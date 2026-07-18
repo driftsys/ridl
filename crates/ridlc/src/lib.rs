@@ -9,8 +9,10 @@
 //! [`CompileOutput::rust_source`] is left empty. The caller (the CLI or a test)
 //! decides what a non-empty diagnostic list means.
 
-use ridl_core::{RidlDatabase, SourceFile as InputFile, check, parse_file, resolve};
-use ridl_syntax::ast::{AstNode as _, SourceFile as AstFile};
+use ridl_core::db::InputFile;
+use ridl_core::{RidlDatabase, parse_file};
+use ridl_sem::{check, resolve};
+use ridl_syntax::ast::{AstNode as _, SourceFile};
 
 /// The result of [`compile`]: the generated Rust source, the lowered IR module,
 /// and every parser, resolver, and checker diagnostic rendered as a message.
@@ -33,7 +35,7 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
 
     let mut diagnostics: Vec<String> = parse.errors().iter().map(|e| e.message.clone()).collect();
 
-    let ast = AstFile::cast(parse.syntax()).expect("parser roots every tree in a SourceFile");
+    let ast = SourceFile::cast(parse.syntax()).expect("parser roots every tree in a SourceFile");
 
     let resolution = resolve(&ast);
     diagnostics.extend(resolution.diagnostics.iter().map(|d| d.message.clone()));

@@ -1,8 +1,8 @@
 //! The salsa incremental database for the RIDL family (docs/ROADMAP.md epic
 //! E0.4, ADR-0004 §3).
 //!
-//! This crate is where "the compiler is a library first" becomes concrete: a
-//! [`SourceFile`] input, a memoized [`parse_file`] query over
+//! This crate is where "the compiler is a library first" becomes concrete: an
+//! [`InputFile`] input, a memoized [`parse_file`] query over
 //! [`ridl_syntax::parse`], and the concrete [`RidlDatabase`] that `ridlc` and
 //! the language server run on. Salsa memoizes each parse and backdates on the
 //! green-tree equality of [`ridl_syntax::Parse`], so editing one file's text
@@ -18,18 +18,18 @@ use ridl_syntax::{Parse, parse};
 /// Editing the text through the generated `set_text` setter starts a new salsa
 /// revision, which is what drives incremental reparsing.
 #[salsa::input]
-pub struct SourceFile {
+pub struct InputFile {
     pub path: String,
     #[returns(ref)]
     pub text: String,
 }
 
-/// Parses one [`SourceFile`] into a lossless [`Parse`].
+/// Parses one [`InputFile`] into a lossless [`Parse`].
 ///
 /// Salsa memoizes the result and backdates on [`Parse`] equality (green-tree
 /// identity), so the body re-runs only when the file's `text` changes.
 #[salsa::tracked(returns(clone))]
-pub fn parse_file(db: &dyn salsa::Database, file: SourceFile) -> Parse {
+pub fn parse_file(db: &dyn salsa::Database, file: InputFile) -> Parse {
     parse(file.text(db))
 }
 
@@ -79,7 +79,7 @@ impl salsa::Database for RidlDatabase {}
 
 #[cfg(test)]
 mod tests {
-    use super::{RidlDatabase, SourceFile, parse_file};
+    use super::{InputFile, RidlDatabase, parse_file};
     use salsa::Setter;
 
     /// The salsa spike's proof: editing one file's text re-parses only that
@@ -89,8 +89,8 @@ mod tests {
     fn edit_reparses_only_the_edited_file() {
         let mut db = RidlDatabase::default();
 
-        let a = SourceFile::new(&db, "a.typl".to_string(), "type A: m".to_string());
-        let b = SourceFile::new(&db, "b.typl".to_string(), "type B: s".to_string());
+        let a = InputFile::new(&db, "a.typl".to_string(), "type A: m".to_string());
+        let b = InputFile::new(&db, "b.typl".to_string(), "type B: s".to_string());
 
         // Initial parse of both inputs runs the query twice.
         let parse_a = parse_file(&db, a);

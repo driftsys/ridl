@@ -1,17 +1,11 @@
 [package]
-name = "ridlc"
+name = "ridl-sem"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [dependencies]
-clap.workspace = true
-ridl-backend-rust = { path = "../../backends/rust" }
 ridl-core = { path = "../ridl-core" }
 ridl-ir = { path = "../ridl-ir" }
-ridl-sem = { path = "../ridl-sem" }
 ridl-syntax = { path = "../ridl-syntax" }
-
-[dev-dependencies]
-insta.workspace = true

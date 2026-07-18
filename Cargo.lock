@@ -821,6 +821,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ridl-sem"
+version = "0.0.0"
+dependencies = [
+ "ridl-core",
+ "ridl-ir",
+ "ridl-syntax",
+]
+
+[[package]]
 name = "ridl-syntax"
 version = "0.0.0"
 dependencies = [
@@ -838,6 +847,7 @@ dependencies = [
  "ridl-backend-rust",
  "ridl-core",
  "ridl-ir",
+ "ridl-sem",
  "ridl-syntax",
 ]
 
