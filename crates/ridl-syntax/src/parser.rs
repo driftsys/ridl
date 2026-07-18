@@ -282,7 +282,9 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::ErrorKw
                     | SyntaxKind::TypeKw
                     | SyntaxKind::ConstKw
-                    | SyntaxKind::StructKw,
+                    | SyntaxKind::StructKw
+                    | SyntaxKind::EnumKw
+                    | SyntaxKind::EnumsetKw,
                 ) => self.definition(),
                 Some(_) => self.err_and_bump("at top level"),
             }
@@ -326,6 +328,8 @@ impl<'a> Parser<'a> {
             Some(SyntaxKind::TypeKw) => self.type_def(),
             Some(SyntaxKind::ConstKw) => self.const_def(),
             Some(SyntaxKind::StructKw) => self.struct_def(),
+            Some(SyntaxKind::EnumKw) => self.enum_def(),
+            Some(SyntaxKind::EnumsetKw) => self.enum_set_def(),
             _ => self.err_and_bump("in a definition"),
         }
     }
@@ -418,33 +422,88 @@ impl<'a> Parser<'a> {
     }
 
     /// `StructDef = 'internal'? 'error'? 'struct' Name '{' (members ','?)*
-    /// '}'` — a member is a `FieldDef` or a `ReservedEntry`; separator commas
-    /// are direct children of the block node, between members (§15.2).
+    /// '}'` — a member is a `FieldDef` or a `ReservedEntry`.
     fn struct_def(&mut self) {
         self.start(SyntaxKind::StructDef);
         self.modifiers();
         self.bump(); // 'struct'
         self.name();
-        if self.block_open() {
-            loop {
-                self.eat_trivia();
-                match self.current() {
-                    None => {
-                        self.error_at_current("FORM-103", "unclosed `{`".to_string());
-                        break;
-                    }
-                    Some(SyntaxKind::RBrace) => {
-                        self.bump();
-                        break;
-                    }
-                    Some(SyntaxKind::Comma) => self.bump(),
-                    Some(SyntaxKind::ReservedKw) => self.reserved_entry(),
-                    Some(SyntaxKind::Ident) => self.field_def(),
-                    Some(_) => self.err_and_bump("in a struct body"),
-                }
-            }
+        self.block_body("in a struct body", true, Self::field_def);
+        self.builder.finish_node();
+    }
+
+    /// `EnumDef = 'internal'? 'error'? 'enum' Name '{' ((values | reserved)
+    /// ','?)* '}'`
+    fn enum_def(&mut self) {
+        self.start(SyntaxKind::EnumDef);
+        self.modifiers();
+        self.bump(); // 'enum'
+        self.name();
+        self.block_body("in an enum body", true, Self::enum_value);
+        self.builder.finish_node();
+    }
+
+    /// `EnumSetDef` — the standalone form (`enumset Name '{' bits '}'`) or
+    /// the derived form (`enumset Name ':' backing_ref:PathType`), §9.1–§9.2.
+    fn enum_set_def(&mut self) {
+        self.start(SyntaxKind::EnumSetDef);
+        self.modifiers();
+        self.bump(); // 'enumset'
+        self.name();
+        if self.at(SyntaxKind::Colon) {
+            self.bump();
+            self.path_type();
+        } else {
+            self.block_body("in an enumset body", false, Self::enum_set_bit);
         }
         self.builder.finish_node();
+    }
+
+    /// `EnumValue = Name '=' value:Literal`
+    fn enum_value(&mut self) {
+        self.value_assignment(SyntaxKind::EnumValue);
+    }
+
+    /// `EnumSetBit = Name '=' value:Literal`
+    fn enum_set_bit(&mut self) {
+        self.value_assignment(SyntaxKind::EnumSetBit);
+    }
+
+    /// The shared `Name '=' Literal` shape of enum values and enumset bits.
+    fn value_assignment(&mut self, kind: SyntaxKind) {
+        self.start(kind);
+        self.name();
+        self.expect(SyntaxKind::Eq);
+        self.literal();
+        self.builder.finish_node();
+    }
+
+    /// The shared block-body loop (§15.2): members separated by newlines or
+    /// commas, trailing comma permitted, separator commas placed as direct
+    /// children of the block node between members. `member` parses the
+    /// member a leading `Ident` announces; `allow_reserved` admits
+    /// `ReservedEntry` members (structs, enums, unions — not enumsets).
+    fn block_body(&mut self, context: &str, allow_reserved: bool, member: fn(&mut Self)) {
+        if !self.block_open() {
+            return;
+        }
+        loop {
+            self.eat_trivia();
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::RBrace) => {
+                    self.bump();
+                    break;
+                }
+                Some(SyntaxKind::Comma) => self.bump(),
+                Some(SyntaxKind::ReservedKw) if allow_reserved => self.reserved_entry(),
+                Some(SyntaxKind::Ident) => member(self),
+                Some(_) => self.err_and_bump(context),
+            }
+        }
     }
 
     /// Consumes the `{` opening a block body; reports FORM-101 and returns
