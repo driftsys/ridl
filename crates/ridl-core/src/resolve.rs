@@ -33,8 +33,9 @@ pub fn resolve(file: &SourceFile) -> Resolution {
     let mut symbols = HashMap::new();
     let mut diagnostics = Vec::new();
 
-    // Pass 1: declare every type and const name. The first declaration of a
-    // name wins; a later one of either kind is a duplicate.
+    // Pass 1: declaration passes run types then consts; on a name collision
+    // the earlier pass wins and a duplicate diagnostic is reported —
+    // source-position order lands with the full resolver in E1.
     for decl in file.type_decls() {
         if let Some(name) = decl.name() {
             declare(&mut symbols, &mut diagnostics, name, SymbolKind::Type);
@@ -70,7 +71,8 @@ pub fn resolve(file: &SourceFile) -> Resolution {
 }
 
 /// Inserts `name` into `symbols` unless it is already declared, in which case
-/// the first declaration wins and the duplicate is reported instead.
+/// the earlier call (from the earlier declaration pass) wins and this later
+/// declaration is reported as a duplicate instead.
 fn declare(
     symbols: &mut HashMap<String, SymbolKind>,
     diagnostics: &mut Vec<ResolveError>,
@@ -126,6 +128,28 @@ mod tests {
         let resolution = resolve_source("type Speed: km/h\ntype Speed: km/h\n");
         assert_eq!(resolution.diagnostics.len(), 1);
         assert!(resolution.diagnostics[0].message.contains("Speed"));
+        assert_eq!(resolution.symbols.get("Speed"), Some(&SymbolKind::Type));
+    }
+
+    #[test]
+    fn cross_kind_collision_reports_one_duplicate_and_the_type_wins() {
+        // `Speed` appears as a const before it appears as a type in the
+        // source; the declare pass still resolves it to the type, because
+        // declaration passes run types then consts regardless of source
+        // position (see the module doc comment on the declare pass).
+        let resolution = resolve_source("const Speed: Speed = 1.0\ntype Speed: km/h\n");
+        assert_eq!(resolution.diagnostics.len(), 1);
+        assert!(resolution.diagnostics[0].message.contains("Speed"));
+        assert_eq!(resolution.symbols.get("Speed"), Some(&SymbolKind::Type));
+    }
+
+    #[test]
+    fn const_with_unparseable_type_name_is_skipped_silently() {
+        // The parser already reports a syntax error for the missing type
+        // reference; the resolver has nothing to add for it and must not
+        // panic on the malformed tree.
+        let resolution = resolve_source("const X: = 1.0\n");
+        assert!(resolution.diagnostics.is_empty());
     }
 
     #[test]
