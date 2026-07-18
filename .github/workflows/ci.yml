@@ -43,6 +43,20 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: mdbook build
 
+  rust:
+    name: rust
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --workspace --locked
+      - run: cargo test --workspace --locked
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+
   convco:
     name: convco
     if: github.event_name == 'pull_request'
@@ -66,7 +80,7 @@ jobs:
     if: always()
     # Every job, so a red anywhere fails the aggregate. "skipped" is accepted:
     # convco only runs on pull requests.
-    needs: [markdown, book, convco]
+    needs: [markdown, book, rust, convco]
     runs-on: ubuntu-latest
     steps:
       - name: check required jobs
