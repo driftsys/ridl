@@ -9,8 +9,7 @@ profiles, cores, platform model) as the direction of record even though 0003 is
 not yet written; this ADR depends only on the concept note's §7–§8 conclusions,
 which 0003 will formalize.
 
-The Epic/Story breakdown of §1 lives in the companion
-`implementation-backlog.md`.
+The Epic/Story breakdown of §1 lives in the companion `docs/ROADMAP.md`.
 
 ## Context
 
@@ -61,7 +60,7 @@ platform.** Within each release the ordering is IR-first — the sequence puts
 maximum cross-layer pressure on the IR as early and as cheaply as possible,
 rather than completing language layers in isolation.
 
-Epics map to milestones (full stories in `implementation-backlog.md`):
+Epics map to milestones (full stories in `docs/ROADMAP.md`):
 
 **V1 — the contract platform**
 
@@ -72,10 +71,11 @@ Epics map to milestones (full stories in `implementation-backlog.md`):
 - **E1 — typl + the tooling spine.** Full lexer, hand-written lossless parser,
   the ADR-0002 resolver (manifest, lockfile, cache), and the hard typl
   semantics: exact range/step arithmetic, wire-width derivation, nominal unit
-  checking, init/default derivation. IR frozen at v1. One backend (Rust +
-  extern-C). Then the spine — `ridlc`, the `ridl` facade, `ridl fmt`, first
-  `ridl-lsp`. Ships typl as a standalone units-aware schema language (v0.1
-  preview): the first external validation.
+  checking, init-value derivation. IR stabilized at v1 (frozen only with the
+  E4.5 stability policy). One backend (Rust + extern-C). Then the spine —
+  `ridlc`, the `ridl` facade, `ridl fmt`, first `ridl-lsp`. Ships typl as a
+  standalone units-aware schema language (v0.1 preview): the first external
+  validation.
 - **E2 — ridl.** The `interact` core (`signal`/`event`/`command`/`query`/
   `final`), generic min/max timing, errors-as-data with inline `T | E`, and the
   `expr` **guaranteed subset** for `require`/`ensure`. A **second backend**
@@ -83,9 +83,9 @@ Epics map to milestones (full stories in `implementation-backlog.md`):
   is language-neutral. `ridl diff` (exit codes 0/1/2) lands here. Result: RIDL
   as it exists today, with codegen and an evolution gate.
 - **E3 — uxdl.** Deliberately cheap: a second profile over E2's `interact` core
-  — `view`/`display`/`input`/`action`, `states`/`during`, binding codegen.
-  Pulling it into V1 also adds a **third profile** that hardens the IR before
-  the executable layer commits to it.
+  — `view`/`display`/`input`/`action`/`fetch`/`fixed`, `states`/`during`,
+  binding codegen. Pulling it into V1 also adds a **third profile** that hardens
+  the IR before the executable layer commits to it.
 - **E4 — V1 ecosystem.** `ridl doc`, the coded error-index website, the contract
   getting-started + tutorial (types → interface → view), the browser playground,
   the IR plugin protocol + stability policy, scaffolding, and the
@@ -98,9 +98,12 @@ Epics map to milestones (full stories in `implementation-backlog.md`):
   WASM component codegen, and the wasmtime reference-oracle. Sits on E2's
   `interact` core and its function layer **extends E2.4's expr subset**. Does
   not begin until the IR has survived three profiles and two backends.
-- **E6 — rsdl (manifest-first).** Instances, bindings (incl. event→command from
-  rmdl emissions), deployment, and test-topology emission. Config-shaped; no
-  grammar profile until topology earns it.
+- **E6 — rsdl.** Components situating contract-blind reactions —
+  `provides`/`requires` boundaries, application-notation wiring (incl.
+  event→command from rmdl emissions), services, systems — plus the deployment
+  region: targets, transport/posture derivation, bundles, and test-topology
+  emission. Composition and deployment are two regions of one grammar (rsdl §2);
+  the earlier manifest-first cut is superseded by the rsdl reference.
 - **E7 — rxdl + V2 ecosystem.** The total single-file profile, the
   reference-oracle test plane (spy/control bridge, online observers), the
   deductive-proof path, the package registry, and the full end-to-end tutorial.
@@ -284,8 +287,8 @@ footprint.
 ### 10. Ecosystem features and when they land
 
 Grouped by ring; the first two rings are table stakes for a usable V1, the last
-two are adoption multipliers. Mapped to epics in `implementation-backlog.md` (V1
-ecosystem = E4; behaviour-dependent items = E7).
+two are adoption multipliers. Mapped to epics in `docs/ROADMAP.md` (V1 ecosystem
+= E4; behaviour-dependent items = E7).
 
 **Inner loop (E1–E3, mandatory):** `ridl fmt` (tight-colon, rowan-based,
 diff-minimal); `ridl-lsp` with diagnostics, hover showing units/ranges,
@@ -387,7 +390,7 @@ Deferred to implementation or a later ADR.
 ## References
 
 - ADR-0002: module system and package management.
-- `implementation-backlog.md` — the Epic/Story breakdown of §1.
+- `docs/ROADMAP.md` — the Epic/Story breakdown of §1.
 - Concept note — the RIDL family, §7 (build sequence) and §8 (platform repo, IR,
   backends).
 - General-form working spec, §5 (`ridl fmt`) and §6.3 (ordinal visibility

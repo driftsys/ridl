@@ -89,14 +89,13 @@ the world only through their signature flows, wired by rsdl components.
 The reactive construct is the **model itself** — the concept-note's model/node
 split is collapsed (decision on record, provisional: _`model` a priori, unless
 better is found_). One construct: a model has typed input/output flows, per-step
-semantics, optional `realizes`, and helpers are just other models it
-instantiates. Rejected: `node` (Lustre jargon, meaningless to the audiences,
-mentally collides with topology vocabulary rsdl needs), `reactor` (Lingua
-Franca's term, foreign to automotive), `block` (Simulink-familiar but generic),
-`process` (OS connotation), `machine` (pre-empts the deferred state-machine
-sugar). "Model" is the word control engineers already use — Simulink model,
-plant model, and this family's own reference-oracle story deploys "the model"
-beside the implementation.
+semantics, and helpers are just other models it instantiates. Rejected: `node`
+(Lustre jargon, meaningless to the audiences, mentally collides with topology
+vocabulary rsdl needs), `reactor` (Lingua Franca's term, foreign to automotive),
+`block` (Simulink-familiar but generic), `process` (OS connotation), `machine`
+(pre-empts the deferred state-machine sugar). "Model" is the word control
+engineers already use — Simulink model, plant model, and this family's own
+reference-oracle story deploys "the model" beside the implementation.
 
 ---
 

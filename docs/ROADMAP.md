@@ -23,7 +23,9 @@ Dependency spine: E0 → E1 → E2 → E3 → E4 ‖ E5 → E6 → E7. E4 (ecosy
 shipped in V1 for `require`/`ensure` (E2.4) must be a genuine forward-compatible
 _subset_ of the family `expr` core — the same grammar rmdl's function layer
 extends in V2 (E5.1), never a throwaway. Hold this line and rmdl's function
-layer is an extension, not a rewrite.
+layer is an extension, not a rewrite. E2.12 writes the expr-core specification
+that fixes the family grammar this subset is verified against — it lands before
+or with E2.4.
 
 ---
 
@@ -37,17 +39,17 @@ cross-layer flow while both are still throwaway-cheap to change. **Exit
 criteria:** `type Speed` + one `const` → lex → parse → resolve → check → IR →
 generated Rust, with a green `insta` snapshot; no feature depth anywhere.
 
-| ID   | Story                                                                                                   | Done when                                  | Size |
-| ---- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------ | ---- |
-| E0.1 | Cargo workspace scaffold per concept note §8.1 (`ridl-syntax`, `ridl-core`, `ridl-ir`, `ridlc`, `ridl`) | crates build, CI runs `cargo test`         | S    |
-| E0.2 | Minimal `logos` lexer for `type`/`const`/idents/number literals + trivia                                | token stream incl. whitespace/comments     | S    |
-| E0.3 | Hand-written parser → `rowan` CST for the two declarations                                              | lossless tree round-trips to source        | S    |
-| E0.4 | Salsa spike: one memoized query (parse-of-file)                                                         | edit invalidates only the changed file     | S    |
-| E0.5 | Trivial resolver — single package, no imports                                                           | names resolve within one file              | S    |
-| E0.6 | IR v0 proto schema skeleton + `prost` build                                                             | `.proto` compiles, Rust IR types generated | M    |
-| E0.7 | Minimal checker: AST → IR for `type`/`const`                                                            | IR emitted for the skeleton input          | S    |
-| E0.8 | Trivial Rust backend: IR → a Rust `struct`/`const`                                                      | emitted Rust compiles                      | S    |
-| E0.9 | `ridlc` wiring + `insta` golden test                                                                    | one command, one snapshot, green           | S    |
+| ID   | Story                                                                                                   | Done when                                                                                       | Size |
+| ---- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---- |
+| E0.1 | Cargo workspace scaffold per concept note §8.1 (`ridl-syntax`, `ridl-core`, `ridl-ir`, `ridlc`, `ridl`) | crates build, CI runs `cargo test`; family crate names reserved on crates.io (concept note §10) | S    |
+| E0.2 | Minimal `logos` lexer for `type`/`const`/idents/number literals + trivia                                | token stream incl. whitespace/comments                                                          | S    |
+| E0.3 | Hand-written parser → `rowan` CST for the two declarations                                              | lossless tree round-trips to source                                                             | S    |
+| E0.4 | Salsa spike: one memoized query (parse-of-file)                                                         | edit invalidates only the changed file                                                          | S    |
+| E0.5 | Trivial resolver — single package, no imports                                                           | names resolve within one file                                                                   | S    |
+| E0.6 | IR v0 proto schema skeleton + `prost` build                                                             | `.proto` compiles, Rust IR types generated                                                      | M    |
+| E0.7 | Minimal checker: AST → IR for `type`/`const`                                                            | IR emitted for the skeleton input                                                               | S    |
+| E0.8 | Trivial Rust backend: IR → a Rust `struct`/`const`                                                      | emitted Rust compiles                                                                           | S    |
+| E0.9 | `ridlc` wiring + `insta` golden test                                                                    | one command, one snapshot, green                                                                | S    |
 
 ## Epic 1 — typl + Tooling Spine
 
@@ -55,8 +57,8 @@ generated Rust, with a green `insta` snapshot; no feature depth anywhere.
 real editor experience (public v0.1 preview). **Value:** first external users
 and feedback; the compiler-as-library spine every later layer reuses. **Exit
 criteria:** arbitrary typl packages compile with full diagnostics, format with
-`ridl fmt`, generate Rust+extern-C, and edit live in VS Code; IR frozen at v1
-for the typl subset.
+`ridl fmt`, generate Rust+extern-C, and edit live in VS Code; IR stabilized at
+v1 for the typl subset (frozen only with the E4.5 stability policy).
 
 | ID    | Story                                                                                                                    | Done when                                                    | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ---- |
@@ -68,7 +70,7 @@ for the typl subset.
 | E1.6  | Lockfile + cache + fetch: SHA-256 pinning, `~/.ridl/cache`, `ureq` fetch, `ridlc --frozen`                               | frozen verifies strictly; cache hit skips fetch              | M    |
 | E1.7  | Type system: struct/enum/enumset/union/tuple/optional + bounded collections                                              | all typl composites check                                    | L    |
 | E1.8  | Ranges & units: exact range/step (`num-rational`), nominal unit checking, wire-width derivation, int64 cap, `wire` floor | width/range diagnostics correct; exactness verified          | L    |
-| E1.9  | Init/default derivation (typl §5.8)                                                                                      | derived inits match spec                                     | M    |
+| E1.9  | Init-value derivation (typl §5.8; `default` is retired — ledger #31)                                                     | derived inits match spec                                     | M    |
 | E1.10 | Diagnostics framework: coded `Diagnostic` struct, `codespan-reporting` renderer, LSP mapping, attribute-diagnostic set   | one struct → both terminal and LSP output                    | M    |
 | E1.11 | IR v1 (typl) stabilized + `serde`/JSON debug rendering                                                                   | IR documented; JSON dump round-trips                         | M    |
 | E1.12 | Rust + extern-C backend for typl types (`quote`/`prettyplease`)                                                          | generated Rust compiles + snapshot-tested                    | M    |
@@ -78,6 +80,7 @@ for the typl subset.
 | E1.16 | Inlay hints: ordinal visibility + unit expansion (general-form §6.3)                                                     | ordinals render beside fields                                | S    |
 | E1.17 | VS Code extension (LSP client + grammar)                                                                                 | installs, connects, highlights                               | S    |
 | E1.18 | Test spine: corpus + `insta` snapshots + first `proptest` (ranges→generators)                                            | ranges generate boundary/step-violation corpora              | M    |
+| E1.19 | CI `wasm32` build check for the compiler crates (feature-gate fetch/fs) — guards the E4.4 playground                     | `cargo check --target wasm32-unknown-unknown` green in CI    | S    |
 
 ## Epic 2 — ridl (the Interface Layer)
 
@@ -87,19 +90,21 @@ breaking-change detection in CI. The IR is proven language-neutral. **Exit
 criteria:** ridl interfaces compile to Rust _and_ a second backend from one IR;
 `ridl diff` gates breaking changes in CI.
 
-| ID    | Story                                                                                                 | Done when                                                               | Size |
-| ----- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---- |
-| E2.1  | `interact` core surface + semantics: `signal`/`event`/`command`/`query`/`final`                       | all five kinds parse, check, resolve payloads                           | L    |
-| E2.2  | Envelope + timing: `@Xms`, `@[min..max]` as generic rate-floor/staleness-bound                        | timing attached to interactions; defaults applied                       | M    |
-| E2.3  | Errors-as-data: `error` types, result unions, inline `T \| E` returns (general-form §6.1)             | fallible query/fetch checks; three-strata respected                     | M    |
-| E2.4  | `expr` **guaranteed subset** for `require`/`ensure` — forward-compatible with the E5.1 function layer | contract clauses parse + type-check; subset documented as V2-extensible | M    |
-| E2.5  | Contract lowering to observer stubs (full checking deferred to E5)                                    | observers represented in IR                                             | S    |
-| E2.6  | Second backend: proto **or** TypeScript bindings                                                      | IR-neutrality proven; snapshot-tested                                   | L    |
-| E2.7  | IR v2 (interaction layer)                                                                             | interactions, timing, errors in IR                                      | M    |
-| E2.8  | `ridl diff`: IR-snapshot compare, exit codes 0/1/2, ordinal + wire-width categories                   | breaking vs compatible classified correctly                             | L    |
-| E2.9  | Baseline-aware `ridlc`: desk-time reorder/insertion detection from lockfile/cache                     | reorder flagged before CI (general-form §6.3)                           | M    |
-| E2.10 | LSP + lint for ridl: interaction hovers, timing display, alias-not-required, canonical `T\|E` lints   | lints fire on a real interface                                          | M    |
-| E2.11 | Generated property tests wired into `ridl test` / CI                                                  | range-derived corpora run as tests                                      | M    |
+| ID    | Story                                                                                                                                                   | Done when                                                               | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---- |
+| E2.1  | `interact` core surface + semantics: `signal`/`event`/`command`/`query`/`final`                                                                         | all five kinds parse, check, resolve payloads                           | L    |
+| E2.2  | Envelope + timing: `@Xms`, `@[min..max]` as generic rate-floor/staleness-bound                                                                          | timing attached to interactions; defaults applied                       | M    |
+| E2.3  | Errors-as-data: `error` types, result unions, inline `T \| E` returns (general-form §6.1)                                                               | fallible query/fetch checks; three-strata respected                     | M    |
+| E2.4  | `expr` **guaranteed subset** for `require`/`ensure` — forward-compatible with the E5.1 function layer                                                   | contract clauses parse + type-check; subset documented as V2-extensible | M    |
+| E2.5  | Contract lowering to observer stubs (full checking deferred to E5)                                                                                      | observers represented in IR                                             | S    |
+| E2.6  | Second backend: TypeScript bindings (chosen over proto — E3.3 builds on it)                                                                             | IR-neutrality proven; snapshot-tested                                   | L    |
+| E2.7  | IR v2 (interaction layer)                                                                                                                               | interactions, timing, errors in IR                                      | M    |
+| E2.8  | `ridl diff`: IR-snapshot compare, exit codes 0/1/2, ordinal + wire-width categories                                                                     | breaking vs compatible classified correctly                             | L    |
+| E2.9  | Baseline-aware `ridlc`: desk-time reorder/insertion detection from lockfile/cache                                                                       | reorder flagged before CI (general-form §6.3)                           | M    |
+| E2.10 | LSP + lint for ridl: interaction hovers, timing display, alias-not-required, canonical `T\|E` lints                                                     | lints fire on a real interface                                          | M    |
+| E2.11 | Generated property tests wired into `ridl test` / CI                                                                                                    | range-derived corpora run as tests                                      | M    |
+| E2.12 | expr-core specification (document, not code): the full contract-term grammar (family overview §2, ADR-0004 open q) — precedes or accompanies E2.4       | spec drafted; the E2.4 subset is checked against it                     | M    |
+| E2.13 | `interface` vs `service` (ridl §14): abstract shape vs global published declaration, service catalog SSOT, `service.member` references, posture-neutral | services declare, resolve, and appear in the IR (E6 binds them)         | M    |
 
 ## Epic 3 — uxdl (User Interface)
 
@@ -107,14 +112,15 @@ criteria:** ridl interfaces compile to Rust _and_ a second backend from one IR;
 user-interaction contracts reusing the Epic 2 machinery; near-free by design,
 and a third profile that further hardens the IR before V2. **Exit criteria:** a
 `view` binds a ridl contract, checks, and generates viewmodel bindings
-(TS/MVVM).
+(TS/MVVM); the descriptive `.rxdl` slice compiles (E3.5).
 
-| ID   | Story                                                                                   | Done when                                            | Size |
-| ---- | --------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---- |
-| E3.1 | Surface: `view`/`display`/`input`/`fixed`/`action` refinements as an `interact` profile | profile-maps onto E2 core                            | M    |
-| E3.2 | `states` + `during` gating                                                              | state-scoped availability checks                     | M    |
-| E3.3 | Binding codegen: viewmodel/widget bindings (TS first)                                   | `display <- signal`, `activate -> command` generated | M    |
-| E3.4 | LSP + lint for uxdl                                                                     | hovers/lints on a real view                          | S    |
+| ID   | Story                                                                                                                                                             | Done when                                            | Size |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---- |
+| E3.1 | Surface: `view`/`display`/`input`/`action`/`fetch`/`fixed` refinements as an `interact` profile                                                                   | profile-maps onto E2 core                            | M    |
+| E3.2 | `states` + `during` gating                                                                                                                                        | state-scoped availability checks                     | M    |
+| E3.3 | Binding codegen: viewmodel/widget bindings (TS first)                                                                                                             | `display <- signal`, `activate -> command` generated | M    |
+| E3.4 | LSP + lint for uxdl                                                                                                                                               | hovers/lints on a real view                          | S    |
+| E3.5 | `.rxdl` descriptive slice: one file carrying typl + ridl + uxdl declarations — the canonical agent/eval unit (ADR-0005 §7); E7.1 extends it to behaviour + wiring | the cruise-control descriptive `.rxdl` compiles      | S    |
 
 ## Epic 4 — Ecosystem & Adoption (V1)
 
@@ -142,43 +148,52 @@ versioned.
 ## Epic 5 — rmdl (Behaviour)
 
 **Milestone:** executable behaviour with a working reference oracle. **Value:**
-generated processing code from realized contracts; deterministic replay/oracle
+generated processing code for contract-blind models — pure reactions that rsdl
+components bind to contracts in E6 (rmdl §7); deterministic replay/oracle
 machinery. The novel, hard core — built on a proven IR. **Exit criteria:** the
-cruise-control model realizes its contract, runs native and as a WASM component
+cruise-control model computes its reaction, runs native and as a WASM component
 with identical step traces, and the oracle diffs tick-by-tick against an
 implementation.
 
-| ID    | Story                                                                                                                        | Done when                                                   | Size |
-| ----- | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ---- |
-| E5.1  | Function/expr core: total functions, `let`, `if`/`case`, bounded combinators + totality checks (RMDL-1xx) — **extends E2.4** | recursion/loops/`last`-in-fn rejected; E2.4 subset subsumed | L    |
-| E5.2  | Model: equations, single-definition, causality (acyclic-except-`last`), topo schedule                                        | instantaneous cycles rejected; schedule derived             | L    |
-| E5.3  | Memory: `last`/`init` seeding + implicit channel-init seeding                                                                | first-step values correct; RMDL-203 fires                   | M    |
-| E5.4  | `when`/`emit` event equations + `case` mode equations                                                                        | hold-vs-emit semantics correct                              | L    |
-| E5.5  | Ambient time: `now`/`dt`/`time(f)`, logical-time step context                                                                | integrator correct under any activation pattern             | M    |
-| E5.6  | Realization: `realizes` binding + completeness checks (RMDL-3xx)                                                             | every contract signal defined; commands consumed            | M    |
-| E5.7  | Step faults (§8): atomic abort, invalid-state propagation, recording                                                         | fault preserves state, marks outputs invalid                | M    |
-| E5.8  | Rust-native codegen: state struct + `step()` fn, IEEE-754-strict                                                             | model runs natively, deterministic                          | L    |
-| E5.9  | WASM-component codegen: `wit-bindgen` + `cargo-component`, WIT from contract                                                 | component builds and runs under wasmtime                    | L    |
-| E5.10 | Reference-oracle + replay harness (`wasmtime`); native vs WASM trace equality                                                | traces bit-identical across targets                         | M    |
-| E5.11 | `jco` browser path for uxdl-side execution                                                                                   | component runs in a browser host                            | M    |
-| E5.12 | Minimal `ridl-rt` scheduler/timeline (input + deadline activation, coalescing)                                               | reactive stepping, quiescent when idle                      | L    |
-| E5.13 | `ridl.std.flow` / `std.control` Tier-1 adapters (rmdl-defined)                                                               | Hold/Changes/Filter/Accumulate/Deadband/Latch compile       | M    |
+| ID    | Story                                                                                                                                                                                                | Done when                                                          | Size |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---- |
+| E5.1  | Function/expr core: total functions, `let`, `if`/`case`/`match`, bounded combinators + totality checks (RMDL-1xx) — **extends E2.4**                                                                 | recursion/loops/`last`-in-fn rejected; E2.4 subset subsumed        | L    |
+| E5.2  | Model: equations, single-definition, causality (acyclic-except-`last`), topo schedule                                                                                                                | instantaneous cycles rejected; schedule derived                    | L    |
+| E5.3  | Memory: `last`/`init` seeding + implicit channel-init seeding                                                                                                                                        | first-step values correct; RMDL-203 fires                          | M    |
+| E5.4  | `when`/`emit` event equations + `case` mode equations                                                                                                                                                | hold-vs-emit semantics correct                                     | L    |
+| E5.5  | Ambient time: `now`/`dt`/`time(f)`, logical-time step context                                                                                                                                        | integrator correct under any activation pattern                    | M    |
+| E5.6  | Signature checks (RMDL-3xx): contract-blindness — no `realizes` (RMDL-302) — and output completeness (RMDL-301)                                                                                      | contract references in models rejected; undefined outputs rejected | S    |
+| E5.7  | Step faults (§8): atomic abort, invalid-state propagation, recording                                                                                                                                 | fault preserves state, marks outputs invalid                       | M    |
+| E5.8  | Rust-native codegen: state struct + `step()` fn, IEEE-754-strict                                                                                                                                     | model runs natively, deterministic                                 | L    |
+| E5.9  | WASM-component codegen: `wit-bindgen` + `cargo-component`, WIT from contract                                                                                                                         | component builds and runs under wasmtime                           | L    |
+| E5.10 | Reference-oracle + replay harness (`wasmtime`); native vs WASM trace equality — needs a cross-target deterministic-math strategy (IEEE-754 ops only, or a shipped deterministic libm), fixed at E5.1 | traces bit-identical across targets                                | M    |
+| E5.11 | `jco` browser path for uxdl-side execution                                                                                                                                                           | component runs in a browser host                                   | M    |
+| E5.12 | Minimal `ridl-rt` scheduler/timeline (input + deadline activation, coalescing)                                                                                                                       | reactive stepping, quiescent when idle                             | L    |
+| E5.13 | `ridl.std.flow` / `std.control` Tier-1 adapters (rmdl-defined)                                                                                                                                       | Hold/Changes/Filter/Accumulate/Deadband/Latch compile              | M    |
 
-## Epic 6 — rsdl (System Assembly, Manifest-First)
+## Epic 6 — rsdl (System Assembly)
 
-**Milestone:** a system is assembled and its deployment artifacts generated.
-**Value:** instances, wiring, and deployment from the SSOT — including the
-event→command side-effect binding that needs rmdl emissions. **Exit criteria:**
-the cruise-control system (interface + model + view) assembles from an rsdl
-manifest and emits topology + integration artifacts; no grammar profile yet.
+**Milestone:** a system is assembled from components and its deployment
+artifacts generated. **Value:** components situate the contract-blind reactions
+E5 delivers — binding them to services, wiring event→command side effects, and
+deriving transport, posture, and deployment from the SSOT. **Exit criteria:**
+the cruise-control system (interface + model + view) assembles from `.rsdl`
+components — composition and deployment as two regions of one grammar (rsdl §2)
+— and emits topology + integration artifacts.
 
-| ID   | Story                                                         | Done when                              | Size |
-| ---- | ------------------------------------------------------------- | -------------------------------------- | ---- |
-| E6.1 | rsdl manifest schema: `instance`, `bind`, `deploy`, transport | manifest parses + validates against IR | M    |
-| E6.2 | Cross-layer resolution (references to typl/ridl/uxdl/rmdl)    | instance typing + binding resolve      | M    |
-| E6.3 | Event→command binding (rmdl §5.7)                             | emitted event wires to a command       | S    |
-| E6.4 | Topology + integration-artifact emission                      | deployable manifest/topology generated | M    |
-| E6.5 | Test-topology emission (injectors/simulators from wiring)     | rest-bus-style test topology derived   | M    |
+| ID    | Story                                                                                                                                                                                     | Done when                                                                    | Size |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
+| E6.1  | `component` declarations: `provides`/`requires` boundary at three grains (inline / interface / service), leaf vs composite (rsdl §3)                                                      | components parse and check; all three boundary grains resolve                | L    |
+| E6.2  | Application-notation wiring: applications as instances, fused `provides … = …`, destructuring, `let` intermediates; composite cycles legal, leaf sync cycles rejected (rsdl §4, RSDL-407) | cruise-control wiring compiles; a leaf-level sync cycle is rejected          | M    |
+| E6.3  | Cross-layer resolution (references to typl/ridl/uxdl/rmdl)                                                                                                                                | instance typing + binding resolve                                            | M    |
+| E6.4  | Contract binding: service member completeness (RSDL-303), timing transfer + init-consistency boundary checks (moved out of rmdl — rmdl §7), declared redundancy (RSDL-502) (rsdl §5)      | every provided member covered; an accidental second provider fails the build | M    |
+| E6.5  | Event→command wiring (rmdl §5.7, rsdl §4.2, RSDL-405)                                                                                                                                     | emitted event wires to a command                                             | S    |
+| E6.6  | `system` root: external boundary, assurance profile, one per workspace (rsdl §6)                                                                                                          | the system compiles as the root component                                    | S    |
+| E6.7  | `deployment` region: targets by capability class, complete placement (RSDL-701), time base (rsdl §7)                                                                                      | every instance placed or RSDL-701 fires                                      | M    |
+| E6.8  | Transport + posture derivation: static vs discovered per connection, physics constraint (RSDL-803), contract-timing feasibility (RSDL-801) (rsdl §8)                                      | one composition deploys both postures; infeasible timing rejected            | L    |
+| E6.9  | Bundles: versioned distribution artifacts, `tier` dependency gating (rsdl §9, RSDL-901)                                                                                                   | bundle manifests emitted for the cruise-control system                       | M    |
+| E6.10 | Topology + integration-artifact emission                                                                                                                                                  | deployable manifest/topology generated                                       | M    |
+| E6.11 | Test topology as a `deployment`: injectors/oracle swapped in (rsdl §2)                                                                                                                    | rest-bus-style test deployment derived                                       | M    |
 
 ## Epic 7 — rxdl & Executable-Platform Ecosystem
 
@@ -189,13 +204,14 @@ full four-/five-way verification story, and the registry. **Exit criteria:** an
 reference-oracle test plane and deductive-proof path work; registry publishes
 and resolves.
 
-| ID   | Story                                                                                                   | Done when                                                     | Size |
-| ---- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---- |
-| E7.1 | `.rxdl` total profile: accept any layer in one file; per-package profile purity enforced in `ridl.toml` | mixed-layer file compiles; purity is a policy error where set | M    |
-| E7.2 | Reference-oracle test plane: spy/control bridge as a generated interface, online observers              | live flows spied/asserted from contracts                      | L    |
-| E7.3 | Deductive-proof verification path (Creusot-compatible `expr` discharge)                                 | a provable contract discharged deductively                    | L    |
-| E7.4 | Package registry service (separate repo/lifecycle)                                                      | publish + resolve a remote package                            | L    |
-| E7.5 | Full `.rxdl` getting-started + end-to-end tutorial (types → interface → model → wiring)                 | a newcomer builds the whole cruise-control system unaided     | M    |
+| ID   | Story                                                                                                                                           | Done when                                                          | Size |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---- |
+| E7.1 | `.rxdl` total profile: extend the E3.5 descriptive slice with the behaviour + wiring layers; per-package profile purity enforced in `ridl.toml` | full mixed-layer file compiles; purity is a policy error where set | M    |
+| E7.2 | Reference-oracle test plane: spy/control bridge as a generated interface, online observers                                                      | live flows spied/asserted from contracts                           | L    |
+| E7.3 | Deductive-proof verification path (Creusot-compatible `expr` discharge)                                                                         | a provable contract discharged deductively                         | L    |
+| E7.4 | Package registry service (separate repo/lifecycle)                                                                                              | publish + resolve a remote package                                 | L    |
+| E7.5 | Full `.rxdl` getting-started + end-to-end tutorial (types → interface → model → wiring)                                                         | a newcomer builds the whole cruise-control system unaided          | M    |
+| E7.6 | Error-index website extended with `RMDL-`/`RSDL-` codes (completes E4.2)                                                                        | every V2 code has an explanation + fix entry                       | S    |
 
 ---
 
@@ -220,18 +236,18 @@ rsdl→E6, family-whole→E7. Each story below carries the epic it rides.
 
 **Preserve, don't build (ADR-0005 §7 invariants — constraints on other epics):**
 every diagnostic stays coded + fix-it (E1.10); `.rxdl` is the canonical agent
-target and eval unit (E7.1); sigil poverty is kept; IR + diagnostic-code +
-`ridl-diff` stability _is_ the agent-contract stability (E4.5 / IR-stability
-open question).
+target and eval unit (E3.5 descriptive slice in V1, E7.1 total in V2); sigil
+poverty is kept; IR + diagnostic-code + `ridl-diff` stability _is_ the
+agent-contract stability (E4.5 / IR-stability open question).
 
 _Layer A — Knowledge (skill + rules; build first, no compiler dependency)_
 
-| ID   | Story                                                                                                                                                                                                                                     | Rides                 | Done when                                                                          | Size |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ---------------------------------------------------------------------------------- | ---- |
-| E8.1 | Rules file — 10–20 always-on "never/always" constraints, distilled from doctrines + the _error_ diagnostics (no semicolons, named-typl payloads, errors-as-data, command≠query, no inheritance, no upward refs, append-only + `reserved`) | E1 (may precede code) | every rule cites a diagnostic code or doctrine; loads in Claude Code/Cursor/Cowork | S    |
-| E8.2 | Skill v0 (typl) — dense decision tables + worked examples for types/ranges/units/evolution, per `skill-ridl-authoring-outline.md`                                                                                                         | E1                    | authors valid `.typl`; content traceable to the typl reference                     | M    |
-| E8.3 | Skill extended to the ridl `interact` core — 5-kind selection table, timing, errors-as-data / `T\|E`, common-mistakes table keyed to codes                                                                                                | E2                    | covers ridl ref §3–§10; cruise-control `.rxdl` example round-trips clean           | M    |
-| E8.4 | Skill profile for uxdl — `view`/`display`/`action` over the interact core                                                                                                                                                                 | E3                    | authors a valid `.uxdl` view bound to a ridl contract                              | S    |
+| ID   | Story                                                                                                                                                                                                                                     | Rides                 | Done when                                                                                                   | Size |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- | ----------------------------------------------------------------------------------------------------------- | ---- |
+| E8.1 | Rules file — 10–20 always-on "never/always" constraints, distilled from doctrines + the _error_ diagnostics (no semicolons, named-typl payloads, errors-as-data, command≠query, no inheritance, no upward refs, append-only + `reserved`) | E1 (may precede code) | every rule cites a diagnostic code or doctrine; loads in Claude Code/Cursor/Cowork                          | S    |
+| E8.2 | Skill v0 (typl) — dense decision tables + worked examples for types/ranges/units/evolution, per `skill-ridl-authoring-outline.md`                                                                                                         | E1                    | authors valid `.typl`; content traceable to the typl reference                                              | M    |
+| E8.3 | Skill extended to the ridl `interact` core — 5-kind selection table, timing, errors-as-data / `T\|E`, common-mistakes table keyed to codes                                                                                                | E2                    | covers ridl ref §3–§10; cruise-control example round-trips clean (`.rxdl` descriptive form once E3.5 lands) | M    |
+| E8.4 | Skill profile for uxdl — `view`/`display`/`action` over the interact core                                                                                                                                                                 | E3                    | authors a valid `.uxdl` view bound to a ridl contract                                                       | S    |
 
 _Layer B — Capability (MCP over the compiler; build second, cheap given
 ADR-0004)_
@@ -259,13 +275,13 @@ _Generation & portability (V1 tail)_
 
 _Layer extensions & packaging (V2)_
 
-| ID    | Story                                                                                                                                            | Rides | Done when                                                                    | Size |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----- | ---------------------------------------------------------------------------- | ---- |
-| E8.13 | Skill extended to rmdl behaviour — `function`/`model`, `last`/`init`, `when`/`emit`, `case`, realization; flow-kind tables                       | E5    | authors a valid `.rmdl` model realizing a contract                           | M    |
-| E8.14 | MCP reference-oracle / replay hooks — execute-and-diff (`ridl_run`/`ridl_oracle`); the strongest verify signal, and the behaviour eval oracle    | E5    | agent-generated model executed and tick-diffed vs expected (ADR-0005 open q) | M    |
-| E8.15 | Skill profile for rsdl — instances, bindings, event→command wiring                                                                               | E6    | authors a valid `.rsdl` assembly                                             | S    |
-| E8.16 | `ridl-architect` subagent — composition of skill + MCP with a built-in verify loop (iterate until `ridl_check` clean and `ridl_diff` compatible) | E7    | completes a multi-interface design task autonomously with green checks       | M    |
-| E8.17 | _(deferred, gated)_ Spy/control bridge as an MCP surface for live-system introspection — behind the same security/assurance model                | E7.2  | not started until the bridge exists; gated on assurance labels               | —    |
+| ID    | Story                                                                                                                                            | Rides | Done when                                                                         | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----- | --------------------------------------------------------------------------------- | ---- |
+| E8.13 | Skill extended to rmdl behaviour — `function`/`model`, `last`/`init`, `when`/`emit`, `case`, realization; flow-kind tables                       | E5    | authors a valid contract-blind `.rmdl` model an rsdl component can bind (rmdl §7) | M    |
+| E8.14 | MCP reference-oracle / replay hooks — execute-and-diff (`ridl_run`/`ridl_oracle`); the strongest verify signal, and the behaviour eval oracle    | E5    | agent-generated model executed and tick-diffed vs expected (ADR-0005 open q)      | M    |
+| E8.15 | Skill profile for rsdl — components, `provides`/`requires`, application-notation wiring, event→command routing                                   | E6    | authors a valid `.rsdl` assembly                                                  | S    |
+| E8.16 | `ridl-architect` subagent — composition of skill + MCP with a built-in verify loop (iterate until `ridl_check` clean and `ridl_diff` compatible) | E7    | completes a multi-interface design task autonomously with green checks            | M    |
+| E8.17 | _(deferred, gated)_ Spy/control bridge as an MCP surface for live-system introspection — behind the same security/assurance model                | E7.2  | not started until the bridge exists; gated on assurance labels                    | —    |
 
 ---
 
@@ -278,7 +294,7 @@ _Layer extensions & packaging (V2)_
 | E2   | ridl contract boundary  | v0.x — RIDL-as-today + diff gate                                              |
 | E3   | uxdl view SSOT          | v0.x — second contract profile                                                |
 | E4   | V1 ecosystem            | **V1.0 — the contract platform**                                              |
-| E5   | rmdl behaviour + oracle | v2.0-beta — executable models, replay                                         |
-| E6   | rsdl assembly           | v2.x — deployable systems                                                     |
+| E5   | rmdl behaviour + oracle | v2.0-alpha — executable models, replay                                        |
+| E6   | rsdl assembly           | v2.0-beta — deployable systems                                                |
 | E7   | rxdl + V2 ecosystem     | **V2.0 — the executable platform**                                            |
 | E8   | agent enablement        | threads V1→V2 (skill+rules & evals in V1; MCP by E2; oracle & subagent in V2) |
