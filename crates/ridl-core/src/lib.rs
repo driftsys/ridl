@@ -1,5 +1,9 @@
 //! Placeholder — the resolver + checker land across epic E0 (docs/ROADMAP.md).
 
+pub mod resolve;
+
+pub use resolve::{Resolution, ResolveError, SymbolKind, resolve};
+
 /// Returns this crate's name.
 pub fn crate_name() -> &'static str {
     env!("CARGO_PKG_NAME")
