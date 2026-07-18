@@ -1,9 +1,10 @@
 # RIDL compiler workspace. Members are the crates the roadmap names for
-# epic E0 (docs/ROADMAP.md); E0.8 adds `backends/*`.
+# epic E0 (docs/ROADMAP.md); E0.8 adds `backends/*`, and epic E1 adds the
+# `xtask` automation crate (`cargo xtask codegen`, ADR-0007 decision 1).
 
 [workspace]
 resolver = "3"
-members = ["crates/*", "backends/*"]
+members = ["crates/*", "backends/*", "xtask"]
 
 [workspace.package]
 version = "0.0.0"
@@ -26,3 +27,4 @@ salsa = "=0.28.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 syn = { version = "2.0.119", features = ["full"] }
+ungrammar = "1.16.1"
