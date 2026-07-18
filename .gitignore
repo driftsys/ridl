@@ -1,7 +1,7 @@
 # mdBook build output (docs/ is the source; mdBook builds to ./book)
 /book
 
-# Rust build output (when the compiler workspace lands — docs/ROADMAP.md E0)
+# Rust build output (docs/ROADMAP.md epic E0)
 /target
 **/target
 **/*.rs.bk
@@ -17,3 +17,6 @@ node_modules/
 
 # Claude Code worktrees
 .claude/worktrees/
+
+# Superpowers orchestration scratch — not part of the repo
+/.superpowers/
