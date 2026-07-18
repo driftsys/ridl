@@ -5,6 +5,8 @@
 - **ADR-0004 — Implementation sequencing and stack.** The build order and
   technology choices (companion to the roadmap).
 - **ADR-0005 — Agent enablement.** Enabling AI agents to author and evolve RIDL.
+- **ADR-0006 — Walking-skeleton execution.** E0-scoped execution decisions
+  (workspace layout, protox, deferred crates.io reservation).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview.
