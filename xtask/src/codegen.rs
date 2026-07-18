@@ -3,9 +3,12 @@
 //!
 //! The generator is deliberately small. It emits one struct per grammar
 //! rule, cast from the `SyntaxKind` variant of the same name — referencing
-//! `SyntaxKind::<Rule>` in every `cast` is the node-list assertion: a rule
-//! without a matching variant fails to compile. Accessors follow
-//! rust-analyzer conventions — children by cast, tokens by kind:
+//! `SyntaxKind::<Rule>` in every `cast` is one half of the node-list
+//! assertion: a rule without a matching variant fails to compile. The
+//! `syntax_kind_node_variants_match_the_grammar` test is the other half: a
+//! `SyntaxKind` node variant without a matching grammar rule (other than the
+//! rule-less `ErrorNode`) fails the test. Accessors follow rust-analyzer
+//! conventions — children by cast, tokens by kind:
 //!
 //! - A rule that is a pure alternation of nodes (`Definition`, `Backing`,
 //!   `StructMember`, `FieldType`) generates no struct; `ast.rs` defines it
@@ -416,6 +419,55 @@ mod tests {
         assert!(
             fresh == committed,
             "crates/ridl-syntax/src/ast/generated.rs is stale — run `cargo xtask codegen`",
+        );
+    }
+
+    /// The `SyntaxKind` node variant names, in declaration order: every
+    /// variant after the lexer's `Error` catch-all token, which is the last
+    /// token before the node inventory in `syntax_kind.rs`.
+    fn syntax_kind_node_variants() -> Vec<String> {
+        let path = syntax_crate_dir().join("src/syntax_kind.rs");
+        let text = fs::read_to_string(path).expect("read syntax_kind.rs");
+        let file: syn::File = syn::parse_str(&text).expect("syntax_kind.rs parses");
+        let variants = file
+            .items
+            .into_iter()
+            .find_map(|item| match item {
+                syn::Item::Enum(item) if item.ident == "SyntaxKind" => Some(item.variants),
+                _ => None,
+            })
+            .expect("the SyntaxKind enum is present");
+        let names: Vec<String> = variants.into_iter().map(|v| v.ident.to_string()).collect();
+        let boundary = names
+            .iter()
+            .position(|name| name == "Error")
+            .expect("the `Error` token variant marks the token/node boundary");
+        names[boundary + 1..].to_vec()
+    }
+
+    /// The reverse of the cast-site guard: every `SyntaxKind` node variant
+    /// must name a grammar rule, or be the rule-less `ErrorNode`. Together
+    /// with the compile-time cast reference, this keeps the node inventory and
+    /// `typl.ungram` in exact correspondence.
+    #[test]
+    fn syntax_kind_node_variants_match_the_grammar() {
+        let grammar_text = fs::read_to_string(grammar_path()).expect("read typl.ungram");
+        let grammar: Grammar = grammar_text.parse().expect("typl.ungram parses");
+
+        let mut expected: Vec<String> = grammar
+            .iter()
+            .filter(|node| !is_enum_rule(&grammar[*node].rule))
+            .map(|node| grammar[node].name.clone())
+            .collect();
+        expected.push("ErrorNode".to_string());
+        expected.sort();
+
+        let mut actual = syntax_kind_node_variants();
+        actual.sort();
+
+        assert_eq!(
+            actual, expected,
+            "SyntaxKind node variants drifted from the grammar rules",
         );
     }
 }
