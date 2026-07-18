@@ -8,3 +8,6 @@ repository.workspace = true
 [dependencies]
 logos.workspace = true
 rowan.workspace = true
+
+[dev-dependencies]
+insta = { workspace = true, features = ["glob"] }
