@@ -1,0 +1,49 @@
+package veh.common
+import marine.nav.Speed as MarineSpeed
+import veh.regulatory.SpeedLimit
+
+/// Vehicle speed over ground.
+type Speed: km/h [0.0..MAX_SPEED step 0.5]
+
+type Counter: integer [0..65535]
+
+type Name: string [1..128]
+
+type Vin: string [17 match VIN_PATTERN]
+
+const MAX_SPEED: Speed = 250.0
+
+const MAX_GEAR: integer = 6
+
+const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/
+
+enum GearPosition {
+  PARK = 0
+  DRIVE = 1
+  reserved 2
+  REVERSE = 3
+}
+
+enumset WarningFlags: Warning
+
+internal enumset LocalFlags: corpus.other.Warning
+
+struct DriverProfile {
+  name: Name // from ridl.std
+  speed: Speed
+  override: Speed?
+  gears: integer [0..MAX_GEAR] = 6
+  range: (min: Speed, max: Speed)
+  readings: [Speed; 8]
+  meta: [Label: Name; 0..32]
+}
+
+error struct SensorFault {
+  code: Counter
+  message: Message
+}
+
+union SensorResult {
+  ok: SensorReading
+  err: SensorFault
+}

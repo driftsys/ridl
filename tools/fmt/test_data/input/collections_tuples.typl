@@ -1,0 +1,20 @@
+package corpus.collections
+
+struct SensorBank {
+  readings : [Speed; 8]
+  faults   : [FaultCode; 0..32]
+  metadata : [Label : Name; 0..32]
+  remote   : [veh.common.Label : veh.common.Speed; 0..4]
+  grid     : [[Gain; 4]; 4]
+  history  : [Speed; 16]?
+  spares   : [Speed?; 4]
+  tuples   : [(min: Speed, max: Speed); 2]
+}
+
+struct Calibrated {
+  window   : (start: Timestamp, stop: Timestamp)
+  optional : (low: Speed, high: Speed)?
+  nested   : (outer: Speed, inner: (a: Gain, b: Gain))
+  mixed    : (value: Speed, raw: integer [0..255])
+  unit     : ()
+}

@@ -810,6 +810,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ridl-fmt"
+version = "0.0.0"
+dependencies = [
+ "ridl-syntax",
+ "rowan",
+]
+
+[[package]]
 name = "ridl-ir"
 version = "0.0.0"
 dependencies = [

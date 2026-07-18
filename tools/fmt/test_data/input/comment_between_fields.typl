@@ -1,0 +1,16 @@
+package corpus.comments
+
+struct DriverProfile {
+  name   : Name
+  // a section comment between fields
+  speed  : Speed
+  /// A doc comment on a field.
+  active : boolean
+}
+
+enum DoorState {
+  CLOSED = 0
+  // retired wire value below
+  reserved 2
+  OPEN   = 1
+}
