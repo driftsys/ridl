@@ -1,0 +1,53 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/duration_in_constraint.typl
+---
+SourceFile@0..70
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  TypeDef@14..36
+    TypeKw@14..18 "type"
+    Whitespace@18..19 " "
+    Name@19..22
+      Ident@19..22 "Bad"
+    Colon@22..23 ":"
+    Whitespace@23..24 " "
+    PrimitiveType@24..31
+      IntegerKw@24..31 "integer"
+    Whitespace@31..32 " "
+    Constraint@32..36
+      LBracket@32..33 "["
+      Literal@33..34
+        IntNumber@33..34 "0"
+      DotDot@34..36 ".."
+  ErrorNode@36..41
+    Duration@36..40 "10ms"
+    RBracket@40..41 "]"
+  Whitespace@41..43 "\n\n"
+  TypeDef@43..69
+    TypeKw@43..47 "type"
+    Whitespace@47..48 " "
+    Name@48..52
+      Ident@48..52 "Good"
+    Colon@52..53 ":"
+    Whitespace@53..54 " "
+    PrimitiveType@54..61
+      IntegerKw@54..61 "integer"
+    Whitespace@61..62 " "
+    Constraint@62..69
+      LBracket@62..63 "["
+      Literal@63..64
+        IntNumber@63..64 "0"
+      DotDot@64..66 ".."
+      Literal@66..68
+        IntNumber@66..68 "10"
+      RBracket@68..69 "]"
+  Whitespace@69..70 "\n"
+errors:
+  FORM-101 36..40 expected RBracket
+  TYPL-302 36..40 duration literal in typl context

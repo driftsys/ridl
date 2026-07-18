@@ -1,0 +1,34 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/mangled_import.typl
+---
+SourceFile@0..60
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  Import@14..29
+    ImportKw@14..20 "import"
+    Whitespace@20..21 " "
+    QualifiedName@21..29
+      Ident@21..28 "vehicle"
+      Dot@28..29 "."
+  Whitespace@29..31 "\n\n"
+  Import@31..59
+    ImportKw@31..37 "import"
+    Whitespace@37..38 " "
+    QualifiedName@38..52
+      Ident@38..45 "vehicle"
+      Dot@45..46 "."
+      Ident@46..52 "common"
+    Whitespace@52..53 " "
+    AsKw@53..55 "as"
+    Whitespace@55..56 " "
+    Name@56..59
+      Ident@56..59 "veh"
+  Whitespace@59..60 "\n"
+errors:
+  FORM-101 31..37 expected a name after `.`

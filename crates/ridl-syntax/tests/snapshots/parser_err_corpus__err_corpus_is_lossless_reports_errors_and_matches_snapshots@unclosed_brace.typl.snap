@@ -1,0 +1,51 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/unclosed_brace.typl
+---
+SourceFile@0..77
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  StructDef@14..47
+    StructKw@14..20 "struct"
+    Whitespace@20..21 " "
+    Name@21..27
+      Ident@21..27 "Broken"
+    Whitespace@27..28 " "
+    LBrace@28..29 "{"
+    Whitespace@29..32 "\n  "
+    FieldDef@32..45
+      Name@32..36
+        Ident@32..36 "gear"
+      Colon@36..37 ":"
+      Whitespace@37..38 " "
+      PrimitiveType@38..45
+        IntegerKw@38..45 "integer"
+    Whitespace@45..47 "\n\n"
+  TypeDef@47..76
+    TypeKw@47..51 "type"
+    Whitespace@51..52 " "
+    Name@52..57
+      Ident@52..57 "After"
+    Colon@57..58 ":"
+    Whitespace@58..59 " "
+    UnitExpr@59..63
+      Ident@59..61 "km"
+      Slash@61..62 "/"
+      Ident@62..63 "h"
+    Whitespace@63..64 " "
+    Constraint@64..76
+      LBracket@64..65 "["
+      Literal@65..68
+        FloatNumber@65..68 "0.0"
+      DotDot@68..70 ".."
+      Literal@70..75
+        FloatNumber@70..75 "250.0"
+      RBracket@75..76 "]"
+  Whitespace@76..77 "\n"
+errors:
+  FORM-103 47..51 unclosed `{`

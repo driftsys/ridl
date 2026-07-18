@@ -1,0 +1,5 @@
+package demo
+
+type Bad: string [match]
+
+type Good: string [3..8]

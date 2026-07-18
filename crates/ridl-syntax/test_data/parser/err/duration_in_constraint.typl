@@ -1,0 +1,5 @@
+package demo
+
+type Bad: integer [0..10ms]
+
+type Good: integer [0..10]

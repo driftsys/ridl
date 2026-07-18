@@ -1,0 +1,5 @@
+package demo
+
+type Broken: integer [0..10
+
+type After: km/h [0.0..250.0]

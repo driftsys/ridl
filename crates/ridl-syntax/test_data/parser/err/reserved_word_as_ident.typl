@@ -1,0 +1,5 @@
+package demo
+
+type signal: integer [0..1]
+
+type Fine: integer [0..1]

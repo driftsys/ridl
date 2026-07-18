@@ -1,0 +1,49 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/broken_constraint.typl
+---
+SourceFile@0..65
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  TypeDef@14..38
+    TypeKw@14..18 "type"
+    Whitespace@18..19 " "
+    Name@19..22
+      Ident@19..22 "Bad"
+    Colon@22..23 ":"
+    Whitespace@23..24 " "
+    PrimitiveType@24..30
+      StringKw@24..30 "string"
+    Whitespace@30..31 " "
+    Constraint@31..38
+      LBracket@31..32 "["
+      MatchKw@32..37 "match"
+      RBracket@37..38 "]"
+  Whitespace@38..40 "\n\n"
+  TypeDef@40..64
+    TypeKw@40..44 "type"
+    Whitespace@44..45 " "
+    Name@45..49
+      Ident@45..49 "Good"
+    Colon@49..50 ":"
+    Whitespace@50..51 " "
+    PrimitiveType@51..57
+      StringKw@51..57 "string"
+    Whitespace@57..58 " "
+    Constraint@58..64
+      LBracket@58..59 "["
+      Bound@59..63
+        Literal@59..60
+          IntNumber@59..60 "3"
+        DotDot@60..62 ".."
+        Literal@62..63
+          IntNumber@62..63 "8"
+      RBracket@63..64 "]"
+  Whitespace@64..65 "\n"
+errors:
+  FORM-101 37..38 expected a value

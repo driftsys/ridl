@@ -1,0 +1,48 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/missing_name.typl
+---
+SourceFile@0..60
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  TypeDef@14..38
+    TypeKw@14..18 "type"
+    Whitespace@18..19 " "
+    Colon@19..20 ":"
+    Whitespace@20..21 " "
+    UnitExpr@21..25
+      Ident@21..23 "km"
+      Slash@23..24 "/"
+      Ident@24..25 "h"
+    Whitespace@25..26 " "
+    Constraint@26..38
+      LBracket@26..27 "["
+      Literal@27..30
+        FloatNumber@27..30 "0.0"
+      DotDot@30..32 ".."
+      Literal@32..37
+        FloatNumber@32..37 "250.0"
+      RBracket@37..38 "]"
+  Whitespace@38..40 "\n\n"
+  ConstDef@40..59
+    ConstKw@40..45 "const"
+    Whitespace@45..46 " "
+    Colon@46..47 ":"
+    Whitespace@47..48 " "
+    PathType@48..55
+      QualifiedName@48..55
+        IntegerKw@48..55 "integer"
+    Whitespace@55..56 " "
+    Eq@56..57 "="
+    Whitespace@57..58 " "
+    Literal@58..59
+      IntNumber@58..59 "5"
+  Whitespace@59..60 "\n"
+errors:
+  FORM-101 19..20 expected a name
+  FORM-101 46..47 expected a name

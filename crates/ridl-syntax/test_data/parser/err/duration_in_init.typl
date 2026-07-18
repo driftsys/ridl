@@ -1,0 +1,5 @@
+package demo
+
+const TIMEOUT: integer = 10ms
+
+const FINE: integer = 5
