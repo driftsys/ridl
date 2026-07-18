@@ -10,6 +10,7 @@ clap = { workspace = true }
 ridl-syntax = { path = "../ridl-syntax" }
 ridl-core = { path = "../ridl-core" }
 ridl-ir = { path = "../ridl-ir" }
+ridl-sem = { path = "../ridl-sem" }
 ridl-backend-rust = { path = "../../backends/rust" }
 
 [dev-dependencies]

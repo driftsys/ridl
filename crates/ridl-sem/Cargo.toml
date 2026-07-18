@@ -1,0 +1,11 @@
+[package]
+name = "ridl-sem"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ridl-core = { path = "../ridl-core" }
+ridl-ir = { path = "../ridl-ir" }
+ridl-syntax = { path = "../ridl-syntax" }
