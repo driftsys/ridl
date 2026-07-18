@@ -31,9 +31,10 @@
 //! The grammar deliberately accepts more than the typl reference allows —
 //! constraints on any primitive in field position, arbitrary map key types,
 //! identifier literals in value positions, `step` on open ranges, non-integer
-//! literals in bounds and reserved entries, and the `internal`/`error`
-//! modifiers on every definition kind. The checker narrows these later
-//! (TYPL-2xx); the parser must not reject them.
+//! literals in bounds and reserved entries, repeated separator commas with no
+//! member between them (`,,,`), and the `internal`/`error` modifiers on every
+//! definition kind. The checker narrows these later (TYPL-2xx); the parser
+//! must not reject them.
 //!
 //! # Profile boundary
 //!
@@ -629,11 +630,30 @@ impl<'a> Parser<'a> {
                 return;
             }
         }
+        // Each `?` wraps one OptionalType node, so an unbounded run would
+        // build a tree deep enough to overflow the stack when it is later
+        // traversed or dropped. The wrap count shares the MAX_TYPE_DEPTH
+        // bound: past it, the remaining `?` tokens land flat in a single
+        // ErrorNode with one FORM-102.
+        let mut wraps = 0;
         while self.at(SyntaxKind::Question) {
+            if wraps >= MAX_TYPE_DEPTH {
+                self.error_at_current(
+                    "FORM-102",
+                    format!("type nesting deeper than {MAX_TYPE_DEPTH} levels"),
+                );
+                self.start(SyntaxKind::ErrorNode);
+                while self.at(SyntaxKind::Question) {
+                    self.bump();
+                }
+                self.builder.finish_node();
+                break;
+            }
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::OptionalType.into());
             self.bump();
             self.builder.finish_node();
+            wraps += 1;
         }
     }
 
@@ -881,7 +901,7 @@ impl<'a> Parser<'a> {
     /// Whether the current token can be a path segment. Primitive keywords
     /// are admitted as segments so `const MAX_GEAR : integer = 6` (typl
     /// reference Appendix B) parses; the checker narrows where a primitive
-    /// is not allowed (TYPL-204 and friends).
+    /// is not allowed (TYPL-204 and the related composite checks).
     fn at_path_segment(&self) -> bool {
         matches!(
             self.current(),
@@ -1026,6 +1046,24 @@ mod tests {
             "deep nesting must stay lossless",
         );
         assert!(!parse.errors().is_empty());
+    }
+
+    #[test]
+    fn pathological_question_repetition_does_not_panic_or_drop_text() {
+        // Each `?` wraps one OptionalType; an unbounded run used to build a
+        // tree deep enough to overflow the stack on traversal or drop.
+        let input = format!("package p\nstruct S {{ f : T{} }}\n", "?".repeat(30_000));
+        let parse = parse(&input);
+        assert_eq!(
+            parse.syntax().text().to_string(),
+            input,
+            "the capped optional run must stay lossless",
+        );
+        assert_eq!(
+            parse.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+            vec!["FORM-102"],
+            "the cap must report exactly one error",
+        );
     }
 
     #[test]
