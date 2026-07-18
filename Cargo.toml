@@ -19,6 +19,7 @@ prost = "0.14.4"
 prost-build = "0.14.4"
 protox = "0.9.1"
 quote = "1.0.46"
+rowan = "0.16.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.150"
 syn = { version = "2.0.119", features = ["full"] }
