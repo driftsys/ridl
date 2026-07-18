@@ -1,0 +1,22 @@
+// Constants: value constants, regex constants, typed and untyped forms
+// (typl reference §6).
+package corpus.consts
+
+type Speed : km/h [0.0..MAX_SPEED step 0.5]
+
+const MAX_SPEED      : Speed   = 250.0
+const SPEED_LIMIT_EU : Speed   = 130.0
+const MAX_GEAR       : integer = 6
+const MIN_TEMP       : float   = -40.0
+const ENABLED        : boolean = true
+const DISABLED       : boolean = false
+const GREETING       : Label   = "hello"
+const LIMIT          : veh.regulatory.SpeedLimit = 130.0
+
+/// A regex constant, reusable in `match` constraints.
+const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
+const ASCII_PATTERN = /^[\x20-\x7E]+$/
+const URI_PATTERN   = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/.+$/
+
+type Vin   : string [17 match VIN_PATTERN]
+type Email : string [1..254 match /^[^@]+@[^@]+\.[^@]+$/]

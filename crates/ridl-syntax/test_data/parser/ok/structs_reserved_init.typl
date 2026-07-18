@@ -1,0 +1,34 @@
+// Structs: fields, optionality, field init values, reserved tombstones,
+// modifiers (typl reference §7).
+package corpus.structs
+
+struct DriverProfile {
+  name     : Name
+  reserved legacyChecksum
+  speed    : Speed
+  override : Speed?
+  gears    : integer [0..MAX_GEAR] = 3
+}
+
+/// Retry policy with declared field init values.
+struct RetryPolicy {
+  attempts : integer [0..10] = 3
+  factor   : float [1.0..8.0 step 0.5] = 2.0
+  enabled  : boolean = true
+}
+
+internal struct RawWheelFrame {
+  ticks : Counter
+  frame : Frame
+}
+
+error struct SensorFault {
+  code    : Counter
+  message : Message
+}
+
+struct Qualified {
+  limit : veh.regulatory.SpeedLimit
+  /// A doc comment on a field.
+  actual : Speed
+}
