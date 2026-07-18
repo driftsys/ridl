@@ -452,6 +452,7 @@ dependencies = [
 name = "ridl-core"
 version = "0.0.0"
 dependencies = [
+ "ridl-ir",
  "ridl-syntax",
 ]
 
