@@ -2,10 +2,9 @@
 #
 # Recipe set follows the driftsys house style (git-std, prim). The repo
 # holds the specifications, ADRs, roadmap, and the Cargo workspace
-# (docs/ROADMAP.md, epic E0). The fmt/check/compile/build shape is in
-# place now — `check` gates the docs, and `compile` builds the Rust
-# workspace as soon as one exists. The mdBook docs are served with
-# `just book`.
+# (docs/ROADMAP.md, epic E0). `check` gates the docs, `compile` and
+# `test` cover the Rust workspace, and `build` runs all three. The
+# mdBook docs are served with `just book`.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
@@ -25,8 +24,8 @@ check:
     prim --check .
     markdownlint '**/*.md' --ignore book --ignore node_modules
 
-# Compile the Rust workspace. A no-op until the compiler workspace lands
-# (docs/ROADMAP.md, epic E0); builds every crate once a Cargo.toml exists.
+# Compile the Rust workspace (the Cargo.toml guard is a defensive
+# fallback for partial checkouts, not a "lands later" gate).
 compile:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -36,9 +35,7 @@ compile:
         echo "compile: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
-# Run the Rust workspace test suite. A no-op until the compiler workspace
-# lands (docs/ROADMAP.md, epic E0); runs every crate's tests once a
-# Cargo.toml exists.
+# Run the Rust workspace test suite (same defensive guard as `compile`).
 test:
     #!/usr/bin/env bash
     set -euo pipefail

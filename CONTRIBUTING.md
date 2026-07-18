@@ -30,8 +30,9 @@ manager as needed.
    (e.g. `docs(rmdl): …`, `docs(adr): …`). `git-std` lints commit messages
    against `.git-std.toml` and drives changelog generation from them. The
    configured scopes are the five languages (`typl`/`ridl`/`uxdl`/`rmdl`/
-   `rsdl`), `family`, `roadmap`, `adr`, and the repo-wide scopes
-   (`repo`/`docs`/`ci`/`hooks`/`deps`).
+   `rsdl`), `family`, `roadmap`, `adr`, the compiler crates
+   (`ridl-syntax`/`ridl-core`/`ridl-ir`/`ridlc`/`backends`), and the repo-wide
+   scopes (`repo`/`docs`/`ci`/`hooks`/`deps`).
 4. Run `just verify` before opening a PR — commit-message lint over your branch
    range, then `just build`.
 5. Open a PR. CI runs the same gates.
@@ -44,8 +45,9 @@ Run `just --list` for the full set. The common ones:
 | -------------- | ------------------------------------------------------ |
 | `just fmt`     | reformat the connective tissue with prim, fix Markdown |
 | `just check`   | lint gate — `prim --check` + markdownlint, no writes   |
-| `just compile` | compile the Rust workspace (no-op until epic E0 lands) |
-| `just build`   | `compile` + `check` — the full local gate              |
+| `just compile` | compile the Rust workspace                             |
+| `just test`    | run the Rust workspace test suite                      |
+| `just build`   | `compile` + `test` + `check` — the full local gate     |
 | `just verify`  | commit-message lint + `build` — run before a PR        |
 | `just book`    | serve the mdBook docs locally                          |
 | `just release` | `git std bump` — version, changelog, tag               |
