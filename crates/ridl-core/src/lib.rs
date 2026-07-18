@@ -1,17 +1,11 @@
-//! Placeholder — the resolver + checker land across epic E0 (docs/ROADMAP.md).
+//! The RIDL family compiler core: the salsa incremental database, the name
+//! resolver, the checker, and the queries built on the syntax layer
+//! (docs/ROADMAP.md epic E0, ADR-0004 §3).
 
 pub mod check;
+pub mod db;
 pub mod resolve;
 
 pub use check::{CheckError, check};
+pub use db::{RidlDatabase, SourceFile, parse_file};
 pub use resolve::{Resolution, ResolveError, SymbolKind, resolve};
-
-/// Returns this crate's name.
-pub fn crate_name() -> &'static str {
-    env!("CARGO_PKG_NAME")
-}
-
-#[test]
-fn crate_name_matches_package() {
-    assert_eq!(crate_name(), "ridl-core");
-}
