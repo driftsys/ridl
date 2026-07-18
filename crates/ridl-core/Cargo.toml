@@ -8,3 +8,4 @@ repository.workspace = true
 [dependencies]
 ridl-ir = { path = "../ridl-ir" }
 ridl-syntax = { path = "../ridl-syntax" }
+salsa.workspace = true
