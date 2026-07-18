@@ -284,7 +284,8 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::ConstKw
                     | SyntaxKind::StructKw
                     | SyntaxKind::EnumKw
-                    | SyntaxKind::EnumsetKw,
+                    | SyntaxKind::EnumsetKw
+                    | SyntaxKind::UnionKw,
                 ) => self.definition(),
                 Some(_) => self.err_and_bump("at top level"),
             }
@@ -330,6 +331,7 @@ impl<'a> Parser<'a> {
             Some(SyntaxKind::StructKw) => self.struct_def(),
             Some(SyntaxKind::EnumKw) => self.enum_def(),
             Some(SyntaxKind::EnumsetKw) => self.enum_set_def(),
+            Some(SyntaxKind::UnionKw) => self.union_def(),
             _ => self.err_and_bump("in a definition"),
         }
     }
@@ -456,6 +458,28 @@ impl<'a> Parser<'a> {
         } else {
             self.block_body("in an enumset body", false, Self::enum_set_bit);
         }
+        self.builder.finish_node();
+    }
+
+    /// `UnionDef = 'internal'? 'error'? 'union' Name '{' ((arms | reserved)
+    /// ','?)* '}'`
+    fn union_def(&mut self) {
+        self.start(SyntaxKind::UnionDef);
+        self.modifiers();
+        self.bump(); // 'union'
+        self.name();
+        self.block_body("in a union body", true, Self::union_arm);
+        self.builder.finish_node();
+    }
+
+    /// `UnionArm = Name ':' type_ref:PathType` — arms reference named types
+    /// only; a primitive keyword still parses as a path segment and the
+    /// checker rejects it (TYPL-204).
+    fn union_arm(&mut self) {
+        self.start(SyntaxKind::UnionArm);
+        self.name();
+        self.expect(SyntaxKind::Colon);
+        self.path_type();
         self.builder.finish_node();
     }
 
