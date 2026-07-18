@@ -1,0 +1,65 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/resync_valid_garbage_valid.typl
+---
+SourceFile@0..94
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  TypeDef@14..42
+    TypeKw@14..18 "type"
+    Whitespace@18..19 " "
+    Name@19..23
+      Ident@19..23 "Good"
+    Colon@23..24 ":"
+    Whitespace@24..25 " "
+    UnitExpr@25..29
+      Ident@25..27 "km"
+      Slash@27..28 "/"
+      Ident@28..29 "h"
+    Whitespace@29..30 " "
+    Constraint@30..42
+      LBracket@30..31 "["
+      Literal@31..34
+        FloatNumber@31..34 "0.0"
+      DotDot@34..36 ".."
+      Literal@36..41
+        FloatNumber@36..41 "250.0"
+      RBracket@41..42 "]"
+  Whitespace@42..44 "\n\n"
+  ErrorNode@44..60
+    RBracket@44..45 "]"
+    Whitespace@45..46 " "
+    RBrace@46..47 "}"
+    Whitespace@47..48 " "
+    Eq@48..49 "="
+    Whitespace@49..50 " "
+    Ident@50..57 "garbage"
+    Whitespace@57..58 " "
+    IntNumber@58..60 "99"
+  Whitespace@60..62 "\n\n"
+  TypeDef@62..93
+    TypeKw@62..66 "type"
+    Whitespace@66..67 " "
+    Name@67..75
+      Ident@67..75 "AlsoGood"
+    Colon@75..76 ":"
+    Whitespace@76..77 " "
+    PrimitiveType@77..84
+      IntegerKw@77..84 "integer"
+    Whitespace@84..85 " "
+    Constraint@85..93
+      LBracket@85..86 "["
+      Literal@86..87
+        IntNumber@86..87 "0"
+      DotDot@87..89 ".."
+      Literal@89..92
+        IntNumber@89..92 "255"
+      RBracket@92..93 "]"
+  Whitespace@93..94 "\n"
+errors:
+  FORM-102 44..45 unexpected token at top level

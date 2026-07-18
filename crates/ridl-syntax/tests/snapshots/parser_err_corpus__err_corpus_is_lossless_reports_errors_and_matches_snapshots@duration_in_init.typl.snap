@@ -1,0 +1,46 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/duration_in_init.typl
+---
+SourceFile@0..69
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  ConstDef@14..43
+    ConstKw@14..19 "const"
+    Whitespace@19..20 " "
+    Name@20..27
+      Ident@20..27 "TIMEOUT"
+    Colon@27..28 ":"
+    Whitespace@28..29 " "
+    PathType@29..36
+      QualifiedName@29..36
+        IntegerKw@29..36 "integer"
+    Whitespace@36..37 " "
+    Eq@37..38 "="
+    Whitespace@38..39 " "
+    ErrorNode@39..43
+      Duration@39..43 "10ms"
+  Whitespace@43..45 "\n\n"
+  ConstDef@45..68
+    ConstKw@45..50 "const"
+    Whitespace@50..51 " "
+    Name@51..55
+      Ident@51..55 "FINE"
+    Colon@55..56 ":"
+    Whitespace@56..57 " "
+    PathType@57..64
+      QualifiedName@57..64
+        IntegerKw@57..64 "integer"
+    Whitespace@64..65 " "
+    Eq@65..66 "="
+    Whitespace@66..67 " "
+    Literal@67..68
+      IntNumber@67..68 "5"
+  Whitespace@68..69 "\n"
+errors:
+  TYPL-302 39..43 duration literal in typl context

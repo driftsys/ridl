@@ -1,0 +1,53 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/unclosed_bracket.typl
+---
+SourceFile@0..73
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  TypeDef@14..41
+    TypeKw@14..18 "type"
+    Whitespace@18..19 " "
+    Name@19..25
+      Ident@19..25 "Broken"
+    Colon@25..26 ":"
+    Whitespace@26..27 " "
+    PrimitiveType@27..34
+      IntegerKw@27..34 "integer"
+    Whitespace@34..35 " "
+    Constraint@35..41
+      LBracket@35..36 "["
+      Literal@36..37
+        IntNumber@36..37 "0"
+      DotDot@37..39 ".."
+      Literal@39..41
+        IntNumber@39..41 "10"
+  Whitespace@41..43 "\n\n"
+  TypeDef@43..72
+    TypeKw@43..47 "type"
+    Whitespace@47..48 " "
+    Name@48..53
+      Ident@48..53 "After"
+    Colon@53..54 ":"
+    Whitespace@54..55 " "
+    UnitExpr@55..59
+      Ident@55..57 "km"
+      Slash@57..58 "/"
+      Ident@58..59 "h"
+    Whitespace@59..60 " "
+    Constraint@60..72
+      LBracket@60..61 "["
+      Literal@61..64
+        FloatNumber@61..64 "0.0"
+      DotDot@64..66 ".."
+      Literal@66..71
+        FloatNumber@66..71 "250.0"
+      RBracket@71..72 "]"
+  Whitespace@72..73 "\n"
+errors:
+  FORM-101 43..47 expected RBracket

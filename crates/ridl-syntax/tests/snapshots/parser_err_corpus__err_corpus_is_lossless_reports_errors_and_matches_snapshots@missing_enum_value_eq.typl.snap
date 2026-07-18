@@ -1,0 +1,49 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/missing_enum_value_eq.typl
+---
+SourceFile@0..66
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  EnumDef@14..65
+    EnumKw@14..18 "enum"
+    Whitespace@18..19 " "
+    Name@19..23
+      Ident@19..23 "Gear"
+    Whitespace@23..24 " "
+    LBrace@24..25 "{"
+    Whitespace@25..28 "\n  "
+    EnumValue@28..39
+      Name@28..35
+        Ident@28..35 "Neutral"
+      Whitespace@35..36 " "
+      Eq@36..37 "="
+      Whitespace@37..38 " "
+      Literal@38..39
+        IntNumber@38..39 "0"
+    Whitespace@39..42 "\n  "
+    EnumValue@42..49
+      Name@42..47
+        Ident@42..47 "Drive"
+      Whitespace@47..48 " "
+      Literal@48..49
+        IntNumber@48..49 "1"
+    Whitespace@49..52 "\n  "
+    EnumValue@52..63
+      Name@52..59
+        Ident@52..59 "Reverse"
+      Whitespace@59..60 " "
+      Eq@60..61 "="
+      Whitespace@61..62 " "
+      Literal@62..63
+        IntNumber@62..63 "2"
+    Whitespace@63..64 "\n"
+    RBrace@64..65 "}"
+  Whitespace@65..66 "\n"
+errors:
+  FORM-101 48..49 expected Eq

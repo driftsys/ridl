@@ -1,0 +1,7 @@
+package demo
+
+type Good: km/h [0.0..250.0]
+
+] } = garbage 99
+
+type AlsoGood: integer [0..255]

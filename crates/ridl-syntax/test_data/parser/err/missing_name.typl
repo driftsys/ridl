@@ -1,0 +1,5 @@
+package demo
+
+type : km/h [0.0..250.0]
+
+const : integer = 5

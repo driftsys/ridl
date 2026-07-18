@@ -6,10 +6,9 @@
 //! including whitespace and comments — lands in the tree in source order, so
 //! [`Parse::syntax`] round-trips back to the original source for both valid
 //! and broken input. On an unexpected token the parser records a
-//! [`SyntaxError`] and wraps the token in an [`ErrorNode`](SyntaxKind::ErrorNode)
-//! rather than dropping it, so recovery never loses text and never panics.
-//! (Resynchronizing recovery is task E1.2c; this parser advances one token at
-//! a time.)
+//! [`SyntaxError`] and wraps the skipped tokens in an
+//! [`ErrorNode`](SyntaxKind::ErrorNode) rather than dropping them, so recovery
+//! never loses text and never panics.
 //!
 //! Trivia placement: leading trivia — including doc comments — is flushed at
 //! the parent level before a child node starts, so a doc comment sits as a
@@ -42,6 +41,34 @@
 //! **TYPL-302** (typl reference §2.8) and parsing continues. Leading zeros in
 //! an integer literal emit **FORM-005**. Every [`SyntaxError`] carries its
 //! diagnostic code; the coded `Diagnostic` model consumes it in task E1.10.
+//!
+//! # Error recovery
+//!
+//! A broken declaration does not derail the rest of the file. When a loop
+//! meets a token it cannot place, it reports one diagnostic and skips forward,
+//! wrapping the skipped run in a single [`ErrorNode`](SyntaxKind::ErrorNode),
+//! until it reaches a resynchronization point: a top-level keyword (`type`,
+//! `const`, `struct`, and the other definition starters) or a closing `}` (a
+//! tuple loop also stops at its `)`). A block body that runs into a top-level
+//! keyword treats its `{` as unclosed (FORM-103) and hands the keyword back to
+//! the top level rather than swallowing the next declaration. A family reserved
+//! word where a declared name is expected is held in an `ErrorNode` and flagged
+//! FORM-105, so the rest of the declaration still parses. Every [`SyntaxError`]
+//! carries the narrowest honest range — the offending token — while the
+//! `ErrorNode` carries the wider skipped span.
+//!
+//! # One diagnostic per source position
+//!
+//! [`Parser::expect`] never consumes on a mismatch, so a stuck cursor could
+//! otherwise re-report at the same offset on every unwind step — a closed
+//! 200-level type nesting once produced over a thousand diagnostics piled on a
+//! single token. The parser records at most one [`SyntaxError`] per token start
+//! offset. Because the cursor only ever moves forward,
+//! [`Parser::error_at_current`] suppressing an error at the offset the previous
+//! error already used is exactly "one diagnostic per source position". A run of
+//! garbage therefore collapses to one diagnostic plus one `ErrorNode`, and the
+//! pathological nesting inputs report a small, constant number of diagnostics
+//! instead of one per unwound level.
 
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
@@ -108,6 +135,25 @@ fn is_value_token(kind: SyntaxKind) -> bool {
             | SyntaxKind::FalseKw
             | SyntaxKind::Regex
             | SyntaxKind::Ident
+    )
+}
+
+/// Whether `kind` starts a top-level construct. These are the
+/// resynchronization points recovery falls back to, both at the file level
+/// and when a block body runs past an unclosed `}` into the next declaration.
+fn is_top_level_start(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::PackageKw
+            | SyntaxKind::ImportKw
+            | SyntaxKind::InternalKw
+            | SyntaxKind::ErrorKw
+            | SyntaxKind::TypeKw
+            | SyntaxKind::ConstKw
+            | SyntaxKind::StructKw
+            | SyntaxKind::EnumKw
+            | SyntaxKind::EnumsetKw
+            | SyntaxKind::UnionKw
     )
 }
 
@@ -234,33 +280,64 @@ impl<'a> Parser<'a> {
     }
 
     /// Records an error spanning the current significant token (or the end of
-    /// input).
+    /// input), unless a diagnostic already sits at that start offset.
+    ///
+    /// The cursor only ever moves forward, so the start offset here is
+    /// non-decreasing across calls; comparing against the last recorded error
+    /// therefore enforces one diagnostic per source position (see the module
+    /// doc). This is the flood control: on a stuck cursor the repeated,
+    /// no-progress `expect`/`bound` errors during an unwind collapse to the
+    /// first one.
     fn error_at_current(&mut self, code: &'static str, message: String) {
         let i = self.significant_pos();
-        let start = self.offsets[i];
-        let end = self.tokens.get(i).map_or(start, |t| start + t.text.len());
+        let start = TextSize::new(self.offsets[i] as u32);
+        if self
+            .errors
+            .last()
+            .is_some_and(|last| last.range.start() == start)
+        {
+            return;
+        }
+        let end = self
+            .tokens
+            .get(i)
+            .map_or(start, |t| start + TextSize::of(t.text));
         self.errors.push(SyntaxError {
             message,
             code,
-            range: TextRange::new(TextSize::new(start as u32), TextSize::new(end as u32)),
+            range: TextRange::new(start, end),
         });
     }
 
-    /// Recovery: report the current unexpected token — TYPL-302 for the
-    /// profile-boundary tokens (duration literals and the `@` timing sigil),
-    /// FORM-102 otherwise — wrap it in an [`SyntaxKind::ErrorNode`], and
-    /// advance, so no text is dropped and the enclosing loop makes progress.
-    fn err_and_bump(&mut self, context: &str) {
-        let (code, message) = match self.current() {
+    /// The diagnostic for the current unexpected token: TYPL-302 for the
+    /// profile-boundary tokens (duration literals and the `@` timing sigil,
+    /// typl reference §2.8), FORM-102 otherwise.
+    fn unexpected_token_diag(&self, context: &str) -> (&'static str, String) {
+        match self.current() {
             Some(SyntaxKind::Duration) => {
                 ("TYPL-302", "duration literal in typl context".to_string())
             }
             Some(SyntaxKind::At) => ("TYPL-302", "timing annotation in typl context".to_string()),
             _ => ("FORM-102", format!("unexpected token {context}")),
-        };
+        }
+    }
+
+    /// Recovery: report the current unexpected token, then skip forward —
+    /// wrapping the skipped run in one [`SyntaxKind::ErrorNode`] — until a
+    /// token `is_sync` accepts (a resynchronization point) or the input ends.
+    /// The first token is always consumed, so the enclosing loop makes
+    /// progress and no text is dropped.
+    fn err_and_recover(&mut self, context: &str, is_sync: impl Fn(SyntaxKind) -> bool) {
+        let (code, message) = self.unexpected_token_diag(context);
         self.error_at_current(code, message);
         self.start(SyntaxKind::ErrorNode);
         self.bump();
+        while let Some(kind) = self.current() {
+            if is_sync(kind) {
+                break;
+            }
+            self.bump();
+        }
         self.builder.finish_node();
     }
 
@@ -296,7 +373,7 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::EnumsetKw
                     | SyntaxKind::UnionKw,
                 ) => self.definition(),
-                Some(_) => self.err_and_bump("at top level"),
+                Some(_) => self.err_and_recover("at top level", is_top_level_start),
             }
         }
         self.builder.finish_node();
@@ -341,7 +418,7 @@ impl<'a> Parser<'a> {
             Some(SyntaxKind::EnumKw) => self.enum_def(),
             Some(SyntaxKind::EnumsetKw) => self.enum_set_def(),
             Some(SyntaxKind::UnionKw) => self.union_def(),
-            _ => self.err_and_bump("in a definition"),
+            _ => self.err_and_recover("in a definition", is_top_level_start),
         }
     }
 
@@ -534,7 +611,20 @@ impl<'a> Parser<'a> {
                 Some(SyntaxKind::Comma) => self.bump(),
                 Some(SyntaxKind::ReservedKw) if allow_reserved => self.reserved_entry(),
                 Some(SyntaxKind::Ident) => member(self),
-                Some(_) => self.err_and_bump(context),
+                // An unclosed `{`: the body ran into the next top-level
+                // declaration. Report the missing brace and let `source_file`
+                // resynchronize instead of swallowing the declaration.
+                Some(kind) if is_top_level_start(kind) => {
+                    self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                    break;
+                }
+                Some(_) => self.err_and_recover(context, |kind| {
+                    matches!(
+                        kind,
+                        SyntaxKind::RBrace | SyntaxKind::Comma | SyntaxKind::Ident
+                    ) || (allow_reserved && kind == SyntaxKind::ReservedKw)
+                        || is_top_level_start(kind)
+                }),
             }
         }
     }
@@ -675,7 +765,21 @@ impl<'a> Parser<'a> {
                 }
                 Some(SyntaxKind::Comma) => self.bump(),
                 Some(SyntaxKind::Ident) => self.tuple_field(),
-                Some(_) => self.err_and_bump("in a tuple type"),
+                // An unclosed `(`: the tuple ran into a block or top-level
+                // boundary. Report it and let the enclosing loop recover.
+                Some(kind) if kind == SyntaxKind::RBrace || is_top_level_start(kind) => {
+                    self.error_at_current("FORM-103", "unclosed `(`".to_string());
+                    break;
+                }
+                Some(_) => self.err_and_recover("in a tuple type", |kind| {
+                    matches!(
+                        kind,
+                        SyntaxKind::RParen
+                            | SyntaxKind::Comma
+                            | SyntaxKind::Ident
+                            | SyntaxKind::RBrace
+                    ) || is_top_level_start(kind)
+                }),
             }
         }
         self.builder.finish_node();
@@ -885,12 +989,25 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// A declared name — a single `Ident` wrapped in a `Name` node. No node
-    /// is built when the name is missing, so accessors see `None` rather
-    /// than an empty `Name`.
+    /// A declared name — a single `Ident` wrapped in a `Name` node. A family
+    /// reserved word is held in an `ErrorNode` and flagged FORM-105; otherwise
+    /// no node is built when the name is missing, so accessors see `None`
+    /// rather than an empty `Name`.
     fn name(&mut self) {
         if self.at(SyntaxKind::Ident) {
             self.start(SyntaxKind::Name);
+            self.bump();
+            self.builder.finish_node();
+        } else if self.at(SyntaxKind::ReservedWord) {
+            // A family reserved word (typl reference §1.4) used where a
+            // declared name is expected: hold it in an `ErrorNode` so the
+            // rest of the declaration still parses, and flag FORM-105.
+            let message = format!(
+                "reserved word `{}` used as identifier",
+                self.tokens[self.significant_pos()].text,
+            );
+            self.error_at_current("FORM-105", message);
+            self.start(SyntaxKind::ErrorNode);
             self.bump();
             self.builder.finish_node();
         } else {
@@ -1083,6 +1200,96 @@ mod tests {
         assert_eq!(
             error.range,
             TextRange::new(TextSize::new(22), TextSize::new(25)),
+        );
+    }
+
+    /// The declared names of every top-level definition, in source order —
+    /// the recovery proof that real declaration nodes survive garbage.
+    fn def_names(input: &str) -> Vec<String> {
+        use crate::ast::{AstNode, HasName, SourceFile};
+        let file = SourceFile::cast(parse(input).syntax()).expect("root is a SourceFile");
+        file.definitions()
+            .filter_map(|def| Some(def.name()?.ident_token()?.text().to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn top_level_garbage_resyncs_to_the_next_declaration() {
+        // Valid, then garbage, then valid: the run of stray tokens is wrapped
+        // in one ErrorNode and the declaration after it is a real node again.
+        let input = "package p\ntype Good: km/h\n] } garbage 9\ntype AlsoGood: integer [0..1]\n";
+        let parse = parse(input);
+        assert_eq!(
+            parse.syntax().text().to_string(),
+            input,
+            "resync must stay lossless",
+        );
+        assert_eq!(def_names(input), vec!["Good", "AlsoGood"]);
+        assert_eq!(error_codes(input), vec!["FORM-102"]);
+    }
+
+    #[test]
+    fn unclosed_brace_resyncs_to_the_next_declaration() {
+        // A struct body that never closes hands the next `type` back to the
+        // top level (FORM-103) instead of swallowing it.
+        let input = "package p\nstruct Broken {\n  gear: integer\n\ntype After: km/h\n";
+        let parse = parse(input);
+        assert_eq!(
+            parse.syntax().text().to_string(),
+            input,
+            "unclosed-brace recovery must stay lossless",
+        );
+        assert_eq!(def_names(input), vec!["Broken", "After"]);
+        assert_eq!(error_codes(input), vec!["FORM-103"]);
+    }
+
+    #[test]
+    fn reserved_word_as_name_flags_form_105_and_keeps_parsing() {
+        // `signal` is a family reserved word (typl reference §1.4); used as a
+        // type name it is held in an ErrorNode and the backing still parses.
+        let input = "package p\ntype signal: integer [0..1]\ntype Fine: integer [0..1]\n";
+        assert_eq!(error_codes(input), vec!["FORM-105"]);
+        // Only `Fine` has a real Name; `signal` sits in an ErrorNode.
+        assert_eq!(def_names(input), vec!["Fine"]);
+    }
+
+    #[test]
+    fn unclosed_brackets_do_not_flood_diagnostics() {
+        // 300 unclosed `[` in a field type: before the one-error-per-offset
+        // rule the deep-recursion unwind piled hundreds of diagnostics on the
+        // stuck tokens. Recovery now collapses the run to a handful.
+        let input = format!("package p\nstruct S {{ f : {} }}\n", "[".repeat(300));
+        let parse = parse(&input);
+        assert_eq!(
+            parse.syntax().text().to_string(),
+            input,
+            "the unclosed-bracket flood must stay lossless",
+        );
+        assert!(
+            parse.errors().len() <= 4,
+            "expected a bounded diagnostic count, got {}: {:?}",
+            parse.errors().len(),
+            parse.errors(),
+        );
+    }
+
+    #[test]
+    fn closed_deep_nesting_does_not_flood_diagnostics() {
+        // A balanced 200-level nested array, deeper than MAX_TYPE_DEPTH: the
+        // closed shape once produced over a thousand diagnostics on unwind.
+        let deep = format!("{}integer{}", "[".repeat(200), ";1]".repeat(200));
+        let input = format!("package p\nstruct S {{ f : {deep} }}\n");
+        let parse = parse(&input);
+        assert_eq!(
+            parse.syntax().text().to_string(),
+            input,
+            "the deep-nesting flood must stay lossless",
+        );
+        assert!(
+            parse.errors().len() <= 4,
+            "expected a bounded diagnostic count, got {}: {:?}",
+            parse.errors().len(),
+            parse.errors(),
         );
     }
 }

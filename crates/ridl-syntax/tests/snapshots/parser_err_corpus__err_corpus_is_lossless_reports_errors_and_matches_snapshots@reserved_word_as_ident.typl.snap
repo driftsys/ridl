@@ -1,0 +1,52 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/reserved_word_as_ident.typl
+---
+SourceFile@0..69
+  PackageDecl@0..12
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..12
+      Ident@8..12 "demo"
+  Whitespace@12..14 "\n\n"
+  TypeDef@14..41
+    TypeKw@14..18 "type"
+    Whitespace@18..19 " "
+    ErrorNode@19..25
+      ReservedWord@19..25 "signal"
+    Colon@25..26 ":"
+    Whitespace@26..27 " "
+    PrimitiveType@27..34
+      IntegerKw@27..34 "integer"
+    Whitespace@34..35 " "
+    Constraint@35..41
+      LBracket@35..36 "["
+      Literal@36..37
+        IntNumber@36..37 "0"
+      DotDot@37..39 ".."
+      Literal@39..40
+        IntNumber@39..40 "1"
+      RBracket@40..41 "]"
+  Whitespace@41..43 "\n\n"
+  TypeDef@43..68
+    TypeKw@43..47 "type"
+    Whitespace@47..48 " "
+    Name@48..52
+      Ident@48..52 "Fine"
+    Colon@52..53 ":"
+    Whitespace@53..54 " "
+    PrimitiveType@54..61
+      IntegerKw@54..61 "integer"
+    Whitespace@61..62 " "
+    Constraint@62..68
+      LBracket@62..63 "["
+      Literal@63..64
+        IntNumber@63..64 "0"
+      DotDot@64..66 ".."
+      Literal@66..67
+        IntNumber@66..67 "1"
+      RBracket@67..68 "]"
+  Whitespace@68..69 "\n"
+errors:
+  FORM-105 19..25 reserved word `signal` used as identifier
