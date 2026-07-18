@@ -20,3 +20,7 @@ node_modules/
 
 # Superpowers orchestration scratch — not part of the repo
 /.superpowers/
+
+# insta pending snapshots — accepted .snap files are committed, drafts are not
+*.snap.new
+*.pending-snap

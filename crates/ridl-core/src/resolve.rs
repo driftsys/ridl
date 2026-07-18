@@ -1,12 +1,18 @@
 //! The trivial single-file resolver (docs/ROADMAP.md epic E0.5): collects
 //! every declared `type`/`const` name, then checks that every const's type
 //! reference names a declared `type`. No imports, no cross-file resolution —
-//! that lands in a later epic.
+//! that lands in a later epic. Composite definitions (`struct`, `enum`,
+//! `enumset`, `union`) are not resolved yet either: the full resolver is E1
+//! scope (docs/ROADMAP.md, task E1 resolver).
+//!
+//! Reads the `typl.ungram`-generated typed AST (`ridl_syntax::ast`) — ported
+//! from the E0 accessor layer in E1.2b.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 
-use ridl_syntax::SourceFile;
+use ridl_syntax::ast::{AstNode, ConstDef, Definition, HasName, SourceFile};
+use ridl_syntax::{SyntaxKind, SyntaxNode};
 
 /// The kind of a declared name.
 #[derive(Debug, Clone, PartialEq)]
@@ -36,21 +42,29 @@ pub fn resolve(file: &SourceFile) -> Resolution {
     // Pass 1: declaration passes run types then consts; on a name collision
     // the earlier pass wins and a duplicate diagnostic is reported —
     // source-position order lands with the full resolver in E1.
-    for decl in file.type_decls() {
-        if let Some(name) = decl.name() {
+    for definition in file.definitions() {
+        if let Definition::Type(decl) = definition
+            && let Some(name) = declared_name(&decl)
+        {
             declare(&mut symbols, &mut diagnostics, name, SymbolKind::Type);
         }
     }
-    for decl in file.const_decls() {
-        if let Some(name) = decl.name() {
+    for definition in file.definitions() {
+        if let Definition::Const(decl) = definition
+            && let Some(name) = declared_name(&decl)
+        {
             declare(&mut symbols, &mut diagnostics, name, SymbolKind::Const);
         }
     }
 
     // Pass 2: every const's type reference must name a declared `type`.
-    for decl in file.const_decls() {
-        let Some(type_name) = decl.type_name() else {
-            // Malformed tree; the parser already reported the syntax error.
+    for definition in file.definitions() {
+        let Definition::Const(decl) = definition else {
+            continue;
+        };
+        let Some(type_name) = const_type_name(&decl) else {
+            // Untyped regex constant, or a malformed tree the parser already
+            // reported a syntax error for.
             continue;
         };
         match symbols.get(&type_name) {
@@ -87,6 +101,51 @@ fn declare(
             entry.insert(kind);
         }
     }
+}
+
+// --- shared AST helpers (also used by the checker) ------------------------
+
+/// The declared name of a definition, or `None` on a malformed tree.
+pub(crate) fn declared_name(definition: &impl HasName) -> Option<String> {
+    Some(definition.name()?.ident_token()?.text().to_string())
+}
+
+/// The type reference of a const (`Speed`, `pkg.Speed`, or a primitive
+/// keyword), or `None` when the const declares no type or the reference is
+/// malformed.
+pub(crate) fn const_type_name(decl: &ConstDef) -> Option<String> {
+    let text = significant_text(decl.type_ref()?.syntax());
+    (!text.is_empty()).then_some(text)
+}
+
+/// The concatenation of every non-trivia token in `node`'s subtree — the
+/// node's text with whitespace and comments removed.
+pub(crate) fn significant_text(node: &SyntaxNode) -> String {
+    node.descendants_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| !token.kind().is_trivia())
+        .map(|token| token.text().to_string())
+        .collect()
+}
+
+/// The `f64` value of a numeric `Literal` node (including a leading `-`), or
+/// `None` when the literal is not numeric (a string, regex, or constant
+/// reference).
+pub(crate) fn literal_f64(literal: &ridl_syntax::ast::Literal) -> Option<f64> {
+    let has_number = literal
+        .syntax()
+        .descendants_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| {
+            matches!(
+                token.kind(),
+                SyntaxKind::IntNumber | SyntaxKind::FloatNumber
+            )
+        });
+    if !has_number {
+        return None;
+    }
+    significant_text(literal.syntax()).parse::<f64>().ok()
 }
 
 #[cfg(test)]
@@ -159,5 +218,15 @@ mod tests {
         );
         assert_eq!(resolution.diagnostics.len(), 1);
         assert!(resolution.diagnostics[0].message.contains("MAX_SPEED"));
+    }
+
+    #[test]
+    fn untyped_regex_constant_resolves_without_diagnostics() {
+        let resolution = resolve_source("package p\nconst VIN_PATTERN = /^[A-Z0-9]{17}$/\n");
+        assert_eq!(
+            resolution.symbols.get("VIN_PATTERN"),
+            Some(&SymbolKind::Const)
+        );
+        assert!(resolution.diagnostics.is_empty());
     }
 }

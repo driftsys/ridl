@@ -2,10 +2,12 @@
 //!
 //! These are the hand-written E0 accessors over the E0 node subset
 //! ([`SyntaxKind::TypeDecl`] and friends). The E1 typed AST generated from
-//! `typl.ungram` lives in [`crate::ast`] (ADR-0007 decision 1); this module
-//! stays functional, re-exported at the crate root, until task E1.2c ports
-//! its consumers and deletes it. Every accessor walks child kinds and
-//! returns `Option`/empty iterators on a malformed tree — it never panics.
+//! `typl.ungram` lives in [`crate::ast`] (ADR-0007 decision 1). The E1.2b
+//! parser emits the `typl.ungram` node kinds, so these accessors no longer
+//! match anything the parser produces; their consumers were ported to
+//! [`crate::ast`] in E1.2b, and task E1.2c deletes this module. Every
+//! accessor walks child kinds and returns `Option`/empty iterators on a
+//! malformed tree — it never panics.
 
 use crate::syntax_kind::{SyntaxKind, SyntaxNode, SyntaxToken};
 
@@ -137,43 +139,6 @@ fn literal_value(node: &SyntaxNode) -> Option<f64> {
         .and_then(|token| token.text().parse::<f64>().ok())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::parse;
-
-    const FIXTURE: &str = include_str!("../fixtures/walking_skeleton.typl");
-
-    fn source_file() -> SourceFile {
-        SourceFile::cast(parse(FIXTURE).syntax()).expect("root is a SourceFile")
-    }
-
-    #[test]
-    fn type_decl_accessors_match_the_fixture() {
-        let decl = source_file()
-            .type_decls()
-            .next()
-            .expect("the fixture has one type declaration");
-        assert_eq!(decl.name().as_deref(), Some("Speed"));
-        assert_eq!(decl.unit().as_deref(), Some("km/h"));
-        assert_eq!(
-            decl.range(),
-            Some(RangeSpec {
-                min: 0.0,
-                max: 250.0,
-                step: Some(0.5),
-            }),
-        );
-    }
-
-    #[test]
-    fn const_decl_accessors_match_the_fixture() {
-        let decl = source_file()
-            .const_decls()
-            .next()
-            .expect("the fixture has one const declaration");
-        assert_eq!(decl.name().as_deref(), Some("MAX_SPEED"));
-        assert_eq!(decl.type_name().as_deref(), Some("Speed"));
-        assert_eq!(decl.value(), Some(250.0));
-    }
-}
+// The E0 accessor tests parsed the fixture and read the E0 node kinds; the
+// E1.2b parser no longer emits those kinds, so the tests moved with the
+// consumers to `crate::ast`. The module itself is deleted in task E1.2c.
