@@ -620,6 +620,160 @@ mod tests {
         assert_eq!(const_def.regex().unwrap().text(), r"/^\d+(\.\d+)?$/");
     }
 
+    /// `error type Broken: boolean` — the grammar admits a misplaced
+    /// `error` modifier on every definition kind, so the checker (not the
+    /// parser) can reject it with TYPL-212; `is_error()` must see it.
+    #[test]
+    fn misplaced_error_modifier_is_held_and_found() {
+        let mut b = GreenNodeBuilder::new();
+        b.start_node(SyntaxKind::SourceFile.into());
+        b.start_node(SyntaxKind::TypeDef.into());
+        token(&mut b, SyntaxKind::ErrorKw, "error");
+        token(&mut b, SyntaxKind::Whitespace, " ");
+        token(&mut b, SyntaxKind::TypeKw, "type");
+        token(&mut b, SyntaxKind::Whitespace, " ");
+        name(&mut b, "Broken");
+        token(&mut b, SyntaxKind::Colon, ":");
+        token(&mut b, SyntaxKind::Whitespace, " ");
+        b.start_node(SyntaxKind::PrimitiveType.into());
+        token(&mut b, SyntaxKind::BooleanKw, "boolean");
+        b.finish_node();
+        b.finish_node();
+        b.finish_node();
+        let root = SyntaxNode::new_root(b.finish());
+
+        let file = SourceFile::cast(root).expect("root is a SourceFile");
+        let Some(Definition::Type(type_def)) = file.definitions().next() else {
+            panic!("expected a type definition");
+        };
+        assert!(type_def.is_error());
+        assert!(type_def.error_token().is_some());
+        assert!(!type_def.is_internal());
+    }
+
+    /// Builds a bare `Constraint` node: `[` + the given body + `]`.
+    fn constraint(build: impl FnOnce(&mut GreenNodeBuilder<'static>)) -> Constraint {
+        let mut b = GreenNodeBuilder::new();
+        b.start_node(SyntaxKind::Constraint.into());
+        token(&mut b, SyntaxKind::LBracket, "[");
+        build(&mut b);
+        token(&mut b, SyntaxKind::RBracket, "]");
+        b.finish_node();
+        Constraint::cast(SyntaxNode::new_root(b.finish())).expect("Constraint casts")
+    }
+
+    /// A `Bound` node: one literal, or two literals around `..`.
+    fn bound(builder: &mut GreenNodeBuilder<'static>, min: &str, max: Option<&str>) {
+        builder.start_node(SyntaxKind::Bound.into());
+        literal(builder, SyntaxKind::IntNumber, min);
+        if let Some(max) = max {
+            token(builder, SyntaxKind::DotDot, "..");
+            literal(builder, SyntaxKind::IntNumber, max);
+        }
+        builder.finish_node();
+    }
+
+    /// Open ranges: the scalar accessors key on the anchor tokens, not on
+    /// child positions, so `[..255]` has no min and `[0..]` has no max.
+    #[test]
+    fn open_ranges_anchor_the_scalar_roles() {
+        // `[..255]` — the literal after a leading `..` is the max.
+        let upper_only = constraint(|b| {
+            token(b, SyntaxKind::DotDot, "..");
+            literal(b, SyntaxKind::IntNumber, "255");
+        });
+        assert!(upper_only.min().is_none());
+        assert_eq!(upper_only.max().unwrap().syntax().text().to_string(), "255");
+        assert!(upper_only.step().is_none());
+        assert!(upper_only.match_pattern().is_none());
+        assert!(upper_only.len().is_none());
+
+        // `[0..]` — the literal before a trailing `..` is the min.
+        let lower_only = constraint(|b| {
+            literal(b, SyntaxKind::IntNumber, "0");
+            token(b, SyntaxKind::DotDot, "..");
+        });
+        assert_eq!(lower_only.min().unwrap().syntax().text().to_string(), "0");
+        assert!(lower_only.max().is_none());
+        assert!(lower_only.step().is_none());
+        assert!(lower_only.match_pattern().is_none());
+    }
+
+    /// `[match PATTERN]` — a bare match pattern is not a scalar endpoint.
+    #[test]
+    fn bare_match_pattern_is_not_a_scalar_endpoint() {
+        let bare_match = constraint(|b| {
+            token(b, SyntaxKind::MatchKw, "match");
+            token(b, SyntaxKind::Whitespace, " ");
+            literal(b, SyntaxKind::Ident, "PATTERN");
+        });
+        assert!(bare_match.min().is_none());
+        assert!(bare_match.max().is_none());
+        assert!(bare_match.step().is_none());
+        assert!(bare_match.len().is_none());
+        assert_eq!(
+            bare_match
+                .match_pattern()
+                .unwrap()
+                .syntax()
+                .text()
+                .to_string(),
+            "PATTERN",
+        );
+    }
+
+    /// Length bounds nest their literals inside a `Bound` child: they never
+    /// leak into the scalar accessors, and the `..` inside the bound does
+    /// not move the anchor-token role tracker.
+    #[test]
+    fn length_bound_literals_do_not_leak_into_the_scalar_accessors() {
+        // `[17 match /re/]` — exact length plus pattern.
+        let exact_len = constraint(|b| {
+            bound(b, "17", None);
+            token(b, SyntaxKind::Whitespace, " ");
+            token(b, SyntaxKind::MatchKw, "match");
+            token(b, SyntaxKind::Whitespace, " ");
+            literal(b, SyntaxKind::Regex, "/re/");
+        });
+        assert!(exact_len.min().is_none());
+        assert!(exact_len.max().is_none());
+        let len = exact_len.len().expect("the length bound is present");
+        assert_eq!(len.min().unwrap().syntax().text().to_string(), "17");
+        assert!(len.max().is_none());
+        assert_eq!(
+            exact_len
+                .match_pattern()
+                .unwrap()
+                .syntax()
+                .text()
+                .to_string(),
+            "/re/",
+        );
+
+        // `[3..6 match P]` — length range plus named pattern.
+        let len_range = constraint(|b| {
+            bound(b, "3", Some("6"));
+            token(b, SyntaxKind::Whitespace, " ");
+            token(b, SyntaxKind::MatchKw, "match");
+            token(b, SyntaxKind::Whitespace, " ");
+            literal(b, SyntaxKind::Ident, "P");
+        });
+        assert!(len_range.min().is_none());
+        assert!(len_range.max().is_none());
+        let len = len_range.len().expect("the length bound is present");
+        assert_eq!(len.min().unwrap().syntax().text().to_string(), "3");
+        assert_eq!(len.max().unwrap().syntax().text().to_string(), "6");
+        assert_eq!(
+            len_range
+                .match_pattern()
+                .unwrap()
+                .syntax()
+                .text()
+                .to_string(),
+            "P",
+        );
+    }
+
     #[test]
     fn enum_set_def_derived_form_exposes_the_backing_ref() {
         let mut b = GreenNodeBuilder::new();

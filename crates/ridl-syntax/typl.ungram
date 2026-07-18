@@ -26,8 +26,10 @@
 //
 // Separator discipline (typl reference §15.2): newline and comma are
 // interchangeable inside every block construct, and a trailing comma is
-// permitted. Newlines are trivia, so the block rules below show members
-// without separators; the parser owns the separator checks.
+// permitted. Newlines are trivia; separator commas are real tokens, and
+// the parser places them as direct children of the block node, between
+// members — the `','?` in each member repetition below admits them. The
+// parser owns the separator checks.
 
 // ---------- Top level ----------
 
@@ -57,7 +59,7 @@ Definition =
 // ---------- Type ----------
 
 TypeDef =
-  'internal'? 'type' Name ':' Backing Constraint? InitValue?
+  'internal'? 'error'? 'type' Name ':' Backing Constraint? InitValue?
 
 Backing =
   PrimitiveType
@@ -100,14 +102,14 @@ Bound =
 // ---------- Constants ----------
 
 // The value of a regex constant (typl reference §6.2) is a Literal
-// wrapping a 'regex' token; ConstDef::regex() in src/ast.rs digs it out.
+// wrapping a 'regex' token; ConstDef::regex() in src/ast.rs extracts it.
 ConstDef =
-  'internal'? 'const' Name (':' type_ref:PathType)? '=' value:Literal
+  'internal'? 'error'? 'const' Name (':' type_ref:PathType)? '=' value:Literal
 
 // ---------- Struct ----------
 
 StructDef =
-  'internal'? 'error'? 'struct' Name '{' members:StructMember* '}'
+  'internal'? 'error'? 'struct' Name '{' (members:StructMember ','?)* '}'
 
 StructMember =
   FieldDef
@@ -147,7 +149,7 @@ TupleField =
 // ---------- Enum ----------
 
 EnumDef =
-  'internal'? 'error'? 'enum' Name '{' (values:EnumValue | reserved:ReservedEntry)* '}'
+  'internal'? 'error'? 'enum' Name '{' ((values:EnumValue | reserved:ReservedEntry) ','?)* '}'
 
 EnumValue =
   Name '=' value:Literal
@@ -156,8 +158,8 @@ EnumValue =
 
 // Standalone form and derived form (typl reference §9.1–§9.2).
 EnumSetDef =
-  'internal'? 'enumset' Name '{' bits:EnumSetBit* '}'
-| 'internal'? 'enumset' Name ':' backing_ref:PathType
+  'internal'? 'error'? 'enumset' Name '{' (bits:EnumSetBit ','?)* '}'
+| 'internal'? 'error'? 'enumset' Name ':' backing_ref:PathType
 
 EnumSetBit =
   Name '=' value:Literal
@@ -165,7 +167,7 @@ EnumSetBit =
 // ---------- Union ----------
 
 UnionDef =
-  'internal'? 'error'? 'union' Name '{' (arms:UnionArm | reserved:ReservedEntry)* '}'
+  'internal'? 'error'? 'union' Name '{' ((arms:UnionArm | reserved:ReservedEntry) ','?)* '}'
 
 UnionArm =
   Name ':' type_ref:PathType

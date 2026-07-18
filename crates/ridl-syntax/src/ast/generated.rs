@@ -147,6 +147,9 @@ impl TypeDef {
     pub fn internal_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::InternalKw)
     }
+    pub fn error_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::ErrorKw)
+    }
     pub fn type_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::TypeKw)
     }
@@ -179,6 +182,9 @@ impl ConstDef {
     }
     pub fn internal_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::InternalKw)
+    }
+    pub fn error_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::ErrorKw)
     }
     pub fn const_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::ConstKw)
@@ -222,6 +228,9 @@ impl StructDef {
     pub fn l_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::LBrace)
     }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
     pub fn r_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::RBrace)
     }
@@ -261,6 +270,9 @@ impl EnumDef {
     pub fn l_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::LBrace)
     }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
     pub fn r_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::RBrace)
     }
@@ -291,11 +303,17 @@ impl EnumSetDef {
     pub fn internal_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::InternalKw)
     }
+    pub fn error_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::ErrorKw)
+    }
     pub fn enumset_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::EnumsetKw)
     }
     pub fn l_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
     }
     pub fn r_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::RBrace)
@@ -338,6 +356,9 @@ impl UnionDef {
     }
     pub fn l_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
     }
     pub fn r_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::RBrace)
