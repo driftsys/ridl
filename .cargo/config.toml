@@ -1,0 +1,4 @@
+# Workspace-local cargo aliases. `cargo xtask <task>` runs the automation
+# crate (ADR-0007 decision 1) — see xtask/src/main.rs for the task list.
+[alias]
+xtask = "run --package xtask --"
