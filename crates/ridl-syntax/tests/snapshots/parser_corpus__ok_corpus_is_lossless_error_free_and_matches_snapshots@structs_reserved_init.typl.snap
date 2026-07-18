@@ -1,0 +1,271 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/structs_reserved_init.typl
+---
+SourceFile@0..705
+  LineComment@0..72 "// Structs: fields, o ..."
+  Whitespace@72..73 "\n"
+  LineComment@73..107 "// modifiers (typl re ..."
+  Whitespace@107..108 "\n"
+  PackageDecl@108..130
+    PackageKw@108..115 "package"
+    Whitespace@115..116 " "
+    QualifiedName@116..130
+      Ident@116..122 "corpus"
+      Dot@122..123 "."
+      Ident@123..130 "structs"
+  Whitespace@130..132 "\n\n"
+  StructDef@132..278
+    StructKw@132..138 "struct"
+    Whitespace@138..139 " "
+    Name@139..152
+      Ident@139..152 "DriverProfile"
+    Whitespace@152..153 " "
+    LBrace@153..154 "{"
+    Whitespace@154..157 "\n  "
+    FieldDef@157..172
+      Name@157..161
+        Ident@157..161 "name"
+      Whitespace@161..166 "     "
+      Colon@166..167 ":"
+      Whitespace@167..168 " "
+      PathType@168..172
+        QualifiedName@168..172
+          Ident@168..172 "Name"
+    Whitespace@172..175 "\n  "
+    ReservedEntry@175..198
+      ReservedKw@175..183 "reserved"
+      Whitespace@183..184 " "
+      Name@184..198
+        Ident@184..198 "legacyChecksum"
+    Whitespace@198..201 "\n  "
+    FieldDef@201..217
+      Name@201..206
+        Ident@201..206 "speed"
+      Whitespace@206..210 "    "
+      Colon@210..211 ":"
+      Whitespace@211..212 " "
+      PathType@212..217
+        QualifiedName@212..217
+          Ident@212..217 "Speed"
+    Whitespace@217..220 "\n  "
+    FieldDef@220..237
+      Name@220..228
+        Ident@220..228 "override"
+      Whitespace@228..229 " "
+      Colon@229..230 ":"
+      Whitespace@230..231 " "
+      OptionalType@231..237
+        PathType@231..236
+          QualifiedName@231..236
+            Ident@231..236 "Speed"
+        Question@236..237 "?"
+    Whitespace@237..240 "\n  "
+    FieldDef@240..276
+      Name@240..245
+        Ident@240..245 "gears"
+      Whitespace@245..249 "    "
+      Colon@249..250 ":"
+      Whitespace@250..251 " "
+      PrimitiveType@251..272
+        IntegerKw@251..258 "integer"
+        Whitespace@258..259 " "
+        Constraint@259..272
+          LBracket@259..260 "["
+          Literal@260..261
+            IntNumber@260..261 "0"
+          DotDot@261..263 ".."
+          Literal@263..271
+            Ident@263..271 "MAX_GEAR"
+          RBracket@271..272 "]"
+      Whitespace@272..273 " "
+      InitValue@273..276
+        Eq@273..274 "="
+        Whitespace@274..275 " "
+        Literal@275..276
+          IntNumber@275..276 "3"
+    Whitespace@276..277 "\n"
+    RBrace@277..278 "}"
+  Whitespace@278..280 "\n\n"
+  DocComment@280..329 "/// Retry policy with ..."
+  Whitespace@329..330 "\n"
+  StructDef@330..458
+    StructKw@330..336 "struct"
+    Whitespace@336..337 " "
+    Name@337..348
+      Ident@337..348 "RetryPolicy"
+    Whitespace@348..349 " "
+    LBrace@349..350 "{"
+    Whitespace@350..353 "\n  "
+    FieldDef@353..383
+      Name@353..361
+        Ident@353..361 "attempts"
+      Whitespace@361..362 " "
+      Colon@362..363 ":"
+      Whitespace@363..364 " "
+      PrimitiveType@364..379
+        IntegerKw@364..371 "integer"
+        Whitespace@371..372 " "
+        Constraint@372..379
+          LBracket@372..373 "["
+          Literal@373..374
+            IntNumber@373..374 "0"
+          DotDot@374..376 ".."
+          Literal@376..378
+            IntNumber@376..378 "10"
+          RBracket@378..379 "]"
+      Whitespace@379..380 " "
+      InitValue@380..383
+        Eq@380..381 "="
+        Whitespace@381..382 " "
+        Literal@382..383
+          IntNumber@382..383 "3"
+    Whitespace@383..386 "\n  "
+    FieldDef@386..428
+      Name@386..392
+        Ident@386..392 "factor"
+      Whitespace@392..395 "   "
+      Colon@395..396 ":"
+      Whitespace@396..397 " "
+      PrimitiveType@397..422
+        FloatKw@397..402 "float"
+        Whitespace@402..403 " "
+        Constraint@403..422
+          LBracket@403..404 "["
+          Literal@404..407
+            FloatNumber@404..407 "1.0"
+          DotDot@407..409 ".."
+          Literal@409..412
+            FloatNumber@409..412 "8.0"
+          Whitespace@412..413 " "
+          StepKw@413..417 "step"
+          Whitespace@417..418 " "
+          Literal@418..421
+            FloatNumber@418..421 "0.5"
+          RBracket@421..422 "]"
+      Whitespace@422..423 " "
+      InitValue@423..428
+        Eq@423..424 "="
+        Whitespace@424..425 " "
+        Literal@425..428
+          FloatNumber@425..428 "2.0"
+    Whitespace@428..431 "\n  "
+    FieldDef@431..456
+      Name@431..438
+        Ident@431..438 "enabled"
+      Whitespace@438..440 "  "
+      Colon@440..441 ":"
+      Whitespace@441..442 " "
+      PrimitiveType@442..449
+        BooleanKw@442..449 "boolean"
+      Whitespace@449..450 " "
+      InitValue@450..456
+        Eq@450..451 "="
+        Whitespace@451..452 " "
+        Literal@452..456
+          TrueKw@452..456 "true"
+    Whitespace@456..457 "\n"
+    RBrace@457..458 "}"
+  Whitespace@458..460 "\n\n"
+  StructDef@460..527
+    InternalKw@460..468 "internal"
+    Whitespace@468..469 " "
+    StructKw@469..475 "struct"
+    Whitespace@475..476 " "
+    Name@476..489
+      Ident@476..489 "RawWheelFrame"
+    Whitespace@489..490 " "
+    LBrace@490..491 "{"
+    Whitespace@491..494 "\n  "
+    FieldDef@494..509
+      Name@494..499
+        Ident@494..499 "ticks"
+      Whitespace@499..500 " "
+      Colon@500..501 ":"
+      Whitespace@501..502 " "
+      PathType@502..509
+        QualifiedName@502..509
+          Ident@502..509 "Counter"
+    Whitespace@509..512 "\n  "
+    FieldDef@512..525
+      Name@512..517
+        Ident@512..517 "frame"
+      Whitespace@517..518 " "
+      Colon@518..519 ":"
+      Whitespace@519..520 " "
+      PathType@520..525
+        QualifiedName@520..525
+          Ident@520..525 "Frame"
+    Whitespace@525..526 "\n"
+    RBrace@526..527 "}"
+  Whitespace@527..529 "\n\n"
+  StructDef@529..597
+    ErrorKw@529..534 "error"
+    Whitespace@534..535 " "
+    StructKw@535..541 "struct"
+    Whitespace@541..542 " "
+    Name@542..553
+      Ident@542..553 "SensorFault"
+    Whitespace@553..554 " "
+    LBrace@554..555 "{"
+    Whitespace@555..558 "\n  "
+    FieldDef@558..575
+      Name@558..562
+        Ident@558..562 "code"
+      Whitespace@562..566 "    "
+      Colon@566..567 ":"
+      Whitespace@567..568 " "
+      PathType@568..575
+        QualifiedName@568..575
+          Ident@568..575 "Counter"
+    Whitespace@575..578 "\n  "
+    FieldDef@578..595
+      Name@578..585
+        Ident@578..585 "message"
+      Whitespace@585..586 " "
+      Colon@586..587 ":"
+      Whitespace@587..588 " "
+      PathType@588..595
+        QualifiedName@588..595
+          Ident@588..595 "Message"
+    Whitespace@595..596 "\n"
+    RBrace@596..597 "}"
+  Whitespace@597..599 "\n\n"
+  StructDef@599..704
+    StructKw@599..605 "struct"
+    Whitespace@605..606 " "
+    Name@606..615
+      Ident@606..615 "Qualified"
+    Whitespace@615..616 " "
+    LBrace@616..617 "{"
+    Whitespace@617..620 "\n  "
+    FieldDef@620..653
+      Name@620..625
+        Ident@620..625 "limit"
+      Whitespace@625..626 " "
+      Colon@626..627 ":"
+      Whitespace@627..628 " "
+      PathType@628..653
+        QualifiedName@628..653
+          Ident@628..631 "veh"
+          Dot@631..632 "."
+          Ident@632..642 "regulatory"
+          Dot@642..643 "."
+          Ident@643..653 "SpeedLimit"
+    Whitespace@653..656 "\n  "
+    DocComment@656..685 "/// A doc comment on  ..."
+    Whitespace@685..688 "\n  "
+    FieldDef@688..702
+      Name@688..694
+        Ident@688..694 "actual"
+      Whitespace@694..695 " "
+      Colon@695..696 ":"
+      Whitespace@696..697 " "
+      PathType@697..702
+        QualifiedName@697..702
+          Ident@697..702 "Speed"
+    Whitespace@702..703 "\n"
+    RBrace@703..704 "}"
+  Whitespace@704..705 "\n"
+errors: none

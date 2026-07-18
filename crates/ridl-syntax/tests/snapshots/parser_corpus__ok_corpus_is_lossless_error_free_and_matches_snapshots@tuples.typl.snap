@@ -1,0 +1,205 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/tuples.typl
+---
+SourceFile@0..379
+  LineComment@0..78 "// Tuples: anonymous  ..."
+  Whitespace@78..79 "\n"
+  PackageDecl@79..100
+    PackageKw@79..86 "package"
+    Whitespace@86..87 " "
+    QualifiedName@87..100
+      Ident@87..93 "corpus"
+      Dot@93..94 "."
+      Ident@94..100 "tuples"
+  Whitespace@100..102 "\n\n"
+  StructDef@102..160
+    StructKw@102..108 "struct"
+    Whitespace@108..109 " "
+    Name@109..121
+      Ident@109..121 "SensorBounds"
+    Whitespace@121..122 " "
+    LBrace@122..123 "{"
+    Whitespace@123..126 "\n  "
+    FieldDef@126..158
+      Name@126..131
+        Ident@126..131 "range"
+      Whitespace@131..132 " "
+      Colon@132..133 ":"
+      Whitespace@133..134 " "
+      TupleType@134..158
+        LParen@134..135 "("
+        TupleField@135..145
+          Name@135..138
+            Ident@135..138 "min"
+          Colon@138..139 ":"
+          Whitespace@139..140 " "
+          PathType@140..145
+            QualifiedName@140..145
+              Ident@140..145 "Speed"
+        Comma@145..146 ","
+        Whitespace@146..147 " "
+        TupleField@147..157
+          Name@147..150
+            Ident@147..150 "max"
+          Colon@150..151 ":"
+          Whitespace@151..152 " "
+          PathType@152..157
+            QualifiedName@152..157
+              Ident@152..157 "Speed"
+        RParen@157..158 ")"
+    Whitespace@158..159 "\n"
+    RBrace@159..160 "}"
+  Whitespace@160..162 "\n\n"
+  StructDef@162..378
+    StructKw@162..168 "struct"
+    Whitespace@168..169 " "
+    Name@169..179
+      Ident@169..179 "Calibrated"
+    Whitespace@179..180 " "
+    LBrace@180..181 "{"
+    Whitespace@181..184 "\n  "
+    FieldDef@184..230
+      Name@184..190
+        Ident@184..190 "window"
+      Whitespace@190..193 "   "
+      Colon@193..194 ":"
+      Whitespace@194..195 " "
+      TupleType@195..230
+        LParen@195..196 "("
+        TupleField@196..212
+          Name@196..201
+            Ident@196..201 "start"
+          Colon@201..202 ":"
+          Whitespace@202..203 " "
+          PathType@203..212
+            QualifiedName@203..212
+              Ident@203..212 "Timestamp"
+        Comma@212..213 ","
+        Whitespace@213..214 " "
+        TupleField@214..229
+          Name@214..218
+            Ident@214..218 "stop"
+          Colon@218..219 ":"
+          Whitespace@219..220 " "
+          PathType@220..229
+            QualifiedName@220..229
+              Ident@220..229 "Timestamp"
+        RParen@229..230 ")"
+    Whitespace@230..233 "\n  "
+    FieldDef@233..270
+      Name@233..241
+        Ident@233..241 "optional"
+      Whitespace@241..242 " "
+      Colon@242..243 ":"
+      Whitespace@243..244 " "
+      OptionalType@244..270
+        TupleType@244..269
+          LParen@244..245 "("
+          TupleField@245..255
+            Name@245..248
+              Ident@245..248 "low"
+            Colon@248..249 ":"
+            Whitespace@249..250 " "
+            PathType@250..255
+              QualifiedName@250..255
+                Ident@250..255 "Speed"
+          Comma@255..256 ","
+          Whitespace@256..257 " "
+          TupleField@257..268
+            Name@257..261
+              Ident@257..261 "high"
+            Colon@261..262 ":"
+            Whitespace@262..263 " "
+            PathType@263..268
+              QualifiedName@263..268
+                Ident@263..268 "Speed"
+          RParen@268..269 ")"
+        Question@269..270 "?"
+    Whitespace@270..273 "\n  "
+    FieldDef@273..325
+      Name@273..279
+        Ident@273..279 "nested"
+      Whitespace@279..282 "   "
+      Colon@282..283 ":"
+      Whitespace@283..284 " "
+      TupleType@284..325
+        LParen@284..285 "("
+        TupleField@285..297
+          Name@285..290
+            Ident@285..290 "outer"
+          Colon@290..291 ":"
+          Whitespace@291..292 " "
+          PathType@292..297
+            QualifiedName@292..297
+              Ident@292..297 "Speed"
+        Comma@297..298 ","
+        Whitespace@298..299 " "
+        TupleField@299..324
+          Name@299..304
+            Ident@299..304 "inner"
+          Colon@304..305 ":"
+          Whitespace@305..306 " "
+          TupleType@306..324
+            LParen@306..307 "("
+            TupleField@307..314
+              Name@307..308
+                Ident@307..308 "a"
+              Colon@308..309 ":"
+              Whitespace@309..310 " "
+              PathType@310..314
+                QualifiedName@310..314
+                  Ident@310..314 "Gain"
+            Comma@314..315 ","
+            Whitespace@315..316 " "
+            TupleField@316..323
+              Name@316..317
+                Ident@316..317 "b"
+              Colon@317..318 ":"
+              Whitespace@318..319 " "
+              PathType@319..323
+                QualifiedName@319..323
+                  Ident@319..323 "Gain"
+            RParen@323..324 ")"
+        RParen@324..325 ")"
+    Whitespace@325..328 "\n  "
+    FieldDef@328..376
+      Name@328..333
+        Ident@328..333 "mixed"
+      Whitespace@333..337 "    "
+      Colon@337..338 ":"
+      Whitespace@338..339 " "
+      TupleType@339..376
+        LParen@339..340 "("
+        TupleField@340..352
+          Name@340..345
+            Ident@340..345 "value"
+          Colon@345..346 ":"
+          Whitespace@346..347 " "
+          PathType@347..352
+            QualifiedName@347..352
+              Ident@347..352 "Speed"
+        Comma@352..353 ","
+        Whitespace@353..354 " "
+        TupleField@354..375
+          Name@354..357
+            Ident@354..357 "raw"
+          Colon@357..358 ":"
+          Whitespace@358..359 " "
+          PrimitiveType@359..375
+            IntegerKw@359..366 "integer"
+            Whitespace@366..367 " "
+            Constraint@367..375
+              LBracket@367..368 "["
+              Literal@368..369
+                IntNumber@368..369 "0"
+              DotDot@369..371 ".."
+              Literal@371..374
+                IntNumber@371..374 "255"
+              RBracket@374..375 "]"
+        RParen@375..376 ")"
+    Whitespace@376..377 "\n"
+    RBrace@377..378 "}"
+  Whitespace@378..379 "\n"
+errors: none

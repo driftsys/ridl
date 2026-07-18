@@ -1,0 +1,271 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/separators_commas.typl
+---
+SourceFile@0..540
+  LineComment@0..71 "// Separator discipli ..."
+  Whitespace@71..72 "\n"
+  LineComment@72..141 "// block construct, t ..."
+  Whitespace@141..142 "\n"
+  PackageDecl@142..167
+    PackageKw@142..149 "package"
+    Whitespace@149..150 " "
+    QualifiedName@150..167
+      Ident@150..156 "corpus"
+      Dot@156..157 "."
+      Ident@157..167 "separators"
+  Whitespace@167..169 "\n\n"
+  EnumDef@169..245
+    EnumKw@169..173 "enum"
+    Whitespace@173..174 " "
+    Name@174..181
+      Ident@174..181 "Warning"
+    Whitespace@181..182 " "
+    LBrace@182..183 "{"
+    Whitespace@183..184 " "
+    EnumValue@184..196
+      Name@184..192
+        Ident@184..192 "LOW_FUEL"
+      Whitespace@192..193 " "
+      Eq@193..194 "="
+      Whitespace@194..195 " "
+      Literal@195..196
+        IntNumber@195..196 "0"
+    Comma@196..197 ","
+    Whitespace@197..198 " "
+    EnumValue@198..214
+      Name@198..210
+        Ident@198..210 "CHECK_ENGINE"
+      Whitespace@210..211 " "
+      Eq@211..212 "="
+      Whitespace@212..213 " "
+      Literal@213..214
+        IntNumber@213..214 "1"
+    Comma@214..215 ","
+    Whitespace@215..216 " "
+    EnumValue@216..229
+      Name@216..225
+        Ident@216..225 "DOOR_OPEN"
+      Whitespace@225..226 " "
+      Eq@226..227 "="
+      Whitespace@227..228 " "
+      Literal@228..229
+        IntNumber@228..229 "2"
+    Comma@229..230 ","
+    Whitespace@230..231 " "
+    EnumValue@231..243
+      Name@231..239
+        Ident@231..239 "SEATBELT"
+      Whitespace@239..240 " "
+      Eq@240..241 "="
+      Whitespace@241..242 " "
+      Literal@242..243
+        IntNumber@242..243 "3"
+    Whitespace@243..244 " "
+    RBrace@244..245 "}"
+  Whitespace@245..247 "\n\n"
+  EnumDef@247..282
+    EnumKw@247..251 "enum"
+    Whitespace@251..252 " "
+    Name@252..260
+      Ident@252..260 "Trailing"
+    Whitespace@260..261 " "
+    LBrace@261..262 "{"
+    Whitespace@262..265 "\n  "
+    EnumValue@265..270
+      Name@265..266
+        Ident@265..266 "A"
+      Whitespace@266..267 " "
+      Eq@267..268 "="
+      Whitespace@268..269 " "
+      Literal@269..270
+        IntNumber@269..270 "0"
+    Comma@270..271 ","
+    Whitespace@271..274 "\n  "
+    EnumValue@274..279
+      Name@274..275
+        Ident@274..275 "B"
+      Whitespace@275..276 " "
+      Eq@276..277 "="
+      Whitespace@277..278 " "
+      Literal@278..279
+        IntNumber@278..279 "1"
+    Comma@279..280 ","
+    Whitespace@280..281 "\n"
+    RBrace@281..282 "}"
+  Whitespace@282..284 "\n\n"
+  StructDef@284..332
+    StructKw@284..290 "struct"
+    Whitespace@290..291 " "
+    Name@291..298
+      Ident@291..298 "OneLine"
+    Whitespace@298..299 " "
+    LBrace@299..300 "{"
+    Whitespace@300..301 " "
+    FieldDef@301..314
+      Name@301..306
+        Ident@301..306 "limit"
+      Whitespace@306..307 " "
+      Colon@307..308 ":"
+      Whitespace@308..309 " "
+      PathType@309..314
+        QualifiedName@309..314
+          Ident@309..314 "Speed"
+    Comma@314..315 ","
+    Whitespace@315..316 " "
+    FieldDef@316..330
+      Name@316..322
+        Ident@316..322 "actual"
+      Whitespace@322..323 " "
+      Colon@323..324 ":"
+      Whitespace@324..325 " "
+      PathType@325..330
+        QualifiedName@325..330
+          Ident@325..330 "Speed"
+    Whitespace@330..331 " "
+    RBrace@331..332 "}"
+  Whitespace@332..334 "\n\n"
+  StructDef@334..401
+    StructKw@334..340 "struct"
+    Whitespace@340..341 " "
+    Name@341..346
+      Ident@341..346 "Mixed"
+    Whitespace@346..347 " "
+    LBrace@347..348 "{"
+    Whitespace@348..351 "\n  "
+    FieldDef@351..365
+      Name@351..356
+        Ident@351..356 "first"
+      Whitespace@356..358 "  "
+      Colon@358..359 ":"
+      Whitespace@359..360 " "
+      PathType@360..365
+        QualifiedName@360..365
+          Ident@360..365 "Speed"
+    Comma@365..366 ","
+    Whitespace@366..367 " "
+    FieldDef@367..381
+      Name@367..373
+        Ident@367..373 "second"
+      Whitespace@373..374 " "
+      Colon@374..375 ":"
+      Whitespace@375..376 " "
+      PathType@376..381
+        QualifiedName@376..381
+          Ident@376..381 "Speed"
+    Whitespace@381..384 "\n  "
+    FieldDef@384..398
+      Name@384..389
+        Ident@384..389 "third"
+      Whitespace@389..391 "  "
+      Colon@391..392 ":"
+      Whitespace@392..393 " "
+      PathType@393..398
+        QualifiedName@393..398
+          Ident@393..398 "Speed"
+    Comma@398..399 ","
+    Whitespace@399..400 "\n"
+    RBrace@400..401 "}"
+  Whitespace@401..403 "\n\n"
+  EnumSetDef@403..439
+    EnumsetKw@403..410 "enumset"
+    Whitespace@410..411 " "
+    Name@411..416
+      Ident@411..416 "Flags"
+    Whitespace@416..417 " "
+    LBrace@417..418 "{"
+    Whitespace@418..419 " "
+    EnumSetBit@419..426
+      Name@419..422
+        Ident@419..422 "LOW"
+      Whitespace@422..423 " "
+      Eq@423..424 "="
+      Whitespace@424..425 " "
+      Literal@425..426
+        IntNumber@425..426 "0"
+    Comma@426..427 ","
+    Whitespace@427..428 " "
+    EnumSetBit@428..436
+      Name@428..432
+        Ident@428..432 "HIGH"
+      Whitespace@432..433 " "
+      Eq@433..434 "="
+      Whitespace@434..435 " "
+      Literal@435..436
+        IntNumber@435..436 "1"
+    Comma@436..437 ","
+    Whitespace@437..438 " "
+    RBrace@438..439 "}"
+  Whitespace@439..441 "\n\n"
+  UnionDef@441..477
+    UnionKw@441..446 "union"
+    Whitespace@446..447 " "
+    Name@447..453
+      Ident@447..453 "Choice"
+    Whitespace@453..454 " "
+    LBrace@454..455 "{"
+    Whitespace@455..456 " "
+    UnionArm@456..465
+      Name@456..457
+        Ident@456..457 "a"
+      Whitespace@457..458 " "
+      Colon@458..459 ":"
+      Whitespace@459..460 " "
+      PathType@460..465
+        QualifiedName@460..465
+          Ident@460..465 "Alpha"
+    Comma@465..466 ","
+    Whitespace@466..467 " "
+    UnionArm@467..475
+      Name@467..468
+        Ident@467..468 "b"
+      Whitespace@468..469 " "
+      Colon@469..470 ":"
+      Whitespace@470..471 " "
+      PathType@471..475
+        QualifiedName@471..475
+          Ident@471..475 "Beta"
+    Whitespace@475..476 " "
+    RBrace@476..477 "}"
+  Whitespace@477..479 "\n\n"
+  StructDef@479..539
+    StructKw@479..485 "struct"
+    Whitespace@485..486 " "
+    Name@486..499
+      Ident@486..499 "TupleTrailing"
+    Whitespace@499..500 " "
+    LBrace@500..501 "{"
+    Whitespace@501..504 "\n  "
+    FieldDef@504..537
+      Name@504..509
+        Ident@504..509 "range"
+      Whitespace@509..510 " "
+      Colon@510..511 ":"
+      Whitespace@511..512 " "
+      TupleType@512..537
+        LParen@512..513 "("
+        TupleField@513..523
+          Name@513..516
+            Ident@513..516 "min"
+          Colon@516..517 ":"
+          Whitespace@517..518 " "
+          PathType@518..523
+            QualifiedName@518..523
+              Ident@518..523 "Speed"
+        Comma@523..524 ","
+        Whitespace@524..525 " "
+        TupleField@525..535
+          Name@525..528
+            Ident@525..528 "max"
+          Colon@528..529 ":"
+          Whitespace@529..530 " "
+          PathType@530..535
+            QualifiedName@530..535
+              Ident@530..535 "Speed"
+        Comma@535..536 ","
+        RParen@536..537 ")"
+    Whitespace@537..538 "\n"
+    RBrace@538..539 "}"
+  Whitespace@539..540 "\n"
+errors: none

@@ -1,0 +1,698 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/appendix_b_full_example.typl
+---
+SourceFile@0..1829
+  PackageDecl@0..18
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..18
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..18 "common"
+  Whitespace@18..20 "\n\n"
+  LineComment@20..62 "// ---------- Units a ..."
+  Whitespace@62..64 "\n\n"
+  DocComment@64..93 "/// Vehicle speed ove ..."
+  Whitespace@93..94 "\n"
+  TypeDef@94..143
+    TypeKw@94..98 "type"
+    Whitespace@98..99 " "
+    Name@99..104
+      Ident@99..104 "Speed"
+    Whitespace@104..111 "       "
+    Colon@111..112 ":"
+    Whitespace@112..113 " "
+    UnitExpr@113..117
+      Ident@113..115 "km"
+      Slash@115..116 "/"
+      Ident@116..117 "h"
+    Whitespace@117..118 " "
+    Constraint@118..143
+      LBracket@118..119 "["
+      Literal@119..122
+        FloatNumber@119..122 "0.0"
+      DotDot@122..124 ".."
+      Literal@124..133
+        Ident@124..133 "MAX_SPEED"
+      Whitespace@133..134 " "
+      StepKw@134..138 "step"
+      Whitespace@138..139 " "
+      Literal@139..142
+        FloatNumber@139..142 "0.5"
+      RBracket@142..143 "]"
+  Whitespace@143..145 "\n\n"
+  DocComment@145..178 "/// Coolant / ambient ..."
+  Whitespace@178..179 "\n"
+  TypeDef@179..226
+    TypeKw@179..183 "type"
+    Whitespace@183..184 " "
+    Name@184..195
+      Ident@184..195 "Temperature"
+    Whitespace@195..196 " "
+    Colon@196..197 ":"
+    Whitespace@197..198 " "
+    UnitExpr@198..201
+      Ident@198..201 "Cel"
+    Whitespace@201..203 "  "
+    Constraint@203..226
+      LBracket@203..204 "["
+      Literal@204..209
+        Minus@204..205 "-"
+        FloatNumber@205..209 "40.0"
+      DotDot@209..211 ".."
+      Literal@211..216
+        FloatNumber@211..216 "125.0"
+      Whitespace@216..217 " "
+      StepKw@217..221 "step"
+      Whitespace@221..222 " "
+      Literal@222..225
+        FloatNumber@222..225 "0.1"
+      RBracket@225..226 "]"
+  Whitespace@226..228 "\n\n"
+  DocComment@228..255 "/// Engine crankshaft ..."
+  Whitespace@255..256 "\n"
+  TypeDef@256..303
+    TypeKw@256..260 "type"
+    Whitespace@260..261 " "
+    Name@261..264
+      Ident@261..264 "RPM"
+    Whitespace@264..273 "         "
+    Colon@273..274 ":"
+    Whitespace@274..275 " "
+    UnitExpr@275..279
+      Slash@275..276 "/"
+      Ident@276..279 "min"
+    Whitespace@279..280 " "
+    Constraint@280..303
+      LBracket@280..281 "["
+      Literal@281..284
+        FloatNumber@281..284 "0.0"
+      DotDot@284..286 ".."
+      Literal@286..292
+        FloatNumber@286..292 "8000.0"
+      Whitespace@292..293 " "
+      StepKw@293..297 "step"
+      Whitespace@297..298 " "
+      Literal@298..302
+        FloatNumber@298..302 "10.0"
+      RBracket@302..303 "]"
+  Whitespace@303..305 "\n\n"
+  DocComment@305..325 "/// Normalised ratio"
+  Whitespace@325..326 "\n"
+  TypeDef@326..371
+    TypeKw@326..330 "type"
+    Whitespace@330..331 " "
+    Name@331..336
+      Ident@331..336 "Ratio"
+    Whitespace@336..343 "       "
+    Colon@343..344 ":"
+    Whitespace@344..345 " "
+    UnitExpr@345..346
+      Percent@345..346 "%"
+    Whitespace@346..350 "    "
+    Constraint@350..371
+      LBracket@350..351 "["
+      Literal@351..354
+        FloatNumber@351..354 "0.0"
+      DotDot@354..356 ".."
+      Literal@356..361
+        FloatNumber@356..361 "100.0"
+      Whitespace@361..362 " "
+      StepKw@362..366 "step"
+      Whitespace@366..367 " "
+      Literal@367..370
+        FloatNumber@367..370 "0.1"
+      RBracket@370..371 "]"
+  Whitespace@371..373 "\n\n"
+  TypeDef@373..406
+    TypeKw@373..377 "type"
+    Whitespace@377..378 " "
+    Name@378..385
+      Ident@378..385 "Counter"
+    Whitespace@385..386 " "
+    Colon@386..387 ":"
+    Whitespace@387..388 " "
+    PrimitiveType@388..395
+      IntegerKw@388..395 "integer"
+    Whitespace@395..396 " "
+    Constraint@396..406
+      LBracket@396..397 "["
+      Literal@397..398
+        IntNumber@397..398 "0"
+      DotDot@398..400 ".."
+      Literal@400..405
+        IntNumber@400..405 "65535"
+      RBracket@405..406 "]"
+  Whitespace@406..407 "\n"
+  TypeDef@407..450
+    TypeKw@407..411 "type"
+    Whitespace@411..412 " "
+    Name@412..416
+      Ident@412..416 "Gain"
+    Whitespace@416..420 "    "
+    Colon@420..421 ":"
+    Whitespace@421..422 " "
+    PrimitiveType@422..427
+      FloatKw@422..427 "float"
+    Whitespace@427..430 "   "
+    Constraint@430..450
+      LBracket@430..431 "["
+      Literal@431..434
+        FloatNumber@431..434 "0.0"
+      DotDot@434..436 ".."
+      Literal@436..439
+        FloatNumber@436..439 "1.0"
+      Whitespace@439..440 " "
+      StepKw@440..444 "step"
+      Whitespace@444..445 " "
+      Literal@445..449
+        FloatNumber@445..449 "0.01"
+      RBracket@449..450 "]"
+  Whitespace@450..452 "\n\n"
+  LineComment@452..486 "// ---------- Constan ..."
+  Whitespace@486..488 "\n\n"
+  ConstDef@488..526
+    ConstKw@488..493 "const"
+    Whitespace@493..494 " "
+    Name@494..503
+      Ident@494..503 "MAX_SPEED"
+    Whitespace@503..509 "      "
+    Colon@509..510 ":"
+    Whitespace@510..511 " "
+    PathType@511..516
+      QualifiedName@511..516
+        Ident@511..516 "Speed"
+    Whitespace@516..519 "   "
+    Eq@519..520 "="
+    Whitespace@520..521 " "
+    Literal@521..526
+      FloatNumber@521..526 "250.0"
+  Whitespace@526..527 "\n"
+  ConstDef@527..565
+    ConstKw@527..532 "const"
+    Whitespace@532..533 " "
+    Name@533..547
+      Ident@533..547 "SPEED_LIMIT_EU"
+    Whitespace@547..548 " "
+    Colon@548..549 ":"
+    Whitespace@549..550 " "
+    PathType@550..555
+      QualifiedName@550..555
+        Ident@550..555 "Speed"
+    Whitespace@555..558 "   "
+    Eq@558..559 "="
+    Whitespace@559..560 " "
+    Literal@560..565
+      FloatNumber@560..565 "130.0"
+  Whitespace@565..566 "\n"
+  ConstDef@566..600
+    ConstKw@566..571 "const"
+    Whitespace@571..572 " "
+    Name@572..580
+      Ident@572..580 "MAX_GEAR"
+    Whitespace@580..587 "       "
+    Colon@587..588 ":"
+    Whitespace@588..589 " "
+    PathType@589..596
+      QualifiedName@589..596
+        IntegerKw@589..596 "integer"
+    Whitespace@596..597 " "
+    Eq@597..598 "="
+    Whitespace@598..599 " "
+    Literal@599..600
+      IntNumber@599..600 "6"
+  Whitespace@600..601 "\n"
+  ConstDef@601..639
+    ConstKw@601..606 "const"
+    Whitespace@606..607 " "
+    Name@607..615
+      Ident@607..615 "IDLE_RPM"
+    Whitespace@615..622 "       "
+    Colon@622..623 ":"
+    Whitespace@623..624 " "
+    PathType@624..627
+      QualifiedName@624..627
+        Ident@624..627 "RPM"
+    Whitespace@627..632 "     "
+    Eq@632..633 "="
+    Whitespace@633..634 " "
+    Literal@634..639
+      FloatNumber@634..639 "800.0"
+  Whitespace@639..641 "\n\n"
+  LineComment@641..671 "// ---------- Enums - ..."
+  Whitespace@671..673 "\n\n"
+  EnumDef@673..750
+    EnumKw@673..677 "enum"
+    Whitespace@677..678 " "
+    Name@678..690
+      Ident@678..690 "GearPosition"
+    Whitespace@690..691 " "
+    LBrace@691..692 "{"
+    Whitespace@692..695 "\n  "
+    EnumValue@695..706
+      Name@695..699
+        Ident@695..699 "PARK"
+      Whitespace@699..703 "    "
+      Eq@703..704 "="
+      Whitespace@704..705 " "
+      Literal@705..706
+        IntNumber@705..706 "0"
+    Whitespace@706..709 "\n  "
+    EnumValue@709..720
+      Name@709..714
+        Ident@709..714 "DRIVE"
+      Whitespace@714..717 "   "
+      Eq@717..718 "="
+      Whitespace@718..719 " "
+      Literal@719..720
+        IntNumber@719..720 "1"
+    Whitespace@720..723 "\n  "
+    EnumValue@723..734
+      Name@723..730
+        Ident@723..730 "REVERSE"
+      Whitespace@730..731 " "
+      Eq@731..732 "="
+      Whitespace@732..733 " "
+      Literal@733..734
+        IntNumber@733..734 "2"
+    Whitespace@734..737 "\n  "
+    EnumValue@737..748
+      Name@737..744
+        Ident@737..744 "NEUTRAL"
+      Whitespace@744..745 " "
+      Eq@745..746 "="
+      Whitespace@746..747 " "
+      Literal@747..748
+        IntNumber@747..748 "3"
+    Whitespace@748..749 "\n"
+    RBrace@749..750 "}"
+  Whitespace@750..752 "\n\n"
+  EnumDef@752..844
+    EnumKw@752..756 "enum"
+    Whitespace@756..757 " "
+    Name@757..764
+      Ident@757..764 "Warning"
+    Whitespace@764..765 " "
+    LBrace@765..766 "{"
+    Whitespace@766..769 "\n  "
+    EnumValue@769..785
+      Name@769..777
+        Ident@769..777 "LOW_FUEL"
+      Whitespace@777..782 "     "
+      Eq@782..783 "="
+      Whitespace@783..784 " "
+      Literal@784..785
+        IntNumber@784..785 "0"
+    Whitespace@785..788 "\n  "
+    EnumValue@788..804
+      Name@788..800
+        Ident@788..800 "CHECK_ENGINE"
+      Whitespace@800..801 " "
+      Eq@801..802 "="
+      Whitespace@802..803 " "
+      Literal@803..804
+        IntNumber@803..804 "1"
+    Whitespace@804..807 "\n  "
+    EnumValue@807..823
+      Name@807..816
+        Ident@807..816 "DOOR_OPEN"
+      Whitespace@816..820 "    "
+      Eq@820..821 "="
+      Whitespace@821..822 " "
+      Literal@822..823
+        IntNumber@822..823 "2"
+    Whitespace@823..826 "\n  "
+    EnumValue@826..842
+      Name@826..834
+        Ident@826..834 "SEATBELT"
+      Whitespace@834..839 "     "
+      Eq@839..840 "="
+      Whitespace@840..841 " "
+      Literal@841..842
+        IntNumber@841..842 "3"
+    Whitespace@842..843 "\n"
+    RBrace@843..844 "}"
+  Whitespace@844..846 "\n\n"
+  EnumSetDef@846..876
+    EnumsetKw@846..853 "enumset"
+    Whitespace@853..854 " "
+    Name@854..866
+      Ident@854..866 "WarningFlags"
+    Whitespace@866..867 " "
+    Colon@867..868 ":"
+    Whitespace@868..869 " "
+    PathType@869..876
+      QualifiedName@869..876
+        Ident@869..876 "Warning"
+  Whitespace@876..878 "\n\n"
+  LineComment@878..913 "// ---------- Composi ..."
+  Whitespace@913..915 "\n\n"
+  StructDef@915..977
+    StructKw@915..921 "struct"
+    Whitespace@921..922 " "
+    Name@922..939
+      Ident@922..939 "SpeedLimitPayload"
+    Whitespace@939..940 " "
+    LBrace@940..941 "{"
+    Whitespace@941..944 "\n  "
+    FieldDef@944..958
+      Name@944..949
+        Ident@944..949 "limit"
+      Whitespace@949..951 "  "
+      Colon@951..952 ":"
+      Whitespace@952..953 " "
+      PathType@953..958
+        QualifiedName@953..958
+          Ident@953..958 "Speed"
+    Whitespace@958..961 "\n  "
+    FieldDef@961..975
+      Name@961..967
+        Ident@961..967 "actual"
+      Whitespace@967..968 " "
+      Colon@968..969 ":"
+      Whitespace@969..970 " "
+      PathType@970..975
+        QualifiedName@970..975
+          Ident@970..975 "Speed"
+    Whitespace@975..976 "\n"
+    RBrace@976..977 "}"
+  Whitespace@977..979 "\n\n"
+  StructDef@979..1147
+    StructKw@979..985 "struct"
+    Whitespace@985..986 " "
+    Name@986..999
+      Ident@986..999 "DriverProfile"
+    Whitespace@999..1000 " "
+    LBrace@1000..1001 "{"
+    Whitespace@1001..1004 "\n  "
+    FieldDef@1004..1019
+      Name@1004..1008
+        Ident@1004..1008 "name"
+      Whitespace@1008..1013 "     "
+      Colon@1013..1014 ":"
+      Whitespace@1014..1015 " "
+      PathType@1015..1019
+        QualifiedName@1015..1019
+          Ident@1015..1019 "Name"
+    Whitespace@1019..1033 "              "
+    LineComment@1033..1044 "// ridl.std"
+    Whitespace@1044..1047 "\n  "
+    FieldDef@1047..1063
+      Name@1047..1052
+        Ident@1047..1052 "speed"
+      Whitespace@1052..1056 "    "
+      Colon@1056..1057 ":"
+      Whitespace@1057..1058 " "
+      PathType@1058..1063
+        QualifiedName@1058..1063
+          Ident@1058..1063 "Speed"
+    Whitespace@1063..1066 "\n  "
+    FieldDef@1066..1083
+      Name@1066..1074
+        Ident@1066..1074 "override"
+      Whitespace@1074..1075 " "
+      Colon@1075..1076 ":"
+      Whitespace@1076..1077 " "
+      OptionalType@1077..1083
+        PathType@1077..1082
+          QualifiedName@1077..1082
+            Ident@1077..1082 "Speed"
+        Question@1082..1083 "?"
+    Whitespace@1083..1095 "            "
+    LineComment@1095..1106 "// optional"
+    Whitespace@1106..1109 "\n  "
+    FieldDef@1109..1145
+      Name@1109..1114
+        Ident@1109..1114 "gears"
+      Whitespace@1114..1118 "    "
+      Colon@1118..1119 ":"
+      Whitespace@1119..1120 " "
+      PrimitiveType@1120..1141
+        IntegerKw@1120..1127 "integer"
+        Whitespace@1127..1128 " "
+        Constraint@1128..1141
+          LBracket@1128..1129 "["
+          Literal@1129..1130
+            IntNumber@1129..1130 "0"
+          DotDot@1130..1132 ".."
+          Literal@1132..1140
+            Ident@1132..1140 "MAX_GEAR"
+          RBracket@1140..1141 "]"
+      Whitespace@1141..1142 " "
+      InitValue@1142..1145
+        Eq@1142..1143 "="
+        Whitespace@1143..1144 " "
+        Literal@1144..1145
+          IntNumber@1144..1145 "6"
+    Whitespace@1145..1146 "\n"
+    RBrace@1146..1147 "}"
+  Whitespace@1147..1149 "\n\n"
+  StructDef@1149..1297
+    StructKw@1149..1155 "struct"
+    Whitespace@1155..1156 " "
+    Name@1156..1168
+      Ident@1156..1168 "SensorBounds"
+    Whitespace@1168..1169 " "
+    LBrace@1169..1170 "{"
+    Whitespace@1170..1173 "\n  "
+    FieldDef@1173..1208
+      Name@1173..1178
+        Ident@1173..1178 "range"
+      Whitespace@1178..1182 "    "
+      Colon@1182..1183 ":"
+      Whitespace@1183..1184 " "
+      TupleType@1184..1208
+        LParen@1184..1185 "("
+        TupleField@1185..1195
+          Name@1185..1188
+            Ident@1185..1188 "min"
+          Colon@1188..1189 ":"
+          Whitespace@1189..1190 " "
+          PathType@1190..1195
+            QualifiedName@1190..1195
+              Ident@1190..1195 "Speed"
+        Comma@1195..1196 ","
+        Whitespace@1196..1197 " "
+        TupleField@1197..1207
+          Name@1197..1200
+            Ident@1197..1200 "max"
+          Colon@1200..1201 ":"
+          Whitespace@1201..1202 " "
+          PathType@1202..1207
+            QualifiedName@1202..1207
+              Ident@1202..1207 "Speed"
+        RParen@1207..1208 ")"
+    Whitespace@1208..1211 "\n  "
+    FieldDef@1211..1232
+      Name@1211..1219
+        Ident@1211..1219 "readings"
+      Whitespace@1219..1220 " "
+      Colon@1220..1221 ":"
+      Whitespace@1221..1222 " "
+      ArrayType@1222..1232
+        LBracket@1222..1223 "["
+        PathType@1223..1228
+          QualifiedName@1223..1228
+            Ident@1223..1228 "Speed"
+        Semicolon@1228..1229 ";"
+        Whitespace@1229..1230 " "
+        Bound@1230..1231
+          Literal@1230..1231
+            IntNumber@1230..1231 "8"
+        RBracket@1231..1232 "]"
+    Whitespace@1232..1235 "\n  "
+    FieldDef@1235..1260
+      Name@1235..1241
+        Ident@1235..1241 "labels"
+      Whitespace@1241..1244 "   "
+      Colon@1244..1245 ":"
+      Whitespace@1245..1246 " "
+      ArrayType@1246..1260
+        LBracket@1246..1247 "["
+        PathType@1247..1252
+          QualifiedName@1247..1252
+            Ident@1247..1252 "Label"
+        Semicolon@1252..1253 ";"
+        Whitespace@1253..1254 " "
+        Bound@1254..1259
+          Literal@1254..1255
+            IntNumber@1254..1255 "1"
+          DotDot@1255..1257 ".."
+          Literal@1257..1259
+            IntNumber@1257..1259 "16"
+        RBracket@1259..1260 "]"
+    Whitespace@1260..1263 "\n  "
+    FieldDef@1263..1295
+      Name@1263..1267
+        Ident@1263..1267 "meta"
+      Whitespace@1267..1272 "     "
+      Colon@1272..1273 ":"
+      Whitespace@1273..1274 " "
+      MapType@1274..1295
+        LBracket@1274..1275 "["
+        PathType@1275..1280
+          QualifiedName@1275..1280
+            Ident@1275..1280 "Label"
+        Whitespace@1280..1281 " "
+        Colon@1281..1282 ":"
+        Whitespace@1282..1283 " "
+        PathType@1283..1287
+          QualifiedName@1283..1287
+            Ident@1283..1287 "Name"
+        Semicolon@1287..1288 ";"
+        Whitespace@1288..1289 " "
+        Bound@1289..1294
+          Literal@1289..1290
+            IntNumber@1289..1290 "0"
+          DotDot@1290..1292 ".."
+          Literal@1292..1294
+            IntNumber@1292..1294 "32"
+        RBracket@1294..1295 "]"
+    Whitespace@1295..1296 "\n"
+    RBrace@1296..1297 "}"
+  Whitespace@1297..1299 "\n\n"
+  UnionDef@1299..1432
+    UnionKw@1299..1304 "union"
+    Whitespace@1304..1305 " "
+    Name@1305..1317
+      Ident@1305..1317 "SensorResult"
+    Whitespace@1317..1318 " "
+    LBrace@1318..1319 "{"
+    Whitespace@1319..1330 "           "
+    LineComment@1330..1388 "// result union — § ..."
+    Whitespace@1388..1391 "\n  "
+    UnionArm@1391..1410
+      Name@1391..1393
+        Ident@1391..1393 "ok"
+      Whitespace@1393..1395 "  "
+      Colon@1395..1396 ":"
+      Whitespace@1396..1397 " "
+      PathType@1397..1410
+        QualifiedName@1397..1410
+          Ident@1397..1410 "SensorReading"
+    Whitespace@1410..1413 "\n  "
+    UnionArm@1413..1430
+      Name@1413..1416
+        Ident@1413..1416 "err"
+      Whitespace@1416..1417 " "
+      Colon@1417..1418 ":"
+      Whitespace@1418..1419 " "
+      PathType@1419..1430
+        QualifiedName@1419..1430
+          Ident@1419..1430 "SensorFault"
+    Whitespace@1430..1431 "\n"
+    RBrace@1431..1432 "}"
+  Whitespace@1432..1434 "\n\n"
+  StructDef@1434..1521
+    StructKw@1434..1440 "struct"
+    Whitespace@1440..1441 " "
+    Name@1441..1454
+      Ident@1441..1454 "SensorReading"
+    Whitespace@1454..1455 " "
+    LBrace@1455..1456 "{"
+    Whitespace@1456..1459 "\n  "
+    FieldDef@1459..1476
+      Name@1459..1464
+        Ident@1459..1464 "value"
+      Whitespace@1464..1469 "     "
+      Colon@1469..1470 ":"
+      Whitespace@1470..1471 " "
+      PathType@1471..1476
+        QualifiedName@1471..1476
+          Ident@1471..1476 "Speed"
+    Whitespace@1476..1479 "\n  "
+    FieldDef@1479..1500
+      Name@1479..1488
+        Ident@1479..1488 "timestamp"
+      Whitespace@1488..1489 " "
+      Colon@1489..1490 ":"
+      Whitespace@1490..1491 " "
+      PathType@1491..1500
+        QualifiedName@1491..1500
+          Ident@1491..1500 "Timestamp"
+    Whitespace@1500..1508 "        "
+    LineComment@1508..1519 "// ridl.std"
+    Whitespace@1519..1520 "\n"
+    RBrace@1520..1521 "}"
+  Whitespace@1521..1523 "\n\n"
+  StructDef@1523..1651
+    ErrorKw@1523..1528 "error"
+    Whitespace@1528..1529 " "
+    StructKw@1529..1535 "struct"
+    Whitespace@1535..1536 " "
+    Name@1536..1547
+      Ident@1536..1547 "SensorFault"
+    Whitespace@1547..1548 " "
+    LBrace@1548..1549 "{"
+    Whitespace@1549..1554 "     "
+    LineComment@1554..1586 "// failure vocabulary ..."
+    Whitespace@1586..1589 "\n  "
+    FieldDef@1589..1606
+      Name@1589..1593
+        Ident@1589..1593 "code"
+      Whitespace@1593..1597 "    "
+      Colon@1597..1598 ":"
+      Whitespace@1598..1599 " "
+      PathType@1599..1606
+        QualifiedName@1599..1606
+          Ident@1599..1606 "Counter"
+    Whitespace@1606..1609 "\n  "
+    FieldDef@1609..1626
+      Name@1609..1616
+        Ident@1609..1616 "message"
+      Whitespace@1616..1617 " "
+      Colon@1617..1618 ":"
+      Whitespace@1618..1619 " "
+      PathType@1619..1626
+        QualifiedName@1619..1626
+          Ident@1619..1626 "Message"
+    Whitespace@1626..1638 "            "
+    LineComment@1638..1649 "// ridl.std"
+    Whitespace@1649..1650 "\n"
+    RBrace@1650..1651 "}"
+  Whitespace@1651..1653 "\n\n"
+  LineComment@1653..1721 "// package-private he ..."
+  Whitespace@1721..1722 "\n"
+  LineComment@1722..1756 "// cross-package code ..."
+  Whitespace@1756..1757 "\n"
+  StructDef@1757..1828
+    InternalKw@1757..1765 "internal"
+    Whitespace@1765..1766 " "
+    StructKw@1766..1772 "struct"
+    Whitespace@1772..1773 " "
+    Name@1773..1786
+      Ident@1773..1786 "RawWheelFrame"
+    Whitespace@1786..1787 " "
+    LBrace@1787..1788 "{"
+    Whitespace@1788..1791 "\n  "
+    FieldDef@1791..1806
+      Name@1791..1796
+        Ident@1791..1796 "ticks"
+      Whitespace@1796..1797 " "
+      Colon@1797..1798 ":"
+      Whitespace@1798..1799 " "
+      PathType@1799..1806
+        QualifiedName@1799..1806
+          Ident@1799..1806 "Counter"
+    Whitespace@1806..1809 "\n  "
+    FieldDef@1809..1826
+      Name@1809..1814
+        Ident@1809..1814 "frame"
+      Whitespace@1814..1815 " "
+      Colon@1815..1816 ":"
+      Whitespace@1816..1817 " "
+      PrimitiveType@1817..1826
+        BytesKw@1817..1822 "bytes"
+        Whitespace@1822..1823 " "
+        Constraint@1823..1826
+          LBracket@1823..1824 "["
+          Bound@1824..1825
+            Literal@1824..1825
+              IntNumber@1824..1825 "8"
+          RBracket@1825..1826 "]"
+    Whitespace@1826..1827 "\n"
+    RBrace@1827..1828 "}"
+  Whitespace@1828..1829 "\n"
+errors: none

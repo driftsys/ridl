@@ -1,0 +1,185 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/unions.typl
+---
+SourceFile@0..505
+  LineComment@0..72 "// Unions: plain, err ..."
+  Whitespace@72..73 "\n"
+  LineComment@73..98 "// (typl reference § ..."
+  Whitespace@98..99 "\n"
+  PackageDecl@99..120
+    PackageKw@99..106 "package"
+    Whitespace@106..107 " "
+    QualifiedName@107..120
+      Ident@107..113 "corpus"
+      Dot@113..114 "."
+      Ident@114..120 "unions"
+  Whitespace@120..122 "\n\n"
+  UnionDef@122..186
+    UnionKw@122..127 "union"
+    Whitespace@127..128 " "
+    Name@128..140
+      Ident@128..140 "SensorResult"
+    Whitespace@140..141 " "
+    LBrace@141..142 "{"
+    Whitespace@142..145 "\n  "
+    UnionArm@145..164
+      Name@145..147
+        Ident@145..147 "ok"
+      Whitespace@147..149 "  "
+      Colon@149..150 ":"
+      Whitespace@150..151 " "
+      PathType@151..164
+        QualifiedName@151..164
+          Ident@151..164 "SensorReading"
+    Whitespace@164..167 "\n  "
+    UnionArm@167..184
+      Name@167..170
+        Ident@167..170 "err"
+      Whitespace@170..171 " "
+      Colon@171..172 ":"
+      Whitespace@172..173 " "
+      PathType@173..184
+        QualifiedName@173..184
+          Ident@173..184 "SensorFault"
+    Whitespace@184..185 "\n"
+    RBrace@185..186 "}"
+  Whitespace@186..188 "\n\n"
+  UnionDef@188..253
+    ErrorKw@188..193 "error"
+    Whitespace@193..194 " "
+    UnionKw@194..199 "union"
+    Whitespace@199..200 " "
+    Name@200..212
+      Ident@200..212 "ServiceFault"
+    Whitespace@212..213 " "
+    LBrace@213..214 "{"
+    Whitespace@214..217 "\n  "
+    UnionArm@217..233
+      Name@217..221
+        Ident@217..221 "diag"
+      Whitespace@221..222 " "
+      Colon@222..223 ":"
+      Whitespace@223..224 " "
+      PathType@224..233
+        QualifiedName@224..233
+          Ident@224..233 "DiagError"
+    Whitespace@233..236 "\n  "
+    UnionArm@236..251
+      Name@236..239
+        Ident@236..239 "cal"
+      Whitespace@239..241 "  "
+      Colon@241..242 ":"
+      Whitespace@242..243 " "
+      PathType@243..251
+        QualifiedName@243..251
+          Ident@243..251 "CalFault"
+    Whitespace@251..252 "\n"
+    RBrace@252..253 "}"
+  Whitespace@253..255 "\n\n"
+  DocComment@255..315 "/// A result union: o ..."
+  Whitespace@315..316 "\n"
+  UnionDef@316..371
+    UnionKw@316..321 "union"
+    Whitespace@321..322 " "
+    Name@322..332
+      Ident@322..332 "CalOutcome"
+    Whitespace@332..333 " "
+    LBrace@333..334 "{"
+    Whitespace@334..337 "\n  "
+    UnionArm@337..352
+      Name@337..339
+        Ident@337..339 "ok"
+      Whitespace@339..341 "  "
+      Colon@341..342 ":"
+      Whitespace@342..343 " "
+      PathType@343..352
+        QualifiedName@343..352
+          Ident@343..352 "CalReport"
+    Whitespace@352..355 "\n  "
+    UnionArm@355..369
+      Name@355..358
+        Ident@355..358 "err"
+      Whitespace@358..359 " "
+      Colon@359..360 ":"
+      Whitespace@360..361 " "
+      PathType@361..369
+        QualifiedName@361..369
+          Ident@361..369 "CalFault"
+    Whitespace@369..370 "\n"
+    RBrace@370..371 "}"
+  Whitespace@371..373 "\n\n"
+  UnionDef@373..454
+    UnionKw@373..378 "union"
+    Whitespace@378..379 " "
+    Name@379..386
+      Ident@379..386 "Evolved"
+    Whitespace@386..387 " "
+    LBrace@387..388 "{"
+    Whitespace@388..391 "\n  "
+    UnionArm@391..404
+      Name@391..396
+        Ident@391..396 "first"
+      Whitespace@396..397 " "
+      Colon@397..398 ":"
+      Whitespace@398..399 " "
+      PathType@399..404
+        QualifiedName@399..404
+          Ident@399..404 "Alpha"
+    Whitespace@404..407 "\n  "
+    ReservedEntry@407..425
+      ReservedKw@407..415 "reserved"
+      Whitespace@415..416 " "
+      Name@416..425
+        Ident@416..425 "legacyArm"
+    Whitespace@425..428 "\n  "
+    UnionArm@428..452
+      Name@428..433
+        Ident@428..433 "third"
+      Whitespace@433..434 " "
+      Colon@434..435 ":"
+      Whitespace@435..436 " "
+      PathType@436..452
+        QualifiedName@436..452
+          Ident@436..439 "veh"
+          Dot@439..440 "."
+          Ident@440..446 "faults"
+          Dot@446..447 "."
+          Ident@447..452 "Gamma"
+    Whitespace@452..453 "\n"
+    RBrace@453..454 "}"
+  Whitespace@454..456 "\n\n"
+  UnionDef@456..504
+    InternalKw@456..464 "internal"
+    Whitespace@464..465 " "
+    UnionKw@465..470 "union"
+    Whitespace@470..471 " "
+    Name@471..477
+      Ident@471..477 "Hidden"
+    Whitespace@477..478 " "
+    LBrace@478..479 "{"
+    Whitespace@479..482 "\n  "
+    UnionArm@482..491
+      Name@482..483
+        Ident@482..483 "a"
+      Whitespace@483..484 " "
+      Colon@484..485 ":"
+      Whitespace@485..486 " "
+      PathType@486..491
+        QualifiedName@486..491
+          Ident@486..491 "Alpha"
+    Whitespace@491..494 "\n  "
+    UnionArm@494..502
+      Name@494..495
+        Ident@494..495 "b"
+      Whitespace@495..496 " "
+      Colon@496..497 ":"
+      Whitespace@497..498 " "
+      PathType@498..502
+        QualifiedName@498..502
+          Ident@498..502 "Beta"
+    Whitespace@502..503 "\n"
+    RBrace@503..504 "}"
+  Whitespace@504..505 "\n"
+errors: none

@@ -110,6 +110,11 @@ fn is_value_token(kind: SyntaxKind) -> bool {
     )
 }
 
+/// The deepest field-type nesting the parser follows before it stops
+/// recursing — far beyond any real schema, small enough that a pathological
+/// input cannot overflow the stack.
+const MAX_TYPE_DEPTH: usize = 128;
+
 /// The recursive-descent state: the token stream, a cursor, the tree builder,
 /// and the diagnostics.
 struct Parser<'a> {
@@ -118,6 +123,8 @@ struct Parser<'a> {
     /// of input; `offsets[i]` is the offset of `tokens[i]`.
     offsets: Vec<usize>,
     pos: usize,
+    /// Current field-type nesting depth, bounded by [`MAX_TYPE_DEPTH`].
+    depth: usize,
     builder: GreenNodeBuilder<'static>,
     errors: Vec<SyntaxError>,
 }
@@ -135,6 +142,7 @@ impl<'a> Parser<'a> {
             tokens,
             offsets,
             pos: 0,
+            depth: 0,
             builder: GreenNodeBuilder::new(),
             errors: Vec::new(),
         }
@@ -572,8 +580,26 @@ impl<'a> Parser<'a> {
     /// `FieldType = PathType | PrimitiveType | TupleType | ArrayType |
     /// MapType | OptionalType` — the type of a field, tuple field, or
     /// collection element. Each `?` suffix wraps the type parsed so far in an
-    /// `OptionalType` node.
+    /// `OptionalType` node. The depth guard keeps a pathological nesting of
+    /// collection and tuple types from overflowing the stack — the parser
+    /// must never panic.
     fn field_type(&mut self) {
+        if self.depth >= MAX_TYPE_DEPTH {
+            self.error_at_current(
+                "FORM-102",
+                format!("type nesting deeper than {MAX_TYPE_DEPTH} levels"),
+            );
+            self.start(SyntaxKind::ErrorNode);
+            self.bump();
+            self.builder.finish_node();
+            return;
+        }
+        self.depth += 1;
+        self.field_type_inner();
+        self.depth -= 1;
+    }
+
+    fn field_type_inner(&mut self) {
         self.eat_trivia();
         let checkpoint = self.builder.checkpoint();
         match self.current() {
@@ -596,6 +622,8 @@ impl<'a> Parser<'a> {
                 self.builder.finish_node();
             }
             Some(SyntaxKind::Ident) => self.path_type(),
+            Some(SyntaxKind::LParen) => self.tuple_type(),
+            Some(SyntaxKind::LBracket) => self.array_or_map(checkpoint),
             _ => {
                 self.error_at_current("FORM-101", "expected a type".to_string());
                 return;
@@ -607,6 +635,61 @@ impl<'a> Parser<'a> {
             self.bump();
             self.builder.finish_node();
         }
+    }
+
+    /// `TupleType = '(' fields:TupleField (',' fields:TupleField)* ')'` —
+    /// separator commas are direct children of the tuple node.
+    fn tuple_type(&mut self) {
+        self.start(SyntaxKind::TupleType);
+        self.bump(); // '('
+        loop {
+            self.eat_trivia();
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `(`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::RParen) => {
+                    self.bump();
+                    break;
+                }
+                Some(SyntaxKind::Comma) => self.bump(),
+                Some(SyntaxKind::Ident) => self.tuple_field(),
+                Some(_) => self.err_and_bump("in a tuple type"),
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    /// `TupleField = Name ':' FieldType`
+    fn tuple_field(&mut self) {
+        self.start(SyntaxKind::TupleField);
+        self.name();
+        self.expect(SyntaxKind::Colon);
+        self.field_type();
+        self.builder.finish_node();
+    }
+
+    /// `ArrayType = '[' element:FieldType ';' Bound ']'` or
+    /// `MapType = '[' key:FieldType ':' value:FieldType ';' Bound ']'` — the
+    /// node kind is decided by the token after the first type, then wrapped
+    /// around everything from the checkpoint (the `[`).
+    fn array_or_map(&mut self, checkpoint: rowan::Checkpoint) {
+        self.bump(); // '['
+        self.field_type(); // the element or key type
+        if self.at(SyntaxKind::Colon) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::MapType.into());
+            self.bump(); // ':'
+            self.field_type(); // the value type
+        } else {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::ArrayType.into());
+        }
+        self.expect(SyntaxKind::Semicolon);
+        self.bound();
+        self.expect(SyntaxKind::RBracket);
+        self.builder.finish_node();
     }
 
     /// `Constraint = '[' … ']'` — see the module doc for the bound policy.
@@ -931,6 +1014,18 @@ mod tests {
     fn stray_at_sigil_flags_typl_302() {
         let codes = error_codes("package p\n@\n");
         assert_eq!(codes, vec!["TYPL-302"]);
+    }
+
+    #[test]
+    fn pathological_type_nesting_does_not_panic_or_drop_text() {
+        let input = format!("package p\nstruct S {{ f : {} }}\n", "[".repeat(300));
+        let parse = parse(&input);
+        assert_eq!(
+            parse.syntax().text().to_string(),
+            input,
+            "deep nesting must stay lossless",
+        );
+        assert!(!parse.errors().is_empty());
     }
 
     #[test]

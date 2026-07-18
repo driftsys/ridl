@@ -1,0 +1,283 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/enums_enumsets.typl
+---
+SourceFile@0..711
+  LineComment@0..68 "// Enums and enum set ..."
+  Whitespace@68..69 "\n"
+  LineComment@69..121 "// tombstones, modifi ..."
+  Whitespace@121..122 "\n"
+  PackageDecl@122..142
+    PackageKw@122..129 "package"
+    Whitespace@129..130 " "
+    QualifiedName@130..142
+      Ident@130..136 "corpus"
+      Dot@136..137 "."
+      Ident@137..142 "enums"
+  Whitespace@142..144 "\n\n"
+  EnumDef@144..221
+    EnumKw@144..148 "enum"
+    Whitespace@148..149 " "
+    Name@149..161
+      Ident@149..161 "GearPosition"
+    Whitespace@161..162 " "
+    LBrace@162..163 "{"
+    Whitespace@163..166 "\n  "
+    EnumValue@166..177
+      Name@166..170
+        Ident@166..170 "PARK"
+      Whitespace@170..174 "    "
+      Eq@174..175 "="
+      Whitespace@175..176 " "
+      Literal@176..177
+        IntNumber@176..177 "0"
+    Whitespace@177..180 "\n  "
+    EnumValue@180..191
+      Name@180..185
+        Ident@180..185 "DRIVE"
+      Whitespace@185..188 "   "
+      Eq@188..189 "="
+      Whitespace@189..190 " "
+      Literal@190..191
+        IntNumber@190..191 "1"
+    Whitespace@191..194 "\n  "
+    EnumValue@194..205
+      Name@194..201
+        Ident@194..201 "REVERSE"
+      Whitespace@201..202 " "
+      Eq@202..203 "="
+      Whitespace@203..204 " "
+      Literal@204..205
+        IntNumber@204..205 "2"
+    Whitespace@205..208 "\n  "
+    EnumValue@208..219
+      Name@208..215
+        Ident@208..215 "NEUTRAL"
+      Whitespace@215..216 " "
+      Eq@216..217 "="
+      Whitespace@217..218 " "
+      Literal@218..219
+        IntNumber@218..219 "3"
+    Whitespace@219..220 "\n"
+    RBrace@220..221 "}"
+  Whitespace@221..223 "\n\n"
+  DocComment@223..261 "/// An enum with a re ..."
+  Whitespace@261..262 "\n"
+  EnumDef@262..332
+    EnumKw@262..266 "enum"
+    Whitespace@266..267 " "
+    Name@267..276
+      Ident@267..276 "DoorState"
+    Whitespace@276..277 " "
+    LBrace@277..278 "{"
+    Whitespace@278..281 "\n  "
+    EnumValue@281..291
+      Name@281..287
+        Ident@281..287 "CLOSED"
+      Whitespace@287..288 " "
+      Eq@288..289 "="
+      Whitespace@289..290 " "
+      Literal@290..291
+        IntNumber@290..291 "0"
+    Whitespace@291..294 "\n  "
+    EnumValue@294..304
+      Name@294..298
+        Ident@294..298 "OPEN"
+      Whitespace@298..301 "   "
+      Eq@301..302 "="
+      Whitespace@302..303 " "
+      Literal@303..304
+        IntNumber@303..304 "1"
+    Whitespace@304..307 "\n  "
+    ReservedEntry@307..317
+      ReservedKw@307..315 "reserved"
+      Whitespace@315..316 " "
+      Literal@316..317
+        IntNumber@316..317 "2"
+    Whitespace@317..320 "\n  "
+    EnumValue@320..330
+      Name@320..326
+        Ident@320..326 "LOCKED"
+      Whitespace@326..327 " "
+      Eq@327..328 "="
+      Whitespace@328..329 " "
+      Literal@329..330
+        IntNumber@329..330 "3"
+    Whitespace@330..331 "\n"
+    RBrace@331..332 "}"
+  Whitespace@332..334 "\n\n"
+  EnumDef@334..421
+    ErrorKw@334..339 "error"
+    Whitespace@339..340 " "
+    EnumKw@340..344 "enum"
+    Whitespace@344..345 " "
+    Name@345..354
+      Ident@345..354 "DiagError"
+    Whitespace@354..355 " "
+    LBrace@355..356 "{"
+    Whitespace@356..359 "\n  "
+    EnumValue@359..377
+      Name@359..373
+        Ident@359..373 "FILTER_INVALID"
+      Whitespace@373..374 " "
+      Eq@374..375 "="
+      Whitespace@375..376 " "
+      Literal@376..377
+        IntNumber@376..377 "0"
+    Whitespace@377..380 "\n  "
+    EnumValue@380..398
+      Name@380..392
+        Ident@380..392 "STORAGE_BUSY"
+      Whitespace@392..395 "   "
+      Eq@395..396 "="
+      Whitespace@396..397 " "
+      Literal@397..398
+        IntNumber@397..398 "1"
+    Whitespace@398..401 "\n  "
+    EnumValue@401..419
+      Name@401..414
+        Ident@401..414 "ACCESS_DENIED"
+      Whitespace@414..416 "  "
+      Eq@416..417 "="
+      Whitespace@417..418 " "
+      Literal@418..419
+        IntNumber@418..419 "2"
+    Whitespace@419..420 "\n"
+    RBrace@420..421 "}"
+  Whitespace@421..423 "\n\n"
+  EnumDef@423..468
+    InternalKw@423..431 "internal"
+    Whitespace@431..432 " "
+    EnumKw@432..436 "enum"
+    Whitespace@436..437 " "
+    Name@437..442
+      Ident@437..442 "Probe"
+    Whitespace@442..443 " "
+    LBrace@443..444 "{"
+    Whitespace@444..447 "\n  "
+    EnumValue@447..455
+      Name@447..451
+        Ident@447..451 "IDLE"
+      Whitespace@451..452 " "
+      Eq@452..453 "="
+      Whitespace@453..454 " "
+      Literal@454..455
+        IntNumber@454..455 "0"
+    Whitespace@455..458 "\n  "
+    EnumValue@458..466
+      Name@458..462
+        Ident@458..462 "BUSY"
+      Whitespace@462..463 " "
+      Eq@463..464 "="
+      Whitespace@464..465 " "
+      Literal@465..466
+        IntNumber@465..466 "1"
+    Whitespace@466..467 "\n"
+    RBrace@467..468 "}"
+  Whitespace@468..470 "\n\n"
+  EnumSetDef@470..570
+    EnumsetKw@470..477 "enumset"
+    Whitespace@477..478 " "
+    Name@478..490
+      Ident@478..490 "WarningFlags"
+    Whitespace@490..491 " "
+    LBrace@491..492 "{"
+    Whitespace@492..495 "\n  "
+    EnumSetBit@495..511
+      Name@495..503
+        Ident@495..503 "LOW_FUEL"
+      Whitespace@503..508 "     "
+      Eq@508..509 "="
+      Whitespace@509..510 " "
+      Literal@510..511
+        IntNumber@510..511 "0"
+    Whitespace@511..514 "\n  "
+    EnumSetBit@514..530
+      Name@514..526
+        Ident@514..526 "CHECK_ENGINE"
+      Whitespace@526..527 " "
+      Eq@527..528 "="
+      Whitespace@528..529 " "
+      Literal@529..530
+        IntNumber@529..530 "1"
+    Whitespace@530..533 "\n  "
+    EnumSetBit@533..549
+      Name@533..542
+        Ident@533..542 "DOOR_OPEN"
+      Whitespace@542..546 "    "
+      Eq@546..547 "="
+      Whitespace@547..548 " "
+      Literal@548..549
+        IntNumber@548..549 "2"
+    Whitespace@549..552 "\n  "
+    EnumSetBit@552..568
+      Name@552..560
+        Ident@552..560 "SEATBELT"
+      Whitespace@560..565 "     "
+      Eq@565..566 "="
+      Whitespace@566..567 " "
+      Literal@567..568
+        IntNumber@567..568 "3"
+    Whitespace@568..569 "\n"
+    RBrace@569..570 "}"
+  Whitespace@570..572 "\n\n"
+  EnumDef@572..626
+    EnumKw@572..576 "enum"
+    Whitespace@576..577 " "
+    Name@577..584
+      Ident@577..584 "Warning"
+    Whitespace@584..585 " "
+    LBrace@585..586 "{"
+    Whitespace@586..589 "\n  "
+    EnumValue@589..605
+      Name@589..597
+        Ident@589..597 "LOW_FUEL"
+      Whitespace@597..602 "     "
+      Eq@602..603 "="
+      Whitespace@603..604 " "
+      Literal@604..605
+        IntNumber@604..605 "0"
+    Whitespace@605..608 "\n  "
+    EnumValue@608..624
+      Name@608..620
+        Ident@608..620 "CHECK_ENGINE"
+      Whitespace@620..621 " "
+      Eq@621..622 "="
+      Whitespace@622..623 " "
+      Literal@623..624
+        IntNumber@623..624 "1"
+    Whitespace@624..625 "\n"
+    RBrace@625..626 "}"
+  Whitespace@626..628 "\n\n"
+  EnumSetDef@628..658
+    EnumsetKw@628..635 "enumset"
+    Whitespace@635..636 " "
+    Name@636..648
+      Ident@636..648 "DerivedFlags"
+    Whitespace@648..649 " "
+    Colon@649..650 ":"
+    Whitespace@650..651 " "
+    PathType@651..658
+      QualifiedName@651..658
+        Ident@651..658 "Warning"
+  Whitespace@658..660 "\n\n"
+  EnumSetDef@660..710
+    InternalKw@660..668 "internal"
+    Whitespace@668..669 " "
+    EnumsetKw@669..676 "enumset"
+    Whitespace@676..677 " "
+    Name@677..687
+      Ident@677..687 "LocalFlags"
+    Whitespace@687..688 " "
+    Colon@688..689 ":"
+    Whitespace@689..690 " "
+    PathType@690..710
+      QualifiedName@690..710
+        Ident@690..696 "corpus"
+        Dot@696..697 "."
+        Ident@697..702 "other"
+        Dot@702..703 "."
+        Ident@703..710 "Warning"
+  Whitespace@710..711 "\n"
+errors: none
