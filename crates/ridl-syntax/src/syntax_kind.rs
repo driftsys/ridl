@@ -4,11 +4,13 @@
 ///
 /// The token variants are the full family token set the lexer recognises
 /// (docs/ROADMAP.md epic E1.1, typl reference §1.4 and §2). The node variants
-/// are the ones the E0 grammar (epic E0.3) produces. [`RidlLanguage`] maps
-/// between this enum and rowan's raw kind through the `#[repr(u16)]`
-/// discriminants, so the node variants stay grouped at the end with
-/// [`Literal`](SyntaxKind::Literal) last — that is the range the
-/// `kind_from_raw` assertion below guards.
+/// are the typl grammar's node inventory (epic E1.2a) — one variant per rule
+/// in `typl.ungram`, plus [`ErrorNode`](SyntaxKind::ErrorNode) for recovery
+/// and the E0-only kinds kept at the end until task E1.2c retires the E0
+/// grammar. [`RidlLanguage`] maps between this enum and rowan's raw kind
+/// through the `#[repr(u16)]` discriminants, so the node variants stay
+/// grouped at the end with [`Range`](SyntaxKind::Range) last — that is the
+/// range the `kind_from_raw` assertion below guards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(u16)]
 pub enum SyntaxKind {
@@ -73,19 +75,48 @@ pub enum SyntaxKind {
     BlockComment,
     DocComment,
     Error,
-    // Nodes — produced by the E0 grammar (epic E0.3).
+    // Nodes — the typl grammar's node inventory (`typl.ungram`, epic E1.2a).
+    // The full parser (task E1.2b) produces them; until it lands, the
+    // generated typed AST casts over trees built directly in tests.
     SourceFile,
+    PackageDecl,
+    Import,
+    TypeDef,
+    ConstDef,
+    StructDef,
+    FieldDef,
+    ReservedEntry,
+    EnumDef,
+    EnumValue,
+    EnumSetDef,
+    EnumSetBit,
+    UnionDef,
+    UnionArm,
+    TupleType,
+    TupleField,
+    ArrayType,
+    MapType,
+    OptionalType,
+    PathType,
+    PrimitiveType,
+    UnitExpr,
+    Constraint,
+    Bound,
+    Name,
+    QualifiedName,
+    Literal,
+    InitValue,
+    /// A recovery node: error recovery (task E1.2c) wraps the tokens it
+    /// skips in one of these, so broken input still produces a lossless
+    /// tree. It is the one node kind with no rule in `typl.ungram`.
+    ErrorNode,
+    // Nodes produced by the E0 grammar only (epic E0.3) — retired together
+    // with the E0 accessor layer in task E1.2c. They sit last so removing
+    // them shrinks the `kind_from_raw` range without renumbering the
+    // grammar's inventory.
     TypeDecl,
     ConstDecl,
-    Name,
-    /// The backing representation of a `type` declaration. Reserved for the
-    /// full E1 grammar; the E0 subset spells the backing inline as
-    /// [`UnitExpr`](SyntaxKind::UnitExpr) plus an optional
-    /// [`Range`](SyntaxKind::Range), so no `Backing` node is emitted yet.
-    Backing,
-    UnitExpr,
     Range,
-    Literal,
 }
 
 impl SyntaxKind {
@@ -120,12 +151,12 @@ impl rowan::Language for RidlLanguage {
 
     fn kind_from_raw(raw: rowan::SyntaxKind) -> SyntaxKind {
         assert!(
-            raw.0 <= SyntaxKind::Literal as u16,
+            raw.0 <= SyntaxKind::Range as u16,
             "raw kind {} is out of range for SyntaxKind",
             raw.0,
         );
         // SAFETY: SyntaxKind is `#[repr(u16)]` with contiguous discriminants
-        // from 0 up to and including `Literal`. The assertion above proves
+        // from 0 up to and including `Range`. The assertion above proves
         // `raw.0` names one of them, so the transmute produces a valid variant.
         unsafe { std::mem::transmute::<u16, SyntaxKind>(raw.0) }
     }

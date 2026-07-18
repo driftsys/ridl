@@ -1,0 +1,196 @@
+// typl.ungram — the typl profile grammar as a rowan tree shape.
+//
+// Transliterated from the typl language reference, Appendix E (EBNF), per
+// ADR-0007 decision 1. This file describes the shape of the syntax tree,
+// not the parser: it is the node-inventory SSOT for the generated typed
+// AST. `cargo xtask codegen` reads it and writes
+// crates/ridl-syntax/src/ast/generated.rs; a drift test in xtask fails
+// when the committed file and this grammar diverge.
+//
+// Conventions (see xtask/src/codegen.rs for the exact rules):
+//
+// - `SomeRule = ...` names a CST node; the generator emits a struct named
+//   exactly after the rule, cast from the same-named SyntaxKind variant.
+// - `'token'` names a token; the mapping from token names to SyntaxKind
+//   variants lives in xtask/src/codegen.rs.
+// - A rule that is a pure alternation of other nodes (Definition, Backing,
+//   StructMember, FieldType) generates no struct — src/ast.rs defines it
+//   as a hand-written enum over the alternatives.
+// - `label:Rule` renames the generated accessor.
+// - Doc comments are trivia tokens and never appear in the tree shape
+//   (typl reference §14): consumers read them from the trivia immediately
+//   preceding a definition (ast::HasDocComments).
+// - `ErrorNode` is the one node kind with no rule here: error recovery
+//   (task E1.2c) wraps arbitrary skipped tokens in it, so it has no
+//   describable shape. The generator appends its struct unconditionally.
+//
+// Separator discipline (typl reference §15.2): newline and comma are
+// interchangeable inside every block construct, and a trailing comma is
+// permitted. Newlines are trivia, so the block rules below show members
+// without separators; the parser owns the separator checks.
+
+// ---------- Top level ----------
+
+SourceFile =
+  PackageDecl?
+  imports:Import*
+  definitions:Definition*
+
+PackageDecl =
+  'package' QualifiedName
+
+// No wildcards, no relative paths, no re-exports — ADR-0002.
+Import =
+  'import' QualifiedName ('as' alias:Name)?
+
+// 'error' is valid on struct, enum, and union definitions only (typl
+// reference §10.1); the parser accepts it everywhere and the checker
+// rejects the rest, so every alternative carries both modifiers.
+Definition =
+  TypeDef
+| ConstDef
+| StructDef
+| EnumDef
+| EnumSetDef
+| UnionDef
+
+// ---------- Type ----------
+
+TypeDef =
+  'internal'? 'type' Name ':' Backing Constraint? InitValue?
+
+Backing =
+  PrimitiveType
+| UnitExpr
+
+// The optional constraint covers the inline constrained-primitive field
+// type (`integer [0..250]`, typl reference §15.3). In a `type` definition
+// the constraint is a direct child of TypeDef instead.
+PrimitiveType =
+  ('boolean' | 'integer' | 'float' | 'string' | 'bytes') Constraint?
+
+// A UCUM unit expression, spelled with the family tokens: `km/h`, `N.m`,
+// `/min`, `%`, `m/s2` (typl reference §5.1). Semantic validation of the
+// expression is the ucum module's job (TYPL-110), not the grammar's.
+UnitExpr =
+  ('ident' | '/' | '.' | '%')*
+
+// Declared init value, bare literal — typl reference §5.8.
+InitValue =
+  '=' Literal
+
+// The constraint clause (typl reference §5.2–§5.5). Three shapes share
+// the brackets: a scalar range with optional step, a length bound with
+// optional match, and a bare match. Scalar endpoints are direct Literal
+// children told apart by the anchor tokens ('..', 'step', 'match'), so
+// their accessors are hand-written in src/ast.rs; length bounds nest in
+// a Bound node.
+Constraint =
+  '[' (
+      min:Literal? '..' max:Literal? ('step' step:Literal)?
+    | len:Bound ('match' match_pattern:Literal)?
+    | 'match' match_pattern:Literal
+  ) ']'
+
+// A collection or length bound: an exact count or an inclusive range
+// (typl reference §12.3, §5.3).
+Bound =
+  min:Literal ('..' max:Literal)?
+
+// ---------- Constants ----------
+
+// The value of a regex constant (typl reference §6.2) is a Literal
+// wrapping a 'regex' token; ConstDef::regex() in src/ast.rs digs it out.
+ConstDef =
+  'internal'? 'const' Name (':' type_ref:PathType)? '=' value:Literal
+
+// ---------- Struct ----------
+
+StructDef =
+  'internal'? 'error'? 'struct' Name '{' members:StructMember* '}'
+
+StructMember =
+  FieldDef
+| ReservedEntry
+
+FieldDef =
+  Name ':' FieldType InitValue?
+
+// Tombstone — typl reference §7.4: name form for structs and unions,
+// integer form for enums.
+ReservedEntry =
+  'reserved' (Name | Literal)
+
+FieldType =
+  PathType
+| PrimitiveType
+| TupleType
+| ArrayType
+| MapType
+| OptionalType
+
+OptionalType =
+  FieldType '?'
+
+ArrayType =
+  '[' element:FieldType ';' Bound ']'
+
+MapType =
+  '[' key:FieldType ':' value:FieldType ';' Bound ']'
+
+TupleType =
+  '(' fields:TupleField (',' fields:TupleField)* ')'
+
+TupleField =
+  Name ':' FieldType
+
+// ---------- Enum ----------
+
+EnumDef =
+  'internal'? 'error'? 'enum' Name '{' (values:EnumValue | reserved:ReservedEntry)* '}'
+
+EnumValue =
+  Name '=' value:Literal
+
+// ---------- EnumSet ----------
+
+// Standalone form and derived form (typl reference §9.1–§9.2).
+EnumSetDef =
+  'internal'? 'enumset' Name '{' bits:EnumSetBit* '}'
+| 'internal'? 'enumset' Name ':' backing_ref:PathType
+
+EnumSetBit =
+  Name '=' value:Literal
+
+// ---------- Union ----------
+
+UnionDef =
+  'internal'? 'error'? 'union' Name '{' (arms:UnionArm | reserved:ReservedEntry)* '}'
+
+UnionArm =
+  Name ':' type_ref:PathType
+
+// ---------- Names and literals ----------
+
+// A declared name: the single identifier a definition, field, value,
+// bit, or arm introduces.
+Name =
+  'ident'
+
+// A reference path: `Type` or `pkg.Type` for types, `veh.common` for
+// packages and imports.
+QualifiedName =
+  'ident' ('.' 'ident')*
+
+// A type reference in type position (field types, union arms, const
+// types, enumset backing).
+PathType =
+  QualifiedName
+
+// One literal value token, with the optional unary minus of a negative
+// number (the lexer emits '-' separately, typl reference §2.4). An
+// 'ident' here is a SCREAMING_SNAKE constant reference in a value
+// position — a scalar bound or a match pattern (Appendix E `scalar` and
+// `pattern`).
+Literal =
+  '-'? ('int_number' | 'float_number' | 'string_lit' | 'true' | 'false' | 'regex' | 'ident')
