@@ -1,0 +1,11 @@
+// Words reserved family-wide but not used by typl (typl reference §1.4). The
+// lexer maps every one to ReservedWord, so they can never be identifiers in a
+// .typl file even though .typl rejects the declarations they belong to.
+interface service signal event command query final
+view display input action activate toggle select adjust dismiss fetch fixed
+states during navigate scroll drag observe surface agent
+require ensure
+model function let last case if then else when emit merge current state
+transition automaton
+component system deployment provides requires instance for assurance target
+place on transport bundle base redundant supervise degraded

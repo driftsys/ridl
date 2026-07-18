@@ -1,0 +1,8 @@
+// A plain line comment (typl reference §13).
+/// A doc line comment (typl reference §14).
+/** A doc block comment
+    spanning several lines,
+    with `[TypeName]` markdown. */
+/* A plain block comment. */
+/* Block comments do not nest: /* the inner open is text */
+type WheelRadius : m [0.20..0.45 step 0.001] // trailing line comment

@@ -1,6 +1,7 @@
 //! The family lexer and grammar (epic E0, docs/ROADMAP.md).
 
 mod ast;
+pub mod keywords;
 mod lexer;
 mod parser;
 mod syntax_kind;

@@ -1,0 +1,18 @@
+// Realistic typl declarations, from the typl reference §5 and §6.
+package veh.common
+
+/// Current vehicle speed.
+type Speed       : km/h  [0.0..250.0 step 0.5] = 0.0
+type Temperature : Cel   [-40.0..125.0 step 0.1]
+type Torque      : N.m   [0.0..500.0 step 0.1]
+type RPM         : /min  [0.0..8000.0 step 10.0]
+type Counter     : integer [0..65535]
+
+const MAX_SPEED : Speed   = 250.0
+const MAX_GEAR  : integer = 6
+
+struct DriverProfile {
+  name     : Name
+  speed    : Speed
+  override : Speed?
+}

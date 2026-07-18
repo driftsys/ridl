@@ -1,0 +1,34 @@
+// A dense file exercising every family token kind, for the round-trip
+// totality snapshot. It is token coverage, not valid typl grammar.
+/// doc line comment
+/** doc block comment */
+/* plain block /* not nested */
+package veh.common
+import marine.nav.Speed as MarineSpeed
+internal type Frame : bytes [8]
+type Speed : km/h [0.0..250.0 step 0.5] = 0.0
+type Ratio : % [0.0..100.0 step 0.1]
+type Vin : string [17 match VIN_PATTERN]
+const MAX_GEAR : integer = 6
+const VIN_PATTERN = /^[A-Z]\/[0-9]+$/
+const LABEL : string = "a\tb\n"
+struct GearState {
+  gear     : integer [0..6] = 3
+  ratio    : float [0.0..1.0 step 0.01]
+  override : Speed?
+  range    : (min: Speed, max: Speed)
+  tags     : [Label : Name; 0..32]
+  timeout  : 10ms
+  neg      : -40
+  odd      : 042
+  ok       : boolean = true
+  off      : boolean = false
+  reserved legacyChecksum
+  @deprecated
+  signal
+  model
+}
+enumset WarningFlags
+union SensorResult | ok | err
+error enum DiagError
+$
