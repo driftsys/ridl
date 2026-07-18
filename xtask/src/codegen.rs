@@ -17,9 +17,9 @@
 //! - When one rule references the same node type more than once under
 //!   distinct labels, the accessors index by position — sound only while
 //!   every occurrence except the last is mandatory. When an earlier
-//!   occurrence is optional (the `Constraint` scalars), position lies, so
-//!   the generator emits nothing and `ast.rs` hand-writes token-anchored
-//!   accessors instead.
+//!   occurrence is optional (the `Constraint` scalars), positional
+//!   indexing gives the wrong child, so the generator emits nothing and
+//!   `ast.rs` hand-writes token-anchored accessors instead.
 //! - A token reference generates a first-token-of-kind accessor
 //!   (`fn <name>_token`), deduplicated per rule.
 
@@ -278,8 +278,9 @@ pub(crate) fn generate() -> String {
                 }
             } else {
                 // Positional accessors need every occurrence except the
-                // last to be mandatory; otherwise the position lies and
-                // ast.rs hand-writes token-anchored accessors instead.
+                // last to be mandatory; otherwise positional indexing
+                // gives the wrong child and ast.rs hand-writes
+                // token-anchored accessors instead.
                 let positional_is_sound = group.iter().all(|e| !e.repeated)
                     && group[..group.len() - 1].iter().all(|e| !e.optional);
                 if !positional_is_sound {
