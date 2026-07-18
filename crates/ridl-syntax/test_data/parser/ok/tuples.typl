@@ -10,4 +10,5 @@ struct Calibrated {
   optional : (low: Speed, high: Speed)?
   nested   : (outer: Speed, inner: (a: Gain, b: Gain))
   mixed    : (value: Speed, raw: integer [0..255])
+  unit     : ()
 }

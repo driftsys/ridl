@@ -96,6 +96,21 @@ impl QualifiedName {
     pub fn ident_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::Ident)
     }
+    pub fn boolean_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::BooleanKw)
+    }
+    pub fn integer_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::IntegerKw)
+    }
+    pub fn float_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::FloatKw)
+    }
+    pub fn string_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::StringKw)
+    }
+    pub fn bytes_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::BytesKw)
+    }
     pub fn dot_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::Dot)
     }
