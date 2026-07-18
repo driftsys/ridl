@@ -6,8 +6,11 @@ A shared vocabulary layer (`typl`) plus four description languages over it
 (`ridl`, `uxdl`, `rmdl`, `rsdl`), sharing one toolchain and one IR.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), and the implementation roadmap. The compiler and toolchain it describes
-are not built yet — the roadmap sequences that work.
+(ADRs), the implementation roadmap, and the compiler workspace. The
+walking-skeleton compiler (epic E0) is built — five compiler crates under
+`crates/` plus `backends/rust`; the rest of the toolchain is sequenced in the
+roadmap. See `docs/technotes/walking-skeleton-architecture.md` for the as-built
+map.
 
 **Read these before doing anything else in this repo:**
 

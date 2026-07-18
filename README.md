@@ -72,8 +72,9 @@ The task runner is [`just`](https://github.com/casey/just):
 | `just`         | list the recipes                                       |
 | `just fmt`     | reformat the connective tissue with prim, fix Markdown |
 | `just check`   | lint gate — `prim --check` + markdownlint, no writes   |
-| `just compile` | compile the Rust workspace (no-op until epic E0 lands) |
-| `just build`   | `compile` + `check` — the full local gate              |
+| `just compile` | compile the Rust workspace                             |
+| `just test`    | run the Rust workspace test suite                      |
+| `just build`   | `compile` + `test` + `check` — the full local gate     |
 | `just verify`  | commit-message lint + `build` — run before a PR        |
 | `just book`    | serve the mdBook docs locally                          |
 | `just release` | `git std bump` — version, changelog, tag               |
@@ -85,8 +86,9 @@ against `.git-std.toml`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
 ## Status
 
 All documents are working drafts (typl / ridl / uxdl / rmdl / rsdl at
-v0.1–v0.2). The design is captured; the implementation is sequenced in the
-roadmap but not yet built.
+v0.1–v0.2). The design is captured; the walking-skeleton compiler (epic E0,
+`crates/` + `backends/rust`) is built, and the rest of the implementation is
+sequenced in the roadmap.
 
 ## A note on ADR numbering
 

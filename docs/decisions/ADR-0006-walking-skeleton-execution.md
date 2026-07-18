@@ -12,8 +12,10 @@ Epic E0 builds the end-to-end skeleton: one trivial `.typl` file through lex →
 parse → resolve → check → IR → generated Rust, snapshot-tested. ADR-0004 fixes
 the stack (logos, hand-written parser, rowan, salsa, prost, quote +
 prettyplease, insta) and the concept note §8.1 fixes the monorepo layout, but
-several execution-level choices were still open. The execution plan lives in
-docs/wip (archived to docs/archive when the epic lands).
+several execution-level choices were still open. The execution plan lived in
+docs/wip and is archived verbatim at
+docs/archive/2026-07-18-e0-walking-skeleton-plan.md now that the epic has
+landed.
 
 ## Decision
 
@@ -43,8 +45,8 @@ docs/wip (archived to docs/archive when the epic lands).
 5. **crates.io name reservation is deferred.** E0.1's "done when" includes
    reserving the family crate names (concept note §10). Publishing requires the
    owner's crates.io credentials and is an outward-facing act the agent does not
-   perform autonomously. Deferred with a tracked debt issue; the concept note's
-   own deadline (before V1) still binds.
+   perform autonomously. Deferred with a tracked debt issue (#92); the concept
+   note's own deadline (before V1) still binds.
 
 6. **`ridl` facade is a stub.** The `ridl` crate builds a binary that only
    points at the roadmap. Porcelain subcommands are E1 scope; the crate exists
