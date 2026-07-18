@@ -281,7 +281,8 @@ impl<'a> Parser<'a> {
                     SyntaxKind::InternalKw
                     | SyntaxKind::ErrorKw
                     | SyntaxKind::TypeKw
-                    | SyntaxKind::ConstKw,
+                    | SyntaxKind::ConstKw
+                    | SyntaxKind::StructKw,
                 ) => self.definition(),
                 Some(_) => self.err_and_bump("at top level"),
             }
@@ -324,6 +325,7 @@ impl<'a> Parser<'a> {
         match self.nth(n) {
             Some(SyntaxKind::TypeKw) => self.type_def(),
             Some(SyntaxKind::ConstKw) => self.const_def(),
+            Some(SyntaxKind::StructKw) => self.struct_def(),
             _ => self.err_and_bump("in a definition"),
         }
     }
@@ -413,6 +415,115 @@ impl<'a> Parser<'a> {
         self.expect(SyntaxKind::Eq);
         self.literal();
         self.builder.finish_node();
+    }
+
+    /// `StructDef = 'internal'? 'error'? 'struct' Name '{' (members ','?)*
+    /// '}'` — a member is a `FieldDef` or a `ReservedEntry`; separator commas
+    /// are direct children of the block node, between members (§15.2).
+    fn struct_def(&mut self) {
+        self.start(SyntaxKind::StructDef);
+        self.modifiers();
+        self.bump(); // 'struct'
+        self.name();
+        if self.block_open() {
+            loop {
+                self.eat_trivia();
+                match self.current() {
+                    None => {
+                        self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                        break;
+                    }
+                    Some(SyntaxKind::RBrace) => {
+                        self.bump();
+                        break;
+                    }
+                    Some(SyntaxKind::Comma) => self.bump(),
+                    Some(SyntaxKind::ReservedKw) => self.reserved_entry(),
+                    Some(SyntaxKind::Ident) => self.field_def(),
+                    Some(_) => self.err_and_bump("in a struct body"),
+                }
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    /// Consumes the `{` opening a block body; reports FORM-101 and returns
+    /// `false` when it is missing, so the caller skips the body loop instead
+    /// of swallowing the rest of the file.
+    fn block_open(&mut self) -> bool {
+        if self.at(SyntaxKind::LBrace) {
+            self.bump();
+            true
+        } else {
+            self.error_at_current("FORM-101", "expected `{`".to_string());
+            false
+        }
+    }
+
+    /// `FieldDef = Name ':' FieldType InitValue?`
+    fn field_def(&mut self) {
+        self.start(SyntaxKind::FieldDef);
+        self.name();
+        self.expect(SyntaxKind::Colon);
+        self.field_type();
+        self.init_value_opt();
+        self.builder.finish_node();
+    }
+
+    /// `ReservedEntry = 'reserved' (Name | Literal)` — the tombstone (§7.4):
+    /// name form for structs and unions, integer form for enums. The parser
+    /// accepts both forms everywhere; the checker narrows.
+    fn reserved_entry(&mut self) {
+        self.start(SyntaxKind::ReservedEntry);
+        self.bump(); // 'reserved'
+        if self.at(SyntaxKind::Ident) {
+            self.name();
+        } else if self.literal_len_at(0) > 0 {
+            self.literal();
+        } else {
+            self.error_at_current("FORM-101", "expected a name or value".to_string());
+        }
+        self.builder.finish_node();
+    }
+
+    /// `FieldType = PathType | PrimitiveType | TupleType | ArrayType |
+    /// MapType | OptionalType` — the type of a field, tuple field, or
+    /// collection element. Each `?` suffix wraps the type parsed so far in an
+    /// `OptionalType` node.
+    fn field_type(&mut self) {
+        self.eat_trivia();
+        let checkpoint = self.builder.checkpoint();
+        match self.current() {
+            Some(
+                kw @ (SyntaxKind::BooleanKw
+                | SyntaxKind::IntegerKw
+                | SyntaxKind::FloatKw
+                | SyntaxKind::StringKw
+                | SyntaxKind::BytesKw),
+            ) => {
+                // The inline constrained primitive (`integer [0..6]`,
+                // §15.3): in field position the constraint nests inside
+                // PrimitiveType, unlike the `type`-definition position.
+                self.start(SyntaxKind::PrimitiveType);
+                self.bump();
+                if self.at(SyntaxKind::LBracket) {
+                    let stringish = matches!(kw, SyntaxKind::StringKw | SyntaxKind::BytesKw);
+                    self.constraint(stringish);
+                }
+                self.builder.finish_node();
+            }
+            Some(SyntaxKind::Ident) => self.path_type(),
+            _ => {
+                self.error_at_current("FORM-101", "expected a type".to_string());
+                return;
+            }
+        }
+        while self.at(SyntaxKind::Question) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::OptionalType.into());
+            self.bump();
+            self.builder.finish_node();
+        }
     }
 
     /// `Constraint = '[' … ']'` — see the module doc for the bound policy.
