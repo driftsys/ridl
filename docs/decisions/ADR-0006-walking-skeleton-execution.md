@@ -46,7 +46,10 @@ landed.
    reserving the family crate names (concept note §10). Publishing requires the
    owner's crates.io credentials and is an outward-facing act the agent does not
    perform autonomously. Deferred with a tracked debt issue (#92); the concept
-   note's own deadline (before V1) still binds.
+   note's own deadline (before V1) still binds. Resolved 2026-07-18: the
+   maintainer supplied credentials and authorized the run, and all ten names
+   (`typl`, `rmdl`, `rsdl`, `uxdl`, `rxdl`, `ridlc`, `ridl-syntax`, `ridl-core`,
+   `ridl-ir`, `ridl-lsp`) are reserved as 0.0.0 placeholders (#92 closed).
 
 6. **`ridl` facade is a stub.** The `ridl` crate builds a binary that only
    points at the roadmap. Porcelain subcommands are E1 scope; the crate exists
@@ -76,9 +79,9 @@ landed.
   the concept note, and zero throwaway infrastructure (accessor generator,
   diagnostic renderer) built before the grammar that justifies it.
 - Negative / accepted: `ridl-core` temporarily hosts passes that belong in
-  `ridl-sem`, a known cut-and-paste move later; crates.io names stay unreserved
-  until the maintainer runs the reservation, and squatting risk persists for
-  that window.
+  `ridl-sem`, a known cut-and-paste move later; the crates.io squatting-risk
+  window closed on 2026-07-18 when the maintainer-authorized reservation ran
+  (decision 5).
 - Review hook: each numbered decision is reversible before E1 at the cost of a
   small refactor; the maintainer can veto any of them by reopening this ADR.
 
