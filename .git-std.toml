@@ -6,10 +6,10 @@
 scheme = "semver"
 strict = true
 
-# Explicit scopes rather than "auto": this repo has no Cargo/npm/Deno
-# workspace yet, so auto-discovery would leave no valid scope. Keep this
-# list in sync as the compiler crates land (docs/ROADMAP.md, epic E0 —
-# ridl-syntax / ridl-core / ridl-ir / ridlc / ridl).
+# Explicit scopes rather than "auto": auto-discovery would read scopes off
+# a single Cargo/npm/Deno workspace, and this repo spans both the docs tree
+# and the Cargo workspace (docs/ROADMAP.md, epic E0). This list is now in
+# sync with the workspace — keep it that way as new crates land.
 scopes = [
   # per-language specifications
   "typl",
@@ -29,6 +29,12 @@ scopes = [
   "ci",
   "hooks",
   "deps",
+  # compiler workspace crates (docs/ROADMAP.md, epic E0)
+  "ridl-syntax",
+  "ridl-core",
+  "ridl-ir",
+  "ridlc",
+  "backends",
 ]
 types = [
   "feat",

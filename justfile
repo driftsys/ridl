@@ -1,11 +1,11 @@
 # RIDL — task runner.
 #
 # Recipe set follows the driftsys house style (git-std, prim). The repo
-# currently holds the specifications, ADRs, and roadmap; the compiler
-# workspace lands later (docs/ROADMAP.md, epic E0). The fmt/check/compile/
-# build shape is in place now — `check` gates the docs, and `compile`
-# builds the Rust workspace as soon as one exists. The mdBook docs are
-# served with `just book`.
+# holds the specifications, ADRs, roadmap, and the Cargo workspace
+# (docs/ROADMAP.md, epic E0). The fmt/check/compile/build shape is in
+# place now — `check` gates the docs, and `compile` builds the Rust
+# workspace as soon as one exists. The mdBook docs are served with
+# `just book`.
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
@@ -36,8 +36,20 @@ compile:
         echo "compile: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
-# Full local gate: compile the code, then run the lint checks.
-build: compile check
+# Run the Rust workspace test suite. A no-op until the compiler workspace
+# lands (docs/ROADMAP.md, epic E0); runs every crate's tests once a
+# Cargo.toml exists.
+test:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f Cargo.toml ]; then
+        cargo test --workspace
+    else
+        echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
+    fi
+
+# Full local gate: compile the code, run the tests, then run the lint checks.
+build: compile test check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

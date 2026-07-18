@@ -44,7 +44,8 @@ standalone member; rsdl is the apex.
 
     just fmt        reformat connective tissue with prim + fix Markdown
     just check      lint gate — prim --check + markdownlint (no writes)
-    just compile    compile the Rust workspace (no-op until epic E0 lands)
+    just compile    compile the Rust workspace
+    just test       run the Rust workspace test suite
     just build      compile + check — the full local gate
     just verify     commit-message lint over the branch range, then build — run before a PR
     just book       serve the mdBook docs locally
