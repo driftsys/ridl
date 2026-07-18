@@ -55,6 +55,10 @@ const MAX_SPEED: Speed = 250.0
 
 Syntax authority: typl language reference §2 (lexical), §5.1 (unit types), §6.1
 (value constants); general form Shape 1 (docs/wip/family-general-form.md §2).
+The `package` declaration typl §3.1 mandates is deliberately absent: the module
+system is E1 scope (ADR-0002), the E0 grammar has no package production, and the
+module name derives from the file stem. The fixture is an E0 subset, not a
+spec-valid standalone typl file.
 
 ## The end-to-end contract
 
@@ -112,7 +116,9 @@ implementer model: sonnet.
 - [ ] Five crates: lib crates expose one placeholder
       `pub fn crate_name() -> &'static str` with one test each;
       `ridlc/src/main.rs` and `ridl/src/main.rs` print a one-line "lands in epic
-      E0/E1" pointer to docs/ROADMAP.md and exit 0.
+      E0/E1" pointer to docs/ROADMAP.md and exit 0. The `ridl` crate sets
+      `publish = false` — the name is taken on crates.io (concept note §10); the
+      binary-vs-crate naming is resolved with the reservation debt issue.
 - [ ] Commit the fixture file exactly as given above.
 - [ ] `ci.yml`: add `rust` job — `actions/checkout@v4`,
       `dtolnay/rust-toolchain@stable` with `components: rustfmt, clippy`,
@@ -156,7 +162,7 @@ sonnet.
 #[repr(u16)]
 pub enum SyntaxKind {
     // Tokens — E0 subset of the family lexer.
-    TypeKw, ConstKw, Ident, IntNumber, FloatNumber,
+    TypeKw, ConstKw, StepKw, Ident, IntNumber, FloatNumber,
     Colon, Eq, LBracket, RBracket, DotDot, Dot, Slash, Comma,
     Whitespace, LineComment, Error,
     // Nodes are appended by Task 3.
@@ -174,7 +180,8 @@ underscore only in SCREAMING_SNAKE — one `Ident` token kind covers all three
 conventions (the checker distinguishes them later). Integers: decimal, optional
 leading `-`. Floats: must contain a decimal point, optional leading `-`, no
 scientific notation. `//` line comments and whitespace (space, tab, CR, LF) are
-trivia tokens. `step` is contextual — lexed as `Ident`, never a keyword.
+trivia tokens. `step` is a typl keyword (§1.4) and lexes as `StepKw`; the rest
+of the family keyword registry lands in E1.
 
 **Steps:**
 
@@ -257,8 +264,8 @@ range       = '[' number '..' number ('step' number)? ']'
 const_decl  = 'const' Name ':' Ident '=' number
 ```
 
-`step` is recognized by token text `Ident("step")`. Recovery: on an unexpected
-token, emit an error node/token and advance — never panic, never drop text.
+`'step'` in the grammar is the `StepKw` token. Recovery: on an unexpected token,
+emit an error node/token and advance — never panic, never drop text.
 
 **Steps:**
 

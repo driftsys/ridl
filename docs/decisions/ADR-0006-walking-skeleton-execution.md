@@ -48,7 +48,12 @@ docs/wip (archived to docs/archive when the epic lands).
 
 6. **`ridl` facade is a stub.** The `ridl` crate builds a binary that only
    points at the roadmap. Porcelain subcommands are E1 scope; the crate exists
-   now so the workspace shape is final from the first commit.
+   now so the workspace shape is final from the first commit. The crate sets
+   `publish = false`: the `ridl` name is taken on crates.io, and the naming
+   ledger (concept note §10) prescribes shipping the `ridl` binary from the
+   `ridlc` crate when publishing. That tension between §8.1 (a `ridl` workspace
+   crate) and §10 (publishable names) is resolved with the reservation debt
+   issue, before anything is published.
 
 7. **Error surfaces in E0 are plain per-crate structs.** The coded `Diagnostic`
    model with `codespan-reporting` rendering is E1 scope (ADR-0004 §5, §10). E0
