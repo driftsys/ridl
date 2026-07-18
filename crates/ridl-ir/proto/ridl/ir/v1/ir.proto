@@ -1,0 +1,367 @@
+syntax = "proto3";
+
+// IR v1 — the typl surface with exact values.
+//
+// This schema is the stable intermediate representation of the typl
+// vocabulary layer (typl language reference §3–§12): named scalar types,
+// constants, structs, enums, enum sets, and unions, with units, ranges, and
+// init values intact. The IR is the centre of gravity between the front end
+// and every backend and ecosystem tool (concept note §8.2).
+//
+// Exactness rule (ADR-0007 decision 9): every numeric value in this schema —
+// range bounds, steps, constant values, init values — is a canonical decimal
+// string, never a floating-point field. float64 cannot represent values such
+// as 0.1 exactly, and the checker's exact arithmetic must survive the IR
+// round trip so ridl-diff (E2.8) can compare honestly. Derived wire widths
+// ride alongside the exact strings as enums.
+//
+// Type-reference canonical form: every resolved type-reference string in
+// this schema (FieldType.named, UnionArm.type_ref, ConstDef.type_ref,
+// EnumSetDef.backing_enum, Constraint.pattern_const) is the fully qualified
+// `pkg.Name` for a cross-package reference and the bare `Name` for a
+// same-package reference — never an import alias. Aliases are a source-level
+// convenience (typl §3.2) and would make ridl-diff comparisons dishonest.
+//
+// Field numbering scheme: envelope and data fields start at 1; oneof members
+// start at 10. Gaps are noted where epic E2 (interaction layer) is expected
+// to add fields; they are commented, not `reserved`, because `reserved`
+// means "never use" while these numbers are earmarked for future use.
+package ridl.ir.v1;
+
+// A checked typl package — the unit of visibility, cycle checking, and
+// codegen output (typl §3.1).
+message Package {
+  // Dot-separated lowercase package name, e.g. "veh.common" (typl §3.1).
+  string name = 1;
+  // Declarations in source order, duplicates already resolved to the
+  // surviving first declaration (ADR-0007 decision 6).
+  repeated Decl decls = 2;
+  // Field numbers 3 to 15 are left unassigned for E2 package-level
+  // additions (interaction declarations and related package metadata).
+}
+
+// Declaration visibility (typl §3.3): public is the language default,
+// internal is package-private.
+enum Visibility {
+  VISIBILITY_UNSPECIFIED = 0;
+  VISIBILITY_PUBLIC = 1;
+  VISIBILITY_INTERNAL = 2;
+}
+
+// One top-level declaration: the shared envelope — name, visibility
+// (typl §3.3), the error modifier (typl §10.1), doc metadata (typl §14) —
+// plus the declaration shape in the kind oneof.
+message Decl {
+  // Declared name: CamelCase for types, SCREAMING_SNAKE for constants
+  // (typl §15.1).
+  string name = 1;
+  Visibility visibility = 2;
+  // True when the declaration carries the error modifier — failure
+  // vocabulary (typl §10.1). Valid on struct, enum, and union declarations
+  // only (TYPL-212).
+  bool is_error = 3;
+  // Doc comment body in CommonMark; empty when absent (typl §14.1). Doc
+  // tags without a structured field of their own (e.g. @see, typl §14.2)
+  // remain verbatim in this body.
+  string doc = 4;
+  // @labels classification identifiers, passed through to generated
+  // metadata unchanged; the core language defines no vocabulary
+  // (typl §14.3).
+  repeated string labels = 5;
+  // @deprecated reason string; absent when not deprecated (typl §14.2).
+  optional string deprecated = 6;
+  // Field numbers 7 to 9 are left unassigned for E2 envelope additions.
+  oneof kind {
+    TypeDef type_def = 10;
+    ConstDef const_def = 11;
+    StructDef struct_def = 12;
+    EnumDef enum_def = 13;
+    EnumSetDef enum_set_def = 14;
+    UnionDef union_def = 15;
+    // Members 16 to 29 are left unassigned for E2 interaction declaration
+    // kinds (ridl signal/event/command/query/final).
+  }
+}
+
+// The five typl primitives (typl §4).
+enum PrimitiveType {
+  PRIMITIVE_TYPE_UNSPECIFIED = 0;
+  PRIMITIVE_TYPE_BOOLEAN = 1;
+  PRIMITIVE_TYPE_INTEGER = 2;
+  PRIMITIVE_TYPE_FLOAT = 3;
+  PRIMITIVE_TYPE_STRING = 4;
+  PRIMITIVE_TYPE_BYTES = 5;
+}
+
+// Derived integer wire width — the typl §4.2 table, plus enum-set widths
+// (typl §9.3). All eight widths stay distinct — in particular uint64 vs
+// int64 — so ridl-diff (E2.8) sees a width flip as a change (ADR-0007
+// decision 9).
+enum IntWidth {
+  INT_WIDTH_UNSPECIFIED = 0;
+  INT_WIDTH_U8 = 1;
+  INT_WIDTH_I8 = 2;
+  INT_WIDTH_U16 = 3;
+  INT_WIDTH_I16 = 4;
+  INT_WIDTH_U32 = 5;
+  INT_WIDTH_I32 = 6;
+  INT_WIDTH_U64 = 7;
+  INT_WIDTH_I64 = 8;
+}
+
+// Derived float wire width — count-based inference (typl §4.3).
+enum FloatWidth {
+  FLOAT_WIDTH_UNSPECIFIED = 0;
+  FLOAT_WIDTH_F32 = 1;
+  FLOAT_WIDTH_F64 = 2;
+}
+
+// The backing of a named scalar type (typl §5): a bare primitive
+// (typl §5.2) or a UCUM unit expression (typl §5.1). A unit backing implies
+// the float primitive (typl §5.1).
+message Backing {
+  oneof kind {
+    PrimitiveType primitive = 10;
+    // Canonical UCUM unit expression, case-sensitive (typl §5.1),
+    // canonicalized by the checker over the curated atom table (ADR-0007
+    // decision 8).
+    string unit = 11;
+  }
+}
+
+// Scalar constraints (typl §5.2–§5.5). Range bounds and steps are canonical
+// decimal strings, never doubles (ADR-0007 decision 9).
+message Constraint {
+  // Inclusive lower range bound (typl §5.5); absent when unstated.
+  optional string min = 1;
+  // Inclusive upper range bound (typl §5.5); absent when unstated.
+  optional string max = 2;
+  // Quantization step: valid values are min + n·step (typl §4.3).
+  optional string step = 3;
+  // Length bounds for string (characters, typl §5.3) and bytes (bytes,
+  // typl §5.4). A fixed [N] constraint has len_min == len_max == N.
+  optional uint64 len_min = 4;
+  optional uint64 len_max = 5;
+  // Regex source text of the match pattern (typl §5.3), resolved through
+  // the named constant when one is referenced.
+  optional string pattern = 6;
+  // Name of the referenced regex constant when the match pattern was given
+  // by name (typl §5.3, §6.2); absent for inline regex literals.
+  optional string pattern_const = 7;
+}
+
+// The resolved init value of a type or field (typl §5.8).
+//
+// Scalar rule: value carries the canonical text form of a scalar init —
+// declared or derived. Composite inits are NOT materialized in the IR:
+// consumers derive them recursively from member inits (struct fields, union
+// first arm, tuple fields, min-bound count of collection elements — the
+// typl §5.8 derivation table). derivable is false and value absent when the
+// type has no derivable init and no declared one (TYPL-115) — an error only
+// where a consumer requires an init.
+message InitValue {
+  bool derivable = 1;
+  optional string value = 2;
+}
+
+// A named scalar type definition (typl §5) — also the shape of an inline
+// scalar field type (FieldType.inline_scalar).
+message TypeDef {
+  Backing backing = 1;
+  Constraint constraint = 2;
+  // The source-declared `= value` init in canonical text form (typl §5.8);
+  // absent when no init was declared.
+  optional string declared_init = 3;
+  // The resolved init, declared or derived (typl §5.8).
+  InitValue init = 4;
+  // The derived wire width (typl §4.2, §4.3, §5.6), resolved once by the
+  // checker and passed to every backend; unset for boolean, string, and
+  // bytes backings, which have no width table. Widths ride alongside the
+  // exact constraint strings as enums (ADR-0007 decision 9).
+  oneof width {
+    IntWidth int_width = 10;
+    FloatWidth float_width = 11;
+  }
+}
+
+// A named compile-time constant (typl §6).
+message ConstDef {
+  // The declared type of a value constant — a named-type reference or a
+  // primitive keyword as written (typl §6.1); absent for regex constants,
+  // which declare no type (typl §6.2).
+  optional string type_ref = 1;
+  // Canonical text form of the constant value — decimal for numerics
+  // (ADR-0007 decision 9); empty for regex constants, whose content is in
+  // regex.
+  string value = 2;
+  // Regex literal source of a regex constant (typl §6.2).
+  optional string regex = 3;
+}
+
+// A named composite with a fixed, closed set of named fields (typl §7).
+message StructDef {
+  // Fields and reserved tombstones in declaration order; ordinals are
+  // declaration-order derived and a tombstone keeps its slot occupied
+  // (typl §7.4).
+  repeated StructMember members = 1;
+  // True when every field is fixed-width and non-optional, so the struct
+  // may be emitted inline — a FlatBuffers struct rather than a table
+  // (typl Appendix D, FlatBuffers note), a repr(C) struct on the extern-C
+  // face (ADR-0007 decision 13).
+  bool fixed_layout = 2;
+}
+
+// One slot of a struct body: a live field or a reserved tombstone
+// (typl §7.4).
+message StructMember {
+  oneof member {
+    Field field = 10;
+    Reserved reserved = 11;
+  }
+}
+
+// A struct field (typl §7) with its own doc envelope (typl §14).
+message Field {
+  // camelCase field name (typl §15.1).
+  string name = 1;
+  // 1-based ordinal derived from declaration order — the stable numeric
+  // identity for tag-based transports (typl §7.4).
+  uint32 ordinal = 2;
+  FieldType type = 3;
+  // The source-declared `= value` init in canonical text form (typl §7.2);
+  // absent when no init was declared.
+  optional string declared_init = 4;
+  // The resolved init of this field (typl §5.8).
+  InitValue init = 5;
+  // Doc comment body in CommonMark; empty when absent (typl §14.1).
+  string doc = 6;
+  // @labels pass-through (typl §14.3).
+  repeated string labels = 7;
+  // @deprecated reason string; absent when not deprecated (typl §14.2).
+  optional string deprecated = 8;
+}
+
+// A reserved tombstone — a retired slot that is never reused (typl §7.4).
+message Reserved {
+  // The retired ordinal slot in a struct or union body; 0 in enum bodies,
+  // where the retired identity is the value.
+  uint32 ordinal = 1;
+  // The retired field name, e.g. `reserved legacyChecksum` (typl §7.4).
+  optional string name = 2;
+  // The retired integer value in enum bodies, e.g. `reserved 3`
+  // (typl §7.4).
+  optional int64 value = 3;
+}
+
+// A named set of discrete integer-backed values (typl §8).
+message EnumDef {
+  repeated EnumValue values = 1;
+  // Retired values, never reused with a new meaning (typl §7.4).
+  repeated Reserved reserved = 2;
+}
+
+// One enum value (typl §8) — or one enum-set bit (typl §9.1).
+message EnumValue {
+  // SCREAMING_SNAKE name (typl §15.1).
+  string name = 1;
+  // The explicitly assigned integer value (typl §8) — the bit position when
+  // used as an enum-set bit (typl §9.1).
+  int64 value = 2;
+  // Doc comment body; empty when absent (typl §14.1). Enum values carry no
+  // structured tag fields, so doc tags (@see, @labels, @deprecated) remain
+  // verbatim in this body.
+  string doc = 3;
+}
+
+// A named bitfield (typl §9).
+message EnumSetDef {
+  // Name of the backing enum for the derived form (typl §9.2); absent for
+  // the standalone form (typl §9.1).
+  optional string backing_enum = 1;
+  // Bit positions. Populated for both forms — the checker copies the
+  // backing enum's values for the derived form, so consumers never chase
+  // the reference (typl §9.1, §9.2).
+  repeated EnumValue bits = 2;
+  // Width inferred from the highest bit position (typl §9.3).
+  IntWidth width = 3;
+}
+
+// A discriminated (tagged) union — exactly one arm active (typl §10).
+message UnionDef {
+  repeated UnionArm arms = 1;
+  // True for a result union (typl §10.2): exactly one success arm and one
+  // error arm. The interaction layer (ridl) maps the error arm onto
+  // transport-native error channels.
+  bool is_result = 2;
+  // Retired arms — a tombstone keeps its ordinal slot occupied, never
+  // reused (typl §7.4; union bodies admit `reserved` per Appendix E).
+  repeated Reserved reserved = 3;
+}
+
+// One union arm (typl §10). Arms reference named types only (TYPL-204).
+message UnionArm {
+  string name = 1;
+  // 1-based ordinal derived from declaration order (typl §7.4).
+  uint32 ordinal = 2;
+  // Resolved named-type reference.
+  string type_ref = 3;
+  // Doc comment body; empty when absent (typl §14.1, Appendix E admits doc
+  // comments on arms).
+  string doc = 4;
+}
+
+// The type of a struct field or tuple field (typl §7, §11, §12; usage rules
+// typl §15.3).
+message FieldType {
+  // True when the field carries the `?` suffix — may be absent, which is
+  // distinct from "present with a null value"; typl has no null (typl §7.1).
+  bool optional = 1;
+  oneof kind {
+    // Resolved named-type reference — nominal identity (typl §5.7).
+    string named = 10;
+    // Direct primitive use. In field and tuple positions string and bytes
+    // are rejected (typl §15.3, TYPL-208); as a map key a bare primitive —
+    // string included — is legal (typl §12.2).
+    PrimitiveType primitive = 11;
+    // Inline constrained scalar, e.g. `integer [0..MAX_GEAR] = 6`
+    // (typl §5.2, Appendix B). The enclosing Field's declared_init and init
+    // are authoritative for an inline scalar; the nested TypeDef's
+    // declared_init and init stay unset.
+    TypeDef inline_scalar = 12;
+    TupleType tuple = 13;
+    ArrayType array = 14;
+    MapType map = 15;
+    // Members 16 to 19 are left unassigned for higher-profile field types
+    // (e.g. the ridl stream, typl §1.3).
+  }
+}
+
+// An anonymous composite of named fields, used inline (typl §11).
+message TupleType {
+  repeated TupleField fields = 1;
+}
+
+// One tuple field — always named; positional access is not permitted
+// (typl §11).
+message TupleField {
+  // camelCase field name (typl §15.1).
+  string name = 1;
+  FieldType type = 2;
+}
+
+// A bounded array (typl §12.1). A fixed array `[T; N]` has
+// min == max == N (typl §12.3). Bounds are mandatory (TYPL-201).
+message ArrayType {
+  FieldType element = 1;
+  uint64 min = 2;
+  uint64 max = 3;
+}
+
+// A bounded map (typl §12.2). The key must be a named string type or a
+// primitive (TYPL-209). Bounds are entry counts and mandatory (TYPL-202).
+message MapType {
+  FieldType key = 1;
+  FieldType value = 2;
+  uint64 min = 3;
+  uint64 max = 4;
+}
