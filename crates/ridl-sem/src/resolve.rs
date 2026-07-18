@@ -13,6 +13,7 @@ use std::collections::hash_map::Entry;
 
 use ridl_syntax::ast::{AstNode, ConstDef, Definition, HasName, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode};
+use rowan::TextRange;
 
 /// The kind of a declared name.
 #[derive(Debug, Clone, PartialEq)]
@@ -21,10 +22,15 @@ pub enum SymbolKind {
     Const,
 }
 
-/// A resolution diagnostic, e.g. an unknown type name.
+/// A resolution diagnostic. It carries the stable diagnostic code it maps to in
+/// the coded model (`ridl_core::diag`, E1.10) and the source range of the
+/// offending name — the empty code string means no typl §16 code exists for the
+/// rule yet (the unknown-type-name check, rehomed by a later task).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ResolveError {
     pub message: String,
+    pub code: &'static str,
+    pub range: TextRange,
 }
 
 /// The result of [`resolve`]: every declared name plus any diagnostics.
@@ -46,14 +52,26 @@ pub fn resolve(file: &SourceFile) -> Resolution {
         if let Definition::Type(decl) = definition
             && let Some(name) = declared_name(&decl)
         {
-            declare(&mut symbols, &mut diagnostics, name, SymbolKind::Type);
+            declare(
+                &mut symbols,
+                &mut diagnostics,
+                name,
+                SymbolKind::Type,
+                name_range(&decl),
+            );
         }
     }
     for definition in file.definitions() {
         if let Definition::Const(decl) = definition
             && let Some(name) = declared_name(&decl)
         {
-            declare(&mut symbols, &mut diagnostics, name, SymbolKind::Const);
+            declare(
+                &mut symbols,
+                &mut diagnostics,
+                name,
+                SymbolKind::Const,
+                name_range(&decl),
+            );
         }
     }
 
@@ -67,13 +85,25 @@ pub fn resolve(file: &SourceFile) -> Resolution {
             // reported a syntax error for.
             continue;
         };
+        let range = decl
+            .type_ref()
+            .map(|type_ref| type_ref.syntax().text_range())
+            .unwrap_or_default();
         match symbols.get(&type_name) {
             Some(SymbolKind::Type) => {}
+            // No typl §16 code covers "used a constant as a type" or an unknown
+            // type name yet; both surface through the resolver import rules and
+            // the checker's lowering skips, and a later task rehomes them
+            // (ADR-0007 decision 10). They render as plain, coded-model messages.
             Some(SymbolKind::Const) => diagnostics.push(ResolveError {
-                message: format!("`{type_name}` is not a type"),
+                message: format!("expected a type, but `{type_name}` names a constant"),
+                code: "",
+                range,
             }),
             None => diagnostics.push(ResolveError {
                 message: format!("unknown type name `{type_name}`"),
+                code: "",
+                range,
             }),
         }
     }
@@ -86,16 +116,20 @@ pub fn resolve(file: &SourceFile) -> Resolution {
 
 /// Inserts `name` into `symbols` unless it is already declared, in which case
 /// the earlier call (from the earlier declaration pass) wins and this later
-/// declaration is reported as a duplicate instead.
+/// declaration is reported as a duplicate (TYPL-009, typl reference §16.1) at
+/// its own `range`.
 fn declare(
     symbols: &mut HashMap<String, SymbolKind>,
     diagnostics: &mut Vec<ResolveError>,
     name: String,
     kind: SymbolKind,
+    range: TextRange,
 ) {
     match symbols.entry(name) {
         Entry::Occupied(entry) => diagnostics.push(ResolveError {
-            message: format!("duplicate declaration `{}`", entry.key()),
+            message: format!("duplicate declaration of `{}`", entry.key()),
+            code: "TYPL-009",
+            range,
         }),
         Entry::Vacant(entry) => {
             entry.insert(kind);
@@ -108,6 +142,16 @@ fn declare(
 /// The declared name of a definition, or `None` on a malformed tree.
 pub(crate) fn declared_name(definition: &impl HasName) -> Option<String> {
     Some(definition.name()?.ident_token()?.text().to_string())
+}
+
+/// The source range of a definition's declared name, or an empty range on a
+/// malformed tree (unreachable for a definition whose [`declared_name`] is
+/// present).
+fn name_range(definition: &impl HasName) -> TextRange {
+    definition
+        .name()
+        .map(|name| name.syntax().text_range())
+        .unwrap_or_default()
 }
 
 /// The type reference of a const (`Speed`, `pkg.Speed`, or a primitive
@@ -218,6 +262,28 @@ mod tests {
         );
         assert_eq!(resolution.diagnostics.len(), 1);
         assert!(resolution.diagnostics[0].message.contains("MAX_SPEED"));
+    }
+
+    #[test]
+    fn empty_file_resolves_to_zero_diagnostics() {
+        // The #102 empty-file resolver test: an empty input parses to an empty
+        // `SourceFile`; the resolver produces no symbols and no diagnostics, and
+        // does not panic on the near-empty tree.
+        let resolution = resolve_source("");
+        assert!(resolution.symbols.is_empty());
+        assert!(resolution.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn duplicate_declaration_carries_the_typl_009_code() {
+        let resolution = resolve_source("type Speed: km/h\ntype Speed: km/h\n");
+        assert_eq!(resolution.diagnostics.len(), 1);
+        assert_eq!(resolution.diagnostics[0].code, "TYPL-009");
+        assert!(
+            resolution.diagnostics[0]
+                .message
+                .contains("duplicate declaration of `Speed`"),
+        );
     }
 
     #[test]

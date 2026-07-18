@@ -9,3 +9,4 @@ repository.workspace = true
 ridl-core = { path = "../ridl-core" }
 ridl-ir = { path = "../ridl-ir" }
 ridl-syntax = { path = "../ridl-syntax" }
+rowan.workspace = true
