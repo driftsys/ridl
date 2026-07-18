@@ -9,7 +9,8 @@
 //! `logos` lexes the raw stream; two source-driven refinements sit on top,
 //! because they depend on more than a single token's bytes:
 //!
-//! - **Regex literals** (§2.7). A `/` whose previous significant token is `=`
+//! - **Regex literals** (§2.7, §5.3). A `/` whose previous significant token is
+//!   `=` (an init or const value) or the `match` keyword (a string constraint)
 //!   begins a regex literal. It is scanned from the source directly and the raw
 //!   stream inside it is discarded by re-lexing from the literal's end, so the
 //!   way `logos` happened to tokenise the pattern bytes does not matter.
@@ -183,7 +184,11 @@ pub fn lex(input: &str) -> Vec<Token<'_>> {
 /// as slashes, identifiers, or a stray line comment.
 fn raw_tokens(input: &str) -> Vec<Raw> {
     let mut out: Vec<Raw> = Vec::new();
-    let mut prev_significant: Option<SyntaxKind> = None;
+    // The previous significant (non-trivia) token: its kind and its source
+    // text. The text is needed to spot the `match` keyword, which is still a
+    // raw `Ident` at this stage — keyword mapping happens after the regex lift.
+    let mut prev_kind: Option<SyntaxKind> = None;
+    let mut prev_text: &str = "";
     let mut base = 0usize;
     'relex: loop {
         let mut lexer = RawToken::lexer(&input[base..]);
@@ -193,26 +198,39 @@ fn raw_tokens(input: &str) -> Vec<Raw> {
             let end = base + span.end;
             let kind = result.map_or(SyntaxKind::Error, SyntaxKind::from);
 
-            if kind == SyntaxKind::Slash && prev_significant == Some(SyntaxKind::Eq) {
+            if kind == SyntaxKind::Slash && starts_regex(prev_kind, prev_text) {
                 let (regex_kind, regex_end) = scan_regex(input, start);
                 out.push(Raw {
                     kind: regex_kind,
                     start,
                     end: regex_end,
                 });
-                prev_significant = Some(regex_kind);
+                prev_kind = Some(regex_kind);
+                prev_text = &input[start..regex_end];
                 base = regex_end;
                 continue 'relex;
             }
 
             out.push(Raw { kind, start, end });
             if !kind.is_trivia() {
-                prev_significant = Some(kind);
+                prev_kind = Some(kind);
+                prev_text = &input[start..end];
             }
         }
         break;
     }
     out
+}
+
+/// Whether a `/` following this previous significant token begins a regex
+/// literal (typl reference §2.7, §5.3): after `=` — an init or const value — or
+/// the `match` keyword — a string constraint. `match` is still a raw `Ident` at
+/// lexing time, so it is matched by its source text; it is a reserved word, so
+/// the text is unambiguous, and typl has no division operator, so neither `= /`
+/// nor `match /` can be anything but a regex.
+fn starts_regex(prev_kind: Option<SyntaxKind>, prev_text: &str) -> bool {
+    prev_kind == Some(SyntaxKind::Eq)
+        || (prev_kind == Some(SyntaxKind::Ident) && prev_text == "match")
 }
 
 /// Scans a regex literal that begins at the `/` at byte `start`. Returns
@@ -489,6 +507,38 @@ mod tests {
             .expect("a significant token");
         assert_eq!(last_significant.kind, SyntaxKind::Error);
         assert_eq!(last_significant.text, "/abc");
+    }
+
+    #[test]
+    fn inline_match_regex_is_one_token() {
+        // The exact `ridl.std` Date declaration (typl reference Appendix A,
+        // §5.3): the regex literal follows the `match` keyword, not `=`.
+        let line = r"type Date : string [10 match /^\d{4}-\d{2}-\d{2}$/]";
+        let tokens = lex(line);
+        assert!(
+            tokens.iter().all(|t| t.kind != SyntaxKind::Error),
+            "no error tokens expected: {tokens:?}",
+        );
+        assert_eq!(
+            significant_kinds(line),
+            vec![
+                SyntaxKind::TypeKw,
+                SyntaxKind::Ident,
+                SyntaxKind::Colon,
+                SyntaxKind::StringKw,
+                SyntaxKind::LBracket,
+                SyntaxKind::IntNumber,
+                SyntaxKind::MatchKw,
+                SyntaxKind::Regex,
+                SyntaxKind::RBracket,
+            ],
+        );
+        let regex: Vec<_> = tokens
+            .iter()
+            .filter(|t| t.kind == SyntaxKind::Regex)
+            .collect();
+        assert_eq!(regex.len(), 1, "one regex token expected: {tokens:?}");
+        assert_eq!(regex[0].text, r"/^\d{4}-\d{2}-\d{2}$/");
     }
 
     // Step (e): durations lex as one Duration; a bare atom is an Ident.

@@ -1,0 +1,9 @@
+// Inline match-regex string types, verbatim from ridl.std (typl reference
+// Appendix A) and typl reference §6.2. Each regex literal follows the `match`
+// keyword, not `=`, and must lex as one Regex token between MatchKw and `]`.
+type Email : string [1..254 match /^[^@]+@[^@]+\.[^@]+$/]
+type Date : string [10 match /^\d{4}-\d{2}-\d{2}$/]
+type TimeOfDay : string [8..15 match /^\d{2}:\d{2}:\d{2}/]
+type Version : string [5..32 match /^\d+\.\d+\.\d+/]
+type CountryCode : string [2 match /^[A-Z]{2}$/]
+type LanguageCode : string [2..5 match /^[a-z]{2}(-[A-Z]{2})?$/]
