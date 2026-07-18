@@ -69,6 +69,12 @@
 //! garbage therefore collapses to one diagnostic plus one `ErrorNode`, and the
 //! pathological nesting inputs report a small, constant number of diagnostics
 //! instead of one per unwound level.
+//!
+//! The profile-boundary **TYPL-302** is the one exception: a positional
+//! FORM-101 can land on a duration or `@` token first (`[0..10ms]` fails the
+//! `]` check at `10ms`), and the profile-boundary fact is the higher-value
+//! diagnostic, so both are recorded. A TYPL-302 token is always consumed where
+//! it is raised, so exempting it can never re-introduce a flood.
 
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
@@ -288,13 +294,20 @@ impl<'a> Parser<'a> {
     /// doc). This is the flood control: on a stuck cursor the repeated,
     /// no-progress `expect`/`bound` errors during an unwind collapse to the
     /// first one.
+    ///
+    /// The profile-boundary **TYPL-302** is exempt: it is the higher-value
+    /// diagnostic and must survive a positional FORM-101 that lands on the
+    /// same boundary token first (`[0..10ms]` reports both). A TYPL-302 token
+    /// is always consumed at the site that raises it, so it can never be the
+    /// stuck-cursor flood source the suppression guards against.
     fn error_at_current(&mut self, code: &'static str, message: String) {
         let i = self.significant_pos();
         let start = TextSize::new(self.offsets[i] as u32);
-        if self
-            .errors
-            .last()
-            .is_some_and(|last| last.range.start() == start)
+        if code != "TYPL-302"
+            && self
+                .errors
+                .last()
+                .is_some_and(|last| last.range.start() == start)
         {
             return;
         }
@@ -1270,6 +1283,26 @@ mod tests {
             "expected a bounded diagnostic count, got {}: {:?}",
             parse.errors().len(),
             parse.errors(),
+        );
+    }
+
+    #[test]
+    fn duration_in_constraint_reports_both_form_101_and_typl_302() {
+        // A duration or `@` inside a constraint fails a positional check on the
+        // same token first; the profile-boundary TYPL-302 must still fire — it
+        // is exempt from the one-diagnostic-per-offset suppression, so both
+        // codes are recorded (matching the honest init-position behavior).
+        assert_eq!(
+            error_codes("package p\ntype X: integer [0..10ms]\n"),
+            vec!["FORM-101", "TYPL-302"],
+        );
+        assert_eq!(
+            error_codes("package p\ntype X: integer [10ms]\n"),
+            vec!["FORM-101", "TYPL-302"],
+        );
+        assert_eq!(
+            error_codes("package p\ntype X: integer [0..5 @ 3]\n"),
+            vec!["FORM-101", "TYPL-302"],
         );
     }
 
