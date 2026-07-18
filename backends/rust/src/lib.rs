@@ -9,6 +9,16 @@ use proc_macro2::{Literal, TokenStream};
 use quote::{format_ident, quote};
 use ridl_ir::{ConstDef, Module, TypeDef};
 
+/// A failure to generate Rust source from a `Module`.
+///
+/// Carried as a value so codegen stays total: no stage in the pipeline panics
+/// (ADR-0004 section 5). The `compile` driver folds `message` into its
+/// diagnostic list.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GenerateError {
+    pub message: String,
+}
+
 /// Generates Rust source text for `module`.
 ///
 /// Emission order is all structs first (in module order), then all consts
@@ -16,7 +26,40 @@ use ridl_ir::{ConstDef, Module, TypeDef};
 /// `TypeDef` in `module` is skipped rather than emitted or panicked on — the
 /// checker upstream of codegen owns that diagnostic; E0 assumes the IR it
 /// receives is well-formed.
-pub fn generate(module: &Module) -> String {
+///
+/// The call is total: it returns [`GenerateError`] rather than panicking. A
+/// typl name can lex as a valid identifier yet still be a Rust keyword (for
+/// example `fn`), which cannot appear where the generated code uses it. Every
+/// emitted name is validated up front with `syn::parse_str::<syn::Ident>`,
+/// before any token is built, because `format_ident!` itself panics on a name
+/// that is neither a legal identifier nor a keyword. When any emitted name is
+/// invalid, the whole call fails with one message listing the offending names —
+/// E0 has no partial-emission requirement. Raw-identifier escaping and name
+/// mangling are an E1 backend decision, not resolved here.
+pub fn generate(module: &Module) -> Result<String, GenerateError> {
+    let mut invalid_names: Vec<String> = Vec::new();
+    for type_def in &module.types {
+        if !is_rust_ident(&type_def.name) {
+            invalid_names.push(type_def.name.clone());
+        }
+    }
+    for const_def in &module.consts {
+        // Mirror `generate_const`: a const whose type does not resolve is
+        // skipped, so its name is never emitted and never validated.
+        let resolves = module.types.iter().any(|t| t.name == const_def.type_name);
+        if resolves && !is_rust_ident(&const_def.name) {
+            invalid_names.push(const_def.name.clone());
+        }
+    }
+    if !invalid_names.is_empty() {
+        return Err(GenerateError {
+            message: format!(
+                "generated Rust would use invalid identifier(s): {}",
+                invalid_names.join(", ")
+            ),
+        });
+    }
+
     let structs = module.types.iter().map(generate_struct);
     let consts = module
         .consts
@@ -28,9 +71,18 @@ pub fn generate(module: &Module) -> String {
         #(#consts)*
     };
 
-    let file: syn::File =
-        syn::parse2(tokens).expect("generated tokens must parse as a well-formed Rust file");
-    prettyplease::unparse(&file)
+    let file: syn::File = syn::parse2(tokens).map_err(|err| GenerateError {
+        message: format!("generated Rust does not parse: {err}"),
+    })?;
+    Ok(prettyplease::unparse(&file))
+}
+
+/// Reports whether `name` parses as a Rust identifier. Unlike
+/// `proc_macro2::Ident::new`, `syn::parse_str::<syn::Ident>` rejects reserved
+/// keywords such as `fn`, so this catches exactly the names that would later
+/// fail to parse as generated code.
+fn is_rust_ident(name: &str) -> bool {
+    syn::parse_str::<syn::Ident>(name).is_ok()
 }
 
 fn generate_struct(type_def: &TypeDef) -> TokenStream {
@@ -78,8 +130,29 @@ mod tests {
     }
 
     #[test]
+    fn type_named_with_a_rust_keyword_is_an_error_not_a_panic() {
+        let module = Module {
+            name: "bad".to_string(),
+            types: vec![TypeDef {
+                name: "fn".to_string(),
+                unit: "m".to_string(),
+                range: None,
+            }],
+            consts: vec![],
+        };
+
+        let error = generate(&module).expect_err("a Rust keyword type name must not generate");
+
+        assert!(
+            error.message.contains("fn"),
+            "the error must name the offending identifier, got: {}",
+            error.message
+        );
+    }
+
+    #[test]
     fn generates_struct_and_const_for_fixture_module() {
-        let source = generate(&fixture());
+        let source = generate(&fixture()).expect("the fixture module generates valid Rust");
 
         assert!(
             source.contains("pub struct Speed(pub f64)"),
@@ -93,7 +166,7 @@ mod tests {
 
     #[test]
     fn generated_source_compiles_with_rustc() {
-        let source = generate(&fixture());
+        let source = generate(&fixture()).expect("the fixture module generates valid Rust");
 
         let dir = std::env::temp_dir();
         let unique = format!(
