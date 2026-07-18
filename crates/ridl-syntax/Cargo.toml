@@ -7,3 +7,4 @@ repository.workspace = true
 
 [dependencies]
 logos.workspace = true
+rowan.workspace = true
