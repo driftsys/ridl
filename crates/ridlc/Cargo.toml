@@ -6,12 +6,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-clap = { workspace = true }
-ridl-syntax = { path = "../ridl-syntax" }
+clap.workspace = true
+ridl-backend-rust = { path = "../../backends/rust" }
 ridl-core = { path = "../ridl-core" }
 ridl-ir = { path = "../ridl-ir" }
 ridl-sem = { path = "../ridl-sem" }
-ridl-backend-rust = { path = "../../backends/rust" }
+ridl-syntax = { path = "../ridl-syntax" }
 
 [dev-dependencies]
-insta = { workspace = true }
+insta.workspace = true
