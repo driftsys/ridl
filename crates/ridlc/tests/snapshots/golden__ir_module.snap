@@ -1,0 +1,25 @@
+---
+source: crates/ridlc/tests/golden.rs
+expression: output.module
+---
+{
+  "name": "walking_skeleton",
+  "types": [
+    {
+      "name": "Speed",
+      "unit": "km/h",
+      "range": {
+        "min": 0.0,
+        "max": 250.0,
+        "step": 0.5
+      }
+    }
+  ],
+  "consts": [
+    {
+      "name": "MAX_SPEED",
+      "type_name": "Speed",
+      "value": 250.0
+    }
+  ]
+}

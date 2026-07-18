@@ -1,0 +1,6 @@
+---
+source: crates/ridlc/tests/golden.rs
+expression: output.rust_source
+---
+pub struct Speed(pub f64);
+pub const MAX_SPEED: Speed = Speed(250f64);
