@@ -84,8 +84,8 @@ wave 4   T20 CLI+facade (after T17, T21) → T22 LSP core → T23 hover/defs
 close    whole-epic review → fix wave → gardening + docs sync
 ```
 
-Model tiers: fable = T2, T3, T8, T12, T13, epic review; sonnet = T5, T19, T26;
-opus = everything else.
+Model tiers: fable = T2, T3, T8, T12, T13, T22, epic review; sonnet = T5, T19,
+T26; opus = everything else.
 
 ---
 
@@ -267,8 +267,12 @@ Branch `e1-2b-parser` · commits `feat(ridl-syntax): …` · model: fable.
 `'reserved'` are their keyword tokens. Missing `package` emits a `SyntaxError`
 but parsing continues. Separator discipline per §15.2. Leading zeros in an
 integer literal emit FORM-005 wording (`integer literal has leading zeros`) as a
-`SyntaxError` (the coded model arrives in task 6). The parser never panics and
-never drops text.
+`SyntaxError` (the coded model arrives in task 6). Profile boundary: a
+`Duration` token or a stray `@` anywhere in a `.typl` parse emits **TYPL-302**
+(the family lexer recognises timing everywhere; the typl profile rejects it —
+typl §2.8) — the one TYPL-3xx code E1 implements; TYPL-301/303/304 need the E2
+family grammar to parse the constructs they reject and are deferred (ADR-0007
+decision 10). The parser never panics and never drops text.
 
 **Steps:**
 
@@ -322,9 +326,9 @@ Branch `e1-2c-recovery` · commits `feat(ridl-syntax): …` /
 - [ ] Failing `err` corpus first: valid→garbage→valid resynchronization (the
       #102 recovery gap); unclosed brace; unclosed bracket; missing name;
       missing `=` in enum value; broken constraint; stray reserved word as
-      identifier (`type signal : …`); mangled import. Snapshots assert
-      losslessness, the error list, and that declarations after the garbage
-      still produce real nodes.
+      identifier (`type signal : …`); mangled import; a duration literal in init
+      position (`= 10ms` → TYPL-302). Snapshots assert losslessness, the error
+      list, and that declarations after the garbage still produce real nodes.
 - [ ] Implement recovery points (top-level keywords, `}`, separator boundaries)
       in the parser.
 - [ ] Port `resolve.rs`, `check.rs`, `ridlc` to the generated AST; delete the
@@ -409,6 +413,9 @@ pub struct Diagnostic {
     pub fixits: Vec<FixIt>,
 }
 pub struct SourceMap { /* FileId -> (path, text) for rendering */ }
+impl SourceMap { pub fn file_id(&mut self, file: &InputFile /* or path+text */) -> FileId; }
+// FileId is issued by SourceMap interning — a pass holding an InputFile
+// gets its FileId here; this is the only bridge between the two.
 pub fn render(diags: &[Diagnostic], sources: &SourceMap) -> String
 ```
 
@@ -422,7 +429,7 @@ pub fn render(diags: &[Diagnostic], sources: &SourceMap) -> String
   delimiter, FORM-104 missing `package` declaration, FORM-105 reserved word used
   as identifier.
 - `ridlc::compile` maps `SyntaxError { message, range }` to coded `Diagnostic`s
-  (the parser tags each error with its FORM code string — add a
+  (the parser tags each error with its code string, FORM-… or TYPL-302 — add a
   `code: &'static str` field to `SyntaxError`), reclaiming the offsets E0
   discarded. `CompileOutput.diagnostics` becomes `Vec<Diagnostic>`; the binary
   renders with `render` to stderr; exit codes keep their E0 meaning (0 clean, 1
@@ -533,7 +540,9 @@ decisions 4, 5, 15 (ridl.std embedding); #102 salsa items.
 }
 #[salsa::input] pub struct Workspace {
     #[return_ref] packages: Vec<Package>,
-    #[return_ref] imports: BTreeMap<String, String>,  // merged per ADR-0002 §5
+    // §5 steps 2-3 pre-merged: member [imports] shadow workspace [imports].
+    // Step 1 (workspace members) is checked against `packages` before this map.
+    #[return_ref] imports: BTreeMap<String, String>,
 }
 // discovery (fs, outside salsa): walk from a path (file, package dir, or
 // workspace root), read manifests, load .typl files, build the inputs.
@@ -657,7 +666,7 @@ impl ExactValue {
     pub fn parse(text: &str) -> Option<ExactValue>;       // int or decimal form
     pub fn to_decimal_string(&self) -> String;            // canonical, lossless
 }
-pub enum IntWidth { U8, I8, U16, I16, U32, I32, U64OrI64 } // §4.2 table order
+pub enum IntWidth { U8, I8, U16, I16, U32, I32, U64, I64 } // all eight §4.2 rows — uint64 vs int64 stays distinct so ridl-diff (E2.8) sees the flip
 pub enum FloatWidth { F32, F64 }
 pub struct IntRange { pub min: ExactValue, pub max: ExactValue }
 pub fn derive_int_width(r: &IntRange) -> Result<IntWidth, WidthError>   // TYPL-111 outside i64 domain
@@ -913,7 +922,9 @@ pub fn const_value(res: &Resolution, name: &str) -> Option<ConstValue>
 - Checks: nominal identity per §5.7 — a const of named type accepts a literal
   satisfying the constraints (TYPL-108 otherwise) and never a value of another
   named type; constants as range bounds resolve through `const_value` (a const
-  bound referencing a non-numeric const → TYPL-105 type-mismatch arm); TYPL-106
+  bound referencing a non-numeric const → TYPL-105, a deliberate borrow: §16.2
+  scopes 105 to `step` and defines no code for a malformed bound const — note
+  the borrow in the diagnostic message test for the error index); TYPL-106
   invalid regex via `regress::Regex::new`; TYPL-005 public declaration exposing
   an `internal` type (fields, arms, bounds constants, backing); doc tags per
   §14: `@see` (unvalidated), `@labels` (pass-through into IR `labels`),
@@ -1327,7 +1338,8 @@ Branch `e1-15b-lsp-nav` · commits `feat(ridl-lsp): …` · model: opus.
 - Hover on a type reference or declaration shows: qualified name, kind,
   backing + canonical UCUM unit, constraint (range/step/length/pattern), derived
   wire width (from IR), init value, doc comment markdown, labels, deprecation.
-  Hover on a field shows its ordinal (§6.3 groundwork).
+  Hover on a field shows its ordinal (general form §6.3 groundwork; the ordinal
+  itself is typl §7.4).
 - Goto-def resolves through imports and qualified references to the `Symbol`
   declaration span; find-refs walks every file of every loaded package for
   resolved references to the same symbol (name-resolution based, not textual).
@@ -1386,7 +1398,8 @@ Branch `e1-15c-lsp-edit` · commits `feat(ridl-lsp): …` · model: opus.
 
 Branch `e1-16-inlay` · commits `feat(ridl-lsp): …` · model: opus.
 
-**Read first:** general form §6.3 (both mitigations); typl §7.4.
+**Read first:** general form §6.3 (the inlay-hint mitigation — the
+baseline-aware `ridlc` half is E2.9); ADR-0004 §10 (unit expansion); typl §7.4.
 
 **Files:**
 
@@ -1479,7 +1492,8 @@ model: sonnet.
 - Attribute blocks, `labels`/`deprecated` as attributes, and the single
   `attr_block` production (general form §4) — E2, with the family grammar work
   (ADR-0007 decision 11).
-- TYPL-107, TYPL-205, TYPL-401/402/403 (decision 10 scope cuts — debt).
+- TYPL-107, TYPL-205, TYPL-301/303/304, TYPL-401/402/403 (decision 10 scope cuts
+  — debt; TYPL-302 alone ships in E1, from the parser).
 - crates.io publishing, marketplace publishing, release tagging — maintainer
   acts.
 - Semantic tokens, `ridl doc`, `ridl diff`, lint — E2/E4 rings (ADR-0004 §10).

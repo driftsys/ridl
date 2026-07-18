@@ -92,11 +92,14 @@ when the epic closes) and cites these decisions by number.
 10. **Semantic scope cuts, recorded as debt.** TYPL-107 (regex vs length bound)
     needs regex length analysis, TYPL-401 needs doc-markdown reference
     resolution, TYPL-402/403 need assurance profiles that do not exist in V1,
-    and TYPL-205 (repeated tuple shape) is `ridl lint` territory (E2). All five
-    are deferred and roll into the E1 debt issue. TYPL-106 regex validation is
-    implemented with the `regress` crate (an ECMA-262 engine, matching the
-    reference's §2.7 syntax choice, where Rust's `regex` crate dialect would
-    not).
+    and TYPL-205 (repeated tuple shape) is `ridl lint` territory (E2). Of the
+    profile-boundary family, TYPL-301/303/304 need the E2 family grammar to
+    parse the constructs they reject and are deferred with it; TYPL-302
+    (duration or timing in typl context) ships in E1, emitted by the parser,
+    because the family lexer already produces the tokens. All the deferred codes
+    roll into the E1 debt issue. TYPL-106 regex validation is implemented with
+    the `regress` crate (an ECMA-262 engine, matching the reference's §2.7
+    syntax choice, where Rust's `regex` crate dialect would not).
 
 11. **The general form's attribute promotion is E2 scope.** E1 parses the typl
     profile per typl reference Appendix E, with `@labels` and `@deprecated` as
