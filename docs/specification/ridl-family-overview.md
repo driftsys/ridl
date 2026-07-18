@@ -23,8 +23,9 @@ ridl         uxdl         rmdl   ← system contracts · user contracts · behav
 
 One grammar, one toolchain, one IR; each language is a **profile** selected by
 file extension (`.typl` `.ridl` `.uxdl` `.rmdl` `.rsdl`, plus `.rxdl` the total
-profile). ridl and uxdl are two profiles of one `interact` core; rmdl realizes
-contracts from either; rsdl wires instances and never stands alone.
+profile). ridl and uxdl are two profiles of one `interact` core; rmdl computes
+contract-blind reactions; rsdl components bind them to contracts and wire
+instances — rsdl never stands alone.
 
 ## 2. Document Inventory
 
