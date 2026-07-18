@@ -1,0 +1,48 @@
+#:schema https://driftsys.github.io/git-std/schemas/v1/git-std.schema.json
+# git-std configuration for the RIDL specification repository.
+# Conventional commits, semver, changelog, and git-hook management — one
+# binary (`git std`). See https://github.com/driftsys/git-std.
+
+scheme = "semver"
+strict = true
+
+# Explicit scopes rather than "auto": this repo has no Cargo/npm/Deno
+# workspace yet, so auto-discovery would leave no valid scope. Keep this
+# list in sync as the compiler crates land (docs/ROADMAP.md, epic E0 —
+# ridl-syntax / ridl-core / ridl-ir / ridlc / ridl).
+scopes = [
+  # per-language specifications
+  "typl",
+  "ridl",
+  "uxdl",
+  "rmdl",
+  "rsdl",
+  # cross-cutting spec (overview, concept note, general form)
+  "family",
+  # the implementation backlog
+  "roadmap",
+  # architecture decision records
+  "adr",
+  # repo-wide: tooling, community files, layout
+  "repo",
+  "docs",
+  "ci",
+  "hooks",
+  "deps",
+]
+types = [
+  "feat",
+  "fix",
+  "docs",
+  "style",
+  "refactor",
+  "perf",
+  "test",
+  "chore",
+  "ci",
+  "build",
+  "revert",
+]
+
+[versioning]
+tag_prefix = "v"

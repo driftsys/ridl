@@ -1,0 +1,205 @@
+# The RIDL Family — Overview and Index
+
+**One platform, five languages, one grammar.** This is the entry-point document:
+the map, the shared doctrines, the reading paths, the decision ledger, and the
+index of open questions. It contains no normative language rules of its own —
+every rule lives in exactly one reference, cited from here.
+
+Status: living index — updated whenever a reference changes.
+
+---
+
+## 1. The Map
+
+```
+              typl            ← vocabulary: types, units, ranges, constants
+  ┌────────────┼────────────┐
+  ▼            ▼            ▼
+ridl         uxdl         rmdl   ← system contracts · user contracts · behaviour
+  └────────────┼────────────┘
+               ▼
+             rsdl             ← architecture: instances, wiring, deployment
+```
+
+One grammar, one toolchain, one IR; each language is a **profile** selected by
+file extension (`.typl` `.ridl` `.uxdl` `.rmdl` `.rsdl`, plus `.rxdl` the total
+profile). ridl and uxdl are two profiles of one `interact` core; rmdl realizes
+contracts from either; rsdl wires instances and never stands alone.
+
+## 2. Document Inventory
+
+| Document                       | Version   | Status            | Owns                                                                                                                                                                                    |
+| ------------------------------ | --------- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Concept note — the RIDL family | draft     | direction-setting | motivation, cores, profiles, platform/repo/IR model, naming ledger                                                                                                                      |
+| ADR-0002 — module system       | accepted  | normative         | `package`/`import`/`as`/`internal`, manifest, lockfile, resolver                                                                                                                        |
+| **typl Language Reference**    | 0.1 draft | normative         | vocabulary layer + family lexicon, keyword registry (§1.4), evolution model (§7.4)                                                                                                      |
+| **ridl Language Reference**    | 0.2 draft | normative         | interaction layer + interact-core semantics: envelope, timing, init/invalid channels, errors, streams                                                                                   |
+| **uxdl Language Reference**    | 0.1 draft | normative         | user-interaction layer (inherits ridl's core rules by reference)                                                                                                                        |
+| **rmdl Language Reference**    | 0.1 draft | normative         | behaviour layer: functions, models, steps/timeline semantics, flow stdlib                                                                                                               |
+| **rsdl Language Reference**    | 0.1 draft | normative         | architecture layer: components (situated reactions), providing/requiring services, application-notation wiring, composition + deployment regions, transport/posture derivation, bundles |
+| expr core specification        | —         | **not started**   | the full contract-term grammar (positions and guaranteed subset already fixed)                                                                                                          |
+| ADR-0003 — the family decision | —         | **not started**   | freezes §1 and the ledger below in ADR form                                                                                                                                             |
+| IR specification               | —         | not started       | serialization, plugin protocol, diff categories, canonical encoding                                                                                                                     |
+| ridl-rt runtime specification  | —         | not started       | scheduler/timeline, acks, quarantine, lag metrics, supervision hooks                                                                                                                    |
+
+Superseded: RIDL Language Reference v0.1 (split into typl + ridl v0.2); markspec
+typl/uxil (prior work, mapped in the typl/uxdl appendices).
+
+## 3. Shared Doctrines — One Place, With Pointers
+
+Each doctrine is normative **where cited**; this list is the index.
+
+1. **One keyword, one concept** — family-wide reserved-word registry; the union
+   of the per-profile keyword sections is the registry. _typl §1.4_
+2. **Registry admission test: language, never runtime** — keywords name
+   describable properties, never execution mechanisms; steps, acks, retries,
+   async/await, scheduling are runtime vocabulary only. _typl §1.4_
+3. **Sigil poverty** — `@` `?` `?:` `->`-arrow and brackets are nearly the whole
+   sigil budget; words over symbols, for non-programmer audiences. _rmdl §4.3
+   note, typl §17.7c_
+4. **Vocabulary lives in typl** — payloads are named types everywhere; no layer
+   defines shapes. Nominal typing makes unit safety real. _typl §5.7, ridl §3,
+   uxdl §3.3_
+5. **Ranges are the semantic truth** — wire widths derived (count-based for
+   floats, `int64`-capped for integers) and never written in source; quantized
+   floats as scaled integers on CAN. An explicit width **floor** (a `wire`
+   clause) is deferred; the `ridl-diff` gate guards width flips meanwhile. _typl
+   §4–§5, §17.11_
+6. **Errors are data** — `error` types + result unions; no `throws`, no
+   exceptions anywhere; three strata: declared functional / derived contract /
+   invisible transport. _typl §10, ridl §10_
+7. **The channel is never empty** — init values (declared or derived) seed every
+   signal channel and every model memory; invalidity propagates as state, never
+   silent quarantine. _typl §5.8, ridl §4.4–4.5, rmdl §5.3_
+8. **The implicit envelope, sender-stamped** — timestamp + sequence number on
+   every interaction instance; loss detectable, dedup possible, payloads never
+   re-declare it. _ridl §3.1_
+9. **One time, logical** — a single platform instant (TAI/PTP epoch,
+   synchronized base assumed); `now`/`dt`/`time(f)` are language, wall-clock and
+   datetime are runtime/presentation; models compute with the time of the
+   _cause_. _ridl §3.1, rmdl §6.3_
+10. **Reactive, not periodic** — the scheduler has no clock, it has a timeline
+    projected from inputs and contracts; periodic is the degenerate case;
+    declared `Clock`s are legitimate functional description. _rmdl §6, Appendix
+    G_
+11. **Timing is contract** — `@[min..max]` bounds are freshness SLOs, scheduler
+    constraints, and debounce/TTL declarations at once; optional with
+    configurable defaults `[100ms..1000ms]`. _ridl §9_
+12. **One evolution model** — implicit ordinals + `reserved` tombstones +
+    append-only, from struct fields to interface methods to view interactions;
+    `ridl-diff` (plumbing-grade despite living in the facade) is the gate. _typl
+    §7.4, ridl §11, concept note §9.1_
+13. **Side effects are emissions** — models emit events; rsdl binds events to
+    commands; nothing in behaviour calls anything. _rmdl §5.7_
+14. **Contracts are multi-executable** — one `require`/`ensure`, five ways:
+    static, property test, online observer, reference oracle, deductive proof.
+    _ridl §13, rmdl §9_
+15. **Failure detection is total, failure management is elsewhere** — safety/HA
+    are properties (future, profile-gated), mechanisms are runtime/rsdl. _ridl
+    §10.4_
+16. **Models are contract-blind; components situate them** — a model is a pure
+    reaction `(O,S)=M(I,S)`; a component wires it to real signals and
+    provides/requires services; a view/model never names its peers. _rmdl §7,
+    rsdl §3_
+17. **Interface is the shape, service is its global published declaration** —
+    `interface : service :: type : instance`; the service catalog is the SSOT;
+    components provide/require services. _ridl §14_
+18. **One contract, both postures** — a `service` is posture-neutral; rsdl
+    derives static (signal/bus, Classic) vs discovered (service, Adaptive) per
+    deployment, so one contract set ships signal-based _and_ service-oriented.
+    This is the AUTOSAR-vs-SOA/SDV reconciliation. _rsdl §8_
+
+## 4. Reading Paths by Audience
+
+- **Data architect**: typl, end to end. Stop there — it stands alone.
+- **Service / bus SSOT engineer**: typl §1–§10 → ridl, end to end (ridl §14 =
+  interface vs service).
+- **UX / frontend engineer**: typl §1–§10 → ridl §3–§4, §9–§10 (the core
+  semantics) → uxdl, end to end.
+- **Control / algorithm engineer**: typl §1–§10 → ridl §3, §9 → rmdl, end to end
+  (Appendix G is your library).
+- **Integrator / architect**: everything above at survey depth → rsdl, end to
+  end (composition + deployment).
+- **Auditor / safety assessor**: this document §3 → typl §1.4 + §7.4 → ridl §10,
+  §14 → rmdl §3.2, §6.4, §8 → rsdl §5.3, §8, §10 → the diagnostics tables of
+  each reference.
+
+## 5. Decision Ledger (design sessions, July 2026)
+
+Chronological; each recorded in full where cited.
+
+| #  | Decision                                                                                                                                                                                                                                                                                                                                                                                               | Where                                           |
+| -- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| 1  | typl extracted as the vocabulary layer; streams stay in ridl                                                                                                                                                                                                                                                                                                                                           | typl §1                                         |
+| 2  | Coded diagnostics family-wide (markspec practice)                                                                                                                                                                                                                                                                                                                                                      | typl §16                                        |
+| 3  | Count-based float width rule (errata to v0.1); integer domain capped at `int64`; explicit `wire` floor clause _(later deferred — see #31)_                                                                                                                                                                                                                                                             | typl §4–§5, §17.11                              |
+| 4  | Field identity: implicit ordinals + `reserved`, no explicit tags                                                                                                                                                                                                                                                                                                                                       | typl §7.4                                       |
+| 5  | Nominal typing; no recursion in composites; no generics (stdlib intrinsics excepted)                                                                                                                                                                                                                                                                                                                   | typl §5.7, §7.3, rmdl App. G                    |
+| 6  | `final` over `config` (naming ledger)                                                                                                                                                                                                                                                                                                                                                                  | concept note §10                                |
+| 7  | ridl v0.2 supersedes v0.1's interaction half                                                                                                                                                                                                                                                                                                                                                           | ridl provenance                                 |
+| 8  | Last-value + init-value channels; invalid-state propagation (SNA = CAN realisation)                                                                                                                                                                                                                                                                                                                    | ridl §4.4–4.5                                   |
+| 9  | Implicit envelope, sender timestamping; system time on TAI/PTP epoch                                                                                                                                                                                                                                                                                                                                   | ridl §3.1                                       |
+| 10 | Errors-as-data: `error` types + result unions; `throws` removed; three strata; command ack beneath fire-and-forget                                                                                                                                                                                                                                                                                     | typl §10, ridl §6, §10                          |
+| 11 | Timing optional with configurable default `[100ms..1000ms]`                                                                                                                                                                                                                                                                                                                                            | ridl §9.1                                       |
+| 12 | Flat interfaces (no `extends`); no in-language version                                                                                                                                                                                                                                                                                                                                                 | ridl §14, §11                                   |
+| 13 | Failure management out of scope; future safety/HA _properties_, profile-gated first                                                                                                                                                                                                                                                                                                                    | ridl §10.4                                      |
+| 14 | uxdl: standalone `view` contracts; core-mirror kinds + action refinements; states + `during`; navigation deferred                                                                                                                                                                                                                                                                                      | uxdl §1.3, §6, §9                               |
+| 15 | rmdl: unified `model` (no `node`); `returns` dropped for `:`                                                                                                                                                                                                                                                                                                                                           | rmdl §1.4, §5.1                                 |
+| 16 | Total function layer, shared with expr core                                                                                                                                                                                                                                                                                                                                                            | rmdl §3                                         |
+| 17 | Reactive-not-periodic: runtime-scheduled steps; timeline; logical time; parallelism by causality; async/await never surface                                                                                                                                                                                                                                                                            | rmdl §6                                         |
+| 18 | `signal`/`event` flow kinds in model signatures; `when`/`emit`; event→command side effects (GRust adoption)                                                                                                                                                                                                                                                                                            | rmdl §5.1, §5.6–5.7                             |
+| 19 | Memory: `last` + `init` (seed model) replacing `pre`/`->`; channel-init seeding                                                                                                                                                                                                                                                                                                                        | rmdl §5.3                                       |
+| 20 | Dispatch triad: `case` (value; expression + mode-equation) / `when` (occurrence) / `match` (pattern)                                                                                                                                                                                                                                                                                                   | rmdl §4.3, §5.2                                 |
+| 21 | Contracts on functions/models incl. deadline terms; deductive proof as fifth verification way                                                                                                                                                                                                                                                                                                          | rmdl §9.2                                       |
+| 22 | Surface `step` removed: `now`/`dt` ambient contextual values; `dt ≡ now - last now`                                                                                                                                                                                                                                                                                                                    | rmdl §6.3                                       |
+| 23 | Flow stdlib curated + named by three-axis review: Hold, Changes, RisingEdge/FallingEdge, Filter, Accumulate, Deadband, Prefer, Latch, Clock, Sample, Coalesce, Watchdog + control tier                                                                                                                                                                                                                 | rmdl App. G                                     |
+| 24 | Registry admission test (language vs runtime) adopted; `step` collision resolved to typl-only                                                                                                                                                                                                                                                                                                          | typl §1.4                                       |
+| 25 | ridl gains **`service`** = global published declaration of an `interface`; `interface` = abstract shape (`type : instance`); SSOT catalog, `service.member`, posture-neutral                                                                                                                                                                                                                           | ridl §14                                        |
+| 26 | **rmdl purified**: `realizes` dropped, §7 → "Models Are Contract-Blind"; a model is a pure reaction, contract binding is rsdl's                                                                                                                                                                                                                                                                        | rmdl §7                                         |
+| 27 | **Component = situated reaction**: real-signal boundary via `provides`/`requires`; body is application notation `out = Reaction(in)`; leaf (models) vs composite (sub-components); "composition"/"binding" keywords rejected                                                                                                                                                                           | rsdl §3–§4                                      |
+| 28 | **Posture derivation**: static (signal/bus, Classic) vs discovered (service, Adaptive) chosen at deployment from static-wire-vs-discovery + physics; one contract deploys both worlds; AUTOSAR vs SOA/SDV reconciled                                                                                                                                                                                   | rsdl §8                                         |
+| 29 | Redundancy = two components providing one service, **declared** (else build error); shape stays single                                                                                                                                                                                                                                                                                                 | rsdl §5.3                                       |
+| 30 | Bundle collapsed to one concept (spk/apk dropped — Android's, not ours); platform-vs-app is a `tier` attribute                                                                                                                                                                                                                                                                                         | rsdl §9                                         |
+| 31 | **Init syntax unified to bare `= value`** (typl types/fields, ridl signal overrides, uxdl display overrides); `default` keyword retired; `init` kept as rmdl's alone (memory seed `init x = value`). **`wire` clause + ten width names dropped** from v0.1 — width is range-inferred and unwritable; the explicit width **floor** deferred to typl §17.11 (`ridl-diff` gate covers the flip meanwhile) | typl §5.6/§5.8, ridl §4.4, uxdl §4, typl §17.11 |
+
+## 6. Open Questions — Consolidated Index
+
+By home; see each reference for full statements.
+
+- **typl §17**: string-backed enums · exclusive bounds · uniqueItems · recursion
+  policy · unit conversion algebra · scientific notation · expr-core deferrals
+  (arithmetic bounds, predicates, infix `match`, invariants) · explicit wire
+  sentinels · byte order home · canonical encoding · **explicit wire-width floor
+  (deferred `wire` clause, §17.11)**
+- **ridl §17**: selective broadcasts · interaction-set reuse · signal groups ·
+  actions/long-operations idiom · QoS boundary vs DDS · mid-stream invalid
+  policy · reflection service · failure-management spec (with safety/HA
+  properties direction) · uxdl divergence budget
+- **uxdl §16**: navigation · two-way binding sugar · gesture streams · a11y
+  metadata · non-visual surfaces · per-state timing · interact-core extraction
+- **rmdl §12**: multi-activation (`merge`/`current` reserved) · query behaviour
+  (pure-function-over-state direction) · state-machine sugar · instance arrays ·
+  saturate-vs-fault boundaries · stdlib freeze · WCET annotation home · unit
+  algebra (shared with typl) · timeout/timer steps
+- **rsdl §13**: composition/deployment boundary · dynamic topology/orchestration
+  (elastic) · transport/posture policy expressiveness · service discovery
+  matching · end-to-end timing composition · bundle dependency/versioning ·
+  resilience realization · global service catalog scoping
+- **Cross-cutting, unhomed**: IR stability policy (blocks `ridl-diff` contract
+  and plugin protocol) · UCUM→AUTOSAR unit mapping table · bridge authentication
+  (concept note)
+
+## 7. What "Consolidated" Means Here
+
+The references stay separate **by design** — five audiences, five learnable
+wholes, independent versioning, citable sections (the family's own §4 rationale;
+the HTML/CSS/JS and JSON-Schema/OpenAPI precedents). This document is the single
+entry point that makes the set navigable: doctrines indexed once, decisions
+ledgered once, open questions inventoried once. A one-file _distribution_
+(concatenated PDF of all references) is a build artifact for `ridl doc`, not an
+authoring structure.
+
+---
+
+_Maintained alongside the references; update §2, §5, §6 whenever a reference
+changes._

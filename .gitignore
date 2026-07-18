@@ -1,0 +1,19 @@
+# mdBook build output (docs/ is the source; mdBook builds to ./book)
+/book
+
+# Rust build output (when the compiler workspace lands — docs/ROADMAP.md E0)
+/target
+**/target
+**/*.rs.bk
+
+# Node (markdownlint-cli via npx)
+node_modules/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Claude Code worktrees
+.claude/worktrees/
