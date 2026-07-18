@@ -24,6 +24,26 @@ fn fixture_compiles_to_committed_snapshots() {
     insta::assert_json_snapshot!("ir_module", output.module);
 }
 
+/// A typl name that is a Rust keyword (`fn`) lexes as a valid identifier and
+/// passes parse, resolve, and check, then the Rust backend rejects it. `compile`
+/// stays total: it reports the failure as a diagnostic naming `fn` and leaves
+/// `rust_source` empty instead of panicking.
+#[test]
+fn keyword_type_name_is_a_backend_diagnostic_not_a_panic() {
+    let output = ridlc::compile("bad.typl", "type fn: m [0.0..1.0]\n");
+
+    assert!(
+        output.diagnostics.iter().any(|d| d.contains("fn")),
+        "expected a diagnostic naming the offending identifier, got: {:?}",
+        output.diagnostics,
+    );
+    assert!(
+        output.rust_source.is_empty(),
+        "a failed backend must leave rust_source empty, got:\n{}",
+        output.rust_source,
+    );
+}
+
 /// `ridlc build <fixture> --out-dir <tmp>` exits 0 and writes a Rust file that
 /// declares the generated `Speed` newtype.
 #[test]

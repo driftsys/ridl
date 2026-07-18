@@ -55,12 +55,15 @@ fn build(input: &Path, out_dir: &Path) -> ExitCode {
         return ExitCode::from(2);
     }
 
-    let stem = input
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or("module");
+    let stem = ridlc::module_name_from_path(&input.to_string_lossy());
     let out_path = out_dir.join(format!("{stem}.rs"));
-    if let Err(err) = std::fs::write(&out_path, &output.rust_source) {
+
+    // Writing an empty `.rs` file when compilation failed would be misleading,
+    // so skip the write when the backend produced nothing and diagnostics
+    // explain why. Exit codes are unchanged: the diagnostics below still drive
+    // exit 1.
+    let write_suppressed = output.rust_source.is_empty() && !output.diagnostics.is_empty();
+    if !write_suppressed && let Err(err) = std::fs::write(&out_path, &output.rust_source) {
         eprintln!("error: cannot write {}: {err}", out_path.display());
         return ExitCode::from(2);
     }
