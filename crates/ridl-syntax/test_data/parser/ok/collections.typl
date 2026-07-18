@@ -1,0 +1,15 @@
+// Collections: fixed arrays, bounded arrays, bounded maps (typl reference
+// §12).
+package corpus.collections
+
+struct SensorBank {
+  readings : [Speed; 8]
+  faults   : [FaultCode; 0..32]
+  metadata : [Label : Name; 0..32]
+  sensors  : [Label : Speed; 1..8]
+  remote   : [veh.common.Label : veh.common.Speed; 0..4]
+  grid     : [[Gain; 4]; 4]
+  history  : [Speed; 16]?
+  spares   : [Speed?; 4]
+  tuples   : [(min: Speed, max: Speed); 2]
+}

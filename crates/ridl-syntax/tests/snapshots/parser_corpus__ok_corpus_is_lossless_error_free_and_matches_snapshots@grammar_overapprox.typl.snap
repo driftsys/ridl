@@ -1,0 +1,333 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/grammar_overapprox.typl
+---
+SourceFile@0..1214
+  LineComment@0..75 "// Deliberate grammar ..."
+  Whitespace@75..76 "\n"
+  LineComment@76..153 "// checker narrows th ..."
+  Whitespace@153..154 "\n"
+  LineComment@154..211 "// Each construct her ..."
+  Whitespace@211..212 "\n"
+  PackageDecl@212..237
+    PackageKw@212..219 "package"
+    Whitespace@219..220 " "
+    QualifiedName@220..237
+      Ident@220..226 "corpus"
+      Dot@226..227 "."
+      Ident@227..237 "overapprox"
+  Whitespace@237..239 "\n\n"
+  LineComment@239..313 "// string/bytes/boole ..."
+  Whitespace@313..314 "\n"
+  LineComment@314..324 "// scope)."
+  Whitespace@324..325 "\n"
+  StructDef@325..403
+    StructKw@325..331 "struct"
+    Whitespace@331..332 " "
+    Name@332..343
+      Ident@332..343 "LooseFields"
+    Whitespace@343..344 " "
+    LBrace@344..345 "{"
+    Whitespace@345..348 "\n  "
+    FieldDef@348..367
+      Name@348..349
+        Ident@348..349 "s"
+      Whitespace@349..352 "   "
+      Colon@352..353 ":"
+      Whitespace@353..354 " "
+      PrimitiveType@354..367
+        StringKw@354..360 "string"
+        Whitespace@360..361 " "
+        Constraint@361..367
+          LBracket@361..362 "["
+          Bound@362..366
+            Literal@362..363
+              IntNumber@362..363 "1"
+            DotDot@363..365 ".."
+            Literal@365..366
+              IntNumber@365..366 "4"
+          RBracket@366..367 "]"
+    Whitespace@367..370 "\n  "
+    FieldDef@370..385
+      Name@370..371
+        Ident@370..371 "b"
+      Whitespace@371..374 "   "
+      Colon@374..375 ":"
+      Whitespace@375..376 " "
+      PrimitiveType@376..385
+        BytesKw@376..381 "bytes"
+        Whitespace@381..382 " "
+        Constraint@382..385
+          LBracket@382..383 "["
+          Bound@383..384
+            Literal@383..384
+              IntNumber@383..384 "8"
+          RBracket@384..385 "]"
+    Whitespace@385..388 "\n  "
+    FieldDef@388..401
+      Name@388..391
+        Ident@388..391 "raw"
+      Whitespace@391..392 " "
+      Colon@392..393 ":"
+      Whitespace@393..394 " "
+      PrimitiveType@394..401
+        BooleanKw@394..401 "boolean"
+    Whitespace@401..402 "\n"
+    RBrace@402..403 "}"
+  Whitespace@403..405 "\n\n"
+  LineComment@405..457 "// An arbitrary map k ..."
+  Whitespace@457..458 "\n"
+  StructDef@458..551
+    StructKw@458..464 "struct"
+    Whitespace@464..465 " "
+    Name@465..474
+      Ident@465..474 "LooseKeys"
+    Whitespace@474..475 " "
+    LBrace@475..476 "{"
+    Whitespace@476..479 "\n  "
+    FieldDef@479..514
+      Name@479..486
+        Ident@479..486 "byArray"
+      Whitespace@486..487 " "
+      Colon@487..488 ":"
+      Whitespace@488..489 " "
+      MapType@489..514
+        LBracket@489..490 "["
+        ArrayType@490..499
+          LBracket@490..491 "["
+          PathType@491..495
+            QualifiedName@491..495
+              Ident@491..495 "Gain"
+          Semicolon@495..496 ";"
+          Whitespace@496..497 " "
+          Bound@497..498
+            Literal@497..498
+              IntNumber@497..498 "2"
+          RBracket@498..499 "]"
+        Whitespace@499..500 " "
+        Colon@500..501 ":"
+        Whitespace@501..502 " "
+        PathType@502..507
+          QualifiedName@502..507
+            Ident@502..507 "Speed"
+        Semicolon@507..508 ";"
+        Whitespace@508..509 " "
+        Bound@509..513
+          Literal@509..510
+            IntNumber@509..510 "0"
+          DotDot@510..512 ".."
+          Literal@512..513
+            IntNumber@512..513 "4"
+        RBracket@513..514 "]"
+    Whitespace@514..517 "\n  "
+    FieldDef@517..549
+      Name@517..523
+        Ident@517..523 "byPrim"
+      Whitespace@523..525 "  "
+      Colon@525..526 ":"
+      Whitespace@526..527 " "
+      MapType@527..549
+        LBracket@527..528 "["
+        PrimitiveType@528..534
+          StringKw@528..534 "string"
+        Whitespace@534..535 " "
+        Colon@535..536 ":"
+        Whitespace@536..537 " "
+        PathType@537..542
+          QualifiedName@537..542
+            Ident@537..542 "Speed"
+        Semicolon@542..543 ";"
+        Whitespace@543..544 " "
+        Bound@544..548
+          Literal@544..545
+            IntNumber@544..545 "0"
+          DotDot@545..547 ".."
+          Literal@547..548
+            IntNumber@547..548 "4"
+        RBracket@548..549 "]"
+    Whitespace@549..550 "\n"
+    RBrace@550..551 "}"
+  Whitespace@551..553 "\n\n"
+  LineComment@553..626 "// A constant referen ..."
+  Whitespace@626..627 "\n"
+  StructDef@627..675
+    StructKw@627..633 "struct"
+    Whitespace@633..634 " "
+    Name@634..643
+      Ident@634..643 "IdentInit"
+    Whitespace@643..644 " "
+    LBrace@644..645 "{"
+    Whitespace@645..648 "\n  "
+    FieldDef@648..673
+      Name@648..653
+        Ident@648..653 "speed"
+      Whitespace@653..654 " "
+      Colon@654..655 ":"
+      Whitespace@655..656 " "
+      PathType@656..661
+        QualifiedName@656..661
+          Ident@656..661 "Speed"
+      Whitespace@661..662 " "
+      InitValue@662..673
+        Eq@662..663 "="
+        Whitespace@663..664 " "
+        Literal@664..673
+          Ident@664..673 "MAX_SPEED"
+    Whitespace@673..674 "\n"
+    RBrace@674..675 "}"
+  Whitespace@675..677 "\n\n"
+  LineComment@677..702 "// step on an open ra ..."
+  Whitespace@702..703 "\n"
+  TypeDef@703..741
+    TypeKw@703..707 "type"
+    Whitespace@707..708 " "
+    Name@708..716
+      Ident@708..716 "OpenStep"
+    Whitespace@716..717 " "
+    Colon@717..718 ":"
+    Whitespace@718..719 " "
+    PrimitiveType@719..724
+      FloatKw@719..724 "float"
+    Whitespace@724..725 " "
+    Constraint@725..741
+      LBracket@725..726 "["
+      Literal@726..729
+        FloatNumber@726..729 "0.0"
+      DotDot@729..731 ".."
+      Whitespace@731..732 " "
+      StepKw@732..736 "step"
+      Whitespace@736..737 " "
+      Literal@737..740
+        FloatNumber@737..740 "0.5"
+      RBracket@740..741 "]"
+  Whitespace@741..743 "\n\n"
+  LineComment@743..792 "// Constant reference ..."
+  Whitespace@792..793 "\n"
+  TypeDef@793..841
+    TypeKw@793..797 "type"
+    Whitespace@797..798 " "
+    Name@798..813
+      Ident@798..813 "BoundedByConsts"
+    Whitespace@813..814 " "
+    Colon@814..815 ":"
+    Whitespace@815..816 " "
+    PrimitiveType@816..822
+      StringKw@816..822 "string"
+    Whitespace@822..823 " "
+    Constraint@823..841
+      LBracket@823..824 "["
+      Bound@824..840
+        Literal@824..831
+          Ident@824..831 "MIN_LEN"
+        DotDot@831..833 ".."
+        Literal@833..840
+          Ident@833..840 "MAX_LEN"
+      RBracket@840..841 "]"
+  Whitespace@841..842 "\n"
+  TypeDef@842..882
+    TypeKw@842..846 "type"
+    Whitespace@846..847 " "
+    Name@847..859
+      Ident@847..859 "FixedByConst"
+    Whitespace@859..863 "    "
+    Colon@863..864 ":"
+    Whitespace@864..865 " "
+    PrimitiveType@865..870
+      BytesKw@865..870 "bytes"
+    Whitespace@870..871 " "
+    Constraint@871..882
+      LBracket@871..872 "["
+      Bound@872..881
+        Literal@872..881
+          Ident@872..881 "FRAME_LEN"
+      RBracket@881..882 "]"
+  Whitespace@882..884 "\n\n"
+  LineComment@884..948 "// Non-integer litera ..."
+  Whitespace@948..949 "\n"
+  StructDef@949..1001
+    StructKw@949..955 "struct"
+    Whitespace@955..956 " "
+    Name@956..969
+      Ident@956..969 "LooseReserved"
+    Whitespace@969..970 " "
+    LBrace@970..971 "{"
+    Whitespace@971..974 "\n  "
+    ReservedEntry@974..984
+      ReservedKw@974..982 "reserved"
+      Whitespace@982..983 " "
+      Literal@983..984
+        IntNumber@983..984 "7"
+    Whitespace@984..987 "\n  "
+    FieldDef@987..999
+      Name@987..991
+        Ident@987..991 "keep"
+      Whitespace@991..992 " "
+      Colon@992..993 ":"
+      Whitespace@993..994 " "
+      PathType@994..999
+        QualifiedName@994..999
+          Ident@994..999 "Speed"
+    Whitespace@999..1000 "\n"
+    RBrace@1000..1001 "}"
+  Whitespace@1001..1003 "\n\n"
+  LineComment@1003..1070 "// The `error` modifi ..."
+  Whitespace@1070..1071 "\n"
+  LineComment@1071..1102 "// (TYPL-212 is check ..."
+  Whitespace@1102..1103 "\n"
+  TypeDef@1103..1141
+    ErrorKw@1103..1108 "error"
+    Whitespace@1108..1109 " "
+    TypeKw@1109..1113 "type"
+    Whitespace@1113..1114 " "
+    Name@1114..1124
+      Ident@1114..1124 "LegacyMark"
+    Whitespace@1124..1125 " "
+    Colon@1125..1126 ":"
+    Whitespace@1126..1127 " "
+    PrimitiveType@1127..1134
+      IntegerKw@1127..1134 "integer"
+    Whitespace@1134..1135 " "
+    Constraint@1135..1141
+      LBracket@1135..1136 "["
+      Literal@1136..1137
+        IntNumber@1136..1137 "0"
+      DotDot@1137..1139 ".."
+      Literal@1139..1140
+        IntNumber@1139..1140 "1"
+      RBracket@1140..1141 "]"
+  Whitespace@1141..1142 "\n"
+  ConstDef@1142..1177
+    ErrorKw@1142..1147 "error"
+    Whitespace@1147..1148 " "
+    ConstKw@1148..1153 "const"
+    Whitespace@1153..1154 " "
+    Name@1154..1163
+      Ident@1154..1163 "LEGACY_ID"
+    Whitespace@1163..1164 " "
+    Colon@1164..1165 ":"
+    Whitespace@1165..1166 " "
+    PathType@1166..1173
+      QualifiedName@1166..1173
+        IntegerKw@1166..1173 "integer"
+    Whitespace@1173..1174 " "
+    Eq@1174..1175 "="
+    Whitespace@1175..1176 " "
+    Literal@1176..1177
+      IntNumber@1176..1177 "9"
+  Whitespace@1177..1178 "\n"
+  EnumSetDef@1178..1213
+    ErrorKw@1178..1183 "error"
+    Whitespace@1183..1184 " "
+    EnumsetKw@1184..1191 "enumset"
+    Whitespace@1191..1192 " "
+    Name@1192..1203
+      Ident@1192..1203 "LegacyFlags"
+    Whitespace@1203..1204 " "
+    Colon@1204..1205 ":"
+    Whitespace@1205..1206 " "
+    PathType@1206..1213
+      QualifiedName@1206..1213
+        Ident@1206..1213 "Warning"
+  Whitespace@1213..1214 "\n"
+errors: none

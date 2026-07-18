@@ -1,0 +1,18 @@
+// Packages, imports, aliases, and visibility (typl reference §3).
+package corpus.imports
+
+import veh.common.Speed
+import marine.nav.Speed as MarineSpeed
+import veh.regulatory.SpeedLimit
+
+type Knots : kn [0.0..60.0 step 0.1]
+
+internal type RawTicks : integer [0..65535]
+
+internal const CALIBRATION : Knots = 1.5
+
+struct Comparison {
+  road  : Speed
+  sea   : MarineSpeed
+  limit : veh.regulatory.SpeedLimit
+}

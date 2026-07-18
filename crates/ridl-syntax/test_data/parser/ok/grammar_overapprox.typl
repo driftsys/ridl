@@ -1,0 +1,42 @@
+// Deliberate grammar over-approximations: the parser accepts these and the
+// checker narrows them later (typl reference §16 — TYPL-2xx and friends).
+// Each construct here parses with zero errors by design.
+package corpus.overapprox
+
+// string/bytes/boolean constraints in field position (TYPL-208 is checker
+// scope).
+struct LooseFields {
+  s   : string [1..4]
+  b   : bytes [8]
+  raw : boolean
+}
+
+// An arbitrary map key (TYPL-209 is checker scope).
+struct LooseKeys {
+  byArray : [[Gain; 2] : Speed; 0..4]
+  byPrim  : [string : Speed; 0..4]
+}
+
+// A constant reference in init position — a Literal wrapping an Ident.
+struct IdentInit {
+  speed : Speed = MAX_SPEED
+}
+
+// step on an open range.
+type OpenStep : float [0.0.. step 0.5]
+
+// Constant references as length-bound endpoints.
+type BoundedByConsts : string [MIN_LEN..MAX_LEN]
+type FixedByConst    : bytes [FRAME_LEN]
+
+// Non-integer literals in a reserved tombstone (checker scope).
+struct LooseReserved {
+  reserved 7
+  keep : Speed
+}
+
+// The `error` modifier on definitions where the checker rejects it
+// (TYPL-212 is checker scope).
+error type LegacyMark : integer [0..1]
+error const LEGACY_ID : integer = 9
+error enumset LegacyFlags : Warning

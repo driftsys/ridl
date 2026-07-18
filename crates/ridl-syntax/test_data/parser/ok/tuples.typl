@@ -1,0 +1,14 @@
+// Tuples: anonymous named-field composites used inline (typl reference §11).
+package corpus.tuples
+
+struct SensorBounds {
+  range : (min: Speed, max: Speed)
+}
+
+struct Calibrated {
+  window   : (start: Timestamp, stop: Timestamp)
+  optional : (low: Speed, high: Speed)?
+  nested   : (outer: Speed, inner: (a: Gain, b: Gain))
+  mixed    : (value: Speed, raw: integer [0..255])
+  unit     : ()
+}

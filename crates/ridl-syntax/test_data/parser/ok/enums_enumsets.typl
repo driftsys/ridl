@@ -1,0 +1,45 @@
+// Enums and enum sets: standalone and derived forms, reserved value
+// tombstones, modifiers (typl reference §8–§9).
+package corpus.enums
+
+enum GearPosition {
+  PARK    = 0
+  DRIVE   = 1
+  REVERSE = 2
+  NEUTRAL = 3
+}
+
+/// An enum with a retired wire value.
+enum DoorState {
+  CLOSED = 0
+  OPEN   = 1
+  reserved 2
+  LOCKED = 3
+}
+
+error enum DiagError {
+  FILTER_INVALID = 0
+  STORAGE_BUSY   = 1
+  ACCESS_DENIED  = 2
+}
+
+internal enum Probe {
+  IDLE = 0
+  BUSY = 1
+}
+
+enumset WarningFlags {
+  LOW_FUEL     = 0
+  CHECK_ENGINE = 1
+  DOOR_OPEN    = 2
+  SEATBELT     = 3
+}
+
+enum Warning {
+  LOW_FUEL     = 0
+  CHECK_ENGINE = 1
+}
+
+enumset DerivedFlags : Warning
+
+internal enumset LocalFlags : corpus.other.Warning

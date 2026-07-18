@@ -1,0 +1,259 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/collections.typl
+---
+SourceFile@0..440
+  LineComment@0..74 "// Collections: fixed ..."
+  Whitespace@74..75 "\n"
+  LineComment@75..84 "// §12)."
+  Whitespace@84..85 "\n"
+  PackageDecl@85..111
+    PackageKw@85..92 "package"
+    Whitespace@92..93 " "
+    QualifiedName@93..111
+      Ident@93..99 "corpus"
+      Dot@99..100 "."
+      Ident@100..111 "collections"
+  Whitespace@111..113 "\n\n"
+  StructDef@113..439
+    StructKw@113..119 "struct"
+    Whitespace@119..120 " "
+    Name@120..130
+      Ident@120..130 "SensorBank"
+    Whitespace@130..131 " "
+    LBrace@131..132 "{"
+    Whitespace@132..135 "\n  "
+    FieldDef@135..156
+      Name@135..143
+        Ident@135..143 "readings"
+      Whitespace@143..144 " "
+      Colon@144..145 ":"
+      Whitespace@145..146 " "
+      ArrayType@146..156
+        LBracket@146..147 "["
+        PathType@147..152
+          QualifiedName@147..152
+            Ident@147..152 "Speed"
+        Semicolon@152..153 ";"
+        Whitespace@153..154 " "
+        Bound@154..155
+          Literal@154..155
+            IntNumber@154..155 "8"
+        RBracket@155..156 "]"
+    Whitespace@156..159 "\n  "
+    FieldDef@159..188
+      Name@159..165
+        Ident@159..165 "faults"
+      Whitespace@165..168 "   "
+      Colon@168..169 ":"
+      Whitespace@169..170 " "
+      ArrayType@170..188
+        LBracket@170..171 "["
+        PathType@171..180
+          QualifiedName@171..180
+            Ident@171..180 "FaultCode"
+        Semicolon@180..181 ";"
+        Whitespace@181..182 " "
+        Bound@182..187
+          Literal@182..183
+            IntNumber@182..183 "0"
+          DotDot@183..185 ".."
+          Literal@185..187
+            IntNumber@185..187 "32"
+        RBracket@187..188 "]"
+    Whitespace@188..191 "\n  "
+    FieldDef@191..223
+      Name@191..199
+        Ident@191..199 "metadata"
+      Whitespace@199..200 " "
+      Colon@200..201 ":"
+      Whitespace@201..202 " "
+      MapType@202..223
+        LBracket@202..203 "["
+        PathType@203..208
+          QualifiedName@203..208
+            Ident@203..208 "Label"
+        Whitespace@208..209 " "
+        Colon@209..210 ":"
+        Whitespace@210..211 " "
+        PathType@211..215
+          QualifiedName@211..215
+            Ident@211..215 "Name"
+        Semicolon@215..216 ";"
+        Whitespace@216..217 " "
+        Bound@217..222
+          Literal@217..218
+            IntNumber@217..218 "0"
+          DotDot@218..220 ".."
+          Literal@220..222
+            IntNumber@220..222 "32"
+        RBracket@222..223 "]"
+    Whitespace@223..226 "\n  "
+    FieldDef@226..258
+      Name@226..233
+        Ident@226..233 "sensors"
+      Whitespace@233..235 "  "
+      Colon@235..236 ":"
+      Whitespace@236..237 " "
+      MapType@237..258
+        LBracket@237..238 "["
+        PathType@238..243
+          QualifiedName@238..243
+            Ident@238..243 "Label"
+        Whitespace@243..244 " "
+        Colon@244..245 ":"
+        Whitespace@245..246 " "
+        PathType@246..251
+          QualifiedName@246..251
+            Ident@246..251 "Speed"
+        Semicolon@251..252 ";"
+        Whitespace@252..253 " "
+        Bound@253..257
+          Literal@253..254
+            IntNumber@253..254 "1"
+          DotDot@254..256 ".."
+          Literal@256..257
+            IntNumber@256..257 "8"
+        RBracket@257..258 "]"
+    Whitespace@258..261 "\n  "
+    FieldDef@261..315
+      Name@261..267
+        Ident@261..267 "remote"
+      Whitespace@267..270 "   "
+      Colon@270..271 ":"
+      Whitespace@271..272 " "
+      MapType@272..315
+        LBracket@272..273 "["
+        PathType@273..289
+          QualifiedName@273..289
+            Ident@273..276 "veh"
+            Dot@276..277 "."
+            Ident@277..283 "common"
+            Dot@283..284 "."
+            Ident@284..289 "Label"
+        Whitespace@289..290 " "
+        Colon@290..291 ":"
+        Whitespace@291..292 " "
+        PathType@292..308
+          QualifiedName@292..308
+            Ident@292..295 "veh"
+            Dot@295..296 "."
+            Ident@296..302 "common"
+            Dot@302..303 "."
+            Ident@303..308 "Speed"
+        Semicolon@308..309 ";"
+        Whitespace@309..310 " "
+        Bound@310..314
+          Literal@310..311
+            IntNumber@310..311 "0"
+          DotDot@311..313 ".."
+          Literal@313..314
+            IntNumber@313..314 "4"
+        RBracket@314..315 "]"
+    Whitespace@315..318 "\n  "
+    FieldDef@318..343
+      Name@318..322
+        Ident@318..322 "grid"
+      Whitespace@322..327 "     "
+      Colon@327..328 ":"
+      Whitespace@328..329 " "
+      ArrayType@329..343
+        LBracket@329..330 "["
+        ArrayType@330..339
+          LBracket@330..331 "["
+          PathType@331..335
+            QualifiedName@331..335
+              Ident@331..335 "Gain"
+          Semicolon@335..336 ";"
+          Whitespace@336..337 " "
+          Bound@337..338
+            Literal@337..338
+              IntNumber@337..338 "4"
+          RBracket@338..339 "]"
+        Semicolon@339..340 ";"
+        Whitespace@340..341 " "
+        Bound@341..342
+          Literal@341..342
+            IntNumber@341..342 "4"
+        RBracket@342..343 "]"
+    Whitespace@343..346 "\n  "
+    FieldDef@346..369
+      Name@346..353
+        Ident@346..353 "history"
+      Whitespace@353..355 "  "
+      Colon@355..356 ":"
+      Whitespace@356..357 " "
+      OptionalType@357..369
+        ArrayType@357..368
+          LBracket@357..358 "["
+          PathType@358..363
+            QualifiedName@358..363
+              Ident@358..363 "Speed"
+          Semicolon@363..364 ";"
+          Whitespace@364..365 " "
+          Bound@365..367
+            Literal@365..367
+              IntNumber@365..367 "16"
+          RBracket@367..368 "]"
+        Question@368..369 "?"
+    Whitespace@369..372 "\n  "
+    FieldDef@372..394
+      Name@372..378
+        Ident@372..378 "spares"
+      Whitespace@378..381 "   "
+      Colon@381..382 ":"
+      Whitespace@382..383 " "
+      ArrayType@383..394
+        LBracket@383..384 "["
+        OptionalType@384..390
+          PathType@384..389
+            QualifiedName@384..389
+              Ident@384..389 "Speed"
+          Question@389..390 "?"
+        Semicolon@390..391 ";"
+        Whitespace@391..392 " "
+        Bound@392..393
+          Literal@392..393
+            IntNumber@392..393 "4"
+        RBracket@393..394 "]"
+    Whitespace@394..397 "\n  "
+    FieldDef@397..437
+      Name@397..403
+        Ident@397..403 "tuples"
+      Whitespace@403..406 "   "
+      Colon@406..407 ":"
+      Whitespace@407..408 " "
+      ArrayType@408..437
+        LBracket@408..409 "["
+        TupleType@409..433
+          LParen@409..410 "("
+          TupleField@410..420
+            Name@410..413
+              Ident@410..413 "min"
+            Colon@413..414 ":"
+            Whitespace@414..415 " "
+            PathType@415..420
+              QualifiedName@415..420
+                Ident@415..420 "Speed"
+          Comma@420..421 ","
+          Whitespace@421..422 " "
+          TupleField@422..432
+            Name@422..425
+              Ident@422..425 "max"
+            Colon@425..426 ":"
+            Whitespace@426..427 " "
+            PathType@427..432
+              QualifiedName@427..432
+                Ident@427..432 "Speed"
+          RParen@432..433 ")"
+        Semicolon@433..434 ";"
+        Whitespace@434..435 " "
+        Bound@435..436
+          Literal@435..436
+            IntNumber@435..436 "2"
+        RBracket@436..437 "]"
+    Whitespace@437..438 "\n"
+    RBrace@438..439 "}"
+  Whitespace@439..440 "\n"
+errors: none

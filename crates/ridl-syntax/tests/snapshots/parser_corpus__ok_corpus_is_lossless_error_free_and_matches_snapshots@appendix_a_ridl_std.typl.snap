@@ -1,0 +1,696 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/appendix_a_ridl_std.typl
+---
+SourceFile@0..2944
+  PackageDecl@0..16
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..16
+      Ident@8..12 "ridl"
+      Dot@12..13 "."
+      Ident@13..16 "std"
+  Whitespace@16..18 "\n\n"
+  LineComment@18..58 "// ---------- Regex C ..."
+  Whitespace@58..60 "\n\n"
+  ConstDef@60..146
+    ConstKw@60..65 "const"
+    Whitespace@65..66 " "
+    Name@66..78
+      Ident@66..78 "UUID_PATTERN"
+    Whitespace@78..80 "  "
+    Eq@80..81 "="
+    Whitespace@81..82 " "
+    Literal@82..146
+      Regex@82..146 "/^[0-9a-f]{8}-[0-9a-f ..."
+  Whitespace@146..147 "\n"
+  ConstDef@147..200
+    ConstKw@147..152 "const"
+    Whitespace@152..153 " "
+    Name@153..165
+      Ident@153..165 "ULID_PATTERN"
+    Whitespace@165..167 "  "
+    Eq@167..168 "="
+    Whitespace@168..169 " "
+    Literal@169..200
+      Regex@169..200 "/^[0-7][0-9A-HJKMNP-T ..."
+  Whitespace@200..201 "\n"
+  ConstDef@201..246
+    ConstKw@201..206 "const"
+    Whitespace@206..207 " "
+    Name@207..218
+      Ident@207..218 "VIN_PATTERN"
+    Whitespace@218..221 "   "
+    Eq@221..222 "="
+    Whitespace@222..223 " "
+    Literal@223..246
+      Regex@223..246 "/^[A-HJ-NPR-Z0-9]{17}$/"
+  Whitespace@246..247 "\n"
+  ConstDef@247..304
+    ConstKw@247..252 "const"
+    Whitespace@252..253 " "
+    Name@253..264
+      Ident@253..264 "URI_PATTERN"
+    Whitespace@264..267 "   "
+    Eq@267..268 "="
+    Whitespace@268..269 " "
+    Literal@269..304
+      Regex@269..304 "/^[a-zA-Z][a-zA-Z0-9+ ..."
+  Whitespace@304..305 "\n"
+  ConstDef@305..344
+    ConstKw@305..310 "const"
+    Whitespace@310..311 " "
+    Name@311..322
+      Ident@311..322 "URL_PATTERN"
+    Whitespace@322..325 "   "
+    Eq@325..326 "="
+    Whitespace@326..327 " "
+    Literal@327..344
+      Regex@327..344 "/^https?:\\/\\/.+$/"
+  Whitespace@344..345 "\n"
+  ConstDef@345..389
+    ConstKw@345..350 "const"
+    Whitespace@350..351 " "
+    Name@351..364
+      Ident@351..364 "EMAIL_PATTERN"
+    Whitespace@364..365 " "
+    Eq@365..366 "="
+    Whitespace@366..367 " "
+    Literal@367..389
+      Regex@367..389 "/^[^@]+@[^@]+\\.[^@]+$/"
+  Whitespace@389..390 "\n"
+  ConstDef@390..437
+    ConstKw@390..395 "const"
+    Whitespace@395..396 " "
+    Name@396..408
+      Ident@396..408 "IPV4_PATTERN"
+    Whitespace@408..410 "  "
+    Eq@410..411 "="
+    Whitespace@411..412 " "
+    Literal@412..437
+      Regex@412..437 "/^(\\d{1,3}\\.){3}\\d{1, ..."
+  Whitespace@437..438 "\n"
+  ConstDef@438..474
+    ConstKw@438..443 "const"
+    Whitespace@443..444 " "
+    Name@444..456
+      Ident@444..456 "IPV6_PATTERN"
+    Whitespace@456..458 "  "
+    Eq@458..459 "="
+    Whitespace@459..460 " "
+    Literal@460..474
+      Regex@460..474 "/^[0-9a-f:]+$/"
+  Whitespace@474..475 "\n"
+  ConstDef@475..513
+    ConstKw@475..480 "const"
+    Whitespace@480..481 " "
+    Name@481..494
+      Ident@481..494 "ASCII_PATTERN"
+    Whitespace@494..495 " "
+    Eq@495..496 "="
+    Whitespace@496..497 " "
+    Literal@497..513
+      Regex@497..513 "/^[\\x20-\\x7E]+$/"
+  Whitespace@513..515 "\n\n"
+  LineComment@515..554 "// ---------- Identit ..."
+  Whitespace@554..556 "\n\n"
+  DocComment@556..609 "/// RFC 4122 UUID — ..."
+  Whitespace@609..610 "\n"
+  TypeDef@610..652
+    TypeKw@610..614 "type"
+    Whitespace@614..615 " "
+    Name@615..619
+      Ident@615..619 "Uuid"
+    Whitespace@619..620 " "
+    Colon@620..621 ":"
+    Whitespace@621..622 " "
+    PrimitiveType@622..628
+      StringKw@622..628 "string"
+    Whitespace@628..629 " "
+    Constraint@629..652
+      LBracket@629..630 "["
+      Bound@630..632
+        Literal@630..632
+          IntNumber@630..632 "36"
+      Whitespace@632..633 " "
+      MatchKw@633..638 "match"
+      Whitespace@638..639 " "
+      Literal@639..651
+        Ident@639..651 "UUID_PATTERN"
+      RBracket@651..652 "]"
+  Whitespace@652..654 "\n\n"
+  DocComment@654..708 "/// ULID — 26 chara ..."
+  Whitespace@708..709 "\n"
+  TypeDef@709..751
+    TypeKw@709..713 "type"
+    Whitespace@713..714 " "
+    Name@714..718
+      Ident@714..718 "Ulid"
+    Whitespace@718..719 " "
+    Colon@719..720 ":"
+    Whitespace@720..721 " "
+    PrimitiveType@721..727
+      StringKw@721..727 "string"
+    Whitespace@727..728 " "
+    Constraint@728..751
+      LBracket@728..729 "["
+      Bound@729..731
+        Literal@729..731
+          IntNumber@729..731 "26"
+      Whitespace@731..732 " "
+      MatchKw@732..737 "match"
+      Whitespace@737..738 " "
+      Literal@738..750
+        Ident@738..750 "ULID_PATTERN"
+      RBracket@750..751 "]"
+  Whitespace@751..753 "\n\n"
+  DocComment@753..821 "/// ISO 3779 Vehicle  ..."
+  Whitespace@821..822 "\n"
+  TypeDef@822..863
+    TypeKw@822..826 "type"
+    Whitespace@826..827 " "
+    Name@827..830
+      Ident@827..830 "Vin"
+    Whitespace@830..832 "  "
+    Colon@832..833 ":"
+    Whitespace@833..834 " "
+    PrimitiveType@834..840
+      StringKw@834..840 "string"
+    Whitespace@840..841 " "
+    Constraint@841..863
+      LBracket@841..842 "["
+      Bound@842..844
+        Literal@842..844
+          IntNumber@842..844 "17"
+      Whitespace@844..845 " "
+      MatchKw@845..850 "match"
+      Whitespace@850..851 " "
+      Literal@851..862
+        Ident@851..862 "VIN_PATTERN"
+      RBracket@862..863 "]"
+  Whitespace@863..865 "\n\n"
+  LineComment@865..903 "// ---------- Network ..."
+  Whitespace@903..905 "\n\n"
+  DocComment@905..921 "/// RFC 3986 URI"
+  Whitespace@921..922 "\n"
+  TypeDef@922..969
+    TypeKw@922..926 "type"
+    Whitespace@926..927 " "
+    Name@927..930
+      Ident@927..930 "Uri"
+    Whitespace@930..933 "   "
+    Colon@933..934 ":"
+    Whitespace@934..935 " "
+    PrimitiveType@935..941
+      StringKw@935..941 "string"
+    Whitespace@941..942 " "
+    Constraint@942..969
+      LBracket@942..943 "["
+      Bound@943..950
+        Literal@943..944
+          IntNumber@943..944 "1"
+        DotDot@944..946 ".."
+        Literal@946..950
+          IntNumber@946..950 "2048"
+      Whitespace@950..951 " "
+      MatchKw@951..956 "match"
+      Whitespace@956..957 " "
+      Literal@957..968
+        Ident@957..968 "URI_PATTERN"
+      RBracket@968..969 "]"
+  Whitespace@969..971 "\n\n"
+  DocComment@971..989 "/// HTTP/HTTPS URL"
+  Whitespace@989..990 "\n"
+  TypeDef@990..1037
+    TypeKw@990..994 "type"
+    Whitespace@994..995 " "
+    Name@995..998
+      Ident@995..998 "Url"
+    Whitespace@998..1001 "   "
+    Colon@1001..1002 ":"
+    Whitespace@1002..1003 " "
+    PrimitiveType@1003..1009
+      StringKw@1003..1009 "string"
+    Whitespace@1009..1010 " "
+    Constraint@1010..1037
+      LBracket@1010..1011 "["
+      Bound@1011..1018
+        Literal@1011..1012
+          IntNumber@1011..1012 "1"
+        DotDot@1012..1014 ".."
+        Literal@1014..1018
+          IntNumber@1014..1018 "2048"
+      Whitespace@1018..1019 " "
+      MatchKw@1019..1024 "match"
+      Whitespace@1024..1025 " "
+      Literal@1025..1036
+        Ident@1025..1036 "URL_PATTERN"
+      RBracket@1036..1037 "]"
+  Whitespace@1037..1039 "\n\n"
+  DocComment@1039..1069 "/// Email address — ..."
+  Whitespace@1069..1070 "\n"
+  TypeDef@1070..1118
+    TypeKw@1070..1074 "type"
+    Whitespace@1074..1075 " "
+    Name@1075..1080
+      Ident@1075..1080 "Email"
+    Whitespace@1080..1081 " "
+    Colon@1081..1082 ":"
+    Whitespace@1082..1083 " "
+    PrimitiveType@1083..1089
+      StringKw@1083..1089 "string"
+    Whitespace@1089..1090 " "
+    Constraint@1090..1118
+      LBracket@1090..1091 "["
+      Bound@1091..1097
+        Literal@1091..1092
+          IntNumber@1091..1092 "1"
+        DotDot@1092..1094 ".."
+        Literal@1094..1097
+          IntNumber@1094..1097 "254"
+      Whitespace@1097..1098 " "
+      MatchKw@1098..1103 "match"
+      Whitespace@1103..1104 " "
+      Literal@1104..1117
+        Ident@1104..1117 "EMAIL_PATTERN"
+      RBracket@1117..1118 "]"
+  Whitespace@1118..1120 "\n\n"
+  DocComment@1120..1164 "/// IPv4 address —  ..."
+  Whitespace@1164..1165 "\n"
+  TypeDef@1165..1211
+    TypeKw@1165..1169 "type"
+    Whitespace@1169..1170 " "
+    Name@1170..1174
+      Ident@1170..1174 "IpV4"
+    Whitespace@1174..1176 "  "
+    Colon@1176..1177 ":"
+    Whitespace@1177..1178 " "
+    PrimitiveType@1178..1184
+      StringKw@1178..1184 "string"
+    Whitespace@1184..1185 " "
+    Constraint@1185..1211
+      LBracket@1185..1186 "["
+      Bound@1186..1191
+        Literal@1186..1187
+          IntNumber@1186..1187 "7"
+        DotDot@1187..1189 ".."
+        Literal@1189..1191
+          IntNumber@1189..1191 "15"
+      Whitespace@1191..1192 " "
+      MatchKw@1192..1197 "match"
+      Whitespace@1197..1198 " "
+      Literal@1198..1210
+        Ident@1198..1210 "IPV4_PATTERN"
+      RBracket@1210..1211 "]"
+  Whitespace@1211..1213 "\n\n"
+  DocComment@1213..1229 "/// IPv6 address"
+  Whitespace@1229..1230 "\n"
+  TypeDef@1230..1276
+    TypeKw@1230..1234 "type"
+    Whitespace@1234..1235 " "
+    Name@1235..1239
+      Ident@1235..1239 "IpV6"
+    Whitespace@1239..1241 "  "
+    Colon@1241..1242 ":"
+    Whitespace@1242..1243 " "
+    PrimitiveType@1243..1249
+      StringKw@1243..1249 "string"
+    Whitespace@1249..1250 " "
+    Constraint@1250..1276
+      LBracket@1250..1251 "["
+      Bound@1251..1256
+        Literal@1251..1252
+          IntNumber@1251..1252 "2"
+        DotDot@1252..1254 ".."
+        Literal@1254..1256
+          IntNumber@1254..1256 "39"
+      Whitespace@1256..1257 " "
+      MatchKw@1257..1262 "match"
+      Whitespace@1262..1263 " "
+      Literal@1263..1275
+        Ident@1263..1275 "IPV6_PATTERN"
+      RBracket@1275..1276 "]"
+  Whitespace@1276..1278 "\n\n"
+  LineComment@1278..1323 "// ---------- General ..."
+  Whitespace@1323..1325 "\n\n"
+  DocComment@1325..1394 "/// Short human-reada ..."
+  Whitespace@1394..1395 "\n"
+  TypeDef@1395..1444
+    TypeKw@1395..1399 "type"
+    Whitespace@1399..1400 " "
+    Name@1400..1405
+      Ident@1400..1405 "Label"
+    Whitespace@1405..1408 "   "
+    Colon@1408..1409 ":"
+    Whitespace@1409..1410 " "
+    PrimitiveType@1410..1416
+      StringKw@1410..1416 "string"
+    Whitespace@1416..1417 " "
+    Constraint@1417..1444
+      LBracket@1417..1418 "["
+      Bound@1418..1423
+        Literal@1418..1419
+          IntNumber@1418..1419 "1"
+        DotDot@1419..1421 ".."
+        Literal@1421..1423
+          IntNumber@1421..1423 "64"
+      Whitespace@1423..1424 " "
+      MatchKw@1424..1429 "match"
+      Whitespace@1429..1430 " "
+      Literal@1430..1443
+        Ident@1430..1443 "ASCII_PATTERN"
+      RBracket@1443..1444 "]"
+  Whitespace@1444..1446 "\n\n"
+  DocComment@1446..1492 "/// Human-readable na ..."
+  Whitespace@1492..1493 "\n"
+  TypeDef@1493..1543
+    TypeKw@1493..1497 "type"
+    Whitespace@1497..1498 " "
+    Name@1498..1502
+      Ident@1498..1502 "Name"
+    Whitespace@1502..1506 "    "
+    Colon@1506..1507 ":"
+    Whitespace@1507..1508 " "
+    PrimitiveType@1508..1514
+      StringKw@1508..1514 "string"
+    Whitespace@1514..1515 " "
+    Constraint@1515..1543
+      LBracket@1515..1516 "["
+      Bound@1516..1522
+        Literal@1516..1517
+          IntNumber@1516..1517 "1"
+        DotDot@1517..1519 ".."
+        Literal@1519..1522
+          IntNumber@1519..1522 "128"
+      Whitespace@1522..1523 " "
+      MatchKw@1523..1528 "match"
+      Whitespace@1528..1529 " "
+      Literal@1529..1542
+        Ident@1529..1542 "ASCII_PATTERN"
+      RBracket@1542..1543 "]"
+  Whitespace@1543..1545 "\n\n"
+  DocComment@1545..1600 "/// Short message or  ..."
+  Whitespace@1600..1601 "\n"
+  TypeDef@1601..1651
+    TypeKw@1601..1605 "type"
+    Whitespace@1605..1606 " "
+    Name@1606..1613
+      Ident@1606..1613 "Message"
+    Whitespace@1613..1614 " "
+    Colon@1614..1615 ":"
+    Whitespace@1615..1616 " "
+    PrimitiveType@1616..1622
+      StringKw@1616..1622 "string"
+    Whitespace@1622..1623 " "
+    Constraint@1623..1651
+      LBracket@1623..1624 "["
+      Bound@1624..1630
+        Literal@1624..1625
+          IntNumber@1624..1625 "1"
+        DotDot@1625..1627 ".."
+        Literal@1627..1630
+          IntNumber@1627..1630 "256"
+      Whitespace@1630..1631 " "
+      MatchKw@1631..1636 "match"
+      Whitespace@1636..1637 " "
+      Literal@1637..1650
+        Ident@1637..1650 "ASCII_PATTERN"
+      RBracket@1650..1651 "]"
+  Whitespace@1651..1653 "\n\n"
+  LineComment@1653..1688 "// ---------- Time Ty ..."
+  Whitespace@1688..1690 "\n\n"
+  DocComment@1690..1755 "/// Absolute point in ..."
+  Whitespace@1755..1756 "\n"
+  DocComment@1756..1824 "/// int64 microsecond ..."
+  Whitespace@1824..1825 "\n"
+  DocComment@1825..1895 "/// Continuous and le ..."
+  Whitespace@1895..1896 "\n"
+  DocComment@1896..1919 "/// presentation edges."
+  Whitespace@1919..1920 "\n"
+  TypeDef@1920..1969
+    TypeKw@1920..1924 "type"
+    Whitespace@1924..1925 " "
+    Name@1925..1934
+      Ident@1925..1934 "Timestamp"
+    Whitespace@1934..1935 " "
+    Colon@1935..1936 ":"
+    Whitespace@1936..1937 " "
+    PrimitiveType@1937..1944
+      IntegerKw@1937..1944 "integer"
+    Whitespace@1944..1945 " "
+    Constraint@1945..1969
+      LBracket@1945..1946 "["
+      Literal@1946..1947
+        IntNumber@1946..1947 "0"
+      DotDot@1947..1949 ".."
+      Literal@1949..1968
+        IntNumber@1949..1968 "9223372036854775807"
+      RBracket@1968..1969 "]"
+  Whitespace@1969..1971 "\n\n"
+  DocComment@1971..2012 "/// Elapsed time inte ..."
+  Whitespace@2012..2013 "\n"
+  TypeDef@2013..2059
+    TypeKw@2013..2017 "type"
+    Whitespace@2017..2018 " "
+    Name@2018..2026
+      Ident@2018..2026 "Duration"
+    Whitespace@2026..2028 "  "
+    Colon@2028..2029 ":"
+    Whitespace@2029..2030 " "
+    UnitExpr@2030..2032
+      Ident@2030..2032 "ms"
+    Whitespace@2032..2033 " "
+    Constraint@2033..2059
+      LBracket@2033..2034 "["
+      Literal@2034..2037
+        FloatNumber@2034..2037 "0.0"
+      DotDot@2037..2039 ".."
+      Literal@2039..2058
+        IntNumber@2039..2058 "9223372036854775807"
+      RBracket@2058..2059 "]"
+  Whitespace@2059..2061 "\n\n"
+  DocComment@2061..2102 "/// Calendar date — ..."
+  Whitespace@2102..2103 "\n"
+  TypeDef@2103..2154
+    TypeKw@2103..2107 "type"
+    Whitespace@2107..2108 " "
+    Name@2108..2112
+      Ident@2108..2112 "Date"
+    Whitespace@2112..2113 " "
+    Colon@2113..2114 ":"
+    Whitespace@2114..2115 " "
+    PrimitiveType@2115..2121
+      StringKw@2115..2121 "string"
+    Whitespace@2121..2122 " "
+    Constraint@2122..2154
+      LBracket@2122..2123 "["
+      Bound@2123..2125
+        Literal@2123..2125
+          IntNumber@2123..2125 "10"
+      Whitespace@2125..2126 " "
+      MatchKw@2126..2131 "match"
+      Whitespace@2131..2132 " "
+      Literal@2132..2153
+        Regex@2132..2153 "/^\\d{4}-\\d{2}-\\d{2}$/"
+      RBracket@2153..2154 "]"
+  Whitespace@2154..2156 "\n\n"
+  DocComment@2156..2193 "/// Time of day — I ..."
+  Whitespace@2193..2194 "\n"
+  TypeDef@2194..2252
+    TypeKw@2194..2198 "type"
+    Whitespace@2198..2199 " "
+    Name@2199..2208
+      Ident@2199..2208 "TimeOfDay"
+    Whitespace@2208..2209 " "
+    Colon@2209..2210 ":"
+    Whitespace@2210..2211 " "
+    PrimitiveType@2211..2217
+      StringKw@2211..2217 "string"
+    Whitespace@2217..2218 " "
+    Constraint@2218..2252
+      LBracket@2218..2219 "["
+      Bound@2219..2224
+        Literal@2219..2220
+          IntNumber@2219..2220 "8"
+        DotDot@2220..2222 ".."
+        Literal@2222..2224
+          IntNumber@2222..2224 "15"
+      Whitespace@2224..2225 " "
+      MatchKw@2225..2230 "match"
+      Whitespace@2230..2231 " "
+      Literal@2231..2251
+        Regex@2231..2251 "/^\\d{2}:\\d{2}:\\d{2}/"
+      RBracket@2251..2252 "]"
+  Whitespace@2252..2254 "\n\n"
+  LineComment@2254..2286 "// ---------- Version ..."
+  Whitespace@2286..2288 "\n\n"
+  DocComment@2288..2325 "/// Semantic version  ..."
+  Whitespace@2325..2326 "\n"
+  TypeDef@2326..2378
+    TypeKw@2326..2330 "type"
+    Whitespace@2330..2331 " "
+    Name@2331..2338
+      Ident@2331..2338 "Version"
+    Whitespace@2338..2339 " "
+    Colon@2339..2340 ":"
+    Whitespace@2340..2341 " "
+    PrimitiveType@2341..2347
+      StringKw@2341..2347 "string"
+    Whitespace@2347..2348 " "
+    Constraint@2348..2378
+      LBracket@2348..2349 "["
+      Bound@2349..2354
+        Literal@2349..2350
+          IntNumber@2349..2350 "5"
+        DotDot@2350..2352 ".."
+        Literal@2352..2354
+          IntNumber@2352..2354 "32"
+      Whitespace@2354..2355 " "
+      MatchKw@2355..2360 "match"
+      Whitespace@2360..2361 " "
+      Literal@2361..2377
+        Regex@2361..2377 "/^\\d+\\.\\d+\\.\\d+/"
+      RBracket@2377..2378 "]"
+  Whitespace@2378..2380 "\n\n"
+  LineComment@2380..2411 "// ---------- Locale  ..."
+  Whitespace@2411..2413 "\n\n"
+  DocComment@2413..2448 "/// ISO 3166-1 alpha- ..."
+  Whitespace@2448..2449 "\n"
+  TypeDef@2449..2497
+    TypeKw@2449..2453 "type"
+    Whitespace@2453..2454 " "
+    Name@2454..2465
+      Ident@2454..2465 "CountryCode"
+    Whitespace@2465..2466 " "
+    Colon@2466..2467 ":"
+    Whitespace@2467..2468 " "
+    PrimitiveType@2468..2474
+      StringKw@2468..2474 "string"
+    Whitespace@2474..2475 " "
+    Constraint@2475..2497
+      LBracket@2475..2476 "["
+      Bound@2476..2477
+        Literal@2476..2477
+          IntNumber@2476..2477 "2"
+      Whitespace@2477..2478 " "
+      MatchKw@2478..2483 "match"
+      Whitespace@2483..2484 " "
+      Literal@2484..2496
+        Regex@2484..2496 "/^[A-Z]{2}$/"
+      RBracket@2496..2497 "]"
+  Whitespace@2497..2499 "\n\n"
+  DocComment@2499..2570 "/// ISO 639-1 languag ..."
+  Whitespace@2570..2571 "\n"
+  TypeDef@2571..2635
+    TypeKw@2571..2575 "type"
+    Whitespace@2575..2576 " "
+    Name@2576..2588
+      Ident@2576..2588 "LanguageCode"
+    Whitespace@2588..2589 " "
+    Colon@2589..2590 ":"
+    Whitespace@2590..2591 " "
+    PrimitiveType@2591..2597
+      StringKw@2591..2597 "string"
+    Whitespace@2597..2598 " "
+    Constraint@2598..2635
+      LBracket@2598..2599 "["
+      Bound@2599..2603
+        Literal@2599..2600
+          IntNumber@2599..2600 "2"
+        DotDot@2600..2602 ".."
+        Literal@2602..2603
+          IntNumber@2602..2603 "5"
+      Whitespace@2603..2604 " "
+      MatchKw@2604..2609 "match"
+      Whitespace@2609..2610 " "
+      Literal@2610..2634
+        Regex@2610..2634 "/^[a-z]{2}(-[A-Z]{2})?$/"
+      RBracket@2634..2635 "]"
+  Whitespace@2635..2637 "\n\n"
+  LineComment@2637..2679 "// ---------- Crypto  ..."
+  Whitespace@2679..2681 "\n\n"
+  DocComment@2681..2710 "/// SHA-256 hash —  ..."
+  Whitespace@2710..2711 "\n"
+  TypeDef@2711..2740
+    TypeKw@2711..2715 "type"
+    Whitespace@2715..2716 " "
+    Name@2716..2726
+      Ident@2716..2726 "Sha256Hash"
+    Whitespace@2726..2728 "  "
+    Colon@2728..2729 ":"
+    Whitespace@2729..2730 " "
+    PrimitiveType@2730..2735
+      BytesKw@2730..2735 "bytes"
+    Whitespace@2735..2736 " "
+    Constraint@2736..2740
+      LBracket@2736..2737 "["
+      Bound@2737..2739
+        Literal@2737..2739
+          IntNumber@2737..2739 "32"
+      RBracket@2739..2740 "]"
+  Whitespace@2740..2742 "\n\n"
+  DocComment@2742..2771 "/// SHA-512 hash —  ..."
+  Whitespace@2771..2772 "\n"
+  TypeDef@2772..2801
+    TypeKw@2772..2776 "type"
+    Whitespace@2776..2777 " "
+    Name@2777..2787
+      Ident@2777..2787 "Sha512Hash"
+    Whitespace@2787..2789 "  "
+    Colon@2789..2790 ":"
+    Whitespace@2790..2791 " "
+    PrimitiveType@2791..2796
+      BytesKw@2791..2796 "bytes"
+    Whitespace@2796..2797 " "
+    Constraint@2797..2801
+      LBracket@2797..2798 "["
+      Bound@2798..2800
+        Literal@2798..2800
+          IntNumber@2798..2800 "64"
+      RBracket@2800..2801 "]"
+  Whitespace@2801..2803 "\n\n"
+  DocComment@2803..2851 "/// Generic cryptogra ..."
+  Whitespace@2851..2852 "\n"
+  TypeDef@2852..2881
+    TypeKw@2852..2856 "type"
+    Whitespace@2856..2857 " "
+    Name@2857..2866
+      Ident@2857..2866 "Signature"
+    Whitespace@2866..2869 "   "
+    Colon@2869..2870 ":"
+    Whitespace@2870..2871 " "
+    PrimitiveType@2871..2876
+      BytesKw@2871..2876 "bytes"
+    Whitespace@2876..2877 " "
+    Constraint@2877..2881
+      LBracket@2877..2878 "["
+      Bound@2878..2880
+        Literal@2878..2880
+          IntNumber@2878..2880 "64"
+      RBracket@2880..2881 "]"
+  Whitespace@2881..2883 "\n\n"
+  DocComment@2883..2908 "/// X.509 DER certifi ..."
+  Whitespace@2908..2909 "\n"
+  TypeDef@2909..2943
+    TypeKw@2909..2913 "type"
+    Whitespace@2913..2914 " "
+    Name@2914..2925
+      Ident@2914..2925 "Certificate"
+    Whitespace@2925..2926 " "
+    Colon@2926..2927 ":"
+    Whitespace@2927..2928 " "
+    PrimitiveType@2928..2933
+      BytesKw@2928..2933 "bytes"
+    Whitespace@2933..2934 " "
+    Constraint@2934..2943
+      LBracket@2934..2935 "["
+      Bound@2935..2942
+        Literal@2935..2936
+          IntNumber@2935..2936 "1"
+        DotDot@2936..2938 ".."
+        Literal@2938..2942
+          IntNumber@2938..2942 "4096"
+      RBracket@2942..2943 "]"
+  Whitespace@2943..2944 "\n"
+errors: none

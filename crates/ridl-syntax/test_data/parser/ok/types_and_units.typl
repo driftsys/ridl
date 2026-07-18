@@ -1,0 +1,26 @@
+// Type definitions: unit backings, constrained primitives, open ranges,
+// declared init values (typl reference §4–§5).
+package corpus.types
+
+/// Vehicle speed over ground, with a declared init value.
+type Speed       : km/h [0.0..250.0 step 0.5] = 0.0
+type Temperature : Cel  [-40.0..125.0 step 0.1]
+type Torque      : N.m  [0.0..500.0 step 0.1]
+type RPM         : /min [0.0..8000.0 step 10.0]
+type Ratio       : %    [0.0..100.0 step 0.1]
+type Accel       : m/s2 [-20.0..20.0 step 0.1]
+
+type Counter : integer [0..65535]
+type Gain    : float   [0.0..1.0 step 0.01]
+type Flag    : boolean
+type Raw     : integer
+
+/// Open ranges: the missing bound defaults to the widest inferred value.
+type Positive : integer [0..]
+type Small    : integer [..255]
+type Offset   : integer [-128..127] = 0
+
+type Vin   : string [17 match VIN_PATTERN]
+type Name  : string [1..128]
+type Frame : bytes  [8]
+type Blob  : bytes  [1..4096]

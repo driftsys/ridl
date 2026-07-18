@@ -10,7 +10,7 @@
 //! decides what a non-empty diagnostic list means.
 
 use ridl_core::{RidlDatabase, SourceFile as InputFile, check, parse_file, resolve};
-use ridl_syntax::SourceFile as AstFile;
+use ridl_syntax::ast::{AstNode as _, SourceFile as AstFile};
 
 /// The result of [`compile`]: the generated Rust source, the lowered IR module,
 /// and every parser, resolver, and checker diagnostic rendered as a message.

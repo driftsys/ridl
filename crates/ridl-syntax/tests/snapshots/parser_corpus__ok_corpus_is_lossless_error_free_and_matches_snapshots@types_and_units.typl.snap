@@ -1,0 +1,401 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/types_and_units.typl
+---
+SourceFile@0..922
+  LineComment@0..72 "// Type definitions:  ..."
+  Whitespace@72..73 "\n"
+  LineComment@73..124 "// declared init valu ..."
+  Whitespace@124..125 "\n"
+  PackageDecl@125..145
+    PackageKw@125..132 "package"
+    Whitespace@132..133 " "
+    QualifiedName@133..145
+      Ident@133..139 "corpus"
+      Dot@139..140 "."
+      Ident@140..145 "types"
+  Whitespace@145..147 "\n\n"
+  DocComment@147..205 "/// Vehicle speed ove ..."
+  Whitespace@205..206 "\n"
+  TypeDef@206..257
+    TypeKw@206..210 "type"
+    Whitespace@210..211 " "
+    Name@211..216
+      Ident@211..216 "Speed"
+    Whitespace@216..223 "       "
+    Colon@223..224 ":"
+    Whitespace@224..225 " "
+    UnitExpr@225..229
+      Ident@225..227 "km"
+      Slash@227..228 "/"
+      Ident@228..229 "h"
+    Whitespace@229..230 " "
+    Constraint@230..251
+      LBracket@230..231 "["
+      Literal@231..234
+        FloatNumber@231..234 "0.0"
+      DotDot@234..236 ".."
+      Literal@236..241
+        FloatNumber@236..241 "250.0"
+      Whitespace@241..242 " "
+      StepKw@242..246 "step"
+      Whitespace@246..247 " "
+      Literal@247..250
+        FloatNumber@247..250 "0.5"
+      RBracket@250..251 "]"
+    Whitespace@251..252 " "
+    InitValue@252..257
+      Eq@252..253 "="
+      Whitespace@253..254 " "
+      Literal@254..257
+        FloatNumber@254..257 "0.0"
+  Whitespace@257..258 "\n"
+  TypeDef@258..305
+    TypeKw@258..262 "type"
+    Whitespace@262..263 " "
+    Name@263..274
+      Ident@263..274 "Temperature"
+    Whitespace@274..275 " "
+    Colon@275..276 ":"
+    Whitespace@276..277 " "
+    UnitExpr@277..280
+      Ident@277..280 "Cel"
+    Whitespace@280..282 "  "
+    Constraint@282..305
+      LBracket@282..283 "["
+      Literal@283..288
+        Minus@283..284 "-"
+        FloatNumber@284..288 "40.0"
+      DotDot@288..290 ".."
+      Literal@290..295
+        FloatNumber@290..295 "125.0"
+      Whitespace@295..296 " "
+      StepKw@296..300 "step"
+      Whitespace@300..301 " "
+      Literal@301..304
+        FloatNumber@301..304 "0.1"
+      RBracket@304..305 "]"
+  Whitespace@305..306 "\n"
+  TypeDef@306..351
+    TypeKw@306..310 "type"
+    Whitespace@310..311 " "
+    Name@311..317
+      Ident@311..317 "Torque"
+    Whitespace@317..323 "      "
+    Colon@323..324 ":"
+    Whitespace@324..325 " "
+    UnitExpr@325..328
+      Ident@325..326 "N"
+      Dot@326..327 "."
+      Ident@327..328 "m"
+    Whitespace@328..330 "  "
+    Constraint@330..351
+      LBracket@330..331 "["
+      Literal@331..334
+        FloatNumber@331..334 "0.0"
+      DotDot@334..336 ".."
+      Literal@336..341
+        FloatNumber@336..341 "500.0"
+      Whitespace@341..342 " "
+      StepKw@342..346 "step"
+      Whitespace@346..347 " "
+      Literal@347..350
+        FloatNumber@347..350 "0.1"
+      RBracket@350..351 "]"
+  Whitespace@351..352 "\n"
+  TypeDef@352..399
+    TypeKw@352..356 "type"
+    Whitespace@356..357 " "
+    Name@357..360
+      Ident@357..360 "RPM"
+    Whitespace@360..369 "         "
+    Colon@369..370 ":"
+    Whitespace@370..371 " "
+    UnitExpr@371..375
+      Slash@371..372 "/"
+      Ident@372..375 "min"
+    Whitespace@375..376 " "
+    Constraint@376..399
+      LBracket@376..377 "["
+      Literal@377..380
+        FloatNumber@377..380 "0.0"
+      DotDot@380..382 ".."
+      Literal@382..388
+        FloatNumber@382..388 "8000.0"
+      Whitespace@388..389 " "
+      StepKw@389..393 "step"
+      Whitespace@393..394 " "
+      Literal@394..398
+        FloatNumber@394..398 "10.0"
+      RBracket@398..399 "]"
+  Whitespace@399..400 "\n"
+  TypeDef@400..445
+    TypeKw@400..404 "type"
+    Whitespace@404..405 " "
+    Name@405..410
+      Ident@405..410 "Ratio"
+    Whitespace@410..417 "       "
+    Colon@417..418 ":"
+    Whitespace@418..419 " "
+    UnitExpr@419..420
+      Percent@419..420 "%"
+    Whitespace@420..424 "    "
+    Constraint@424..445
+      LBracket@424..425 "["
+      Literal@425..428
+        FloatNumber@425..428 "0.0"
+      DotDot@428..430 ".."
+      Literal@430..435
+        FloatNumber@430..435 "100.0"
+      Whitespace@435..436 " "
+      StepKw@436..440 "step"
+      Whitespace@440..441 " "
+      Literal@441..444
+        FloatNumber@441..444 "0.1"
+      RBracket@444..445 "]"
+  Whitespace@445..446 "\n"
+  TypeDef@446..492
+    TypeKw@446..450 "type"
+    Whitespace@450..451 " "
+    Name@451..456
+      Ident@451..456 "Accel"
+    Whitespace@456..463 "       "
+    Colon@463..464 ":"
+    Whitespace@464..465 " "
+    UnitExpr@465..469
+      Ident@465..466 "m"
+      Slash@466..467 "/"
+      Ident@467..469 "s2"
+    Whitespace@469..470 " "
+    Constraint@470..492
+      LBracket@470..471 "["
+      Literal@471..476
+        Minus@471..472 "-"
+        FloatNumber@472..476 "20.0"
+      DotDot@476..478 ".."
+      Literal@478..482
+        FloatNumber@478..482 "20.0"
+      Whitespace@482..483 " "
+      StepKw@483..487 "step"
+      Whitespace@487..488 " "
+      Literal@488..491
+        FloatNumber@488..491 "0.1"
+      RBracket@491..492 "]"
+  Whitespace@492..494 "\n\n"
+  TypeDef@494..527
+    TypeKw@494..498 "type"
+    Whitespace@498..499 " "
+    Name@499..506
+      Ident@499..506 "Counter"
+    Whitespace@506..507 " "
+    Colon@507..508 ":"
+    Whitespace@508..509 " "
+    PrimitiveType@509..516
+      IntegerKw@509..516 "integer"
+    Whitespace@516..517 " "
+    Constraint@517..527
+      LBracket@517..518 "["
+      Literal@518..519
+        IntNumber@518..519 "0"
+      DotDot@519..521 ".."
+      Literal@521..526
+        IntNumber@521..526 "65535"
+      RBracket@526..527 "]"
+  Whitespace@527..528 "\n"
+  TypeDef@528..571
+    TypeKw@528..532 "type"
+    Whitespace@532..533 " "
+    Name@533..537
+      Ident@533..537 "Gain"
+    Whitespace@537..541 "    "
+    Colon@541..542 ":"
+    Whitespace@542..543 " "
+    PrimitiveType@543..548
+      FloatKw@543..548 "float"
+    Whitespace@548..551 "   "
+    Constraint@551..571
+      LBracket@551..552 "["
+      Literal@552..555
+        FloatNumber@552..555 "0.0"
+      DotDot@555..557 ".."
+      Literal@557..560
+        FloatNumber@557..560 "1.0"
+      Whitespace@560..561 " "
+      StepKw@561..565 "step"
+      Whitespace@565..566 " "
+      Literal@566..570
+        FloatNumber@566..570 "0.01"
+      RBracket@570..571 "]"
+  Whitespace@571..572 "\n"
+  TypeDef@572..594
+    TypeKw@572..576 "type"
+    Whitespace@576..577 " "
+    Name@577..581
+      Ident@577..581 "Flag"
+    Whitespace@581..585 "    "
+    Colon@585..586 ":"
+    Whitespace@586..587 " "
+    PrimitiveType@587..594
+      BooleanKw@587..594 "boolean"
+  Whitespace@594..595 "\n"
+  TypeDef@595..617
+    TypeKw@595..599 "type"
+    Whitespace@599..600 " "
+    Name@600..603
+      Ident@600..603 "Raw"
+    Whitespace@603..608 "     "
+    Colon@608..609 ":"
+    Whitespace@609..610 " "
+    PrimitiveType@610..617
+      IntegerKw@610..617 "integer"
+  Whitespace@617..619 "\n\n"
+  DocComment@619..692 "/// Open ranges: the  ..."
+  Whitespace@692..693 "\n"
+  TypeDef@693..722
+    TypeKw@693..697 "type"
+    Whitespace@697..698 " "
+    Name@698..706
+      Ident@698..706 "Positive"
+    Whitespace@706..707 " "
+    Colon@707..708 ":"
+    Whitespace@708..709 " "
+    PrimitiveType@709..716
+      IntegerKw@709..716 "integer"
+    Whitespace@716..717 " "
+    Constraint@717..722
+      LBracket@717..718 "["
+      Literal@718..719
+        IntNumber@718..719 "0"
+      DotDot@719..721 ".."
+      RBracket@721..722 "]"
+  Whitespace@722..723 "\n"
+  TypeDef@723..754
+    TypeKw@723..727 "type"
+    Whitespace@727..728 " "
+    Name@728..733
+      Ident@728..733 "Small"
+    Whitespace@733..737 "    "
+    Colon@737..738 ":"
+    Whitespace@738..739 " "
+    PrimitiveType@739..746
+      IntegerKw@739..746 "integer"
+    Whitespace@746..747 " "
+    Constraint@747..754
+      LBracket@747..748 "["
+      DotDot@748..750 ".."
+      Literal@750..753
+        IntNumber@750..753 "255"
+      RBracket@753..754 "]"
+  Whitespace@754..755 "\n"
+  TypeDef@755..794
+    TypeKw@755..759 "type"
+    Whitespace@759..760 " "
+    Name@760..766
+      Ident@760..766 "Offset"
+    Whitespace@766..769 "   "
+    Colon@769..770 ":"
+    Whitespace@770..771 " "
+    PrimitiveType@771..778
+      IntegerKw@771..778 "integer"
+    Whitespace@778..779 " "
+    Constraint@779..790
+      LBracket@779..780 "["
+      Literal@780..784
+        Minus@780..781 "-"
+        IntNumber@781..784 "128"
+      DotDot@784..786 ".."
+      Literal@786..789
+        IntNumber@786..789 "127"
+      RBracket@789..790 "]"
+    Whitespace@790..791 " "
+    InitValue@791..794
+      Eq@791..792 "="
+      Whitespace@792..793 " "
+      Literal@793..794
+        IntNumber@793..794 "0"
+  Whitespace@794..796 "\n\n"
+  TypeDef@796..838
+    TypeKw@796..800 "type"
+    Whitespace@800..801 " "
+    Name@801..804
+      Ident@801..804 "Vin"
+    Whitespace@804..807 "   "
+    Colon@807..808 ":"
+    Whitespace@808..809 " "
+    PrimitiveType@809..815
+      StringKw@809..815 "string"
+    Whitespace@815..816 " "
+    Constraint@816..838
+      LBracket@816..817 "["
+      Bound@817..819
+        Literal@817..819
+          IntNumber@817..819 "17"
+      Whitespace@819..820 " "
+      MatchKw@820..825 "match"
+      Whitespace@825..826 " "
+      Literal@826..837
+        Ident@826..837 "VIN_PATTERN"
+      RBracket@837..838 "]"
+  Whitespace@838..839 "\n"
+  TypeDef@839..867
+    TypeKw@839..843 "type"
+    Whitespace@843..844 " "
+    Name@844..848
+      Ident@844..848 "Name"
+    Whitespace@848..850 "  "
+    Colon@850..851 ":"
+    Whitespace@851..852 " "
+    PrimitiveType@852..858
+      StringKw@852..858 "string"
+    Whitespace@858..859 " "
+    Constraint@859..867
+      LBracket@859..860 "["
+      Bound@860..866
+        Literal@860..861
+          IntNumber@860..861 "1"
+        DotDot@861..863 ".."
+        Literal@863..866
+          IntNumber@863..866 "128"
+      RBracket@866..867 "]"
+  Whitespace@867..868 "\n"
+  TypeDef@868..891
+    TypeKw@868..872 "type"
+    Whitespace@872..873 " "
+    Name@873..878
+      Ident@873..878 "Frame"
+    Whitespace@878..879 " "
+    Colon@879..880 ":"
+    Whitespace@880..881 " "
+    PrimitiveType@881..886
+      BytesKw@881..886 "bytes"
+    Whitespace@886..888 "  "
+    Constraint@888..891
+      LBracket@888..889 "["
+      Bound@889..890
+        Literal@889..890
+          IntNumber@889..890 "8"
+      RBracket@890..891 "]"
+  Whitespace@891..892 "\n"
+  TypeDef@892..921
+    TypeKw@892..896 "type"
+    Whitespace@896..897 " "
+    Name@897..901
+      Ident@897..901 "Blob"
+    Whitespace@901..903 "  "
+    Colon@903..904 ":"
+    Whitespace@904..905 " "
+    PrimitiveType@905..910
+      BytesKw@905..910 "bytes"
+    Whitespace@910..912 "  "
+    Constraint@912..921
+      LBracket@912..913 "["
+      Bound@913..920
+        Literal@913..914
+          IntNumber@913..914 "1"
+        DotDot@914..916 ".."
+        Literal@916..920
+          IntNumber@916..920 "4096"
+      RBracket@920..921 "]"
+  Whitespace@921..922 "\n"
+errors: none

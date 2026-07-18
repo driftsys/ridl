@@ -1,0 +1,271 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/consts_and_regex.typl
+---
+SourceFile@0..793
+  LineComment@0..71 "// Constants: value c ..."
+  Whitespace@71..72 "\n"
+  LineComment@72..96 "// (typl reference §6)."
+  Whitespace@96..97 "\n"
+  PackageDecl@97..118
+    PackageKw@97..104 "package"
+    Whitespace@104..105 " "
+    QualifiedName@105..118
+      Ident@105..111 "corpus"
+      Dot@111..112 "."
+      Ident@112..118 "consts"
+  Whitespace@118..120 "\n\n"
+  TypeDef@120..163
+    TypeKw@120..124 "type"
+    Whitespace@124..125 " "
+    Name@125..130
+      Ident@125..130 "Speed"
+    Whitespace@130..131 " "
+    Colon@131..132 ":"
+    Whitespace@132..133 " "
+    UnitExpr@133..137
+      Ident@133..135 "km"
+      Slash@135..136 "/"
+      Ident@136..137 "h"
+    Whitespace@137..138 " "
+    Constraint@138..163
+      LBracket@138..139 "["
+      Literal@139..142
+        FloatNumber@139..142 "0.0"
+      DotDot@142..144 ".."
+      Literal@144..153
+        Ident@144..153 "MAX_SPEED"
+      Whitespace@153..154 " "
+      StepKw@154..158 "step"
+      Whitespace@158..159 " "
+      Literal@159..162
+        FloatNumber@159..162 "0.5"
+      RBracket@162..163 "]"
+  Whitespace@163..165 "\n\n"
+  ConstDef@165..203
+    ConstKw@165..170 "const"
+    Whitespace@170..171 " "
+    Name@171..180
+      Ident@171..180 "MAX_SPEED"
+    Whitespace@180..186 "      "
+    Colon@186..187 ":"
+    Whitespace@187..188 " "
+    PathType@188..193
+      QualifiedName@188..193
+        Ident@188..193 "Speed"
+    Whitespace@193..196 "   "
+    Eq@196..197 "="
+    Whitespace@197..198 " "
+    Literal@198..203
+      FloatNumber@198..203 "250.0"
+  Whitespace@203..204 "\n"
+  ConstDef@204..242
+    ConstKw@204..209 "const"
+    Whitespace@209..210 " "
+    Name@210..224
+      Ident@210..224 "SPEED_LIMIT_EU"
+    Whitespace@224..225 " "
+    Colon@225..226 ":"
+    Whitespace@226..227 " "
+    PathType@227..232
+      QualifiedName@227..232
+        Ident@227..232 "Speed"
+    Whitespace@232..235 "   "
+    Eq@235..236 "="
+    Whitespace@236..237 " "
+    Literal@237..242
+      FloatNumber@237..242 "130.0"
+  Whitespace@242..243 "\n"
+  ConstDef@243..277
+    ConstKw@243..248 "const"
+    Whitespace@248..249 " "
+    Name@249..257
+      Ident@249..257 "MAX_GEAR"
+    Whitespace@257..264 "       "
+    Colon@264..265 ":"
+    Whitespace@265..266 " "
+    PathType@266..273
+      QualifiedName@266..273
+        IntegerKw@266..273 "integer"
+    Whitespace@273..274 " "
+    Eq@274..275 "="
+    Whitespace@275..276 " "
+    Literal@276..277
+      IntNumber@276..277 "6"
+  Whitespace@277..278 "\n"
+  ConstDef@278..316
+    ConstKw@278..283 "const"
+    Whitespace@283..284 " "
+    Name@284..292
+      Ident@284..292 "MIN_TEMP"
+    Whitespace@292..299 "       "
+    Colon@299..300 ":"
+    Whitespace@300..301 " "
+    PathType@301..306
+      QualifiedName@301..306
+        FloatKw@301..306 "float"
+    Whitespace@306..309 "   "
+    Eq@309..310 "="
+    Whitespace@310..311 " "
+    Literal@311..316
+      Minus@311..312 "-"
+      FloatNumber@312..316 "40.0"
+  Whitespace@316..317 "\n"
+  ConstDef@317..354
+    ConstKw@317..322 "const"
+    Whitespace@322..323 " "
+    Name@323..330
+      Ident@323..330 "ENABLED"
+    Whitespace@330..338 "        "
+    Colon@338..339 ":"
+    Whitespace@339..340 " "
+    PathType@340..347
+      QualifiedName@340..347
+        BooleanKw@340..347 "boolean"
+    Whitespace@347..348 " "
+    Eq@348..349 "="
+    Whitespace@349..350 " "
+    Literal@350..354
+      TrueKw@350..354 "true"
+  Whitespace@354..355 "\n"
+  ConstDef@355..393
+    ConstKw@355..360 "const"
+    Whitespace@360..361 " "
+    Name@361..369
+      Ident@361..369 "DISABLED"
+    Whitespace@369..376 "       "
+    Colon@376..377 ":"
+    Whitespace@377..378 " "
+    PathType@378..385
+      QualifiedName@378..385
+        BooleanKw@378..385 "boolean"
+    Whitespace@385..386 " "
+    Eq@386..387 "="
+    Whitespace@387..388 " "
+    Literal@388..393
+      FalseKw@388..393 "false"
+  Whitespace@393..394 "\n"
+  ConstDef@394..434
+    ConstKw@394..399 "const"
+    Whitespace@399..400 " "
+    Name@400..408
+      Ident@400..408 "GREETING"
+    Whitespace@408..415 "       "
+    Colon@415..416 ":"
+    Whitespace@416..417 " "
+    PathType@417..422
+      QualifiedName@417..422
+        Ident@417..422 "Label"
+    Whitespace@422..425 "   "
+    Eq@425..426 "="
+    Whitespace@426..427 " "
+    Literal@427..434
+      String@427..434 "\"hello\""
+  Whitespace@434..435 "\n"
+  ConstDef@435..491
+    ConstKw@435..440 "const"
+    Whitespace@440..441 " "
+    Name@441..446
+      Ident@441..446 "LIMIT"
+    Whitespace@446..456 "          "
+    Colon@456..457 ":"
+    Whitespace@457..458 " "
+    PathType@458..483
+      QualifiedName@458..483
+        Ident@458..461 "veh"
+        Dot@461..462 "."
+        Ident@462..472 "regulatory"
+        Dot@472..473 "."
+        Ident@473..483 "SpeedLimit"
+    Whitespace@483..484 " "
+    Eq@484..485 "="
+    Whitespace@485..486 " "
+    Literal@486..491
+      FloatNumber@486..491 "130.0"
+  Whitespace@491..493 "\n\n"
+  DocComment@493..547 "/// A regex constant, ..."
+  Whitespace@547..548 "\n"
+  ConstDef@548..593
+    ConstKw@548..553 "const"
+    Whitespace@553..554 " "
+    Name@554..565
+      Ident@554..565 "VIN_PATTERN"
+    Whitespace@565..568 "   "
+    Eq@568..569 "="
+    Whitespace@569..570 " "
+    Literal@570..593
+      Regex@570..593 "/^[A-HJ-NPR-Z0-9]{17}$/"
+  Whitespace@593..594 "\n"
+  ConstDef@594..632
+    ConstKw@594..599 "const"
+    Whitespace@599..600 " "
+    Name@600..613
+      Ident@600..613 "ASCII_PATTERN"
+    Whitespace@613..614 " "
+    Eq@614..615 "="
+    Whitespace@615..616 " "
+    Literal@616..632
+      Regex@616..632 "/^[\\x20-\\x7E]+$/"
+  Whitespace@632..633 "\n"
+  ConstDef@633..690
+    ConstKw@633..638 "const"
+    Whitespace@638..639 " "
+    Name@639..650
+      Ident@639..650 "URI_PATTERN"
+    Whitespace@650..653 "   "
+    Eq@653..654 "="
+    Whitespace@654..655 " "
+    Literal@655..690
+      Regex@655..690 "/^[a-zA-Z][a-zA-Z0-9+ ..."
+  Whitespace@690..692 "\n\n"
+  TypeDef@692..734
+    TypeKw@692..696 "type"
+    Whitespace@696..697 " "
+    Name@697..700
+      Ident@697..700 "Vin"
+    Whitespace@700..703 "   "
+    Colon@703..704 ":"
+    Whitespace@704..705 " "
+    PrimitiveType@705..711
+      StringKw@705..711 "string"
+    Whitespace@711..712 " "
+    Constraint@712..734
+      LBracket@712..713 "["
+      Bound@713..715
+        Literal@713..715
+          IntNumber@713..715 "17"
+      Whitespace@715..716 " "
+      MatchKw@716..721 "match"
+      Whitespace@721..722 " "
+      Literal@722..733
+        Ident@722..733 "VIN_PATTERN"
+      RBracket@733..734 "]"
+  Whitespace@734..735 "\n"
+  TypeDef@735..792
+    TypeKw@735..739 "type"
+    Whitespace@739..740 " "
+    Name@740..745
+      Ident@740..745 "Email"
+    Whitespace@745..746 " "
+    Colon@746..747 ":"
+    Whitespace@747..748 " "
+    PrimitiveType@748..754
+      StringKw@748..754 "string"
+    Whitespace@754..755 " "
+    Constraint@755..792
+      LBracket@755..756 "["
+      Bound@756..762
+        Literal@756..757
+          IntNumber@756..757 "1"
+        DotDot@757..759 ".."
+        Literal@759..762
+          IntNumber@759..762 "254"
+      Whitespace@762..763 " "
+      MatchKw@763..768 "match"
+      Whitespace@768..769 " "
+      Literal@769..791
+        Regex@769..791 "/^[^@]+@[^@]+\\.[^@]+$/"
+      RBracket@791..792 "]"
+  Whitespace@792..793 "\n"
+errors: none

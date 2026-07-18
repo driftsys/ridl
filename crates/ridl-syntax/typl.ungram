@@ -140,6 +140,9 @@ ArrayType =
 MapType =
   '[' key:FieldType ':' value:FieldType ';' Bound ']'
 
+// Appendix E requires at least one field, but typl reference §11 names the
+// empty tuple `()` as the unit type — the parser follows §11 and admits a
+// tuple with zero fields; the ok corpus freezes that shape.
 TupleType =
   '(' fields:TupleField (',' fields:TupleField)* ')'
 
@@ -180,9 +183,16 @@ Name =
   'ident'
 
 // A reference path: `Type` or `pkg.Type` for types, `veh.common` for
-// packages and imports.
+// packages and imports. A segment may also be one of the five primitive
+// keywords, so `const MAX_GEAR : integer = 6` (typl reference Appendix B)
+// parses; the checker narrows where a primitive is not allowed. Because a
+// segment is not always an 'ident' token, consumers must read the path
+// text (concatenate the non-trivia tokens, as ridl-core's
+// `significant_text` does), never `ident_token()` — that accessor returns
+// only the first plain-identifier segment.
 QualifiedName =
-  'ident' ('.' 'ident')*
+  ('ident' | 'boolean' | 'integer' | 'float' | 'string' | 'bytes')
+  ('.' ('ident' | 'boolean' | 'integer' | 'float' | 'string' | 'bytes'))*
 
 // A type reference in type position (field types, union arms, const
 // types, enumset backing).

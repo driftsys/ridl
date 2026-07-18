@@ -1,0 +1,25 @@
+// Separator discipline: newline and comma are interchangeable in every
+// block construct, trailing comma permitted (typl reference §15.2).
+package corpus.separators
+
+enum Warning { LOW_FUEL = 0, CHECK_ENGINE = 1, DOOR_OPEN = 2, SEATBELT = 3 }
+
+enum Trailing {
+  A = 0,
+  B = 1,
+}
+
+struct OneLine { limit : Speed, actual : Speed }
+
+struct Mixed {
+  first  : Speed, second : Speed
+  third  : Speed,
+}
+
+enumset Flags { LOW = 0, HIGH = 1, }
+
+union Choice { a : Alpha, b : Beta }
+
+struct TupleTrailing {
+  range : (min: Speed, max: Speed,)
+}

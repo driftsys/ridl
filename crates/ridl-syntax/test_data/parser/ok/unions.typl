@@ -1,0 +1,30 @@
+// Unions: plain, error, and result-shaped, with reserved arm tombstones
+// (typl reference §10).
+package corpus.unions
+
+union SensorResult {
+  ok  : SensorReading
+  err : SensorFault
+}
+
+error union ServiceFault {
+  diag : DiagError
+  cal  : CalFault
+}
+
+/// A result union: one success arm, one error arm (§10.2).
+union CalOutcome {
+  ok  : CalReport
+  err : CalFault
+}
+
+union Evolved {
+  first : Alpha
+  reserved legacyArm
+  third : veh.faults.Gamma
+}
+
+internal union Hidden {
+  a : Alpha
+  b : Beta
+}

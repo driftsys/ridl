@@ -1,16 +1,20 @@
 //! The minimal AST -> IR checker (docs/ROADMAP.md epic E0.7): lowers every
-//! `type`/`const` declaration to IR and runs one real semantic check — a const
-//! value must lie inside its resolved type's range.
+//! `type`/`const` definition to IR and runs one real semantic check — a const
+//! value must lie inside its resolved type's range. Composite definitions are
+//! not lowered yet — the full checker is E1 scope.
 //!
 //! Diagnostics accumulate; lowering continues past errors — the checker never
 //! returns a hard error (ADR-0004 §5).
+//!
+//! Reads the `typl.ungram`-generated typed AST (`ridl_syntax::ast`) — ported
+//! from the E0 accessor layer in E1.2b.
 
 use std::collections::HashMap;
 
 use ridl_ir::{ConstDef, Module, Range, TypeDef};
-use ridl_syntax::{RangeSpec, SourceFile};
+use ridl_syntax::ast::{self, AstNode, Definition, SourceFile};
 
-use crate::resolve::{Resolution, SymbolKind};
+use crate::resolve::{Resolution, SymbolKind, const_type_name, declared_name, literal_f64};
 
 /// A semantic diagnostic raised while lowering the AST to IR.
 #[derive(Debug, Clone, PartialEq)]
@@ -18,7 +22,7 @@ pub struct CheckError {
     pub message: String,
 }
 
-/// Lowers every `type`/`const` declaration in `file` to IR under `module_name`,
+/// Lowers every `type`/`const` definition in `file` to IR under `module_name`,
 /// checking that each const value lies inside its resolved type's range.
 ///
 /// A const whose type reference did not resolve is left unlowered: the resolver
@@ -35,29 +39,41 @@ pub fn check(
 
     // Lower each `type` and record its declared range for the const check.
     let mut types = Vec::new();
-    let mut type_ranges: HashMap<String, RangeSpec> = HashMap::new();
-    for decl in file.type_decls() {
+    let mut type_ranges: HashMap<String, Range> = HashMap::new();
+    for definition in file.definitions() {
+        let Definition::Type(decl) = definition else {
+            continue;
+        };
         // A nameless type means a malformed tree; the parser already reported
         // the syntax error, so skip it rather than fabricate a name.
-        let Some(name) = decl.name() else { continue };
-        let range = decl.range();
-        if let Some(range) = &range {
-            type_ranges.insert(name.clone(), range.clone());
+        let Some(name) = declared_name(&decl) else {
+            continue;
+        };
+        let range = scalar_range(&decl);
+        if let Some(range) = range {
+            type_ranges.insert(name.clone(), range);
         }
         types.push(TypeDef {
             name,
-            unit: decl.unit().unwrap_or_default(),
-            range: range.map(lower_range),
+            unit: backing_text(&decl),
+            range,
         });
     }
 
     // Lower each `const` whose type resolved, checking its value against range.
     let mut consts = Vec::new();
-    for decl in file.const_decls() {
-        // A malformed tree; the parser already reported the syntax error.
-        let (Some(name), Some(type_name), Some(value)) =
-            (decl.name(), decl.type_name(), decl.value())
-        else {
+    for definition in file.definitions() {
+        let Definition::Const(decl) = definition else {
+            continue;
+        };
+        // A malformed tree (or a non-numeric constant, e.g. a regex): the
+        // parser or the E1 checker owns those; the E0-scope lowering covers
+        // numeric constants only.
+        let (Some(name), Some(type_name), Some(value)) = (
+            declared_name(&decl),
+            const_type_name(&decl),
+            decl.value().and_then(|literal| literal_f64(&literal)),
+        ) else {
             continue;
         };
 
@@ -96,13 +112,27 @@ pub fn check(
     (module, errors)
 }
 
-/// Lowers an AST range to IR, mapping an unstated step to proto3's `0.0`.
-fn lower_range(range: RangeSpec) -> Range {
-    Range {
-        min: range.min,
-        max: range.max,
-        step: range.step.unwrap_or(0.0),
-    }
+/// The backing of a `type` definition as IR text: the UCUM unit expression
+/// (`km/h`) or the primitive keyword (`integer`). Empty when the backing is
+/// missing (a malformed tree).
+fn backing_text(decl: &ast::TypeDef) -> String {
+    decl.backing()
+        .map(|backing| crate::resolve::significant_text(backing.syntax()))
+        .unwrap_or_default()
+}
+
+/// The scalar range of a `type` definition's constraint, lowered to IR: both
+/// numeric endpoints must be present (open ranges and constant-reference
+/// bounds resolve in E1), and an unstated step maps to proto3's `0.0`.
+fn scalar_range(decl: &ast::TypeDef) -> Option<Range> {
+    let constraint = decl.constraint()?;
+    let min = literal_f64(&constraint.min()?)?;
+    let max = literal_f64(&constraint.max()?)?;
+    let step = constraint
+        .step()
+        .and_then(|literal| literal_f64(&literal))
+        .unwrap_or(0.0);
+    Some(Range { min, max, step })
 }
 
 #[cfg(test)]
@@ -170,5 +200,20 @@ mod tests {
         );
         // The const is not lowered — its type reference did not resolve.
         assert!(module.consts.is_empty());
+    }
+
+    #[test]
+    fn negative_bounds_lower_with_their_sign() {
+        let input = "package p\ntype T: Cel [-40.0..125.0 step 0.1]\n";
+        let (module, errors) = check_source(input, "m");
+        assert!(errors.is_empty(), "expected no errors, got: {errors:?}");
+        assert_eq!(
+            module.types[0].range,
+            Some(Range {
+                min: -40.0,
+                max: 125.0,
+                step: 0.1,
+            }),
+        );
     }
 }
