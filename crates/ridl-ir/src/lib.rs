@@ -192,11 +192,11 @@ mod v1_round_trip {
                         )),
                     }),
                     constraint: Some(constraint("0", "6", None)),
-                    declared_init: Some("6".to_string()),
-                    init: Some(v1::InitValue {
-                        derivable: true,
-                        value: Some("6".to_string()),
-                    }),
+                    // The enclosing Field's declared_init and init are
+                    // authoritative for an inline scalar; the nested
+                    // TypeDef's init fields stay unset.
+                    declared_init: None,
+                    init: None,
                     width: Some(v1::type_def::Width::IntWidth(v1::IntWidth::U8 as i32)),
                 }))),
                 optional: false,
@@ -237,21 +237,29 @@ mod v1_round_trip {
             width: v1::IntWidth::U8 as i32,
         };
 
-        // union SensorResult { ok : SensorReading, err : SensorFault }
+        // union SensorResult { ok : SensorReading, reserved legacyErr,
+        // err : SensorFault } — a tombstoned arm keeps ordinal 2 occupied.
         let sensor_result = v1::UnionDef {
             arms: vec![
                 v1::UnionArm {
                     name: "ok".to_string(),
                     ordinal: 1,
                     type_ref: "SensorReading".to_string(),
+                    doc: "Successful reading".to_string(),
                 },
                 v1::UnionArm {
                     name: "err".to_string(),
-                    ordinal: 2,
+                    ordinal: 3,
                     type_ref: "SensorFault".to_string(),
+                    doc: String::new(),
                 },
             ],
             is_result: true,
+            reserved: vec![v1::Reserved {
+                ordinal: 2,
+                name: Some("legacyErr".to_string()),
+                value: None,
+            }],
         };
 
         v1::Package {
@@ -357,6 +365,14 @@ mod v1_round_trip {
         let decoded = v1::Package::decode(buf.as_slice()).expect("decode must succeed");
 
         assert_eq!(package, decoded);
+        let Some(v1::decl::Kind::UnionDef(union_def)) = &decoded.decls[5].kind else {
+            panic!("SensorResult must decode as a union");
+        };
+        assert_eq!(
+            union_def.reserved[0].name.as_deref(),
+            Some("legacyErr"),
+            "the tombstoned union arm must survive the round trip"
+        );
     }
 
     #[test]

@@ -15,6 +15,13 @@ syntax = "proto3";
 // round trip so ridl-diff (E2.8) can compare honestly. Derived wire widths
 // ride alongside the exact strings as enums.
 //
+// Type-reference canonical form: every resolved type-reference string in
+// this schema (FieldType.named, UnionArm.type_ref, ConstDef.type_ref,
+// EnumSetDef.backing_enum, Constraint.pattern_const) is the fully qualified
+// `pkg.Name` for a cross-package reference and the bare `Name` for a
+// same-package reference — never an import alias. Aliases are a source-level
+// convenience (typl §3.2) and would make ridl-diff comparisons dishonest.
+//
 // Field numbering scheme: envelope and data fields start at 1; oneof members
 // start at 10. Gaps are noted where epic E2 (interaction layer) is expected
 // to add fields; they are commented, not `reserved`, because `reserved`
@@ -53,7 +60,9 @@ message Decl {
   // vocabulary (typl §10.1). Valid on struct, enum, and union declarations
   // only (TYPL-212).
   bool is_error = 3;
-  // Doc comment body in CommonMark; empty when absent (typl §14.1).
+  // Doc comment body in CommonMark; empty when absent (typl §14.1). Doc
+  // tags without a structured field of their own (e.g. @see, typl §14.2)
+  // remain verbatim in this body.
   string doc = 4;
   // @labels classification identifiers, passed through to generated
   // metadata unchanged; the core language defines no vocabulary
@@ -234,8 +243,8 @@ message Field {
 
 // A reserved tombstone — a retired slot that is never reused (typl §7.4).
 message Reserved {
-  // The retired ordinal slot in a struct body; 0 in enum bodies, where the
-  // retired identity is the value.
+  // The retired ordinal slot in a struct or union body; 0 in enum bodies,
+  // where the retired identity is the value.
   uint32 ordinal = 1;
   // The retired field name, e.g. `reserved legacyChecksum` (typl §7.4).
   optional string name = 2;
@@ -258,7 +267,9 @@ message EnumValue {
   // The explicitly assigned integer value (typl §8) — the bit position when
   // used as an enum-set bit (typl §9.1).
   int64 value = 2;
-  // Doc comment body; empty when absent (typl §14.1).
+  // Doc comment body; empty when absent (typl §14.1). Enum values carry no
+  // structured tag fields, so doc tags (@see, @labels, @deprecated) remain
+  // verbatim in this body.
   string doc = 3;
 }
 
@@ -282,6 +293,9 @@ message UnionDef {
   // error arm. The interaction layer (ridl) maps the error arm onto
   // transport-native error channels.
   bool is_result = 2;
+  // Retired arms — a tombstone keeps its ordinal slot occupied, never
+  // reused (typl §7.4; union bodies admit `reserved` per Appendix E).
+  repeated Reserved reserved = 3;
 }
 
 // One union arm (typl §10). Arms reference named types only (TYPL-204).
@@ -291,6 +305,9 @@ message UnionArm {
   uint32 ordinal = 2;
   // Resolved named-type reference.
   string type_ref = 3;
+  // Doc comment body; empty when absent (typl §14.1, Appendix E admits doc
+  // comments on arms).
+  string doc = 4;
 }
 
 // The type of a struct field or tuple field (typl §7, §11, §12; usage rules
@@ -302,11 +319,14 @@ message FieldType {
   oneof kind {
     // Resolved named-type reference — nominal identity (typl §5.7).
     string named = 10;
-    // Direct primitive use; string and bytes are rejected here (typl §15.3,
-    // TYPL-208).
+    // Direct primitive use. In field and tuple positions string and bytes
+    // are rejected (typl §15.3, TYPL-208); as a map key a bare primitive —
+    // string included — is legal (typl §12.2).
     PrimitiveType primitive = 11;
     // Inline constrained scalar, e.g. `integer [0..MAX_GEAR] = 6`
-    // (typl §5.2, Appendix B).
+    // (typl §5.2, Appendix B). The enclosing Field's declared_init and init
+    // are authoritative for an inline scalar; the nested TypeDef's
+    // declared_init and init stay unset.
     TypeDef inline_scalar = 12;
     TupleType tuple = 13;
     ArrayType array = 14;
