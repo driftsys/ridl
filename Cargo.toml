@@ -12,6 +12,8 @@ license = "MIT"
 repository = "https://github.com/driftsys/ridl"
 
 [workspace.dependencies]
+clap = { version = "4.6.2", features = ["derive"] }
+insta = { version = "1.48.0", features = ["json"] }
 logos = "0.16.1"
 prettyplease = "0.2.37"
 proc-macro2 = "1.0.106"
