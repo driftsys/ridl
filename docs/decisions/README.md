@@ -7,6 +7,9 @@
 - **ADR-0005 — Agent enablement.** Enabling AI agents to author and evolve RIDL.
 - **ADR-0006 — Walking-skeleton execution.** E0-scoped execution decisions
   (workspace layout, protox, deferred crates.io reservation).
+- **ADR-0007 — Epic E1 execution.** E1-scoped execution decisions (ungrammar
+  tooling, diagnostic namespaces, corpus layout, `ridl-sem` split, IR exactness,
+  scope cuts).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview.
