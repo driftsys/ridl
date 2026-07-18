@@ -39,18 +39,22 @@
 //! Source order is wire identity (typl reference §7.4): a formatter must never
 //! change ordinals. This formatter normalises whitespace and separators only —
 //! it never reorders declarations, imports, fields, enum values, or union arms.
-//! It also does not reorder a definition that appears before the `package`
-//! line; it emits every element in source order.
+//! Input whose first item is not the `package` declaration is a missing-package
+//! parse error (FORM-104), so it is returned untouched and never reformatted;
+//! the never-reorder guarantee applies to the inputs that do format.
 //!
-//! # A note on comments inside a one-line construct
+//! # Comments are never dropped
 //!
-//! Comments survive at declaration and member boundaries (leading and inline
-//! trailing). A comment embedded inside a single-line construct — between the
-//! brackets of a constraint or a collection, or between the parentheses of a
-//! tuple — is dropped, because that construct is re-emitted from its significant
-//! tokens. Comments are trivia, so dropping one leaves the node structure and
-//! the non-trivia token set unchanged, and the result is still idempotent. The
-//! typl style places no comments there, so this does not arise in practice.
+//! Comments and doc comments survive everywhere. At declaration and member
+//! boundaries they are re-anchored: a leading comment leads the item it
+//! precedes, and an inline trailing comment stays on its line — including a
+//! comment on the opening-brace line of a block. A comment embedded *inside* a
+//! single-line construct — between the brackets of a constraint or a
+//! collection, the parentheses of a tuple, or the tokens of one declaration —
+//! cannot be reflowed into the tight style without risking its meaning, so the
+//! enclosing construct is emitted verbatim from source instead of being
+//! re-synthesised. That keeps every comment in place, leaves the node structure
+//! and the non-trivia token set unchanged, and stays idempotent.
 
 use ridl_syntax::{
     SyntaxKind, SyntaxNode,
@@ -290,6 +294,15 @@ type SyntaxElement = NodeOrToken<SyntaxNode, ridl_syntax::SyntaxToken>;
 fn format_element(node: &SyntaxNode, indent: usize) -> Vec<String> {
     let ind = indent_str(indent);
     let line = |s: String| vec![format!("{ind}{s}")];
+    // A comment wedged directly among a single-line element's own tokens (for
+    // example between a field name and its colon) would be dropped by the
+    // token-stitching synthesis; emit the whole element verbatim so no comment
+    // is ever lost. Brace-block definitions are excluded: their direct comment
+    // children are the between-member comments that `layout_container` places,
+    // and their header-region comments are handled by `format_block_def`.
+    if is_single_line_element(node) && has_direct_comment(node) {
+        return vec![format!("{ind}{}", node.text())];
+    }
     match node.kind() {
         SyntaxKind::PackageDecl => line(format!(
             "package {}",
@@ -390,28 +403,77 @@ fn format_enumset_derived(node: &SyntaxNode) -> String {
 
 /// Formats a `struct` / `enum` / `union` / standalone `enumset` — the header,
 /// the members laid out at the next indent, and the closing brace. An empty
-/// body renders as `{}` on the header line.
+/// body renders as `{}` on the header line. A comment on the opening-brace line
+/// stays on that line; a comment in the header region is preserved verbatim.
 fn format_block_def(node: &SyntaxNode, indent: usize, keyword: &str) -> Vec<String> {
     let ind = indent_str(indent);
-    let header = format!(
-        "{ind}{}{keyword} {} {{",
-        modifiers_prefix(node),
-        child_tight(node, SyntaxKind::Name),
-    );
-    let members = elements_between_braces(node);
-    let member_lines = layout_container(&members, indent + 1, false);
-    if member_lines.is_empty() {
-        return vec![format!(
-            "{ind}{}{keyword} {} {{}}",
-            modifiers_prefix(node),
-            child_tight(node, SyntaxKind::Name),
-        )];
+    let header_prefix = block_header_prefix(node, keyword);
+    let all_members = elements_between_braces(node);
+    let (brace_comment, members) = split_brace_line_comment(&all_members);
+    let member_lines = layout_container(members, indent + 1, false);
+
+    if member_lines.is_empty() && brace_comment.is_none() {
+        return vec![format!("{ind}{header_prefix} {{}}")];
     }
+
+    let open = match &brace_comment {
+        Some(comment) => format!("{ind}{header_prefix} {{ {comment}"),
+        None => format!("{ind}{header_prefix} {{"),
+    };
     let mut out = Vec::with_capacity(member_lines.len() + 2);
-    out.push(header);
+    out.push(open);
     out.extend(member_lines);
     out.push(format!("{ind}}}"));
     out
+}
+
+/// The header text before the opening brace — `struct Name`, `error enum Name`,
+/// and so on. A comment in the header region (before `{`) forces the region to
+/// be emitted verbatim so the comment is not lost.
+fn block_header_prefix(node: &SyntaxNode, keyword: &str) -> String {
+    let mut verbatim = String::new();
+    let mut has_comment = false;
+    for element in node.children_with_tokens() {
+        match element {
+            NodeOrToken::Token(t) if t.kind() == SyntaxKind::LBrace => break,
+            NodeOrToken::Token(t) => {
+                has_comment |= is_comment(t.kind());
+                verbatim.push_str(t.text());
+            }
+            NodeOrToken::Node(n) => verbatim.push_str(&n.text().to_string()),
+        }
+    }
+    if has_comment {
+        verbatim.trim_end().to_string()
+    } else {
+        format!(
+            "{}{keyword} {}",
+            modifiers_prefix(node),
+            child_tight(node, SyntaxKind::Name)
+        )
+    }
+}
+
+/// Splits off a comment that sits on the opening-brace line — before the first
+/// newline — so it can stay on that line rather than move above the first
+/// member. Returns the comment text and the remaining member elements.
+fn split_brace_line_comment(elements: &[SyntaxElement]) -> (Option<String>, &[SyntaxElement]) {
+    let mut i = 0;
+    while let Some(element) = elements.get(i) {
+        match element {
+            NodeOrToken::Token(t) if t.kind() == SyntaxKind::Whitespace => {
+                if t.text().contains('\n') {
+                    break;
+                }
+                i += 1;
+            }
+            NodeOrToken::Token(t) if is_comment(t.kind()) => {
+                return (Some(t.text().trim_end().to_string()), &elements[i + 1..]);
+            }
+            _ => break,
+        }
+    }
+    (None, elements)
 }
 
 /// The container children strictly between the block's first `{` and its
@@ -493,8 +555,12 @@ fn is_field_type(kind: SyntaxKind) -> bool {
 }
 
 /// Renders a field, tuple-field, or collection-element type inline, recursing
-/// through tuples, arrays, maps, and optionals.
+/// through tuples, arrays, maps, and optionals. A type carrying a comment is
+/// emitted verbatim so the comment survives (the never-drop-a-comment rule).
 fn format_field_type(node: &SyntaxNode) -> String {
+    if contains_comment(node) {
+        return node.text().to_string();
+    }
     match node.kind() {
         SyntaxKind::PathType => tight_text(node),
         SyntaxKind::PrimitiveType => {
@@ -558,8 +624,12 @@ fn format_field_type(node: &SyntaxNode) -> String {
 
 /// Renders a `[ … ]` constraint: tight brackets, no spaces around `..`, single
 /// spaces around `step` and `match`. Scalar endpoints are direct `Literal`
-/// children; a length bound is a `Bound` child.
+/// children; a length bound is a `Bound` child. A constraint carrying a comment
+/// is emitted verbatim so the comment survives (the never-drop-a-comment rule).
 fn format_constraint(node: &SyntaxNode) -> String {
+    if contains_comment(node) {
+        return node.text().to_string();
+    }
     let mut out = String::new();
     for element in node.children_with_tokens() {
         match element {
@@ -659,13 +729,42 @@ fn child_tight(node: &SyntaxNode, kind: SyntaxKind) -> String {
 
 /// Concatenates every non-trivia token under `node`, with no separators — the
 /// canonical rendering of an atom (qualified name, unit expression, literal,
-/// length bound) whose parts never take internal spacing.
+/// length bound) whose parts never take internal spacing. An atom carrying a
+/// comment is emitted verbatim so the comment survives.
 fn tight_text(node: &SyntaxNode) -> String {
+    if contains_comment(node) {
+        return node.text().to_string();
+    }
     node.descendants_with_tokens()
         .filter_map(|e| e.into_token())
         .filter(|t| !t.kind().is_trivia())
         .map(|t| t.text().to_string())
         .collect()
+}
+
+/// Whether any token anywhere under `node` is a comment.
+fn contains_comment(node: &SyntaxNode) -> bool {
+    node.descendants_with_tokens()
+        .filter_map(|e| e.into_token())
+        .any(|t| is_comment(t.kind()))
+}
+
+/// Whether any direct child token of `node` is a comment — a comment wedged
+/// among the node's own tokens, which token-stitching synthesis would drop.
+fn has_direct_comment(node: &SyntaxNode) -> bool {
+    node.children_with_tokens()
+        .any(|e| matches!(e, NodeOrToken::Token(t) if is_comment(t.kind())))
+}
+
+/// Whether `node` is a definition or member that renders on a single line —
+/// everything except a brace-block definition (`struct`, `enum`, `union`, or a
+/// standalone `enumset`), whose direct comment children are handled elsewhere.
+fn is_single_line_element(node: &SyntaxNode) -> bool {
+    match node.kind() {
+        SyntaxKind::StructDef | SyntaxKind::EnumDef | SyntaxKind::UnionDef => false,
+        SyntaxKind::EnumSetDef => !has_token(node, SyntaxKind::LBrace),
+        _ => true,
+    }
 }
 
 #[cfg(test)]
@@ -784,5 +883,78 @@ mod tests {
     fn empty_block_body_collapses_to_braces() {
         let input = "package p\nstruct Empty {\n}\n";
         assert_eq!(formatted(input), "package p\n\nstruct Empty {}\n");
+    }
+
+    #[test]
+    fn block_comment_inside_a_constraint_is_preserved() {
+        let input = "package p\ntype Frame: bytes [/* fixed */ 8]\n";
+        let out = formatted(input);
+        assert!(
+            out.contains("/* fixed */"),
+            "constraint comment dropped: {out}"
+        );
+        assert_eq!(out, "package p\n\ntype Frame: bytes [/* fixed */ 8]\n");
+        assert_eq!(formatted(&out), out, "not a fixed point");
+    }
+
+    #[test]
+    fn block_comment_inside_an_array_type_is_preserved() {
+        let input = "package p\nstruct S {\n  readings : [Speed; /* per wheel */ 8]\n}\n";
+        let out = formatted(input);
+        assert!(
+            out.contains("/* per wheel */"),
+            "array comment dropped: {out}"
+        );
+        assert_eq!(
+            out,
+            "package p\n\nstruct S {\n  readings: [Speed; /* per wheel */ 8]\n}\n",
+        );
+        assert_eq!(formatted(&out), out, "not a fixed point");
+    }
+
+    #[test]
+    fn block_comment_inside_a_tuple_type_is_preserved() {
+        let input = "package p\nstruct S {\n  range : (min: Speed, /* hi */ max: Speed)\n}\n";
+        let out = formatted(input);
+        assert!(out.contains("/* hi */"), "tuple comment dropped: {out}");
+        assert_eq!(
+            out,
+            "package p\n\nstruct S {\n  range: (min: Speed, /* hi */ max: Speed)\n}\n",
+        );
+        assert_eq!(formatted(&out), out, "not a fixed point");
+    }
+
+    #[test]
+    fn line_comment_inside_a_construct_is_preserved() {
+        // A line comment inside brackets runs to the end of its line, so the
+        // whole array type is emitted verbatim to keep the comment in place.
+        let input = "package p\nstruct S {\n  readings : [Speed; // per wheel\n  8]\n}\n";
+        let out = formatted(input);
+        assert!(out.contains("// per wheel"), "line comment dropped: {out}");
+        assert_eq!(
+            out,
+            "package p\n\nstruct S {\n  readings: [Speed; // per wheel\n  8]\n}\n",
+        );
+        assert_eq!(formatted(&out), out, "not a fixed point");
+    }
+
+    #[test]
+    fn comment_among_a_declarations_own_tokens_is_preserved() {
+        // A comment between a name and its colon would be dropped by token
+        // stitching; the declaration is emitted verbatim instead.
+        let input = "package p\nconst X /* note */ : integer = 5\n";
+        let out = formatted(input);
+        assert!(out.contains("/* note */"), "spine comment dropped: {out}");
+        assert_eq!(out, "package p\n\nconst X /* note */ : integer = 5\n");
+        assert_eq!(formatted(&out), out, "not a fixed point");
+    }
+
+    #[test]
+    fn comment_on_the_brace_line_stays_on_the_brace_line() {
+        let input = "package p\nunion R {   // result union\n  ok : A\n  err : B\n}\n";
+        assert_eq!(
+            formatted(input),
+            "package p\n\nunion R { // result union\n  ok: A\n  err: B\n}\n",
+        );
     }
 }

@@ -67,8 +67,7 @@ struct SensorBounds {
   meta: [Label: Name; 0..32]
 }
 
-union SensorResult {
-  // result union — §10.2: one success arm, one error arm
+union SensorResult { // result union — §10.2: one success arm, one error arm
   ok: SensorReading
   err: SensorFault
 }
@@ -78,8 +77,7 @@ struct SensorReading {
   timestamp: Timestamp // ridl.std
 }
 
-error struct SensorFault {
-  // failure vocabulary — §10.1
+error struct SensorFault { // failure vocabulary — §10.1
   code: Counter
   message: Message // ridl.std
 }
