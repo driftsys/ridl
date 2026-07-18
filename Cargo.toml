@@ -12,3 +12,4 @@ license = "MIT"
 repository = "https://github.com/driftsys/ridl"
 
 [workspace.dependencies]
+logos = "0.16.1"
