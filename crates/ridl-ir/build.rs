@@ -1,6 +1,8 @@
-//! Generates the IR v0 Rust types from the protobuf schema at build time.
+//! Generates the IR Rust types from the protobuf schemas at build time.
 //!
-//! The schema is compiled with `protox`, a pure-Rust protobuf front end, so
+//! Two schema versions are compiled: v0 (walking-skeleton subset, retired by
+//! task 13 of the E1 plan) and v1 (the typl surface with exact values). The
+//! schemas are compiled with `protox`, a pure-Rust protobuf front end, so
 //! the build needs no system `protoc` binary (ADR-0006 decision 3). The
 //! resulting descriptor set is handed to `prost-build`, which emits the Rust
 //! types. `type_attribute` adds the `serde` derives so the JSON debug
@@ -9,16 +11,24 @@
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let proto = "proto/ridl/ir/v0/ir.proto";
+    let protos = ["proto/ridl/ir/v0/ir.proto", "proto/ridl/ir/v1/ir.proto"];
     let include = "proto";
 
-    println!("cargo:rerun-if-changed={proto}");
+    for proto in protos {
+        println!("cargo:rerun-if-changed={proto}");
+    }
     println!("cargo:rerun-if-changed={include}");
 
-    let file_descriptors = protox::compile([proto], [include])?;
+    let file_descriptors = protox::compile(protos, [include])?;
 
     prost_build::Config::new()
         .type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]")
+        // Box the inline-scalar oneof member: an inline TypeDef is the
+        // largest FieldType kind by far, and boxing it keeps FieldType (and
+        // everything holding one) small. prost boxes the recursive
+        // array/map members on its own; this one is not recursive, so it is
+        // boxed explicitly.
+        .boxed(".ridl.ir.v1.FieldType.kind.inline_scalar")
         .compile_fds(file_descriptors)?;
 
     Ok(())
