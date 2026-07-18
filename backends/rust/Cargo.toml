@@ -1,0 +1,13 @@
+[package]
+name = "ridl-backend-rust"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+prettyplease.workspace = true
+proc-macro2.workspace = true
+quote.workspace = true
+ridl-ir = { path = "../../crates/ridl-ir" }
+syn.workspace = true
