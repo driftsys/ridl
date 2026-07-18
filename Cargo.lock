@@ -426,6 +426,17 @@ name = "ridl"
 version = "0.0.0"
 
 [[package]]
+name = "ridl-backend-rust"
+version = "0.0.0"
+dependencies = [
+ "prettyplease",
+ "proc-macro2",
+ "quote",
+ "ridl-ir",
+ "syn",
+]
+
+[[package]]
 name = "ridl-core"
 version = "0.0.0"
 dependencies = [
