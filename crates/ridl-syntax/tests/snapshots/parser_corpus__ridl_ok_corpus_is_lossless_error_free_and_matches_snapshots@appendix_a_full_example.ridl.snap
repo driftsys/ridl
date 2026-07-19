@@ -414,23 +414,32 @@ SourceFile@0..2091
       AttrBlock@1509..1579
         LBracket@1509..1510 "["
         Whitespace@1510..1515 "\n    "
-        RequireKw@1515..1522 "require"
-        Whitespace@1522..1523 " "
-        Ident@1523..1531 "position"
-        Whitespace@1531..1532 " "
-        Neq@1532..1534 "!="
-        Whitespace@1534..1535 " "
-        Ident@1535..1547 "GearPosition"
-        Dot@1547..1548 "."
-        Ident@1548..1552 "PARK"
-        Whitespace@1552..1553 " "
-        PipePipe@1553..1555 "||"
-        Whitespace@1555..1556 " "
-        Ident@1556..1568 "currentSpeed"
-        Whitespace@1568..1569 " "
-        EqEq@1569..1571 "=="
-        Whitespace@1571..1572 " "
-        FloatNumber@1572..1575 "0.0"
+        Attribute@1515..1575
+          RequireKw@1515..1522 "require"
+          Whitespace@1522..1523 " "
+          BinaryExpr@1523..1575
+            BinaryExpr@1523..1552
+              PathExpr@1523..1531
+                Ident@1523..1531 "position"
+              Whitespace@1531..1532 " "
+              Neq@1532..1534 "!="
+              Whitespace@1534..1535 " "
+              MemberExpr@1535..1552
+                PathExpr@1535..1547
+                  Ident@1535..1547 "GearPosition"
+                Dot@1547..1548 "."
+                Ident@1548..1552 "PARK"
+            Whitespace@1552..1553 " "
+            PipePipe@1553..1555 "||"
+            Whitespace@1555..1556 " "
+            BinaryExpr@1556..1575
+              PathExpr@1556..1568
+                Ident@1556..1568 "currentSpeed"
+              Whitespace@1568..1569 " "
+              EqEq@1569..1571 "=="
+              Whitespace@1571..1572 " "
+              LiteralExpr@1572..1575
+                FloatNumber@1572..1575 "0.0"
         Whitespace@1575..1578 "\n  "
         RBracket@1578..1579 "]"
     Whitespace@1579..1583 "\n\n  "
@@ -470,21 +479,29 @@ SourceFile@0..2091
       AttrBlock@1730..1786
         LBracket@1730..1731 "["
         Whitespace@1731..1736 "\n    "
-        RequireKw@1736..1743 "require"
-        Whitespace@1743..1744 " "
-        Ident@1744..1750 "window"
-        Whitespace@1750..1751 " "
-        Gt@1751..1752 ">"
-        Whitespace@1752..1753 " "
-        Duration@1753..1756 "0ms"
+        Attribute@1736..1756
+          RequireKw@1736..1743 "require"
+          Whitespace@1743..1744 " "
+          BinaryExpr@1744..1756
+            PathExpr@1744..1750
+              Ident@1744..1750 "window"
+            Whitespace@1750..1751 " "
+            Gt@1751..1752 ">"
+            Whitespace@1752..1753 " "
+            LiteralExpr@1753..1756
+              Duration@1753..1756 "0ms"
         Whitespace@1756..1761 "\n    "
-        EnsureKw@1761..1767 "ensure"
-        Whitespace@1767..1769 "  "
-        Ident@1769..1775 "result"
-        Whitespace@1775..1776 " "
-        Ge@1776..1778 ">="
-        Whitespace@1778..1779 " "
-        FloatNumber@1779..1782 "0.0"
+        Attribute@1761..1782
+          EnsureKw@1761..1767 "ensure"
+          Whitespace@1767..1769 "  "
+          BinaryExpr@1769..1782
+            PathExpr@1769..1775
+              Ident@1769..1775 "result"
+            Whitespace@1775..1776 " "
+            Ge@1776..1778 ">="
+            Whitespace@1778..1779 " "
+            LiteralExpr@1779..1782
+              FloatNumber@1779..1782 "0.0"
         Whitespace@1782..1785 "\n  "
         RBracket@1785..1786 "]"
     Whitespace@1786..1790 "\n\n  "

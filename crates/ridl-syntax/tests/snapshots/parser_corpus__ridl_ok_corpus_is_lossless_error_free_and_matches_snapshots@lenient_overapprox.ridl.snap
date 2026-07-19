@@ -140,7 +140,9 @@ SourceFile@0..1081
       AttrBlock@720..731
         LBracket@720..721 "["
         Whitespace@721..722 " "
-        Ident@722..729 "persist"
+        Attribute@722..729
+          Name@722..729
+            Ident@722..729 "persist"
         Whitespace@729..730 " "
         RBracket@730..731 "]"
     Whitespace@731..734 "\n  "
@@ -159,11 +161,15 @@ SourceFile@0..1081
       AttrBlock@765..780
         LBracket@765..766 "["
         Whitespace@766..767 " "
-        Ident@767..774 "someKey"
-        Whitespace@774..775 " "
-        Eq@775..776 "="
-        Whitespace@776..777 " "
-        IntNumber@777..778 "3"
+        Attribute@767..778
+          Name@767..774
+            Ident@767..774 "someKey"
+          Whitespace@774..775 " "
+          Eq@775..776 "="
+          Whitespace@776..777 " "
+          AttrValue@777..778
+            Literal@777..778
+              IntNumber@777..778 "3"
         Whitespace@778..779 " "
         RBracket@779..780 "]"
     Whitespace@780..783 "\n  "
@@ -182,7 +188,9 @@ SourceFile@0..1081
       AttrBlock@799..809
         LBracket@799..800 "["
         Whitespace@800..801 " "
-        Ident@801..807 "cached"
+        Attribute@801..807
+          Name@801..807
+            Ident@801..807 "cached"
         Whitespace@807..808 " "
         RBracket@808..809 "]"
     Whitespace@809..813 "\n\n  "
@@ -244,7 +252,9 @@ SourceFile@0..1081
       AttrBlock@1011..1022
         LBracket@1011..1012 "["
         Whitespace@1012..1013 " "
-        Ident@1013..1020 "flagged"
+        Attribute@1013..1020
+          Name@1013..1020
+            Ident@1013..1020 "flagged"
         Whitespace@1020..1021 " "
         RBracket@1021..1022 "]"
       Whitespace@1022..1023 " "
@@ -274,7 +284,9 @@ SourceFile@0..1081
       AttrBlock@1067..1078
         LBracket@1067..1068 "["
         Whitespace@1068..1069 " "
-        Ident@1069..1076 "flagged"
+        Attribute@1069..1076
+          Name@1069..1076
+            Ident@1069..1076 "flagged"
         Whitespace@1076..1077 " "
         RBracket@1077..1078 "]"
     Whitespace@1078..1079 "\n"

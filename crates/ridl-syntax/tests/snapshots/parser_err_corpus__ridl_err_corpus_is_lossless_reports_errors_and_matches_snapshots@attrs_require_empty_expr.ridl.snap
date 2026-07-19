@@ -1,0 +1,51 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/attrs_require_empty_expr.ridl
+---
+SourceFile@0..161
+  PackageDecl@0..17
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..17
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..17 "attrs"
+  Whitespace@17..19 "\n\n"
+  LineComment@19..91 "// A predicate keywor ..."
+  Whitespace@91..92 "\n"
+  InterfaceDef@92..160
+    InterfaceKw@92..101 "interface"
+    Whitespace@101..102 " "
+    Name@102..113
+      Ident@102..113 "MissingExpr"
+    Whitespace@113..114 " "
+    LBrace@114..115 "{"
+    Whitespace@115..118 "\n  "
+    QueryDef@118..158
+      QueryKw@118..123 "query"
+      Whitespace@123..124 " "
+      Name@124..132
+        Ident@124..132 "getState"
+      ParamList@132..134
+        LParen@132..133 "("
+        RParen@133..134 ")"
+      Colon@134..135 ":"
+      Whitespace@135..136 " "
+      ReturnType@136..146
+        PathType@136..146
+          QualifiedName@136..146
+            Ident@136..146 "DriveState"
+      Whitespace@146..147 " "
+      AttrBlock@147..158
+        LBracket@147..148 "["
+        Whitespace@148..149 " "
+        Attribute@149..157
+          RequireKw@149..156 "require"
+          Whitespace@156..157 " "
+        RBracket@157..158 "]"
+    Whitespace@158..159 "\n"
+    RBrace@159..160 "}"
+  Whitespace@160..161 "\n"
+errors:
+  FORM-101 157..158 expected an expression

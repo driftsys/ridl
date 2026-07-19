@@ -1,0 +1,359 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/attrs_precedence.ridl
+---
+SourceFile@0..946
+  PackageDecl@0..17
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..17
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..17 "attrs"
+  Whitespace@17..19 "\n\n"
+  LineComment@19..90 "// Precedence and ass ..."
+  Whitespace@90..91 "\n"
+  LineComment@91..153 "// the snapshot pins  ..."
+  Whitespace@153..154 "\n"
+  InterfaceDef@154..945
+    InterfaceKw@154..163 "interface"
+    Whitespace@163..164 " "
+    Name@164..180
+      Ident@164..180 "PrecedenceShapes"
+    Whitespace@180..181 " "
+    LBrace@181..182 "{"
+    Whitespace@182..186 "\n\n  "
+    LineComment@186..234 "// `a || (b && c)` — ..."
+    Whitespace@234..237 "\n  "
+    CommandDef@237..305
+      CommandKw@237..244 "command"
+      Whitespace@244..245 " "
+      Name@245..254
+        Ident@245..254 "orOverAnd"
+      ParamList@254..281
+        LParen@254..255 "("
+        Param@255..262
+          Name@255..256
+            Ident@255..256 "a"
+          Colon@256..257 ":"
+          Whitespace@257..258 " "
+          PathType@258..262
+            QualifiedName@258..262
+              Ident@258..262 "Flag"
+        Comma@262..263 ","
+        Whitespace@263..264 " "
+        Param@264..271
+          Name@264..265
+            Ident@264..265 "b"
+          Colon@265..266 ":"
+          Whitespace@266..267 " "
+          PathType@267..271
+            QualifiedName@267..271
+              Ident@267..271 "Flag"
+        Comma@271..272 ","
+        Whitespace@272..273 " "
+        Param@273..280
+          Name@273..274
+            Ident@273..274 "c"
+          Colon@274..275 ":"
+          Whitespace@275..276 " "
+          PathType@276..280
+            QualifiedName@276..280
+              Ident@276..280 "Flag"
+        RParen@280..281 ")"
+      Whitespace@281..282 " "
+      AttrBlock@282..305
+        LBracket@282..283 "["
+        Whitespace@283..284 " "
+        Attribute@284..303
+          RequireKw@284..291 "require"
+          Whitespace@291..292 " "
+          BinaryExpr@292..303
+            PathExpr@292..293
+              Ident@292..293 "a"
+            Whitespace@293..294 " "
+            PipePipe@294..296 "||"
+            Whitespace@296..297 " "
+            BinaryExpr@297..303
+              PathExpr@297..298
+                Ident@297..298 "b"
+              Whitespace@298..299 " "
+              AmpAmp@299..301 "&&"
+              Whitespace@301..302 " "
+              PathExpr@302..303
+                Ident@302..303 "c"
+        Whitespace@303..304 " "
+        RBracket@304..305 "]"
+    Whitespace@305..309 "\n\n  "
+    LineComment@309..356 "// `(!a) && b` — un ..."
+    Whitespace@356..359 "\n  "
+    CommandDef@359..415
+      CommandKw@359..366 "command"
+      Whitespace@366..367 " "
+      Name@367..377
+        Ident@367..377 "notOverAnd"
+      ParamList@377..395
+        LParen@377..378 "("
+        Param@378..385
+          Name@378..379
+            Ident@378..379 "a"
+          Colon@379..380 ":"
+          Whitespace@380..381 " "
+          PathType@381..385
+            QualifiedName@381..385
+              Ident@381..385 "Flag"
+        Comma@385..386 ","
+        Whitespace@386..387 " "
+        Param@387..394
+          Name@387..388
+            Ident@387..388 "b"
+          Colon@388..389 ":"
+          Whitespace@389..390 " "
+          PathType@390..394
+            QualifiedName@390..394
+              Ident@390..394 "Flag"
+        RParen@394..395 ")"
+      Whitespace@395..396 " "
+      AttrBlock@396..415
+        LBracket@396..397 "["
+        Whitespace@397..398 " "
+        Attribute@398..413
+          RequireKw@398..405 "require"
+          Whitespace@405..406 " "
+          BinaryExpr@406..413
+            PrefixExpr@406..408
+              Bang@406..407 "!"
+              PathExpr@407..408
+                Ident@407..408 "a"
+            Whitespace@408..409 " "
+            AmpAmp@409..411 "&&"
+            Whitespace@411..412 " "
+            PathExpr@412..413
+              Ident@412..413 "b"
+        Whitespace@413..414 " "
+        RBracket@414..415 "]"
+    Whitespace@415..419 "\n\n  "
+    LineComment@419..491 "// `(a + (b * c)) < d ..."
+    Whitespace@491..494 "\n  "
+    CommandDef@494..584
+      CommandKw@494..501 "command"
+      Whitespace@501..502 " "
+      Name@502..512
+        Ident@502..512 "mulOverAdd"
+      ParamList@512..552
+        LParen@512..513 "("
+        Param@513..521
+          Name@513..514
+            Ident@513..514 "a"
+          Colon@514..515 ":"
+          Whitespace@515..516 " "
+          PathType@516..521
+            QualifiedName@516..521
+              Ident@516..521 "Count"
+        Comma@521..522 ","
+        Whitespace@522..523 " "
+        Param@523..531
+          Name@523..524
+            Ident@523..524 "b"
+          Colon@524..525 ":"
+          Whitespace@525..526 " "
+          PathType@526..531
+            QualifiedName@526..531
+              Ident@526..531 "Count"
+        Comma@531..532 ","
+        Whitespace@532..533 " "
+        Param@533..541
+          Name@533..534
+            Ident@533..534 "c"
+          Colon@534..535 ":"
+          Whitespace@535..536 " "
+          PathType@536..541
+            QualifiedName@536..541
+              Ident@536..541 "Count"
+        Comma@541..542 ","
+        Whitespace@542..543 " "
+        Param@543..551
+          Name@543..544
+            Ident@543..544 "d"
+          Colon@544..545 ":"
+          Whitespace@545..546 " "
+          PathType@546..551
+            QualifiedName@546..551
+              Ident@546..551 "Count"
+        RParen@551..552 ")"
+      Whitespace@552..553 " "
+      AttrBlock@553..584
+        LBracket@553..554 "["
+        Whitespace@554..559 "\n    "
+        Attribute@559..580
+          RequireKw@559..566 "require"
+          Whitespace@566..567 " "
+          BinaryExpr@567..580
+            BinaryExpr@567..576
+              PathExpr@567..568
+                Ident@567..568 "a"
+              Whitespace@568..569 " "
+              Plus@569..570 "+"
+              Whitespace@570..571 " "
+              BinaryExpr@571..576
+                PathExpr@571..572
+                  Ident@571..572 "b"
+                Whitespace@572..573 " "
+                Star@573..574 "*"
+                Whitespace@574..575 " "
+                PathExpr@575..576
+                  Ident@575..576 "c"
+            Whitespace@576..577 " "
+            Lt@577..578 "<"
+            Whitespace@578..579 " "
+            PathExpr@579..580
+              Ident@579..580 "d"
+        Whitespace@580..583 "\n  "
+        RBracket@583..584 "]"
+    Whitespace@584..588 "\n\n  "
+    LineComment@588..654 "// `((a - b) + c) < d ..."
+    Whitespace@654..657 "\n  "
+    CommandDef@657..746
+      CommandKw@657..664 "command"
+      Whitespace@664..665 " "
+      Name@665..674
+        Ident@665..674 "leftAssoc"
+      ParamList@674..714
+        LParen@674..675 "("
+        Param@675..683
+          Name@675..676
+            Ident@675..676 "a"
+          Colon@676..677 ":"
+          Whitespace@677..678 " "
+          PathType@678..683
+            QualifiedName@678..683
+              Ident@678..683 "Count"
+        Comma@683..684 ","
+        Whitespace@684..685 " "
+        Param@685..693
+          Name@685..686
+            Ident@685..686 "b"
+          Colon@686..687 ":"
+          Whitespace@687..688 " "
+          PathType@688..693
+            QualifiedName@688..693
+              Ident@688..693 "Count"
+        Comma@693..694 ","
+        Whitespace@694..695 " "
+        Param@695..703
+          Name@695..696
+            Ident@695..696 "c"
+          Colon@696..697 ":"
+          Whitespace@697..698 " "
+          PathType@698..703
+            QualifiedName@698..703
+              Ident@698..703 "Count"
+        Comma@703..704 ","
+        Whitespace@704..705 " "
+        Param@705..713
+          Name@705..706
+            Ident@705..706 "d"
+          Colon@706..707 ":"
+          Whitespace@707..708 " "
+          PathType@708..713
+            QualifiedName@708..713
+              Ident@708..713 "Count"
+        RParen@713..714 ")"
+      Whitespace@714..715 " "
+      AttrBlock@715..746
+        LBracket@715..716 "["
+        Whitespace@716..721 "\n    "
+        Attribute@721..742
+          RequireKw@721..728 "require"
+          Whitespace@728..729 " "
+          BinaryExpr@729..742
+            BinaryExpr@729..738
+              BinaryExpr@729..734
+                PathExpr@729..730
+                  Ident@729..730 "a"
+                Whitespace@730..731 " "
+                Minus@731..732 "-"
+                Whitespace@732..733 " "
+                PathExpr@733..734
+                  Ident@733..734 "b"
+              Whitespace@734..735 " "
+              Plus@735..736 "+"
+              Whitespace@736..737 " "
+              PathExpr@737..738
+                Ident@737..738 "c"
+            Whitespace@738..739 " "
+            Lt@739..740 "<"
+            Whitespace@740..741 " "
+            PathExpr@741..742
+              Ident@741..742 "d"
+        Whitespace@742..745 "\n  "
+        RBracket@745..746 "]"
+    Whitespace@746..750 "\n\n  "
+    LineComment@750..808 "// Member chains: a s ..."
+    Whitespace@808..811 "\n  "
+    CommandDef@811..943
+      CommandKw@811..818 "command"
+      Whitespace@818..819 " "
+      Name@819..826
+        Ident@819..826 "members"
+      ParamList@826..866
+        LParen@826..827 "("
+        Param@827..845
+          Name@827..833
+            Ident@827..833 "filter"
+          Colon@833..834 ":"
+          Whitespace@834..835 " "
+          PathType@835..845
+            QualifiedName@835..845
+              Ident@835..845 "DiagFilter"
+        Comma@845..846 ","
+        Whitespace@846..847 " "
+        Param@847..865
+          Name@847..851
+            Ident@847..851 "gear"
+          Colon@851..852 ":"
+          Whitespace@852..853 " "
+          PathType@853..865
+            QualifiedName@853..865
+              Ident@853..865 "GearPosition"
+        RParen@865..866 ")"
+      Whitespace@866..867 " "
+      AttrBlock@867..943
+        LBracket@867..868 "["
+        Whitespace@868..873 "\n    "
+        Attribute@873..901
+          RequireKw@873..880 "require"
+          Whitespace@880..881 " "
+          BinaryExpr@881..901
+            MemberExpr@881..896
+              PathExpr@881..887
+                Ident@881..887 "filter"
+              Dot@887..888 "."
+              Ident@888..896 "severity"
+            Whitespace@896..897 " "
+            Ge@897..899 ">="
+            Whitespace@899..900 " "
+            LiteralExpr@900..901
+              IntNumber@900..901 "4"
+        Whitespace@901..906 "\n    "
+        Attribute@906..939
+          RequireKw@906..913 "require"
+          Whitespace@913..914 " "
+          BinaryExpr@914..939
+            PathExpr@914..918
+              Ident@914..918 "gear"
+            Whitespace@918..919 " "
+            EqEq@919..921 "=="
+            Whitespace@921..922 " "
+            MemberExpr@922..939
+              PathExpr@922..934
+                Ident@922..934 "GearPosition"
+              Dot@934..935 "."
+              Ident@935..939 "PARK"
+        Whitespace@939..942 "\n  "
+        RBracket@942..943 "]"
+    Whitespace@943..944 "\n"
+    RBrace@944..945 "}"
+  Whitespace@945..946 "\n"
+errors: none

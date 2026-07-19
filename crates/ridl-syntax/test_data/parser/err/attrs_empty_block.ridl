@@ -1,0 +1,7 @@
+package veh.attrs
+
+// gf §4.2 requires at least one attribute per block: `[]` parses losslessly
+// into an empty AttrBlock node and FORM-101 lands on the closing bracket.
+interface EmptyBlock {
+  command reset() []
+}

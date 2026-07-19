@@ -1,0 +1,7 @@
+package veh.attrs
+
+// A dangling `||` with no right operand: the BinaryExpr keeps its lhs and
+// FORM-101 lands where the operand should start.
+interface Dangling {
+  command check(a: Flag) [ require a || ]
+}

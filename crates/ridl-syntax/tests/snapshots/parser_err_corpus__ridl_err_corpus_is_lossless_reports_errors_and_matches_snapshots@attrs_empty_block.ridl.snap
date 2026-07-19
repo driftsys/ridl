@@ -1,0 +1,43 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/attrs_empty_block.ridl
+---
+SourceFile@0..218
+  PackageDecl@0..17
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..17
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..17 "attrs"
+  Whitespace@17..19 "\n\n"
+  LineComment@19..96 "// gf §4.2 requires  ..."
+  Whitespace@96..97 "\n"
+  LineComment@97..171 "// into an empty Attr ..."
+  Whitespace@171..172 "\n"
+  InterfaceDef@172..217
+    InterfaceKw@172..181 "interface"
+    Whitespace@181..182 " "
+    Name@182..192
+      Ident@182..192 "EmptyBlock"
+    Whitespace@192..193 " "
+    LBrace@193..194 "{"
+    Whitespace@194..197 "\n  "
+    CommandDef@197..215
+      CommandKw@197..204 "command"
+      Whitespace@204..205 " "
+      Name@205..210
+        Ident@205..210 "reset"
+      ParamList@210..212
+        LParen@210..211 "("
+        RParen@211..212 ")"
+      Whitespace@212..213 " "
+      AttrBlock@213..215
+        LBracket@213..214 "["
+        RBracket@214..215 "]"
+    Whitespace@215..216 "\n"
+    RBrace@216..217 "}"
+  Whitespace@217..218 "\n"
+errors:
+  FORM-101 214..215 expected an attribute

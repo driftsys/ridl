@@ -1,0 +1,49 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/attrs_require_in_typl.typl
+---
+SourceFile@0..242
+  PackageDecl@0..9
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..9
+      Ident@8..9 "p"
+  Whitespace@9..11 "\n\n"
+  LineComment@11..80 "// A require/ensure a ..."
+  Whitespace@80..81 "\n"
+  LineComment@81..151 "// (TYPL-303, typl re ..."
+  Whitespace@151..152 "\n"
+  LineComment@152..197 "// declaration, so `F ..."
+  Whitespace@197..198 "\n"
+  ErrorNode@198..213
+    ReservedWord@198..205 "require"
+    Whitespace@205..206 " "
+    Ident@206..207 "x"
+    Whitespace@207..208 " "
+    Gt@208..209 ">"
+    Whitespace@209..210 " "
+    Duration@210..213 "0ms"
+  Whitespace@213..215 "\n\n"
+  TypeDef@215..241
+    TypeKw@215..219 "type"
+    Whitespace@219..220 " "
+    Name@220..224
+      Ident@220..224 "Fine"
+    Whitespace@224..225 " "
+    Colon@225..226 ":"
+    Whitespace@226..227 " "
+    PrimitiveType@227..234
+      IntegerKw@227..234 "integer"
+    Whitespace@234..235 " "
+    Constraint@235..241
+      LBracket@235..236 "["
+      Literal@236..237
+        IntNumber@236..237 "0"
+      DotDot@237..239 ".."
+      Literal@239..240
+        IntNumber@239..240 "1"
+      RBracket@240..241 "]"
+  Whitespace@241..242 "\n"
+errors:
+  TYPL-303 198..205 require/ensure attribute in typl context

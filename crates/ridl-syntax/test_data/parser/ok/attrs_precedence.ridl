@@ -1,0 +1,28 @@
+package veh.attrs
+
+// Precedence and associativity proofs (expr-core specification §3.1):
+// the snapshot pins the tree shape each contract parses into.
+interface PrecedenceShapes {
+
+  // `a || (b && c)` — && binds tighter than ||.
+  command orOverAnd(a: Flag, b: Flag, c: Flag) [ require a || b && c ]
+
+  // `(!a) && b` — unary binds tighter than &&.
+  command notOverAnd(a: Flag, b: Flag) [ require !a && b ]
+
+  // `(a + (b * c)) < d` — multiplicative over additive over comparison.
+  command mulOverAdd(a: Count, b: Count, c: Count, d: Count) [
+    require a + b * c < d
+  ]
+
+  // `((a - b) + c) < d` — one additive level is left-associative.
+  command leftAssoc(a: Count, b: Count, c: Count, d: Count) [
+    require a - b + c < d
+  ]
+
+  // Member chains: a struct-field shape and an enum access.
+  command members(filter: DiagFilter, gear: GearPosition) [
+    require filter.severity >= 4
+    require gear == GearPosition.PARK
+  ]
+}

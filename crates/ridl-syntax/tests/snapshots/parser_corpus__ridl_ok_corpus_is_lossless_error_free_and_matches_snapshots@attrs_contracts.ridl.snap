@@ -1,0 +1,257 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/attrs_contracts.ridl
+---
+SourceFile@0..700
+  PackageDecl@0..17
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..17
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..17 "attrs"
+  Whitespace@17..19 "\n\n"
+  DocComment@19..96 "/// Every ridl §13 c ..."
+  Whitespace@96..97 "\n"
+  InterfaceDef@97..699
+    InterfaceKw@97..106 "interface"
+    Whitespace@106..107 " "
+    Name@107..121
+      Ident@107..121 "ContractShapes"
+    Whitespace@121..122 " "
+    LBrace@122..123 "{"
+    Whitespace@123..127 "\n\n  "
+    DocComment@127..181 "/// Own signal a requ ..."
+    Whitespace@181..184 "\n  "
+    SignalDef@184..217
+      SignalKw@184..190 "signal"
+      Whitespace@190..191 " "
+      Name@191..203
+        Ident@191..203 "currentSpeed"
+      Whitespace@203..204 " "
+      Colon@204..205 ":"
+      Whitespace@205..206 " "
+      PathType@206..211
+        QualifiedName@206..211
+          Ident@206..211 "Speed"
+      Whitespace@211..212 " "
+      Timing@212..217
+        At@212..213 "@"
+        Duration@213..217 "10ms"
+    Whitespace@217..221 "\n\n  "
+    CommandDef@221..318
+      CommandKw@221..228 "command"
+      Whitespace@228..229 " "
+      Name@229..237
+        Ident@229..237 "setRange"
+      ParamList@237..261
+        LParen@237..238 "("
+        Param@238..248
+          Name@238..241
+            Ident@238..241 "min"
+          Colon@241..242 ":"
+          Whitespace@242..243 " "
+          PathType@243..248
+            QualifiedName@243..248
+              Ident@243..248 "Speed"
+        Comma@248..249 ","
+        Whitespace@249..250 " "
+        Param@250..260
+          Name@250..253
+            Ident@250..253 "max"
+          Colon@253..254 ":"
+          Whitespace@254..255 " "
+          PathType@255..260
+            QualifiedName@255..260
+              Ident@255..260 "Speed"
+        RParen@260..261 ")"
+      Whitespace@261..262 " "
+      AttrBlock@262..318
+        LBracket@262..263 "["
+        Whitespace@263..268 "\n    "
+        Attribute@268..285
+          RequireKw@268..275 "require"
+          Whitespace@275..276 " "
+          BinaryExpr@276..285
+            PathExpr@276..279
+              Ident@276..279 "min"
+            Whitespace@279..280 " "
+            Lt@280..281 "<"
+            Whitespace@281..282 " "
+            PathExpr@282..285
+              Ident@282..285 "max"
+        Whitespace@285..290 "\n    "
+        Attribute@290..314
+          RequireKw@290..297 "require"
+          Whitespace@297..298 " "
+          BinaryExpr@298..314
+            PathExpr@298..301
+              Ident@298..301 "max"
+            Whitespace@301..302 " "
+            Le@302..304 "<="
+            Whitespace@304..305 " "
+            PathExpr@305..314
+              Ident@305..314 "MAX_SPEED"
+        Whitespace@314..317 "\n  "
+        RBracket@317..318 "]"
+    Whitespace@318..322 "\n\n  "
+    QueryDef@322..425
+      QueryKw@322..327 "query"
+      Whitespace@327..328 " "
+      Name@328..343
+        Ident@328..343 "getAverageSpeed"
+      ParamList@343..361
+        LParen@343..344 "("
+        Param@344..360
+          Name@344..350
+            Ident@344..350 "window"
+          Colon@350..351 ":"
+          Whitespace@351..352 " "
+          PathType@352..360
+            QualifiedName@352..360
+              Ident@352..360 "Duration"
+        RParen@360..361 ")"
+      Colon@361..362 ":"
+      Whitespace@362..363 " "
+      ReturnType@363..368
+        PathType@363..368
+          QualifiedName@363..368
+            Ident@363..368 "Speed"
+      Whitespace@368..369 " "
+      AttrBlock@369..425
+        LBracket@369..370 "["
+        Whitespace@370..375 "\n    "
+        Attribute@375..395
+          RequireKw@375..382 "require"
+          Whitespace@382..383 " "
+          BinaryExpr@383..395
+            PathExpr@383..389
+              Ident@383..389 "window"
+            Whitespace@389..390 " "
+            Gt@390..391 ">"
+            Whitespace@391..392 " "
+            LiteralExpr@392..395
+              Duration@392..395 "0ms"
+        Whitespace@395..400 "\n    "
+        Attribute@400..421
+          EnsureKw@400..406 "ensure"
+          Whitespace@406..408 "  "
+          BinaryExpr@408..421
+            PathExpr@408..414
+              Ident@408..414 "result"
+            Whitespace@414..415 " "
+            Ge@415..417 ">="
+            Whitespace@417..418 " "
+            LiteralExpr@418..421
+              FloatNumber@418..421 "0.0"
+        Whitespace@421..424 "\n  "
+        RBracket@424..425 "]"
+    Whitespace@425..429 "\n\n  "
+    CommandDef@429..539
+      CommandKw@429..436 "command"
+      Whitespace@436..437 " "
+      Name@437..444
+        Ident@437..444 "setGear"
+      ParamList@444..468
+        LParen@444..445 "("
+        Param@445..467
+          Name@445..453
+            Ident@445..453 "position"
+          Colon@453..454 ":"
+          Whitespace@454..455 " "
+          PathType@455..467
+            QualifiedName@455..467
+              Ident@455..467 "GearPosition"
+        RParen@467..468 ")"
+      Whitespace@468..469 " "
+      AttrBlock@469..539
+        LBracket@469..470 "["
+        Whitespace@470..475 "\n    "
+        Attribute@475..535
+          RequireKw@475..482 "require"
+          Whitespace@482..483 " "
+          BinaryExpr@483..535
+            BinaryExpr@483..512
+              PathExpr@483..491
+                Ident@483..491 "position"
+              Whitespace@491..492 " "
+              Neq@492..494 "!="
+              Whitespace@494..495 " "
+              MemberExpr@495..512
+                PathExpr@495..507
+                  Ident@495..507 "GearPosition"
+                Dot@507..508 "."
+                Ident@508..512 "PARK"
+            Whitespace@512..513 " "
+            PipePipe@513..515 "||"
+            Whitespace@515..516 " "
+            BinaryExpr@516..535
+              PathExpr@516..528
+                Ident@516..528 "currentSpeed"
+              Whitespace@528..529 " "
+              EqEq@529..531 "=="
+              Whitespace@531..532 " "
+              LiteralExpr@532..535
+                FloatNumber@532..535 "0.0"
+        Whitespace@535..538 "\n  "
+        RBracket@538..539 "]"
+    Whitespace@539..543 "\n\n  "
+    DocComment@543..617 "/// The sixth guarant ..."
+    Whitespace@617..620 "\n  "
+    QueryDef@620..697
+      QueryKw@620..625 "query"
+      Whitespace@625..626 " "
+      Name@626..634
+        Ident@626..634 "getRange"
+      ParamList@634..636
+        LParen@634..635 "("
+        RParen@635..636 ")"
+      Colon@636..637 ":"
+      Whitespace@637..638 " "
+      ReturnType@638..662
+        TupleType@638..662
+          LParen@638..639 "("
+          TupleField@639..649
+            Name@639..642
+              Ident@639..642 "min"
+            Colon@642..643 ":"
+            Whitespace@643..644 " "
+            PathType@644..649
+              QualifiedName@644..649
+                Ident@644..649 "Speed"
+          Comma@649..650 ","
+          Whitespace@650..651 " "
+          TupleField@651..661
+            Name@651..654
+              Ident@651..654 "max"
+            Colon@654..655 ":"
+            Whitespace@655..656 " "
+            PathType@656..661
+              QualifiedName@656..661
+                Ident@656..661 "Speed"
+          RParen@661..662 ")"
+      Whitespace@662..663 " "
+      AttrBlock@663..697
+        LBracket@663..664 "["
+        Whitespace@664..669 "\n    "
+        Attribute@669..693
+          EnsureKw@669..675 "ensure"
+          Whitespace@675..676 " "
+          BinaryExpr@676..693
+            MemberExpr@676..686
+              PathExpr@676..682
+                Ident@676..682 "result"
+              Dot@682..683 "."
+              Ident@683..686 "min"
+            Whitespace@686..687 " "
+            Ge@687..689 ">="
+            Whitespace@689..690 " "
+            LiteralExpr@690..693
+              FloatNumber@690..693 "0.0"
+        Whitespace@693..696 "\n  "
+        RBracket@696..697 "]"
+    Whitespace@697..698 "\n"
+    RBrace@698..699 "}"
+  Whitespace@699..700 "\n"
+errors: none

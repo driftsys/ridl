@@ -147,6 +147,17 @@ pub enum SyntaxKind {
     Timing,
     TimingRange,
     AttrBlock,
+    // Nodes of the attribute and guaranteed-subset expression grammar
+    // (`family.ungram`, epic E2.4 — general form §4.2, expr-core
+    // specification §3.1).
+    Attribute,
+    AttrValue,
+    BinaryExpr,
+    PrefixExpr,
+    MemberExpr,
+    PathExpr,
+    ParenExpr,
+    LiteralExpr,
     /// A recovery node: error recovery wraps the tokens it skips in one of
     /// these, so broken input still produces a lossless tree. It is the one
     /// node kind with no rule in `family.ungram`, and the last variant — the

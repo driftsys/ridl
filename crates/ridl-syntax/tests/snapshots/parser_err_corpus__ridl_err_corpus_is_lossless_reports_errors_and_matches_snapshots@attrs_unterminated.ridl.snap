@@ -1,0 +1,65 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/attrs_unterminated.ridl
+---
+SourceFile@0..259
+  PackageDecl@0..17
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..17
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..17 "attrs"
+  Whitespace@17..19 "\n\n"
+  LineComment@19..95 "// The attr block nev ..."
+  Whitespace@95..96 "\n"
+  LineComment@96..151 "// boundary instead o ..."
+  Whitespace@151..152 "\n"
+  InterfaceDef@152..258
+    InterfaceKw@152..161 "interface"
+    Whitespace@161..162 " "
+    Name@162..168
+      Ident@162..168 "Broken"
+    Whitespace@168..169 " "
+    LBrace@169..170 "{"
+    Whitespace@170..173 "\n  "
+    CommandDef@173..256
+      CommandKw@173..180 "command"
+      Whitespace@180..181 " "
+      Name@181..188
+        Ident@181..188 "setGear"
+      ParamList@188..212
+        LParen@188..189 "("
+        Param@189..211
+          Name@189..197
+            Ident@189..197 "position"
+          Colon@197..198 ":"
+          Whitespace@198..199 " "
+          PathType@199..211
+            QualifiedName@199..211
+              Ident@199..211 "GearPosition"
+        RParen@211..212 ")"
+      Whitespace@212..213 " "
+      AttrBlock@213..256
+        LBracket@213..214 "["
+        Whitespace@214..219 "\n    "
+        Attribute@219..256
+          RequireKw@219..226 "require"
+          Whitespace@226..227 " "
+          BinaryExpr@227..256
+            PathExpr@227..235
+              Ident@227..235 "position"
+            Whitespace@235..236 " "
+            Neq@236..238 "!="
+            Whitespace@238..239 " "
+            MemberExpr@239..256
+              PathExpr@239..251
+                Ident@239..251 "GearPosition"
+              Dot@251..252 "."
+              Ident@252..256 "PARK"
+    Whitespace@256..257 "\n"
+    RBrace@257..258 "}"
+  Whitespace@258..259 "\n"
+errors:
+  FORM-103 257..258 unclosed `[`

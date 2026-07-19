@@ -47,8 +47,9 @@
 //! The parser runs under a [`Profile`] (E2 task 2, ADR-0007 decision 10). In
 //! a `.typl` parse — byte-identical to the E1 parser — a `Duration` token or
 //! a stray `@` anywhere emits **TYPL-302** (typl reference §2.8) and parsing
-//! continues, and an interaction keyword at declaration-start position emits
-//! **TYPL-304**. In a `.ridl` parse durations and `@` are ordinary tokens,
+//! continues, an interaction keyword at declaration-start position emits
+//! **TYPL-304**, and a `require`/`ensure` attribute emits **TYPL-303** with
+//! the same recovery. In a `.ridl` parse durations and `@` are ordinary tokens,
 //! and a `ReservedWord` at declaration-start position — a word of the
 //! uxdl/rmdl/rsdl profiles — emits **RIDL-403** (ridl reference §16.4). Both
 //! declaration-start boundaries recover exactly as FORM-105 does. The stream
@@ -199,9 +200,9 @@ fn is_interaction_start(kind: SyntaxKind) -> bool {
     )
 }
 
-/// The deepest field-type nesting the parser follows before it stops
-/// recursing — far beyond any real schema, small enough that a pathological
-/// input cannot overflow the stack.
+/// The deepest field-type, expression, or attribute-value nesting the parser
+/// follows before it stops recursing — far beyond any real schema, small
+/// enough that a pathological input cannot overflow the stack.
 const MAX_TYPE_DEPTH: usize = 128;
 
 /// The recursive-descent state: the token stream, a cursor, the tree builder,
@@ -457,12 +458,15 @@ impl<'a> Parser<'a> {
     /// 10, ridl reference §16.4). Called on a `ReservedWord` at the top level:
     ///
     /// - in a `.typl` parse, an interaction keyword (one of the nine ridl
-    ///   words) draws **TYPL-304** instead of the generic FORM-102;
+    ///   words) draws **TYPL-304** instead of the generic FORM-102 — except
+    ///   `require`/`ensure`, which are attributes, not declarations, and
+    ///   draw **TYPL-303** (`require/ensure attribute in typl context`,
+    ///   typl reference §16.4);
     /// - in a `.ridl` parse, any `ReservedWord` — a behaviour,
     ///   user-interaction, or architecture word of the uxdl/rmdl/rsdl
     ///   profiles — draws **RIDL-403**.
     ///
-    /// Both recover exactly as FORM-105 does ([`Parser::recover`]: the run
+    /// All recover exactly as FORM-105 does ([`Parser::recover`]: the run
     /// lands in one `ErrorNode`, resynchronizing at the next top-level
     /// keyword). Returns `false` — leaving the token untouched for the
     /// caller's generic recovery — when neither boundary applies (a
@@ -470,15 +474,17 @@ impl<'a> Parser<'a> {
     fn profile_boundary_at_top_level(&mut self) -> bool {
         let text = self.tokens[self.significant_pos()].text;
         let (code, message) = match self.profile {
-            Profile::Typl => {
-                if keywords::ridl_keyword(text).is_none() {
-                    return false;
-                }
-                (
+            Profile::Typl => match keywords::ridl_keyword(text) {
+                None => return false,
+                Some(SyntaxKind::RequireKw | SyntaxKind::EnsureKw) => (
+                    "TYPL-303",
+                    "require/ensure attribute in typl context".to_string(),
+                ),
+                Some(_) => (
                     "TYPL-304",
                     format!("interaction declaration in typl context: `{text}`"),
-                )
-            }
+                ),
+            },
             Profile::Ridl => (
                 "RIDL-403",
                 format!(
@@ -954,31 +960,44 @@ impl<'a> Parser<'a> {
         self.builder.finish_node();
     }
 
-    /// A balanced `[ … ]` after an interaction signature, held as an
-    /// [`AttrBlock`](SyntaxKind::AttrBlock) of raw tokens with no inner
-    /// structure — lossless. The attribute grammar replaces this placeholder
-    /// in task 4. An unclosed block stops at an interaction or body
-    /// boundary (FORM-103) instead of swallowing the rest of the interface.
+    /// `AttrBlock = '[' (attributes:Attribute ','?)* ']'` — the single
+    /// attribute production of the general form (§4.2–§4.3). Separator
+    /// commas are direct children of the block node, mirroring the
+    /// block-body discipline. gf §4.2 requires at least one attribute per
+    /// block: an empty `[]` still parses losslessly into an `AttrBlock`
+    /// node and FORM-101 (`expected an attribute`) lands on the closing
+    /// bracket. An unclosed block stops at an interaction or body boundary
+    /// (FORM-103) instead of swallowing the rest of the interface.
     fn attr_block(&mut self) {
         self.start(SyntaxKind::AttrBlock);
         self.bump(); // '['
-        let mut depth = 1usize;
+        let mut saw_attribute = false;
         loop {
             match self.current() {
                 None => {
                     self.error_at_current("FORM-103", "unclosed `[`".to_string());
                     break;
                 }
-                Some(SyntaxKind::LBracket) => {
-                    depth += 1;
-                    self.bump();
-                }
                 Some(SyntaxKind::RBracket) => {
-                    depth -= 1;
-                    self.bump();
-                    if depth == 0 {
-                        break;
+                    if !saw_attribute {
+                        self.error_at_current("FORM-101", "expected an attribute".to_string());
                     }
+                    self.bump();
+                    break;
+                }
+                Some(SyntaxKind::Comma) => self.bump(),
+                // A `ReservedWord` in key position goes through
+                // [`Parser::name`], which holds it in an `ErrorNode` with
+                // FORM-105 — the E1 reserved-word discipline — so the rest
+                // of the attribute (`= value`) still parses.
+                Some(
+                    SyntaxKind::Ident
+                    | SyntaxKind::RequireKw
+                    | SyntaxKind::EnsureKw
+                    | SyntaxKind::ReservedWord,
+                ) => {
+                    saw_attribute = true;
+                    self.attribute();
                 }
                 Some(kind)
                     if kind == SyntaxKind::RBrace
@@ -988,10 +1007,307 @@ impl<'a> Parser<'a> {
                     self.error_at_current("FORM-103", "unclosed `[`".to_string());
                     break;
                 }
-                Some(_) => self.bump(),
+                Some(_) => self.err_and_recover("in an attribute block", |kind| {
+                    matches!(
+                        kind,
+                        SyntaxKind::RBracket
+                            | SyntaxKind::Comma
+                            | SyntaxKind::Ident
+                            | SyntaxKind::RequireKw
+                            | SyntaxKind::EnsureKw
+                            | SyntaxKind::ReservedWord
+                            | SyntaxKind::RBrace
+                    ) || is_interaction_start(kind)
+                        || is_top_level_start(kind)
+                }),
             }
         }
         self.builder.finish_node();
+    }
+
+    /// `Attribute = key | key '=' const_value | ('require'|'ensure') expr`
+    /// — the three forms of gf §4.2. One grammar production for all of
+    /// them; which keys are legal where is checker scope (gf §4.3,
+    /// FORM-106/107/108, E2 task 5). Callers have confirmed the leading
+    /// token is an `Ident` or a predicate keyword.
+    fn attribute(&mut self) {
+        self.start(SyntaxKind::Attribute);
+        match self.current() {
+            Some(SyntaxKind::RequireKw | SyntaxKind::EnsureKw) => {
+                self.bump(); // 'require' | 'ensure'
+                self.expr();
+            }
+            _ => {
+                self.name(); // the attr key
+                if self.at(SyntaxKind::Eq) {
+                    self.bump();
+                    self.attr_value();
+                }
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    /// `const_value = literal | SCREAMING_SNAKE_ID | '(' const_value (','
+    /// const_value)* ')'` (gf §4.2), as an [`AttrValue`](SyntaxKind::AttrValue)
+    /// node: one `Literal` child (an `ident` value token is the constant
+    /// reference), or a parenthesised list of nested `AttrValue`s. The
+    /// depth guard bounds pathological list nesting, sharing the
+    /// [`MAX_TYPE_DEPTH`] budget with the type and expression grammars.
+    fn attr_value(&mut self) {
+        if self.depth >= MAX_TYPE_DEPTH {
+            self.error_at_current(
+                "FORM-102",
+                format!("value nesting deeper than {MAX_TYPE_DEPTH} levels"),
+            );
+            self.start(SyntaxKind::ErrorNode);
+            self.bump();
+            self.builder.finish_node();
+            return;
+        }
+        self.depth += 1;
+        self.attr_value_inner();
+        self.depth -= 1;
+    }
+
+    fn attr_value_inner(&mut self) {
+        self.eat_trivia();
+        if self.at(SyntaxKind::LParen) {
+            self.start(SyntaxKind::AttrValue);
+            self.bump(); // '('
+            loop {
+                self.eat_trivia();
+                match self.current() {
+                    None => {
+                        self.error_at_current("FORM-103", "unclosed `(`".to_string());
+                        break;
+                    }
+                    Some(SyntaxKind::RParen) => {
+                        self.bump();
+                        break;
+                    }
+                    Some(SyntaxKind::Comma) => self.bump(),
+                    Some(SyntaxKind::LParen) => self.attr_value(),
+                    Some(kind)
+                        if kind == SyntaxKind::RBracket
+                            || kind == SyntaxKind::RBrace
+                            || is_interaction_start(kind)
+                            || is_top_level_start(kind) =>
+                    {
+                        self.error_at_current("FORM-103", "unclosed `(`".to_string());
+                        break;
+                    }
+                    _ if self.literal_len_at(0) > 0 => self.attr_value(),
+                    Some(_) => self.err_and_recover("in an attribute value", |kind| {
+                        matches!(
+                            kind,
+                            SyntaxKind::RParen
+                                | SyntaxKind::Comma
+                                | SyntaxKind::LParen
+                                | SyntaxKind::RBracket
+                                | SyntaxKind::RBrace
+                        ) || is_interaction_start(kind)
+                            || is_top_level_start(kind)
+                    }),
+                }
+            }
+            self.builder.finish_node();
+        } else if self.literal_len_at(0) > 0 {
+            self.start(SyntaxKind::AttrValue);
+            self.literal();
+            self.builder.finish_node();
+        } else {
+            self.error_at_current("FORM-101", "expected a value".to_string());
+        }
+    }
+
+    // --- the guaranteed-subset expression grammar (E2.4) ------------------
+    //
+    // The expr-core specification §3.1 productions, one function per
+    // precedence level, loosest to tightest: `||` — `&&` — comparison —
+    // additive — multiplicative — unary — member access. Binary levels are
+    // left-associative (each iteration wraps the run so far in a fresh
+    // BinaryExpr from the same checkpoint); a comparison never chains.
+    // Inside an expression `<` is always the comparison operator — the
+    // stream-type reading of `<` exists only in param-type and return-type
+    // position, and the two positions never overlap.
+
+    /// `expr = or_expr` — the entry point, called from a predicate
+    /// attribute and from a parenthesised group. The depth guard bounds
+    /// paren nesting ([`Parser::primary`] recurses through here), sharing
+    /// the [`MAX_TYPE_DEPTH`] budget.
+    fn expr(&mut self) {
+        if self.depth >= MAX_TYPE_DEPTH {
+            self.error_at_current(
+                "FORM-102",
+                format!("expression nesting deeper than {MAX_TYPE_DEPTH} levels"),
+            );
+            self.start(SyntaxKind::ErrorNode);
+            self.bump();
+            self.builder.finish_node();
+            return;
+        }
+        self.depth += 1;
+        self.or_expr();
+        self.depth -= 1;
+    }
+
+    /// `or_expr = and_expr { '||' and_expr }`
+    fn or_expr(&mut self) {
+        self.eat_trivia();
+        let checkpoint = self.builder.checkpoint();
+        self.and_expr();
+        while self.at(SyntaxKind::PipePipe) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
+            self.bump();
+            self.and_expr();
+            self.builder.finish_node();
+        }
+    }
+
+    /// `and_expr = cmp_expr { '&&' cmp_expr }`
+    fn and_expr(&mut self) {
+        self.eat_trivia();
+        let checkpoint = self.builder.checkpoint();
+        self.cmp_expr();
+        while self.at(SyntaxKind::AmpAmp) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
+            self.bump();
+            self.cmp_expr();
+            self.builder.finish_node();
+        }
+    }
+
+    /// `cmp_expr = add_expr [ cmp_op add_expr ]` — at most one comparison:
+    /// `a < b < c` is a parse error (write `a < b && b < c`), reported by
+    /// whatever context the leftover operator lands in.
+    fn cmp_expr(&mut self) {
+        self.eat_trivia();
+        let checkpoint = self.builder.checkpoint();
+        self.add_expr();
+        if matches!(
+            self.current(),
+            Some(
+                SyntaxKind::EqEq
+                    | SyntaxKind::Neq
+                    | SyntaxKind::Lt
+                    | SyntaxKind::Le
+                    | SyntaxKind::Gt
+                    | SyntaxKind::Ge
+            )
+        ) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
+            self.bump();
+            self.add_expr();
+            self.builder.finish_node();
+        }
+    }
+
+    /// `add_expr = mul_expr { ('+' | '-') mul_expr }`
+    fn add_expr(&mut self) {
+        self.eat_trivia();
+        let checkpoint = self.builder.checkpoint();
+        self.mul_expr();
+        while matches!(self.current(), Some(SyntaxKind::Plus | SyntaxKind::Minus)) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
+            self.bump();
+            self.mul_expr();
+            self.builder.finish_node();
+        }
+    }
+
+    /// `mul_expr = unary_expr { ('*' | '/' | '%') unary_expr }`
+    fn mul_expr(&mut self) {
+        self.eat_trivia();
+        let checkpoint = self.builder.checkpoint();
+        self.unary_expr();
+        while matches!(
+            self.current(),
+            Some(SyntaxKind::Star | SyntaxKind::Slash | SyntaxKind::Percent)
+        ) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::BinaryExpr.into());
+            self.bump();
+            self.unary_expr();
+            self.builder.finish_node();
+        }
+    }
+
+    /// `unary_expr = [ '!' | '-' ] postfix_expr` — at most one prefix.
+    fn unary_expr(&mut self) {
+        if matches!(self.current(), Some(SyntaxKind::Bang | SyntaxKind::Minus)) {
+            self.start(SyntaxKind::PrefixExpr);
+            self.bump();
+            self.postfix_expr();
+            self.builder.finish_node();
+        } else {
+            self.postfix_expr();
+        }
+    }
+
+    /// `postfix_expr = primary { '.' member }` — each `.member` step wraps
+    /// the run so far in a [`MemberExpr`](SyntaxKind::MemberExpr), so
+    /// `filter.severity` and `GearPosition.PARK` nest left-associatively.
+    fn postfix_expr(&mut self) {
+        self.eat_trivia();
+        let checkpoint = self.builder.checkpoint();
+        self.primary();
+        while self.at(SyntaxKind::Dot) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::MemberExpr.into());
+            self.bump(); // '.'
+            if self.at(SyntaxKind::Ident) {
+                self.bump();
+            } else {
+                self.error_at_current("FORM-101", "expected a member name".to_string());
+            }
+            self.builder.finish_node();
+        }
+    }
+
+    /// `primary = literal | duration_lit | path_head | '(' expr ')'` — a
+    /// [`LiteralExpr`](SyntaxKind::LiteralExpr) (typl literal or duration —
+    /// zero durations are legal in expression position, expr-core spec
+    /// §3.1), a [`PathExpr`](SyntaxKind::PathExpr), or a parenthesised
+    /// group. No node is built when no primary starts here, so a missing
+    /// operand reports FORM-101 without consuming the boundary token.
+    fn primary(&mut self) {
+        match self.current() {
+            Some(
+                SyntaxKind::IntNumber
+                | SyntaxKind::FloatNumber
+                | SyntaxKind::String
+                | SyntaxKind::TrueKw
+                | SyntaxKind::FalseKw
+                | SyntaxKind::Duration,
+            ) => {
+                self.start(SyntaxKind::LiteralExpr);
+                if self.at(SyntaxKind::IntNumber) {
+                    self.flag_leading_zeros();
+                }
+                self.bump();
+                self.builder.finish_node();
+            }
+            Some(SyntaxKind::Ident) => {
+                self.start(SyntaxKind::PathExpr);
+                self.bump();
+                self.builder.finish_node();
+            }
+            Some(SyntaxKind::LParen) => {
+                self.start(SyntaxKind::ParenExpr);
+                self.bump();
+                self.expr();
+                self.expect(SyntaxKind::RParen);
+                self.builder.finish_node();
+            }
+            _ => {
+                self.error_at_current("FORM-101", "expected an expression".to_string());
+            }
+        }
     }
 
     /// `EnumValue = Name '=' value:Literal`
