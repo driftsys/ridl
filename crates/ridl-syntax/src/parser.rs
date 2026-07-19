@@ -707,6 +707,7 @@ impl<'a> Parser<'a> {
                 Some(SyntaxKind::EventKw) => self.value_interaction(SyntaxKind::EventDef),
                 Some(SyntaxKind::CommandKw) => self.callable_interaction(SyntaxKind::CommandDef),
                 Some(SyntaxKind::QueryKw) => self.callable_interaction(SyntaxKind::QueryDef),
+                Some(SyntaxKind::FinalKw) => self.value_interaction(SyntaxKind::FinalDef),
                 // An unclosed `{`: the body ran into the next top-level
                 // declaration. Report the missing brace and hand the
                 // declaration back, exactly as `block_body` does.
