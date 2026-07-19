@@ -6,6 +6,11 @@
 //! `ridl fmt` runs the `ridl-fmt` formatter over `.typl` files (E1.14). The exit
 //! code is 0 clean, 1 on a diagnostic error (or, for `fmt --check`, a file that
 //! would change), and 2 on an input/output or usage error.
+//!
+//! `ridl diff` compares two IR snapshots or source trees through the
+//! `ridl-diff` engine (E2.8a). It carries its own exit contract — 0 compatible
+//! or identical, 1 breaking, 2 error (concept note §9.1, ADR-0008 decision 9) —
+//! and never touches `ridlc`'s source→IR boundary beyond compiling each side.
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -52,6 +57,26 @@ enum Command {
         #[arg(long)]
         check: bool,
     },
+    /// Compare two IR snapshots or source trees and classify the change:
+    /// exit 0 compatible or identical, 1 breaking, 2 error.
+    Diff {
+        /// The baseline: an `.ir.json` snapshot, a `.typl`/`.ridl` file, a
+        /// package directory, or a workspace root.
+        old: PathBuf,
+        /// The candidate, in the same forms as the baseline.
+        new: PathBuf,
+        /// Output format for the report.
+        #[arg(long, value_enum, default_value = "text")]
+        format: DiffFormat,
+    },
+}
+
+/// The `ridl diff` output format — human-readable text or machine-readable
+/// JSON with a stable schema.
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+enum DiffFormat {
+    Text,
+    Json,
 }
 
 fn main() -> ExitCode {
@@ -65,7 +90,87 @@ fn main() -> ExitCode {
             frozen,
         } => finish(ridlc::run_build(&path, &out_dir, &emit, frozen.into())),
         Command::Fmt { path, check } => run_fmt(&path, check),
+        Command::Diff { old, new, format } => run_diff(&old, &new, format),
     }
+}
+
+/// Compares the `old` and `new` inputs and renders the report to stdout,
+/// returning the diff exit code: 2 on an I/O or compile error while loading
+/// either side, 1 when the change is breaking, 0 when it is compatible or the
+/// two are identical.
+fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
+    let old_packages = match load_diff_side(old) {
+        Ok(packages) => packages,
+        Err(code) => return code,
+    };
+    let new_packages = match load_diff_side(new) {
+        Ok(packages) => packages,
+        Err(code) => return code,
+    };
+
+    let report = ridl_diff::diff_sets(&old_packages, &new_packages);
+    let rendered = match format {
+        DiffFormat::Text => ridl_diff::render_text(&report),
+        DiffFormat::Json => ridl_diff::render_json(&report),
+    };
+    println!("{rendered}");
+
+    match report.verdict {
+        ridl_diff::Verdict::Breaking => ExitCode::FAILURE,
+        ridl_diff::Verdict::Compatible | ridl_diff::Verdict::Identical => ExitCode::SUCCESS,
+    }
+}
+
+/// Loads one side of a diff into a set of resolved packages.
+///
+/// An `.ir.json` file is deserialized directly; anything else (a `.typl` or
+/// `.ridl` file, a package directory, or a workspace root) is compiled in
+/// process through `ridlc::compile_workspace`. A read, parse, or compile error
+/// renders to stderr and yields exit code 2 — `ridl diff` never emits a diff
+/// report over a snapshot it could not build.
+fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+    if is_ir_json(entry) {
+        return match ridl_diff::load_ir_json(entry) {
+            Ok(package) => Ok(vec![package]),
+            Err(err) => {
+                eprintln!("error: {}: {err}", entry.display());
+                Err(ExitCode::from(2))
+            }
+        };
+    }
+
+    let mut db = ridl_core::RidlDatabase::default();
+    match ridlc::compile_workspace(&mut db, entry) {
+        Ok(output) => {
+            if output
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error)
+            {
+                eprint!("{}", render(&output.diagnostics, &output.sources));
+                return Err(ExitCode::from(2));
+            }
+            Ok(output
+                .checked
+                .into_iter()
+                .map(|checked| checked.ir)
+                .collect())
+        }
+        Err(err) => {
+            eprintln!("error: {}: {err}", entry.display());
+            Err(ExitCode::from(2))
+        }
+    }
+}
+
+/// Whether `path` is an `.ir.json` snapshot (a file whose name ends `.ir.json`)
+/// rather than a source input.
+fn is_ir_json(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".ir.json"))
 }
 
 /// Renders a check/build run's diagnostics to stderr and turns the outcome into

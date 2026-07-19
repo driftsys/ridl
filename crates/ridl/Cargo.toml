@@ -9,5 +9,10 @@ publish = false
 [dependencies]
 clap.workspace = true
 ridl-core = { path = "../ridl-core" }
+ridl-diff = { path = "../../tools/diff" }
 ridl-fmt = { path = "../../tools/fmt" }
+ridl-ir = { path = "../ridl-ir" }
 ridlc = { path = "../ridlc" }
+
+[dev-dependencies]
+serde_json.workspace = true
