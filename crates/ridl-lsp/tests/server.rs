@@ -150,6 +150,246 @@ fn range(start: (u32, u32), end: (u32, u32)) -> lt::Range {
     }
 }
 
+fn pos(line: u32, character: u32) -> lt::Position {
+    lt::Position { line, character }
+}
+
+fn text_position(uri: lt::Uri, position: lt::Position) -> lt::TextDocumentPositionParams {
+    lt::TextDocumentPositionParams {
+        text_document: lt::TextDocumentIdentifier { uri },
+        position,
+    }
+}
+
+/// Sends a hover request and returns the parsed result.
+fn hover_at(
+    client: &Connection,
+    id: i32,
+    uri: lt::Uri,
+    position: lt::Position,
+) -> Option<lt::Hover> {
+    request::<lt::request::HoverRequest>(
+        client,
+        id,
+        lt::HoverParams {
+            text_document_position_params: text_position(uri, position),
+            work_done_progress_params: Default::default(),
+        },
+    );
+    let response = next_response(client);
+    serde_json::from_value(response.response_result.expect("hover succeeds"))
+        .expect("a valid hover result")
+}
+
+/// Sends a goto-definition request and returns the parsed result.
+fn definition_at(
+    client: &Connection,
+    id: i32,
+    uri: lt::Uri,
+    position: lt::Position,
+) -> Option<lt::GotoDefinitionResponse> {
+    request::<lt::request::GotoDefinition>(
+        client,
+        id,
+        lt::GotoDefinitionParams {
+            text_document_position_params: text_position(uri, position),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+        },
+    );
+    let response = next_response(client);
+    serde_json::from_value(response.response_result.expect("definition succeeds"))
+        .expect("a valid definition result")
+}
+
+/// Sends a references request and returns the parsed result.
+fn references_at(
+    client: &Connection,
+    id: i32,
+    uri: lt::Uri,
+    position: lt::Position,
+    include_declaration: bool,
+) -> Option<Vec<lt::Location>> {
+    request::<lt::request::References>(
+        client,
+        id,
+        lt::ReferenceParams {
+            text_document_position: text_position(uri, position),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: lt::ReferenceContext {
+                include_declaration,
+            },
+        },
+    );
+    let response = next_response(client);
+    serde_json::from_value(response.response_result.expect("references succeed"))
+        .expect("a valid references result")
+}
+
+/// The two-member fixture workspace: `veh.common` declares `Speed` (a
+/// unit-typed, constrained type with a doc comment), the constant `MAX_SPEED`
+/// used as a range bound in `Cruise`, and a `Gearbox` struct; `app` imports
+/// and uses `veh.common.Speed`.
+const VEH_COMMON: &str = "package veh.common\n\
+/// Vehicle speed over ground\n\
+type Speed: km/h [0.0..250.0 step 0.5]\n\
+const MAX_SPEED: float = 250.0\n\
+type Cruise: float [0.0..MAX_SPEED step 0.5]\n\
+struct Gearbox { primary: Speed, secondary: Speed }\n";
+
+const APP: &str = "package app\n\
+import veh.common.Speed\n\
+struct Cabin { primary: Speed }\n";
+
+/// Writes the two-member workspace to `dir` and returns the two file URIs.
+fn write_workspace(dir: &TempDir) -> (lt::Uri, lt::Uri) {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"app\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("veh-common")).expect("create veh-common");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "veh-common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    let veh = dir.write("veh-common/lib.typl", VEH_COMMON);
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    let app = dir.write("app/lib.typl", APP);
+    (uri_of(&veh), uri_of(&app))
+}
+
+/// The server thread's join handle: it returns the server loop's result.
+type ServerThread = std::thread::JoinHandle<Result<(), Box<dyn std::error::Error + Send + Sync>>>;
+
+/// Spawns the server over an in-memory connection loaded at `root`.
+fn start(root: lt::Uri) -> (Connection, ServerThread) {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, Some(root));
+    (client, server)
+}
+
+/// Hover on `Speed` shows its unit, range, derived width, and doc comment,
+/// read across the package boundary from `veh.common`'s IR.
+#[test]
+fn hover_on_a_type_reference_shows_unit_range_width_and_doc() {
+    let dir = TempDir::new("hover");
+    let (_veh, app) = write_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    // `display: Speed` on line 2 of `app/lib.typl`; the `Speed` reference
+    // starts at UTF-16 column 24.
+    let hover = hover_at(&client, 10, app, pos(2, 26)).expect("Speed has hover content");
+    let value = match hover.contents {
+        lt::HoverContents::Markup(markup) => {
+            assert_eq!(markup.kind, lt::MarkupKind::Markdown);
+            markup.value
+        }
+        other => panic!("expected markdown hover, got {other:?}"),
+    };
+    assert!(
+        value.contains("veh.common.Speed"),
+        "qualified name: {value}"
+    );
+    assert!(value.contains("km/h"), "canonical unit: {value}");
+    // The checker stores canonical decimals, so `0.0..250.0` reads `0..250`.
+    assert!(value.contains("[0..250 step 0.5]"), "constraint: {value}");
+    assert!(value.contains("f32"), "derived wire width: {value}");
+    assert!(
+        value.contains("Vehicle speed over ground"),
+        "doc comment: {value}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Goto-definition on the `Speed` reference in `app` jumps to its declaration
+/// in `veh.common` — resolved across the package boundary through the import.
+#[test]
+fn goto_definition_crosses_the_package_boundary() {
+    let dir = TempDir::new("goto");
+    let (veh, app) = write_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let response =
+        definition_at(&client, 10, app, pos(2, 26)).expect("Speed resolves to a definition");
+    let location = match response {
+        lt::GotoDefinitionResponse::Scalar(location) => location,
+        other => panic!("expected a single location, got {other:?}"),
+    };
+    assert_eq!(
+        location.uri.as_str(),
+        veh.as_str(),
+        "definition is in veh.common's file",
+    );
+    // `type Speed` on line 2 of `veh-common/lib.typl`: the name spans columns
+    // 5..10.
+    assert_eq!(
+        location.range,
+        range((2, 5), (2, 10)),
+        "the `Speed` name span"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Find-references on the constant `MAX_SPEED` finds its use inside the
+/// `Cruise` range constraint — a resolved reference, not a textual match.
+#[test]
+fn find_references_finds_a_constant_bound_reference() {
+    let dir = TempDir::new("refs");
+    let (veh, _app) = write_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    // `const MAX_SPEED` on line 3 of `veh-common/lib.typl`: the name starts at
+    // column 6.
+    let locations = references_at(&client, 10, veh.clone(), pos(3, 8), false)
+        .expect("MAX_SPEED resolves to a symbol");
+    assert_eq!(locations.len(), 1, "one reference, got: {locations:?}");
+    assert_eq!(locations[0].uri.as_str(), veh.as_str());
+    // `[0.0..MAX_SPEED step 0.5]` on line 4: `MAX_SPEED` spans columns 25..34.
+    assert_eq!(
+        locations[0].range,
+        range((4, 25), (4, 34)),
+        "the reference inside the constraint",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on a struct field shows its derived ordinal (general form §6.3).
+#[test]
+fn hover_on_a_struct_field_shows_its_ordinal() {
+    let dir = TempDir::new("ordinal");
+    let (veh, _app) = write_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    // `struct Gearbox { primary: Speed, secondary: Speed }` on line 5:
+    // `secondary` starts at column 33 and is the second field.
+    let hover = hover_at(&client, 10, veh, pos(5, 35)).expect("the field has hover content");
+    let value = match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    };
+    assert!(value.contains("secondary"), "names the field: {value}");
+    assert!(value.contains("#2"), "shows the ordinal: {value}");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// The full conversation over a loaded workspace: initialize advertises
 /// incremental sync and quick-fix code actions; opening the broken file
 /// publishes the two parser codes with correct ranges; an incremental edit

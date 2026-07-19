@@ -20,12 +20,13 @@
 //!   package↔directory law, e.g. TYPL-002) are computed once at load time —
 //!   the loader does not re-run per edit. They are published for files whose
 //!   buffer still matches the loaded text and dropped once a file is edited.
-//! - A load diagnostic whose file cannot be recovered from the load-time
-//!   [`SourceMap`] (which interns by path but exposes no reverse lookup) is
-//!   not published; `ridl check` still renders it.
+//! - A load diagnostic whose file the load-time [`SourceMap`] cannot resolve
+//!   back to a path (only a [`FileId::DETACHED`] span) is not published;
+//!   `ridl check` still renders it.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use lsp_server::{Connection, ErrorCode, Message, Notification, Request, RequestId, Response};
 use lsp_types as lt;
@@ -39,9 +40,11 @@ use ridl_core::package::{Package, PackageOrigin, Workspace};
 use ridl_core::{LoadedWorkspace, load_workspace, std_package};
 use ridl_sem::{check_package, resolve_package};
 use ridl_syntax::ast::{AstNode as _, SourceFile};
+use rowan::TextRange;
 use salsa::Setter as _;
 
 use crate::convert::{self, LineIndex};
+use crate::{hover, nav};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -57,10 +60,10 @@ pub fn run(connection: Connection) -> Result<(), Error> {
     main_loop(connection, state)
 }
 
-/// The capability set this task lands: incremental text sync with open/close
-/// notifications, and quick-fix code actions. The later E1.15 tasks add
-/// hover, goto-definition, and find-references (b), completion and rename
-/// (c), and inlay hints (d) to this same struct.
+/// The capability set: incremental text sync with open/close notifications,
+/// quick-fix code actions (E1.15a), and hover, goto-definition, and
+/// find-references (E1.15b). The later E1.15 tasks add completion and rename
+/// (c) and inlay hints (d) to this same struct.
 fn server_capabilities() -> lt::ServerCapabilities {
     lt::ServerCapabilities {
         text_document_sync: Some(lt::TextDocumentSyncCapability::Options(
@@ -76,6 +79,9 @@ fn server_capabilities() -> lt::ServerCapabilities {
                 ..Default::default()
             },
         )),
+        hover_provider: Some(lt::HoverProviderCapability::Simple(true)),
+        definition_provider: Some(lt::OneOf::Left(true)),
+        references_provider: Some(lt::OneOf::Left(true)),
         ..Default::default()
     }
 }
@@ -152,9 +158,16 @@ struct ServerState {
     /// Every loaded workspace file, keyed by its load-time path string —
     /// the inputs `didOpen`/`didChange` overlay via `set_text`.
     files: HashMap<String, InputFile>,
+    /// The package each loaded workspace file belongs to, keyed by the same
+    /// path — the map hover and navigation use to find a file's package.
+    file_package: HashMap<String, Package>,
     /// Open files outside the loaded workspace: a fresh overlay input
     /// wrapped in a synthetic single-file package.
     overlays: HashMap<String, (InputFile, Package)>,
+    /// Per-file line tables, keyed by path, for the position arithmetic hover
+    /// and navigation need. Built on first use and invalidated on `didChange`
+    /// (the only event that changes a file's text).
+    line_indexes: HashMap<String, Rc<LineIndex>>,
     /// The load-time loader findings per path, converted once; dropped per
     /// file when its buffer diverges from the loaded text (see module docs).
     loader_diagnostics: BTreeMap<String, Vec<lt::Diagnostic>>,
@@ -178,7 +191,7 @@ impl ServerState {
         let loaded = root
             .as_deref()
             .and_then(|root| load_workspace(&mut db, root).ok());
-        let (workspace, load_diagnostics, mut sources) = match loaded {
+        let (workspace, load_diagnostics, sources) = match loaded {
             Some(LoadedWorkspace {
                 workspace,
                 diagnostics,
@@ -192,25 +205,24 @@ impl ServerState {
         };
 
         let mut files = HashMap::new();
+        let mut file_package = HashMap::new();
         for package in workspace.packages(&db) {
             for file in package.files(&db) {
                 files.insert(file.path(&db).clone(), *file);
+                file_package.insert(file.path(&db).clone(), *package);
             }
         }
-        let loader_diagnostics = convert_loader_diagnostics(
-            &db,
-            &files,
-            root.as_deref(),
-            load_diagnostics,
-            &mut sources,
-        );
+        let loader_diagnostics =
+            convert_loader_diagnostics(&db, &files, load_diagnostics, &sources);
 
         ServerState {
             db,
             std,
             workspace,
             files,
+            file_package,
             overlays: HashMap::new(),
+            line_indexes: HashMap::new(),
             loader_diagnostics,
             edited: HashSet::new(),
             published: HashSet::new(),
@@ -226,6 +238,36 @@ impl ServerState {
             lt::request::CodeActionRequest::METHOD => {
                 match serde_json::from_value::<lt::CodeActionParams>(request.params) {
                     Ok(params) => Response::new_ok(request.id, self.code_actions(&params)),
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            lt::request::HoverRequest::METHOD => {
+                match serde_json::from_value::<lt::HoverParams>(request.params) {
+                    Ok(params) => Response::new_ok(request.id, self.hover(&params)),
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            lt::request::GotoDefinition::METHOD => {
+                match serde_json::from_value::<lt::GotoDefinitionParams>(request.params) {
+                    Ok(params) => Response::new_ok(request.id, self.goto_definition(&params)),
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            lt::request::References::METHOD => {
+                match serde_json::from_value::<lt::ReferenceParams>(request.params) {
+                    Ok(params) => Response::new_ok(request.id, self.references(&params)),
                     Err(err) => Response::new_err(
                         request.id,
                         ErrorCode::InvalidParams as i32,
@@ -352,6 +394,9 @@ impl ServerState {
     fn set_text(&mut self, path: String, input: InputFile, text: String) {
         if input.text(&self.db) != &text {
             input.set_text(&mut self.db).to(text);
+            // The cached line table described the old text; drop it so the
+            // next hover or navigation rebuilds it.
+            self.line_indexes.remove(&path);
             // The loader's law findings for this file described the loaded
             // text; they are stale from here on.
             self.edited.insert(path);
@@ -458,6 +503,114 @@ impl ServerState {
             .map(|fix| lt::CodeActionOrCommand::CodeAction(fix.action.clone()))
             .collect()
     }
+
+    /// `textDocument/hover`: the declaration or field the cursor names, rendered
+    /// as markdown (E1.15b).
+    fn hover(&mut self, params: &lt::HoverParams) -> Option<lt::Hover> {
+        let position = params.text_document_position_params.position;
+        let path = convert::uri_to_path(&params.text_document_position_params.text_document.uri)?;
+        let (file, package) = self.locate(&path)?;
+        let offset = self.line_index_of(file).offset(position);
+        let info = hover::hover(&self.db, self.workspace, self.std, package, file, offset)?;
+        let range = self.line_index_of(file).range(info.range);
+        Some(lt::Hover {
+            contents: lt::HoverContents::Markup(lt::MarkupContent {
+                kind: lt::MarkupKind::Markdown,
+                value: info.markdown,
+            }),
+            range: Some(range),
+        })
+    }
+
+    /// `textDocument/definition`: the declaration site of the symbol the cursor
+    /// names, resolved through imports and qualified references (E1.15b).
+    fn goto_definition(
+        &mut self,
+        params: &lt::GotoDefinitionParams,
+    ) -> Option<lt::GotoDefinitionResponse> {
+        let position = params.text_document_position_params.position;
+        let path = convert::uri_to_path(&params.text_document_position_params.text_document.uri)?;
+        let (file, package) = self.locate(&path)?;
+        let offset = self.line_index_of(file).offset(position);
+        let located = nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)?;
+        let location = self.location(located.symbol.file, located.symbol.range)?;
+        Some(lt::GotoDefinitionResponse::Scalar(location))
+    }
+
+    /// `textDocument/references`: every resolved reference to the symbol the
+    /// cursor names, across every loaded package — the declaration itself
+    /// included when the client asks for it (E1.15b).
+    fn references(&mut self, params: &lt::ReferenceParams) -> Option<Vec<lt::Location>> {
+        let position = params.text_document_position.position;
+        let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
+        let (file, package) = self.locate(&path)?;
+        let offset = self.line_index_of(file).offset(position);
+        let located = nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)?;
+
+        let packages = self.search_packages();
+        let references = nav::find_references(
+            &self.db,
+            self.workspace,
+            self.std,
+            &packages,
+            &located.symbol,
+        );
+
+        let mut locations = Vec::new();
+        if params.context.include_declaration
+            && let Some(location) = self.location(located.symbol.file, located.symbol.range)
+        {
+            locations.push(location);
+        }
+        for (file, range) in references {
+            if let Some(location) = self.location(file, range) {
+                locations.push(location);
+            }
+        }
+        Some(locations)
+    }
+
+    /// The input and package for a document path: an overlay file, or a loaded
+    /// workspace file with its package.
+    fn locate(&self, path: &str) -> Option<(InputFile, Package)> {
+        if let Some((input, package)) = self.overlays.get(path) {
+            return Some((*input, *package));
+        }
+        let input = self.files.get(path).copied()?;
+        let package = self.file_package.get(path).copied()?;
+        Some((input, package))
+    }
+
+    /// The every-package universe find-references walks: the workspace members,
+    /// the standalone overlays, and the embedded `ridl.std`.
+    fn search_packages(&self) -> Vec<Package> {
+        let mut packages = self.workspace.packages(&self.db).clone();
+        packages.extend(self.overlays.values().map(|(_, package)| *package));
+        packages.push(self.std);
+        packages
+    }
+
+    /// The line table for `file`, cached by path and invalidated on `didChange`.
+    fn line_index_of(&mut self, file: InputFile) -> Rc<LineIndex> {
+        let path = file.path(&self.db).clone();
+        if let Some(index) = self.line_indexes.get(&path) {
+            return index.clone();
+        }
+        let index = Rc::new(convert::line_index(file.text(&self.db)));
+        self.line_indexes.insert(path, index.clone());
+        index
+    }
+
+    /// The LSP location of a byte range inside `file`, or `None` when the file's
+    /// path is not an absolute `file://` URI.
+    fn location(&mut self, file: InputFile, range: TextRange) -> Option<lt::Location> {
+        let uri = convert::path_to_uri(file.path(&self.db))?;
+        let index = self.line_index_of(file);
+        Some(lt::Location {
+            uri,
+            range: index.range(range),
+        })
+    }
 }
 
 /// Sends one `textDocument/publishDiagnostics` notification for `path`.
@@ -532,37 +685,36 @@ fn batch(diagnostics: Vec<Diagnostic>, table: &HashMap<FileId, (String, String)>
 /// loader's findings (manifest diagnostics, the package↔directory law) once,
 /// grouped by path.
 ///
-/// [`SourceMap`] interns by path and exposes no reverse lookup, so this
-/// probes the paths the loader is known to have interned: every package
-/// file, plus every `ridl.toml` at or above a package file's directory or
-/// the workspace root. Probing a known path returns the id the loader
-/// stamped; probing a path the loader never saw mints a fresh id no load
-/// diagnostic can carry, which is harmless. Manifest texts are read back
-/// from disk (nothing edited them this early); a file that cannot be
-/// recovered drops its diagnostics from publication — `ridl check` still
-/// renders them.
+/// The load-time [`SourceMap`] is the authority: [`SourceMap::path`] reverses
+/// each diagnostic's [`FileId`] to the file the loader interned it for. A
+/// `.typl` file's current text comes from its [`InputFile`]; a manifest's text
+/// is read back from disk (nothing edited it this early). A span the map cannot
+/// resolve (only [`FileId::DETACHED`]) or a manifest that cannot be read drops
+/// its diagnostics from publication — `ridl check` still renders them.
 fn convert_loader_diagnostics(
     db: &RidlDatabase,
     files: &HashMap<String, InputFile>,
-    root: Option<&Path>,
     diagnostics: Vec<Diagnostic>,
-    sources: &mut SourceMap,
+    sources: &SourceMap,
 ) -> BTreeMap<String, Vec<lt::Diagnostic>> {
     if diagnostics.is_empty() {
         return BTreeMap::new();
     }
-    let mut candidates: BTreeSet<String> = files.keys().cloned().collect();
-    let manifest_dirs = files
-        .keys()
-        .flat_map(|path| Path::new(path).ancestors().skip(1))
-        .chain(root.into_iter().flat_map(Path::ancestors));
-    for dir in manifest_dirs {
-        candidates.insert(dir.join("ridl.toml").to_string_lossy().into_owned());
-    }
+    let referenced = diagnostics.iter().flat_map(|diagnostic| {
+        std::iter::once(diagnostic.primary.file)
+            .chain(diagnostic.labels.iter().map(|label| label.span.file))
+            .chain(diagnostic.fixits.iter().map(|fixit| fixit.span.file))
+    });
 
     let mut table: HashMap<FileId, (String, String)> = HashMap::new();
-    for path in candidates {
-        let id = sources.file_id(&path, "");
+    for id in referenced {
+        if table.contains_key(&id) {
+            continue;
+        }
+        let Some(path) = sources.path(id) else {
+            continue;
+        };
+        let path = path.to_string();
         let text = match files.get(&path) {
             Some(input) => input.text(db).clone(),
             None => match std::fs::read_to_string(&path) {
@@ -570,7 +722,7 @@ fn convert_loader_diagnostics(
                 Err(_) => continue,
             },
         };
-        table.entry(id).or_insert((path, text));
+        table.insert(id, (path, text));
     }
     // The loader emits no fix-its, so the batch's fixes stay empty.
     batch(diagnostics, &table).diagnostics

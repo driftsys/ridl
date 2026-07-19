@@ -23,4 +23,6 @@
 //! package that file belongs to.
 
 pub mod convert;
+pub mod hover;
+pub mod nav;
 pub mod server;
