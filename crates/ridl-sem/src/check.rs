@@ -1771,6 +1771,17 @@ impl Checker<'_> {
     /// DFS over the composite reference graph: every struct/union of the
     /// checked package that can reach itself — directly or through any chain
     /// of composite references, across packages — is TYPL-206 (§7.3).
+    ///
+    /// Cross-package scope, on record: the resolver's TYPL-004 walks import
+    /// edges only, so a qualified-ref-only cycle (`a` holds
+    /// `struct S { x: b.T }`, `b` holds `struct T { y: a.S }`, no imports)
+    /// escapes it — this DFS follows qualified references and closes exactly
+    /// that case. A qualified-ref-only mutual reference between packages
+    /// through *non-composite* declarations (a const in `a` typed by a type
+    /// of `b` and the reverse) stays permitted, as accepted: range bounds
+    /// cannot take qualified references (a bound literal is a single
+    /// identifier), so such a shape carries no unbounded wire size and no
+    /// resolution ambiguity, and no diagnostic covers it.
     fn check_recursion(&mut self, starts: &[(String, usize, TextRange)]) {
         for (name, file_index, range) in starts {
             let start = (self.package_name.clone(), name.clone());
