@@ -33,7 +33,7 @@ fn keyword_type_name_is_a_backend_diagnostic_not_a_panic() {
     let output = ridlc::compile("bad.typl", "type fn: m [0.0..1.0]\n");
 
     assert!(
-        output.diagnostics.iter().any(|d| d.contains("fn")),
+        output.diagnostics.iter().any(|d| d.message.contains("fn")),
         "expected a diagnostic naming the offending identifier, got: {:?}",
         output.diagnostics,
     );
@@ -41,6 +41,29 @@ fn keyword_type_name_is_a_backend_diagnostic_not_a_panic() {
         output.rust_source.is_empty(),
         "a failed backend must leave rust_source empty, got:\n{}",
         output.rust_source,
+    );
+}
+
+/// A duration literal inside a constraint fails a positional parser check and
+/// crosses the profile boundary at the same token, so `compile` surfaces both a
+/// FORM-101 and a TYPL-302 at the same offset. The JSON snapshot pins the
+/// structured diagnostics — codes, severities, and exact byte offsets — and the
+/// render snapshot pins the terminal output: two clean blocks, one caret each.
+#[test]
+fn duration_in_constraint_yields_two_coded_diagnostics() {
+    let output = ridlc::compile("example.typl", "package p\ntype X: integer [0..10ms]\n");
+
+    let codes: Vec<&str> = output
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect();
+    assert_eq!(codes, vec!["FORM-101", "TYPL-302"]);
+
+    insta::assert_json_snapshot!("duration_in_constraint_diagnostics", output.diagnostics);
+    insta::assert_snapshot!(
+        "duration_in_constraint_render",
+        ridl_core::diag::render(&output.diagnostics, &output.sources),
     );
 }
 

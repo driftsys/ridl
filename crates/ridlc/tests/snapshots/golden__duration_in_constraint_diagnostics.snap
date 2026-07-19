@@ -1,0 +1,34 @@
+---
+source: crates/ridlc/tests/golden.rs
+expression: output.diagnostics
+---
+[
+  {
+    "code": "FORM-101",
+    "severity": "Error",
+    "message": "expected `]`",
+    "primary": {
+      "file": 0,
+      "range": {
+        "start": 30,
+        "end": 34
+      }
+    },
+    "labels": [],
+    "fixits": []
+  },
+  {
+    "code": "TYPL-302",
+    "severity": "Error",
+    "message": "duration literal in typl context",
+    "primary": {
+      "file": 0,
+      "range": {
+        "start": 30,
+        "end": 34
+      }
+    },
+    "labels": [],
+    "fixits": []
+  }
+]

@@ -12,6 +12,7 @@ ridl-core = { path = "../ridl-core" }
 ridl-ir = { path = "../ridl-ir" }
 ridl-sem = { path = "../ridl-sem" }
 ridl-syntax = { path = "../ridl-syntax" }
+rowan.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

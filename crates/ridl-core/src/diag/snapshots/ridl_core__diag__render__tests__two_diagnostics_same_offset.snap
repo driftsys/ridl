@@ -1,0 +1,15 @@
+---
+source: crates/ridl-core/src/diag/render.rs
+expression: rendered
+---
+error[FORM-101]: expected `]`
+  ┌─ demo.typl:2:21
+  │
+2 │ type X: integer [0..10ms]
+  │                     ^^^^
+
+error[TYPL-302]: duration literal in typl context
+  ┌─ demo.typl:2:21
+  │
+2 │ type X: integer [0..10ms]
+  │                     ^^^^

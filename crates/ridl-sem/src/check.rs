@@ -13,13 +13,18 @@ use std::collections::HashMap;
 
 use ridl_ir::{ConstDef, Module, Range, TypeDef};
 use ridl_syntax::ast::{self, AstNode, Definition, SourceFile};
+use rowan::TextRange;
 
 use crate::resolve::{Resolution, SymbolKind, const_type_name, declared_name, literal_f64};
 
-/// A semantic diagnostic raised while lowering the AST to IR.
+/// A semantic diagnostic raised while lowering the AST to IR. It carries the
+/// stable diagnostic code it maps to in the coded model (`ridl_core::diag`,
+/// E1.10) and the source range of the offending construct.
 #[derive(Debug, Clone, PartialEq)]
 pub struct CheckError {
     pub message: String,
+    pub code: &'static str,
+    pub range: TextRange,
 }
 
 /// Lowers every `type`/`const` definition in `file` to IR under `module_name`,
@@ -69,13 +74,20 @@ pub fn check(
         // A malformed tree (or a non-numeric constant, e.g. a regex): the
         // parser or the E1 checker owns those; the E0-scope lowering covers
         // numeric constants only.
+        let value_literal = decl.value();
         let (Some(name), Some(type_name), Some(value)) = (
             declared_name(&decl),
             const_type_name(&decl),
-            decl.value().and_then(|literal| literal_f64(&literal)),
+            value_literal.as_ref().and_then(literal_f64),
         ) else {
             continue;
         };
+        // The value literal is present whenever `value` parsed, so its range is
+        // the caret site for an out-of-range diagnostic.
+        let value_range = value_literal
+            .as_ref()
+            .map(|literal| literal.syntax().text_range())
+            .unwrap_or_default();
 
         // Skip a const whose type reference did not resolve to a declared
         // `type`: the resolver owns that diagnostic, and lowering the const
@@ -84,8 +96,9 @@ pub fn check(
             continue;
         }
 
-        // typl §5.5: a const value must lie within its type's inclusive range.
-        // Step conformance (quantization) is checked in E1, not here.
+        // typl §5.5: a const value must lie within its type's inclusive range
+        // (TYPL-108, typl reference §16.2). Step conformance (quantization) is
+        // checked in a later task, not here.
         if let Some(range) = type_ranges.get(&type_name)
             && (value < range.min || value > range.max)
         {
@@ -94,6 +107,8 @@ pub fn check(
                     "const `{name}` value {value} outside `{type_name}` range [{}, {}]",
                     range.min, range.max
                 ),
+                code: "TYPL-108",
+                range: value_range,
             });
         }
 
@@ -181,6 +196,7 @@ mod tests {
         let input = "type Speed: km/h [0.0..250.0 step 0.5]\nconst TOO_FAST: Speed = 300.0\n";
         let (module, errors) = check_source(input, "m");
         assert_eq!(errors.len(), 1, "expected one error, got: {errors:?}");
+        assert_eq!(errors[0].code, "TYPL-108");
         assert!(errors[0].message.contains("TOO_FAST"));
         assert!(errors[0].message.contains("Speed"));
         // The value is representable, so the const is still lowered.
