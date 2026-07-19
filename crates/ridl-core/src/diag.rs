@@ -98,6 +98,10 @@ impl DiagCode {
     /// Circular package imports (typl §16.1, ADR-0002 §6). Emitted by the
     /// resolver (E1.4) from a depth-first walk over package import edges.
     pub const TYPL_004: DiagCode = DiagCode("TYPL-004");
+    /// A public declaration exposes an `internal` type in its fields, arms,
+    /// backing, or a range-bound constant (typl §3.3, §16.1). Emitted by the
+    /// checker (E1.7b).
+    pub const TYPL_005: DiagCode = DiagCode("TYPL-005");
     /// Conflicting imports without an alias (typl §16.1, ADR-0002 §2).
     /// Emitted by the resolver (E1.4).
     pub const TYPL_006: DiagCode = DiagCode("TYPL-006");
@@ -118,8 +122,14 @@ impl DiagCode {
     /// Range `min > max` (typl §16.2).
     pub const TYPL_104: DiagCode = DiagCode("TYPL-104");
     /// `step` type mismatch, non-positive, or larger than the range
-    /// (typl §16.2).
+    /// (typl §16.2). Also borrowed by the checker (E1.7b) for a range bound
+    /// that references a non-numeric constant, a malformed bound const for
+    /// which §16.2 defines no dedicated code.
     pub const TYPL_105: DiagCode = DiagCode("TYPL-105");
+    /// Invalid regex syntax in a `match` constraint or a regex `const`
+    /// (typl §16.2). Validated with the `regress` ECMA-262 engine (ADR-0007
+    /// decision 10). Emitted by the checker (E1.7b).
+    pub const TYPL_106: DiagCode = DiagCode("TYPL-106");
     /// `const` value violates its declared type constraints (typl §16.2).
     pub const TYPL_108: DiagCode = DiagCode("TYPL-108");
     /// Init (`= value`) incompatible with the type/field constraints
@@ -163,6 +173,12 @@ impl DiagCode {
     pub const TYPL_214: DiagCode = DiagCode("TYPL-214");
     /// Timing annotation or duration literal in a typl context (typl §16.4).
     pub const TYPL_302: DiagCode = DiagCode("TYPL-302");
+    /// Blank line between a doc comment and its definition (typl §14, §16.5).
+    /// Warning. Emitted by the checker (E1.7b).
+    pub const TYPL_404: DiagCode = DiagCode("TYPL-404");
+    /// `@deprecated` doc tag without a reason string (typl §14.2, §16.5).
+    /// Warning. Emitted by the checker (E1.7b).
+    pub const TYPL_405: DiagCode = DiagCode("TYPL-405");
 
     // --- MANI manifest (0xx) — ADR-0007 decision 2, ADR-0002 §4 ---
     /// The `ridl.toml` text is not valid TOML.
