@@ -1,0 +1,77 @@
+{
+  "name": "ridl-vscode",
+  "displayName": "RIDL (typl)",
+  "description": "Syntax highlighting and a language server client for typl, the RIDL family's type language.",
+  "version": "0.0.1",
+  "publisher": "driftsys",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/driftsys/ridl.git",
+    "directory": "editors/vscode"
+  },
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "typl",
+        "aliases": [
+          "typl",
+          "RIDL typl"
+        ],
+        "extensions": [
+          ".typl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "typl",
+        "scopeName": "source.typl",
+        "path": "./syntaxes/typl.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "RIDL",
+      "properties": {
+        "ridl.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the ridl-lsp binary. Empty (the default) finds ridl-lsp on PATH."
+        },
+        "ridl.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the JSON-RPC communication between VS Code and ridl-lsp."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.1",
+    "@types/vscode": "1.91.0",
+    "@vscode/vsce": "3.9.2",
+    "typescript": "5.9.2"
+  }
+}

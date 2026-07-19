@@ -39,6 +39,8 @@ scopes = [
   "xtask",
   "ridl-sem",
   "ridl-lsp",
+  # editor integrations (docs/ROADMAP.md, epic E1.17)
+  "editors",
 ]
 types = [
   "feat",
