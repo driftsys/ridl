@@ -1316,3 +1316,210 @@ fn a_std_symbol_is_not_renameable() {
     shut_down(&client, 12);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+// --- inlay hints (E1.16) -------------------------------------------------
+
+/// Sends an inlay-hint range request and returns the parsed hints.
+fn inlay_hints_at(
+    client: &Connection,
+    id: i32,
+    uri: lt::Uri,
+    range: lt::Range,
+) -> Vec<lt::InlayHint> {
+    request::<lt::request::InlayHintRequest>(
+        client,
+        id,
+        lt::InlayHintParams {
+            work_done_progress_params: Default::default(),
+            text_document: lt::TextDocumentIdentifier { uri },
+            range,
+        },
+    );
+    let response = next_response(client);
+    let parsed: Option<Vec<lt::InlayHint>> =
+        serde_json::from_value(response.response_result.expect("inlay hints succeed"))
+            .expect("a valid inlay-hint result");
+    parsed.unwrap_or_default()
+}
+
+/// The string label of an inlay hint (every hint the server emits is a plain
+/// string label).
+fn label(hint: &lt::InlayHint) -> &str {
+    match &hint.label {
+        lt::InlayHintLabel::String(text) => text.as_str(),
+        other => panic!("expected a string label, got {other:?}"),
+    }
+}
+
+/// The `(position, label)` pairs of the hints of the given kind, in order.
+fn hint_pairs(hints: &[lt::InlayHint], kind: lt::InlayHintKind) -> Vec<(lt::Position, String)> {
+    hints
+        .iter()
+        .filter(|hint| hint.kind == Some(kind))
+        .map(|hint| (hint.position, label(hint).to_string()))
+        .collect()
+}
+
+/// A whole-file range: line 0 through a line past the end, which the server's
+/// `LineIndex` clamps to the end of the text.
+fn whole_file() -> lt::Range {
+    range((0, 0), (1_000, 0))
+}
+
+/// The server advertises the inlay-hint capability, closing the E1.15 LSP
+/// feature set.
+#[test]
+fn advertises_the_inlay_hint_capability() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    let capabilities = initialize(&client, None);
+    assert!(
+        matches!(
+            capabilities.inlay_hint_provider,
+            Some(lt::OneOf::Left(true))
+        ),
+        "inlay hints advertised: {:?}",
+        capabilities.inlay_hint_provider,
+    );
+    shut_down(&client, 1);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// The §7.4 tombstone struct: the two live fields render their derived
+/// ordinals, and the reserved slot between them is counted, so `speed` is `#3`,
+/// not `#2` — a reorder is visibly a renumbering (general form §6.3).
+#[test]
+fn inlay_hints_render_struct_field_ordinals_counting_the_tombstone() {
+    let uri = path_to_uri("/ridl-lsp-inlay-struct/solo.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // `struct DriverProfile { name / reserved legacyChecksum / speed }` — the
+    // §7.4 example. `Name` and `Speed` are primitive-backed, so no unit hints.
+    did_open(
+        &client,
+        &uri,
+        "package demo\n\
+         type Name: string [1..64]\n\
+         type Speed: integer [0..250]\n\
+         struct DriverProfile {\n\
+        \x20 name: Name\n\
+        \x20 reserved legacyChecksum\n\
+        \x20 speed: Speed\n\
+         }\n",
+    );
+
+    let hints = inlay_hints_at(&client, 10, uri.clone(), whole_file());
+    // `name` on line 4 (cols 2..6) is #1; `speed` on line 6 (cols 2..7) is #3 —
+    // the tombstone on line 5 occupies slot 2.
+    assert_eq!(
+        hint_pairs(&hints, lt::InlayHintKind::PARAMETER),
+        vec![(pos(4, 6), "#1".to_string()), (pos(6, 7), "#3".to_string()),],
+        "field ordinals count the reserved tombstone",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A unit-typed `type` renders the unit's human reading after the UCUM code,
+/// from `UcumExpr::display_name` over the canonical unit the checker stored.
+#[test]
+fn inlay_hint_expands_a_unit_typed_declaration() {
+    let uri = path_to_uri("/ridl-lsp-inlay-unit/solo.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    did_open(
+        &client,
+        &uri,
+        "package demo\ntype Speed: km/h [0.0..250.0 step 0.5]\n",
+    );
+
+    let hints = inlay_hints_at(&client, 10, uri.clone(), whole_file());
+    // `km/h` on line 1 spans cols 12..16; the reading is anchored after it.
+    assert_eq!(
+        hint_pairs(&hints, lt::InlayHintKind::TYPE),
+        vec![(pos(1, 16), "\u{27e8}kilometer per hour\u{27e9}".to_string())],
+        "the unit expansion reads the canonical UCUM unit",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// An enum's values render the number that is their wire identity — the
+/// explicit integer value, read from the IR, not a positional ordinal. `PARK`
+/// is the first value yet renders `#0`, because its transport identity is `0`.
+#[test]
+fn inlay_hints_render_enum_value_wire_numbers() {
+    let uri = path_to_uri("/ridl-lsp-inlay-enum/solo.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    did_open(
+        &client,
+        &uri,
+        "package demo\n\
+         enum GearPosition {\n\
+        \x20 PARK = 0\n\
+        \x20 DRIVE = 1\n\
+        \x20 REVERSE = 2\n\
+         }\n",
+    );
+
+    let hints = inlay_hints_at(&client, 10, uri.clone(), whole_file());
+    assert_eq!(
+        hint_pairs(&hints, lt::InlayHintKind::PARAMETER),
+        vec![
+            (pos(2, 6), "#0".to_string()), // PARK, cols 2..6
+            (pos(3, 7), "#1".to_string()), // DRIVE, cols 2..7
+            (pos(4, 9), "#2".to_string()), // REVERSE, cols 2..9
+        ],
+        "enum values render their wire value, not a declaration-order position",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A union's arms render their declaration-order ordinal. The request is a
+/// range request scoped to the union body, so the fields of the two structs on
+/// earlier lines fall outside the window and are excluded.
+#[test]
+fn inlay_hint_renders_union_arm_ordinals_within_the_requested_range() {
+    let uri = path_to_uri("/ridl-lsp-inlay-union/solo.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    did_open(
+        &client,
+        &uri,
+        "package demo\n\
+         struct Reading { value: integer [0..100] }\n\
+         struct Fault { code: integer [0..255] }\n\
+         union SensorResult {\n\
+        \x20 ok: Reading\n\
+        \x20 err: Fault\n\
+         }\n",
+    );
+
+    // Lines 4..5 are the union arms; the struct fields sit on lines 1..2, out
+    // of the requested window.
+    let hints = inlay_hints_at(&client, 10, uri.clone(), range((4, 0), (6, 0)));
+    assert_eq!(
+        hint_pairs(&hints, lt::InlayHintKind::PARAMETER),
+        vec![
+            (pos(4, 4), "#1".to_string()), // `ok`, cols 2..4
+            (pos(5, 5), "#2".to_string()), // `err`, cols 2..5
+        ],
+        "only the in-range union arm ordinals are returned",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
