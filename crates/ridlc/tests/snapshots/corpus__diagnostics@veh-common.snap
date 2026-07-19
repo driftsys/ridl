@@ -1,0 +1,6 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.diagnostics
+input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
+---
+(no diagnostics — the entry compiles clean)

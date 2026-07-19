@@ -15,4 +15,6 @@ ridl-syntax = { path = "../ridl-syntax" }
 rowan.workspace = true
 
 [dev-dependencies]
-insta.workspace = true
+# The `glob` feature drives the full-pipeline corpus runner (tests/corpus.rs,
+# E1.18); `json` rides in from the workspace default.
+insta = { workspace = true, features = ["glob"] }

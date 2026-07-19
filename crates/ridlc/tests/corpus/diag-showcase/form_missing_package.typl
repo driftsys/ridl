@@ -1,0 +1,3 @@
+// FORM-104: this file declares no `package`. It still loads into the package
+// named by the manifest, so its one clean type is checked normally.
+type NoPackageDeclared : integer [0..10]

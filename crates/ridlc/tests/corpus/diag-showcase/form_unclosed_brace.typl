@@ -1,0 +1,7 @@
+package diag.showcase
+
+// FORM-103: an unclosed delimiter — the struct brace is never closed before the
+// file ends. (An unclosed constraint bracket, by contrast, reports FORM-101
+// "expected `]`".)
+struct UnclosedBrace {
+  keep : Name

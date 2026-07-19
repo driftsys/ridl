@@ -1,0 +1,7 @@
+package diag.showcase
+package diag.extra
+
+// TYPL-001: more than one `package` declaration in a single file (the second
+// declaration above is flagged). The first declaration matches the directory,
+// so no TYPL-002 fires here.
+type DoublyDeclared : integer [0..10]

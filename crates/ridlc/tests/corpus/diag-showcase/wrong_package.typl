@@ -1,0 +1,5 @@
+package diag.wrong
+
+// TYPL-002: this file declares a package name that does not mirror its
+// directory (the manifest names the package `diag.showcase`).
+type WrongPackage : integer [0..10]

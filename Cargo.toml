@@ -22,7 +22,12 @@ num-bigint = "0.4.8"
 num-rational = "0.4.2"
 prettyplease = "0.2.37"
 proc-macro2 = "1.0.106"
-proptest = "1.11.0"
+# Default features off: `testgen` (E1.18) makes proptest a normal dependency of
+# ridl-sem, and the `fork`/`timeout` process machinery in the default set does
+# not build for wasm32-unknown-unknown (the E1.19 `--no-default-features`
+# compiler-crate check). Consumers add the `std` feature, which is all the
+# strategy builders and the test runner need.
+proptest = { version = "1.11.0", default-features = false }
 prost = "0.14.4"
 prost-build = "0.14.4"
 protox = "0.9.1"

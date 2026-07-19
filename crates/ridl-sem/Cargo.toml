@@ -8,6 +8,14 @@ repository.workspace = true
 [dependencies]
 num-bigint.workspace = true
 num-rational.workspace = true
+# `testgen` ships proptest strategies derived from a checked range (the "typl
+# ranges are generators" feature, E1.18). proptest is an OPTIONAL dependency
+# gated behind the default-on `testgen` feature: proptest pulls in
+# `rand`/`getrandom`, which does not compile for wasm32-unknown-unknown, so the
+# E1.19 `--no-default-features` compiler-crate check must be able to drop it
+# (ADR-0007 decision 5, the same discipline the fs/fetch gates follow). The
+# `std` feature is all the strategy builders and the test runner need.
+proptest = { workspace = true, features = ["std"], optional = true }
 # ridl-sem only uses ridl-core's db/diag/package/std_lib modules, none of
 # which sit behind the fs/fetch features, so the default features (fetch,
 # which implies fs) are turned off here. Leaving the default on would pull
@@ -21,6 +29,19 @@ ridl-syntax = { path = "../ridl-syntax" }
 rowan.workspace = true
 salsa.workspace = true
 
+[features]
+# `testgen` ships by default; the wasm check turns it off with
+# `--no-default-features` so proptest (and its wasm-hostile `getrandom`) never
+# enters that build.
+default = ["testgen"]
+testgen = ["dep:proptest"]
+
 [dev-dependencies]
 insta.workspace = true
-proptest.workspace = true
+# proptest is also a dev-dependency so the crate's own tests (scalar.rs's
+# property tests, gated by `#[cfg(test)]` only) compile regardless of the
+# `testgen` feature — in particular under `--no-default-features`, where the
+# optional normal dependency above is turned off. Dev-dependencies are not
+# built by `cargo check`, so this does not re-enter the E1.19 wasm build. The
+# workspace pins default-features off, so `std` is requested here explicitly.
+proptest = { workspace = true, features = ["std"] }

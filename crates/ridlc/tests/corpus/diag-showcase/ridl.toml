@@ -1,0 +1,9 @@
+[package]
+name = "diag.showcase"
+version = "1.0.0"
+# `edition` is not a recognized manifest key: MANI-005 (warning).
+edition = "2024"
+
+[imports]
+# The value is not an http(s) URL with a host: MANI-007.
+"ghost.pkg" = "ghost://not-a-url"

@@ -1,0 +1,10 @@
+package veh.cluster
+
+// Speed is declared in the sibling member `veh.common`; the resolver binds it
+// through the workspace-member resolution path (ADR-0002 §5 step 1).
+import veh.common.Speed
+
+/// Instrument-cluster reading, carrying a speed from the common package.
+struct ClusterReading {
+  speed : Speed
+}
