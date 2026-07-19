@@ -1150,6 +1150,7 @@ dependencies = [
  "ridl-ir",
  "ridl-syntax",
  "rowan",
+ "salsa",
 ]
 
 [[package]]

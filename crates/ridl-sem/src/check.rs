@@ -15,7 +15,7 @@ use ridl_ir::{ConstDef, Module, Range, TypeDef};
 use ridl_syntax::ast::{self, AstNode, Definition, SourceFile};
 use rowan::TextRange;
 
-use crate::resolve::{Resolution, SymbolKind, const_type_name, declared_name, literal_f64};
+use crate::resolve::{FileResolution, SymbolKind, const_type_name, declared_name, literal_f64};
 
 /// A semantic diagnostic raised while lowering the AST to IR. It carries the
 /// stable diagnostic code it maps to in the coded model (`ridl_core::diag`,
@@ -37,7 +37,7 @@ pub struct CheckError {
 /// downstream — but it also raises a [`CheckError`].
 pub fn check(
     file: &SourceFile,
-    resolution: &Resolution,
+    resolution: &FileResolution,
     module_name: &str,
 ) -> (Module, Vec<CheckError>) {
     let mut errors = Vec::new();

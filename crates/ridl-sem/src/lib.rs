@@ -9,4 +9,6 @@ pub mod scalar;
 pub mod ucum;
 
 pub use check::{CheckError, check};
-pub use resolve::{Resolution, ResolveError, SymbolKind, resolve};
+pub use resolve::{
+    FileResolution, Resolution, ResolveError, Symbol, SymbolKind, resolve, resolve_package,
+};
