@@ -6,7 +6,12 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+num-bigint.workspace = true
+num-rational.workspace = true
 ridl-core = { path = "../ridl-core" }
 ridl-ir = { path = "../ridl-ir" }
 ridl-syntax = { path = "../ridl-syntax" }
 rowan.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true

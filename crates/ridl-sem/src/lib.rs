@@ -5,6 +5,7 @@
 
 pub mod check;
 pub mod resolve;
+pub mod scalar;
 pub mod ucum;
 
 pub use check::{CheckError, check};
