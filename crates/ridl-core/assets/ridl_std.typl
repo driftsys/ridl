@@ -1,0 +1,96 @@
+package ridl.std
+
+// ---------- Regex Constants ----------
+
+const UUID_PATTERN  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const ULID_PATTERN  = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
+const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
+const URI_PATTERN   = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/.+$/
+const URL_PATTERN   = /^https?:\/\/.+$/
+const EMAIL_PATTERN = /^[^@]+@[^@]+\.[^@]+$/
+const IPV4_PATTERN  = /^(\d{1,3}\.){3}\d{1,3}$/
+const IPV6_PATTERN  = /^[0-9a-f:]+$/
+const ASCII_PATTERN = /^[\x20-\x7E]+$/
+
+// ---------- Identity Types ----------
+
+/// RFC 4122 UUID — 36 characters including hyphens
+type Uuid : string [36 match UUID_PATTERN]
+
+/// ULID — 26 characters, lexicographically sortable
+type Ulid : string [26 match ULID_PATTERN]
+
+/// ISO 3779 Vehicle Identification Number — exactly 17 characters
+type Vin  : string [17 match VIN_PATTERN]
+
+// ---------- Network Types ----------
+
+/// RFC 3986 URI
+type Uri   : string [1..2048 match URI_PATTERN]
+
+/// HTTP/HTTPS URL
+type Url   : string [1..2048 match URL_PATTERN]
+
+/// Email address — RFC 5321
+type Email : string [1..254 match EMAIL_PATTERN]
+
+/// IPv4 address — dotted decimal notation
+type IpV4  : string [7..15 match IPV4_PATTERN]
+
+/// IPv6 address
+type IpV6  : string [2..39 match IPV6_PATTERN]
+
+// ---------- General String Types ----------
+
+/// Short human-readable label — ASCII printable, max 64 characters
+type Label   : string [1..64 match ASCII_PATTERN]
+
+/// Human-readable name — max 128 characters
+type Name    : string [1..128 match ASCII_PATTERN]
+
+/// Short message or description — max 256 characters
+type Message : string [1..256 match ASCII_PATTERN]
+
+// ---------- Time Types ----------
+
+/// Absolute point in time — platform time domain (ridl §3.1):
+/// int64 microseconds since the PTP epoch, 1970-01-01 00:00:00 TAI.
+/// Continuous and leap-second-free; convert to civil datetime only at
+/// presentation edges.
+type Timestamp : integer [0..9223372036854775807]
+
+/// Elapsed time interval in milliseconds
+type Duration  : ms [0.0..9223372036854775807]
+
+/// Calendar date — ISO 8601 YYYY-MM-DD
+type Date : string [10 match /^\d{4}-\d{2}-\d{2}$/]
+
+/// Time of day — ISO 8601 HH:MM:SS
+type TimeOfDay : string [8..15 match /^\d{2}:\d{2}:\d{2}/]
+
+// ---------- Version ----------
+
+/// Semantic version — SemVer 2.0.0
+type Version : string [5..32 match /^\d+\.\d+\.\d+/]
+
+// ---------- Locale ----------
+
+/// ISO 3166-1 alpha-2 country code
+type CountryCode : string [2 match /^[A-Z]{2}$/]
+
+/// ISO 639-1 language code with optional region — e.g. "en", "en-US"
+type LanguageCode : string [2..5 match /^[a-z]{2}(-[A-Z]{2})?$/]
+
+// ---------- Crypto / Security ----------
+
+/// SHA-256 hash — 32 bytes
+type Sha256Hash  : bytes [32]
+
+/// SHA-512 hash — 64 bytes
+type Sha512Hash  : bytes [64]
+
+/// Generic cryptographic signature — 64 bytes
+type Signature   : bytes [64]
+
+/// X.509 DER certificate
+type Certificate : bytes [1..4096]

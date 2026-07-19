@@ -85,6 +85,13 @@ impl DiagCode {
     pub const FORM_105: DiagCode = DiagCode("FORM-105");
 
     // --- typl codes emitted in E1 so far (typl reference §16) ---
+    /// More than one `package` declaration in a single file (typl §16.1).
+    /// Emitted by the package loader (E1.3).
+    pub const TYPL_001: DiagCode = DiagCode("TYPL-001");
+    /// Package name does not mirror the directory path relative to the
+    /// manifest root (typl §16.1, ADR-0002 §1). Emitted by the package loader
+    /// (E1.3); single-file mode is exempt.
+    pub const TYPL_002: DiagCode = DiagCode("TYPL-002");
     /// Duplicate definition of the same name in a package (typl §16.1).
     pub const TYPL_009: DiagCode = DiagCode("TYPL-009");
     /// `const` value violates its declared type constraints (typl §16.2).
@@ -111,6 +118,10 @@ impl DiagCode {
     pub const MANI_006: DiagCode = DiagCode("MANI-006");
     /// An `[imports]` value is not a valid import URL.
     pub const MANI_007: DiagCode = DiagCode("MANI-007");
+    /// A workspace member directory is missing or has no `ridl.toml`. Emitted
+    /// by the package loader (E1.3), which is where member paths are resolved
+    /// against the filesystem.
+    pub const MANI_008: DiagCode = DiagCode("MANI-008");
 }
 
 /// A diagnostic's severity. Warnings and info diagnostics arrive with later
@@ -325,6 +336,11 @@ pub const MANI_CATALOG: &[CatalogEntry] = &[
         severity: Severity::Error,
         summary: "invalid import URL",
     },
+    CatalogEntry {
+        code: DiagCode::MANI_008,
+        severity: Severity::Error,
+        summary: "workspace member directory has no `ridl.toml`",
+    },
 ];
 
 /// Polishes a raw parser message into the house diagnostic style —
@@ -445,6 +461,7 @@ mod tests {
             codes,
             vec![
                 "MANI-001", "MANI-002", "MANI-003", "MANI-004", "MANI-005", "MANI-006", "MANI-007",
+                "MANI-008",
             ],
         );
         // Every MANI code is an error except the unknown-key warning (MANI-005).
