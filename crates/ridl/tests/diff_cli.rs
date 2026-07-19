@@ -104,7 +104,72 @@ fn source_files_identical_exits_zero() {
     let new = dir.write("new.ridl", BASE);
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     assert_eq!(code, 0, "identical sources exit 0, stderr:\n{stderr}");
-    assert!(stdout.starts_with("identical"), "stdout:\n{stdout}");
+    // `render_text` terminates every line itself, so the text output must not
+    // pick up a trailing blank line.
+    assert_eq!(
+        stdout, "identical\n",
+        "the text rendering must not gain a blank line, got:\n{stdout:?}"
+    );
+}
+
+/// Retiring an interaction but writing its `reserved` tombstone at the end of
+/// the body frees the retired ordinal, so a surviving interaction slides down
+/// into it (ridl §11). Driven through real source so the compiler assigns the
+/// ordinals: a retirement is compatible, but this one shifts a wire identity
+/// and must gate.
+#[test]
+fn a_tombstone_written_out_of_its_slot_exits_one() {
+    const HEADER: &str = "package veh.cluster\ntype T: integer [0..10]\n";
+    let dir = TempDir::new("tombstone");
+    // a=1, b=2, c=3
+    let old = dir.write(
+        "old.ridl",
+        &format!(
+            "{HEADER}interface I {{\n  signal a: T @10ms\n  signal b: T @10ms\n  signal c: T @10ms\n}}\n"
+        ),
+    );
+    // a=1, c=2 (slid down from 3), reserved b=3
+    let new = dir.write(
+        "new.ridl",
+        &format!(
+            "{HEADER}interface I {{\n  signal a: T @10ms\n  signal c: T @10ms\n  reserved b\n}}\n"
+        ),
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(
+        code, 1,
+        "an out-of-slot tombstone frees a wire slot, stdout:\n{stdout}stderr:\n{stderr}"
+    );
+    assert!(stdout.starts_with("breaking"), "stdout:\n{stdout}");
+}
+
+/// Control for the case above: the same retirement written in the retired
+/// interaction's own slot keeps every later ordinal and stays compatible.
+#[test]
+fn a_tombstone_written_in_its_slot_exits_zero() {
+    const HEADER: &str = "package veh.cluster\ntype T: integer [0..10]\n";
+    let dir = TempDir::new("tombstone-ok");
+    let old = dir.write(
+        "old.ridl",
+        &format!(
+            "{HEADER}interface I {{\n  signal a: T @10ms\n  signal b: T @10ms\n  signal c: T @10ms\n}}\n"
+        ),
+    );
+    // reserved b holds ordinal 2, so c keeps ordinal 3.
+    let new = dir.write(
+        "new.ridl",
+        &format!(
+            "{HEADER}interface I {{\n  signal a: T @10ms\n  reserved b\n  signal c: T @10ms\n}}\n"
+        ),
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "an in-slot retirement is compatible, stdout:\n{stdout}stderr:\n{stderr}"
+    );
+    assert!(stdout.contains("interaction_retired"), "stdout:\n{stdout}");
 }
 
 /// `ridl diff <dir> <dir>` over two package directories: a breaking change

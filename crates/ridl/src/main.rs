@@ -109,11 +109,12 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
     };
 
     let report = ridl_diff::diff_sets(&old_packages, &new_packages);
-    let rendered = match format {
-        DiffFormat::Text => ridl_diff::render_text(&report),
-        DiffFormat::Json => ridl_diff::render_json(&report),
-    };
-    println!("{rendered}");
+    // `render_text` already terminates every line, so it prints as is; the JSON
+    // rendering has no trailing newline and gets one.
+    match format {
+        DiffFormat::Text => print!("{}", ridl_diff::render_text(&report)),
+        DiffFormat::Json => println!("{}", ridl_diff::render_json(&report)),
+    }
 
     match report.verdict {
         ridl_diff::Verdict::Breaking => ExitCode::FAILURE,
