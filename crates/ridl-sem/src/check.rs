@@ -642,12 +642,23 @@ impl Checker<'_> {
                 max: None,
             };
         };
-        let min = constraint
-            .min()
-            .and_then(|literal| self.numeric_literal(&literal));
-        let max = constraint
-            .max()
-            .and_then(|literal| self.numeric_literal(&literal));
+        let min_literal = constraint.min();
+        let max_literal = constraint.max();
+        let min = min_literal
+            .as_ref()
+            .and_then(|literal| self.numeric_literal(literal));
+        let max = max_literal
+            .as_ref()
+            .and_then(|literal| self.numeric_literal(literal));
+        // A bound that is written but does not resolve numerically (an
+        // unresolvable or chained constant reference) is not an omitted
+        // bound: taking the §5.5 default would derive a definite width that
+        // flips when the constant later resolves (task 14's `const_value`) —
+        // a silent wire break. The width is deferred instead (the TYPL-111
+        // shape); the unknown-constant diagnostic itself is task 14
+        // territory.
+        let unresolved_bound =
+            (min_literal.is_some() && min.is_none()) || (max_literal.is_some() && max.is_none());
 
         // TYPL-105: `step` quantizes floats only (§4.3).
         if let Some(step) = constraint.step() {
@@ -671,25 +682,31 @@ impl Checker<'_> {
             );
         }
 
-        // §5.5: an omitted bound defaults to the widest value the inferred
-        // width allows — the int64 domain edge on the open side.
-        let effective_min = min.clone().unwrap_or_else(|| int64_edge(false));
-        let effective_max = max.clone().unwrap_or_else(|| int64_edge(true));
-        let width = match derive_int_width(&IntRange {
-            min: effective_min,
-            max: effective_max,
-        }) {
-            Ok(width) => Some(v1::type_def::Width::IntWidth(
-                v1::IntWidth::from(width) as i32
-            )),
-            Err(error) => {
-                debug_assert_eq!(error.code(), "TYPL-111");
-                self.error(
-                    DiagCode::TYPL_111,
-                    constraint.syntax().text_range(),
-                    "integer range bound outside the `int64` domain `[-2^63..2^63-1]`".to_string(),
-                );
-                None
+        // §5.5: a bound genuinely omitted from source defaults to the widest
+        // value the inferred width allows — the int64 domain edge on the
+        // open side.
+        let width = if unresolved_bound {
+            None
+        } else {
+            let effective_min = min.clone().unwrap_or_else(|| int64_edge(false));
+            let effective_max = max.clone().unwrap_or_else(|| int64_edge(true));
+            match derive_int_width(&IntRange {
+                min: effective_min,
+                max: effective_max,
+            }) {
+                Ok(width) => Some(v1::type_def::Width::IntWidth(
+                    v1::IntWidth::from(width) as i32
+                )),
+                Err(error) => {
+                    debug_assert_eq!(error.code(), "TYPL-111");
+                    self.error(
+                        DiagCode::TYPL_111,
+                        constraint.syntax().text_range(),
+                        "integer range bound outside the `int64` domain `[-2^63..2^63-1]`"
+                            .to_string(),
+                    );
+                    None
+                }
             }
         };
         ScalarParts {
@@ -729,17 +746,25 @@ impl Checker<'_> {
                 max: None,
             };
         };
-        let min = constraint
-            .min()
-            .and_then(|literal| self.numeric_literal(&literal));
-        let max = constraint
-            .max()
-            .and_then(|literal| self.numeric_literal(&literal));
+        let min_literal = constraint.min();
+        let max_literal = constraint.max();
+        let min = min_literal
+            .as_ref()
+            .and_then(|literal| self.numeric_literal(literal));
+        let max = max_literal
+            .as_ref()
+            .and_then(|literal| self.numeric_literal(literal));
 
         let step_literal = constraint.step();
         let step = step_literal
             .as_ref()
             .and_then(|literal| self.numeric_literal(literal));
+        // Same rule as the integer path: a written-but-unresolved bound or
+        // step must not silently derive a definite width — defer it until
+        // the constant resolves (task 14).
+        let unresolved_bound = (min_literal.is_some() && min.is_none())
+            || (max_literal.is_some() && max.is_none())
+            || (step_literal.is_some() && step.is_none());
         // The T10 review fact: `1` and `1.0` erase to one ExactValue, so the
         // integer-form check reads the raw CST token kind.
         if let Some(literal) = &step_literal
@@ -805,15 +830,24 @@ impl Checker<'_> {
             );
         }
 
-        // §4 recommendation: a float wants both a range and a step.
-        if min.is_none() || max.is_none() || step.is_none() {
+        // §4 recommendation: a float wants both a range and a step. Judged on
+        // the written literals — a bound that is written but unresolved is
+        // declared, not missing.
+        if min_literal.is_none() || max_literal.is_none() || step_literal.is_none() {
             missing_constraint_warning(self, decl_span);
         }
 
-        let width = if min.is_some() && max.is_some() {
-            derive_float_width(&float_range(step.clone()))
+        let width = if unresolved_bound {
+            None
         } else {
-            crate::scalar::FloatWidth::F64
+            let width = if min.is_some() && max.is_some() {
+                derive_float_width(&float_range(step.clone()))
+            } else {
+                crate::scalar::FloatWidth::F64
+            };
+            Some(v1::type_def::Width::FloatWidth(
+                v1::FloatWidth::from(width) as i32
+            ))
         };
         ScalarParts {
             constraint: Some(v1::Constraint {
@@ -825,9 +859,7 @@ impl Checker<'_> {
                 pattern: None,
                 pattern_const: None,
             }),
-            width: Some(v1::type_def::Width::FloatWidth(
-                v1::FloatWidth::from(width) as i32
-            )),
+            width,
             min,
             max,
         }
@@ -1572,7 +1604,6 @@ impl Checker<'_> {
         let mut is_result = false;
         if decl.is_error() {
             // TYPL-214: every arm of an `error union` is error-typed.
-            let mut kind_index = 0;
             for child in decl.syntax().children() {
                 let Some(arm) = ast::UnionArm::cast(child) else {
                     continue;
@@ -1587,8 +1618,6 @@ impl Checker<'_> {
                 if symbol.kind == SymbolKind::Const {
                     continue;
                 }
-                kind_index += 1;
-                let _ = kind_index;
                 if !symbol.is_error {
                     let name = member_name(arm.name()).unwrap_or_default();
                     self.error(
@@ -2333,6 +2362,47 @@ mod tests {
         assert_eq!(type_def(&checked, "Gain").declared_init, None);
     }
 
+    /// A bound that is written but does not resolve numerically (an
+    /// unresolvable or chained constant reference) must not take the
+    /// omitted-bound default: a definite width would be wrong and would flip
+    /// when the constant later resolves (task 14's `const_value`) — a silent
+    /// wire break. The width stays unset instead; the unknown-constant
+    /// diagnostic itself is task 14 territory.
+    #[test]
+    fn written_but_unresolved_bound_defers_the_width() {
+        let checked = check_source("app", "package app\ntype X : integer [0..TYPO]\n");
+        let def = type_def(&checked, "X");
+        assert_eq!(
+            def.width, None,
+            "no definite width from an unresolved bound"
+        );
+        let constraint = def.constraint.as_ref().unwrap();
+        assert_eq!(constraint.min.as_deref(), Some("0"));
+        assert_eq!(
+            constraint.max, None,
+            "the unresolved bound lowers as absent"
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+
+        // The float path has the same shape.
+        let float = check_source("app", "package app\ntype Y : float [0.0..TYPO step 0.5]\n");
+        assert_eq!(type_def(&float, "Y").width, None);
+        assert!(codes(&float).is_empty(), "got: {:?}", float.diagnostics);
+    }
+
+    /// §5.5: a bound genuinely omitted from source still takes the
+    /// widest-value default and derives a width.
+    #[test]
+    fn omitted_bound_still_defaults_to_the_int64_edge() {
+        let checked = check_source("app", "package app\ntype X : integer [0..]\n");
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            type_def(&checked, "X").width,
+            Some(v1::type_def::Width::IntWidth(v1::IntWidth::U64 as i32)),
+            "[0..] fills the open side with the int64 edge and derives uint64",
+        );
+    }
+
     // --- TYPL-110/111: units and the int64 domain -------------------------
 
     #[test]
@@ -2440,9 +2510,11 @@ mod tests {
             "app",
             "package app\nstruct S { t : T }\nstruct T { s : [S; 4] }\n",
         );
-        let found = codes(&checked);
-        assert!(
-            found.iter().filter(|code| **code == "TYPL-206").count() >= 1,
+        // Both composites sit on the cycle, so each reports once — exactly
+        // two TYPL-206, nothing else.
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-206", "TYPL-206"],
             "got: {:?}",
             checked.diagnostics,
         );
