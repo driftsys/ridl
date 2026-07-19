@@ -5,3 +5,9 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
+
+[dependencies]
+clap.workspace = true
+ridl-core = { path = "../ridl-core" }
+ridl-fmt = { path = "../../tools/fmt" }
+ridlc = { path = "../ridlc" }
