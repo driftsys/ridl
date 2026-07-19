@@ -1,0 +1,32 @@
+package veh.lenient
+
+// Grammar over-approximations (the parser accepts, the checker narrows —
+// the E1 discipline, E2 task 5 emits the rejections). Every shape below
+// parses losslessly with zero parser errors.
+
+interface LenientShapes {
+
+  // RIDL-201 territory: a stream payload on a signal parses.
+  signal rawFeed : <SensorFrame>
+
+  // RIDL-104 territory: a return type on a command parses.
+  command setMode(mode: DriveMode): AckState
+
+  // RIDL-106 territory and friends: timing parses on command, query, final.
+  command reset() @50ms
+  query getState(): DriveState @[10ms..100ms]
+  final buildId : BuildId @1s
+
+  // RIDL-301/-106 territory: attr blocks parse on signal, event, final.
+  signal speed : Speed [ persist ]
+  event doorOpened : DoorPayload [ someKey = 3 ]
+  final vin : Vin [ cached ]
+
+  // Init values parse on event and final.
+  event calibrated : CalPayload = DEFAULT_CAL
+  final region : Region = REGION_EU
+
+  // Timing and attr block in either order.
+  query ordered(): DriveState [ flagged ] @10ms
+  query reordered(): DriveState @10ms [ flagged ]
+}

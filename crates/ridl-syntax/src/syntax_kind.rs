@@ -5,7 +5,7 @@
 /// The token variants are the full family token set the lexer recognises
 /// (docs/ROADMAP.md epic E1.1, typl reference §1.4 and §2). The node variants
 /// are the typl grammar's node inventory (epic E1.2a) — one variant per rule
-/// in `typl.ungram`, plus [`ErrorNode`](SyntaxKind::ErrorNode) for recovery.
+/// in `family.ungram`, plus [`ErrorNode`](SyntaxKind::ErrorNode) for recovery.
 /// [`RidlLanguage`] maps between this enum and rowan's raw kind through the
 /// `#[repr(u16)]` discriminants, so the node variants stay grouped at the end
 /// with [`ErrorNode`](SyntaxKind::ErrorNode) last — that is the range the
@@ -100,7 +100,7 @@ pub enum SyntaxKind {
     BlockComment,
     DocComment,
     Error,
-    // Nodes — the typl grammar's node inventory (`typl.ungram`, epic E1.2a).
+    // Nodes — the typl grammar's node inventory (`family.ungram`, epic E1.2a).
     // The full parser (task E1.2b) produces them; until it lands, the
     // generated typed AST casts over trees built directly in tests.
     SourceFile,
@@ -131,9 +131,25 @@ pub enum SyntaxKind {
     QualifiedName,
     Literal,
     InitValue,
+    // Nodes of the ridl interaction grammar (`family.ungram`, epic E2.1a —
+    // ridl reference Appendix C, ADR-0008 decisions 1 and 2).
+    InterfaceDef,
+    SignalDef,
+    EventDef,
+    CommandDef,
+    QueryDef,
+    FinalDef,
+    Param,
+    ParamList,
+    ReturnType,
+    StreamType,
+    FallibleType,
+    Timing,
+    TimingRange,
+    AttrBlock,
     /// A recovery node: error recovery wraps the tokens it skips in one of
     /// these, so broken input still produces a lossless tree. It is the one
-    /// node kind with no rule in `typl.ungram`, and the last variant — the
+    /// node kind with no rule in `family.ungram`, and the last variant — the
     /// `kind_from_raw` assertion below guards the range up to it.
     ErrorNode,
 }

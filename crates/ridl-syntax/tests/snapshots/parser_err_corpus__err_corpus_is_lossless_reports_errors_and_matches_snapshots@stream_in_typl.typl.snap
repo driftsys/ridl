@@ -1,0 +1,55 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/stream_in_typl.typl
+---
+SourceFile@0..75
+  PackageDecl@0..9
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..9
+      Ident@8..9 "p"
+  Whitespace@9..11 "\n\n"
+  StructDef@11..74
+    StructKw@11..17 "struct"
+    Whitespace@17..18 " "
+    Name@18..24
+      Ident@18..24 "Frames"
+    Whitespace@24..25 " "
+    LBrace@25..26 "{"
+    Whitespace@26..29 "\n  "
+    FieldDef@29..45
+      Name@29..35
+        Ident@29..35 "frames"
+      Whitespace@35..36 " "
+      Colon@36..37 ":"
+      Whitespace@37..38 " "
+      StreamType@38..45
+        Lt@38..39 "<"
+        PathType@39..44
+          QualifiedName@39..44
+            Ident@39..44 "Frame"
+        Gt@44..45 ">"
+    Whitespace@45..48 "\n  "
+    FieldDef@48..72
+      Name@48..53
+        Ident@48..53 "count"
+      Whitespace@53..55 "  "
+      Colon@55..56 ":"
+      Whitespace@56..57 " "
+      PrimitiveType@57..72
+        IntegerKw@57..64 "integer"
+        Whitespace@64..65 " "
+        Constraint@65..72
+          LBracket@65..66 "["
+          Literal@66..67
+            IntNumber@66..67 "0"
+          DotDot@67..69 ".."
+          Literal@69..71
+            IntNumber@69..71 "64"
+          RBracket@71..72 "]"
+    Whitespace@72..73 "\n"
+    RBrace@73..74 "}"
+  Whitespace@74..75 "\n"
+errors:
+  TYPL-301 38..39 stream type in typl context

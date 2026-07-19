@@ -1,0 +1,175 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/signals.ridl
+---
+SourceFile@0..726
+  PackageDecl@0..19
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..19
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..19 "signals"
+  Whitespace@19..21 "\n\n"
+  DocComment@21..70 "/// Every signal shap ..."
+  Whitespace@70..71 "\n"
+  InterfaceDef@71..725
+    InterfaceKw@71..80 "interface"
+    Whitespace@80..81 " "
+    Name@81..93
+      Ident@81..93 "SignalShapes"
+    Whitespace@93..94 " "
+    LBrace@94..95 "{"
+    Whitespace@95..99 "\n\n  "
+    DocComment@99..124 "/// Strict periodic f ..."
+    Whitespace@124..127 "\n  "
+    SignalDef@127..160
+      SignalKw@127..133 "signal"
+      Whitespace@133..134 " "
+      Name@134..146
+        Ident@134..146 "currentSpeed"
+      Whitespace@146..147 " "
+      Colon@147..148 ":"
+      Whitespace@148..149 " "
+      PathType@149..154
+        QualifiedName@149..154
+          Ident@149..154 "Speed"
+      Whitespace@154..155 " "
+      Timing@155..160
+        At@155..156 "@"
+        Duration@156..160 "10ms"
+    Whitespace@160..164 "\n\n  "
+    DocComment@164..192 "/// Range form, both  ..."
+    Whitespace@192..195 "\n  "
+    SignalDef@195..241
+      SignalKw@195..201 "signal"
+      Whitespace@201..202 " "
+      Name@202..212
+        Ident@202..212 "engineTemp"
+      Whitespace@212..213 " "
+      Colon@213..214 ":"
+      Whitespace@214..215 " "
+      PathType@215..226
+        QualifiedName@215..226
+          Ident@215..226 "Temperature"
+      Whitespace@226..227 " "
+      Timing@227..241
+        At@227..228 "@"
+        LBracket@228..229 "["
+        TimingRange@229..240
+          Duration@229..233 "20ms"
+          DotDot@233..235 ".."
+          Duration@235..240 "100ms"
+        RBracket@240..241 "]"
+    Whitespace@241..245 "\n\n  "
+    DocComment@245..283 "/// Half-open range:  ..."
+    Whitespace@283..286 "\n  "
+    SignalDef@286..326
+      SignalKw@286..292 "signal"
+      Whitespace@292..293 " "
+      Name@293..302
+        Ident@293..302 "cabinTemp"
+      Whitespace@302..303 " "
+      Colon@303..304 ":"
+      Whitespace@304..305 " "
+      PathType@305..316
+        QualifiedName@305..316
+          Ident@305..316 "Temperature"
+      Whitespace@316..317 " "
+      Timing@317..326
+        At@317..318 "@"
+        LBracket@318..319 "["
+        TimingRange@319..325
+          Duration@319..323 "20ms"
+          DotDot@323..325 ".."
+        RBracket@325..326 "]"
+    Whitespace@326..330 "\n\n  "
+    DocComment@330..368 "/// Half-open range:  ..."
+    Whitespace@368..371 "\n  "
+    SignalDef@371..414
+      SignalKw@371..377 "signal"
+      Whitespace@377..378 " "
+      Name@378..389
+        Ident@378..389 "outsideTemp"
+      Whitespace@389..390 " "
+      Colon@390..391 ":"
+      Whitespace@391..392 " "
+      PathType@392..403
+        QualifiedName@392..403
+          Ident@392..403 "Temperature"
+      Whitespace@403..404 " "
+      Timing@404..414
+        At@404..405 "@"
+        LBracket@405..406 "["
+        TimingRange@406..413
+          DotDot@406..408 ".."
+          Duration@408..413 "100ms"
+        RBracket@413..414 "]"
+    Whitespace@414..418 "\n\n  "
+    DocComment@418..481 "/// Bare init overrid ..."
+    Whitespace@481..484 "\n  "
+    SignalDef@484..542
+      SignalKw@484..490 "signal"
+      Whitespace@490..491 " "
+      Name@491..502
+        Ident@491..502 "targetSpeed"
+      Whitespace@502..503 " "
+      Colon@503..504 ":"
+      Whitespace@504..505 " "
+      PathType@505..510
+        QualifiedName@505..510
+          Ident@505..510 "Speed"
+      Whitespace@510..511 " "
+      InitValue@511..527
+        Eq@511..512 "="
+        Whitespace@512..513 " "
+        Literal@513..527
+          Ident@513..527 "SPEED_LIMIT_EU"
+      Whitespace@527..528 " "
+      Timing@528..542
+        At@528..529 "@"
+        LBracket@529..530 "["
+        TimingRange@530..541
+          Duration@530..534 "20ms"
+          DotDot@534..536 ".."
+          Duration@536..541 "500ms"
+        RBracket@541..542 "]"
+    Whitespace@542..546 "\n\n  "
+    DocComment@546..574 "/// Literal init, no  ..."
+    Whitespace@574..577 "\n  "
+    SignalDef@577..611
+      SignalKw@577..583 "signal"
+      Whitespace@583..584 " "
+      Name@584..594
+        Ident@584..594 "wiperLevel"
+      Whitespace@594..595 " "
+      Colon@595..596 ":"
+      Whitespace@596..597 " "
+      PathType@597..607
+        QualifiedName@597..607
+          Ident@597..607 "WiperLevel"
+      Whitespace@607..608 " "
+      InitValue@608..611
+        Eq@608..609 "="
+        Whitespace@609..610 " "
+        Literal@610..611
+          IntNumber@610..611 "0"
+    Whitespace@611..615 "\n\n  "
+    DocComment@615..690 "/// Untimed and unini ..."
+    Whitespace@690..693 "\n  "
+    SignalDef@693..723
+      SignalKw@693..699 "signal"
+      Whitespace@699..700 " "
+      Name@700..708
+        Ident@700..708 "warnings"
+      Whitespace@708..709 " "
+      Colon@709..710 ":"
+      Whitespace@710..711 " "
+      PathType@711..723
+        QualifiedName@711..723
+          Ident@711..723 "WarningFlags"
+    Whitespace@723..724 "\n"
+    RBrace@724..725 "}"
+  Whitespace@725..726 "\n"
+errors: none

@@ -1,4 +1,4 @@
-// typl.ungram — the typl profile grammar as a rowan tree shape.
+// family.ungram — the typl profile grammar as a rowan tree shape.
 //
 // Transliterated from the typl language reference, Appendix E (EBNF), per
 // ADR-0007 decision 1. This file describes the shape of the syntax tree,
@@ -37,6 +37,7 @@ SourceFile =
   PackageDecl?
   imports:Import*
   definitions:Definition*
+  interfaces:InterfaceDef*
 
 PackageDecl =
   'package' QualifiedName
@@ -174,6 +175,94 @@ UnionDef =
 
 UnionArm =
   Name ':' type_ref:PathType
+
+// ---------- ridl interactions ----------
+//
+// Transliterated from the ridl language reference, Appendix C, with the two
+// decided supersessions baked in (ADR-0008 decisions 1 and 2): the return
+// type gains `fallible_type = type_ref "|" type_ref` (general form §6.1),
+// and a signal's bare `= value` init comes before its timing annotation.
+//
+// The parser is deliberately more lenient than the reference — the checker
+// narrows (RIDL-1xx/2xx/3xx, E2 task 5): a `: return_type` after a
+// command's params parses; timing parses on command, query, and final;
+// an attr block parses on signal, event, and final; an init value parses
+// on event and final. The rules below name a child only where the typed
+// AST exposes an accessor for it; the extra lenient children (an attr
+// block on a signal or event, an init value on an event or final) still
+// land inside the definition node and are reached through the CST.
+
+InterfaceDef =
+  'internal'? 'error'? 'interface' Name '{' (members:InterfaceMember ','?)* '}'
+
+InterfaceMember =
+  SignalDef
+| EventDef
+| CommandDef
+| QueryDef
+| FinalDef
+| ReservedEntry
+
+SignalDef =
+  'signal' Name ':' payload:FieldType InitValue? Timing?
+
+EventDef =
+  'event' Name ':' payload:FieldType Timing?
+
+CommandDef =
+  'command' Name params:ParamList (':' return_type:ReturnType)? AttrBlock? Timing?
+
+QueryDef =
+  'query' Name params:ParamList ':' return_type:ReturnType AttrBlock? Timing?
+
+FinalDef =
+  'final' Name ':' payload:FieldType Timing? AttrBlock?
+
+ParamList =
+  '(' (params:Param ','?)* ')'
+
+Param =
+  Name ':' param_type:ParamType
+
+ParamType =
+  FieldType
+| StreamType
+
+// The four return shapes (ridl reference §7.1, general form §6.1). The
+// labels force a struct with one accessor per shape instead of an enum —
+// the checker asks "which shape" through the four `Option`s.
+ReturnType =
+  type_ref:PathType
+| tuple_type:TupleType
+| stream_type:StreamType
+| fallible_type:FallibleType
+
+// `ok | err` — both arms are named types (general form §6.1); the
+// accessors are positional (first and second `PathType` child).
+FallibleType =
+  ok:PathType '|' err:PathType
+
+// The stream container `<T>` (ridl reference §12): a named element type,
+// or raw `string`/`bytes` held as a bare token child
+// (`StreamType::element_primitive()` in src/ast.rs).
+StreamType =
+  '<' (element_type:PathType | 'string' | 'bytes') '>'
+
+// `@10ms` (strict periodic) or `@[min..max]` (range) — ridl reference §9.
+// `Timing::duration()`, `TimingRange::min()`, and `TimingRange::max()` are
+// hand-written in src/ast.rs: the range endpoints are both `duration`
+// tokens told apart by the `..` anchor.
+Timing =
+  '@' ('duration' | '[' range:TimingRange ']')
+
+TimingRange =
+  min:'duration'? '..' max:'duration'?
+
+// A balanced `[ … ]` after an interaction signature. Until E2 task 4 the
+// parser consumes the content as raw tokens (lossless, no inner
+// structure); the attribute grammar replaces this rule then.
+AttrBlock =
+  '[' ']'
 
 // ---------- Names and literals ----------
 

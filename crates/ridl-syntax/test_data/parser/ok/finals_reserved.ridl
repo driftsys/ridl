@@ -1,0 +1,17 @@
+package veh.finals
+
+/// Finals and tombstones (ridl reference §8; typl §7.4).
+interface FinalShapes {
+
+  final vin : Vin
+
+  reserved resetCounters
+
+  /// Retired ordinals sit between live interactions.
+  final softwareVersion : Version
+
+  reserved legacyChecksum
+
+  /// A collection payload — array final type.
+  final capabilities : [Label; 0..32]
+}

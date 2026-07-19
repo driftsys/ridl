@@ -1,0 +1,26 @@
+package veh.signals
+
+/// Every signal shape (ridl reference §4, §9).
+interface SignalShapes {
+
+  /// Strict periodic form.
+  signal currentSpeed : Speed @10ms
+
+  /// Range form, both bounds.
+  signal engineTemp : Temperature @[20ms..100ms]
+
+  /// Half-open range: lower bound only.
+  signal cabinTemp : Temperature @[20ms..]
+
+  /// Half-open range: upper bound only.
+  signal outsideTemp : Temperature @[..100ms]
+
+  /// Bare init override before the timing (ADR-0008 decision 2).
+  signal targetSpeed : Speed = SPEED_LIMIT_EU @[20ms..500ms]
+
+  /// Literal init, no timing.
+  signal wiperLevel : WiperLevel = 0
+
+  /// Untimed and uninitialized — the default timing is applied downstream.
+  signal warnings : WarningFlags
+}

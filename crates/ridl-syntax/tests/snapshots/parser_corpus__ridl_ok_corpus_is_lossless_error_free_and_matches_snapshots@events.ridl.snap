@@ -1,0 +1,108 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/events.ridl
+---
+SourceFile@0..446
+  PackageDecl@0..18
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..18
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..18 "events"
+  Whitespace@18..20 "\n\n"
+  DocComment@20..58 "/// Event shapes (rid ..."
+  Whitespace@58..59 "\n"
+  InterfaceDef@59..445
+    InterfaceKw@59..68 "interface"
+    Whitespace@68..69 " "
+    Name@69..80
+      Ident@69..80 "EventShapes"
+    Whitespace@80..81 " "
+    LBrace@81..82 "{"
+    Whitespace@82..86 "\n\n  "
+    DocComment@86..143 "/// Raised on every d ..."
+    Whitespace@143..146 "\n  "
+    EventDef@146..191
+      EventKw@146..151 "event"
+      Whitespace@151..152 " "
+      Name@152..162
+        Ident@152..162 "doorOpened"
+      Whitespace@162..163 " "
+      Colon@163..164 ":"
+      Whitespace@164..165 " "
+      PathType@165..176
+        QualifiedName@165..176
+          Ident@165..176 "DoorPayload"
+      Whitespace@176..177 " "
+      Timing@177..191
+        At@177..178 "@"
+        LBracket@178..179 "["
+        TimingRange@179..190
+          Duration@179..183 "50ms"
+          DotDot@183..185 ".."
+          Duration@185..190 "500ms"
+        RBracket@190..191 "]"
+    Whitespace@191..195 "\n\n  "
+    DocComment@195..236 "/// Half-open bounds  ..."
+    Whitespace@236..239 "\n  "
+    EventDef@239..294
+      EventKw@239..244 "event"
+      Whitespace@244..245 " "
+      Name@245..263
+        Ident@245..263 "speedLimitExceeded"
+      Whitespace@263..264 " "
+      Colon@264..265 ":"
+      Whitespace@265..266 " "
+      PathType@266..283
+        QualifiedName@266..283
+          Ident@266..283 "SpeedLimitPayload"
+      Whitespace@283..284 " "
+      Timing@284..294
+        At@284..285 "@"
+        LBracket@285..286 "["
+        TimingRange@286..293
+          Duration@286..291 "100ms"
+          DotDot@291..293 ".."
+        RBracket@293..294 "]"
+    Whitespace@294..298 "\n\n  "
+    DocComment@298..331 "/// Upper bound only, ..."
+    Whitespace@331..334 "\n  "
+    EventDef@334..379
+      EventKw@334..339 "event"
+      Whitespace@339..340 " "
+      Name@340..357
+        Ident@340..357 "parkAssistWarning"
+      Whitespace@357..358 " "
+      Colon@358..359 ":"
+      Whitespace@359..360 " "
+      PathType@360..371
+        QualifiedName@360..371
+          Ident@360..371 "ParkWarning"
+      Whitespace@371..372 " "
+      Timing@372..379
+        At@372..373 "@"
+        LBracket@373..374 "["
+        TimingRange@374..378
+          DotDot@374..376 ".."
+          Duration@376..378 "2s"
+        RBracket@378..379 "]"
+    Whitespace@379..383 "\n\n  "
+    DocComment@383..401 "/// Untimed event."
+    Whitespace@401..404 "\n  "
+    EventDef@404..443
+      EventKw@404..409 "event"
+      Whitespace@409..410 " "
+      Name@410..425
+        Ident@410..425 "ignitionChanged"
+      Whitespace@425..426 " "
+      Colon@426..427 ":"
+      Whitespace@427..428 " "
+      PathType@428..443
+        QualifiedName@428..443
+          Ident@428..443 "IgnitionPayload"
+    Whitespace@443..444 "\n"
+    RBrace@444..445 "}"
+  Whitespace@445..446 "\n"
+errors: none

@@ -1,0 +1,34 @@
+package veh.mixed
+
+import veh.common.Label
+import veh.common.FaultPage
+
+// Vocabulary local to the contract — typl declarations at package level,
+// interleaved with the interface in one .ridl file.
+
+struct DiagFilter {
+  severity : integer [0..5]
+  category : Label?
+}
+
+error enum DiagError {
+  FILTER_INVALID = 0
+  STORAGE_BUSY   = 1
+}
+
+const MAX_RETRIES : integer = 3
+
+/// The contract over the local vocabulary.
+interface Diagnostics {
+
+  signal lastError : DiagError @[100ms..1s]
+
+  query readFaults(filter: DiagFilter): FaultPage | DiagError
+}
+
+/// The internal modifier parses on an interface too.
+internal interface Maintenance {
+  command clearAll()
+}
+
+type RetryBudget : integer [0..10]

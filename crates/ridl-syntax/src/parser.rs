@@ -2,7 +2,7 @@
 //! (docs/ROADMAP.md epic E1.2b, ADR-0004 §2, typl reference Appendix E).
 //!
 //! The parser consumes the flat token stream from [`crate::lex`] and builds a
-//! lossless rowan tree whose nodes match `typl.ungram` exactly: every token —
+//! lossless rowan tree whose nodes match `family.ungram` exactly: every token —
 //! including whitespace and comments — lands in the tree in source order, so
 //! [`Parse::syntax`] round-trips back to the original source for both valid
 //! and broken input. On an unexpected token the parser records a
@@ -35,6 +35,13 @@
 //! definition kind. The checker narrows these later (TYPL-2xx); the parser
 //! must not reject them.
 //!
+//! The interaction grammar (E2 task 3) follows the same discipline: a
+//! `: return_type` after a command's params parses; timing parses on
+//! command, query, and final; an attr block parses on signal, event, and
+//! final; an init value parses on event and final; a stream `<T>` parses in
+//! every type position, including signal/event payloads and struct fields.
+//! The rejections are checker scope (RIDL-104/-106/-201/-301, E2 task 5).
+//!
 //! # Profile boundary
 //!
 //! The parser runs under a [`Profile`] (E2 task 2, ADR-0007 decision 10). In
@@ -44,7 +51,11 @@
 //! **TYPL-304**. In a `.ridl` parse durations and `@` are ordinary tokens,
 //! and a `ReservedWord` at declaration-start position — a word of the
 //! uxdl/rmdl/rsdl profiles — emits **RIDL-403** (ridl reference §16.4). Both
-//! declaration-start boundaries recover exactly as FORM-105 does. Leading
+//! declaration-start boundaries recover exactly as FORM-105 does. The stream
+//! grammar parses under both profiles (E2 task 3): a `<T>` in type position
+//! builds a `StreamType` node everywhere, and in a `.typl` parse it
+//! additionally emits **TYPL-301** (`stream type in typl context`) and
+//! parsing continues. Leading
 //! zeros in an integer literal emit **FORM-005**. Every [`SyntaxError`]
 //! carries its diagnostic code; the coded `Diagnostic` model consumes it in
 //! task E1.10.
@@ -137,7 +148,7 @@ pub fn parse(input: &str, profile: Profile) -> Parse {
     parser.finish()
 }
 
-/// Whether `kind` can be the value token of a `Literal` (`typl.ungram` rule
+/// Whether `kind` can be the value token of a `Literal` (`family.ungram` rule
 /// `Literal`, minus the optional leading `-`).
 fn is_value_token(kind: SyntaxKind) -> bool {
     matches!(
@@ -155,6 +166,8 @@ fn is_value_token(kind: SyntaxKind) -> bool {
 /// Whether `kind` starts a top-level construct. These are the
 /// resynchronization points recovery falls back to, both at the file level
 /// and when a block body runs past an unclosed `}` into the next declaration.
+/// `interface` joins the set with E2.1a; under [`Profile::Typl`] it never
+/// occurs (the word lexes to `ReservedWord` there).
 fn is_top_level_start(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -168,6 +181,21 @@ fn is_top_level_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::EnumKw
             | SyntaxKind::EnumsetKw
             | SyntaxKind::UnionKw
+            | SyntaxKind::InterfaceKw
+    )
+}
+
+/// Whether `kind` starts an interaction inside an interface body — the five
+/// interaction keywords (E2.1a). They join the recovery sync set inside
+/// interface bodies, so garbage resynchronizes at the next interaction.
+fn is_interaction_start(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::SignalKw
+            | SyntaxKind::EventKw
+            | SyntaxKind::CommandKw
+            | SyntaxKind::QueryKw
+            | SyntaxKind::FinalKw
     )
 }
 
@@ -411,7 +439,8 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::StructKw
                     | SyntaxKind::EnumKw
                     | SyntaxKind::EnumsetKw
-                    | SyntaxKind::UnionKw,
+                    | SyntaxKind::UnionKw
+                    | SyntaxKind::InterfaceKw,
                 ) => self.definition(),
                 Some(SyntaxKind::ReservedWord) => {
                     if !self.profile_boundary_at_top_level() {
@@ -501,6 +530,7 @@ impl<'a> Parser<'a> {
             Some(SyntaxKind::EnumKw) => self.enum_def(),
             Some(SyntaxKind::EnumsetKw) => self.enum_set_def(),
             Some(SyntaxKind::UnionKw) => self.union_def(),
+            Some(SyntaxKind::InterfaceKw) => self.interface_def(),
             _ => self.err_and_recover("in a definition", is_top_level_start),
         }
     }
@@ -652,6 +682,318 @@ impl<'a> Parser<'a> {
         self.builder.finish_node();
     }
 
+    // --- ridl interaction productions (E2.1a, ridl reference Appendix C) --
+
+    /// `InterfaceDef = 'internal'? 'error'? 'interface' Name '{' (members
+    /// ','?)* '}'` — an interface body holds interactions and `reserved`
+    /// tombstones only (ridl reference §14.1); a type declaration inside it
+    /// is RIDL-107, checker scope. The body loop is the interaction
+    /// counterpart of [`Parser::block_body`]: members are announced by the
+    /// five interaction keywords instead of an `Ident`, and those keywords
+    /// are the recovery sync points, so garbage inside a body
+    /// resynchronizes at the next interaction.
+    fn interface_def(&mut self) {
+        self.start(SyntaxKind::InterfaceDef);
+        self.modifiers();
+        self.bump(); // 'interface'
+        self.name();
+        if !self.block_open() {
+            self.builder.finish_node();
+            return;
+        }
+        loop {
+            self.eat_trivia();
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::RBrace) => {
+                    self.bump();
+                    break;
+                }
+                Some(SyntaxKind::Comma) => self.bump(),
+                Some(SyntaxKind::ReservedKw) => self.reserved_entry(),
+                Some(SyntaxKind::SignalKw) => self.value_interaction(SyntaxKind::SignalDef),
+                Some(SyntaxKind::EventKw) => self.value_interaction(SyntaxKind::EventDef),
+                Some(SyntaxKind::CommandKw) => self.callable_interaction(SyntaxKind::CommandDef),
+                Some(SyntaxKind::QueryKw) => self.callable_interaction(SyntaxKind::QueryDef),
+                Some(SyntaxKind::FinalKw) => self.value_interaction(SyntaxKind::FinalDef),
+                // An unclosed `{`: the body ran into the next top-level
+                // declaration. Report the missing brace and hand the
+                // declaration back, exactly as `block_body` does.
+                Some(kind) if is_top_level_start(kind) => {
+                    self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                    break;
+                }
+                Some(_) => self.err_and_recover("in an interface body", |kind| {
+                    matches!(
+                        kind,
+                        SyntaxKind::RBrace | SyntaxKind::Comma | SyntaxKind::ReservedKw
+                    ) || is_interaction_start(kind)
+                        || is_top_level_start(kind)
+                }),
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    /// The shared `kw Name ':' payload InitValue? annotations` shape of the
+    /// three value interactions — `SignalDef`, `EventDef`, and `FinalDef`.
+    /// The bare `= value` init comes before the timing (ADR-0008 decision
+    /// 2). The reference allows the init on signals only and timing on
+    /// signals and events; here all three kinds accept an init, a timing,
+    /// and an attr block, and the checker narrows (RIDL-106/-301, task 5).
+    fn value_interaction(&mut self, kind: SyntaxKind) {
+        self.start(kind);
+        self.bump(); // 'signal' | 'event' | 'final'
+        self.name();
+        self.expect(SyntaxKind::Colon);
+        self.field_type();
+        self.init_value_opt();
+        self.interaction_annotations();
+        self.builder.finish_node();
+    }
+
+    /// The shared `kw Name '(' params ')' (':' ReturnType)? annotations`
+    /// shape of the two callable interactions — `CommandDef` and
+    /// `QueryDef`. A command's return type is lenient here (RIDL-104,
+    /// checker scope); a query's is mandatory — a missing `:` draws
+    /// FORM-101 (ridl reference §6.1, §7.1).
+    fn callable_interaction(&mut self, kind: SyntaxKind) {
+        self.start(kind);
+        self.bump(); // 'command' | 'query'
+        self.name();
+        self.param_list();
+        if self.at(SyntaxKind::Colon) {
+            self.bump();
+            self.return_type();
+        } else if kind == SyntaxKind::QueryDef {
+            self.error_at_current("FORM-101", "expected `:` and a return type".to_string());
+        }
+        self.interaction_annotations();
+        self.builder.finish_node();
+    }
+
+    /// `ParamList = '(' (params:Param ','?)* ')'` — separator commas are
+    /// direct children of the list node, mirroring the block-body
+    /// discipline (typl reference §15.2). No node is built when the `(` is
+    /// missing, so `CommandDef::params()` sees `None`.
+    fn param_list(&mut self) {
+        if !self.at(SyntaxKind::LParen) {
+            self.error_at_current("FORM-101", "expected `(`".to_string());
+            return;
+        }
+        self.start(SyntaxKind::ParamList);
+        self.bump(); // '('
+        loop {
+            self.eat_trivia();
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `(`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::RParen) => {
+                    self.bump();
+                    break;
+                }
+                Some(SyntaxKind::Comma) => self.bump(),
+                Some(SyntaxKind::Ident) => self.param(),
+                // An unclosed `(`: the list ran into an interaction, body,
+                // or top-level boundary. Report it and hand the token back.
+                Some(kind)
+                    if kind == SyntaxKind::RBrace
+                        || is_interaction_start(kind)
+                        || is_top_level_start(kind) =>
+                {
+                    self.error_at_current("FORM-103", "unclosed `(`".to_string());
+                    break;
+                }
+                Some(_) => self.err_and_recover("in a parameter list", |kind| {
+                    matches!(
+                        kind,
+                        SyntaxKind::RParen
+                            | SyntaxKind::Comma
+                            | SyntaxKind::Ident
+                            | SyntaxKind::RBrace
+                    ) || is_interaction_start(kind)
+                        || is_top_level_start(kind)
+                }),
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    /// `Param = Name ':' (FieldType | StreamType)` — a named typl type, a
+    /// tuple (typl §11), or a stream `<T>` (ridl reference §12.1); the
+    /// stream parses through the shared field-type dispatch.
+    fn param(&mut self) {
+        self.start(SyntaxKind::Param);
+        self.name();
+        self.expect(SyntaxKind::Colon);
+        self.field_type();
+        self.builder.finish_node();
+    }
+
+    /// `ReturnType = PathType | TupleType | StreamType | FallibleType` —
+    /// the four return shapes (ridl reference §7.1). A named type followed
+    /// by `|` extends into `FallibleType = ok '|' err` (general form §6.1,
+    /// ADR-0008 decision 1). No node is built when no shape starts here, so
+    /// `return_type()` accessors see `None`.
+    fn return_type(&mut self) {
+        self.eat_trivia();
+        match self.current() {
+            Some(SyntaxKind::LParen) => {
+                self.start(SyntaxKind::ReturnType);
+                self.tuple_type();
+                self.builder.finish_node();
+            }
+            Some(SyntaxKind::Lt) => {
+                self.start(SyntaxKind::ReturnType);
+                self.stream_type();
+                self.builder.finish_node();
+            }
+            _ if self.at_path_segment() => {
+                self.start(SyntaxKind::ReturnType);
+                let checkpoint = self.builder.checkpoint();
+                self.path_type();
+                if self.at(SyntaxKind::Pipe) {
+                    self.builder
+                        .start_node_at(checkpoint, SyntaxKind::FallibleType.into());
+                    self.bump(); // '|'
+                    self.path_type();
+                    self.builder.finish_node();
+                }
+                self.builder.finish_node();
+            }
+            _ => {
+                self.error_at_current("FORM-101", "expected a return type".to_string());
+            }
+        }
+    }
+
+    /// `StreamType = '<' (PathType | 'string' | 'bytes') '>'` — the element
+    /// is a named type, or a bare raw `string`/`bytes` token (ridl
+    /// reference §12.2, the one exception to typl §15.3). Callers have
+    /// confirmed the `<`.
+    fn stream_type(&mut self) {
+        self.start(SyntaxKind::StreamType);
+        self.bump(); // '<'
+        if matches!(
+            self.current(),
+            Some(SyntaxKind::StringKw | SyntaxKind::BytesKw)
+        ) && self.nth(1) == Some(SyntaxKind::Gt)
+        {
+            self.bump(); // the raw element keyword
+        } else if self.at_path_segment() {
+            self.path_type();
+        } else {
+            self.error_at_current("FORM-101", "expected an element type".to_string());
+        }
+        self.expect(SyntaxKind::Gt);
+        self.builder.finish_node();
+    }
+
+    /// The lenient trailing annotations of an interaction: at most one
+    /// [`Timing`](SyntaxKind::Timing) and at most one
+    /// [`AttrBlock`](SyntaxKind::AttrBlock), in either order. Which kinds
+    /// may carry which annotation is checker scope (RIDL-104/-106/-301,
+    /// task 5); the parser accepts both on every interaction.
+    fn interaction_annotations(&mut self) {
+        let mut seen_timing = false;
+        let mut seen_attrs = false;
+        loop {
+            match self.current() {
+                Some(SyntaxKind::At) if !seen_timing => {
+                    seen_timing = true;
+                    self.timing();
+                }
+                Some(SyntaxKind::LBracket) if !seen_attrs => {
+                    seen_attrs = true;
+                    self.attr_block();
+                }
+                _ => break,
+            }
+        }
+    }
+
+    /// `Timing = '@' ('duration' | '[' TimingRange ']')` — strict periodic
+    /// or range (ridl reference §9). Callers have confirmed the `@`.
+    fn timing(&mut self) {
+        self.start(SyntaxKind::Timing);
+        self.bump(); // '@'
+        if self.at(SyntaxKind::Duration) {
+            self.bump();
+        } else if self.at(SyntaxKind::LBracket) {
+            self.bump();
+            self.timing_range();
+            self.expect(SyntaxKind::RBracket);
+        } else {
+            self.error_at_current("FORM-101", "expected a duration or `[`".to_string());
+        }
+        self.builder.finish_node();
+    }
+
+    /// `TimingRange = 'duration'? '..' 'duration'?` — both bounds or the
+    /// half-open forms `min..` and `..max` (ridl reference §9). A range
+    /// with neither bound is a structural error (FORM-101).
+    fn timing_range(&mut self) {
+        self.start(SyntaxKind::TimingRange);
+        let has_min = self.at(SyntaxKind::Duration);
+        if has_min {
+            self.bump();
+        }
+        self.expect(SyntaxKind::DotDot);
+        let has_max = self.at(SyntaxKind::Duration);
+        if has_max {
+            self.bump();
+        }
+        if !has_min && !has_max {
+            self.error_at_current("FORM-101", "expected a duration".to_string());
+        }
+        self.builder.finish_node();
+    }
+
+    /// A balanced `[ … ]` after an interaction signature, held as an
+    /// [`AttrBlock`](SyntaxKind::AttrBlock) of raw tokens with no inner
+    /// structure — lossless. The attribute grammar replaces this placeholder
+    /// in task 4. An unclosed block stops at an interaction or body
+    /// boundary (FORM-103) instead of swallowing the rest of the interface.
+    fn attr_block(&mut self) {
+        self.start(SyntaxKind::AttrBlock);
+        self.bump(); // '['
+        let mut depth = 1usize;
+        loop {
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `[`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::LBracket) => {
+                    depth += 1;
+                    self.bump();
+                }
+                Some(SyntaxKind::RBracket) => {
+                    depth -= 1;
+                    self.bump();
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                Some(kind)
+                    if kind == SyntaxKind::RBrace
+                        || is_interaction_start(kind)
+                        || is_top_level_start(kind) =>
+                {
+                    self.error_at_current("FORM-103", "unclosed `[`".to_string());
+                    break;
+                }
+                Some(_) => self.bump(),
+            }
+        }
+        self.builder.finish_node();
+    }
+
     /// `EnumValue = Name '=' value:Literal`
     fn enum_value(&mut self) {
         self.value_assignment(SyntaxKind::EnumValue);
@@ -798,6 +1140,18 @@ impl<'a> Parser<'a> {
             Some(SyntaxKind::Ident) => self.path_type(),
             Some(SyntaxKind::LParen) => self.tuple_type(),
             Some(SyntaxKind::LBracket) => self.array_or_map(checkpoint),
+            Some(SyntaxKind::Lt) => {
+                // The stream container `<T>` (ridl reference §12) parses in
+                // every type position under both profiles; in a `.typl`
+                // parse it is the profile boundary — TYPL-301 — and parsing
+                // continues (ADR-0007 decision 10). Under `Profile::Ridl`
+                // the positions where a stream is not allowed (struct
+                // fields, signal and event payloads) are checker scope.
+                if self.profile == Profile::Typl {
+                    self.error_at_current("TYPL-301", "stream type in typl context".to_string());
+                }
+                self.stream_type();
+            }
             _ => {
                 self.error_at_current("FORM-101", "expected a type".to_string());
                 return;
@@ -1285,6 +1639,38 @@ mod tests {
             .map(|e| e.code)
             .collect();
         assert_eq!(codes, vec!["TYPL-304"]);
+    }
+
+    // E2 task 3: the stream grammar parses under both profiles; in a `.typl`
+    // parse a `<T>` in type position is the profile boundary — TYPL-301 —
+    // and the StreamType node is still built, losslessly.
+    #[test]
+    fn stream_type_in_typl_flags_typl_301_and_keeps_parsing() {
+        let input = "package p\nstruct S {\n  f : <Frame>\n  g : integer [0..1]\n}\n";
+        let parsed = parse(input, Profile::Typl);
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "the TYPL-301 boundary must stay lossless",
+        );
+        assert_eq!(
+            parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+            vec!["TYPL-301"],
+        );
+        let has_stream = parsed
+            .syntax()
+            .descendants()
+            .any(|node| node.kind() == SyntaxKind::StreamType);
+        assert!(has_stream, "the stream still parses into a StreamType node");
+
+        // Under `Profile::Ridl` the same field parses with no error at all —
+        // stream placement is checker scope there.
+        let parsed = parse(input, Profile::Ridl);
+        assert!(
+            parsed.errors().is_empty(),
+            "no parser error under Ridl, got: {:?}",
+            parsed.errors(),
+        );
     }
 
     // E2 task 2 step (f): a reserved word of another profile at

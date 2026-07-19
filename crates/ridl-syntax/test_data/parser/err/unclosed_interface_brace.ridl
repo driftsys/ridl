@@ -1,0 +1,6 @@
+package veh.err
+
+interface Broken {
+  signal speed : Speed @10ms
+
+type After : integer [0..1]

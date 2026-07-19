@@ -1,0 +1,15 @@
+package veh.shell
+
+/// An empty contract shape parses.
+interface Empty {
+}
+
+/// Tombstones are the one non-interaction member (typl §7.4).
+interface OnlyReserved {
+  reserved resetCounters
+  reserved legacyChecksum
+}
+
+/// The internal modifier parses on an interface.
+internal interface Hidden {
+}

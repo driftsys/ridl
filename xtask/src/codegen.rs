@@ -1,5 +1,5 @@
 //! Generates the typed AST (`crates/ridl-syntax/src/ast/generated.rs`) from
-//! the grammar (`crates/ridl-syntax/typl.ungram`) — ADR-0007 decision 1.
+//! the grammar (`crates/ridl-syntax/family.ungram`) — ADR-0007 decision 1.
 //!
 //! The generator is deliberately small. It emits one struct per grammar
 //! rule, cast from the `SyntaxKind` variant of the same name — referencing
@@ -43,7 +43,7 @@ fn syntax_crate_dir() -> PathBuf {
 }
 
 fn grammar_path() -> PathBuf {
-    syntax_crate_dir().join("typl.ungram")
+    syntax_crate_dir().join("family.ungram")
 }
 
 pub(crate) fn generated_path() -> PathBuf {
@@ -57,7 +57,7 @@ pub(crate) fn write_generated() -> PathBuf {
     path
 }
 
-/// The token names `typl.ungram` may use: the `SyntaxKind` variant each one
+/// The token names `family.ungram` may use: the `SyntaxKind` variant each one
 /// maps to, and the base of the generated accessor name.
 fn token_info(name: &str) -> (&'static str, &'static str) {
     match name {
@@ -82,11 +82,18 @@ fn token_info(name: &str) -> (&'static str, &'static str) {
         "match" => ("MatchKw", "match"),
         "reserved" => ("ReservedKw", "reserved"),
         "error" => ("ErrorKw", "error"),
+        "interface" => ("InterfaceKw", "interface"),
+        "signal" => ("SignalKw", "signal"),
+        "event" => ("EventKw", "event"),
+        "command" => ("CommandKw", "command"),
+        "query" => ("QueryKw", "query"),
+        "final" => ("FinalKw", "final"),
         "ident" => ("Ident", "ident"),
         "int_number" => ("IntNumber", "int_number"),
         "float_number" => ("FloatNumber", "float_number"),
         "string_lit" => ("String", "string_lit"),
         "regex" => ("Regex", "regex"),
+        "duration" => ("Duration", "duration"),
         ":" => ("Colon", "colon"),
         "=" => ("Eq", "eq"),
         "[" => ("LBracket", "l_bracket"),
@@ -103,9 +110,11 @@ fn token_info(name: &str) -> (&'static str, &'static str) {
         ";" => ("Semicolon", "semicolon"),
         "@" => ("At", "at"),
         "|" => ("Pipe", "pipe"),
+        "<" => ("Lt", "lt"),
+        ">" => ("Gt", "gt"),
         "%" => ("Percent", "percent"),
         "-" => ("Minus", "minus"),
-        _ => panic!("typl.ungram token {name:?} is missing from the codegen token table"),
+        _ => panic!("family.ungram token {name:?} is missing from the codegen token table"),
     }
 }
 
@@ -193,10 +202,10 @@ fn snake_case(name: &str) -> String {
     out
 }
 
-/// Generates the full text of `src/ast/generated.rs` from `typl.ungram`.
+/// Generates the full text of `src/ast/generated.rs` from `family.ungram`.
 pub(crate) fn generate() -> String {
-    let grammar_text = fs::read_to_string(grammar_path()).expect("read typl.ungram");
-    let grammar: Grammar = grammar_text.parse().expect("typl.ungram parses");
+    let grammar_text = fs::read_to_string(grammar_path()).expect("read family.ungram");
+    let grammar: Grammar = grammar_text.parse().expect("family.ungram parses");
 
     let mut enum_rules: Vec<String> = Vec::new();
     let mut structs = TokenStream::new();
@@ -326,7 +335,7 @@ pub(crate) fn generate() -> String {
 
         let struct_name = format_ident!("{}", data.name);
         let doc = format!(
-            " A `{}` node (`typl.ungram` rule `{}`).",
+            " A `{}` node (`family.ungram` rule `{}`).",
             data.name, data.name
         );
         structs.extend(quote! {
@@ -358,7 +367,7 @@ pub(crate) fn generate() -> String {
     // describable shape and is appended here unconditionally.
     structs.extend(quote! {
         /// An error-recovery node wrapping the tokens the parser skipped
-        /// (task E1.2c). The one node kind with no rule in `typl.ungram`.
+        /// (task E1.2c). The one node kind with no rule in `family.ungram`.
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
         pub struct ErrorNode {
             syntax: SyntaxNode,
@@ -378,14 +387,19 @@ pub(crate) fn generate() -> String {
         .iter()
         .map(|name| format_ident!("{name}"))
         .collect();
+    // One `use` per item: single-item imports are stable under rustfmt, so
+    // the committed file satisfies `cargo fmt --check` and the drift test at
+    // the same time regardless of how long the enum list grows.
     let children_import = if uses_children {
-        quote! { AstChildren, }
+        quote! { use super::AstChildren; }
     } else {
         quote! {}
     };
     let file: syn::File = syn::parse2(quote! {
+        #children_import
+        use super::AstNode;
+        #(use super::#enum_idents;)*
         use super::support;
-        use super::{#children_import AstNode, #(#enum_idents),*};
         use crate::syntax_kind::{SyntaxKind, SyntaxNode, SyntaxToken};
 
         #structs
@@ -395,7 +409,7 @@ pub(crate) fn generate() -> String {
     let mut out = String::new();
     writeln!(
         out,
-        "//! The typed AST node structs, generated from `typl.ungram`.\n\
+        "//! The typed AST node structs, generated from `family.ungram`.\n\
          //!\n\
          //! @generated by `cargo xtask codegen` — do not edit by hand. The\n\
          //! xtask drift test regenerates this file into a buffer and fails\n\
@@ -448,11 +462,11 @@ mod tests {
     /// The reverse of the cast-site guard: every `SyntaxKind` node variant
     /// must name a grammar rule, or be the rule-less `ErrorNode`. Together
     /// with the compile-time cast reference, this keeps the node inventory and
-    /// `typl.ungram` in exact correspondence.
+    /// `family.ungram` in exact correspondence.
     #[test]
     fn syntax_kind_node_variants_match_the_grammar() {
-        let grammar_text = fs::read_to_string(grammar_path()).expect("read typl.ungram");
-        let grammar: Grammar = grammar_text.parse().expect("typl.ungram parses");
+        let grammar_text = fs::read_to_string(grammar_path()).expect("read family.ungram");
+        let grammar: Grammar = grammar_text.parse().expect("family.ungram parses");
 
         let mut expected: Vec<String> = grammar
             .iter()
