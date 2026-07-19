@@ -1,7 +1,8 @@
 ---
-source: crates/ridlc/tests/golden.rs
-expression: output.rust_source
+source: backends/rust/src/tests.rs
+expression: "rust_for(vec![speed_decl()])"
 ---
+/// Vehicle speed over ground
 #[repr(transparent)]
 pub struct Speed(pub f64);
 impl Default for Speed {
@@ -9,4 +10,3 @@ impl Default for Speed {
         Speed(0.0)
     }
 }
-pub const MAX_SPEED: Speed = Speed(250.0);

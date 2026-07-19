@@ -88,7 +88,9 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
     diagnostics.extend(remap_diagnostics(checked.diagnostics, &render_ids));
 
     let rust_source = match ridl_backend_rust::generate(&checked.ir) {
-        Ok(source) => source,
+        // The E1.12 backend returns Rust plus a C header; this pre-CLI plumbing
+        // path keeps only the Rust source. Task 20 wires the C header emit.
+        Ok(generated) => generated.rust_source,
         Err(err) => {
             // The backend does not carry source ranges yet, so its diagnostic
             // has no code and points at the file start.
