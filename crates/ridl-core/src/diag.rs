@@ -92,6 +92,20 @@ impl DiagCode {
     /// manifest root (typl §16.1, ADR-0002 §1). Emitted by the package loader
     /// (E1.3); single-file mode is exempt.
     pub const TYPL_002: DiagCode = DiagCode("TYPL-002");
+    /// Wildcard, relative, or re-exporting import (typl §16.1, ADR-0002 §2).
+    /// Emitted by the resolver (E1.4).
+    pub const TYPL_003: DiagCode = DiagCode("TYPL-003");
+    /// Circular package imports (typl §16.1, ADR-0002 §6). Emitted by the
+    /// resolver (E1.4) from a depth-first walk over package import edges.
+    pub const TYPL_004: DiagCode = DiagCode("TYPL-004");
+    /// Conflicting imports without an alias (typl §16.1, ADR-0002 §2).
+    /// Emitted by the resolver (E1.4).
+    pub const TYPL_006: DiagCode = DiagCode("TYPL-006");
+    /// Unused import (typl §16.1). Emitted by the resolver (E1.4) as a warning.
+    pub const TYPL_007: DiagCode = DiagCode("TYPL-007");
+    /// Import alias without an actual collision (typl §16.1, ADR-0002 §2).
+    /// Emitted by the resolver (E1.4) as a warning.
+    pub const TYPL_008: DiagCode = DiagCode("TYPL-008");
     /// Duplicate definition of the same name in a package (typl §16.1).
     pub const TYPL_009: DiagCode = DiagCode("TYPL-009");
     /// `const` value violates its declared type constraints (typl §16.2).
