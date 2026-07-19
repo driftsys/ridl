@@ -745,3 +745,574 @@ fn a_standalone_overlay_file_is_analyzed_from_its_buffer() {
         .expect("the server thread joins")
         .expect("the server loop exits cleanly");
 }
+
+// ==========================================================================
+// E1.15c — completion and rename (task 24)
+// ==========================================================================
+
+/// Opens `text` as the buffer for `uri` (a workspace file or a standalone
+/// overlay).
+fn did_open(client: &Connection, uri: &lt::Uri, text: &str) {
+    notify::<lt::notification::DidOpenTextDocument>(
+        client,
+        lt::DidOpenTextDocumentParams {
+            text_document: lt::TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "ridl".to_string(),
+                version: 0,
+                text: text.to_string(),
+            },
+        },
+    );
+}
+
+/// Sends a completion request and returns the offered items.
+fn complete_at(
+    client: &Connection,
+    id: i32,
+    uri: lt::Uri,
+    position: lt::Position,
+) -> Vec<lt::CompletionItem> {
+    request::<lt::request::Completion>(
+        client,
+        id,
+        lt::CompletionParams {
+            text_document_position: text_position(uri, position),
+            work_done_progress_params: Default::default(),
+            partial_result_params: Default::default(),
+            context: None,
+        },
+    );
+    let response = next_response(client);
+    let parsed: Option<lt::CompletionResponse> =
+        serde_json::from_value(response.response_result.expect("completion succeeds"))
+            .expect("a valid completion result");
+    match parsed {
+        Some(lt::CompletionResponse::Array(items)) => items,
+        Some(lt::CompletionResponse::List(list)) => list.items,
+        None => Vec::new(),
+    }
+}
+
+/// The labels of a set of completion items.
+fn labels(items: &[lt::CompletionItem]) -> Vec<&str> {
+    items.iter().map(|item| item.label.as_str()).collect()
+}
+
+/// The kind of the item labelled `label`, if present.
+fn kind_of(items: &[lt::CompletionItem], label: &str) -> Option<lt::CompletionItemKind> {
+    items
+        .iter()
+        .find(|item| item.label == label)
+        .and_then(|item| item.kind)
+}
+
+/// Sends a rename request and returns the raw response (so a rejection can be
+/// inspected as an error).
+fn rename_raw(
+    client: &Connection,
+    id: i32,
+    uri: lt::Uri,
+    position: lt::Position,
+    new_name: &str,
+) -> Response {
+    request::<lt::request::Rename>(
+        client,
+        id,
+        lt::RenameParams {
+            text_document_position: text_position(uri, position),
+            new_name: new_name.to_string(),
+            work_done_progress_params: Default::default(),
+        },
+    );
+    next_response(client)
+}
+
+/// Sends a rename request that is expected to succeed and returns the edit.
+fn rename_at(
+    client: &Connection,
+    id: i32,
+    uri: lt::Uri,
+    position: lt::Position,
+    new_name: &str,
+) -> lt::WorkspaceEdit {
+    let response = rename_raw(client, id, uri, position, new_name);
+    let parsed: Option<lt::WorkspaceEdit> =
+        serde_json::from_value(response.response_result.expect("rename succeeds"))
+            .expect("a valid rename result");
+    parsed.expect("rename produces a workspace edit")
+}
+
+/// The text edits a workspace edit carries for `uri`, sorted by start position.
+fn edits_for(edit: &lt::WorkspaceEdit, uri: &lt::Uri) -> Vec<lt::TextEdit> {
+    // `WorkspaceEdit.changes` is keyed by `lsp_types::Uri`, whose inner cache
+    // cell trips `mutable_key_type`; the key's identity never mutates.
+    #[allow(clippy::mutable_key_type)]
+    let changes = edit.changes.as_ref().expect("the edit carries changes");
+    let mut edits = changes
+        .iter()
+        .find(|(key, _)| key.as_str() == uri.as_str())
+        .map(|(_, edits)| edits.clone())
+        .unwrap_or_default();
+    edits.sort_by_key(|edit| (edit.range.start.line, edit.range.start.character));
+    edits
+}
+
+/// Sends a prepareRename request and returns the parsed response.
+fn prepare_rename_at(
+    client: &Connection,
+    id: i32,
+    uri: lt::Uri,
+    position: lt::Position,
+) -> Option<lt::PrepareRenameResponse> {
+    request::<lt::request::PrepareRenameRequest>(client, id, text_position(uri, position));
+    let response = next_response(client);
+    serde_json::from_value(response.response_result.expect("prepareRename succeeds"))
+        .expect("a valid prepareRename result")
+}
+
+/// (a) Completion after `:` in a field type position offers the visible named
+/// types (locals + `ridl.std`) and the primitives, each kind-annotated.
+#[test]
+fn completion_after_colon_offers_types_and_primitives() {
+    let uri = path_to_uri("/ridl-lsp-complete/types.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // `struct Holder { item: }` on line 2; the colon is at column 20, so a
+    // cursor at column 22 sits just past `: `.
+    let text = "package demo\ntype Speed: integer [0..10]\nstruct Holder { item: }\n";
+    did_open(&client, &uri, text);
+    let items = complete_at(&client, 10, uri.clone(), pos(2, 22));
+    let offered = labels(&items);
+
+    assert!(
+        offered.contains(&"Speed"),
+        "local type offered: {offered:?}"
+    );
+    assert!(
+        offered.contains(&"Timestamp"),
+        "a ridl.std type offered: {offered:?}",
+    );
+    assert!(
+        offered.contains(&"integer"),
+        "a primitive offered: {offered:?}",
+    );
+    assert_eq!(
+        kind_of(&items, "Speed"),
+        Some(lt::CompletionItemKind::CLASS),
+        "a named type is kind-annotated as a type",
+    );
+    assert_eq!(
+        kind_of(&items, "integer"),
+        Some(lt::CompletionItemKind::KEYWORD),
+        "a primitive is kind-annotated as a keyword",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (b) Completion after `import` offers the known package names, and after a
+/// completed package path offers that package's public symbols.
+#[test]
+fn completion_after_import_offers_packages_and_symbols() {
+    let dir = TempDir::new("complete-import");
+    let (_veh, app) = write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // `import ` on line 1, cursor just past the keyword and its space.
+    did_open(&client, &app, "package app\nimport \n");
+    let packages = complete_at(&client, 10, app.clone(), pos(1, 7));
+    let package_labels = labels(&packages);
+    assert!(
+        package_labels.contains(&"veh.common"),
+        "a workspace package is offered: {package_labels:?}",
+    );
+    assert_eq!(
+        kind_of(&packages, "veh.common"),
+        Some(lt::CompletionItemKind::MODULE),
+        "a package name is kind-annotated as a module",
+    );
+
+    // `import veh.common.` on line 1, cursor just past the final dot.
+    did_open(&client, &app, "package app\nimport veh.common.\n");
+    let symbols = complete_at(&client, 12, app.clone(), pos(1, 18));
+    let symbol_labels = labels(&symbols);
+    assert!(
+        symbol_labels.contains(&"Speed"),
+        "the package's public symbol is offered: {symbol_labels:?}",
+    );
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (c) Completion at a definition-start position offers the definition
+/// keywords and the modifiers.
+#[test]
+fn completion_at_definition_start_offers_keywords() {
+    let uri = path_to_uri("/ridl-lsp-complete/keywords.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // A blank top-level line after the package declaration.
+    let text = "package demo\n\n";
+    did_open(&client, &uri, text);
+    let items = complete_at(&client, 10, uri.clone(), pos(1, 0));
+    let offered = labels(&items);
+
+    for keyword in [
+        "type", "const", "struct", "enum", "enumset", "union", "internal", "error",
+    ] {
+        assert!(
+            offered.contains(&keyword),
+            "definition keyword `{keyword}` offered: {offered:?}",
+        );
+    }
+    assert_eq!(
+        kind_of(&items, "struct"),
+        Some(lt::CompletionItemKind::KEYWORD),
+        "a definition keyword is kind-annotated as a keyword",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (c') Completion inside a `match` constraint offers the regex constants in
+/// scope (a local one and a `ridl.std` pattern).
+#[test]
+fn completion_inside_match_offers_regex_consts() {
+    let uri = path_to_uri("/ridl-lsp-complete/match.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // `type Code: string [1..8 match ]` on line 2: `match ` ends at column 30,
+    // so a cursor there sits just past the keyword and its space.
+    let text = "package demo\nconst CODE_PATTERN = /^[A-Z]+$/\ntype Code: string [1..8 match ]\n";
+    did_open(&client, &uri, text);
+    let items = complete_at(&client, 10, uri.clone(), pos(2, 30));
+    let offered = labels(&items);
+
+    assert!(
+        offered.contains(&"CODE_PATTERN"),
+        "a local regex const offered: {offered:?}",
+    );
+    assert!(
+        offered.contains(&"UUID_PATTERN"),
+        "a ridl.std regex const offered: {offered:?}",
+    );
+    // A non-regex const is not offered as a pattern.
+    assert!(
+        !offered.contains(&"MAX_SPEED"),
+        "only regex consts are offered: {offered:?}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (d) Renaming `Speed` across the two-package workspace also rewrites the
+/// `import veh.common.Speed` line in `app` — the load-bearing case.
+#[test]
+fn rename_across_packages_updates_the_import_line() {
+    let dir = TempDir::new("rename-import");
+    let (veh, app) = write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // `type Speed` on line 2 of `veh-common/lib.typl`: the name spans 5..10.
+    let edit = rename_at(&client, 10, veh.clone(), pos(2, 7), "Velocity");
+
+    // The declaration and both struct references in veh.common are rewritten.
+    let veh_edits = edits_for(&edit, &veh);
+    assert_eq!(
+        veh_edits.len(),
+        3,
+        "declaration + two references: {veh_edits:?}"
+    );
+    assert!(
+        veh_edits.iter().all(|edit| edit.new_text == "Velocity"),
+        "every veh edit inserts the new name: {veh_edits:?}",
+    );
+    assert_eq!(
+        veh_edits[0].range,
+        range((2, 5), (2, 10)),
+        "the declaration"
+    );
+
+    // The import line AND the struct reference in app are rewritten.
+    let app_edits = edits_for(&edit, &app);
+    assert_eq!(
+        app_edits.len(),
+        2,
+        "import line + one reference: {app_edits:?}"
+    );
+    assert!(
+        app_edits.iter().all(|edit| edit.new_text == "Velocity"),
+        "every app edit inserts the new name: {app_edits:?}",
+    );
+    // `import veh.common.Speed` on line 1: `Speed` spans columns 18..23.
+    assert_eq!(
+        app_edits[0].range,
+        range((1, 18), (1, 23)),
+        "the import line's imported-name segment is rewritten",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (e) Rename invoked from the import line itself works: the cursor sits on the
+/// imported name in `import veh.common.Speed`, where `symbol_at` finds nothing,
+/// so the import-path entry point resolves the target.
+#[test]
+fn rename_from_the_import_line_works() {
+    let dir = TempDir::new("rename-from-import");
+    let (veh, app) = write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // `import veh.common.Speed` on line 1 of `app/lib.typl`: `Speed` is at 18.
+    let edit = rename_at(&client, 10, app.clone(), pos(1, 20), "Velocity");
+
+    let veh_edits = edits_for(&edit, &veh);
+    assert_eq!(
+        veh_edits.len(),
+        3,
+        "the declaration and its two references are found from the import: {veh_edits:?}",
+    );
+    let app_edits = edits_for(&edit, &app);
+    assert_eq!(
+        app_edits.len(),
+        2,
+        "the import and its reference: {app_edits:?}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (f) Renaming a qualified reference `veh.common.Speed` rewrites only the
+/// final `Speed` segment, never the whole qualified name.
+#[test]
+fn rename_of_a_qualified_reference_rewrites_only_the_last_segment() {
+    let dir = TempDir::new("rename-qualified");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"app\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("veh-common")).expect("create veh-common");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "veh-common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    let veh = dir.write(
+        "veh-common/lib.typl",
+        "package veh.common\ntype Speed: km/h\n",
+    );
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    // A qualified reference, no import statement.
+    let app = dir.write(
+        "app/lib.typl",
+        "package app\nstruct Cabin { primary: veh.common.Speed }\n",
+    );
+    let veh_uri = uri_of(&veh);
+    let app_uri = uri_of(&app);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let edit = rename_at(&client, 10, veh_uri.clone(), pos(1, 7), "Velocity");
+
+    let app_edits = edits_for(&edit, &app_uri);
+    assert_eq!(app_edits.len(), 1, "one qualified reference: {app_edits:?}");
+    let edited = &app_edits[0];
+    assert_eq!(edited.new_text, "Velocity");
+    assert_eq!(
+        edited.range.end.character - edited.range.start.character,
+        5,
+        "only the 5-character `Speed` segment is edited, not the whole path",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (g) Renaming into the reserved word `signal` is rejected.
+#[test]
+fn rename_into_a_reserved_word_is_rejected() {
+    let dir = TempDir::new("rename-reserved");
+    let (veh, _app) = write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let response = rename_raw(&client, 10, veh.clone(), pos(2, 7), "signal");
+    assert!(
+        response.response_result.is_err(),
+        "renaming to a reserved word fails: {response:?}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (h) Renaming `Speed` to `Cruise`, already declared in the same package, is
+/// rejected as a collision.
+#[test]
+fn rename_introducing_a_duplicate_is_rejected() {
+    let dir = TempDir::new("rename-dup");
+    let (veh, _app) = write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let response = rename_raw(&client, 10, veh.clone(), pos(2, 7), "Cruise");
+    assert!(
+        response.response_result.is_err(),
+        "renaming onto an existing declaration fails: {response:?}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (i) Renaming a type to a name that violates the CamelCase convention (R7)
+/// is rejected.
+#[test]
+fn rename_violating_the_case_convention_is_rejected() {
+    let dir = TempDir::new("rename-case");
+    let (veh, _app) = write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // A type must stay CamelCase; `velocity` is lowercase.
+    let response = rename_raw(&client, 10, veh.clone(), pos(2, 7), "velocity");
+    assert!(
+        response.response_result.is_err(),
+        "renaming a type to a lowercase name fails: {response:?}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// prepareRename returns the name span on a renameable symbol and nothing on a
+/// non-symbol position, so the client rejects an invalid rename early.
+#[test]
+fn prepare_rename_validates_the_cursor() {
+    let dir = TempDir::new("prepare-rename");
+    let (veh, _app) = write_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let on_name = prepare_rename_at(&client, 10, veh.clone(), pos(2, 7));
+    match on_name {
+        Some(lt::PrepareRenameResponse::Range(returned)) => {
+            assert_eq!(returned, range((2, 5), (2, 10)), "the `Speed` name span");
+        }
+        other => panic!("expected a rename range, got {other:?}"),
+    }
+
+    // The `package` keyword is not a renameable symbol.
+    let on_keyword = prepare_rename_at(&client, 11, veh.clone(), pos(0, 2));
+    assert!(on_keyword.is_none(), "a keyword position is not renameable");
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (CRITICAL-1 regression) Renaming a symbol imported under an alias rewrites
+/// the import line's imported-name segment but leaves the alias usage intact —
+/// the alias binds the local name, so rewriting the usage would unbind it.
+#[test]
+fn rename_leaves_an_alias_usage_intact() {
+    let dir = TempDir::new("rename-alias");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"app\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("veh-common")).expect("create veh-common");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "veh-common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    let veh = dir.write(
+        "veh-common/lib.typl",
+        "package veh.common\ntype Speed: km/h\n",
+    );
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    // `Speed` is imported under the alias `Velocity`, then used as `Velocity`.
+    let app = dir.write(
+        "app/lib.typl",
+        "package app\nimport veh.common.Speed as Velocity\nstruct Cabin { primary: Velocity }\n",
+    );
+    let veh_uri = uri_of(&veh);
+    let app_uri = uri_of(&app);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let edit = rename_at(&client, 10, veh_uri.clone(), pos(1, 7), "Rapidity");
+
+    // The declaration in veh.common is rewritten.
+    let veh_edits = edits_for(&edit, &veh_uri);
+    assert_eq!(veh_edits.len(), 1, "the declaration only: {veh_edits:?}");
+    assert_eq!(veh_edits[0].new_text, "Rapidity");
+
+    // In app, ONLY the import line's imported-name segment is rewritten. The
+    // `Velocity` usage on line 2 is left untouched — rewriting it would leave
+    // `Rapidity` unbound.
+    let app_edits = edits_for(&edit, &app_uri);
+    assert_eq!(
+        app_edits.len(),
+        1,
+        "only the import segment, not the alias usage: {app_edits:?}",
+    );
+    // `import veh.common.Speed as Velocity` on line 1: `Speed` spans 18..23.
+    assert_eq!(
+        app_edits[0].range,
+        range((1, 18), (1, 23)),
+        "the import segment"
+    );
+    assert_eq!(app_edits[0].new_text, "Rapidity");
+    assert!(
+        app_edits.iter().all(|edit| edit.range.start.line != 2),
+        "no edit touches the `Velocity` usage on line 2: {app_edits:?}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (CRITICAL-2 regression) A `ridl.std` symbol is not renameable: prepareRename
+/// returns null and rename fails, so no partial edit that drops the built-in
+/// declaration while rewriting user references is ever produced.
+#[test]
+fn a_std_symbol_is_not_renameable() {
+    let uri = path_to_uri("/ridl-lsp-std/std.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // A user struct referencing the built-in `ridl.std` type `Timestamp`.
+    did_open(&client, &uri, "package demo\nstruct S { at: Timestamp }\n");
+
+    // `Timestamp` on line 1 starts at column 15.
+    let prepared = prepare_rename_at(&client, 10, uri.clone(), pos(1, 16));
+    assert!(
+        prepared.is_none(),
+        "a ridl.std symbol cannot be renamed: {prepared:?}",
+    );
+
+    // Rename itself fails rather than emitting a partial edit.
+    let response = rename_raw(&client, 11, uri.clone(), pos(1, 16), "Instant");
+    assert!(
+        response.response_result.is_err(),
+        "renaming a std symbol fails: {response:?}",
+    );
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
