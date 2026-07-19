@@ -39,8 +39,11 @@
 //! `: return_type` after a command's params parses; timing parses on
 //! command, query, and final; an attr block parses on signal, event, and
 //! final; an init value parses on event and final; a stream `<T>` parses in
-//! every type position, including signal/event payloads and struct fields.
-//! The rejections are checker scope (RIDL-104/-106/-201/-301, E2 task 5).
+//! every type position, including signal/event payloads and struct fields;
+//! a typl definition inside an interface body recovers into a body-local
+//! `ErrorNode` (E2 task 5 attaches RIDL-107 from its leading keyword).
+//! The rejections are checker scope (RIDL-104/-106/-107/-201/-301, E2
+//! task 5).
 //!
 //! # Profile boundary
 //!
@@ -197,6 +200,23 @@ fn is_interaction_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::CommandKw
             | SyntaxKind::QueryKw
             | SyntaxKind::FinalKw
+    )
+}
+
+/// Whether `kind` is a typl definition keyword. Inside an interface body these
+/// recover into a body-local [`ErrorNode`](SyntaxKind::ErrorNode) — the ridl
+/// reference forbids type declarations there (§14.1) and reserves RIDL-107 for
+/// them (§16.1, checker scope, E2 task 5) — unlike the remaining top-level
+/// keywords, which signal an unclosed `{`.
+fn is_typl_definition_start(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::TypeKw
+            | SyntaxKind::ConstKw
+            | SyntaxKind::StructKw
+            | SyntaxKind::EnumKw
+            | SyntaxKind::EnumsetKw
+            | SyntaxKind::UnionKw
     )
 }
 
@@ -725,6 +745,21 @@ impl<'a> Parser<'a> {
                 Some(SyntaxKind::CommandKw) => self.callable_interaction(SyntaxKind::CommandDef),
                 Some(SyntaxKind::QueryKw) => self.callable_interaction(SyntaxKind::QueryDef),
                 Some(SyntaxKind::FinalKw) => self.value_interaction(SyntaxKind::FinalDef),
+                // A typl definition keyword inside the body: the body holds
+                // interactions and tombstones only (ridl §14.1), so the
+                // declaration recovers into a body-local ErrorNode for the
+                // checker to code as RIDL-107 (E2 task 5). The remaining
+                // top-level keywords (`package`, `import`, `internal`,
+                // `error`, `interface`) still signal an unclosed `{` below.
+                Some(kind) if is_typl_definition_start(kind) => {
+                    self.err_and_recover("in an interface body", |kind| {
+                        matches!(
+                            kind,
+                            SyntaxKind::RBrace | SyntaxKind::Comma | SyntaxKind::ReservedKw
+                        ) || is_interaction_start(kind)
+                            || is_top_level_start(kind)
+                    })
+                }
                 // An unclosed `{`: the body ran into the next top-level
                 // declaration. Report the missing brace and hand the
                 // declaration back, exactly as `block_body` does.

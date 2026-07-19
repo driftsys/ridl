@@ -1,5 +1,6 @@
 ---
 source: crates/ridl-syntax/tests/parser_err_corpus.rs
+assertion_line: 75
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/err/unclosed_interface_brace.ridl
 ---
@@ -12,7 +13,7 @@ SourceFile@0..94
       Dot@11..12 "."
       Ident@12..15 "err"
   Whitespace@15..17 "\n\n"
-  InterfaceDef@17..66
+  InterfaceDef@17..94
     InterfaceKw@17..26 "interface"
     Whitespace@26..27 " "
     Name@27..33
@@ -36,25 +37,21 @@ SourceFile@0..94
         At@59..60 "@"
         Duration@60..64 "10ms"
     Whitespace@64..66 "\n\n"
-  TypeDef@66..93
-    TypeKw@66..70 "type"
-    Whitespace@70..71 " "
-    Name@71..76
+    ErrorNode@66..93
+      TypeKw@66..70 "type"
+      Whitespace@70..71 " "
       Ident@71..76 "After"
-    Whitespace@76..77 " "
-    Colon@77..78 ":"
-    Whitespace@78..79 " "
-    PrimitiveType@79..86
+      Whitespace@76..77 " "
+      Colon@77..78 ":"
+      Whitespace@78..79 " "
       IntegerKw@79..86 "integer"
-    Whitespace@86..87 " "
-    Constraint@87..93
+      Whitespace@86..87 " "
       LBracket@87..88 "["
-      Literal@88..89
-        IntNumber@88..89 "0"
+      IntNumber@88..89 "0"
       DotDot@89..91 ".."
-      Literal@91..92
-        IntNumber@91..92 "1"
+      IntNumber@91..92 "1"
       RBracket@92..93 "]"
-  Whitespace@93..94 "\n"
+    Whitespace@93..94 "\n"
 errors:
-  FORM-103 66..70 unclosed `{`
+  FORM-102 66..70 unexpected token in an interface body
+  FORM-103 94..94 unclosed `{`
