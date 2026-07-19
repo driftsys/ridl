@@ -3,8 +3,10 @@
 //! Two families of hint make hidden semantics visible at the desk, so the
 //! author never has to open the IR to read them:
 //!
-//! - **Ordinal hints** render, beside every struct field, union arm, and
-//!   enum/enum-set value, the number that is its wire identity (typl §7.4).
+//! - **Ordinal hints** render, beside every struct field, union arm,
+//!   enum/enum-set value, and — since E2.10b — every interaction and
+//!   `reserved` tombstone of an interface body or a service's inline shape,
+//!   the number that is its wire identity (typl §7.4, ridl §11).
 //!   For a struct field or union arm that is the derived declaration-order
 //!   ordinal — counting `reserved` tombstones, so a field after a retired slot
 //!   shows the higher number and a reorder is visibly a renumbering. For an
@@ -27,14 +29,16 @@
 //! carries a byte offset; the server converts it to a UTF-16 LSP position
 //! through the file's `LineIndex`.
 
+use std::collections::HashSet;
+
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace};
 use ridl_ir::v2;
 use ridl_sem::check_package;
 use ridl_sem::ucum::UcumExpr;
 use ridl_syntax::ast::{
-    AstNode, Backing, Definition, EnumDef, EnumSetDef, Name, StructDef, StructMember, TypeDef,
-    UnionDef,
+    AstNode, Backing, Definition, EnumDef, EnumSetDef, HasName, InterfaceDef, InterfaceMember,
+    Name, ServiceDef, StructDef, StructMember, TypeDef, UnionDef,
 };
 use rowan::{TextRange, TextSize};
 
@@ -89,6 +93,12 @@ pub fn inlay_hints(
             Definition::Type(type_def) => unit_hint(ir, &type_def, &mut hints),
             Definition::Const(_) => {}
         }
+    }
+    for interface in source.interfaces() {
+        interface_hints(ir, &interface, &mut hints);
+    }
+    for service in source.services() {
+        service_hints(ir, &service, &mut hints);
     }
     hints.retain(|hint| range.contains_inclusive(hint.offset));
     hints
@@ -278,4 +288,79 @@ fn unit_backing(type_def: &v2::TypeDef) -> Option<String> {
         v2::backing::Kind::Unit(unit) => Some(unit.clone()),
         v2::backing::Kind::Primitive(_) => None,
     }
+}
+
+/// Ordinal hints for an interface body's interactions (ridl §11): the number
+/// beside every interaction and every `reserved` tombstone, read from the
+/// interface's IR by name so a tombstone's slot is counted exactly as codegen
+/// and `ridl diff` count it. This is the editor half of the general form §6.3
+/// mitigation — reordering an interface visibly becomes renumbering.
+fn interface_hints(ir: &v2::Package, def: &InterfaceDef, out: &mut Vec<InlayHint>) {
+    let Some(name) = def.name().and_then(|name| name_text(&name)) else {
+        return;
+    };
+    let Some(shape) = ir.interfaces.iter().find(|shape| shape.name == name) else {
+        return;
+    };
+    member_hints(shape, def.members(), out);
+}
+
+/// Ordinal hints for a service's inline shape (ridl §14.5). An inline shape is
+/// an interface body in every way that matters to wire identity, so it carries
+/// its own ordinal sequence and gets the same hints.
+fn service_hints(ir: &v2::Package, service: &ServiceDef, out: &mut Vec<InlayHint>) {
+    let Some(name) = service.name().as_ref().and_then(nav::dotted_text) else {
+        return;
+    };
+    let Some(found) = ir.services.iter().find(|found| found.name == name) else {
+        return;
+    };
+    let Some(v2::service::Shape::Inline(shape)) = &found.shape else {
+        return;
+    };
+    member_hints(shape, service.inline_members(), out);
+}
+
+/// The ordinal hints of one interface body, source member by source member.
+///
+/// A RIDL-402 duplicate re-declaration is skipped: first wins, the loser is
+/// excluded from the contract and holds no ordinal slot, so numbering it would
+/// claim an identity it does not have. Tombstones never dedupe — each one
+/// holds its own slot.
+fn member_hints(
+    shape: &v2::Interface,
+    members: impl Iterator<Item = InterfaceMember>,
+    out: &mut Vec<InlayHint>,
+) {
+    let mut seen: HashSet<String> = HashSet::new();
+    for member in members {
+        let Some(name_node) = member.name() else {
+            continue;
+        };
+        let Some(name) = name_text(&name_node) else {
+            continue;
+        };
+        let reserved = matches!(member, InterfaceMember::Reserved(_));
+        if !reserved && !seen.insert(name.clone()) {
+            continue;
+        }
+        if let Some(ordinal) = interaction_ordinal(shape, &name, reserved) {
+            out.push(ordinal_hint(&name_node, ordinal));
+        }
+    }
+}
+
+/// The ridl §11 ordinal of one interface member, from the lowered IR. A
+/// tombstone is matched on its retired name, which lives in `Reserved`, not on
+/// the `Decl` envelope.
+fn interaction_ordinal(shape: &v2::Interface, name: &str, reserved: bool) -> Option<u32> {
+    shape
+        .interactions
+        .iter()
+        .find(|decl| match (&decl.kind, reserved) {
+            (Some(v2::decl::Kind::ReservedSlot(slot)), true) => slot.name.as_deref() == Some(name),
+            (Some(v2::decl::Kind::ReservedSlot(_)), false) | (_, true) => false,
+            (_, false) => decl.name == name,
+        })
+        .map(|decl| decl.ordinal)
 }

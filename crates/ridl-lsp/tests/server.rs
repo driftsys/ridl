@@ -1523,3 +1523,589 @@ fn inlay_hint_renders_union_arm_ordinals_within_the_requested_range() {
     shut_down(&client, 11);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+// --- the ridl interaction layer (E2.10b) ---------------------------------
+
+/// The typl vocabulary the ridl fixture contract imports.
+const RIDL_VOCAB: &str = "package veh.common\n\
+/// Vehicle speed over ground\n\
+type Speed: km/h [0.0..250.0 step 0.5]\n\
+type Version: string [0..32]\n";
+
+/// The ridl fixture contract: one interface holding all five interaction
+/// kinds plus a `reserved` tombstone at ordinal 6, a named-shape service, and
+/// an inline-shape service.
+///
+/// `engineTemp`'s payload sits behind a block comment holding a two-byte `°`,
+/// so its UTF-16 column and its byte offset differ — the fixture that pins the
+/// `convert` bridge on the ridl side.
+const RIDL_CONTRACT: &str = "package veh.cluster\n\
+\n\
+import veh.common.Speed\n\
+import veh.common.Version\n\
+\n\
+struct DoorPayload {\n\
+\x20 sensorId : integer [0..15]\n\
+\x20 isOpen   : boolean\n\
+}\n\
+\n\
+struct CalReport {\n\
+\x20 offset : integer [0..100]\n\
+}\n\
+\n\
+error enum CalError {\n\
+\x20 SENSOR_UNAVAILABLE = 0\n\
+}\n\
+\n\
+/// Main vehicle status contract shape.\n\
+interface VehicleStatus {\n\
+\x20 /// Current vehicle speed\n\
+\x20 signal currentSpeed : Speed @10ms\n\
+\x20 signal cabinLoad : Speed\n\
+\x20 signal engineTemp : /* \u{b0}C */ Speed @[20ms..100ms]\n\
+\x20 event doorOpened : DoorPayload @[50ms..500ms]\n\
+\x20 command setGear(position: Speed)\n\
+\x20 reserved resetCounters\n\
+\x20 query calibrate(axle: Speed): CalReport | CalError\n\
+\x20 final softwareVersion : Version\n\
+}\n\
+\n\
+service veh.adas.cruise : VehicleStatus\n\
+\n\
+service veh.hvac.cabin {\n\
+\x20 signal temperature : Speed @[1s..10s]\n\
+\x20 command setTarget(t: Speed)\n\
+}\n";
+
+/// Writes the two-member ridl fixture workspace to `dir` and returns the
+/// `(vocabulary, contract)` file URIs.
+fn write_ridl_workspace(dir: &TempDir) -> (lt::Uri, lt::Uri) {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"cluster\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("veh-common")).expect("create veh-common");
+    std::fs::create_dir_all(dir.path().join("cluster")).expect("create cluster");
+    dir.write(
+        "veh-common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    let vocab = dir.write("veh-common/lib.typl", RIDL_VOCAB);
+    dir.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    let contract = dir.write("cluster/contract.ridl", RIDL_CONTRACT);
+    (uri_of(&vocab), uri_of(&contract))
+}
+
+/// The UTF-16 LSP position of the start of the `occurrence`-th (0-based)
+/// match of `needle` in `text`. Keeps the ridl tests readable without hand
+/// counting columns; the UTF-16 test below pins one column literally as well,
+/// so the helper itself cannot mask a conversion bug.
+fn find_pos(text: &str, needle: &str, occurrence: usize) -> lt::Position {
+    let byte = text
+        .match_indices(needle)
+        .nth(occurrence)
+        .unwrap_or_else(|| panic!("`{needle}` occurs at least {} times", occurrence + 1))
+        .0;
+    let line = text[..byte].matches('\n').count() as u32;
+    let line_start = text[..byte].rfind('\n').map_or(0, |index| index + 1);
+    let character = text[line_start..byte].encode_utf16().count() as u32;
+    lt::Position { line, character }
+}
+
+/// The hover markdown at `position`, or a panic naming what was missing.
+fn hover_markdown(client: &Connection, id: i32, uri: lt::Uri, position: lt::Position) -> String {
+    let hover = hover_at(client, id, uri, position).expect("the position has hover content");
+    match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    }
+}
+
+/// Hover on a signal renders its kind, resolved payload, ordinal, and the
+/// resolved strict-periodic timing with the per-kind reading general form
+/// §6.2 derives for a state interaction.
+#[test]
+fn hover_on_a_signal_shows_kind_payload_ordinal_and_the_signal_reading() {
+    let dir = TempDir::new("ridl-hover-signal");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        find_pos(RIDL_CONTRACT, "currentSpeed", 0),
+    );
+    assert!(value.contains("signal"), "kind: {value}");
+    assert!(value.contains("veh.common.Speed"), "payload: {value}");
+    assert!(value.contains("km/h"), "payload unit: {value}");
+    assert!(
+        value.contains("[0..250 step 0.5]"),
+        "payload range: {value}"
+    );
+    assert!(value.contains("#1"), "ordinal: {value}");
+    assert!(value.contains("strict periodic"), "timing mode: {value}");
+    assert!(value.contains("10ms"), "timing bound: {value}");
+    assert!(
+        value.contains("min = rate floor (debounce), max = staleness bound (refresh ceiling)"),
+        "the general form §6.2 signal reading: {value}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an event renders the occurrence reading — throttle and TTL —
+/// which general form §6.2 derives from the declaring keyword, not from the
+/// annotation.
+#[test]
+fn hover_on_an_event_shows_the_throttle_and_ttl_reading() {
+    let dir = TempDir::new("ridl-hover-event");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        find_pos(RIDL_CONTRACT, "doorOpened", 0),
+    );
+    assert!(value.contains("event"), "kind: {value}");
+    assert!(value.contains("DoorPayload"), "payload: {value}");
+    assert!(value.contains("#4"), "ordinal: {value}");
+    assert!(value.contains("[50ms..500ms]"), "timing bounds: {value}");
+    assert!(
+        value.contains(
+            "min = rate floor (throttle), max = staleness bound \
+             (TTL: stale occurrences discarded)"
+        ),
+        "the general form §6.2 event reading: {value}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// An untimed signal is not untimed in the IR: the configured default is
+/// resolved at compile time, and hover says so (ridl §9.1).
+#[test]
+fn hover_on_an_untimed_signal_shows_the_applied_default() {
+    let dir = TempDir::new("ridl-hover-default");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        find_pos(RIDL_CONTRACT, "cabinLoad", 0),
+    );
+    assert!(value.contains("#2"), "ordinal: {value}");
+    assert!(
+        value.contains("default [100ms..1000ms] applied"),
+        "the applied default: {value}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on a command renders its kind, ordinal, and resolved parameters.
+#[test]
+fn hover_on_a_command_shows_its_ordinal_and_parameters() {
+    let dir = TempDir::new("ridl-hover-command");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(&client, 10, contract, find_pos(RIDL_CONTRACT, "setGear", 0));
+    assert!(value.contains("command"), "kind: {value}");
+    assert!(
+        value.contains("position: veh.common.Speed"),
+        "parameter: {value}",
+    );
+    assert!(value.contains("#5"), "ordinal: {value}");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on a `final` renders its kind, payload, and ordinal — the tombstone
+/// before it is counted, so it is `#8`, not `#7`.
+#[test]
+fn hover_on_a_final_shows_its_payload_and_tombstone_counted_ordinal() {
+    let dir = TempDir::new("ridl-hover-final");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        find_pos(RIDL_CONTRACT, "softwareVersion", 0),
+    );
+    assert!(value.contains("final"), "kind: {value}");
+    assert!(value.contains("veh.common.Version"), "payload: {value}");
+    assert!(
+        value.contains("#8"),
+        "the tombstone-counted ordinal: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on a fallible query names both arms and closes with the general form
+/// §6.4 wording — Stratum 3 is detected, not undefined.
+#[test]
+fn hover_on_a_fallible_query_names_both_arms_and_the_stratum_three_wording() {
+    let dir = TempDir::new("ridl-hover-query");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        find_pos(RIDL_CONTRACT, "calibrate", 0),
+    );
+    assert!(value.contains("query"), "kind: {value}");
+    assert!(value.contains("#7"), "ordinal: {value}");
+    assert!(value.contains("CalReport"), "the ok arm: {value}");
+    assert!(value.contains("CalError"), "the error arm: {value}");
+    assert!(
+        value.contains("infrastructure failure — detected, undeclared"),
+        "the verbatim general form §6.4 sentence: {value}",
+    );
+    assert!(
+        !value.contains("undefined behavior") && !value.contains("undefined behaviour"),
+        "Stratum 3 is never described as undefined behavior: {value}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on the `|` of an inline fallible return renders the same two-arm
+/// reading and the same §6.4 wording as the query hover.
+#[test]
+fn hover_on_the_fallible_pipe_shows_both_arms_and_the_strata_note() {
+    let dir = TempDir::new("ridl-hover-pipe");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        find_pos(RIDL_CONTRACT, "| CalError", 0),
+    );
+    assert!(value.contains("CalReport"), "the ok arm: {value}");
+    assert!(value.contains("CalError"), "the error arm: {value}");
+    assert!(
+        value.contains("infrastructure failure — detected, undeclared"),
+        "the verbatim general form §6.4 sentence: {value}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on a service names its interface shape and states the ridl §14.5
+/// posture neutrality — a service says nothing about its wire realization.
+#[test]
+fn hover_on_a_service_shows_its_interface_and_the_posture_note() {
+    let dir = TempDir::new("ridl-hover-service");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract.clone(),
+        find_pos(RIDL_CONTRACT, "veh.adas.cruise", 0),
+    );
+    assert!(value.contains("service"), "kind: {value}");
+    assert!(value.contains("veh.adas.cruise"), "service name: {value}");
+    assert!(value.contains("VehicleStatus"), "interface shape: {value}");
+    assert!(value.contains("Posture-neutral"), "the §14.5 note: {value}");
+
+    // The inline-shape form reports its own member count instead of a name.
+    let inline = hover_markdown(
+        &client,
+        12,
+        contract,
+        find_pos(RIDL_CONTRACT, "veh.hvac.cabin", 0),
+    );
+    assert!(inline.contains("inline"), "inline shape: {inline}");
+    assert!(
+        inline.contains("Posture-neutral"),
+        "the §14.5 note: {inline}"
+    );
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Ordinal inlay hints number every interaction of an interface body and the
+/// `reserved` tombstone among them — the editor half of the general form §6.3
+/// mitigation.
+#[test]
+fn inlay_hints_number_every_interaction_and_the_reserved_tombstone() {
+    let dir = TempDir::new("ridl-inlay-interface");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let hints = inlay_hints_at(&client, 10, contract, whole_file());
+    let ordinals = hint_pairs(&hints, lt::InlayHintKind::PARAMETER);
+    let labels: Vec<&str> = ordinals
+        .iter()
+        .map(|(_, label)| label.as_str())
+        .filter(|label| label.starts_with('#'))
+        .collect();
+    // The struct and enum bodies contribute their own numbers first; the eight
+    // interface slots follow in declaration order, tombstone included.
+    assert!(
+        labels
+            .windows(8)
+            .any(|window| window == ["#1", "#2", "#3", "#4", "#5", "#6", "#7", "#8"]),
+        "eight contiguous interface ordinals: {labels:?}",
+    );
+
+    let at = |needle: &str| {
+        let start = find_pos(RIDL_CONTRACT, needle, 0);
+        pos(
+            start.line,
+            start.character + needle.encode_utf16().count() as u32,
+        )
+    };
+    for (needle, expected) in [
+        ("currentSpeed", "#1"),
+        ("cabinLoad", "#2"),
+        ("engineTemp", "#3"),
+        ("doorOpened", "#4"),
+        ("setGear", "#5"),
+        ("resetCounters", "#6"),
+        ("calibrate", "#7"),
+        ("softwareVersion", "#8"),
+    ] {
+        assert!(
+            ordinals.contains(&(at(needle), expected.to_string())),
+            "`{needle}` carries {expected}: {ordinals:?}",
+        );
+    }
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A service's inline shape carries its own ordinal sequence, and the inlay
+/// hints render it — an inline shape is an interface body in every way that
+/// matters to wire identity.
+#[test]
+fn inlay_hints_number_a_service_inline_shape() {
+    let dir = TempDir::new("ridl-inlay-service");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let hints = inlay_hints_at(&client, 10, contract, whole_file());
+    let ordinals = hint_pairs(&hints, lt::InlayHintKind::PARAMETER);
+    let at = |needle: &str| {
+        let start = find_pos(RIDL_CONTRACT, needle, 0);
+        pos(
+            start.line,
+            start.character + needle.encode_utf16().count() as u32,
+        )
+    };
+    assert!(
+        ordinals.contains(&(at("temperature"), "#1".to_string())),
+        "the inline shape's first member: {ordinals:?}",
+    );
+    assert!(
+        ordinals.contains(&(at("setTarget"), "#2".to_string())),
+        "the inline shape's second member: {ordinals:?}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Goto-definition on an interaction's payload reference crosses the package
+/// boundary to the typl declaration.
+#[test]
+fn goto_definition_on_an_interaction_payload_crosses_packages() {
+    let dir = TempDir::new("ridl-goto-payload");
+    let (vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    // The `Speed` payload of `signal currentSpeed`.
+    let position = find_pos(RIDL_CONTRACT, "currentSpeed : Speed", 0);
+    let position = pos(position.line, position.character + 16);
+    let response = definition_at(&client, 10, contract, position).expect("the payload resolves");
+    let location = match response {
+        lt::GotoDefinitionResponse::Scalar(location) => location,
+        other => panic!("expected a single location, got {other:?}"),
+    };
+    assert_eq!(
+        location.uri.as_str(),
+        vocab.as_str(),
+        "declared in veh.common"
+    );
+    assert_eq!(
+        location.range,
+        range((2, 5), (2, 10)),
+        "the `Speed` name span",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Goto-definition on a service's interface reference jumps to the interface
+/// declaration, and find-references from the interface finds that reference.
+#[test]
+fn goto_definition_and_references_work_on_a_service_interface_reference() {
+    let dir = TempDir::new("ridl-goto-service");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let reference = find_pos(RIDL_CONTRACT, "VehicleStatus", 1);
+    let declaration = find_pos(RIDL_CONTRACT, "VehicleStatus", 0);
+    let response = definition_at(
+        &client,
+        10,
+        contract.clone(),
+        pos(reference.line, reference.character + 2),
+    )
+    .expect("the interface reference resolves");
+    let location = match response {
+        lt::GotoDefinitionResponse::Scalar(location) => location,
+        other => panic!("expected a single location, got {other:?}"),
+    };
+    assert_eq!(location.uri.as_str(), contract.as_str());
+    assert_eq!(
+        location.range,
+        range(
+            (declaration.line, declaration.character),
+            (declaration.line, declaration.character + 13),
+        ),
+        "the `VehicleStatus` name span",
+    );
+
+    let locations = references_at(
+        &client,
+        12,
+        contract.clone(),
+        pos(declaration.line, declaration.character + 2),
+        false,
+    )
+    .expect("the interface is a symbol");
+    assert_eq!(
+        locations.len(),
+        1,
+        "the service's shape reference, got: {locations:?}",
+    );
+    assert_eq!(
+        locations[0].range.start, reference,
+        "the reference inside the service declaration",
+    );
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Completion after a `:` in payload position offers the visible named types,
+/// and completion at an interaction-start position offers the five kind
+/// keywords plus `reserved`.
+#[test]
+fn completion_inside_an_interface_body_covers_both_contexts() {
+    let dir = TempDir::new("ridl-completion");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    // Just after the `: ` of `signal currentSpeed : Speed`.
+    let payload = find_pos(RIDL_CONTRACT, "currentSpeed : Speed", 0);
+    let items = complete_at(
+        &client,
+        10,
+        contract.clone(),
+        pos(payload.line, payload.character + 15),
+    );
+    let types = labels(&items);
+    assert!(types.contains(&"Speed"), "named types: {types:?}");
+    assert!(
+        types.contains(&"DoorPayload"),
+        "local named types: {types:?}",
+    );
+
+    // The start of the `reserved resetCounters` line — an interaction-start
+    // position inside the interface body.
+    let start = find_pos(RIDL_CONTRACT, "reserved resetCounters", 0);
+    let items = complete_at(&client, 12, contract, pos(start.line, start.character));
+    let keywords = labels(&items);
+    for keyword in ["signal", "event", "command", "query", "final", "reserved"] {
+        assert!(
+            keywords.contains(&keyword),
+            "`{keyword}` offered at an interaction start: {keywords:?}",
+        );
+    }
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A payload reference preceded on its own line by a two-byte `°` resolves at
+/// its UTF-16 column, not its byte offset — the `convert` bridge is the only
+/// place positions cross, on the ridl side too.
+#[test]
+fn hover_on_a_payload_after_a_multibyte_comment_uses_utf16_columns() {
+    let dir = TempDir::new("ridl-utf16");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    // `  signal engineTemp : /* °C */ Speed @[20ms..100ms]` — `Speed` starts
+    // at UTF-16 column 31 but byte offset 32 within the line.
+    let payload = find_pos(RIDL_CONTRACT, "*/ Speed", 0);
+    let payload = pos(payload.line, payload.character + 3);
+    assert_eq!(payload.character, 31, "the UTF-16 column of `Speed`");
+
+    let hover = hover_at(
+        &client,
+        10,
+        contract,
+        pos(payload.line, payload.character + 2),
+    )
+    .expect("the payload reference has hover content");
+    let value = match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    };
+    assert!(
+        value.contains("veh.common.Speed"),
+        "resolved payload: {value}"
+    );
+    assert_eq!(
+        hover.range.expect("hover reports its range").start,
+        payload,
+        "the reference span starts at the UTF-16 column",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}

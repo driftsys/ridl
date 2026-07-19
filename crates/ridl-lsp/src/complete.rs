@@ -12,7 +12,10 @@
 //! - inside a constraint after the `match` keyword → the regex constants in
 //!   scope (a `match` pattern is a regex literal or a named regex constant);
 //! - at a definition-start position (the top level of a file) → the definition
-//!   keywords and the `internal` / `error` modifiers.
+//!   keywords and the `internal` / `error` modifiers;
+//! - at an interaction-start position (directly inside an `interface` body or a
+//!   service's inline shape) → the five ridl interaction keywords plus
+//!   `reserved` (E2.10b).
 //!
 //! The context is decided from the token to the left of the cursor and the
 //! identifier the cursor is completing, not from a well-formed tree — the same
@@ -36,6 +39,11 @@ const DEFINITION_KEYWORDS: &[&str] = &[
     "type", "const", "struct", "enum", "enumset", "union", "internal", "error",
 ];
 
+/// The interaction keywords offered at an interaction-start position: the five
+/// ridl kinds (ridl §4–§8) plus the `reserved` tombstone (ridl §11). Nothing
+/// else may appear in an interface body — a typl declaration there is RIDL-107.
+const INTERACTION_KEYWORDS: &[&str] = &["signal", "event", "command", "query", "final", "reserved"];
+
 /// The completion items for the cursor at `offset` in `file` (a file of `pkg`).
 ///
 /// `packages` is the every-package universe (workspace members, standalone
@@ -58,7 +66,8 @@ pub fn completion(
         Context::Type => type_completions(db, ws, std, pkg),
         Context::Import => import_completions(db, ws, std, packages, &source, offset),
         Context::Match => match_completions(db, ws, std, pkg),
-        Context::DefinitionStart => keyword_completions(),
+        Context::DefinitionStart => keyword_completions(DEFINITION_KEYWORDS),
+        Context::InteractionStart => keyword_completions(INTERACTION_KEYWORDS),
     }
 }
 
@@ -72,6 +81,9 @@ enum Context {
     Match,
     /// At the top level of a file — a definition keyword or modifier.
     DefinitionStart,
+    /// Directly inside an interface body or a service's inline shape — an
+    /// interaction keyword or `reserved`.
+    InteractionStart,
 }
 
 /// Decides the completion context from the tree around `offset`, or `None` when
@@ -105,18 +117,31 @@ fn context(root: &SyntaxNode, offset: TextSize) -> Option<Context> {
         match anchor.kind() {
             SyntaxKind::Colon => return Some(Context::Type),
             SyntaxKind::MatchKw => return Some(Context::Match),
-            // Naming positions: right after a definition keyword the user is
-            // typing the declared name, so offer nothing.
+            // Naming positions: right after a definition or interaction
+            // keyword the user is typing the declared name, so offer nothing.
             SyntaxKind::TypeKw
             | SyntaxKind::ConstKw
             | SyntaxKind::StructKw
             | SyntaxKind::EnumKw
             | SyntaxKind::EnumsetKw
-            | SyntaxKind::UnionKw => return None,
+            | SyntaxKind::UnionKw
+            | SyntaxKind::InterfaceKw
+            | SyntaxKind::ServiceKw
+            | SyntaxKind::SignalKw
+            | SyntaxKind::EventKw
+            | SyntaxKind::CommandKw
+            | SyntaxKind::QueryKw
+            | SyntaxKind::FinalKw
+            | SyntaxKind::ReservedKw => return None,
             _ => {}
         }
     }
 
+    // Interaction start: the cursor sits directly in an interface body or a
+    // service's inline shape.
+    if is_interaction_start(word.as_ref().unwrap_or(&left)) {
+        return Some(Context::InteractionStart);
+    }
     // Definition start: the cursor sits at the top level of the file.
     if is_top_level(word.as_ref().unwrap_or(&left)) {
         return Some(Context::DefinitionStart);
@@ -153,6 +178,22 @@ fn is_top_level(token: &SyntaxToken) -> bool {
     while let Some(current) = node {
         match current.kind() {
             SyntaxKind::SourceFile => return true,
+            SyntaxKind::ErrorNode => node = current.parent(),
+            _ => return false,
+        }
+    }
+    false
+}
+
+/// Whether `token` sits directly inside an `interface` body or a service's
+/// inline shape — its nearest node ancestor is the `InterfaceDef` or
+/// `ServiceDef`, seen through any recovery `ErrorNode` wrappers. A token nested
+/// deeper (inside an interaction's own node) is not at a member start.
+fn is_interaction_start(token: &SyntaxToken) -> bool {
+    let mut node = token.parent();
+    while let Some(current) = node {
+        match current.kind() {
+            SyntaxKind::InterfaceDef | SyntaxKind::ServiceDef => return true,
             SyntaxKind::ErrorNode => node = current.parent(),
             _ => return false,
         }
@@ -264,9 +305,9 @@ fn match_completions(
     sorted(items)
 }
 
-/// The definition keywords and modifiers.
-fn keyword_completions() -> Vec<lt::CompletionItem> {
-    DEFINITION_KEYWORDS
+/// A fixed keyword list, kind-annotated as keywords.
+fn keyword_completions(keywords: &[&str]) -> Vec<lt::CompletionItem> {
+    keywords
         .iter()
         .map(|keyword| {
             item(
