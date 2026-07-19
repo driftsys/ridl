@@ -1,0 +1,58 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+assertion_line: 75
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/type_decl_in_interface.ridl
+---
+SourceFile@0..97
+  PackageDecl@0..15
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..15
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..15 "err"
+  Whitespace@15..17 "\n\n"
+  InterfaceDef@17..96
+    InterfaceKw@17..26 "interface"
+    Whitespace@26..27 " "
+    Name@27..33
+      Ident@27..33 "Broken"
+    Whitespace@33..34 " "
+    LBrace@34..35 "{"
+    Whitespace@35..38 "\n  "
+    ErrorNode@38..65
+      TypeKw@38..42 "type"
+      Whitespace@42..43 " "
+      Ident@43..48 "Local"
+      Whitespace@48..49 " "
+      Colon@49..50 ":"
+      Whitespace@50..51 " "
+      IntegerKw@51..58 "integer"
+      Whitespace@58..59 " "
+      LBracket@59..60 "["
+      IntNumber@60..61 "0"
+      DotDot@61..63 ".."
+      IntNumber@63..64 "1"
+      RBracket@64..65 "]"
+    Whitespace@65..68 "\n  "
+    SignalDef@68..94
+      SignalKw@68..74 "signal"
+      Whitespace@74..75 " "
+      Name@75..80
+        Ident@75..80 "speed"
+      Whitespace@80..81 " "
+      Colon@81..82 ":"
+      Whitespace@82..83 " "
+      PathType@83..88
+        QualifiedName@83..88
+          Ident@83..88 "Speed"
+      Whitespace@88..89 " "
+      Timing@89..94
+        At@89..90 "@"
+        Duration@90..94 "10ms"
+    Whitespace@94..95 "\n"
+    RBrace@95..96 "}"
+  Whitespace@96..97 "\n"
+errors:
+  FORM-102 38..42 unexpected token in an interface body

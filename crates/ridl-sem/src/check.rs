@@ -26,12 +26,12 @@
 
 use std::collections::HashSet;
 
-use ridl_core::db::InputFile;
+use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_ir::v1;
-use ridl_syntax::SyntaxKind;
-use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers};
+use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, HasName};
+use ridl_syntax::{Profile, SyntaxKind};
 use rowan::{NodeOrToken, TextRange};
 
 use crate::docs;
@@ -56,6 +56,44 @@ use crate::ucum::parse_ucum;
 pub struct CheckedPackage {
     pub ir: v1::Package,
     pub diagnostics: Vec<Diagnostic>,
+}
+
+/// A structurally checked interface: its definition plus the ordinal
+/// assignment of ridl §11 — 1-based, declaration order, one sequence across
+/// all interaction kinds, `reserved` tombstones counted. Shared with the IR
+/// lowering (E2 task 6) and the inlay-hint renderer (task 20).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CheckedInterface {
+    pub def: ast::InterfaceDef,
+    /// Each surviving member with its 1-based ordinal. A RIDL-402 duplicate
+    /// lowers first-wins only: the losing re-declaration is excluded and
+    /// holds no ordinal slot, so the surviving contract stays contiguous.
+    pub members: Vec<(ast::InterfaceMember, u32)>,
+}
+
+/// Assigns the ridl §11 ordinals of one interface (see [`CheckedInterface`]).
+/// Pure over the AST — the structural diagnostics (RIDL-401/-402 and the
+/// per-kind rules) are the package checker's, not this function's.
+pub fn checked_interface(def: &ast::InterfaceDef) -> CheckedInterface {
+    let mut members = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut ordinal = 0u32;
+    for member in def.members() {
+        // A RIDL-402 loser is excluded and holds no ordinal slot; `reserved`
+        // tombstones always hold theirs (ridl §11).
+        if !matches!(member, ast::InterfaceMember::Reserved(_))
+            && let Some(name) = member_name(member.name())
+            && !seen.insert(name)
+        {
+            continue;
+        }
+        ordinal += 1;
+        members.push((member, ordinal));
+    }
+    CheckedInterface {
+        def: def.clone(),
+        members,
+    }
 }
 
 /// Checks `pkg` and lowers it to IR v1 (typl reference §4–§12, §16.2–§16.3).
@@ -113,6 +151,19 @@ pub fn check_package(
             if let Some(decl) = checker.lower_definition(&definition) {
                 decls.push(decl);
             }
+        }
+        // The E2.1b interaction structural pass — diagnostics only, nothing
+        // lowered until task 6.
+        for interface in source.interfaces() {
+            if !checker.is_winner(*file, &interface) {
+                continue;
+            }
+            checker.check_interface(&interface);
+        }
+        // Stream-position narrowing runs on ridl-profile files only: in a
+        // `.typl` parse the parser itself reports every stream as TYPL-301.
+        if profile_of_path(file.path(db)) == Profile::Ridl {
+            checker.check_stream_positions(&source);
         }
     }
 
@@ -382,17 +433,18 @@ impl Checker<'_> {
         self.diag(code, Severity::Info, range, message);
     }
 
-    /// Whether `definition` is the resolver's first-wins winner for its name —
-    /// the one occurrence the checker lowers (ADR-0007 decision 6).
-    fn is_winner(&self, file: InputFile, definition: &Definition) -> bool {
-        let Some(name) = declared_name(definition) else {
+    /// Whether a declaration (typl definition or ridl interface) is the
+    /// resolver's first-wins winner for its name — the one occurrence the
+    /// checker processes (ADR-0007 decision 6).
+    fn is_winner(&self, file: InputFile, declaration: &impl HasName) -> bool {
+        let Some(name) = declared_name(declaration) else {
             return false;
         };
         match self.resolution.symbols.get(&name) {
             Some(symbol) => {
                 symbol.package == self.package_name
                     && symbol.file == file
-                    && symbol.range == name_range(definition)
+                    && symbol.range == name_range(declaration)
             }
             None => false,
         }
@@ -421,7 +473,7 @@ impl Checker<'_> {
     }
 
     /// Resolves a type path, emitting the T6 description-first messages
-    /// (unknown name / const-where-type-expected) — no §16 code exists for
+    /// (unknown name / non-type-where-type-expected) — no §16 code exists for
     /// either.
     fn resolve_type_path(&mut self, path: &ast::PathType) -> PathTarget {
         let written = significant_text(path.syntax());
@@ -432,6 +484,16 @@ impl Checker<'_> {
                     DiagCode::NONE,
                     range,
                     format!("expected a type, but `{written}` names a constant"),
+                );
+                PathTarget::Unresolved(written)
+            }
+            // An interface is not a type: it has no values, so it cannot sit
+            // in payload, field, or parameter position (ridl §14.0).
+            Some(symbol) if symbol.kind == SymbolKind::Interface => {
+                self.error(
+                    DiagCode::NONE,
+                    range,
+                    format!("expected a type, but `{written}` names an interface"),
                 );
                 PathTarget::Unresolved(written)
             }
@@ -690,7 +752,8 @@ impl Checker<'_> {
             .map(|backing| backing.syntax().text_range())
             .unwrap_or_else(|| name_range(decl));
         let parts = self.lower_scalar(class, decl.constraint(), span);
-        let (declared_init, declared) = self.lower_declared_init(decl.init_value(), &parts);
+        let (declared_init, declared) =
+            self.lower_declared_init(decl.init_value(), &parts, DiagCode::TYPL_109);
         let mut type_def = v1::TypeDef {
             backing,
             constraint: parts.constraint,
@@ -1297,10 +1360,14 @@ impl Checker<'_> {
     /// `match` pattern, against that pattern (see [`Checker::check_string_init`]).
     /// Returns `(declared_init, init)`; both stay absent when no init is
     /// declared — derivation is the task 15 pass.
+    /// `violation` is the code an out-of-constraint init draws: TYPL-109 at
+    /// the vocabulary layer (types and fields), RIDL-110 for a signal's
+    /// `= value` override (ridl §4.4, E2 task 5) — one validation, two codes.
     fn lower_declared_init(
         &mut self,
         init: Option<ast::InitValue>,
         parts: &ScalarParts,
+        violation: DiagCode,
     ) -> (Option<String>, Option<v1::InitValue>) {
         let Some(literal) = init.as_ref().and_then(ast::InitValue::literal) else {
             return (None, None);
@@ -1309,7 +1376,7 @@ impl Checker<'_> {
             LitKind::Number { value } => {
                 if out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
                     self.error(
-                        DiagCode::TYPL_109,
+                        violation,
                         literal.syntax().text_range(),
                         format!(
                             "init value {} is outside the declared range [{}..{}]",
@@ -1323,14 +1390,14 @@ impl Checker<'_> {
             }
             LitKind::Bool(flag) => flag.to_string(),
             LitKind::Str(text) => {
-                self.check_string_init(&text, parts, literal.syntax().text_range());
+                self.check_string_init(&text, parts, literal.syntax().text_range(), violation);
                 text
             }
             LitKind::ConstRef(name) => match self.const_numeric_value_in(self.pkg, &name) {
                 Some(value) => {
                     if out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
                         self.error(
-                            DiagCode::TYPL_109,
+                            violation,
                             literal.syntax().text_range(),
                             format!(
                                 "init value {} is outside the declared range [{}..{}]",
@@ -1367,7 +1434,14 @@ impl Checker<'_> {
     /// struct field too: the length bound and `match` pattern flow into the
     /// field's `ScalarParts` whether the field is an inline string/bytes scalar
     /// or is typed by a named string/bytes `type` (see [`Checker::lower_field`]).
-    fn check_string_init(&mut self, text: &str, parts: &ScalarParts, range: TextRange) {
+    /// `violation` is the emitted code — see [`Checker::lower_declared_init`].
+    fn check_string_init(
+        &mut self,
+        text: &str,
+        parts: &ScalarParts,
+        range: TextRange,
+        violation: DiagCode,
+    ) {
         let Some(constraint) = &parts.constraint else {
             return;
         };
@@ -1376,7 +1450,7 @@ impl Checker<'_> {
             && length < min
         {
             self.error(
-                DiagCode::TYPL_109,
+                violation,
                 range,
                 format!("init string length {length} is below the declared minimum {min}"),
             );
@@ -1384,7 +1458,7 @@ impl Checker<'_> {
             && length > max
         {
             self.error(
-                DiagCode::TYPL_109,
+                violation,
                 range,
                 format!("init string length {length} exceeds the declared maximum {max}"),
             );
@@ -1394,7 +1468,7 @@ impl Checker<'_> {
             && regex.find(text).is_none()
         {
             self.error(
-                DiagCode::TYPL_109,
+                violation,
                 range,
                 format!("init string `{text}` does not match the type's `match` pattern"),
             );
@@ -1490,7 +1564,8 @@ impl Checker<'_> {
                 .and_then(|l| l.scalar_bounds.as_ref())
                 .and_then(|(_, max)| max.clone()),
         };
-        let (declared_init, declared) = self.lower_declared_init(field.init_value(), &bounds_parts);
+        let (declared_init, declared) =
+            self.lower_declared_init(field.init_value(), &bounds_parts, DiagCode::TYPL_109);
         // E1.9: a field without a declared init derives one from the §5.8 table
         // (a named reference resolves to the referenced type's own init).
         let init = match declared {
@@ -1579,6 +1654,12 @@ impl Checker<'_> {
             },
             SymbolKind::Const => v1::InitValue {
                 derivable: false,
+                value: None,
+            },
+            // Unreachable through `resolve_type_path`, which rejects an
+            // interface in type position; kept derivable as the safe default.
+            SymbolKind::Interface => v1::InitValue {
+                derivable: true,
                 value: None,
             },
         }
@@ -2383,6 +2464,486 @@ impl Checker<'_> {
         }
     }
 
+    // --- the E2.1b interaction structural pass ----------------------------
+    //
+    // Diagnostics only — the IR is untouched until task 6. The task 3 parser
+    // over-approximates the interaction grammar deliberately; every
+    // over-approximation is narrowed here so none leaks to IR lowering:
+    //
+    // - payloads and params parse as any `FieldType` → narrowed to the
+    //   Appendix C shapes (named type; `final` also arrays; params also
+    //   streams) with pointed FORM-102 messages;
+    // - the `error` modifier parses on `interface` → TYPL-212;
+    // - a return type parses on `command` → RIDL-104;
+    // - timing parses on `command`/`query`/`final` → FORM-102 on the
+    //   callables (§16.1 scopes RIDL-106 to `final`), RIDL-106 on `final`;
+    // - an attr block parses on `signal`/`event`/`final` → RIDL-106 on
+    //   `final`; predicates draw RIDL-301/-302, keys the gf §4.3 allow-list
+    //   (FORM-106/-107/-108);
+    // - an init value parses on `event` and `final` → FORM-102;
+    // - a stream `<T>` parses in every type position → RIDL-201 on
+    //   signal/event payloads, FORM-102 on `final`, TYPL-301 elsewhere
+    //   (struct fields and collections, ridl §12.3), via
+    //   [`Checker::check_stream_positions`];
+    // - timing and attrs parse in either order → no separate order rule:
+    //   no interaction kind legally carries both, so every wrong-order
+    //   combination already draws its kind rule.
+
+    /// The structural rules of one interface (ridl §16, E2 task 5).
+    fn check_interface(&mut self, def: &ast::InterfaceDef) {
+        // TYPL-212: `error` is failure vocabulary for composites only
+        // (typl §10.1) — an interface is not one.
+        if def.is_error() {
+            self.error(
+                DiagCode::TYPL_212,
+                name_range(def),
+                "`error` is not valid on an `interface` declaration — only `struct`, `enum`, and `union`"
+                    .to_string(),
+            );
+        }
+
+        // RIDL-107: a typl declaration inside the body. The parser recovers
+        // it into an ErrorNode; the code attaches when the recovered node's
+        // first token is a typl definition keyword.
+        for node in def.syntax().children() {
+            if node.kind() == SyntaxKind::ErrorNode
+                && node
+                    .children_with_tokens()
+                    .filter_map(|element| element.into_token())
+                    .find(|token| !token.kind().is_trivia())
+                    .is_some_and(|token| is_typl_definition_keyword(token.kind()))
+            {
+                self.error(
+                    DiagCode::RIDL_107,
+                    node.text_range(),
+                    "type declaration inside an interface body — typl declarations live at package level"
+                        .to_string(),
+                );
+            }
+        }
+
+        // Pre-pass: the reserved tombstone names (ridl §11). Recorded debt
+        // (E2 ledger M1): duplicate `reserved` tombstones in one interface
+        // are silent here although each occupies an ordinal slot and shifts
+        // the later ordinals — whether that deserves a diagnostic (TYPL-211
+        // is the struct-side precedent) is decided in a later task.
+        let mut reserved: HashSet<String> = HashSet::new();
+        for member in def.members() {
+            if let ast::InterfaceMember::Reserved(entry) = &member
+                && let Some(name) = member_name(entry.name())
+            {
+                reserved.insert(name);
+            }
+        }
+
+        let mut seen: HashSet<String> = HashSet::new();
+        for member in def.members() {
+            if !matches!(member, ast::InterfaceMember::Reserved(_))
+                && let Some(name) = member_name(member.name())
+            {
+                let range = member_name_range(member.name(), member.syntax());
+                if reserved.contains(&name) {
+                    self.error(
+                        DiagCode::RIDL_401,
+                        range,
+                        format!("interaction `{name}` re-declares a `reserved` name"),
+                    );
+                }
+                if !seen.insert(name.clone()) {
+                    // RIDL-402: first wins; the loser is excluded from
+                    // lowering ([`checked_interface`]) and not re-checked.
+                    self.error(
+                        DiagCode::RIDL_402,
+                        range,
+                        format!("duplicate interaction name `{name}`"),
+                    );
+                    continue;
+                }
+            }
+            match &member {
+                ast::InterfaceMember::Signal(signal) => self.check_signal(signal),
+                ast::InterfaceMember::Event(event) => self.check_event(event),
+                ast::InterfaceMember::Command(command) => self.check_command(command),
+                ast::InterfaceMember::Query(query) => self.check_query(query),
+                ast::InterfaceMember::Final(fin) => self.check_final(fin),
+                ast::InterfaceMember::Reserved(_) => {}
+            }
+        }
+    }
+
+    /// `signal Name : type_ref init_value? timing?` (ridl §4.1, Appendix C).
+    fn check_signal(&mut self, signal: &ast::SignalDef) {
+        match signal.payload() {
+            Some(ast::FieldType::Path(path)) => {
+                if let PathTarget::Symbol(symbol) = self.resolve_type_path(&path) {
+                    match signal.init_value() {
+                        // RIDL-110: the bare `= value` override validates
+                        // against the payload constraints — the E1 scalar
+                        // validation with the ridl code (§4.4). Recorded
+                        // debt (E2 ledger M2): the leniency is E1's exactly —
+                        // a type-mismatched literal (`= true` on a numeric
+                        // payload), a value off the `step` grid, or an
+                        // override on a non-`type` payload all pass silently,
+                        // as they do for struct fields — although the §16.1
+                        // RIDL-110 wording reads broader.
+                        Some(init) => {
+                            let parts = self.payload_scalar_parts(&symbol);
+                            self.lower_declared_init(Some(init), &parts, DiagCode::RIDL_110);
+                        }
+                        // RIDL-109: no override, so the payload type's own
+                        // init must derive (typl §5.8 through ridl §4.4).
+                        None => {
+                            if !self.named_type_init(&symbol).derivable {
+                                self.error(
+                                    DiagCode::RIDL_109,
+                                    path.syntax().text_range(),
+                                    format!(
+                                        "signal payload type `{}` has no derivable init value and no `= value` override",
+                                        symbol.name
+                                    ),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+            Some(other) => self.error(
+                DiagCode::FORM_102,
+                other.syntax().text_range(),
+                "signal payload must be a named type".to_string(),
+            ),
+            // A stream payload (RIDL-201, `check_stream_positions`) or a
+            // parse error already reported.
+            None => {}
+        }
+        self.check_member_attrs(signal.syntax(), MemberKind::Signal);
+    }
+
+    /// `event Name : type_ref timing?` (ridl §5.1, Appendix C).
+    fn check_event(&mut self, event: &ast::EventDef) {
+        match event.payload() {
+            Some(ast::FieldType::Path(path)) => {
+                self.resolve_type_path(&path);
+            }
+            Some(other) => self.error(
+                DiagCode::FORM_102,
+                other.syntax().text_range(),
+                "event payload must be a named type".to_string(),
+            ),
+            None => {}
+        }
+        // Events carry no init — occurrences are not state (§4.4/§5.1); the
+        // grammar has no such production, so FORM-102 with a pointed message.
+        if let Some(init) = init_value_child(event.syntax()) {
+            self.error(
+                DiagCode::FORM_102,
+                init.syntax().text_range(),
+                "init value not valid on event".to_string(),
+            );
+        }
+        self.check_member_attrs(event.syntax(), MemberKind::Event);
+    }
+
+    /// `command Name '(' params ')' attr_block?` (ridl §6.1, Appendix C).
+    fn check_command(&mut self, command: &ast::CommandDef) {
+        // RIDL-104: a command always returns `()`.
+        if let Some(return_type) = command.return_type() {
+            self.error(
+                DiagCode::RIDL_104,
+                return_type.syntax().text_range(),
+                "return type on command — a command always returns `()`; use `query` for a result"
+                    .to_string(),
+            );
+        }
+        if let Some(timing) = command.timing() {
+            self.error(
+                DiagCode::FORM_102,
+                timing.syntax().text_range(),
+                "timing annotation not valid on command".to_string(),
+            );
+        }
+        if let Some(params) = command.params() {
+            self.check_params(&params, "command");
+        }
+        self.check_member_attrs(command.syntax(), MemberKind::Command);
+    }
+
+    /// `query Name '(' params ')' ':' return_type attr_block?` (ridl §7.1,
+    /// Appendix C; inline `T | E` per general form §6.1, ADR-0008 decision 1).
+    fn check_query(&mut self, query: &ast::QueryDef) {
+        if let Some(timing) = query.timing() {
+            self.error(
+                DiagCode::FORM_102,
+                timing.syntax().text_range(),
+                "timing annotation not valid on query".to_string(),
+            );
+        }
+        if let Some(params) = query.params() {
+            self.check_params(&params, "query");
+        }
+        if let Some(return_type) = query.return_type() {
+            self.check_query_return(&return_type);
+        }
+        self.check_member_attrs(query.syntax(), MemberKind::Query);
+    }
+
+    /// The four return shapes: named type, named-field tuple, stream, and
+    /// inline fallible `T | E`. An empty tuple is RIDL-105.
+    fn check_query_return(&mut self, return_type: &ast::ReturnType) {
+        if let Some(tuple) = return_type.tuple_type() {
+            if tuple.fields().next().is_none() {
+                self.error(
+                    DiagCode::RIDL_105,
+                    return_type.syntax().text_range(),
+                    "query returning `()` — a query must return a value; use `command`".to_string(),
+                );
+                return;
+            }
+            self.resolve_paths_in(tuple.syntax());
+        } else if let Some(stream) = return_type.stream_type() {
+            self.check_stream_element(&stream);
+        } else if let Some(fallible) = return_type.fallible_type() {
+            if let Some(ok) = fallible.ok() {
+                self.resolve_type_path(&ok);
+            }
+            if let Some(err) = fallible.err() {
+                self.resolve_type_path(&err);
+            }
+        } else if let Some(path) = return_type.type_ref() {
+            self.resolve_type_path(&path);
+        }
+    }
+
+    /// `final Name : (type_ref | array_type)` (ridl §8, Appendix C) — no
+    /// init, no timing, no attribute block (RIDL-106).
+    fn check_final(&mut self, fin: &ast::FinalDef) {
+        match fin.payload() {
+            Some(ast::FieldType::Path(path)) => {
+                self.resolve_type_path(&path);
+            }
+            Some(ast::FieldType::Array(array)) => self.resolve_paths_in(array.syntax()),
+            Some(other) => self.error(
+                DiagCode::FORM_102,
+                other.syntax().text_range(),
+                "final payload must be a named type or an array".to_string(),
+            ),
+            // A stream payload (FORM-102, `check_stream_positions`) or a
+            // parse error already reported.
+            None => {}
+        }
+        if let Some(init) = init_value_child(fin.syntax()) {
+            self.error(
+                DiagCode::FORM_102,
+                init.syntax().text_range(),
+                "init value not valid on final".to_string(),
+            );
+        }
+        if let Some(timing) = fin.timing() {
+            self.error(
+                DiagCode::RIDL_106,
+                timing.syntax().text_range(),
+                "timing annotation not valid on final".to_string(),
+            );
+        }
+        if let Some(block) = fin.attr_block() {
+            self.error(
+                DiagCode::RIDL_106,
+                block.syntax().text_range(),
+                "attribute block not valid on final".to_string(),
+            );
+        }
+        self.check_member_attrs(fin.syntax(), MemberKind::Final);
+    }
+
+    /// `param_type = type_ref | stream_type` (ridl Appendix C) — `noun`
+    /// names the callable kind in the FORM-102 message.
+    fn check_params(&mut self, params: &ast::ParamList, noun: &str) {
+        for param in params.params() {
+            match param.param_type() {
+                Some(ast::ParamType::Field(ast::FieldType::Path(path))) => {
+                    self.resolve_type_path(&path);
+                }
+                Some(ast::ParamType::Field(other)) => self.error(
+                    DiagCode::FORM_102,
+                    other.syntax().text_range(),
+                    format!("{noun} parameter must be a named type or a stream"),
+                ),
+                Some(ast::ParamType::Stream(stream)) => self.check_stream_element(&stream),
+                None => {}
+            }
+        }
+    }
+
+    /// RIDL-202: a stream element is a named type or raw `string`/`bytes`
+    /// (ridl §12.2). A primitive keyword element parses as a path.
+    fn check_stream_element(&mut self, stream: &ast::StreamType) {
+        if let Some(path) = stream.element_type() {
+            if primitive_path_keyword(&path).is_some() {
+                self.error(
+                    DiagCode::RIDL_202,
+                    path.syntax().text_range(),
+                    "stream element type must be a named type, `string`, or `bytes`".to_string(),
+                );
+            } else {
+                self.resolve_type_path(&path);
+            }
+        }
+        // A raw `string`/`bytes` element is the §12.2 exception; a missing
+        // element was a parse error.
+    }
+
+    /// Resolves every named-type reference under `node` — tuple fields and
+    /// array elements resolve exactly as struct fields do. Primitive keyword
+    /// paths inside stream elements are skipped: the stream's position is
+    /// already flagged, and they name no symbol.
+    fn resolve_paths_in(&mut self, node: &ridl_syntax::SyntaxNode) {
+        let paths: Vec<ast::PathType> = node
+            .descendants()
+            .filter_map(ast::PathType::cast)
+            .filter(|path| {
+                !(primitive_path_keyword(path).is_some()
+                    && path
+                        .syntax()
+                        .parent()
+                        .is_some_and(|parent| parent.kind() == SyntaxKind::StreamType))
+            })
+            .collect();
+        for path in paths {
+            self.resolve_type_path(&path);
+        }
+    }
+
+    /// The gf §4.3 attribute allow-list plus the ridl §13 predicate table,
+    /// over the member's attr block (if any). In E2 the only consumable
+    /// attributes are the `require`/`ensure` predicates: every flag or
+    /// assignment key draws FORM-107 when gf §4.3 knows it, FORM-106 when it
+    /// is unknown; a repeated key draws FORM-108.
+    ///
+    /// Recorded deferral (gf §4.5): attribute keys are doctrine-bound to
+    /// become contextual (recognised only inside `[ ]`, not registry words).
+    /// E2 does not implement that downgrade: `init` stays family-reserved —
+    /// `[ init = X ]` already draws FORM-105 at parse, and signal init is the
+    /// bare `= value` form (ADR-0008 decision 2) — so no key is special-cased
+    /// here.
+    fn check_member_attrs(&mut self, member: &ridl_syntax::SyntaxNode, kind: MemberKind) {
+        let Some(block) = member.children().find_map(ast::AttrBlock::cast) else {
+            return;
+        };
+        let noun = kind.noun();
+        let mut seen: HashSet<String> = HashSet::new();
+        for attribute in block.attributes() {
+            match attribute.predicate_kind() {
+                Some(ast::PredicateKind::Require) => {
+                    if !matches!(kind, MemberKind::Command | MemberKind::Query) {
+                        self.error(
+                            DiagCode::RIDL_301,
+                            attribute.syntax().text_range(),
+                            format!(
+                                "`require` not valid on {noun} — contracts belong to `command` and `query`"
+                            ),
+                        );
+                    }
+                }
+                Some(ast::PredicateKind::Ensure) => match kind {
+                    MemberKind::Query => {}
+                    MemberKind::Command => self.error(
+                        DiagCode::RIDL_302,
+                        attribute.syntax().text_range(),
+                        "`ensure` not valid on command — a command has no result to observe"
+                            .to_string(),
+                    ),
+                    _ => self.error(
+                        DiagCode::RIDL_301,
+                        attribute.syntax().text_range(),
+                        format!("`ensure` not valid on {noun} — contracts belong to `query`"),
+                    ),
+                },
+                None => {
+                    // A reserved-word key already drew FORM-105 at parse and
+                    // carries no name node.
+                    let Some(key) = member_name(attribute.key()) else {
+                        continue;
+                    };
+                    let range = attribute.syntax().text_range();
+                    if GF_ATTRIBUTE_KEYS.contains(&key.as_str()) {
+                        self.error(
+                            DiagCode::FORM_107,
+                            range,
+                            format!("attribute `{key}` not valid on {noun}"),
+                        );
+                    } else {
+                        self.error(
+                            DiagCode::FORM_106,
+                            range,
+                            format!("unknown attribute key `{key}`"),
+                        );
+                    }
+                    if !seen.insert(key.clone()) {
+                        self.error(
+                            DiagCode::FORM_108,
+                            range,
+                            format!("duplicate attribute key `{key}`"),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    /// Classifies every stream `<T>` in a ridl-profile file by position
+    /// (ridl §12.3): legal in interaction position (params and returns —
+    /// a command return is already RIDL-104 wholesale), RIDL-201 on
+    /// signal/event payloads, FORM-102 on `final`, TYPL-301 anywhere else
+    /// (struct fields and collections — the task 3 parser hand-off).
+    fn check_stream_positions(&mut self, source: &ast::SourceFile) {
+        for node in source.syntax().descendants() {
+            if node.kind() != SyntaxKind::StreamType {
+                continue;
+            }
+            let range = node.text_range();
+            match node.parent().map(|parent| parent.kind()) {
+                Some(SyntaxKind::Param | SyntaxKind::ReturnType) => {}
+                Some(SyntaxKind::SignalDef) => self.error(
+                    DiagCode::RIDL_201,
+                    range,
+                    "stream `<T>` not valid on a signal payload".to_string(),
+                ),
+                Some(SyntaxKind::EventDef) => self.error(
+                    DiagCode::RIDL_201,
+                    range,
+                    "stream `<T>` not valid on an event payload".to_string(),
+                ),
+                Some(SyntaxKind::FinalDef) => self.error(
+                    DiagCode::FORM_102,
+                    range,
+                    "stream `<T>` not valid on final".to_string(),
+                ),
+                _ => self.error(
+                    DiagCode::TYPL_301,
+                    range,
+                    "stream type `<T>` not valid on a struct field or collection — interaction parameters and query returns only"
+                        .to_string(),
+                ),
+            }
+        }
+    }
+
+    /// The scalar bounds and string constraint of a signal payload's named
+    /// type, for validating the `= value` override (RIDL-110) — exactly the
+    /// parts a struct field typed by the same name would validate against.
+    fn payload_scalar_parts(&self, symbol: &Symbol) -> ScalarParts {
+        if symbol.kind != SymbolKind::Type {
+            return ScalarParts::empty();
+        }
+        let (min, max) = self.named_scalar_bounds(symbol).unwrap_or((None, None));
+        ScalarParts {
+            constraint: self.named_string_constraint(symbol),
+            width: None,
+            min,
+            max,
+        }
+    }
+
     // --- fixed-width analysis ---------------------------------------------
 
     /// Whether a field type is fixed-width in the given package view.
@@ -2449,7 +3010,7 @@ impl Checker<'_> {
         }
         let result = match symbol.kind {
             SymbolKind::Enum | SymbolKind::EnumSet => true,
-            SymbolKind::Union | SymbolKind::Const => false,
+            SymbolKind::Union | SymbolKind::Const | SymbolKind::Interface => false,
             SymbolKind::Type => match self.find_definition(symbol) {
                 Some(Definition::Type(decl)) => match decl.backing() {
                     Some(ast::Backing::Unit(_)) => true,
@@ -2632,6 +3193,65 @@ fn member_name_range(name: Option<ast::Name>, node: &ridl_syntax::SyntaxNode) ->
     }
 }
 
+/// The interaction kind an attribute block sits on, for the ridl §13
+/// predicate table and the gf §4.3 allow-list messages.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MemberKind {
+    Signal,
+    Event,
+    Command,
+    Query,
+    Final,
+}
+
+impl MemberKind {
+    fn noun(self) -> &'static str {
+        match self {
+            Self::Signal => "signal",
+            Self::Event => "event",
+            Self::Command => "command",
+            Self::Query => "query",
+            Self::Final => "final",
+        }
+    }
+}
+
+/// The attribute keys the general form §4.3 table defines (the key forms —
+/// `require`/`ensure` parse as predicates, never as keys). A key outside
+/// this list is FORM-106; inside it but not consumable here, FORM-107.
+/// Recorded debt (E2 ledger M3): in E2 no key is consumable, so a flat list
+/// suffices; the task that first consumes a key (`persist`, `labels`, …)
+/// must turn this into the full gf §4.3 key×kind allow-list.
+const GF_ATTRIBUTE_KEYS: &[&str] = &[
+    "default",
+    "init",
+    "persist",
+    "invariant",
+    "labels",
+    "deprecated",
+];
+
+/// Whether `kind` is a typl definition keyword — the RIDL-107 trigger when it
+/// leads an ErrorNode recovered inside an interface body.
+fn is_typl_definition_keyword(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::TypeKw
+            | SyntaxKind::ConstKw
+            | SyntaxKind::StructKw
+            | SyntaxKind::EnumKw
+            | SyntaxKind::EnumsetKw
+            | SyntaxKind::UnionKw
+    )
+}
+
+/// The `InitValue` child of an interaction node. `EventDef` and `FinalDef`
+/// admit no init in the reference grammar, so the generated AST carries no
+/// accessor — the lenient parse still holds the node as a direct child.
+fn init_value_child(node: &ridl_syntax::SyntaxNode) -> Option<ast::InitValue> {
+    node.children().find_map(ast::InitValue::cast)
+}
+
 /// The backing class of a type's backing, without emitting diagnostics (unlike
 /// [`Checker::lower_backing`]). A unit backing is float-classed (§5.1); an
 /// absent or malformed backing is `Unknown`.
@@ -2722,12 +3342,13 @@ fn kind_noun(kind: SymbolKind) -> &'static str {
         SymbolKind::Enum => "enum",
         SymbolKind::EnumSet => "enumset",
         SymbolKind::Union => "union",
+        SymbolKind::Interface => "interface",
     }
 }
 
 fn kind_article(kind: SymbolKind) -> &'static str {
     match kind {
-        SymbolKind::Enum | SymbolKind::EnumSet => "an",
+        SymbolKind::Enum | SymbolKind::EnumSet | SymbolKind::Interface => "an",
         _ => "a",
     }
 }
@@ -4058,5 +4679,645 @@ mod tests {
         );
         assert_eq!(codes(&checked), vec!["TYPL-108"]);
         assert!(checked.diagnostics[0].message.contains("FAST"));
+    }
+
+    // --- the E2.1b interaction structural pass ----------------------------
+
+    /// A single-file workspace-member package whose one file is `.ridl`.
+    fn ridl_package(db: &RidlDatabase, name: &str, text: &str) -> Package {
+        let file = InputFile::new(
+            db,
+            format!("{}.ridl", name.replace('.', "/")),
+            text.to_string(),
+        );
+        Package::new(
+            db,
+            name.to_string(),
+            vec![file],
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+        )
+    }
+
+    /// Checks a single-package workspace whose one file is a `.ridl` file.
+    fn check_ridl(name: &str, text: &str) -> CheckedPackage {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(&db, name, text);
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        check_package(&db, ws, pkg, std)
+    }
+
+    /// The diagnostic messages, in order.
+    fn messages(checked: &CheckedPackage) -> Vec<&str> {
+        checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect()
+    }
+
+    /// A clean vocabulary prefix for interaction tests.
+    const PRELUDE: &str = "package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n";
+
+    /// Parses `text` as one `.ridl` file and returns its first interface.
+    fn first_interface(db: &RidlDatabase, text: &str) -> ast::InterfaceDef {
+        let file = InputFile::new(db, "app.ridl".to_string(), text.to_string());
+        source_file(db, file)
+            .interfaces()
+            .next()
+            .expect("an interface parses")
+    }
+
+    /// The `(name, ordinal)` walk of a checked interface.
+    fn ordinal_walk(checked: &CheckedInterface) -> Vec<(String, u32)> {
+        checked
+            .members
+            .iter()
+            .map(|(member, ordinal)| {
+                let name = member
+                    .name()
+                    .and_then(|name| name.ident_token())
+                    .map(|token| token.text().to_string())
+                    .unwrap_or_default();
+                (name, *ordinal)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn ridl_104_return_type_on_command() {
+        let bad = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command reset(): Speed\n}}\n"),
+        );
+        assert_eq!(codes(&bad), vec!["RIDL-104"]);
+
+        let good = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command reset()\n}}\n"),
+        );
+        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+    }
+
+    #[test]
+    fn ridl_105_query_returning_unit() {
+        let bad = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  query q(): ()\n}}\n"),
+        );
+        assert_eq!(codes(&bad), vec!["RIDL-105"]);
+
+        let good = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  query q(): Speed\n}}\n"),
+        );
+        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+    }
+
+    #[test]
+    fn ridl_106_timing_or_attr_block_on_final() {
+        let timed = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  final v : Version @10ms\n}}\n"),
+        );
+        assert_eq!(codes(&timed), vec!["RIDL-106"]);
+        assert_eq!(
+            timed.diagnostics[0].message,
+            "timing annotation not valid on final",
+        );
+
+        // The attribute block draws RIDL-106; its key additionally draws the
+        // gf §4.3 allow-list verdict (FORM-107).
+        let attributed = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  final v : Version [ persist ]\n}}\n"),
+        );
+        assert_eq!(codes(&attributed), vec!["RIDL-106", "FORM-107"]);
+
+        let good = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  final v : Version\n}}\n"),
+        );
+        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+    }
+
+    #[test]
+    fn ridl_107_type_declaration_inside_an_interface_body() {
+        let checked = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  type X: m\n  signal s : Speed @10ms\n}}\n"),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-107"]);
+
+        let composite = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  struct S {{ a: Speed }}\n}}\n"),
+        );
+        assert_eq!(codes(&composite), vec!["RIDL-107"]);
+    }
+
+    #[test]
+    fn interface_members_survive_an_in_body_composite_declaration() {
+        // The T5 review fix: the in-body recovery is brace-aware, so a
+        // composite declaration's own `}` (and an enum's commas) never close
+        // the interface — the members after it keep their place and their
+        // ordinals, and each stray declaration draws its own RIDL-107.
+        let text = format!(
+            "{PRELUDE}interface I {{\n  struct Extra {{ a: Speed }}\n  signal s : Speed @10ms\n  enum Mode {{ A, B }}\n  event e : Speed\n}}\n"
+        );
+        let checked = check_ridl("app", &text);
+        assert_eq!(codes(&checked), vec!["RIDL-107", "RIDL-107"]);
+
+        let db = RidlDatabase::default();
+        let interface = first_interface(&db, &text);
+        let walk = ordinal_walk(&checked_interface(&interface));
+        assert_eq!(walk, vec![("s".to_string(), 1), ("e".to_string(), 2)]);
+    }
+
+    #[test]
+    fn unclosed_interface_keeps_the_following_declarations() {
+        // The T5 review fix, second manifestation: a genuinely unclosed `{`
+        // reports FORM-103 at parse and hands the following declarations —
+        // brace-carrying ones included — back to the package level, so their
+        // symbols stay and nothing cascades.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(
+            &db,
+            "app",
+            "package app\ntype Speed: km/h [0.0..300.0 step 0.5]\ninterface I {\n  signal s : Speed @10ms\n\ntype After : integer [0..1]\n\nstruct Uses { f: After }\n",
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let resolution = resolve_package(&db, ws, pkg, std);
+        assert!(resolution.symbols.contains_key("After"), "`After` survives");
+        assert!(resolution.symbols.contains_key("Uses"), "`Uses` survives");
+        let checked = check_package(&db, ws, pkg, std);
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    #[test]
+    fn ridl_109_signal_payload_without_derivable_init() {
+        // `string [11..17]` has no derivable init (len_min > 0, typl §5.8).
+        let bad = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}type Plate: string [11..17]\ninterface I {{\n  signal plate : Plate @10ms\n}}\n"
+            ),
+        );
+        assert!(
+            codes(&bad).contains(&"RIDL-109"),
+            "got: {:?}",
+            bad.diagnostics
+        );
+        let ridl_109 = bad
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.code.as_str() == "RIDL-109")
+            .expect("checked above");
+        assert_eq!(ridl_109.severity, Severity::Error);
+
+        // A conforming `= value` override satisfies §4.4 — no RIDL-109/110.
+        let good = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}type Plate: string [11..17]\ninterface I {{\n  signal plate : Plate = \"AAAAAAAAAAA\" @10ms\n}}\n"
+            ),
+        );
+        assert!(
+            !codes(&good).contains(&"RIDL-109"),
+            "got: {:?}",
+            good.diagnostics
+        );
+        assert!(
+            !codes(&good).contains(&"RIDL-110"),
+            "got: {:?}",
+            good.diagnostics
+        );
+    }
+
+    #[test]
+    fn ridl_110_signal_init_override_violating_the_payload_constraints() {
+        let bad = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed = 400.0 @10ms\n}}\n"),
+        );
+        assert_eq!(codes(&bad), vec!["RIDL-110"]);
+        assert!(
+            bad.diagnostics[0]
+                .message
+                .contains("outside the declared range"),
+            "got: {}",
+            bad.diagnostics[0].message,
+        );
+
+        // A SCREAMING_SNAKE constant reference resolves through the E1 const
+        // chain and validates in range.
+        let good = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}const CRUISE = 120.0\ninterface I {{\n  signal s : Speed = CRUISE @10ms\n}}\n"
+            ),
+        );
+        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+
+        let bad_const = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}const OVER = 400.0\ninterface I {{\n  signal s : Speed = OVER @10ms\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&bad_const), vec!["RIDL-110"]);
+    }
+
+    #[test]
+    fn ridl_201_stream_payload_on_signal_or_event() {
+        let checked = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : <Speed>\n  event e : <Speed>\n}}\n"),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-201", "RIDL-201"]);
+    }
+
+    #[test]
+    fn ridl_202_stream_element_not_a_named_type() {
+        let bad = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  query q(): <integer>\n}}\n"),
+        );
+        assert_eq!(codes(&bad), vec!["RIDL-202"]);
+
+        // Named elements and the raw `string`/`bytes` exception are legal
+        // (ridl §12.2).
+        let good = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  query named(): <Speed>\n  query raw(): <string>\n}}\n"
+            ),
+        );
+        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+    }
+
+    #[test]
+    fn ridl_301_contracts_on_signal_event_final() {
+        let on_signal = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed @10ms [ require s > 0.0 ]\n}}\n"),
+        );
+        assert_eq!(codes(&on_signal), vec!["RIDL-301"]);
+
+        let on_event = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  event e : Speed [ ensure x > 0.0 ]\n}}\n"),
+        );
+        assert_eq!(codes(&on_event), vec!["RIDL-301"]);
+
+        // On a `final` the block itself is already RIDL-106; the predicate
+        // additionally draws RIDL-301 (ridl §16.3 lists `final`).
+        let on_final = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  final v : Version [ require x > 0.0 ]\n}}\n"),
+        );
+        assert_eq!(codes(&on_final), vec!["RIDL-106", "RIDL-301"]);
+
+        // `require` on command/query and `ensure` on query are the legal
+        // homes (ridl §13).
+        let good = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  command c(p: Speed) [ require p > 0.0 ]\n  query q(w: Speed): Speed [ require w > 0.0\n    ensure result >= 0.0 ]\n}}\n"
+            ),
+        );
+        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+    }
+
+    #[test]
+    fn ridl_302_ensure_on_command() {
+        let checked = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c() [ ensure x > 0.0 ]\n}}\n"),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-302"]);
+    }
+
+    #[test]
+    fn ridl_401_interaction_redeclared_under_a_reserved_name() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  reserved resetCounters\n  query resetCounters(w: Speed): Speed\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-401"]);
+    }
+
+    #[test]
+    fn ridl_402_duplicate_interaction_name_first_wins() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n  event a : Speed\n  query b(): Speed\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-402"]);
+
+        // The loser is excluded from the checked members and holds no
+        // ordinal slot — lowering keeps exactly the first declaration.
+        let db = RidlDatabase::default();
+        let interface = first_interface(
+            &db,
+            "package app\ninterface I {\n  signal a : Speed @10ms\n  event a : Speed\n  query b(): Speed\n}\n",
+        );
+        let walk = ordinal_walk(&checked_interface(&interface));
+        assert_eq!(walk, vec![("a".to_string(), 1), ("b".to_string(), 2)]);
+    }
+
+    #[test]
+    fn form_102_timing_on_command_and_query() {
+        // §16.1 scopes RIDL-106 to `final` and the reference grammar has no
+        // timing production on the callables — FORM-102 with a pointed
+        // message, no new RIDL code (E2 plan task 5).
+        let on_command = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c() @10ms\n}}\n"),
+        );
+        assert_eq!(codes(&on_command), vec!["FORM-102"]);
+        assert_eq!(
+            on_command.diagnostics[0].message,
+            "timing annotation not valid on command",
+        );
+
+        let on_query = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  query q(): Speed @10ms\n}}\n"),
+        );
+        assert_eq!(codes(&on_query), vec!["FORM-102"]);
+        assert_eq!(
+            on_query.diagnostics[0].message,
+            "timing annotation not valid on query",
+        );
+    }
+
+    #[test]
+    fn form_102_init_on_event_and_final() {
+        let on_event = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  event e : Speed = 3.0\n}}\n"),
+        );
+        assert_eq!(codes(&on_event), vec!["FORM-102"]);
+        assert_eq!(
+            on_event.diagnostics[0].message,
+            "init value not valid on event",
+        );
+
+        let on_final = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  final v : Version = \"1.0.0\"\n}}\n"),
+        );
+        assert_eq!(codes(&on_final), vec!["FORM-102"]);
+        assert_eq!(
+            on_final.diagnostics[0].message,
+            "init value not valid on final",
+        );
+    }
+
+    #[test]
+    fn form_102_payload_and_param_narrowing() {
+        // The grammar over-approximates payloads and params as FieldType
+        // (task 3); the checker narrows to the reference Appendix C shapes.
+        let tuple_signal = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : (a: Speed, b: Speed) @10ms\n}}\n"),
+        );
+        assert_eq!(codes(&tuple_signal), vec!["FORM-102"]);
+        assert_eq!(
+            tuple_signal.diagnostics[0].message,
+            "signal payload must be a named type",
+        );
+
+        let primitive_event = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  event e : integer [0..5]\n}}\n"),
+        );
+        assert_eq!(codes(&primitive_event), vec!["FORM-102"]);
+        assert_eq!(
+            primitive_event.diagnostics[0].message,
+            "event payload must be a named type",
+        );
+
+        let map_final = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  final f : [Version: Speed; 0..3]\n}}\n"),
+        );
+        assert_eq!(codes(&map_final), vec!["FORM-102"]);
+        assert_eq!(
+            map_final.diagnostics[0].message,
+            "final payload must be a named type or an array",
+        );
+
+        let stream_final = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  final f : <Speed>\n}}\n"),
+        );
+        assert_eq!(codes(&stream_final), vec!["FORM-102"]);
+        assert_eq!(
+            stream_final.diagnostics[0].message,
+            "stream `<T>` not valid on final",
+        );
+
+        let tuple_param = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c(p: (a: Speed))\n}}\n"),
+        );
+        assert_eq!(codes(&tuple_param), vec!["FORM-102"]);
+        assert_eq!(
+            tuple_param.diagnostics[0].message,
+            "command parameter must be a named type or a stream",
+        );
+
+        // The Appendix C `final_type` admits arrays (`[Label; 0..32]`).
+        let array_final = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  final caps : [Label; 0..32]\n}}\n"),
+        );
+        assert!(
+            codes(&array_final).is_empty(),
+            "got: {:?}",
+            array_final.diagnostics
+        );
+    }
+
+    #[test]
+    fn form_106_107_108_attribute_allow_list() {
+        // gf §4.3: in E2 only `require`/`ensure` predicates are consumable —
+        // a known key on the wrong kind is FORM-107, an unknown key FORM-106,
+        // a duplicate key FORM-108.
+        let known = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c() [ persist ]\n}}\n"),
+        );
+        assert_eq!(codes(&known), vec!["FORM-107"]);
+        assert!(
+            known.diagnostics[0].message.contains("persist"),
+            "got: {}",
+            known.diagnostics[0].message,
+        );
+
+        let unknown = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c() [ frobnicate ]\n}}\n"),
+        );
+        assert_eq!(codes(&unknown), vec!["FORM-106"]);
+
+        let duplicate = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c() [ persist, persist ]\n}}\n"),
+        );
+        assert_eq!(codes(&duplicate), vec!["FORM-107", "FORM-107", "FORM-108"]);
+
+        let assignment = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed @10ms [ labels = (A) ]\n}}\n"),
+        );
+        assert_eq!(codes(&assignment), vec!["FORM-107"]);
+    }
+
+    #[test]
+    fn typl_301_stream_on_a_struct_field_in_a_ridl_file() {
+        // The ridl-profile parser accepts `<T>` in every type position and
+        // defers the struct-field/collection rejection to the checker (task 3
+        // hand-off; ridl §12.3 — typl TYPL-301 territory).
+        let checked = check_ridl("app", &format!("{PRELUDE}struct S {{\n  x: <Speed>\n}}\n"));
+        assert_eq!(codes(&checked), vec!["TYPL-301"]);
+    }
+
+    #[test]
+    fn error_modifier_on_interface_is_rejected() {
+        let checked = check_ridl("app", "package app\nerror interface I { }\n");
+        assert_eq!(codes(&checked), vec!["TYPL-212"]);
+        assert!(
+            checked.diagnostics[0].message.contains("interface"),
+            "got: {}",
+            checked.diagnostics[0].message,
+        );
+
+        let internal = check_ridl("app", "package app\ninternal interface I { }\n");
+        assert!(
+            codes(&internal).is_empty(),
+            "got: {:?}",
+            internal.diagnostics
+        );
+    }
+
+    #[test]
+    fn interface_in_type_position_is_rejected() {
+        let checked = check_ridl("app", "package app\ninterface I { }\nstruct S { f: I }\n");
+        assert_eq!(
+            messages(&checked),
+            vec!["expected a type, but `I` names an interface"],
+        );
+    }
+
+    #[test]
+    fn payload_resolves_through_an_import_and_unknown_keeps_the_e1_message() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let veh = package(
+            &db,
+            "veh.common",
+            "package veh.common\ntype Speed: km/h [0.0..300.0 step 0.5]\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport veh.common.Speed\ninterface I {\n  signal s : Speed @10ms\n}\n",
+        );
+        let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+        let checked = check_package(&db, ws, app, std);
+        assert!(
+            checked.diagnostics.is_empty(),
+            "the imported payload resolves, got: {:?}",
+            checked.diagnostics,
+        );
+
+        let broken = check_ridl(
+            "app",
+            "package app\ninterface I {\n  signal s : NoSuchType @10ms\n}\n",
+        );
+        assert_eq!(messages(&broken), vec!["unknown type name `NoSuchType`"]);
+    }
+
+    /// The ridl reference Appendix A interface, member for member.
+    const APPENDIX_A_INTERFACE: &str = "\
+package veh.cluster
+
+interface VehicleStatus {
+
+  /// Current vehicle speed
+  signal currentSpeed : Speed @10ms
+
+  /// Engine temperature
+  signal engineTemp : Temperature @[20ms..100ms]
+
+  /// Active warnings
+  signal warnings : WarningFlags @[50ms..1s]
+
+  /// Raised on every door state change
+  event doorOpened : DoorPayload @[50ms..500ms]
+
+  /// Request a gear change
+  command setGear(position: GearPosition) [
+    require position != GearPosition.PARK || currentSpeed == 0.0
+  ]
+
+  reserved resetCounters
+
+  /// Sliding-window average
+  query getAverageSpeed(window: Duration): Speed [
+    require window > 0ms
+    ensure  result >= 0.0
+  ]
+
+  /// Fault history as a finite stream
+  query streamFaults(filter: DiagFilter): <FaultEvent>
+
+  /// Paged fault snapshot
+  query getFaultPage(filter: DiagFilter): FaultPageResult
+
+  final softwareVersion : Version
+  final capabilities    : [Label; 0..32]
+}
+";
+
+    #[test]
+    fn ordinals_match_the_appendix_a_worked_example() {
+        // ridl §11: 1-based, declaration order, one sequence across all
+        // kinds, the reserved tombstone counted at #6.
+        let db = RidlDatabase::default();
+        let interface = first_interface(&db, APPENDIX_A_INTERFACE);
+        let checked = checked_interface(&interface);
+        assert_eq!(checked.def, interface);
+        let walk = ordinal_walk(&checked);
+        let expected: Vec<(String, u32)> = [
+            ("currentSpeed", 1),
+            ("engineTemp", 2),
+            ("warnings", 3),
+            ("doorOpened", 4),
+            ("setGear", 5),
+            ("resetCounters", 6),
+            ("getAverageSpeed", 7),
+            ("streamFaults", 8),
+            ("getFaultPage", 9),
+            ("softwareVersion", 10),
+            ("capabilities", 11),
+        ]
+        .iter()
+        .map(|(name, ordinal)| (name.to_string(), *ordinal))
+        .collect();
+        assert_eq!(walk, expected);
+        assert!(
+            matches!(checked.members[5].0, ast::InterfaceMember::Reserved(_)),
+            "#6 is the reserved tombstone",
+        );
     }
 }
