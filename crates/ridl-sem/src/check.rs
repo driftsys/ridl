@@ -132,21 +132,25 @@ pub fn check_package(
         Some(raw) => match timing::parse_default_timing(raw) {
             Ok(spec) => spec,
             Err(reason) => {
-                if let Some(&first) = file_ids.first() {
-                    default_diagnostics.push(Diagnostic {
-                        code: DiagCode::MANI_009,
-                        severity: Severity::Error,
-                        message: format!(
-                            "invalid `[defaults].timing` in the package manifest: {reason}"
-                        ),
-                        primary: Span {
-                            file: first,
-                            range: TextRange::empty(0.into()),
-                        },
-                        labels: Vec::new(),
-                        fixits: Vec::new(),
-                    });
-                }
+                // The span is the package's first file. A package with no
+                // interned files cannot carry one, so the diagnostic falls back
+                // to the detached id (rendered as a bare coded message) rather
+                // than vanishing — a dropped manifest error is worse than an
+                // unanchored one.
+                let file = file_ids.first().copied().unwrap_or(FileId::DETACHED);
+                default_diagnostics.push(Diagnostic {
+                    code: DiagCode::MANI_009,
+                    severity: Severity::Error,
+                    message: format!(
+                        "invalid `[defaults].timing` in the package manifest: {reason}"
+                    ),
+                    primary: Span {
+                        file,
+                        range: TextRange::empty(0.into()),
+                    },
+                    labels: Vec::new(),
+                    fixits: Vec::new(),
+                });
                 timing::builtin_default_timing()
             }
         },
@@ -2736,7 +2740,11 @@ impl Checker<'_> {
             None => {}
         }
         self.check_member_attrs(signal.syntax(), MemberKind::Signal);
-        let timing = self.resolve_member_timing(signal.timing(), timing::InteractionKind::Signal);
+        let timing = self.resolve_member_timing(
+            signal.timing(),
+            member_name_range(signal.name(), signal.syntax()),
+            timing::InteractionKind::Signal,
+        );
         v2::SignalDef {
             payload,
             declared_init,
@@ -2770,7 +2778,11 @@ impl Checker<'_> {
             );
         }
         self.check_member_attrs(event.syntax(), MemberKind::Event);
-        let timing = self.resolve_member_timing(event.timing(), timing::InteractionKind::Event);
+        let timing = self.resolve_member_timing(
+            event.timing(),
+            member_name_range(event.name(), event.syntax()),
+            timing::InteractionKind::Event,
+        );
         v2::EventDef { payload, timing }
     }
 
@@ -2781,11 +2793,12 @@ impl Checker<'_> {
     fn resolve_member_timing(
         &mut self,
         annot: Option<ast::Timing>,
+        anchor: TextRange,
         kind: timing::InteractionKind,
     ) -> Option<v2::Timing> {
         let file = self.file_ids[self.current_file];
         let (spec, diags) =
-            timing::resolve_timing(annot.as_ref(), kind, &self.default_timing, file);
+            timing::resolve_timing(annot.as_ref(), kind, &self.default_timing, file, anchor);
         self.diagnostics.extend(diags);
         spec.map(lower_timing_spec)
     }
@@ -6013,6 +6026,104 @@ interface VehicleStatus {
                 max_us: Some("1000000".to_string()),
                 default_applied: true,
             }),
+        );
+    }
+
+    #[test]
+    fn fractional_durations_report_and_never_unset_a_written_bound_in_ir() {
+        // The T9 review regression, asserted on the lowered IR: the lexer
+        // merges a FloatNumber with a time atom, so a fractional duration
+        // reaches the checker. Each case must draw a diagnostic AND keep every
+        // bound the source wrote — a dropped min/max would be an invisible
+        // contract change for `ridl diff` (ADR-0008 d12).
+        let strict = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed @1.5ms\n}}\n"),
+        );
+        assert_eq!(codes(&strict), vec!["FORM-102"]);
+        assert_eq!(
+            signal_def(&strict, "s").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::StrictPeriodic as i32,
+                min_us: Some("1500".to_string()),
+                max_us: Some("1500".to_string()),
+                default_applied: false,
+            }),
+        );
+
+        let low = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed @[1.5ms..100ms]\n}}\n"),
+        );
+        assert_eq!(codes(&low), vec!["FORM-102"]);
+        assert_eq!(
+            signal_def(&low, "s").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::Range as i32,
+                min_us: Some("1500".to_string()),
+                max_us: Some("100000".to_string()),
+                default_applied: false,
+            }),
+            "the rate floor must survive",
+        );
+
+        let high = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed @[20ms..2.5s]\n}}\n"),
+        );
+        assert_eq!(codes(&high), vec!["FORM-102"]);
+        assert_eq!(
+            signal_def(&high, "s").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::Range as i32,
+                min_us: Some("20000".to_string()),
+                max_us: Some("2500000".to_string()),
+                default_applied: false,
+            }),
+            "the staleness bound must survive",
+        );
+
+        // `0.0ms` is both an illegal form (FORM-102) and a zero value
+        // (RIDL-102) — it must no longer escape the zero rule.
+        let zero = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed @0.0ms\n}}\n"),
+        );
+        assert!(codes(&zero).contains(&"FORM-102"), "got {:?}", codes(&zero));
+        assert!(codes(&zero).contains(&"RIDL-102"), "got {:?}", codes(&zero));
+        assert_eq!(
+            signal_def(&zero, "s").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::StrictPeriodic as i32,
+                min_us: Some("0".to_string()),
+                max_us: Some("0".to_string()),
+                default_applied: false,
+            }),
+        );
+    }
+
+    #[test]
+    fn ridl_100_anchors_on_each_untimed_interaction() {
+        // The T9 review fix: the default-applied warning points at the
+        // interaction that received the default, so N untimed interactions
+        // yield N navigable warnings rather than N carets on byte 0.
+        let text =
+            format!("{PRELUDE}interface I {{\n  signal alpha : Speed\n  event beta : Speed\n}}\n");
+        let checked = check_ridl("app", &text);
+        assert_eq!(codes(&checked), vec!["RIDL-100", "RIDL-100"]);
+
+        let spans: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| {
+                let range = diagnostic.primary.range;
+                &text[usize::from(range.start())..usize::from(range.end())]
+            })
+            .collect();
+        assert_eq!(
+            spans,
+            vec!["alpha", "beta"],
+            "each RIDL-100 anchors on its own interaction name",
         );
     }
 
