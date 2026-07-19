@@ -44,7 +44,7 @@ pub fn hover(
     }
 
     let located = symbol_at(db, ws, std, pkg, file, offset)?;
-    let markdown = symbol_markdown(db, ws, std, &located.symbol);
+    let markdown = symbol_markdown(db, ws, std, pkg, &located.symbol);
     Some(HoverInfo {
         markdown,
         range: located.reference,
@@ -110,14 +110,21 @@ fn field_ordinal(ir: &v1::Package, struct_name: &str, field_name: &str) -> Optio
 
 /// The hover markdown for a resolved symbol: the declaration's IR rendering when
 /// the symbol lowered, or a minimal name-and-kind line as a fallback.
+///
+/// `pkg` is the package the cursor was in; it is preferred when its name matches
+/// so a symbol declared in a standalone overlay (which `package_of` cannot find)
+/// still renders its full IR — mirroring the checker's own `package_handle`.
 fn symbol_markdown(
     db: &dyn salsa::Database,
     ws: Workspace,
     std: Package,
+    pkg: Package,
     symbol: &Symbol,
 ) -> String {
     let qualified = format!("{}.{}", symbol.package, symbol.name);
-    let target = if symbol.package == *std.name(db) {
+    let target = if symbol.package == *pkg.name(db) {
+        Some(pkg)
+    } else if symbol.package == *std.name(db) {
         Some(std)
     } else {
         package_of(db, ws, symbol.package.clone())
@@ -218,12 +225,15 @@ fn backing(backing: Option<&v1::Backing>) -> String {
 }
 
 /// The constraint clause of a type (`[0.0..250.0 step 0.5]`, `[0..256]`,
-/// `match /.../`), or the empty string when there is no constraint.
+/// `[..100]`, `match /.../`), or the empty string when there is no constraint.
 fn constraint(constraint: Option<&v1::Constraint>) -> String {
     let Some(constraint) = constraint else {
         return String::new();
     };
-    if let Some(min) = &constraint.min {
+    // An open-ended range lowers with one bound absent (`[..100]`, `[0..]`);
+    // render the present side and leave the other empty (ADR-0004 §10).
+    if constraint.min.is_some() || constraint.max.is_some() {
+        let min = constraint.min.as_deref().unwrap_or("");
         let max = constraint.max.as_deref().unwrap_or("");
         let step = constraint
             .step

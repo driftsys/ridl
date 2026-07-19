@@ -229,14 +229,14 @@ fn references_at(
 
 /// The two-member fixture workspace: `veh.common` declares `Speed` (a
 /// unit-typed, constrained type with a doc comment), the constant `MAX_SPEED`
-/// used as a range bound in `Cruise`, and a `Gearbox` struct; `app` imports
-/// and uses `veh.common.Speed`.
+/// used as a range bound in `Cruise`, and a `Gearbox` struct with a reserved
+/// tombstone between its two fields; `app` imports and uses `veh.common.Speed`.
 const VEH_COMMON: &str = "package veh.common\n\
 /// Vehicle speed over ground\n\
 type Speed: km/h [0.0..250.0 step 0.5]\n\
 const MAX_SPEED: float = 250.0\n\
 type Cruise: float [0.0..MAX_SPEED step 0.5]\n\
-struct Gearbox { primary: Speed, secondary: Speed }\n";
+struct Gearbox { primary: Speed, reserved oldRatio, secondary: Speed }\n";
 
 const APP: &str = "package app\n\
 import veh.common.Speed\n\
@@ -283,7 +283,7 @@ fn hover_on_a_type_reference_shows_unit_range_width_and_doc() {
     let root = uri_of(dir.path());
     let (client, server) = start(root);
 
-    // `display: Speed` on line 2 of `app/lib.typl`; the `Speed` reference
+    // `primary: Speed` on line 2 of `app/lib.typl`; the `Speed` reference
     // starts at UTF-16 column 24.
     let hover = hover_at(&client, 10, app, pos(2, 26)).expect("Speed has hover content");
     let value = match hover.contents {
@@ -376,15 +376,195 @@ fn hover_on_a_struct_field_shows_its_ordinal() {
     let root = uri_of(dir.path());
     let (client, server) = start(root);
 
-    // `struct Gearbox { primary: Speed, secondary: Speed }` on line 5:
-    // `secondary` starts at column 33 and is the second field.
-    let hover = hover_at(&client, 10, veh, pos(5, 35)).expect("the field has hover content");
+    // `struct Gearbox { primary: Speed, reserved oldRatio, secondary: Speed }`
+    // on line 5: `secondary` starts at column 52. It is the third slot — the
+    // reserved tombstone between the two fields keeps ordinal 2, so `secondary`
+    // is ordinal 3. This pins that hover counts reserved slots.
+    let hover = hover_at(&client, 10, veh, pos(5, 54)).expect("the field has hover content");
     let value = match hover.contents {
         lt::HoverContents::Markup(markup) => markup.value,
         other => panic!("expected markdown hover, got {other:?}"),
     };
     assert!(value.contains("secondary"), "names the field: {value}");
-    assert!(value.contains("#2"), "shows the ordinal: {value}");
+    assert!(
+        value.contains("#3"),
+        "shows the tombstone-counted ordinal: {value}"
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Opens a standalone overlay from `text` and returns the hover markdown at
+/// `position`, or `None`.
+fn open_and_hover(
+    client: &Connection,
+    id: i32,
+    uri: &lt::Uri,
+    text: &str,
+    position: lt::Position,
+) -> Option<String> {
+    notify::<lt::notification::DidOpenTextDocument>(
+        client,
+        lt::DidOpenTextDocumentParams {
+            text_document: lt::TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "ridl".to_string(),
+                version: 0,
+                text: text.to_string(),
+            },
+        },
+    );
+    hover_at(client, id, uri.clone(), position).map(|hover| match hover.contents {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    })
+}
+
+/// Closing and reopening an overlay with shifted text still hovers at the new
+/// position: the cached line table is dropped on close, so the reopened
+/// document's positions map through its own text (IMPORTANT-1 regression).
+#[test]
+fn reopening_a_shifted_overlay_hovers_at_the_new_position() {
+    let uri = path_to_uri("/ridl-lsp-reopen/solo.typl").expect("an absolute synthetic path");
+
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // First open: `type Widget` is on line 1; hover lands on the declaration.
+    let first = "package solo\ntype Widget: integer [0..10]\n";
+    let before = open_and_hover(&client, 10, &uri, first, pos(1, 7)).expect("Widget hovers");
+    assert!(
+        before.contains("Widget"),
+        "first hover names Widget: {before}"
+    );
+
+    notify::<lt::notification::DidCloseTextDocument>(
+        &client,
+        lt::DidCloseTextDocumentParams {
+            text_document: lt::TextDocumentIdentifier { uri: uri.clone() },
+        },
+    );
+
+    // Reopen the same path with a blank leading line, so `type Widget` is now
+    // on line 2. Hovering there must still land — a stale line table would map
+    // this position through the old text and miss.
+    let shifted = "\npackage solo\ntype Widget: integer [0..10]\n";
+    let after = open_and_hover(&client, 11, &uri, shifted, pos(2, 7))
+        .expect("Widget still hovers after the shift");
+    assert!(
+        after.contains("Widget"),
+        "reopened hover names Widget: {after}"
+    );
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover renders an open-start (`[..100]`) and an open-end (`[0..]`) range —
+/// the checker lowers each with one bound absent, and hover must still show the
+/// constraint (IMPORTANT-2 regression; ADR-0004 §10).
+#[test]
+fn hover_renders_open_ended_ranges() {
+    let uri = path_to_uri("/ridl-lsp-edge/edge.typl").expect("an absolute synthetic path");
+
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    let text = "package edge\ntype Partial: integer [..100]\ntype Lower: integer [0..]\n";
+    notify::<lt::notification::DidOpenTextDocument>(
+        &client,
+        lt::DidOpenTextDocumentParams {
+            text_document: lt::TextDocumentItem {
+                uri: uri.clone(),
+                language_id: "ridl".to_string(),
+                version: 0,
+                text: text.to_string(),
+            },
+        },
+    );
+
+    // `type Partial` on line 1: the name starts at column 5.
+    let partial = hover_at(&client, 10, uri.clone(), pos(1, 7))
+        .expect("Partial hovers")
+        .contents;
+    let partial = match partial {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    };
+    assert!(
+        partial.contains("[..100]"),
+        "open-start range is shown: {partial}",
+    );
+
+    // `type Lower` on line 2: the name starts at column 5.
+    let lower = hover_at(&client, 11, uri.clone(), pos(2, 7))
+        .expect("Lower hovers")
+        .contents;
+    let lower = match lower {
+        lt::HoverContents::Markup(markup) => markup.value,
+        other => panic!("expected markdown hover, got {other:?}"),
+    };
+    assert!(lower.contains("[0..]"), "open-end range is shown: {lower}",);
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Two packages each declare `Speed`; find-references on one package's `Speed`
+/// returns only that package's own reference, never the other's — the
+/// name-resolution property T24 rename depends on (MINOR-5).
+#[test]
+fn find_references_does_not_cross_a_name_collision() {
+    let dir = TempDir::new("collision");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"alpha\", \"beta\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("alpha")).expect("create alpha");
+    std::fs::create_dir_all(dir.path().join("beta")).expect("create beta");
+    dir.write(
+        "alpha/ridl.toml",
+        "[package]\nname = \"alpha\"\nversion = \"1.0.0\"\n",
+    );
+    let alpha = dir.write(
+        "alpha/lib.typl",
+        "package alpha\ntype Speed: km/h\nstruct A { primary: Speed }\n",
+    );
+    dir.write(
+        "beta/ridl.toml",
+        "[package]\nname = \"beta\"\nversion = \"1.0.0\"\n",
+    );
+    let beta = dir.write(
+        "beta/lib.typl",
+        "package beta\ntype Speed: m/s\nstruct B { primary: Speed }\n",
+    );
+    let alpha_uri = uri_of(&alpha);
+    let beta_uri = uri_of(&beta);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // `type Speed` on line 1 of `alpha/lib.typl`: the name starts at column 5.
+    let locations = references_at(&client, 10, alpha_uri.clone(), pos(1, 7), false)
+        .expect("alpha's Speed resolves");
+    assert_eq!(
+        locations.len(),
+        1,
+        "only alpha's reference, got: {locations:?}"
+    );
+    assert_eq!(
+        locations[0].uri.as_str(),
+        alpha_uri.as_str(),
+        "the reference is in alpha, not beta",
+    );
+    assert_ne!(
+        locations[0].uri.as_str(),
+        beta_uri.as_str(),
+        "beta's identically named Speed is not a reference to alpha's",
+    );
+    // `struct A { primary: Speed }` on line 2: `Speed` spans columns 20..25.
+    assert_eq!(locations[0].range, range((2, 20), (2, 25)));
 
     shut_down(&client, 11);
     server.join().expect("thread joins").expect("clean exit");

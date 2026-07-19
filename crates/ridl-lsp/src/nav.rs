@@ -51,7 +51,7 @@ pub fn symbol_at(
     let token = identifier_at(source.syntax(), offset)?;
     let reference = reference_at(&token)?;
     let resolution = resolve_package(db, ws, pkg, std);
-    let symbol = resolve_reference(db, ws, std, &resolution, &reference)?;
+    let symbol = resolve_reference(db, ws, std, pkg, &resolution, &reference)?;
     Some(Located {
         symbol,
         reference: reference.range,
@@ -79,7 +79,7 @@ pub fn find_references(
         for &file in pkg.files(db) {
             let source = source_file(db, file);
             for reference in references_in(&source) {
-                if let Some(symbol) = resolve_reference(db, ws, std, &resolution, &reference)
+                if let Some(symbol) = resolve_reference(db, ws, std, pkg, &resolution, &reference)
                     && symbol.package == target.package
                     && symbol.name == target.name
                 {
@@ -99,16 +99,21 @@ struct Reference {
     range: TextRange,
 }
 
-/// Resolves a [`Reference`] against the referencing package's `resolution`.
+/// Resolves a [`Reference`] against the referencing package `pkg`'s
+/// `resolution`.
 ///
 /// A single-segment reference is looked up in the package-local view (locals,
 /// imports, then `ridl.std`); a qualified reference resolves its package path
 /// through ADR-0002 §5 and reads the named declaration from that package's own
-/// resolution — never an alias or a re-export.
+/// resolution — never an alias or a re-export. The requesting package `pkg` is
+/// preferred when its name matches the path, so a self-qualified reference in a
+/// standalone overlay (which `package_of` cannot find) still resolves —
+/// mirroring the checker's own `package_handle`.
 fn resolve_reference(
     db: &dyn salsa::Database,
     ws: Workspace,
     std: Package,
+    pkg: Package,
     resolution: &Resolution,
     reference: &Reference,
 ) -> Option<Symbol> {
@@ -117,7 +122,9 @@ fn resolve_reference(
         return resolution.symbols.get(name).cloned();
     }
     let target_path = package_path.join(".");
-    let target = if target_path == *std.name(db) {
+    let target = if target_path == *pkg.name(db) {
+        pkg
+    } else if target_path == *std.name(db) {
         std
     } else {
         package_of(db, ws, target_path.clone())?

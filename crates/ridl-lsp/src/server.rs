@@ -379,6 +379,9 @@ impl ServerState {
     /// the next publish); a workspace file reverts to its on-disk text.
     fn close(&mut self, path: &str) {
         if self.overlays.remove(path).is_some() {
+            // Dropping the overlay drops its input; a later reopen mints a
+            // fresh one, so the cached line table for this path is stale.
+            self.line_indexes.remove(path);
             return;
         }
         if let Some(input) = self.files.get(path).copied()
