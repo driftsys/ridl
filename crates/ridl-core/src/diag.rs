@@ -140,6 +140,10 @@ impl DiagCode {
     /// Integer range bound (or enumset bit position) outside the `int64`
     /// domain (typl §4.2, §16.2).
     pub const TYPL_111: DiagCode = DiagCode("TYPL-111");
+    /// Type has no derivable init value and no declared `= value`
+    /// (typl §5.8, §16.2). Info — escalated to an error only by consumers
+    /// that require an init (e.g. a ridl signal payload).
+    pub const TYPL_115: DiagCode = DiagCode("TYPL-115");
     /// Array without explicit bounds (typl §16.3).
     pub const TYPL_201: DiagCode = DiagCode("TYPL-201");
     /// Map without explicit bounds (typl §16.3).

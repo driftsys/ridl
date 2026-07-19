@@ -18,10 +18,11 @@
 //!   [`ridl_core::diag::remap_diagnostics`]);
 //! - doc-comment semantics (`Decl::doc`, `labels`, `deprecated`) land with the
 //!   task 14 doc scanner — this pass leaves them empty;
-//! - init-value derivation is task 15: this pass lowers the **declared**
-//!   `= value` init (validated as TYPL-109) into `InitValue`; a declaration
-//!   without one carries no `InitValue` until the task 15 derivation pass
-//!   fills it in.
+//! - every lowered `TypeDef` and `Field` carries a populated `InitValue`
+//!   (typl §5.8, E1.9): the **declared** `= value` init (validated as TYPL-109)
+//!   when present, otherwise the value derived from the §5.8 table by
+//!   [`crate::init`]. A named type whose init is neither declared nor derivable
+//!   is marked `{ derivable: false }` and reported as TYPL-115 (info).
 
 use std::collections::HashSet;
 
@@ -34,6 +35,7 @@ use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers};
 use rowan::{NodeOrToken, TextRange};
 
 use crate::docs;
+use crate::init;
 use crate::resolve::{
     Resolution, Symbol, SymbolKind, declared_name, declared_symbols, name_range,
     qualified_segments, resolve_package, significant_text, source_file,
@@ -331,7 +333,14 @@ enum PathTarget {
 /// bounds when the type is a scalar (used to validate a declared init).
 struct LoweredType {
     ty: v1::FieldType,
+    /// Exact numeric bounds when the field type is a numeric scalar, used to
+    /// validate a numeric declared init (TYPL-109).
     scalar_bounds: Option<(Option<ExactValue>, Option<ExactValue>)>,
+    /// Length bounds and `match` pattern when the field type is a string/bytes
+    /// scalar — inline (`name : string [0..8]`) or a named string/bytes `type`.
+    /// Used to validate a declared string/bytes init (TYPL-109); the numeric
+    /// path reads `scalar_bounds` instead.
+    init_constraint: Option<v1::Constraint>,
 }
 
 impl LoweredType {
@@ -339,6 +348,7 @@ impl LoweredType {
         LoweredType {
             ty,
             scalar_bounds: None,
+            init_constraint: None,
         }
     }
 }
@@ -366,6 +376,10 @@ impl Checker<'_> {
 
     fn warning(&mut self, code: DiagCode, range: TextRange, message: String) {
         self.diag(code, Severity::Warning, range, message);
+    }
+
+    fn info(&mut self, code: DiagCode, range: TextRange, message: String) {
+        self.diag(code, Severity::Info, range, message);
     }
 
     /// Whether `definition` is the resolver's first-wins winner for its name —
@@ -558,7 +572,7 @@ impl Checker<'_> {
     fn lower_definition(&mut self, definition: &Definition) -> Option<v1::Decl> {
         let name = declared_name(definition)?;
         let kind = match definition {
-            Definition::Type(decl) => v1::decl::Kind::TypeDef(self.lower_type(decl)),
+            Definition::Type(decl) => v1::decl::Kind::TypeDef(self.lower_type(&name, decl)),
             Definition::Const(decl) => v1::decl::Kind::ConstDef(self.lower_const(&name, decl)),
             Definition::Struct(decl) => v1::decl::Kind::StructDef(self.lower_struct(decl)),
             Definition::Enum(decl) => v1::decl::Kind::EnumDef(self.lower_enum(decl)),
@@ -669,21 +683,37 @@ impl Checker<'_> {
         }
     }
 
-    fn lower_type(&mut self, decl: &ast::TypeDef) -> v1::TypeDef {
+    fn lower_type(&mut self, name: &str, decl: &ast::TypeDef) -> v1::TypeDef {
         let (backing, class) = self.lower_backing(decl.backing());
         let span = decl
             .backing()
             .map(|backing| backing.syntax().text_range())
             .unwrap_or_else(|| name_range(decl));
         let parts = self.lower_scalar(class, decl.constraint(), span);
-        let (declared_init, init) = self.lower_declared_init(decl.init_value(), &parts);
-        v1::TypeDef {
+        let (declared_init, declared) = self.lower_declared_init(decl.init_value(), &parts);
+        let mut type_def = v1::TypeDef {
             backing,
             constraint: parts.constraint,
             declared_init,
-            init,
+            init: declared,
             width: parts.width,
+        };
+        // E1.9: a type without a declared `= value` derives its init from the
+        // §5.8 table. A named type whose init is not derivable (a string/bytes
+        // type forbidding length 0, or a `match`-typed one) is reported as
+        // TYPL-115 (info) — a consumer that requires an init escalates it.
+        if type_def.init.is_none() {
+            let derived = init::derive_type_init(&type_def);
+            if !derived.derivable {
+                self.info(
+                    DiagCode::TYPL_115,
+                    name_range(decl),
+                    format!("type `{name}` has no derivable init value and no declared `= value`"),
+                );
+            }
+            type_def.init = Some(derived);
         }
+        type_def
     }
 
     fn lower_backing(
@@ -778,7 +808,8 @@ impl Checker<'_> {
         // TYPL-108, §5.7 nominal identity: a const of a named type is never
         // initialized from a value of another named type. A value that
         // references a const of a different named type is the reachable case.
-        if let (Some(LitKind::ConstRef(source_name)), Some(target)) = (&value_kind, &target_type)
+        let nominal_reported = if let (Some(LitKind::ConstRef(source_name)), Some(target)) =
+            (&value_kind, &target_type)
             && let Some((target_display, source_display)) =
                 self.nominal_init_violation(target, source_name)
         {
@@ -787,6 +818,32 @@ impl Checker<'_> {
                 value_range,
                 format!(
                     "const `{name}` of type `{target_display}` cannot be initialized from `{source_name}` of type `{source_display}` — nominal types are not interchangeable (§5.7)",
+                ),
+            );
+            true
+        } else {
+            false
+        };
+
+        // TYPL-108: a value that references another constant must still satisfy
+        // this constant's declared range. Only direct numeric literals reach
+        // the range check above; a `const = const` init resolves through the
+        // const chain here. Skipped when a nominal-identity violation already
+        // fired, so one init reports one TYPL-108.
+        if !nominal_reported
+            && let (Some(LitKind::ConstRef(source_name)), Some((min, max, type_name))) =
+                (&value_kind, &bounds)
+            && let Some(value) = self.const_numeric_value_in(self.pkg, source_name)
+            && out_of_bounds(&value, min.as_ref(), max.as_ref())
+        {
+            self.error(
+                DiagCode::TYPL_108,
+                value_range,
+                format!(
+                    "const `{name}` value {} outside `{type_name}` range [{}, {}]",
+                    value.to_decimal_string(),
+                    render_bound(min.as_ref()),
+                    render_bound(max.as_ref()),
                 ),
             );
         }
@@ -1305,11 +1362,11 @@ impl Checker<'_> {
     /// escape processing is not applied (the raw inner text is measured).
     /// Pattern conformance uses ECMA-262 `test` semantics — a match anywhere in
     /// the string; typl patterns are anchored with `^`…`$`. An invalid pattern
-    /// is skipped here (TYPL-106 reports it at the pattern's own site). Only
-    /// `type` definitions reach this with a populated `constraint`; an inline
-    /// scalar struct field carries only numeric bounds through the field path,
-    /// so its string init is length-checked only where the field's type is a
-    /// named string `type`.
+    /// is skipped here (TYPL-106 reports it at the pattern's own site). Reached
+    /// with a populated `constraint` for a named `type` and, since E1.9, for a
+    /// struct field too: the length bound and `match` pattern flow into the
+    /// field's `ScalarParts` whether the field is an inline string/bytes scalar
+    /// or is typed by a named string/bytes `type` (see [`Checker::lower_field`]).
     fn check_string_init(&mut self, text: &str, parts: &ScalarParts, range: TextRange) {
         let Some(constraint) = &parts.constraint else {
             return;
@@ -1417,8 +1474,12 @@ impl Checker<'_> {
         let lowered = field
             .field_type()
             .map(|field_type| self.lower_field_type(&field_type, false));
+        // The field's own bounds validate a declared init (TYPL-109): the exact
+        // numeric bounds for a numeric field, and the length bounds plus `match`
+        // pattern for a string/bytes field — inline or through a named string
+        // `type`. Both come from the lowered field type.
         let bounds_parts = ScalarParts {
-            constraint: None,
+            constraint: lowered.as_ref().and_then(|l| l.init_constraint.clone()),
             width: None,
             min: lowered
                 .as_ref()
@@ -1429,7 +1490,13 @@ impl Checker<'_> {
                 .and_then(|l| l.scalar_bounds.as_ref())
                 .and_then(|(_, max)| max.clone()),
         };
-        let (declared_init, init) = self.lower_declared_init(field.init_value(), &bounds_parts);
+        let (declared_init, declared) = self.lower_declared_init(field.init_value(), &bounds_parts);
+        // E1.9: a field without a declared init derives one from the §5.8 table
+        // (a named reference resolves to the referenced type's own init).
+        let init = match declared {
+            Some(init) => Some(init),
+            None => lowered.as_ref().map(|l| self.derive_field_init(&l.ty)),
+        };
         v1::Field {
             name,
             ordinal,
@@ -1439,6 +1506,273 @@ impl Checker<'_> {
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
+        }
+    }
+
+    /// Derives a field's init from its lowered field type (typl §5.8), resolving
+    /// a named reference to the referenced type's own init. See [`crate::init`].
+    fn derive_field_init(&self, field_type: &v1::FieldType) -> v1::InitValue {
+        init::derive_field_init(field_type, &|name| self.named_ref_init(name))
+    }
+
+    /// The derived init of a named reference (`Speed`, `ridl.std.Name`), by kind
+    /// (typl §5.8): a scalar `type` materializes its value; an `enum` its `0`
+    /// or lowest value; an `enumset` the empty set; a `struct` or `union` is a
+    /// derivable composite the consumer reconstructs (a `union` inherits its
+    /// first arm's derivability). An unresolved reference — already reported by
+    /// the type-resolution pass — is treated as a derivable composite.
+    fn named_ref_init(&self, canonical: &str) -> v1::InitValue {
+        match self.resolve_canonical(canonical) {
+            Some(symbol) => self.named_type_init(&symbol),
+            None => v1::InitValue {
+                derivable: true,
+                value: None,
+            },
+        }
+    }
+
+    /// The derived init of a resolved named type (typl §5.8).
+    fn named_type_init(&self, symbol: &Symbol) -> v1::InitValue {
+        match symbol.kind {
+            SymbolKind::Type => {
+                let Some(Definition::Type(decl)) = self.find_definition(symbol) else {
+                    return v1::InitValue {
+                        derivable: true,
+                        value: None,
+                    };
+                };
+                // A named type with its own declared init carries that value.
+                if let Some(init) = self.declared_type_init(&decl, symbol) {
+                    return init;
+                }
+                match backing_class(decl.backing()) {
+                    BackingClass::Boolean => v1::InitValue {
+                        derivable: true,
+                        value: Some("false".to_string()),
+                    },
+                    BackingClass::Integer | BackingClass::Float => {
+                        let (min, max) = self.named_scalar_bounds(symbol).unwrap_or((None, None));
+                        init::numeric_zero_or_min(min, max)
+                    }
+                    BackingClass::Str | BackingClass::Bytes => {
+                        init::string_init(self.named_string_constraint(symbol).as_ref())
+                    }
+                    BackingClass::Unknown => v1::InitValue {
+                        derivable: true,
+                        value: None,
+                    },
+                }
+            }
+            SymbolKind::Enum => self.enum_default_init(symbol),
+            SymbolKind::EnumSet => v1::InitValue {
+                // The empty set — no bits set (typl §5.8).
+                derivable: true,
+                value: Some(String::new()),
+            },
+            SymbolKind::Struct => v1::InitValue {
+                derivable: true,
+                value: None,
+            },
+            SymbolKind::Union => v1::InitValue {
+                derivable: self.union_is_derivable(symbol),
+                value: None,
+            },
+            SymbolKind::Const => v1::InitValue {
+                derivable: false,
+                value: None,
+            },
+        }
+    }
+
+    /// The materialized value of a named type's own declared `= value` init
+    /// (typl §5.8), or `None` when the type declares no init. A constant-valued
+    /// init resolves through the const chain in the type's defining package.
+    fn declared_type_init(&self, decl: &ast::TypeDef, symbol: &Symbol) -> Option<v1::InitValue> {
+        let literal = decl.init_value()?.literal()?;
+        let value = match literal_kind(&literal) {
+            LitKind::Number { value } => value.to_decimal_string(),
+            LitKind::Bool(flag) => flag.to_string(),
+            LitKind::Str(text) => text,
+            LitKind::ConstRef(reference) => {
+                let package = self.package_handle(&symbol.package)?;
+                match self.const_value_in(package, &reference)? {
+                    ConstValue::Number(value) => value.to_decimal_string(),
+                    ConstValue::Bool(flag) => flag.to_string(),
+                    ConstValue::Text(text) => text,
+                    ConstValue::Regex(_) => return None,
+                }
+            }
+            LitKind::Regex(_) | LitKind::Malformed => return None,
+        };
+        Some(v1::InitValue {
+            derivable: true,
+            value: Some(value),
+        })
+    }
+
+    /// The derived enum init (typl §5.8): the value `0` when an enum value
+    /// declares it, otherwise the lowest declared value. A degenerate enum with
+    /// no integer-valued members is not derivable.
+    fn enum_default_init(&self, symbol: &Symbol) -> v1::InitValue {
+        let Some(Definition::Enum(decl)) = self.find_definition(symbol) else {
+            return v1::InitValue {
+                derivable: true,
+                value: None,
+            };
+        };
+        let values: Vec<i64> = decl
+            .values()
+            .filter_map(
+                |value| match value.value().map(|literal| literal_kind(&literal)) {
+                    Some(LitKind::Number { value }) => exact_to_i64(&value),
+                    _ => None,
+                },
+            )
+            .collect();
+        match values.iter().copied().min() {
+            Some(_) if values.contains(&0) => v1::InitValue {
+                derivable: true,
+                value: Some("0".to_string()),
+            },
+            Some(lowest) => v1::InitValue {
+                derivable: true,
+                value: Some(lowest.to_string()),
+            },
+            None => v1::InitValue {
+                derivable: false,
+                value: None,
+            },
+        }
+    }
+
+    /// Whether a union's derived init — its first arm's init (typl §5.8) — is
+    /// derivable. The first arm resolves one level: a scalar arm defers to its
+    /// scalar derivability, an enum/enumset/struct/union arm is derivable.
+    fn union_is_derivable(&self, symbol: &Symbol) -> bool {
+        let Some(Definition::Union(decl)) = self.find_definition(symbol) else {
+            return true;
+        };
+        let Some(first_arm) = decl.syntax().children().find_map(ast::UnionArm::cast) else {
+            return false;
+        };
+        let Some(path) = first_arm.type_ref() else {
+            return true;
+        };
+        if primitive_path_keyword(&path).is_some() {
+            return true;
+        }
+        let Some(package) = self.package_handle(&symbol.package) else {
+            return true;
+        };
+        let resolution = resolve_package(self.db, self.ws, package, self.std);
+        match self.lookup_path_in(&resolution, &path) {
+            Some(arm) if arm.kind == SymbolKind::Type => self.type_symbol_is_derivable(&arm),
+            _ => true,
+        }
+    }
+
+    /// Whether a named scalar `type` has a derivable init (typl §5.8): numeric
+    /// and boolean types always do; a string/bytes type does when its bounds
+    /// admit length 0 and it carries no `match` pattern; a type with a declared
+    /// init always does.
+    fn type_symbol_is_derivable(&self, symbol: &Symbol) -> bool {
+        let Some(Definition::Type(decl)) = self.find_definition(symbol) else {
+            return true;
+        };
+        if decl.init_value().is_some() {
+            return true;
+        }
+        match backing_class(decl.backing()) {
+            BackingClass::Boolean
+            | BackingClass::Integer
+            | BackingClass::Float
+            | BackingClass::Unknown => true,
+            BackingClass::Str | BackingClass::Bytes => self
+                .named_string_constraint(symbol)
+                .is_some_and(|constraint| {
+                    constraint.pattern.is_none()
+                        && constraint.pattern_const.is_none()
+                        && constraint.len_min.unwrap_or(0) == 0
+                }),
+        }
+    }
+
+    /// The length bounds and `match` pattern of a named string/bytes `type`, as
+    /// an IR constraint (read-only, no diagnostics), for init validation and
+    /// derivation. `None` when the symbol is not a string/bytes type.
+    fn named_string_constraint(&self, symbol: &Symbol) -> Option<v1::Constraint> {
+        let Definition::Type(decl) = self.find_definition(symbol)? else {
+            return None;
+        };
+        match backing_class(decl.backing()) {
+            BackingClass::Str | BackingClass::Bytes => {}
+            _ => return None,
+        }
+        let constraint = decl.constraint();
+        let (len_min, len_max) = self.string_len_bounds(constraint.as_ref());
+        let (pattern, pattern_const) = self.string_pattern(constraint.as_ref());
+        Some(v1::Constraint {
+            min: None,
+            max: None,
+            step: None,
+            len_min: Some(len_min),
+            len_max: Some(len_max),
+            pattern,
+            pattern_const,
+        })
+    }
+
+    /// The length bounds of a string/bytes constraint, mirroring
+    /// [`Checker::lower_len_scalar`] but read-only: the §4.4 default `[0..256]`
+    /// when no length bound is written, a fixed `[N]` as `(N, N)`.
+    fn string_len_bounds(&self, constraint: Option<&ast::Constraint>) -> (u64, u64) {
+        let Some(bound) = constraint.and_then(ast::Constraint::len) else {
+            return (0, 256);
+        };
+        let min = bound
+            .min()
+            .and_then(|literal| self.numeric_literal(&literal))
+            .and_then(|value| exact_to_u64(&value));
+        if bound.dotdot_token().is_some() {
+            let max = bound
+                .max()
+                .and_then(|literal| self.numeric_literal(&literal))
+                .and_then(|value| exact_to_u64(&value));
+            (min.unwrap_or(0), max.unwrap_or(256))
+        } else {
+            let n = min.unwrap_or(0);
+            (n, n)
+        }
+    }
+
+    /// The `match` pattern of a string constraint, resolved to regex text (an
+    /// inline literal or a named regex constant), read-only.
+    fn string_pattern(
+        &self,
+        constraint: Option<&ast::Constraint>,
+    ) -> (Option<String>, Option<String>) {
+        let Some(match_literal) = constraint.and_then(ast::Constraint::match_pattern) else {
+            return (None, None);
+        };
+        match literal_kind(&match_literal) {
+            LitKind::Regex(text) => (Some(text), None),
+            LitKind::ConstRef(name) => match self.const_regex_value(&name) {
+                Some((text, canonical)) => (Some(text), Some(canonical)),
+                None => (None, Some(name)),
+            },
+            _ => (None, None),
+        }
+    }
+
+    /// Resolves a canonical IR reference (`Speed` same-package,
+    /// `ridl.std.Name` cross-package) to its declaration symbol.
+    fn resolve_canonical(&self, canonical: &str) -> Option<Symbol> {
+        match canonical.rsplit_once('.') {
+            Some((package, name)) => {
+                let handle = self.package_handle(package)?;
+                declared_symbols(self.db, handle).get(name).cloned()
+            }
+            None => declared_symbols(self.db, self.pkg).get(canonical).cloned(),
         }
     }
 
@@ -1525,12 +1859,19 @@ impl Checker<'_> {
                 let scalar_bounds = (symbol.kind == SymbolKind::Type)
                     .then(|| self.named_scalar_bounds(&symbol))
                     .flatten();
+                // A field typed by a named string/bytes `type` carries that
+                // type's length bound and `match` pattern for init validation
+                // (the T14 field-init obligation; TYPL-109).
+                let init_constraint = (symbol.kind == SymbolKind::Type)
+                    .then(|| self.named_string_constraint(&symbol))
+                    .flatten();
                 LoweredType {
                     ty: v1::FieldType {
                         optional: false,
                         kind: Some(v1::field_type::Kind::Named(self.canonical_ref(&symbol))),
                     },
                     scalar_bounds,
+                    init_constraint,
                 }
             }
             PathTarget::Unresolved(written) => LoweredType::plain(v1::FieldType {
@@ -1551,6 +1892,12 @@ impl Checker<'_> {
                 // TypeDef's stay unset.
                 let parts = self.lower_scalar(class, Some(constraint), span);
                 let bounds = (parts.min.clone(), parts.max.clone());
+                // An inline string/bytes scalar carries its length bound and
+                // `match` pattern for init validation (TYPL-109); a numeric
+                // inline scalar validates through `scalar_bounds`.
+                let init_constraint = matches!(class, BackingClass::Str | BackingClass::Bytes)
+                    .then(|| parts.constraint.clone())
+                    .flatten();
                 LoweredType {
                     ty: v1::FieldType {
                         optional: false,
@@ -1565,6 +1912,7 @@ impl Checker<'_> {
                         }))),
                     },
                     scalar_bounds: Some(bounds),
+                    init_constraint,
                 }
             }
             None => {
@@ -2281,6 +2629,17 @@ fn member_name_range(name: Option<ast::Name>, node: &ridl_syntax::SyntaxNode) ->
     }
 }
 
+/// The backing class of a type's backing, without emitting diagnostics (unlike
+/// [`Checker::lower_backing`]). A unit backing is float-classed (§5.1); an
+/// absent or malformed backing is `Unknown`.
+fn backing_class(backing: Option<ast::Backing>) -> BackingClass {
+    match backing {
+        None => BackingClass::Unknown,
+        Some(ast::Backing::Primitive(node)) => primitive_of(&node).1,
+        Some(ast::Backing::Unit(_)) => BackingClass::Float,
+    }
+}
+
 /// The IR primitive and backing class of a `PrimitiveType` node.
 fn primitive_of(node: &ast::PrimitiveType) -> (v1::PrimitiveType, BackingClass) {
     if node.boolean_token().is_some() {
@@ -2713,10 +3072,11 @@ mod tests {
         );
     }
 
-    /// A valid declared init lowers into `InitValue`; a declaration without
-    /// one carries no `InitValue` until the task 15 derivation pass.
+    /// A valid declared init lowers into `InitValue`; a declaration without one
+    /// derives its init from the §5.8 table (E1.9) while keeping
+    /// `declared_init` absent.
     #[test]
-    fn declared_init_lowers_and_underived_init_stays_unset() {
+    fn declared_init_lowers_and_underived_init_is_derived() {
         let checked = check_source(
             "app",
             "package app\ntype Speed: km/h [0.0..250.0 step 0.5] = 0.0\ntype Gain: float [0.0..1.0 step 0.01]\n",
@@ -2729,7 +3089,15 @@ mod tests {
                 value: Some("0".to_string()),
             }),
         );
-        assert_eq!(type_def(&checked, "Gain").init, None);
+        // Gain declares no init, so it derives `0` (within `[0.0..1.0]`) —
+        // rendered as the canonical `0` — with `declared_init` still absent.
+        assert_eq!(
+            type_def(&checked, "Gain").init,
+            Some(v1::InitValue {
+                derivable: true,
+                value: Some("0".to_string()),
+            }),
+        );
         assert_eq!(type_def(&checked, "Gain").declared_init, None);
     }
 
@@ -3234,18 +3602,30 @@ mod tests {
     #[test]
     fn typl_106_invalid_inline_match_regex() {
         let checked = check_source("app", "package app\ntype Bad : string [1..10 match /[/]\n");
-        assert_eq!(codes(&checked), vec!["TYPL-106"]);
+        // The invalid inline regex is TYPL-106; the `match`-typed `Bad` also has
+        // no derivable init and no declared `= value`, so it is TYPL-115 (info).
+        assert_eq!(codes(&checked), vec!["TYPL-106", "TYPL-115"]);
     }
 
-    /// A valid regex constant reused in a `match` bound is clean — the constant
-    /// is validated at its declaration, not re-validated at the use site.
+    /// A valid regex constant reused in a `match` bound raises no TYPL-106 — the
+    /// constant is validated at its declaration, not re-validated at the use
+    /// site. A `match`-typed type is not init-derivable, so `Vin` is TYPL-115
+    /// (info) rather than clean.
     #[test]
-    fn valid_regex_constant_and_match_are_clean() {
+    fn valid_regex_constant_and_match_are_info_only() {
         let checked = check_source(
             "app",
             "package app\nconst VIN = /^[A-HJ-NPR-Z0-9]{17}$/\ntype Vin : string [17 match VIN]\n",
         );
-        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(codes(&checked), vec!["TYPL-115"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Info);
+        assert_eq!(
+            type_def(&checked, "Vin").init,
+            Some(v1::InitValue {
+                derivable: false,
+                value: None,
+            }),
+        );
     }
 
     // --- TYPL-005: internal-type exposure ---------------------------------
@@ -3379,5 +3759,279 @@ mod tests {
             "got: {:?}",
             ok_pattern.diagnostics,
         );
+    }
+
+    // --- E1.9: init derivation (§5.8) and TYPL-115 ------------------------
+
+    /// A scalar `InitValue`.
+    fn iv(derivable: bool, value: Option<&str>) -> v1::InitValue {
+        v1::InitValue {
+            derivable,
+            value: value.map(str::to_string),
+        }
+    }
+
+    /// The derived (or declared) init of struct `struct_name`'s field
+    /// `field_name`.
+    fn field_init(
+        checked: &CheckedPackage,
+        struct_name: &str,
+        field_name: &str,
+    ) -> Option<v1::InitValue> {
+        struct_def(checked, struct_name)
+            .members
+            .iter()
+            .find_map(|member| match member.member.as_ref()? {
+                v1::struct_member::Member::Field(field) if field.name == field_name => {
+                    Some(field.init.clone())
+                }
+                _ => None,
+            })
+            .flatten()
+    }
+
+    #[test]
+    fn derived_boolean_init_is_false() {
+        let checked = check_source("app", "package app\ntype Flag : boolean\n");
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            type_def(&checked, "Flag").init,
+            Some(iv(true, Some("false")))
+        );
+    }
+
+    #[test]
+    fn derived_numeric_init_is_zero_in_range_else_min() {
+        let in_range = check_source("app", "package app\ntype A : integer [0..20]\n");
+        assert_eq!(type_def(&in_range, "A").init, Some(iv(true, Some("0"))));
+        // `0` outside the range derives the minimum instead.
+        let out = check_source("app", "package app\ntype B : integer [10..20]\n");
+        assert_eq!(type_def(&out, "B").init, Some(iv(true, Some("10"))));
+    }
+
+    #[test]
+    fn derived_string_init_is_empty_or_non_derivable() {
+        // Bounds admit length 0: the empty string is the derived init.
+        let empty = check_source("app", "package app\ntype S : string [0..8]\n");
+        assert!(codes(&empty).is_empty(), "got: {:?}", empty.diagnostics);
+        assert_eq!(type_def(&empty, "S").init, Some(iv(true, Some(""))));
+
+        // A minimum length above 0 forbids the empty string: not derivable,
+        // TYPL-115 (info).
+        let bounded = check_source("app", "package app\ntype T : string [2..8]\n");
+        assert_eq!(codes(&bounded), vec!["TYPL-115"]);
+        assert_eq!(bounded.diagnostics[0].severity, Severity::Info);
+        assert_eq!(type_def(&bounded, "T").init, Some(iv(false, None)));
+
+        // A fixed-length bytes type is the same shape.
+        let bytes = check_source("app", "package app\ntype H : bytes [32]\n");
+        assert_eq!(codes(&bytes), vec!["TYPL-115"]);
+        assert_eq!(type_def(&bytes, "H").init, Some(iv(false, None)));
+    }
+
+    #[test]
+    fn match_typed_type_is_non_derivable_typl_115() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Code : string [1..8 match /^[A-Z]+$/]\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-115"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Info);
+        assert_eq!(type_def(&checked, "Code").init, Some(iv(false, None)));
+    }
+
+    #[test]
+    fn derived_enum_field_init_is_zero_if_declared_else_lowest() {
+        let with_zero = check_source(
+            "app",
+            "package app\nenum E { A = 0, B = 1 }\nstruct S { e : E }\n",
+        );
+        assert_eq!(field_init(&with_zero, "S", "e"), Some(iv(true, Some("0"))));
+        // No 0: the lowest declared value is the default.
+        let without_zero = check_source(
+            "app",
+            "package app\nenum F { A = 5, B = 3 }\nstruct S { f : F }\n",
+        );
+        assert_eq!(
+            field_init(&without_zero, "S", "f"),
+            Some(iv(true, Some("3")))
+        );
+    }
+
+    #[test]
+    fn derived_enumset_field_init_is_empty() {
+        let checked = check_source(
+            "app",
+            "package app\nenum W { A = 0, B = 1 }\nenumset Flags : W\nstruct S { fl : Flags }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(field_init(&checked, "S", "fl"), Some(iv(true, Some(""))));
+    }
+
+    #[test]
+    fn derived_struct_field_inits_recurse_with_optional_absent() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             type Speed: km/h [0.0..250.0 step 0.5]\n\
+             struct S {\n\
+               count : integer [0..10]\n\
+               speed : Speed\n\
+               over  : Speed?\n\
+             }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        // An inline numeric field derives 0-in-range.
+        assert_eq!(
+            field_init(&checked, "S", "count"),
+            Some(iv(true, Some("0")))
+        );
+        // A named numeric type field materializes the type's init.
+        assert_eq!(
+            field_init(&checked, "S", "speed"),
+            Some(iv(true, Some("0")))
+        );
+        // An optional field is absent — derivable, no value.
+        assert_eq!(field_init(&checked, "S", "over"), Some(iv(true, None)));
+    }
+
+    #[test]
+    fn derived_union_field_init_reflects_first_arm() {
+        // First arm derivable (Speed): the union field is a derivable composite.
+        let derivable = check_source(
+            "app",
+            "package app\n\
+             type Speed  : km/h [0.0..250.0 step 0.5]\n\
+             type Counter: integer [0..255]\n\
+             union U { fast : Speed, count : Counter }\n\
+             struct S { u : U }\n",
+        );
+        assert_eq!(field_init(&derivable, "S", "u"), Some(iv(true, None)));
+
+        // First arm non-derivable (a `match`-typed string): the union field is
+        // not derivable.
+        let non_derivable = check_source(
+            "app",
+            "package app\n\
+             type Code   : string [1..8 match /^[A-Z]+$/]\n\
+             type Counter: integer [0..255]\n\
+             union V { code : Code, count : Counter }\n\
+             struct S { v : V }\n",
+        );
+        assert_eq!(field_init(&non_derivable, "S", "v"), Some(iv(false, None)));
+    }
+
+    #[test]
+    fn derived_tuple_field_init_is_a_derivable_composite() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Speed: km/h [0.0..250.0 step 0.5]\nstruct S { range : (min: Speed, max: Speed) }\n",
+        );
+        assert_eq!(field_init(&checked, "S", "range"), Some(iv(true, None)));
+    }
+
+    #[test]
+    fn derived_collection_field_init_follows_the_min_count() {
+        // A fixed array of a derivable element is derivable.
+        let array = check_source(
+            "app",
+            "package app\ntype Speed: km/h [0.0..250.0 step 0.5]\nstruct S { xs : [Speed; 8] }\n",
+        );
+        assert_eq!(field_init(&array, "S", "xs"), Some(iv(true, None)));
+
+        // A `min = 0` collection is empty, hence derivable regardless of its
+        // (non-derivable) element types.
+        let empty_map = check_source(
+            "app",
+            "package app\nstruct S { m : [Label : Name; 0..4] }\n",
+        );
+        assert_eq!(field_init(&empty_map, "S", "m"), Some(iv(true, None)));
+
+        // A `min > 0` array of a non-derivable element (a `match`-typed
+        // `ridl.std.Name`) is not derivable.
+        let bounded = check_source("app", "package app\nstruct S { names : [Name; 1..4] }\n");
+        assert_eq!(field_init(&bounded, "S", "names"), Some(iv(false, None)));
+    }
+
+    #[test]
+    fn typl_109_declared_init_out_of_range_type_and_field() {
+        // Type level (§5.8 declared init).
+        let type_level = check_source(
+            "app",
+            "package app\ntype Speed: km/h [0.0..250.0 step 0.5] = 300.0\n",
+        );
+        assert_eq!(codes(&type_level), vec!["TYPL-109"]);
+        // Field level — an inline numeric field init out of range.
+        let field_level = check_source(
+            "app",
+            "package app\nstruct S { speed : integer [0..250] = 300 }\n",
+        );
+        assert_eq!(codes(&field_level), vec!["TYPL-109"]);
+    }
+
+    /// The T14 field-init obligation: a too-long string field init through a
+    /// named string `type` now fires TYPL-109 (it passed silently before E1.9).
+    #[test]
+    fn typl_109_string_field_init_too_long_via_named_type() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Tag : string [0..4]\nstruct S { tag : Tag = \"toolong\" }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-109"]);
+        assert!(checked.diagnostics[0].message.contains("length"));
+    }
+
+    /// The inline-scalar analogue of the T14 obligation.
+    #[test]
+    fn typl_109_string_field_init_too_long_inline() {
+        let checked = check_source(
+            "app",
+            "package app\nstruct S { tag : string [0..4] = \"toolong\" }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-109"]);
+        assert!(checked.diagnostics[0].message.contains("length"));
+    }
+
+    /// A field init that violates the named type's `match` pattern fires
+    /// TYPL-109 (the `match`-typed `Code` itself is TYPL-115).
+    #[test]
+    fn typl_109_string_field_init_violates_named_pattern() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Code : string [1..8 match /^[A-Z]+$/]\nstruct S { code : Code = \"abc\" }\n",
+        );
+        assert!(
+            codes(&checked).contains(&"TYPL-109"),
+            "got: {:?}",
+            checked.diagnostics,
+        );
+        assert!(
+            checked
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.message.contains("pattern")),
+        );
+    }
+
+    #[test]
+    fn conforming_string_field_init_via_named_type_is_clean() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Tag : string [0..8]\nstruct S { tag : Tag = \"hello\" }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// The minor T14 obligation: a `const = const` init whose resolved numeric
+    /// value violates the const's declared range is TYPL-108 (only direct
+    /// numeric literals reached the check before E1.9).
+    #[test]
+    fn typl_108_constref_init_out_of_range() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Speed: km/h [0.0..250.0 step 0.5]\nconst BASE = 300.0\nconst FAST : Speed = BASE\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-108"]);
+        assert!(checked.diagnostics[0].message.contains("FAST"));
     }
 }
