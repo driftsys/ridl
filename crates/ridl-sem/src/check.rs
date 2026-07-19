@@ -170,6 +170,7 @@ pub fn check_package(
         diagnostics: default_diagnostics,
         default_timing,
         interface_signals: Vec::new(),
+        interface_name: String::new(),
         contract_vocabulary: None,
     };
 
@@ -365,6 +366,11 @@ struct Checker<'db> {
     /// Set by [`Checker::lower_interface`] before its members are lowered and
     /// cleared after; empty everywhere else.
     interface_signals: Vec<(String, ExprType)>,
+    /// The name the observer stubs of the interface being lowered are scoped
+    /// to (E2.5): the declared interface name, or a service's dotted global
+    /// name for an inline shape, which has no name of its own. Set and cleared
+    /// alongside [`Checker::interface_signals`].
+    interface_name: String,
     /// The package's resolved constants and enums (expr-core §6), built on the
     /// first contract clause of the package and reused for the rest.
     contract_vocabulary: Option<expr::ContractVocabulary>,
@@ -2636,6 +2642,7 @@ impl Checker<'_> {
         // environment. A `require` on any interaction may read them (ridl §13),
         // including one declared later in the body, so they are gathered before
         // the members are lowered.
+        self.interface_name = declared_name(def).unwrap_or_default();
         self.interface_signals = def
             .members()
             .filter_map(|member| match member {
@@ -2680,6 +2687,7 @@ impl Checker<'_> {
         }
 
         self.interface_signals.clear();
+        self.interface_name.clear();
 
         let doc_info = docs::scan(&def.doc_comments());
         let visibility = if def.is_internal() {
@@ -2702,15 +2710,20 @@ impl Checker<'_> {
     /// §11 ordinal, and the kind. Visibility and `is_error` stay unset on
     /// interactions.
     fn lower_interaction(&mut self, member: &ast::InterfaceMember, ordinal: u32) -> v2::Decl {
+        // The interaction name is half of the observer id its contracts carry
+        // (E2.5), so it is read before the member lowers.
+        let interaction_name = member_name(member.name()).unwrap_or_default();
         let kind = match member {
             ast::InterfaceMember::Signal(signal) => {
                 v2::decl::Kind::SignalDef(self.lower_signal(signal))
             }
             ast::InterfaceMember::Event(event) => v2::decl::Kind::EventDef(self.lower_event(event)),
             ast::InterfaceMember::Command(command) => {
-                v2::decl::Kind::CommandDef(self.lower_command(command))
+                v2::decl::Kind::CommandDef(self.lower_command(command, &interaction_name))
             }
-            ast::InterfaceMember::Query(query) => v2::decl::Kind::QueryDef(self.lower_query(query)),
+            ast::InterfaceMember::Query(query) => {
+                v2::decl::Kind::QueryDef(self.lower_query(query, &interaction_name))
+            }
             ast::InterfaceMember::Final(fin) => v2::decl::Kind::FinalDef(self.lower_final(fin)),
             // The tombstone stores its ordinal twice — on the `Decl`
             // envelope AND in `Reserved`. The schema cannot enforce the
@@ -2858,6 +2871,27 @@ impl Checker<'_> {
             }
         }
 
+        // An inline shape has no name of its own, so its observer stubs are
+        // scoped to the service's dotted global name (E2.5).
+        self.interface_name = service
+            .name()
+            .map(|dotted| significant_text(dotted.syntax()))
+            .unwrap_or_default();
+        // An inline shape IS an interface shape (ridl §14.5), so a `require`
+        // on one of its interactions reads its own signals exactly as it does
+        // inside an `interface` body (ridl §13) — the same pre-pass.
+        self.interface_signals = service
+            .inline_members()
+            .filter_map(|member| match member {
+                ast::InterfaceMember::Signal(signal) => {
+                    let name = member_name(signal.name())?;
+                    let payload = signal.payload()?;
+                    Some((name, self.expr_type_of_field_type(&payload)))
+                }
+                _ => None,
+            })
+            .collect();
+
         let mut reserved: HashSet<String> = HashSet::new();
         for member in service.inline_members() {
             if let ast::InterfaceMember::Reserved(entry) = &member
@@ -2894,6 +2928,9 @@ impl Checker<'_> {
             ordinal += 1;
             interactions.push(self.lower_interaction(&member, ordinal));
         }
+
+        self.interface_signals.clear();
+        self.interface_name.clear();
 
         v2::Interface {
             name: String::new(),
@@ -3256,11 +3293,24 @@ impl Checker<'_> {
     /// (already reported) and the `CommandDef` proto admits `require` only;
     /// the misplaced clause lowers nothing and is not type-checked. Flag and
     /// assignment attributes carry no predicate and are skipped (their
-    /// diagnostics come from [`Checker::check_member_attrs`]). The observer
-    /// stub fields stay empty — task 12 (E2.5) fills them.
+    /// diagnostics come from [`Checker::check_member_attrs`]).
+    ///
+    /// Every lowered clause is also an **observer stub** (E2.5): the reads it
+    /// resolves ([`expr::collect_refs`]) — signals as canonical
+    /// `Interface.signalName`, parameters by name, `result` as a flag — plus
+    /// `observer_id`, the handle the E5/E7 observer tooling is expected to
+    /// address a single clause by.
+    ///
+    /// The id is `"{Interface}.{interaction}.{require|ensure}[{i}]"`, and its
+    /// guarantee is precisely **positional**: `i` counts the interaction's
+    /// clauses **of that kind** from 0, so appending a clause of either kind
+    /// never renumbers an existing one. Removing a clause does renumber the
+    /// survivors of its kind — a known limitation, recorded against ADR-0008
+    /// for E5/E7 (a tombstone or explicit-index mechanism).
     fn lower_contracts(
         &mut self,
         node: &ridl_syntax::SyntaxNode,
+        interaction: &str,
         allow_ensure: bool,
         params: &[(String, ExprType)],
         result: Option<ExprType>,
@@ -3269,6 +3319,11 @@ impl Checker<'_> {
             return Vec::new();
         };
         let signals = self.interface_signals.clone();
+        let interface = self.interface_name.clone();
+        // One counter per clause kind — the observer id numbers within its
+        // kind, never across the two.
+        let mut requires = 0usize;
+        let mut ensures = 0usize;
         // The package vocabulary is resolved once per package and moved out of
         // `self` for the duration of the walk, which needs `&mut self` for the
         // diagnostics.
@@ -3307,6 +3362,7 @@ impl Checker<'_> {
                 },
             };
             let (_, diagnostics) = expr::check_contract_expr(&clause, &scope);
+            let refs = expr::collect_refs(&clause, &scope);
             // The subset checker sees one expression and not its file, so the
             // file id is stamped here.
             let file = self.file_ids[self.current_file];
@@ -3315,13 +3371,25 @@ impl Checker<'_> {
                     diagnostic.primary.file = file;
                     diagnostic
                 }));
+            // `kind` is one of the two predicates matched above, never
+            // `Unspecified`.
+            let (kind_text, index) = match kind {
+                v2::ContractKind::Ensure => ("ensure", &mut ensures),
+                _ => ("require", &mut requires),
+            };
+            let observer_id = format!("{interface}.{interaction}.{kind_text}[{index}]");
+            *index += 1;
             contracts.push(v2::Contract {
                 kind: kind as i32,
                 source: expr::canonical_expr_text(&clause),
-                signal_refs: Vec::new(),
-                param_refs: Vec::new(),
-                uses_result: false,
-                observer_id: String::new(),
+                signal_refs: refs
+                    .signals
+                    .iter()
+                    .map(|signal| format!("{interface}.{signal}"))
+                    .collect(),
+                param_refs: refs.params,
+                uses_result: refs.uses_result,
+                observer_id,
             });
         }
         self.contract_vocabulary = Some(vocabulary);
@@ -3329,7 +3397,7 @@ impl Checker<'_> {
     }
 
     /// `command Name '(' params ')' attr_block?` (ridl §6.1, Appendix C).
-    fn lower_command(&mut self, command: &ast::CommandDef) -> v2::CommandDef {
+    fn lower_command(&mut self, command: &ast::CommandDef, name: &str) -> v2::CommandDef {
         // RIDL-104: a command always returns `()` — the erroneous return
         // shape is reported and not lowered (a `CommandDef` has no return
         // field to carry it).
@@ -3354,13 +3422,13 @@ impl Checker<'_> {
             .unwrap_or_default();
         self.check_member_attrs(command.syntax(), MemberKind::Command);
         let param_types = self.param_expr_types(command.params().as_ref());
-        let contracts = self.lower_contracts(command.syntax(), false, &param_types, None);
+        let contracts = self.lower_contracts(command.syntax(), name, false, &param_types, None);
         v2::CommandDef { params, contracts }
     }
 
     /// `query Name '(' params ')' ':' return_type attr_block?` (ridl §7.1,
     /// Appendix C; inline `T | E` per general form §6.1, ADR-0008 decision 1).
-    fn lower_query(&mut self, query: &ast::QueryDef) -> v2::QueryDef {
+    fn lower_query(&mut self, query: &ast::QueryDef, name: &str) -> v2::QueryDef {
         if let Some(timing) = query.timing() {
             self.error(
                 DiagCode::FORM_102,
@@ -3383,7 +3451,7 @@ impl Checker<'_> {
             Some(declared) => self.result_expr_type(&declared),
             None => ExprType::Unsupported("an absent return type".to_string()),
         });
-        let contracts = self.lower_contracts(query.syntax(), true, &param_types, result_type);
+        let contracts = self.lower_contracts(query.syntax(), name, true, &param_types, result_type);
         v2::QueryDef {
             params,
             return_type,
@@ -6285,6 +6353,175 @@ interface I {\n\
         assert_eq!(sources, ["min < max && max <= MAX_SPEED", "result >= 0.0"],);
     }
 
+    /// The `(observer_id, signal_refs, param_refs, uses_result)` stub of every
+    /// contract on the interaction named `name`, in lowering order.
+    fn observer_stubs<'a>(
+        checked: &'a CheckedPackage,
+        name: &str,
+    ) -> Vec<(&'a str, Vec<&'a str>, Vec<&'a str>, bool)> {
+        let contracts = match &interaction(checked, name).kind {
+            Some(v2::decl::Kind::CommandDef(command)) => &command.contracts,
+            Some(v2::decl::Kind::QueryDef(query)) => &query.contracts,
+            _ => panic!("`{name}` carries no contracts"),
+        };
+        contracts
+            .iter()
+            .map(|contract| {
+                (
+                    contract.observer_id.as_str(),
+                    contract
+                        .signal_refs
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                    contract
+                        .param_refs
+                        .iter()
+                        .map(String::as_str)
+                        .collect::<Vec<_>>(),
+                    contract.uses_result,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn contract_observer_ids_number_within_the_clause_kind() {
+        // Task 12: `i` counts the interaction's clauses **of that kind**, so
+        // two requires on one command are `[0]` and `[1]`.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  command c(min: Speed, max: Speed) [\n\
+    require min < max\n\
+    require max <= MAX_SPEED\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            observer_stubs(&checked, "c"),
+            [
+                ("I.c.require[0]", vec![], vec!["min", "max"], false),
+                ("I.c.require[1]", vec![], vec!["max"], false),
+            ],
+        );
+    }
+
+    #[test]
+    fn appending_a_clause_does_not_renumber_the_earlier_observer_ids() {
+        // The observer id is the handle E5/E7 observer tooling is expected to
+        // address a single clause by, so appending a clause must leave every
+        // earlier id untouched — which is why `i` is scoped to the clause kind
+        // rather than counted across kinds. (Removal is the known limitation,
+        // pinned by the test below.)
+        let one_require = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  query q(w: Duration): Speed [\n\
+    require w > 0ms\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        assert_eq!(
+            observer_stubs(&one_require, "q")[0].0,
+            "I.q.require[0]",
+            "the sole require is `[0]`",
+        );
+
+        // A second require appended after it: the first keeps `[0]`.
+        let two_requires = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  query q(w: Duration): Speed [\n\
+    require w > 0ms\n\
+    require w < 10s\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        let ids: Vec<&str> = observer_stubs(&two_requires, "q")
+            .iter()
+            .map(|stub| stub.0)
+            .collect();
+        assert_eq!(ids, ["I.q.require[0]", "I.q.require[1]"]);
+
+        // An `ensure` added beside the require: the require still reads `[0]`
+        // and the ensure opens its own kind-scoped run at `[0]`.
+        let require_and_ensure = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  query q(w: Duration): Speed [\n\
+    require w > 0ms\n\
+    ensure  result >= 0.0\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        let ids: Vec<&str> = observer_stubs(&require_and_ensure, "q")
+            .iter()
+            .map(|stub| stub.0)
+            .collect();
+        assert_eq!(ids, ["I.q.require[0]", "I.q.ensure[0]"]);
+    }
+
+    #[test]
+    fn removing_a_clause_renumbers_the_survivors_known_limitation() {
+        // The index is **positional**: it is stable under append (the test
+        // above) but a clause *removal* shifts every later clause of the same
+        // kind down one, so a surviving id starts addressing a different
+        // predicate. Deleting the first of two requires moves the survivor
+        // from `[1]` to `[0]`.
+        //
+        // This is known and accepted behavior, not an oversight — pinned here
+        // so it can never be re-discovered as a regression. A tombstone or
+        // explicit-index mechanism is recorded against ADR-0008 for E5/E7.
+        let both = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  command c(min: Speed, max: Speed) [\n\
+    require min < max\n\
+    require max <= MAX_SPEED\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        let stubs = observer_stubs(&both, "c");
+        let survivor = &stubs[1];
+        assert_eq!(
+            (survivor.0, &survivor.2),
+            ("I.c.require[1]", &vec!["max"]),
+            "with both clauses present, `max <= MAX_SPEED` is `[1]`",
+        );
+
+        // The first require deleted: the same surviving predicate now answers
+        // to `[0]`.
+        let first_removed = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  command c(min: Speed, max: Speed) [\n\
+    require max <= MAX_SPEED\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        let stubs = observer_stubs(&first_removed, "c");
+        let survivor = &stubs[0];
+        assert_eq!(
+            (survivor.0, &survivor.2),
+            ("I.c.require[0]", &vec!["max"]),
+            "the survivor renumbers to `[0]` — the accepted limitation",
+        );
+    }
+
     #[test]
     fn ridl_401_interaction_redeclared_under_a_reserved_name() {
         let checked = check_ridl(
@@ -6944,6 +7181,41 @@ interface VehicleStatus {
             [
                 (v2::ContractKind::Require as i32, "window > 0ms"),
                 (v2::ContractKind::Ensure as i32, "result >= 0.0"),
+            ],
+        );
+    }
+
+    #[test]
+    fn appendix_a_contracts_lower_observer_stubs() {
+        // Task 12: every clause of the Appendix A interface is an addressable
+        // observer stub — the reads it resolves plus the positional id E5/E7
+        // observer tooling addresses it by. A signal read is canonical
+        // `Interface.signalName`; a parameter read is the bare parameter name.
+        let checked = check_appendix_a();
+        assert_eq!(
+            observer_stubs(&checked, "setGear"),
+            [(
+                "VehicleStatus.setGear.require[0]",
+                vec!["VehicleStatus.currentSpeed"],
+                vec!["position"],
+                false,
+            )],
+        );
+        assert_eq!(
+            observer_stubs(&checked, "getAverageSpeed"),
+            [
+                (
+                    "VehicleStatus.getAverageSpeed.require[0]",
+                    vec![],
+                    vec!["window"],
+                    false,
+                ),
+                (
+                    "VehicleStatus.getAverageSpeed.ensure[0]",
+                    vec![],
+                    vec![],
+                    true,
+                ),
             ],
         );
     }
@@ -7638,6 +7910,44 @@ interface VehicleStatus {
             panic!("inline service must lower to an inline shape");
         };
         assert_eq!(inline.interactions.len(), 1);
+    }
+
+    #[test]
+    fn service_inline_shape_require_reads_its_sibling_signals() {
+        // An inline shape IS an interface shape (ridl §14.5), so a `require`
+        // on one of its interactions may read the shape's own signals exactly
+        // as it may inside an `interface` body (ridl §13). Reading one is
+        // clean, and it lowers as a canonical signal ref scoped to the
+        // service's dotted global name.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) [ require temperature < t ]\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
+            panic!("inline service must lower to an inline shape");
+        };
+        let Some(v2::decl::Kind::CommandDef(set_target)) = &inline
+            .interactions
+            .iter()
+            .find(|decl| decl.name == "setTarget")
+            .expect("no `setTarget` interaction")
+            .kind
+        else {
+            panic!("setTarget is not a command");
+        };
+        assert_eq!(set_target.contracts.len(), 1);
+        assert_eq!(
+            set_target.contracts[0].signal_refs,
+            ["veh.hvac.cabin.temperature"],
+        );
+        assert_eq!(set_target.contracts[0].param_refs, ["t"]);
+        assert_eq!(
+            set_target.contracts[0].observer_id,
+            "veh.hvac.cabin.setTarget.require[0]",
+        );
     }
 
     // --- catalog/IR parity on the canonical interface reference ----------

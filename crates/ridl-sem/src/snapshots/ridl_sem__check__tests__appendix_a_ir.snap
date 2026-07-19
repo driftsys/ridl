@@ -507,10 +507,14 @@ expression: "v2::to_json_pretty(&checked.ir)"
                 {
                   "kind": 1,
                   "source": "position != GearPosition.PARK || currentSpeed == 0.0",
-                  "signal_refs": [],
-                  "param_refs": [],
+                  "signal_refs": [
+                    "VehicleStatus.currentSpeed"
+                  ],
+                  "param_refs": [
+                    "position"
+                  ],
                   "uses_result": false,
-                  "observer_id": ""
+                  "observer_id": "VehicleStatus.setGear.require[0]"
                 }
               ]
             }
@@ -568,17 +572,19 @@ expression: "v2::to_json_pretty(&checked.ir)"
                   "kind": 1,
                   "source": "window > 0ms",
                   "signal_refs": [],
-                  "param_refs": [],
+                  "param_refs": [
+                    "window"
+                  ],
                   "uses_result": false,
-                  "observer_id": ""
+                  "observer_id": "VehicleStatus.getAverageSpeed.require[0]"
                 },
                 {
                   "kind": 2,
                   "source": "result >= 0.0",
                   "signal_refs": [],
                   "param_refs": [],
-                  "uses_result": false,
-                  "observer_id": ""
+                  "uses_result": true,
+                  "observer_id": "VehicleStatus.getAverageSpeed.ensure[0]"
                 }
               ]
             }
