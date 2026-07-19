@@ -794,6 +794,7 @@ mod package_tests {
             vec![input(db, &format!("{name}.typl"), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
         )
     }
 
@@ -813,6 +814,7 @@ mod package_tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
+            None,
         )
     }
 
@@ -1085,6 +1087,7 @@ mod package_tests {
             vec![input(db, &format!("{name}.ridl"), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
         )
     }
 

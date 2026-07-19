@@ -45,6 +45,7 @@ use crate::scalar::{
     DiagKind, ExactValue, FloatRange, IntRange, derive_float_width, derive_int_width,
     enumset_width, validate_range, validate_step,
 };
+use crate::timing;
 use crate::ucum::parse_ucum;
 
 /// A checked package: its lowered IR and the checker's own diagnostics.
@@ -121,6 +122,37 @@ pub fn check_package(
         .map(|file| sources.file_id(file.path(db), file.text(db)))
         .collect();
 
+    // Resolve the package timing default once (ridl §9.1): the winning raw
+    // `[defaults].timing` string (package `[defaults]` already shadows the
+    // workspace default, merged at load) is parsed here — `ridl-core` cannot
+    // depend on `ridl-sem`, so a malformed string is MANI-009, spanning the
+    // package's first file, and the built-in `[100ms..1000ms]` is the fallback.
+    let mut default_diagnostics = Vec::new();
+    let default_timing = match pkg.default_timing(db).as_ref() {
+        Some(raw) => match timing::parse_default_timing(raw) {
+            Ok(spec) => spec,
+            Err(reason) => {
+                if let Some(&first) = file_ids.first() {
+                    default_diagnostics.push(Diagnostic {
+                        code: DiagCode::MANI_009,
+                        severity: Severity::Error,
+                        message: format!(
+                            "invalid `[defaults].timing` in the package manifest: {reason}"
+                        ),
+                        primary: Span {
+                            file: first,
+                            range: TextRange::empty(0.into()),
+                        },
+                        labels: Vec::new(),
+                        fixits: Vec::new(),
+                    });
+                }
+                timing::builtin_default_timing()
+            }
+        },
+        None => timing::builtin_default_timing(),
+    };
+
     let mut checker = Checker {
         db,
         ws,
@@ -130,7 +162,8 @@ pub fn check_package(
         resolution,
         file_ids,
         current_file: 0,
-        diagnostics: Vec::new(),
+        diagnostics: default_diagnostics,
+        default_timing,
     };
 
     let mut decls = Vec::new();
@@ -298,6 +331,10 @@ struct Checker<'db> {
     file_ids: Vec<FileId>,
     current_file: usize,
     diagnostics: Vec<Diagnostic>,
+    /// The resolved package timing default (ridl §9.1): the parsed
+    /// `[defaults].timing` or the built-in `[100ms..1000ms]`, applied to every
+    /// untimed signal and event (E2 task 9).
+    default_timing: timing::TimingSpec,
 }
 
 /// The primitive class a scalar constraint is validated against.
@@ -2699,13 +2736,12 @@ impl Checker<'_> {
             None => {}
         }
         self.check_member_attrs(signal.syntax(), MemberKind::Signal);
+        let timing = self.resolve_member_timing(signal.timing(), timing::InteractionKind::Signal);
         v2::SignalDef {
             payload,
             declared_init,
             init,
-            // Timing lowers empty in E2.1c (`mode = UNSPECIFIED`); task 9
-            // resolves the real bounds (ADR-0008 decision 12).
-            timing: Some(v2::Timing::default()),
+            timing,
         }
     }
 
@@ -2734,11 +2770,24 @@ impl Checker<'_> {
             );
         }
         self.check_member_attrs(event.syntax(), MemberKind::Event);
-        v2::EventDef {
-            payload,
-            // Timing lowers empty in E2.1c; task 9 resolves the bounds.
-            timing: Some(v2::Timing::default()),
-        }
+        let timing = self.resolve_member_timing(event.timing(), timing::InteractionKind::Event);
+        v2::EventDef { payload, timing }
+    }
+
+    /// Resolves a signal's or event's timing to its IR `Timing` (ridl §9,
+    /// ADR-0008 decision 12): parses and validates the `@` annotation or
+    /// applies the package default, accumulating the RIDL-10x diagnostics
+    /// [`timing::resolve_timing`] returns. Always `Some` for a signal or event.
+    fn resolve_member_timing(
+        &mut self,
+        annot: Option<ast::Timing>,
+        kind: timing::InteractionKind,
+    ) -> Option<v2::Timing> {
+        let file = self.file_ids[self.current_file];
+        let (spec, diags) =
+            timing::resolve_timing(annot.as_ref(), kind, &self.default_timing, file);
+        self.diagnostics.extend(diags);
+        spec.map(lower_timing_spec)
     }
 
     /// `command Name '(' params ')' attr_block?` (ridl §6.1, Appendix C).
@@ -3570,6 +3619,22 @@ fn exact_to_i64(value: &ExactValue) -> Option<i64> {
     i64::try_from(value.0.to_integer()).ok()
 }
 
+/// Lowers a resolved [`timing::TimingSpec`] to its IR `Timing` (ADR-0008
+/// decision 12): the mode discriminator, the exact-decimal microsecond bound
+/// strings (an unset half-open side stays `None`), and the default-applied flag.
+fn lower_timing_spec(spec: timing::TimingSpec) -> v2::Timing {
+    let mode = match spec.mode {
+        timing::TimingMode::StrictPeriodic => v2::TimingMode::StrictPeriodic,
+        timing::TimingMode::Range => v2::TimingMode::Range,
+    };
+    v2::Timing {
+        mode: mode as i32,
+        min_us: spec.min_us.map(|value| value.to_decimal_string()),
+        max_us: spec.max_us.map(|value| value.to_decimal_string()),
+        default_applied: spec.default_applied,
+    }
+}
+
 /// The int64 domain edge an omitted bound defaults to (§5.5).
 fn int64_edge(upper: bool) -> ExactValue {
     let text = if upper {
@@ -3603,6 +3668,7 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
         )
     }
 
@@ -4885,6 +4951,30 @@ mod tests {
             vec![file],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
+        )
+    }
+
+    /// A single-file `.ridl` package carrying a configured `[defaults].timing`
+    /// (the raw string the checker parses, ridl §9.1).
+    fn ridl_package_with_default(
+        db: &RidlDatabase,
+        name: &str,
+        text: &str,
+        default_timing: &str,
+    ) -> Package {
+        let file = InputFile::new(
+            db,
+            format!("{}.ridl", name.replace('.', "/")),
+            text.to_string(),
+        );
+        Package::new(
+            db,
+            name.to_string(),
+            vec![file],
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            Some(default_timing.to_string()),
         )
     }
 
@@ -5016,7 +5106,9 @@ mod tests {
             "{PRELUDE}interface I {{\n  struct Extra {{ a: Speed }}\n  signal s : Speed @10ms\n  enum Mode {{ A, B }}\n  event e : Speed\n}}\n"
         );
         let checked = check_ridl("app", &text);
-        assert_eq!(codes(&checked), vec!["RIDL-107", "RIDL-107"]);
+        // The untimed `event e` additionally draws RIDL-100 (default applied,
+        // E2 task 9); the two in-body composites are RIDL-107.
+        assert_eq!(codes(&checked), vec!["RIDL-107", "RIDL-107", "RIDL-100"]);
 
         let db = RidlDatabase::default();
         let interface = first_interface(&db, &text);
@@ -5125,7 +5217,12 @@ mod tests {
             "app",
             &format!("{PRELUDE}interface I {{\n  signal s : <Speed>\n  event e : <Speed>\n}}\n"),
         );
-        assert_eq!(codes(&checked), vec!["RIDL-201", "RIDL-201"]);
+        // Both are untimed, so each draws RIDL-100 (default applied) when it
+        // lowers, before the stream payloads draw RIDL-201 (E2 task 9).
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-100", "RIDL-100", "RIDL-201", "RIDL-201"],
+        );
     }
 
     #[test]
@@ -5159,7 +5256,8 @@ mod tests {
             "app",
             &format!("{PRELUDE}interface I {{\n  event e : Speed [ ensure x > 0.0 ]\n}}\n"),
         );
-        assert_eq!(codes(&on_event), vec!["RIDL-301"]);
+        // The untimed event also draws RIDL-100 (default applied, E2 task 9).
+        assert_eq!(codes(&on_event), vec!["RIDL-301", "RIDL-100"]);
 
         // On a `final` the block itself is already RIDL-106; the predicate
         // additionally draws RIDL-301 (ridl §16.3 lists `final`).
@@ -5253,7 +5351,9 @@ mod tests {
             "app",
             &format!("{PRELUDE}interface I {{\n  event e : Speed = 3.0\n}}\n"),
         );
-        assert_eq!(codes(&on_event), vec!["FORM-102"]);
+        // FORM-102 for the init; the untimed event then draws RIDL-100
+        // (default applied, E2 task 9).
+        assert_eq!(codes(&on_event), vec!["FORM-102", "RIDL-100"]);
         assert_eq!(
             on_event.diagnostics[0].message,
             "init value not valid on event",
@@ -5288,7 +5388,9 @@ mod tests {
             "app",
             &format!("{PRELUDE}interface I {{\n  event e : integer [0..5]\n}}\n"),
         );
-        assert_eq!(codes(&primitive_event), vec!["FORM-102"]);
+        // FORM-102 for the payload; the untimed event then draws RIDL-100
+        // (default applied, E2 task 9).
+        assert_eq!(codes(&primitive_event), vec!["FORM-102", "RIDL-100"]);
         assert_eq!(
             primitive_event.diagnostics[0].message,
             "event payload must be a named type",
@@ -5669,6 +5771,14 @@ interface VehicleStatus {
         signal
     }
 
+    /// The `EventDef` of the interaction named `name`.
+    fn event_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::EventDef {
+        let Some(v2::decl::Kind::EventDef(event)) = &interaction(checked, name).kind else {
+            panic!("`{name}` is not an event");
+        };
+        event
+    }
+
     #[test]
     fn appendix_a_lowers_clean_and_its_ir_v2_json_is_the_golden() {
         let checked = check_appendix_a();
@@ -5841,19 +5951,142 @@ interface VehicleStatus {
     }
 
     #[test]
-    fn appendix_a_timing_lowers_empty_until_task_9() {
-        // Task 6 lowers `Timing` empty (`mode = TIMING_MODE_UNSPECIFIED`);
-        // task 9 resolves the real bounds.
+    fn appendix_a_timing_resolves_concrete_bounds() {
+        // Task 9 resolves every `@` annotation to exact microsecond bounds
+        // (ADR-0008 decision 12): strict periodic stores the period in both
+        // bounds; a range keeps each explicit bound.
         let checked = check_appendix_a();
         assert_eq!(
             signal_def(&checked, "currentSpeed").timing,
             Some(v2::Timing {
-                mode: v2::TimingMode::Unspecified as i32,
-                min_us: None,
-                max_us: None,
+                mode: v2::TimingMode::StrictPeriodic as i32,
+                min_us: Some("10000".to_string()),
+                max_us: Some("10000".to_string()),
                 default_applied: false,
             }),
+            "@10ms lowers as a strict period with both bounds 10000us",
         );
+        assert_eq!(
+            signal_def(&checked, "engineTemp").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::Range as i32,
+                min_us: Some("20000".to_string()),
+                max_us: Some("100000".to_string()),
+                default_applied: false,
+            }),
+            "@[20ms..100ms] lowers as a range",
+        );
+        assert_eq!(
+            event_def(&checked, "doorOpened").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::Range as i32,
+                min_us: Some("50000".to_string()),
+                max_us: Some("500000".to_string()),
+                default_applied: false,
+            }),
+            "@[50ms..500ms] lowers as a range on an event",
+        );
+    }
+
+    #[test]
+    fn ridl_100_untimed_signal_applies_the_default_with_the_flag() {
+        // An untimed signal resolves the built-in default `[100ms..1000ms]`
+        // with `default_applied` set, and draws a RIDL-100 warning naming the
+        // applied bounds (ridl §9.1).
+        let checked = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed\n}}\n"),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-100"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+        assert!(
+            checked.diagnostics[0].message.contains("100000")
+                && checked.diagnostics[0].message.contains("1000000"),
+            "RIDL-100 must name the applied bounds, got {:?}",
+            checked.diagnostics[0].message,
+        );
+        assert_eq!(
+            signal_def(&checked, "s").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::Range as i32,
+                min_us: Some("100000".to_string()),
+                max_us: Some("1000000".to_string()),
+                default_applied: true,
+            }),
+        );
+    }
+
+    #[test]
+    fn a_configured_package_default_applies_to_untimed_signals() {
+        // The package `[defaults].timing` resolves the bounds of an untimed
+        // signal (ridl §9.1) — the raw string parses in the checker.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_with_default(
+            &db,
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed\n}}\n"),
+            "[50ms..2s]",
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        assert_eq!(codes(&checked), vec!["RIDL-100"]);
+        assert_eq!(
+            signal_def(&checked, "s").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::Range as i32,
+                min_us: Some("50000".to_string()),
+                max_us: Some("2000000".to_string()),
+                default_applied: true,
+            }),
+            "the configured `[50ms..2s]` resolves to 50000us..2000000us",
+        );
+    }
+
+    #[test]
+    fn mani_009_on_a_malformed_default_timing_string() {
+        // A malformed `[defaults].timing` is MANI-009, spanning the package's
+        // first file; the built-in default is the fallback so signals still
+        // resolve (ridl §9.1, ADR-0008 decision 13).
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_with_default(
+            &db,
+            "app",
+            &format!("{PRELUDE}interface I {{\n  signal s : Speed @10ms\n}}\n"),
+            "fast",
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        assert_eq!(codes(&checked), vec!["MANI-009"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Error);
+        assert!(
+            checked.diagnostics[0].message.contains("[defaults].timing"),
+            "MANI-009 must name the manifest key, got {:?}",
+            checked.diagnostics[0].message,
+        );
+        // The strict-periodic signal still lowers with concrete bounds.
+        assert_eq!(
+            signal_def(&checked, "s").timing.as_ref().unwrap().min_us,
+            Some("10000".to_string()),
+        );
+    }
+
+    #[test]
+    fn command_carries_no_timing_in_ir() {
+        // A command has no `Timing` field at all — timing is absent from the IR
+        // for command/query/final (ridl §9).
+        let checked = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  command c(p: Speed)\n}}\n"),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let v2::decl::Kind::CommandDef(_) = interaction(&checked, "c").kind.as_ref().unwrap()
+        else {
+            panic!("expected a command");
+        };
+        // `CommandDef` has no timing field — nothing to assert absent beyond
+        // the type shape; the absence is structural.
     }
 
     #[test]
@@ -5896,6 +6129,7 @@ interface VehicleStatus {
             vec![typl, ridl],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         let checked = check_package(&db, ws, pkg, std);

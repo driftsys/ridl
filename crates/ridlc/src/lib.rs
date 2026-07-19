@@ -93,6 +93,7 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
         vec![input],
         PackageOrigin::WorkspaceMember,
         BTreeMap::new(),
+        None,
     );
     let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
 
