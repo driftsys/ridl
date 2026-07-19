@@ -60,6 +60,14 @@ criteria:** arbitrary typl packages compile with full diagnostics, format with
 `ridl fmt`, generate Rust+extern-C, and edit live in VS Code; IR stabilized at
 v1 for the typl subset (frozen only with the E4.5 stability policy).
 
+**Status:** landed — all nineteen stories (E1.1–E1.19) shipped as PRs #107–#133;
+the typl v0.1 preview toolchain (compiler, `ridl fmt`, LSP, VS Code extension)
+is complete over IR v1 (exact decimal). Deferred per ADR-0007: E1.8 ships no
+`wire` width floor yet (typl §17.11 / ADR-0007 d7) — nominal unit checking
+itself ships; of the profile-boundary and doc diagnostics only TYPL-302 ships —
+TYPL-301/303/304 and TYPL-107/205/401/402/403 are recorded debt (ADR-0007 d10).
+Cutting the v0.1 preview tag is a maintainer act (ADR-0007 d14).
+
 | ID    | Story                                                                                                                    | Done when                                                    | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ---- |
 | E1.1  | Full lexer: all typl tokens, C17 int/float literal rules, durations, regex consts, trivia                                | lexer corpus tests pass                                      | M    |

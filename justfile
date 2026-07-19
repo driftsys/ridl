@@ -17,12 +17,12 @@ default:
 # then auto-fix Markdown style findings.
 fmt:
     prim .
-    markdownlint '**/*.md' --ignore book --ignore node_modules --fix
+    markdownlint '**/*.md' --ignore book --ignore '**/node_modules' --fix
 
 # Lint gate — no writes: prim --check (formatting) + markdownlint (style).
 check:
     prim --check .
-    markdownlint '**/*.md' --ignore book --ignore node_modules
+    markdownlint '**/*.md' --ignore book --ignore '**/node_modules'
 
 # Compile the Rust workspace (the Cargo.toml guard is a defensive
 # fallback for partial checkouts, not a "lands later" gate).

@@ -15,3 +15,9 @@ provenance. Nothing here is normative — the current references live in
   served as the spec. The gardened records are
   [ADR-0006](../decisions/ADR-0006-walking-skeleton-execution.md) and
   [the walking-skeleton-architecture technote](../technotes/walking-skeleton-architecture.md).
+- **2026-07-18-e1-typl-tooling-spine-plan.md** — the epic E1 (typl + tooling
+  spine) implementation plan, archived verbatim from `docs/wip/` once the epic
+  landed. As with E0, the roadmap's Epic 1 section plus
+  [ADR-0007](../decisions/ADR-0007-e1-execution.md) served as the spec. The
+  gardened records are [ADR-0007](../decisions/ADR-0007-e1-execution.md) and
+  [the as-built architecture technote](../technotes/walking-skeleton-architecture.md).
