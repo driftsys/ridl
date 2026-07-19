@@ -18,6 +18,7 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use rowan::TextRange;
 
@@ -32,13 +33,34 @@ pub struct FetchError {
     pub message: String,
 }
 
+/// The bounded end-to-end timeout applied to every fetch. `ureq`'s default
+/// agent leaves connect, receive-headers, and receive-body unbounded, so a
+/// server that accepts the connection then stalls — or trickles bytes slowly
+/// under the 10 MB cap — would hang the build forever. This caps the whole
+/// call.
+const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Downloads the artifact at `url` and returns its bytes.
 ///
-/// A non-2xx HTTP status, a transport failure, or a body over the 10 MB read
-/// limit is a [`FetchError`]. Callers validate the URL first (see
-/// [`is_fetchable_url`]); `ureq` will still reject a malformed URL here.
+/// The entire call — connect, send, and receive — is bounded by
+/// [`FETCH_TIMEOUT`] (30 seconds): a stalled or trickling server is a
+/// [`FetchError`], never a hang. A non-2xx HTTP status, a transport failure, or
+/// a body over the 10 MB read limit is also a [`FetchError`]. Callers validate
+/// the URL first (see [`is_fetchable_url`]); `ureq` will still reject a
+/// malformed URL here.
 pub fn fetch(url: &str) -> Result<Vec<u8>, FetchError> {
-    let mut response = ureq::get(url).call().map_err(|err| FetchError {
+    fetch_with_timeout(url, FETCH_TIMEOUT)
+}
+
+/// [`fetch`] with an explicit `timeout`, so a test can drive the timeout path
+/// with a short bound instead of the production 30 seconds. Builds a one-off
+/// agent whose global timeout caps the whole call.
+fn fetch_with_timeout(url: &str, timeout: Duration) -> Result<Vec<u8>, FetchError> {
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_global(Some(timeout))
+        .build()
+        .into();
+    let mut response = agent.get(url).call().map_err(|err| FetchError {
         message: err.to_string(),
     })?;
     response.body_mut().read_to_vec().map_err(|err| FetchError {
@@ -166,6 +188,10 @@ pub fn materialize_imports(
                         continue;
                     }
                 };
+                // Store before verifying against the pin: the cache is
+                // content-addressed, so a mismatched artifact lands at its own
+                // hash, never in the pinned entry's directory — it can never be
+                // served as the pin. The mismatch below then drops it.
                 let (sha, path) = match cache.store(url, &bytes) {
                     Ok(stored) => stored,
                     Err(err) => {
@@ -367,6 +393,59 @@ mod tests {
         let _ = stream.flush();
     }
 
+    /// A stub that accepts connections and never responds — it holds every
+    /// accepted stream open so the client waits for a response that never
+    /// comes. It proves the fetch timeout fires instead of hanging.
+    struct StallingStub {
+        addr: std::net::SocketAddr,
+        shutdown: Arc<AtomicBool>,
+        handle: Option<JoinHandle<()>>,
+    }
+
+    impl StallingStub {
+        fn start() -> StallingStub {
+            let listener = TcpListener::bind("127.0.0.1:0").expect("bind the stalling stub");
+            let addr = listener.local_addr().expect("stub address");
+            let shutdown = Arc::new(AtomicBool::new(false));
+            let handle = {
+                let shutdown = shutdown.clone();
+                std::thread::spawn(move || {
+                    let mut held = Vec::new();
+                    for incoming in listener.incoming() {
+                        if shutdown.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        match incoming {
+                            // Hold the stream open, never write a response.
+                            Ok(stream) => held.push(stream),
+                            Err(_) => break,
+                        }
+                    }
+                    drop(held);
+                })
+            };
+            StallingStub {
+                addr,
+                shutdown,
+                handle: Some(handle),
+            }
+        }
+
+        fn url(&self) -> String {
+            format!("http://{}/package.tar", self.addr)
+        }
+    }
+
+    impl Drop for StallingStub {
+        fn drop(&mut self) {
+            self.shutdown.store(true, Ordering::SeqCst);
+            let _ = TcpStream::connect(self.addr);
+            if let Some(handle) = self.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
     fn cache(dir: &TempDir) -> Cache {
         Cache {
             root: dir.path().join("cache"),
@@ -385,6 +464,22 @@ mod tests {
         let got = fetch(stub.url()).expect("the fetch succeeds");
         assert_eq!(got, body, "the fetched bytes are the served body");
         assert_eq!(stub.hits(), 1, "exactly one request reached the stub");
+    }
+
+    /// A server that accepts the connection then never responds must time out
+    /// rather than hang: the bounded global timeout turns the stall into a
+    /// `FetchError` promptly. Driven with a short timeout so the test is fast.
+    #[test]
+    fn fetch_times_out_on_a_stalled_server() {
+        let stub = StallingStub::start();
+        let start = std::time::Instant::now();
+        let result = fetch_with_timeout(&stub.url(), Duration::from_millis(300));
+        assert!(result.is_err(), "a stalled server must time out, not hang");
+        assert!(
+            start.elapsed() < Duration::from_secs(5),
+            "the timeout must fire promptly (no hang), took {:?}",
+            start.elapsed(),
+        );
     }
 
     /// `fetch` against a refused address is a `FetchError`, the MANI-101 path.

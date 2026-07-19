@@ -72,6 +72,11 @@ impl Cache {
         let parent = self.url_dir(url);
         fs::create_dir_all(&parent)?;
 
+        // The staging name keys on the process id and the content hash, not a
+        // per-call token, so `store` is not safe for two concurrent
+        // same-process calls storing the *same* content — they would share this
+        // directory. That is fine today: `materialize_imports` is sequential and
+        // deduplicates URLs, so no two concurrent stores race here.
         let staging = parent.join(format!(".staging-{sha256}-{}", std::process::id()));
         // A stale staging directory from a crashed run would make `create_dir`
         // fail; clear it first.
@@ -234,6 +239,97 @@ mod tests {
             None,
             "the cache is indexed by URL as well as content hash",
         );
+    }
+
+    /// A tar carrying a parent-directory-escaping entry (`../poison`) must not
+    /// write anything outside the entry directory. The `tar` crate skips such
+    /// entries on unpack today; this test locks the security property so a
+    /// future swap of the unpack mechanism cannot silently reintroduce path
+    /// traversal.
+    #[test]
+    fn store_does_not_let_a_tar_escape_the_entry_directory() {
+        let dir = TempDir::new("traversal");
+        let cache = cache(&dir);
+        let url = "https://registry.example.com/veh/evil@v1.0.0";
+
+        // Sanity: the hand-crafting is valid, so a benign raw-name tar unpacks.
+        // This proves the escaping case below is stopped by the traversal guard,
+        // not by a malformed archive the reader rejects outright.
+        let (_, benign_path) = cache
+            .store(
+                "https://registry.example.com/veh/benign@v1.0.0",
+                &tar_with_raw_name("benign.typl", b"package veh.benign\n"),
+            )
+            .expect("a benign hand-crafted tar stores");
+        assert!(
+            benign_path.join("benign.typl").is_file(),
+            "the hand-crafted tar format is valid and unpacks",
+        );
+
+        // The tar builder refuses to *write* a `..` path, so the malicious
+        // archive is hand-crafted to reach the unpack-side guard.
+        let tar = tar_with_raw_name("../poison", b"pwned");
+
+        // Storing may succeed (skipping the escaping entry) or error; neither
+        // outcome may write outside the entry directory.
+        let _ = cache.store(url, &tar);
+        assert!(
+            !contains_file_named(dir.path(), "poison"),
+            "an escaping tar entry must never be written anywhere in the cache tree",
+        );
+    }
+
+    /// Hand-builds a single-entry POSIX tar whose file name is written verbatim
+    /// — bypassing the `tar` builder's refusal to emit `..` paths — so a
+    /// path-traversal archive can be constructed for the unpack guard test.
+    fn tar_with_raw_name(name: &str, contents: &[u8]) -> Vec<u8> {
+        let mut header = [0u8; 512];
+        let name_bytes = name.as_bytes();
+        header[..name_bytes.len()].copy_from_slice(name_bytes);
+        header[100..108].copy_from_slice(b"0000644\0"); // mode
+        header[108..116].copy_from_slice(b"0000000\0"); // uid
+        header[116..124].copy_from_slice(b"0000000\0"); // gid
+        header[124..136].copy_from_slice(format!("{:011o}\0", contents.len()).as_bytes()); // size
+        header[136..148].copy_from_slice(b"00000000000\0"); // mtime
+        header[156] = b'0'; // typeflag: regular file
+        header[257..263].copy_from_slice(b"ustar\0"); // magic
+        header[263..265].copy_from_slice(b"00"); // version
+
+        // Checksum: sum every header byte with the checksum field taken as
+        // spaces, then write it as six octal digits, a NUL, and a space.
+        for byte in &mut header[148..156] {
+            *byte = b' ';
+        }
+        let checksum: u32 = header.iter().map(|&byte| u32::from(byte)).sum();
+        header[148..156].copy_from_slice(format!("{checksum:06o}\0 ").as_bytes());
+
+        let mut out = Vec::new();
+        out.extend_from_slice(&header);
+        out.extend_from_slice(contents);
+        // Pad the data to a 512-byte boundary, then end with two zero blocks.
+        out.resize(out.len() + (512 - contents.len() % 512) % 512, 0);
+        out.resize(out.len() + 1024, 0);
+        out
+    }
+
+    /// Whether any file named `name` exists anywhere under `root`.
+    fn contains_file_named(root: &Path, name: &str) -> bool {
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = fs::read_dir(&dir) else {
+                continue;
+            };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.file_name().is_some_and(|found| found == name) {
+                    return true;
+                }
+                if path.is_dir() {
+                    stack.push(path);
+                }
+            }
+        }
+        false
     }
 
     /// Re-storing already-cached content is a no-op that returns the existing
