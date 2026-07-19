@@ -1,18 +1,18 @@
 //! Generates the IR Rust types from the protobuf schemas at build time.
 //!
-//! The v1 schema (the typl surface with exact values) and the v2 schema
-//! (v1 plus the ridl interaction layer, ADR-0008 decision 8) are compiled
-//! with `protox`, a pure-Rust protobuf front end, so the build needs no
-//! system `protoc` binary (ADR-0006 decision 3). The resulting descriptor
-//! set is handed to `prost-build`, which emits the Rust types.
-//! `type_attribute` adds the `serde` derives so the JSON debug rendering of
-//! the IR exists (ADR-0004 §4). The E0 v0 schema was removed when its last
-//! consumer moved to v1 (task 13 of the E1 plan).
+//! The v2 schema (the typl surface plus the ridl interaction layer, ADR-0008
+//! decision 8) is compiled with `protox`, a pure-Rust protobuf front end, so
+//! the build needs no system `protoc` binary (ADR-0006 decision 3). The
+//! resulting descriptor set is handed to `prost-build`, which emits the Rust
+//! types. `type_attribute` adds the `serde` derives so the JSON debug
+//! rendering of the IR exists (ADR-0004 §4). The v1 schema was removed when
+//! its last consumer moved to v2 (task 6 of the E2 plan), mirroring the E0 v0
+//! retirement.
 
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let protos = ["proto/ridl/ir/v1/ir.proto", "proto/ridl/ir/v2/ir.proto"];
+    let protos = ["proto/ridl/ir/v2/ir.proto"];
     let include = "proto";
 
     for proto in protos {
@@ -29,7 +29,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         // everything holding one) small. prost boxes the recursive
         // array/map members on its own; this one is not recursive, so it is
         // boxed explicitly.
-        .boxed(".ridl.ir.v1.FieldType.kind.inline_scalar")
         .boxed(".ridl.ir.v2.FieldType.kind.inline_scalar")
         .compile_fds(file_descriptors)?;
 
