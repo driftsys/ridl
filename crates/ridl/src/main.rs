@@ -62,12 +62,17 @@ enum Command {
     Diff {
         /// The baseline: an `.ir.json` snapshot, a `.typl`/`.ridl` file, a
         /// package directory, or a workspace root.
-        old: PathBuf,
+        old: Option<PathBuf>,
         /// The candidate, in the same forms as the baseline.
-        new: PathBuf,
+        new: Option<PathBuf>,
         /// Output format for the report.
         #[arg(long, value_enum, default_value = "text")]
         format: DiffFormat,
+        /// Print the classification rule for one change category and exit,
+        /// instead of comparing snapshots. Takes a category exactly as the
+        /// report prints it, e.g. `timing_changed`.
+        #[arg(long, value_name = "CATEGORY")]
+        explain: Option<String>,
     },
 }
 
@@ -90,7 +95,46 @@ fn main() -> ExitCode {
             frozen,
         } => finish(ridlc::run_build(&path, &out_dir, &emit, frozen.into())),
         Command::Fmt { path, check } => run_fmt(&path, check),
-        Command::Diff { old, new, format } => run_diff(&old, &new, format),
+        Command::Diff {
+            old,
+            new,
+            format,
+            explain,
+        } => match explain {
+            Some(category) => run_explain(&category),
+            None => match (old, new) {
+                (Some(old), Some(new)) => run_diff(&old, &new, format),
+                _ => {
+                    eprintln!(
+                        "error: `ridl diff` needs both an old and a new input, \
+                         or `--explain <CATEGORY>`"
+                    );
+                    ExitCode::from(2)
+                }
+            },
+        },
+    }
+}
+
+/// Prints the classification rule for one change category — the table of
+/// ADR-0008 decision 14 as text, and the CI-facing documentation of record until
+/// the E4 error index publishes it. An unknown category is a usage error: exit 2
+/// with the valid words listed.
+fn run_explain(category: &str) -> ExitCode {
+    match ridl_diff::category_from_word(category) {
+        Some(category) => {
+            println!("{}", ridl_diff::category_word(category));
+            println!("{}", ridl_diff::explain(category));
+            ExitCode::SUCCESS
+        }
+        None => {
+            eprintln!("error: unknown change category `{category}`");
+            eprintln!("the categories `ridl diff` reports are:");
+            for known in ridl_diff::CATEGORIES {
+                eprintln!("  {}", ridl_diff::category_word(known));
+            }
+            ExitCode::from(2)
+        }
     }
 }
 

@@ -91,6 +91,7 @@ fn diff_decl(pkg: &str, name: &str, old: &v2::Decl, new: &v2::Decl, changes: &mu
     if envelope_differs(old, new) {
         emit(changes, path.clone(), Category::DocOnly, None, None);
     }
+    emit_visibility(changes, path.clone(), old.visibility, new.visibility);
 
     use v2::decl::Kind;
     match (&old.kind, &new.kind) {
@@ -189,8 +190,20 @@ fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec
 /// A coarse comparison of a composite type body (struct fields, enum values,
 /// enum-set bits, union arms) by member name. A member present on one side is
 /// an addition or removal; a member changed in place is a single
-/// `ConstraintChanged`. The fine-grained per-member classification is E2.8b's
-/// job (task 17).
+/// `ConstraintChanged`. The classifier reads the bodies themselves to decide an
+/// addition's direction, so the append-only rule of typl §7.4 is judged there.
+///
+/// **Known limitation (carried debt).** This comparison is keyed on member
+/// names and never reads the body's `reserved` list, so it cannot tell a bare
+/// deletion from typl §7.4's sanctioned "delete by tombstone" — both arrive at
+/// the classifier as `DeclRemoved`, which classifies breaking. That errs in the
+/// safe direction, but it makes a sanctioned retirement gate CI, so a team that
+/// retires a struct field correctly still has to override the gate. Closing it
+/// means matching removals against the container's `reserved` entries — the IR
+/// carries everything needed (`Reserved.name` for struct and union bodies,
+/// `Reserved.value` for enum bodies). Recorded for a later epic rather than
+/// taken here, because E2.8b's normative table scopes its tombstone row to
+/// interactions.
 fn diff_composite(
     path: &str,
     old_names: Vec<String>,
@@ -264,6 +277,12 @@ fn diff_interfaces(
                         None,
                     );
                 }
+                emit_visibility(
+                    changes,
+                    format!("{pkg}/{name}"),
+                    old_iface.visibility,
+                    new_iface.visibility,
+                );
                 diff_interface(pkg, name, old_iface, new_iface, changes);
             }
             None => emit(
@@ -315,7 +334,7 @@ fn diff_interface(
         let member_path = format!("{pkg}/{iface}/{name}");
         if let Some((new_ord, new_decl)) = new_live_map.get(name) {
             matched.push((name, *old_ord, *new_ord));
-            diff_interaction(&member_path, old_decl, new_decl, changes);
+            diff_interaction(iface, &member_path, old_decl, new_decl, changes);
         } else if let Some(reserved_ord) = new_reserved.get(name) {
             // A tombstone must hold the retired interaction's own ordinal
             // (ridl §11). A tombstone placed elsewhere lets the surviving
@@ -499,11 +518,20 @@ fn anchor_ordinals(
 }
 
 /// Compares two matched interactions of the same name: kind, then the
-/// kind-specific contract-carrying fields, then the doc envelope.
-fn diff_interaction(path: &str, old: &v2::Decl, new: &v2::Decl, changes: &mut Vec<Change>) {
+/// kind-specific contract-carrying fields, then the doc envelope. `iface` is the
+/// enclosing interface name, needed to derive an inline `T | E` transport
+/// identity (ADR-0008 decision 4).
+fn diff_interaction(
+    iface: &str,
+    path: &str,
+    old: &v2::Decl,
+    new: &v2::Decl,
+    changes: &mut Vec<Change>,
+) {
     if envelope_differs(old, new) {
         emit(changes, path.to_string(), Category::DocOnly, None, None);
     }
+    emit_visibility(changes, path.to_string(), old.visibility, new.visibility);
 
     use v2::decl::Kind;
     match (&old.kind, &new.kind) {
@@ -591,8 +619,8 @@ fn diff_interaction(path: &str, old: &v2::Decl, new: &v2::Decl, changes: &mut Ve
                     changes,
                     path.to_string(),
                     Category::ReturnChanged,
-                    Some(return_str(a.return_type.as_ref())),
-                    Some(return_str(b.return_type.as_ref())),
+                    Some(return_str(iface, old.ordinal, a.return_type.as_ref())),
+                    Some(return_str(iface, new.ordinal, b.return_type.as_ref())),
                 );
             }
             if a.contracts != b.contracts {
@@ -669,13 +697,10 @@ fn diff_service(
     changes: &mut Vec<Change>,
 ) {
     let path = format!("{pkg}/{name}");
-    if old.doc != new.doc
-        || old.labels != new.labels
-        || old.deprecated != new.deprecated
-        || old.visibility != new.visibility
-    {
+    if old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated {
         emit(changes, path.clone(), Category::DocOnly, None, None);
     }
+    emit_visibility(changes, path.clone(), old.visibility, new.visibility);
 
     use v2::service::Shape;
     match (&old.shape, &new.shape) {
@@ -763,18 +788,43 @@ fn union_arm_names(def: &v2::UnionDef) -> Vec<String> {
 // Envelope comparison.
 // ==========================================================================
 
+/// Whether anything in the doc envelope changed.
+///
+/// Visibility is deliberately **not** part of this comparison. It is metadata
+/// in the surface grammar, but it is not metadata to a consumer: `internal`
+/// maps to a target's package-private mechanism — Rust `pub(crate)`, a
+/// non-exported TypeScript member (ADR-0002 §8) — so narrowing it deletes the
+/// declaration from every out-of-package consumer. It travels as its own
+/// category so it can be classified by direction.
 fn envelope_differs(old: &v2::Decl, new: &v2::Decl) -> bool {
-    old.doc != new.doc
-        || old.labels != new.labels
-        || old.deprecated != new.deprecated
-        || old.visibility != new.visibility
+    old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
 }
 
 fn interface_envelope_differs(old: &v2::Interface, new: &v2::Interface) -> bool {
-    old.doc != new.doc
-        || old.labels != new.labels
-        || old.deprecated != new.deprecated
-        || old.visibility != new.visibility
+    old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
+}
+
+/// Emits a [`Category::VisibilityChanged`] when the two sides publish a
+/// declaration at different visibilities. The classifier reads the direction.
+fn emit_visibility(changes: &mut Vec<Change>, path: String, old: i32, new: i32) {
+    if old == new {
+        return;
+    }
+    emit(
+        changes,
+        path,
+        Category::VisibilityChanged,
+        Some(visibility_name(old).to_string()),
+        Some(visibility_name(new).to_string()),
+    );
+}
+
+fn visibility_name(visibility: i32) -> &'static str {
+    match v2::Visibility::try_from(visibility) {
+        Ok(v2::Visibility::Public) => "public",
+        Ok(v2::Visibility::Internal) => "internal",
+        _ => "unspecified",
+    }
 }
 
 // ==========================================================================
@@ -885,15 +935,25 @@ fn contracts_str(contracts: &[v2::Contract]) -> String {
     format!("[{}]", rendered.join("; "))
 }
 
-fn return_str(return_type: Option<&v2::ReturnType>) -> String {
+/// Renders a query return shape.
+///
+/// An inline `T | E` renders with its synthesized transport identity alongside
+/// the arms (ADR-0008 decision 4: interface + interaction ordinal + ordered arm
+/// types). The identity is what a backend keys on, so a report that only showed
+/// the arm spelling would hide which of the two changed things actually moved —
+/// the same arms at a different ordinal are a different identity.
+fn return_str(iface: &str, ordinal: u32, return_type: Option<&v2::ReturnType>) -> String {
     let Some(return_type) = return_type else {
         return "()".to_string();
     };
     match &return_type.kind {
         Some(v2::return_type::Kind::Value(value)) => field_type_str(value),
-        Some(v2::return_type::Kind::Fallible(fallible)) => {
-            format!("{} | {}", fallible.ok, fallible.err)
-        }
+        Some(v2::return_type::Kind::Fallible(fallible)) => format!(
+            "{} | {} (transport identity {})",
+            fallible.ok,
+            fallible.err,
+            v2::fallible_transport_identity(iface, ordinal, fallible)
+        ),
         None => "()".to_string(),
     }
 }
