@@ -22,12 +22,13 @@ use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_core::parse_file;
 use ridl_syntax::ast::{
-    AstNode, Definition, HasModifiers, HasName, Import, QualifiedName, SourceFile,
+    AstNode, Definition, HasModifiers, HasName, Import, InterfaceDef, QualifiedName, SourceFile,
 };
 use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::TextRange;
 
-/// The kind of a declared name — one variant per typl definition keyword.
+/// The kind of a declared name — one variant per typl definition keyword,
+/// plus the ridl `interface` declaration (E2.1b).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SymbolKind {
     Type,
@@ -36,6 +37,7 @@ pub enum SymbolKind {
     Enum,
     EnumSet,
     Union,
+    Interface,
 }
 
 // ==========================================================================
@@ -104,26 +106,20 @@ pub fn resolve_package(
     let mut diagnostics = Vec::new();
     let mut symbols: HashMap<String, Symbol> = HashMap::new();
 
-    // 1. Local declarations. First declaration wins everywhere (ADR-0007
-    //    decision 6); a later duplicate is TYPL-009 at its own name.
+    // 1. Local declarations, in source order across both declaration shapes
+    //    (typl definitions and ridl interfaces). First declaration wins
+    //    everywhere (ADR-0007 decision 6); a later duplicate is TYPL-009 at
+    //    its own name.
     for (index, file) in files.iter().enumerate() {
         let source = source_file(db, *file);
-        for definition in source.definitions() {
-            let Some(name) = declared_name(&definition) else {
+        for declaration in declarations(&source) {
+            let Some(name) = declaration.name() else {
                 continue;
             };
-            let range = name_range(&definition);
+            let range = declaration.name_range();
             match symbols.entry(name.clone()) {
                 Entry::Vacant(entry) => {
-                    entry.insert(Symbol {
-                        name,
-                        package: package_name.clone(),
-                        kind: kind_of(&definition),
-                        internal: definition.is_internal(),
-                        is_error: definition.is_error(),
-                        file: *file,
-                        range,
-                    });
+                    entry.insert(declaration.symbol(name, &package_name, *file, range));
                 }
                 Entry::Occupied(_) => diagnostics.push(diagnostic(
                     DiagCode::TYPL_009,
@@ -635,22 +631,82 @@ pub(crate) fn declared_symbols(
     let mut symbols: HashMap<String, Symbol> = HashMap::new();
     for file in package.files(db) {
         let source = source_file(db, *file);
-        for definition in source.definitions() {
-            let Some(name) = declared_name(&definition) else {
+        for declaration in declarations(&source) {
+            let Some(name) = declaration.name() else {
                 continue;
             };
-            symbols.entry(name.clone()).or_insert(Symbol {
-                name,
-                package: package_name.clone(),
-                kind: kind_of(&definition),
-                internal: definition.is_internal(),
-                is_error: definition.is_error(),
-                file: *file,
-                range: name_range(&definition),
-            });
+            let range = declaration.name_range();
+            symbols
+                .entry(name.clone())
+                .or_insert_with(|| declaration.symbol(name, &package_name, *file, range));
         }
     }
     symbols
+}
+
+/// A named top-level declaration — a typl definition or a ridl interface
+/// (E2.1b). [`declarations`] yields them in source order, so the first-wins
+/// tiebreak (ADR-0007 decision 6) holds across the two shapes.
+pub(crate) enum Declaration {
+    Definition(Definition),
+    Interface(InterfaceDef),
+}
+
+/// The declarations of a source file, in source order.
+pub(crate) fn declarations(source: &SourceFile) -> impl Iterator<Item = Declaration> + use<> {
+    source.syntax().children().filter_map(|node| {
+        if let Some(definition) = Definition::cast(node.clone()) {
+            return Some(Declaration::Definition(definition));
+        }
+        InterfaceDef::cast(node).map(Declaration::Interface)
+    })
+}
+
+impl Declaration {
+    fn name(&self) -> Option<String> {
+        match self {
+            Self::Definition(definition) => declared_name(definition),
+            Self::Interface(interface) => declared_name(interface),
+        }
+    }
+
+    fn name_range(&self) -> TextRange {
+        match self {
+            Self::Definition(definition) => name_range(definition),
+            Self::Interface(interface) => name_range(interface),
+        }
+    }
+
+    /// The [`Symbol`] this declaration binds.
+    fn symbol(
+        &self,
+        name: String,
+        package_name: &str,
+        file: InputFile,
+        range: TextRange,
+    ) -> Symbol {
+        let (kind, internal, is_error) = match self {
+            Self::Definition(definition) => (
+                kind_of(definition),
+                definition.is_internal(),
+                definition.is_error(),
+            ),
+            Self::Interface(interface) => (
+                SymbolKind::Interface,
+                interface.is_internal(),
+                interface.is_error(),
+            ),
+        };
+        Symbol {
+            name,
+            package: package_name.to_string(),
+            kind,
+            internal,
+            is_error,
+            file,
+            range,
+        }
+    }
 }
 
 /// The parsed [`SourceFile`] of one input, through the memoized parse query.
@@ -1019,6 +1075,74 @@ mod package_tests {
         assert_eq!(timestamp.kind, SymbolKind::Type);
         assert_eq!(timestamp.package.as_str(), "ridl.std");
         assert!(resolution.diagnostics.is_empty());
+    }
+
+    /// A single-file workspace-member package whose one file is `.ridl`.
+    fn ridl_package(db: &RidlDatabase, name: &str, text: &str) -> Package {
+        Package::new(
+            db,
+            name.to_string(),
+            vec![input(db, &format!("{name}.ridl"), text)],
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+        )
+    }
+
+    #[test]
+    fn interface_names_enter_the_symbol_table() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = ridl_package(&db, "app", "package app\ninterface Cruise { }\n");
+        let ws = Workspace::new(&db, vec![app], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, app, std);
+        let symbol = resolution.symbols.get("Cruise").expect("`Cruise` binds");
+        assert_eq!(symbol.kind, SymbolKind::Interface);
+        assert!(resolution.diagnostics.is_empty());
+    }
+
+    #[test]
+    fn interface_duplicating_a_type_is_typl_009_and_the_type_wins() {
+        // A duplicate against any declaration kind is TYPL-009, first wins
+        // (ADR-0007 decision 6, unchanged for E2).
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\ntype Cruise: m\ninterface Cruise { }\n",
+        );
+        let ws = Workspace::new(&db, vec![app], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, app, std);
+        assert_eq!(codes(&resolution), vec!["TYPL-009"]);
+        assert_eq!(
+            resolution.symbols["Cruise"].kind,
+            SymbolKind::Type,
+            "the first declaration wins the binding",
+        );
+    }
+
+    #[test]
+    fn type_duplicating_an_interface_is_typl_009_and_the_interface_wins() {
+        // The mirror order: first-wins must follow source order across the
+        // two declaration shapes, not process one shape before the other.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\ninterface Cruise { }\ntype Cruise: m\n",
+        );
+        let ws = Workspace::new(&db, vec![app], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, app, std);
+        assert_eq!(codes(&resolution), vec!["TYPL-009"]);
+        assert_eq!(
+            resolution.symbols["Cruise"].kind,
+            SymbolKind::Interface,
+            "the first declaration wins the binding",
+        );
     }
 
     #[test]

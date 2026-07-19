@@ -323,5 +323,6 @@ fn symbol_kind(kind: SymbolKind) -> &'static str {
         SymbolKind::Enum => "enum",
         SymbolKind::EnumSet => "enumset",
         SymbolKind::Union => "union",
+        SymbolKind::Interface => "interface",
     }
 }

@@ -84,6 +84,15 @@ impl DiagCode {
     /// Reserved word used as an identifier.
     pub const FORM_105: DiagCode = DiagCode("FORM-105");
 
+    // --- FORM attribute semantics (gf §4.3) — the shared attribute
+    // allow-list codes, emitted by the checker (E2 task 5) ---
+    /// Unknown attribute key — not a key the general form §4.3 table defines.
+    pub const FORM_106: DiagCode = DiagCode("FORM-106");
+    /// Attribute key not allowed on this declaration kind (general form §4.3).
+    pub const FORM_107: DiagCode = DiagCode("FORM-107");
+    /// Duplicate attribute key in one `[ ]` block (general form §4.3).
+    pub const FORM_108: DiagCode = DiagCode("FORM-108");
+
     // --- typl codes emitted in E1 so far (typl reference §16) ---
     /// More than one `package` declaration in a single file (typl §16.1).
     /// Emitted by the package loader (E1.3).
@@ -175,6 +184,11 @@ impl DiagCode {
     pub const TYPL_213: DiagCode = DiagCode("TYPL-213");
     /// `error union` containing a non-error-typed arm (typl §16.3).
     pub const TYPL_214: DiagCode = DiagCode("TYPL-214");
+    /// Stream type `<T>` outside interaction position (typl §16.4, ridl
+    /// §12.3). Emitted by the parser in a `.typl` parse (E2 task 2) and by
+    /// the checker for struct fields and collections in a `.ridl` file
+    /// (E2 task 5).
+    pub const TYPL_301: DiagCode = DiagCode("TYPL-301");
     /// Timing annotation or duration literal in a typl context (typl §16.4).
     pub const TYPL_302: DiagCode = DiagCode("TYPL-302");
     /// Interaction declaration in a typl context (typl §16.4, ADR-0007
@@ -189,6 +203,44 @@ impl DiagCode {
     pub const TYPL_405: DiagCode = DiagCode("TYPL-405");
 
     // --- RIDL codes emitted in E2 so far (ridl reference §16) ---
+    /// Explicit return type on a `command` — a command always returns `()`
+    /// (ridl §6.1, §16.1). Emitted by the checker (E2 task 5).
+    pub const RIDL_104: DiagCode = DiagCode("RIDL-104");
+    /// `query` returning `()` — use `command` (ridl §7.1, §16.1). Emitted by
+    /// the checker (E2 task 5).
+    pub const RIDL_105: DiagCode = DiagCode("RIDL-105");
+    /// Timing annotation or attribute block on `final` (ridl §8, §16.1).
+    /// Emitted by the checker (E2 task 5).
+    pub const RIDL_106: DiagCode = DiagCode("RIDL-106");
+    /// Type declaration inside an `interface` body — typl declarations live at
+    /// package level (ridl §14.1, §16.1). Emitted by the checker (E2 task 5)
+    /// from the parser's recovered ErrorNode.
+    pub const RIDL_107: DiagCode = DiagCode("RIDL-107");
+    /// Signal payload type has no derivable init value and no `= value`
+    /// override (ridl §4.4, §16.1). Emitted by the checker (E2 task 5).
+    pub const RIDL_109: DiagCode = DiagCode("RIDL-109");
+    /// Signal `= value` init override violates the payload type's constraints
+    /// (ridl §4.4, §16.1). Emitted by the checker (E2 task 5).
+    pub const RIDL_110: DiagCode = DiagCode("RIDL-110");
+    /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
+    /// Emitted by the checker (E2 task 5).
+    pub const RIDL_201: DiagCode = DiagCode("RIDL-201");
+    /// Stream element type not a named type, `string`, or `bytes` (ridl
+    /// §12.2, §16.2). Emitted by the checker (E2 task 5).
+    pub const RIDL_202: DiagCode = DiagCode("RIDL-202");
+    /// `require` or `ensure` on `signal`, `event`, or `final` (ridl §13,
+    /// §16.3). Emitted by the checker (E2 task 5).
+    pub const RIDL_301: DiagCode = DiagCode("RIDL-301");
+    /// `ensure` on `command` — a command has no result to observe (ridl §6.1,
+    /// §16.3). Emitted by the checker (E2 task 5).
+    pub const RIDL_302: DiagCode = DiagCode("RIDL-302");
+    /// Interaction re-declared under a `reserved` name (ridl §11, §16.4).
+    /// Emitted by the checker (E2 task 5).
+    pub const RIDL_401: DiagCode = DiagCode("RIDL-401");
+    /// Duplicate interaction name within an interface (ridl §14.1, §16.4).
+    /// Emitted by the checker (E2 task 5); lowering keeps the first
+    /// declaration only.
+    pub const RIDL_402: DiagCode = DiagCode("RIDL-402");
     /// Behaviour, user-interaction, or architecture declaration in a ridl
     /// context (ridl §16.4): a reserved word of the uxdl/rmdl/rsdl profiles at
     /// declaration-start position in a `.ridl` parse. Emitted by the parser
@@ -398,9 +450,11 @@ pub struct CatalogEntry {
     pub summary: &'static str,
 }
 
-/// The full FORM catalogue (ADR-0007 decision 2): lexical `0xx` and parse `1xx`.
-/// Every FORM code is listed even when no pass emits it yet, so the error index
-/// has one authoritative source. FORM diagnostics are all errors.
+/// The full FORM catalogue (ADR-0007 decision 2): lexical `0xx`, parse `1xx`,
+/// and the attribute-semantics codes 106–108 the checker emits for the general
+/// form §4.3 allow-list (E2 task 5). Every FORM code is listed even when no
+/// pass emits it yet, so the error index has one authoritative source. FORM
+/// diagnostics are all errors.
 pub const FORM_CATALOG: &[CatalogEntry] = &[
     CatalogEntry {
         code: DiagCode::FORM_001,
@@ -451,6 +505,21 @@ pub const FORM_CATALOG: &[CatalogEntry] = &[
         code: DiagCode::FORM_105,
         severity: Severity::Error,
         summary: "reserved word used as an identifier",
+    },
+    CatalogEntry {
+        code: DiagCode::FORM_106,
+        severity: Severity::Error,
+        summary: "unknown attribute key",
+    },
+    CatalogEntry {
+        code: DiagCode::FORM_107,
+        severity: Severity::Error,
+        summary: "attribute key not allowed on this declaration kind",
+    },
+    CatalogEntry {
+        code: DiagCode::FORM_108,
+        severity: Severity::Error,
+        summary: "duplicate attribute key in one block",
     },
 ];
 
@@ -687,7 +756,7 @@ mod tests {
             codes,
             vec![
                 "FORM-001", "FORM-002", "FORM-003", "FORM-004", "FORM-005", "FORM-101", "FORM-102",
-                "FORM-103", "FORM-104", "FORM-105",
+                "FORM-103", "FORM-104", "FORM-105", "FORM-106", "FORM-107", "FORM-108",
             ],
         );
         assert!(
