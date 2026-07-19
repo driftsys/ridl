@@ -5,6 +5,7 @@
 
 pub mod check;
 pub mod resolve;
+pub mod ucum;
 
 pub use check::{CheckError, check};
 pub use resolve::{Resolution, ResolveError, SymbolKind, resolve};
