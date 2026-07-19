@@ -104,6 +104,20 @@ interface VehicleStatus {
 }
 ";
 
+/// A breaking change that moves no ordinal: the payload type narrows and the
+/// staleness bound is raised. `ridl diff` gates on both; the desk check must
+/// stay silent, because general form §6.3 asks it for ordinal drift only.
+const NON_ORDINAL: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+type DoorState: integer [0..1]
+type NarrowState: integer [0..0]
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: NarrowState @[100ms..2s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+
 /// Lays out a one-package workspace holding `source` and returns its root.
 fn package_workspace(dir: &TempDir, source: &str) -> PathBuf {
     dir.write("ridl.toml", MANIFEST);
@@ -364,5 +378,194 @@ interface VehicleStatus {
     assert!(
         !stderr.contains("RIDL-407"),
         "no desk warning over a broken compile:\n{stderr}",
+    );
+}
+
+/// The desk check reports ordinal drift and nothing else. A payload narrowing
+/// and a raised staleness bound are both breaking — `ridl diff` says so in the
+/// same breath — but neither moves an ordinal, so the desk stays quiet and CI
+/// keeps that job (general form §6.3).
+#[test]
+fn check_is_silent_on_a_non_ordinal_breaking_change() {
+    let dir = TempDir::new("nonordinal");
+    let root = package_workspace(&dir, BASE);
+    let out = dir.path().join("published");
+    ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        out.as_os_str(),
+    ]);
+
+    dir.write("cluster.ridl", NON_ORDINAL);
+
+    // The control: the very same edit is breaking to `ridl diff`.
+    let snapshot = out.join("veh.cluster.ir.json");
+    let (diff_code, diff_stdout, _) =
+        ridl(&["diff".as_ref(), snapshot.as_os_str(), root.as_os_str()]);
+    assert_eq!(diff_code, 1, "the edit is breaking:\n{diff_stdout}");
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        out.as_os_str(),
+    ]);
+
+    assert!(
+        !stderr.contains("RIDL-407"),
+        "a breaking change that moves no ordinal is not the desk check's job:\n{stderr}",
+    );
+    assert_eq!(code, 0, "and it does not gate the check:\n{stderr}");
+}
+
+/// Snapshots are matched to packages by the package name *inside* the file, not
+/// by the file's name — so a renamed or hand-managed snapshot still lines up
+/// with the package it holds.
+#[test]
+fn check_matches_snapshots_by_package_name_not_file_name() {
+    let dir = TempDir::new("byname");
+    let root = package_workspace(&dir, BASE);
+    let out = dir.path().join("published");
+    ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        out.as_os_str(),
+    ]);
+    std::fs::rename(
+        out.join("veh.cluster.ir.json"),
+        out.join("zzz-totally-wrong-name.ir.json"),
+    )
+    .expect("rename the snapshot");
+
+    dir.write("cluster.ridl", REORDERED);
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        out.as_os_str(),
+    ]);
+
+    assert!(
+        stderr.contains("RIDL-407") && stderr.contains("veh.cluster/VehicleStatus/doorClosed"),
+        "the misnamed snapshot is still attributed to its package:\n{stderr}",
+    );
+    assert_eq!(code, 0, "the exit code is untouched:\n{stderr}");
+}
+
+/// `ridl diff <baseline-dir> <workspace>` reads the directory as a snapshot
+/// set. Compiling it as source instead would diff the current source against
+/// itself and always report `identical` — a CI gate that fails open.
+#[test]
+fn diff_reads_a_baseline_directory_as_a_snapshot_set() {
+    let dir = TempDir::new("diffdir");
+    let root = package_workspace(&dir, BASE);
+    ridl(&["baseline".as_ref(), root.as_os_str()]);
+    let baseline = root.join(".ridl/baseline");
+
+    dir.write("cluster.ridl", REORDERED);
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), baseline.as_os_str(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the reorder is breaking:\n{stdout}{stderr}");
+    assert!(
+        stdout.contains("interaction_reordered")
+            && stdout.contains("veh.cluster/VehicleStatus/doorClosed"),
+        "the report names the change:\n{stdout}",
+    );
+}
+
+/// The same comparison over an unchanged workspace is clean.
+#[test]
+fn diff_of_an_unchanged_workspace_against_its_baseline_is_clean() {
+    let dir = TempDir::new("diffsame");
+    let root = package_workspace(&dir, BASE);
+    ridl(&["baseline".as_ref(), root.as_os_str()]);
+    let baseline = root.join(".ridl/baseline");
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), baseline.as_os_str(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "nothing changed:\n{stdout}{stderr}");
+    assert!(stdout.contains("identical"), "and it says so:\n{stdout}");
+}
+
+/// A directory holding no `.ir.json` is source, not a snapshot set: it still
+/// takes the compile path, so source-tree comparison is unaffected.
+#[test]
+fn diff_of_a_directory_without_snapshots_compiles_it_as_source() {
+    let old = TempDir::new("srcold");
+    let old_root = package_workspace(&old, BASE);
+    let new = TempDir::new("srcnew");
+    let new_root = package_workspace(&new, REORDERED);
+
+    let (code, stdout, stderr) =
+        ridl(&["diff".as_ref(), old_root.as_os_str(), new_root.as_os_str()]);
+
+    assert_eq!(code, 1, "two source trees still compare:\n{stdout}{stderr}");
+    assert!(
+        stdout.contains("interaction_reordered"),
+        "and the reorder is found:\n{stdout}",
+    );
+}
+
+/// Re-publishing a baseline regenerates it wholesale: a snapshot for a package
+/// the workspace no longer declares is dropped rather than left to rot.
+#[test]
+fn baseline_drops_a_snapshot_whose_package_is_gone() {
+    let dir = TempDir::new("rename");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write("cluster.ridl", BASE);
+    let root = dir.path().to_path_buf();
+    ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert!(
+        root.join(".ridl/baseline/veh.cluster.ir.json").is_file(),
+        "the first baseline is published",
+    );
+
+    // Rename the package: the manifest and the source move together.
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.dash\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write("cluster.ridl", &BASE.replace("veh.cluster", "veh.dash"));
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the renamed workspace compiles:\n{stderr}");
+
+    let baseline = root.join(".ridl/baseline");
+    assert!(
+        baseline.join("veh.dash.ir.json").is_file(),
+        "the new package is published",
+    );
+    assert!(
+        !baseline.join("veh.cluster.ir.json").exists(),
+        "the snapshot under the old package name is gone",
+    );
+}
+
+/// A workspace that does not compile leaves the published baseline untouched —
+/// re-publishing must never destroy a good baseline.
+#[test]
+fn baseline_keeps_the_published_snapshots_when_the_compile_fails() {
+    let dir = TempDir::new("keep");
+    let root = package_workspace(&dir, BASE);
+    ridl(&["baseline".as_ref(), root.as_os_str()]);
+    let snapshot = root.join(".ridl/baseline/veh.cluster.ir.json");
+    let published = std::fs::read_to_string(&snapshot).expect("read the published snapshot");
+
+    dir.write(
+        "cluster.ridl",
+        "package veh.cluster
+interface VehicleStatus {
+  event doorClosed: Nope @[100ms..1s]
+}
+",
+    );
+    let (code, _, _) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the broken workspace fails to publish");
+    assert_eq!(
+        std::fs::read_to_string(&snapshot).expect("the snapshot survives"),
+        published,
+        "the published baseline is exactly as it was",
     );
 }

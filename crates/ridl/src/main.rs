@@ -201,20 +201,31 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
 
 /// Loads one side of a diff into a set of resolved packages.
 ///
-/// An `.ir.json` file is deserialized directly; anything else (a `.typl` or
-/// `.ridl` file, a package directory, or a workspace root) is compiled in
-/// process through `ridlc::compile_workspace`. A read, parse, or compile error
-/// renders to stderr and yields exit code 2 — `ridl diff` never emits a diff
-/// report over a snapshot it could not build.
+/// Three input forms, in order:
+///
+/// 1. an `.ir.json` file — deserialized directly;
+/// 2. a directory holding `.ir.json` files — deserialized as a snapshot set.
+///    This is the form `.ridl/baseline/` takes, and an N-package workspace
+///    publishes N snapshots, so `ridl diff .ridl/baseline .` has to read the
+///    whole directory. Falling through to a compile here would silently diff
+///    the current source against itself and always report `identical`
+///    (ADR-0008 decision 14: `ridl diff` reads the workspace-local baseline);
+/// 3. anything else — a `.typl`/`.ridl` file, a package directory, or a
+///    workspace root — compiled in process through `ridlc::compile_workspace`.
+///    A directory with no `.ir.json` in it is source, and takes this path.
+///
+/// A read, parse, or compile error renders to stderr and yields exit code 2 —
+/// `ridl diff` never emits a diff report over a snapshot it could not build.
 fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     if is_ir_json(entry) {
-        return match ridl_diff::load_ir_json(entry) {
-            Ok(package) => Ok(vec![package]),
-            Err(err) => {
-                eprintln!("error: {}: {err}", entry.display());
-                Err(ExitCode::from(2))
-            }
-        };
+        return load_snapshots(&[entry.to_path_buf()]);
+    }
+
+    if entry.is_dir() {
+        let snapshots = snapshot_files(entry)?;
+        if !snapshots.is_empty() {
+            return load_snapshots(&snapshots);
+        }
     }
 
     let mut db = ridl_core::RidlDatabase::default();
@@ -311,16 +322,79 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
 /// against. One `.ir.json` holds exactly one package, so an N-package workspace
 /// writes N files, one per package name; `ridl check` matches them back up by
 /// the package name inside each file, never by file name.
+///
+/// The baseline is regenerated **wholesale**: the published directory ends up
+/// holding exactly the packages the workspace declares now, so renaming a
+/// package leaves no snapshot behind under the old name. Publishing goes
+/// through a staging directory to get that without risking the opposite
+/// failure — clearing the directory up front would destroy a good baseline
+/// whenever the workspace happens not to compile.
 fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     let out_dir = out
         .map(Path::to_path_buf)
         .unwrap_or_else(|| default_baseline_dir(path));
-    finish(ridlc::run_build(
-        path,
-        &out_dir,
-        &[Emit::IrJson],
-        false.into(),
-    ))
+    let staging = staging_dir(&out_dir);
+    let _ = std::fs::remove_dir_all(&staging);
+
+    let run = match ridlc::run_build(path, &staging, &[Emit::IrJson], false.into()) {
+        Ok(run) => run,
+        Err(err) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
+
+    // An error-bearing run wrote nothing (`ridlc` gates every emit on a clean
+    // compile), so there is nothing to publish and the existing baseline stays
+    // exactly as it was.
+    if run.has_error() {
+        let _ = std::fs::remove_dir_all(&staging);
+        return finish(Ok(run));
+    }
+
+    if let Err(err) = publish_baseline(&staging, &out_dir) {
+        let _ = std::fs::remove_dir_all(&staging);
+        eprintln!(
+            "error: cannot publish the baseline to {}: {err}",
+            out_dir.display()
+        );
+        return ExitCode::from(2);
+    }
+
+    finish(Ok(run))
+}
+
+/// The directory the snapshots are built into before they are published: a
+/// hidden sibling of `out_dir`, so the move into place is a rename within one
+/// filesystem.
+fn staging_dir(out_dir: &Path) -> PathBuf {
+    let name = out_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("baseline");
+    out_dir
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(format!(".{name}.staging"))
+}
+
+/// Replaces the `.ir.json` set in `out_dir` with the freshly built one in
+/// `staging`, dropping any snapshot whose package the workspace no longer
+/// declares. Only `.ir.json` files are touched: `out_dir` may be a directory a
+/// user pointed `--out` at, and nothing else in it is this command's to delete.
+fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(out_dir)?;
+    for stale in ir_json_files(out_dir)? {
+        std::fs::remove_file(stale)?;
+    }
+    for fresh in ir_json_files(staging)? {
+        let name = fresh
+            .file_name()
+            .expect("a listed snapshot path has a file name");
+        std::fs::rename(&fresh, out_dir.join(name))?;
+    }
+    std::fs::remove_dir_all(staging)
 }
 
 /// Where to read the baseline from, if anywhere.
@@ -421,35 +495,47 @@ fn desk_check(entry: &Path, location: &Path, run: &mut CliRun) -> Result<(), Exi
 }
 
 /// Loads the baseline packages: every `.ir.json` in a directory, in file-name
-/// order, or the single file `location` names. A snapshot that cannot be read
-/// or parsed is exit 2 — a desk check over half a baseline would be a lie about
-/// what is published.
+/// order, or the single file `location` names.
 fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
-        let entries = match std::fs::read_dir(location) {
-            Ok(entries) => entries,
-            Err(err) => {
-                eprintln!(
-                    "error: cannot read the baseline directory {}: {err}",
-                    location.display()
-                );
-                return Err(ExitCode::from(2));
-            }
-        };
-        let mut files: Vec<PathBuf> = entries
-            .flatten()
-            .map(|entry| entry.path())
-            .filter(|path| is_ir_json(path))
-            .collect();
-        files.sort();
-        files
+        snapshot_files(location)?
     } else {
         vec![location.to_path_buf()]
     };
+    load_snapshots(&files)
+}
 
+/// The `.ir.json` snapshots directly inside `dir`, in file-name order.
+fn ir_json_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| is_ir_json(path))
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
+/// [`ir_json_files`] with an unreadable directory turned into exit 2 — a
+/// comparison against a directory that cannot be listed must not quietly become
+/// a comparison against nothing.
+fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, ExitCode> {
+    ir_json_files(dir).map_err(|err| {
+        eprintln!(
+            "error: cannot read the snapshot directory {}: {err}",
+            dir.display()
+        );
+        ExitCode::from(2)
+    })
+}
+
+/// Deserializes every snapshot in `files`. One that cannot be read or parsed is
+/// exit 2 — a comparison against half a baseline would be a lie about what is
+/// published.
+fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let mut packages = Vec::new();
     for file in files {
-        match ridl_diff::load_ir_json(&file) {
+        match ridl_diff::load_ir_json(file) {
             Ok(package) => packages.push(package),
             Err(err) => {
                 eprintln!("error: {}: {err}", file.display());
