@@ -13,10 +13,10 @@
 //! [`package_of`] lookup query, and the pure package-declaration reader the
 //! loader's law checks build on.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 
-use ridl_syntax::SyntaxNode;
 use ridl_syntax::ast::{AstNode as _, ServiceDef, SourceFile};
+use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::TextRange;
 
 use crate::db::InputFile;
@@ -181,6 +181,10 @@ pub fn service_catalog(db: &dyn salsa::Database, ws: Workspace, std: Package) ->
 
     for package in ws.packages(db) {
         let package_name = package.name(db).clone();
+        // The package-wide binding view the resolver builds: local
+        // declarations and imports are collected across every file of the
+        // package, and a local declaration shadows an import.
+        let names = package_names(db, package);
         for file in package.files(db) {
             let file_id = sources.file_id(file.path(db), file.text(db));
             let source = service_source(db, *file);
@@ -220,7 +224,7 @@ pub fn service_catalog(db: &dyn salsa::Database, ws: Workspace, std: Package) ->
                     name,
                     CatalogEntry {
                         package: package_name.clone(),
-                        interface_ref: canonical_interface_ref(&source, &service),
+                        interface_ref: canonical_interface_ref(&names, &service),
                     },
                 );
             }
@@ -243,11 +247,13 @@ fn service_source(db: &dyn salsa::Database, file: InputFile) -> SourceFile {
 /// an inline shape.
 ///
 /// A multi-segment reference is already package-qualified and is kept as
-/// written. A single-segment reference resolves through the declaring file's
-/// `import` statements: an imported interface name canonicalizes to its full
-/// `pkg.Name` path, while an unresolved or same-package name stays bare — the
-/// same bare/qualified split the checker's IR lowering produces.
-fn canonical_interface_ref(source: &SourceFile, service: &ServiceDef) -> String {
+/// written. A single-segment reference resolves against the **package-wide**
+/// binding view ([`package_names`]), in the resolver's precedence: a local
+/// declaration anywhere in the package shadows an import, and an import bound
+/// in any file of the package canonicalizes the name to its full `pkg.Name`
+/// path. An unresolved name stays bare. This is the same bare/qualified split
+/// the checker's IR lowering produces, so the catalog and the IR always agree.
+fn canonical_interface_ref(names: &PackageNames, service: &ServiceDef) -> String {
     let Some(path) = service.interface_ref() else {
         return String::new();
     };
@@ -255,22 +261,65 @@ fn canonical_interface_ref(source: &SourceFile, service: &ServiceDef) -> String 
     if written.is_empty() || written.contains('.') {
         return written;
     }
-    for import in source.imports() {
-        let Some(qualified) = import.qualified_name() else {
-            continue;
-        };
-        let full = significant_node_text(qualified.syntax());
-        let base = full.rsplit('.').next().unwrap_or(full.as_str());
-        let local = import
-            .alias()
-            .and_then(|alias| alias.ident_token())
-            .map(|token| token.text().to_string())
-            .unwrap_or_else(|| base.to_string());
-        if local == written {
-            return full;
-        }
+    // A local declaration shadows an import (ridl-sem `apply_imports`), so a
+    // name declared anywhere in this package stays bare.
+    if names.locals.contains(&written) {
+        return written;
+    }
+    if let Some(full) = names.imports.get(&written) {
+        return full.clone();
     }
     written
+}
+
+/// The package-wide names a reference can bind to, mirroring the resolver's
+/// precedence: local declarations (any file) shadow imports (any file).
+struct PackageNames {
+    locals: HashSet<String>,
+    imports: HashMap<String, String>,
+}
+
+fn package_names(db: &dyn salsa::Database, package: &Package) -> PackageNames {
+    let mut locals = HashSet::new();
+    let mut imports: HashMap<String, String> = HashMap::new();
+    for file in package.files(db) {
+        let source = service_source(db, *file);
+        for definition in source.definitions() {
+            if let Some(name) = declaration_name(definition.syntax()) {
+                locals.insert(name);
+            }
+        }
+        for interface in source.interfaces() {
+            if let Some(name) = declaration_name(interface.syntax()) {
+                locals.insert(name);
+            }
+        }
+        for import in source.imports() {
+            let Some(qualified) = import.qualified_name() else {
+                continue;
+            };
+            let full = significant_node_text(qualified.syntax());
+            let base = full.rsplit('.').next().unwrap_or(full.as_str()).to_string();
+            let local = import
+                .alias()
+                .and_then(|alias| alias.ident_token())
+                .map(|token| token.text().to_string())
+                .unwrap_or(base);
+            // Among colliding imports the first wins, as in `apply_imports`.
+            imports.entry(local).or_insert(full);
+        }
+    }
+    PackageNames { locals, imports }
+}
+
+/// The identifier of a declaration's `Name` child.
+fn declaration_name(node: &SyntaxNode) -> Option<String> {
+    node.children()
+        .find(|child| child.kind() == SyntaxKind::Name)?
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .find(|token| token.kind() == SyntaxKind::Ident)
+        .map(|token| token.text().to_string())
 }
 
 /// The concatenation of every non-trivia token in `node`'s subtree — the

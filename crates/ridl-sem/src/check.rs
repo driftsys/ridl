@@ -173,6 +173,9 @@ pub fn check_package(
     let mut decls = Vec::new();
     let mut interfaces = Vec::new();
     let mut services = Vec::new();
+    // Service dotted names already lowered in this package, so a same-package
+    // duplicate lowers once (first-wins).
+    let mut lowered_services: HashSet<String> = HashSet::new();
     let mut composite_starts = Vec::new();
     for (index, file) in files.iter().enumerate() {
         checker.current_file = index;
@@ -202,10 +205,18 @@ pub fn check_package(
         }
         // Services (E2.13): the global published declarations. Their dotted
         // names live in the workspace catalog namespace, not the type
-        // namespace, so there is no per-package first-wins here — cross-package
-        // uniqueness is `service_catalog`'s job (RIDL-140). Every service in
-        // the package lowers to `Package.services`.
+        // namespace, so the resolver's `is_winner` does not apply — uniqueness
+        // across the workspace is `service_catalog`'s job (RIDL-140). A
+        // same-package duplicate still lowers only once, first-wins, so the IR
+        // never carries a name twice while the catalog holds one entry.
         for service in source.services() {
+            let name = service
+                .name()
+                .map(|dotted| significant_text(dotted.syntax()))
+                .unwrap_or_default();
+            if !name.is_empty() && !lowered_services.insert(name) {
+                continue;
+            }
             services.push(checker.lower_service(&service));
         }
         // Stream-position narrowing runs on ridl-profile files only: in a
@@ -2712,10 +2723,14 @@ impl Checker<'_> {
     /// so it is never a `SymbolKind`. Services always publish with public
     /// visibility — a global contract takes no `internal` modifier.
     fn lower_service(&mut self, service: &ast::ServiceDef) -> v2::Service {
-        let name = service
-            .name()
+        let dotted = service.name();
+        let name = dotted
+            .as_ref()
             .map(|dotted| significant_text(dotted.syntax()))
             .unwrap_or_default();
+        if let Some(dotted) = &dotted {
+            self.check_service_name(dotted);
+        }
         let doc_info = docs::scan(&service.doc_comments());
         let shape = match service.interface_ref() {
             // The named-shape form: the reference must name an interface.
@@ -2737,11 +2752,32 @@ impl Checker<'_> {
         }
     }
 
+    /// A service's dotted global name is reverse-domain, like a package name:
+    /// every segment is `lowercase_id` — an ASCII lowercase letter followed by
+    /// ASCII lowercase letters or digits (ridl §14.5, ADR-0002 §1, the same
+    /// rule the manifest enforces for package names). The parser accepts any
+    /// identifier run and the checker narrows, the E1 discipline. No §16 code
+    /// covers the name shape, so this is a description-first diagnostic (the
+    /// [`Checker::resolve_type_path`] precedent).
+    fn check_service_name(&mut self, dotted: &ast::DottedName) {
+        for segment in dotted.segments() {
+            let text = segment.text();
+            if !is_lowercase_name_segment(text) {
+                self.error(
+                    DiagCode::NONE,
+                    segment.text_range(),
+                    format!(
+                        "service name segment `{text}` is not lowercase — a service has a dotted, reverse-domain global name"
+                    ),
+                );
+            }
+        }
+    }
+
     /// Resolves a service's named interface shape (ridl §14.5). The reference
     /// must name an `interface`; a type, constant, or unknown name is RIDL-141
     /// (§16.4). Returns the canonical reference for the IR — bare same-package,
-    /// fully qualified cross-package — resolved through the declaring file's
-    /// imports.
+    /// fully qualified cross-package — resolved through the package's imports.
     fn lower_service_ref(&mut self, path: &ast::PathType) -> String {
         let written = significant_text(path.syntax());
         let range = path.syntax().text_range();
@@ -3680,6 +3716,19 @@ fn blank_line_before_definition(definition: &Definition) -> bool {
 /// The declared name of a body member (field, arm, enum value, bit,
 /// tombstone) — these nodes carry a `name()` accessor but not the `HasName`
 /// trait.
+/// One segment of a dotted global name: an ASCII lowercase letter followed by
+/// ASCII lowercase letters or digits (ADR-0002 §1). This is the rule
+/// `ridl-core`'s manifest applies to package names; a service's dotted name is
+/// reverse-domain in exactly the same shape (ridl §14.5).
+fn is_lowercase_name_segment(segment: &str) -> bool {
+    let mut chars = segment.chars();
+    match chars.next() {
+        Some(first) if first.is_ascii_lowercase() => {}
+        _ => return false,
+    }
+    chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit())
+}
+
 fn member_name(name: Option<ast::Name>) -> Option<String> {
     Some(name?.ident_token()?.text().to_string())
 }
@@ -3961,7 +4010,7 @@ fn int64_edge(upper: bool) -> ExactValue {
 mod tests {
     use super::*;
     use ridl_core::db::RidlDatabase;
-    use ridl_core::package::PackageOrigin;
+    use ridl_core::package::{PackageOrigin, service_catalog};
     use ridl_core::std_lib::std_package;
     use std::collections::BTreeMap;
 
@@ -6952,5 +7001,153 @@ interface VehicleStatus {
             panic!("inline service must lower to an inline shape");
         };
         assert_eq!(inline.interactions.len(), 1);
+    }
+
+    // --- catalog/IR parity on the canonical interface reference ----------
+    //
+    // The catalog is the SSOT later tasks consume, so its `interface_ref` must
+    // agree with the IR's on every clean program. Both cases below are clean —
+    // no diagnostic on either side would reveal a divergence.
+
+    /// A workspace-member package whose files are all `.ridl`.
+    fn ridl_package_files(db: &RidlDatabase, name: &str, files: &[(&str, &str)]) -> Package {
+        let inputs = files
+            .iter()
+            .map(|(file_name, text)| {
+                InputFile::new(
+                    db,
+                    format!("{}/{file_name}", name.replace('.', "/")),
+                    text.to_string(),
+                )
+            })
+            .collect();
+        Package::new(
+            db,
+            name.to_string(),
+            inputs,
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+        )
+    }
+
+    /// The named shape of the one service in a checked package.
+    fn service_ref(checked: &CheckedPackage) -> &str {
+        let Some(v2::service::Shape::InterfaceRef(reference)) = &checked.ir.services[0].shape
+        else {
+            panic!("expected a named service shape");
+        };
+        reference
+    }
+
+    const CRUISE_CONTROL: &str = "package veh.common\ntype Flag: boolean\ninterface CruiseControl {\n  signal engaged : Flag\n}\n";
+
+    #[test]
+    fn catalog_and_ir_agree_when_the_import_is_in_another_file() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = ridl_package(&db, "veh.common", CRUISE_CONTROL);
+        // Imports bind package-wide (ADR-0002 §2): the import sits in one file
+        // and the service in another, so a file-scoped scan would miss it.
+        let adas = ridl_package_files(
+            &db,
+            "veh.adas",
+            &[
+                (
+                    "a.ridl",
+                    "package veh.adas\nimport veh.common.CruiseControl\n",
+                ),
+                (
+                    "b.ridl",
+                    "package veh.adas\nservice veh.adas.cruise : CruiseControl\n",
+                ),
+            ],
+        );
+        let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
+
+        let checked = check_package(&db, ws, adas, std);
+        let catalog = service_catalog(&db, ws, std);
+
+        assert!(
+            checked.diagnostics.is_empty(),
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(catalog.diagnostics.is_empty());
+        assert_eq!(service_ref(&checked), "veh.common.CruiseControl");
+        assert_eq!(
+            catalog.entries["veh.adas.cruise"].interface_ref,
+            service_ref(&checked),
+            "the catalog and the IR must agree on the canonical reference",
+        );
+    }
+
+    #[test]
+    fn catalog_and_ir_agree_when_a_local_shadows_an_import() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = ridl_package(&db, "veh.common", CRUISE_CONTROL);
+        // A local declaration shadows the import of the same name, so the
+        // reference resolves same-package and canonicalizes bare.
+        let adas = ridl_package(
+            &db,
+            "veh.adas",
+            "package veh.adas\nimport veh.common.CruiseControl\ntype Flag: boolean\ninterface CruiseControl {\n  signal engaged : Flag\n}\nservice veh.adas.cruise : CruiseControl\n",
+        );
+        let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
+
+        let checked = check_package(&db, ws, adas, std);
+        let catalog = service_catalog(&db, ws, std);
+
+        assert!(
+            checked.diagnostics.is_empty(),
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(catalog.diagnostics.is_empty());
+        assert_eq!(service_ref(&checked), "CruiseControl");
+        assert_eq!(
+            catalog.entries["veh.adas.cruise"].interface_ref,
+            service_ref(&checked),
+            "the catalog and the IR must agree on the canonical reference",
+        );
+    }
+
+    #[test]
+    fn service_name_segments_must_be_lowercase() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice veh.X.y : I\n"
+            ),
+        );
+        let messages = messages(&checked);
+        assert_eq!(messages.len(), 1, "got: {:?}", checked.diagnostics);
+        assert!(
+            messages[0].contains("`X` is not lowercase"),
+            "got: {:?}",
+            messages,
+        );
+
+        let good = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice veh.x2.y : I\n"
+            ),
+        );
+        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+    }
+
+    #[test]
+    fn a_same_package_duplicate_service_lowers_once() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n}}\nservice veh.adas.cruise : I\nservice veh.adas.cruise : I\n"
+            ),
+        );
+        // The workspace-wide RIDL-140 is `service_catalog`'s job; the IR must
+        // not carry the name twice regardless.
+        assert_eq!(checked.ir.services.len(), 1);
+        assert_eq!(checked.ir.services[0].name, "veh.adas.cruise");
     }
 }
