@@ -829,6 +829,89 @@ fn enumset_bit_beyond_31_needs_a_64_bit_width() {
     );
 }
 
+#[test]
+fn narrow_width_const_beyond_2_53_is_unrepresentable() {
+    // Defense in depth: a narrow (U32) width claiming a value past 2^53 is a
+    // malformed IR — emitting it as a number literal would silently round,
+    // and TypeScript would compile the wrong value without complaint.
+    let result = generate(&package(
+        "veh.common",
+        vec![
+            counter_decl(),
+            public_decl(
+                "BAD_COUNT",
+                v2::decl::Kind::ConstDef(v2::ConstDef {
+                    type_ref: Some("Counter".to_string()),
+                    value: "9007199254740993".to_string(),
+                    regex: None,
+                }),
+            ),
+        ],
+    ));
+    let Err(GenerateError::Unrepresentable(message)) = result else {
+        panic!("a narrow-width const past 2^53 must be Unrepresentable, got {result:?}");
+    };
+    assert!(
+        message.contains("BAD_COUNT"),
+        "the error must name the constant, got: {message}"
+    );
+}
+
+#[test]
+fn narrow_width_init_beyond_2_53_is_not_derivable() {
+    // The same malformed shape in init position: the init function is
+    // omitted rather than emitting a rounding literal; the type itself
+    // still emits.
+    let source = ts_for(vec![public_decl(
+        "Sus",
+        primitive_type(
+            v2::PrimitiveType::Integer,
+            init_value(true, Some("9007199254740993")),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::U32 as i32)),
+        ),
+    )]);
+    assert!(
+        source.contains("export type Sus"),
+        "the branded type must still emit, got:\n{source}"
+    );
+    assert!(
+        !source.contains("function initSus"),
+        "an init value past 2^53 under a narrow width must not derive an init function, got:\n{source}"
+    );
+}
+
+#[test]
+fn stream_field_in_typl_surface_is_unrepresentable() {
+    // The stream container is an interaction shape (ridl §12); meeting one
+    // in a struct field is an IR inconsistency, reported rather than
+    // guessed around.
+    let stream_field = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                element: Some(v2::stream_type::Element::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            })),
+        }),
+        ..named_field("tail", 1, "", false, init_value(false, None))
+    };
+    let result = generate(&package(
+        "veh.common",
+        vec![public_decl(
+            "Bad",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(stream_field)],
+                fixed_layout: false,
+            }),
+        )],
+    ));
+    assert!(
+        matches!(result, Err(GenerateError::Unrepresentable(_))),
+        "a stream in a typl-surface field must be Unrepresentable, got {result:?}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Appendix B — the full typl example.
 // ---------------------------------------------------------------------------

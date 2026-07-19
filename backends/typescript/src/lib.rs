@@ -259,7 +259,20 @@ fn emit_const(
         match backing {
             ScalarBacking::Float => float_literal(&cd.value),
             ScalarBacking::Integer if wide => bigint_literal(name, &cd.value)?,
-            ScalarBacking::Integer => cd.value.clone(),
+            ScalarBacking::Integer => {
+                // Defense in depth: the width claims the value is narrow, but
+                // a malformed IR could still carry a value past 2^53 — as a
+                // `number` literal it would silently round, and TypeScript
+                // would compile the wrong value without complaint.
+                if !fits_safe_number(&cd.value) {
+                    return Err(GenerateError::Unrepresentable(format!(
+                        "constant {name}: value {value:?} exceeds Number.MAX_SAFE_INTEGER \
+                         but its type claims a narrow (non-64-bit) integer width",
+                        value = cd.value
+                    )));
+                }
+                cd.value.clone()
+            }
             ScalarBacking::Boolean => bool_literal(&cd.value).to_string(),
             ScalarBacking::String => format!("{} as const", ts_string(&cd.value)),
             ScalarBacking::Bytes => return Ok(None),
@@ -708,7 +721,12 @@ fn scalar_init_value(backing: ScalarBacking, wide: bool, value: Option<&str>) ->
             let value = value?;
             is_integer_form(value).then(|| format!("{value}n"))
         }
-        ScalarBacking::Integer => Some(value?.to_string()),
+        ScalarBacking::Integer => {
+            // Defense in depth: a value past 2^53 under a narrow width would
+            // round as a `number` literal, so the init is denied instead.
+            let value = value?;
+            fits_safe_number(value).then(|| value.to_string())
+        }
         ScalarBacking::Boolean => Some(bool_literal(value.unwrap_or("false")).to_string()),
         ScalarBacking::String => match value {
             Some(text) if !text.is_empty() => Some(ts_string(text)),
@@ -860,11 +878,9 @@ fn tuple_init(ctx: &Ctx, tuple: &v2::TupleType) -> Option<String> {
 /// The init of an array slot: the min-bound count of element inits
 /// (typl §5.8) — `[]` when the minimum is zero.
 fn array_init(ctx: &Ctx, array: &v2::ArrayType, slot: &Slot) -> Option<String> {
-    let count = if array.min == array.max {
-        array.max
-    } else {
-        array.min
-    };
+    // A fixed array has min == max, so `min` is the count in both the fixed
+    // and the bounded form.
+    let count = array.min;
     if count == 0 {
         return Some("[]".to_string());
     }
