@@ -28,14 +28,16 @@ use super::{Diagnostic, Severity, SourceMap, Span};
 /// the output is stable for snapshots and clean when piped.
 pub fn render(diags: &[Diagnostic], sources: &SourceMap) -> String {
     let mut files = SimpleFiles::new();
+    let mut file_count = 0usize;
     for (path, text) in sources.iter_files() {
         files.add(path, text);
+        file_count += 1;
     }
 
     let config = Config::default();
     let mut out = String::new();
     for diag in diags {
-        let rendered = to_codespan(diag);
+        let rendered = to_codespan(diag, file_count);
         term::emit_to_string(&mut out, &config, &files, &rendered)
             .expect("rendering to an in-memory string cannot fail");
     }
@@ -43,23 +45,38 @@ pub fn render(diags: &[Diagnostic], sources: &SourceMap) -> String {
 }
 
 /// Maps one homegrown [`Diagnostic`] to a `codespan-reporting` diagnostic.
-fn to_codespan(diag: &Diagnostic) -> cs::Diagnostic<usize> {
+///
+/// A label whose [`FileId`](super::FileId) is not in the source map — most
+/// often [`FileId::DETACHED`](super::FileId::DETACHED), which the lockfile and
+/// fetch diagnostics carry — is dropped rather than looked up, so a detached
+/// diagnostic renders as a bare coded message with no source snippet instead of
+/// panicking on a missing file.
+fn to_codespan(diag: &Diagnostic, file_count: usize) -> cs::Diagnostic<usize> {
     let severity = match diag.severity {
         Severity::Error => cs::Severity::Error,
         Severity::Warning => cs::Severity::Warning,
         Severity::Info => cs::Severity::Note,
     };
 
-    let mut labels = vec![label(&diag.primary, cs::LabelStyle::Primary, "")];
+    let in_range = |span: &Span| (span.file.0 as usize) < file_count;
+
+    let mut labels = Vec::new();
+    if in_range(&diag.primary) {
+        labels.push(label(&diag.primary, cs::LabelStyle::Primary, ""));
+    }
     for secondary in &diag.labels {
-        labels.push(label(
-            &secondary.span,
-            cs::LabelStyle::Secondary,
-            &secondary.message,
-        ));
+        if in_range(&secondary.span) {
+            labels.push(label(
+                &secondary.span,
+                cs::LabelStyle::Secondary,
+                &secondary.message,
+            ));
+        }
     }
     for fixit in &diag.fixits {
-        labels.push(label(&fixit.span, cs::LabelStyle::Secondary, &fixit.label));
+        if in_range(&fixit.span) {
+            labels.push(label(&fixit.span, cs::LabelStyle::Secondary, &fixit.label));
+        }
     }
 
     // Fix-its render as notes: codespan-reporting has no first-class suggestion,
@@ -197,5 +214,35 @@ mod tests {
     fn no_diagnostics_render_to_empty_string() {
         let map = SourceMap::new();
         assert_eq!(super::render(&[], &map), "");
+    }
+
+    /// A detached diagnostic (a MANI-1xx fetch or lockfile diagnostic, whose
+    /// primary span is [`FileId::DETACHED`]) renders as a bare coded message —
+    /// its out-of-range file id is dropped, not looked up, so rendering never
+    /// panics even against an empty source map.
+    #[test]
+    fn detached_diagnostic_renders_without_a_source_snippet() {
+        use super::super::FileId;
+        let diags = vec![Diagnostic {
+            code: DiagCode::MANI_101,
+            severity: Severity::Error,
+            message: "failed to fetch `https://registry.example.com/foo@v1`".to_string(),
+            primary: Span {
+                file: FileId::DETACHED,
+                range: TextRange::default(),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        }];
+        let map = SourceMap::new();
+        let rendered = super::render(&diags, &map);
+        assert!(
+            rendered.contains("MANI-101"),
+            "the rendered output must carry the code, got:\n{rendered}",
+        );
+        assert!(
+            rendered.contains("failed to fetch"),
+            "the rendered output must carry the message, got:\n{rendered}",
+        );
     }
 }

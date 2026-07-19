@@ -122,6 +122,21 @@ impl DiagCode {
     /// by the package loader (E1.3), which is where member paths are resolved
     /// against the filesystem.
     pub const MANI_008: DiagCode = DiagCode("MANI-008");
+
+    // --- MANI distribution (1xx) — lockfile, cache, fetch (E1.6, ADR-0002
+    // §5, §7) ---
+    /// A remote import could not be fetched (network failure, a non-2xx HTTP
+    /// status, or a value that is not a fetchable `http(s)` URL).
+    pub const MANI_101: DiagCode = DiagCode("MANI-101");
+    /// Fetched content hashes to a value that does not match the SHA-256 the
+    /// lockfile pins for the same URL (ADR-0002 §7).
+    pub const MANI_102: DiagCode = DiagCode("MANI-102");
+    /// `--frozen` was requested but the lockfile has no entry for a remote
+    /// import; a frozen build never regenerates the lockfile (ADR-0002 §7).
+    pub const MANI_103: DiagCode = DiagCode("MANI-103");
+    /// `--frozen` was requested and a lockfile-pinned import is not present in
+    /// the cache; a frozen build never fetches (ADR-0002 §7).
+    pub const MANI_104: DiagCode = DiagCode("MANI-104");
 }
 
 /// A diagnostic's severity. Warnings and info diagnostics arrive with later
@@ -139,6 +154,14 @@ pub enum Severity {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize)]
 #[serde(transparent)]
 pub struct FileId(u32);
+
+impl FileId {
+    /// A sentinel id for a diagnostic that is not tied to any source file. The
+    /// lockfile, cache, and fetch diagnostics (MANI-1xx) concern a URL rather
+    /// than a byte span, so they carry this id; [`render`] draws them as a bare
+    /// coded message with no source snippet. No [`SourceMap`] ever issues it.
+    pub const DETACHED: FileId = FileId(u32::MAX);
+}
 
 /// A source location: a byte range inside a specific file. The range is a
 /// `rowan::TextRange` — the same coordinate space parse and semantic passes work
@@ -296,10 +319,10 @@ pub const FORM_CATALOG: &[CatalogEntry] = &[
 ];
 
 /// The manifest MANI catalogue (ADR-0007 decision 2): the manifest `0xx` codes
-/// the `ridl.toml` parser (E1.5) and the package loader (E1.3) emit. Listed here
+/// the `ridl.toml` parser (E1.5) and the package loader (E1.3) emit, and the
+/// distribution `1xx` codes the import materializer (E1.6) emits. Listed here
 /// even for `MANI-004`, whose emission site is the loader rather than the
 /// standalone parser, so the error index (E4.2) has one authoritative source.
-/// The distribution `1xx` codes (lockfile, cache, fetch) arrive with E1.6.
 pub const MANI_CATALOG: &[CatalogEntry] = &[
     CatalogEntry {
         code: DiagCode::MANI_001,
@@ -340,6 +363,26 @@ pub const MANI_CATALOG: &[CatalogEntry] = &[
         code: DiagCode::MANI_008,
         severity: Severity::Error,
         summary: "workspace member directory has no `ridl.toml`",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_101,
+        severity: Severity::Error,
+        summary: "remote import fetch failed",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_102,
+        severity: Severity::Error,
+        summary: "fetched content hash does not match the lockfile",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_103,
+        severity: Severity::Error,
+        summary: "`--frozen`: no lockfile entry for a remote import",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_104,
+        severity: Severity::Error,
+        summary: "`--frozen`: a lockfile-pinned import is not cached",
     },
 ];
 
@@ -461,7 +504,7 @@ mod tests {
             codes,
             vec![
                 "MANI-001", "MANI-002", "MANI-003", "MANI-004", "MANI-005", "MANI-006", "MANI-007",
-                "MANI-008",
+                "MANI-008", "MANI-101", "MANI-102", "MANI-103", "MANI-104",
             ],
         );
         // Every MANI code is an error except the unknown-key warning (MANI-005).
