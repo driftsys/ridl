@@ -249,12 +249,16 @@ export const vehicleStatusTiming = {
  * The require/ensure clauses of this interface, as data (ridl §13). `id` is
  * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
  * is the canonical expression text; `signals` and `params` name what the
- * expression reads.
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
  */
 export const vehicleStatusContracts = [
-  { id: 'VehicleStatus.setGear.require[0]', kind: 'require', source: 'position != GearPosition.PARK || currentSpeed == 0.0', signals: ['currentSpeed'], params: ['position'] },
-  { id: 'VehicleStatus.getAverageSpeed.require[0]', kind: 'require', source: 'window > 0ms', signals: [], params: ['window'] },
-  { id: 'VehicleStatus.getAverageSpeed.ensure[0]', kind: 'ensure', source: 'result >= 0.0', signals: [], params: [] },
+  { id: 'VehicleStatus.setGear.require[0]', kind: 'require', source: 'position != GearPosition.PARK || currentSpeed == 0.0', signals: ['currentSpeed'], params: ['position'], usesResult: false },
+  { id: 'VehicleStatus.getAverageSpeed.require[0]', kind: 'require', source: 'window > 0ms', signals: [], params: ['window'], usesResult: false },
+  { id: 'VehicleStatus.getAverageSpeed.ensure[0]', kind: 'ensure', source: 'result >= 0.0', signals: [], params: [], usesResult: true },
 ] as const;
 
 /**
@@ -313,7 +317,11 @@ export const service_veh_cluster_logsTiming = {} as const;
  * The require/ensure clauses of this interface, as data (ridl §13). `id` is
  * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
  * is the canonical expression text; `signals` and `params` name what the
- * expression reads.
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
  */
 export const service_veh_cluster_logsContracts = [] as const;
 

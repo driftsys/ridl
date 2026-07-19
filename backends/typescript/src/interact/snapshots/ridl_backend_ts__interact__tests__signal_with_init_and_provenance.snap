@@ -86,6 +86,10 @@ export const vehicleStatusTiming = {
  * The require/ensure clauses of this interface, as data (ridl §13). `id` is
  * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
  * is the canonical expression text; `signals` and `params` name what the
- * expression reads.
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
  */
 export const vehicleStatusContracts = [] as const;

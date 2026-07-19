@@ -69,16 +69,29 @@ pub(crate) fn emit_package(ctx: &Ctx, package: &v2::Package) -> Result<Vec<Strin
     let mut blocks = vec![vocabulary()];
 
     for interface in &package.interfaces {
-        emit_interface(ctx, &interface.name, interface, None, &mut blocks)?;
+        // A named interface is its own identity: the type name and the
+        // identity name are the same string.
+        let names = Names {
+            r#type: &interface.name,
+            identity: &interface.name,
+        };
+        emit_interface(ctx, names, interface, None, &mut blocks)?;
     }
     // An inline service shape carries no name of its own (ridl §14.5); its
     // generated interface is named after the service, and the note saying so
     // rides in the faces' own docs rather than as a detached comment.
     for service in &package.services {
         if let Some(v2::service::Shape::Inline(inline)) = &service.shape {
-            let name = inline_interface_name(&service.name);
-            let note = inline_shape_note(&service.name, &name);
-            emit_interface(ctx, &name, inline, Some(&note), &mut blocks)?;
+            let type_name = inline_interface_name(&service.name);
+            let note = inline_shape_note(&service.name, &type_name);
+            // The identity is the service's DOTTED name, never the mangled
+            // type name and never `Interface.name` — which is "" by
+            // construction for an inline shape (ridl §14.5).
+            let names = Names {
+                r#type: &type_name,
+                identity: &service.name,
+            };
+            emit_interface(ctx, names, inline, Some(&note), &mut blocks)?;
         }
     }
     if !package.services.is_empty() {
@@ -142,16 +155,45 @@ export type Result<T, E> =
 
 fn emit_interface(
     ctx: &Ctx,
-    name: &str,
+    names: Names,
     interface: &v2::Interface,
     note: Option<&str>,
     blocks: &mut Vec<String>,
 ) -> Result<(), GenerateError> {
-    blocks.push(emit_face(ctx, name, interface, note, Face::Consumer)?);
-    blocks.push(emit_face(ctx, name, interface, note, Face::Provider)?);
-    blocks.push(emit_timing(name, interface)?);
-    blocks.push(emit_contracts(name, interface)?);
+    blocks.push(emit_face(ctx, names, interface, note, Face::Consumer)?);
+    blocks.push(emit_face(ctx, names, interface, note, Face::Provider)?);
+    blocks.push(emit_timing(names, interface)?);
+    blocks.push(emit_contracts(names, interface)?);
     Ok(())
+}
+
+/// The two names an interface is generated under, which are not always the
+/// same string.
+///
+/// - `type` names the generated TypeScript interfaces (`{type}Consumer`,
+///   `{type}Provider`) and the generated consts. It must be a TypeScript
+///   identifier, so an inline service shape's is the mangled
+///   `Service_veh_adas_logs`.
+/// - `identity` is what the interface is called everywhere OUTSIDE this
+///   module: the first component of a fallible return's transport identity
+///   (ADR-0008 decision 4) and the prefix of its observer-stub ids. For a
+///   named interface it is the interface name; for an inline service shape it
+///   is the service's **dotted global name**.
+///
+/// Keeping these apart is load-bearing, not cosmetic. An inline shape's
+/// `Interface.name` is `""` by construction (ridl §14.5), so deriving the
+/// identity from it would emit `#3:Ok|Err` — which is not an identity at all,
+/// since two different services with a fallible query at the same ordinal
+/// over the same arms would collide. It would also disagree with two things
+/// that already exist: `ridl diff` keys a service's interactions on the
+/// dotted name (`tools/diff/src/walk.rs`, `diff_services`), and the observer
+/// stubs lowered into this very module are scoped to the dotted name
+/// (`ridl-sem`, `lower_service_inline`, E2.5). One value, three consumers —
+/// they have to agree.
+#[derive(Debug, Clone, Copy)]
+struct Names<'a> {
+    r#type: &'a str,
+    identity: &'a str,
 }
 
 /// Which side of a binding a face is generated for (ridl §14).
@@ -189,7 +231,7 @@ impl Face {
 
 fn emit_face(
     ctx: &Ctx,
-    name: &str,
+    names: Names,
     interface: &v2::Interface,
     note: Option<&str>,
     face: Face,
@@ -212,10 +254,12 @@ fn emit_face(
 
     let mut members = String::new();
     for decl in &interface.interactions {
-        members.push_str(&emit_member(ctx, &interface.name, decl, face)?);
+        // The IDENTITY name, not the type name: a member's transport identity
+        // is what the interface is called outside this module.
+        members.push_str(&emit_member(ctx, names.identity, decl, face)?);
     }
 
-    let face_name = format!("{name}{}", face.suffix());
+    let face_name = format!("{type_name}{}", face.suffix(), type_name = names.r#type);
     if members.is_empty() {
         Ok(format!("{doc}export interface {face_name} {{}}\n"))
     } else {
@@ -437,7 +481,10 @@ fn interaction_type_ts(ctx: &Ctx, ft: &v2::FieldType) -> Result<String, Generate
 /// are **bigint microseconds**: the IR carries exact decimal microsecond
 /// strings (ADR-0008 decision 12), and `bigint` is the only TypeScript
 /// numeric form that holds them without rounding.
-fn emit_timing(name: &str, interface: &v2::Interface) -> Result<String, GenerateError> {
+fn emit_timing(names: Names, interface: &v2::Interface) -> Result<String, GenerateError> {
+    // Diagnostics name the interface the way the author wrote it, so the
+    // identity name is the one that belongs in an error message.
+    let owner = names.identity;
     let mut entries = String::new();
     for decl in &interface.interactions {
         let timing = match &decl.kind {
@@ -450,14 +497,14 @@ fn emit_timing(name: &str, interface: &v2::Interface) -> Result<String, Generate
             "  {member}: {{ mode: {mode}, minUs: {min}, maxUs: {max}, \
              defaultApplied: {applied} }},\n",
             member = decl.name,
-            mode = timing_mode(name, &decl.name, timing.mode)?,
-            min = micros_literal(name, &decl.name, timing.min_us.as_deref())?,
-            max = micros_literal(name, &decl.name, timing.max_us.as_deref())?,
+            mode = timing_mode(owner, &decl.name, timing.mode)?,
+            min = micros_literal(owner, &decl.name, timing.min_us.as_deref())?,
+            max = micros_literal(owner, &decl.name, timing.max_us.as_deref())?,
             applied = timing.default_applied
         ));
     }
 
-    let const_name = format!("{}Timing", lower_camel(name));
+    let const_name = format!("{}Timing", lower_camel(names.r#type));
     let doc = "\
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
@@ -514,7 +561,8 @@ fn micros_literal(
 /// E2.5 observer stubs, so a runtime builds its observers from this table
 /// rather than by parsing the generated source. `source` is the canonical
 /// expression text; E5.1 replaces it with a structured tree.
-fn emit_contracts(name: &str, interface: &v2::Interface) -> Result<String, GenerateError> {
+fn emit_contracts(names: Names, interface: &v2::Interface) -> Result<String, GenerateError> {
+    let owner = names.identity;
     let mut entries = String::new();
     for decl in &interface.interactions {
         let contracts: &[v2::Contract] = match &decl.kind {
@@ -525,23 +573,28 @@ fn emit_contracts(name: &str, interface: &v2::Interface) -> Result<String, Gener
         for contract in contracts {
             entries.push_str(&format!(
                 "  {{ id: {id}, kind: {kind}, source: {source}, signals: [{signals}], \
-                 params: [{params}] }},\n",
+                 params: [{params}], usesResult: {uses_result} }},\n",
                 id = ts_string(&contract.observer_id),
-                kind = contract_kind(name, &decl.name, contract.kind)?,
+                kind = contract_kind(owner, &decl.name, contract.kind)?,
                 source = ts_string(&contract.source),
                 signals = string_list(&contract.signal_refs),
-                params = string_list(&contract.param_refs)
+                params = string_list(&contract.param_refs),
+                uses_result = contract.uses_result
             ));
         }
     }
 
-    let const_name = format!("{}Contracts", lower_camel(name));
+    let const_name = format!("{}Contracts", lower_camel(names.r#type));
     let doc = "\
 /**
  * The require/ensure clauses of this interface, as data (ridl §13). `id` is
  * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
  * is the canonical expression text; `signals` and `params` name what the
- * expression reads.
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
  */
 ";
     if entries.is_empty() {
@@ -685,6 +738,21 @@ fn lower_camel(name: &str) -> String {
 /// interaction-layer name. TypeScript has one module namespace, so a
 /// collision emits a module that does not compile; naming it here keeps the
 /// backend honest rather than deferring the failure to `tsc`.
+///
+/// The check covers the vocabulary names and the faces of named interfaces.
+/// It deliberately does not cover the generated const names or an inline
+/// shape's face names, because neither can collide today:
+///
+/// - The consts are `lower_camel`-stemmed (`vehicleStatusTiming`), while typl
+///   declaration names are CamelCase or SCREAMING_SNAKE (typl §15.1) — the
+///   first character alone separates them.
+/// - An inline shape's faces are prefixed `Service_` and a service name's
+///   segments are lowercase with no underscores (`check_service_name` in
+///   `ridl-sem`), so the dots-to-underscores mangling is injective and lands
+///   in a shape no typl name takes.
+///
+/// Both arguments rest on naming rules enforced elsewhere. If either rule
+/// relaxes, this check has to grow to match.
 fn check_name_collisions(package: &v2::Package) -> Result<(), GenerateError> {
     for decl in &package.decls {
         if VOCABULARY_NAMES.contains(&decl.name.as_str()) {

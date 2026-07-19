@@ -201,6 +201,12 @@ fn render(package: &v2::Package) -> String {
     generate(package).expect("the package generates").source
 }
 
+/// Marks a declaration deprecated with a reason (typl §14.2).
+fn deprecate(mut decl: v2::Decl, reason: &str) -> v2::Decl {
+    decl.deprecated = Some(reason.to_string());
+    decl
+}
+
 // ---------------------------------------------------------------------------
 // One snapshot per interaction kind.
 // ---------------------------------------------------------------------------
@@ -870,6 +876,245 @@ fn typl_only_package_emits_no_vocabulary() {
     let source = render(&package);
     assert!(!source.contains("Provenance"), "got:\n{source}");
     assert!(!source.contains("SignalHandle"), "got:\n{source}");
+}
+
+// ---------------------------------------------------------------------------
+// Transport identity inside an inline service shape.
+// ---------------------------------------------------------------------------
+
+/// A fallible query inside a service's inline shape takes its transport
+/// identity from the service's DOTTED global name.
+///
+/// An inline shape's `Interface.name` is `""` by construction (ridl §14.5),
+/// so an emitter that reached for it would produce `#3:FaultPage|DiagError` —
+/// no interface component at all, and therefore not an identity: a second
+/// service with a fallible query at the same ordinal over the same arms would
+/// emit the identical string. The dotted name is also what `ridl diff` keys a
+/// service's interactions on and what the observer stubs in this same module
+/// are scoped to (E2.5), so all three have to agree.
+#[test]
+fn inline_service_fallible_query_uses_the_dotted_service_name() {
+    let fetch = interaction(
+        "fetchFaults",
+        3,
+        query(
+            vec![param("filter", named("DiagFilter"))],
+            fallible("FaultPage", "DiagError"),
+            Vec::new(),
+        ),
+    );
+    let package = interact_package(
+        Vec::new(),
+        vec![service(
+            "veh.adas.logs",
+            v2::service::Shape::Inline(interface("", vec![fetch])),
+        )],
+    );
+    let source = render(&package);
+
+    assert!(
+        source.contains("@transportIdentity veh.adas.logs#3:FaultPage|DiagError"),
+        "the identity must carry the dotted service name, got:\n{source}"
+    );
+    // The empty-interface-name regression, named directly: the bug emitted an
+    // identity whose interface component was blank.
+    assert!(
+        !source.contains("@transportIdentity #3:"),
+        "the identity must never lose its interface component, got:\n{source}"
+    );
+    // The emitted string is exactly what the single IR derivation produces —
+    // no separate spelling of the rule lives in this backend.
+    let expected = v2::fallible_transport_identity(
+        "veh.adas.logs",
+        3,
+        &v2::FallibleType {
+            ok: "FaultPage".to_string(),
+            err: "DiagError".to_string(),
+        },
+    );
+    assert!(
+        source.contains(&format!("@transportIdentity {expected}")),
+        "the identity must match the IR helper ({expected}), got:\n{source}"
+    );
+}
+
+/// A named interface keeps using its own name, so threading the identity
+/// separately from the generated type name did not disturb the common case.
+#[test]
+fn named_interface_identity_is_the_interface_name() {
+    let package = one(interaction(
+        "getFaultPage",
+        9,
+        query(
+            vec![param("filter", named("DiagFilter"))],
+            fallible("FaultPage", "DiagError"),
+            Vec::new(),
+        ),
+    ));
+    assert!(render(&package).contains("@transportIdentity VehicleStatus#9:FaultPage|DiagError"));
+}
+
+// ---------------------------------------------------------------------------
+// Attribute surfaces that the per-kind snapshots do not exercise.
+// ---------------------------------------------------------------------------
+
+/// An optional parameter uses the `name?:` property form (typl §7.1 carried
+/// into interaction position) — absence is in the signature, not a
+/// `| undefined` union.
+#[test]
+fn optional_parameter_uses_the_question_mark_form() {
+    let package = one(interaction(
+        "search",
+        1,
+        query(
+            vec![
+                param("filter", named("DiagFilter")),
+                param(
+                    "cursor",
+                    v2::FieldType {
+                        optional: true,
+                        ..named("Cursor")
+                    },
+                ),
+            ],
+            v2::return_type::Kind::Value(named("FaultPage")),
+            Vec::new(),
+        ),
+    ));
+    let source = render(&package);
+    assert!(
+        source.contains("search(filter: DiagFilter, cursor?: Cursor): Promise<FaultPage>;"),
+        "an optional parameter must render as `cursor?:`, got:\n{source}"
+    );
+    // The marker is what carries the optionality; without it the signature
+    // would demand an argument the contract says is optional.
+    assert!(
+        !source.contains("cursor: Cursor"),
+        "the required form must not be emitted for an optional parameter, got:\n{source}"
+    );
+}
+
+/// `@deprecated` reaches every interaction kind and the interface itself
+/// (typl §14.2), on both faces.
+#[test]
+fn deprecated_reaches_interactions_and_both_faces() {
+    let mut iface = interface(
+        "Legacy",
+        vec![
+            deprecate(
+                interaction(
+                    "oldSpeed",
+                    1,
+                    signal(
+                        "Speed",
+                        Some("0.0"),
+                        timing(
+                            v2::TimingMode::StrictPeriodic,
+                            Some("10000"),
+                            Some("10000"),
+                            false,
+                        ),
+                    ),
+                ),
+                "use currentSpeed",
+            ),
+            deprecate(
+                interaction(
+                    "oldPing",
+                    2,
+                    event(
+                        "Ping",
+                        timing(v2::TimingMode::Range, Some("1000"), Some("2000"), false),
+                    ),
+                ),
+                "no replacement",
+            ),
+            deprecate(
+                interaction("oldSet", 3, command(Vec::new(), Vec::new())),
+                "use setGear",
+            ),
+            deprecate(
+                interaction(
+                    "oldGet",
+                    4,
+                    query(
+                        Vec::new(),
+                        v2::return_type::Kind::Value(named("Speed")),
+                        Vec::new(),
+                    ),
+                ),
+                "use getAverageSpeed",
+            ),
+            deprecate(interaction("oldVin", 5, final_def(named("Vin"))), "use vin"),
+        ],
+    );
+    iface.deprecated = Some("superseded by VehicleStatus".to_string());
+    let package = interact_package(vec![iface], Vec::new());
+    let source = render(&package);
+
+    for reason in [
+        "@deprecated use currentSpeed",
+        "@deprecated no replacement",
+        "@deprecated use setGear",
+        "@deprecated use getAverageSpeed",
+        "@deprecated use vin",
+        "@deprecated superseded by VehicleStatus",
+    ] {
+        // Twice each: once per face.
+        assert_eq!(
+            source.matches(reason).count(),
+            2,
+            "{reason:?} must appear on both faces, got:\n{source}"
+        );
+    }
+}
+
+/// A reserved tombstone occupies an ordinal but emits no member (ridl §11):
+/// the interactions around it are unaffected, and nothing named after the
+/// retired interaction appears anywhere in the module.
+#[test]
+fn reserved_tombstone_emits_no_member() {
+    let package = interact_package(
+        vec![interface(
+            "VehicleStatus",
+            vec![
+                interaction(
+                    "speed",
+                    1,
+                    signal(
+                        "Speed",
+                        Some("0.0"),
+                        timing(
+                            v2::TimingMode::StrictPeriodic,
+                            Some("10000"),
+                            Some("10000"),
+                            false,
+                        ),
+                    ),
+                ),
+                reserved(2, "resetCounters"),
+                interaction("vin", 3, final_def(named("Vin"))),
+            ],
+        )],
+        Vec::new(),
+    );
+    let source = render(&package);
+
+    assert!(
+        !source.contains("resetCounters"),
+        "a retired interaction must not appear in the generated module, got:\n{source}"
+    );
+    // The tombstone sits between two live interactions; both survive it.
+    assert!(
+        source.contains("speed: SignalHandle<Speed>;"),
+        "got:\n{source}"
+    );
+    assert!(source.contains("readonly vin: Vin;"), "got:\n{source}");
+    // It contributes no timing entry either — a tombstone carries no timing.
+    assert!(
+        !source.contains("undefined, maxUs: undefined"),
+        "a tombstone must not reach the timing table, got:\n{source}"
+    );
 }
 
 // ---------------------------------------------------------------------------
