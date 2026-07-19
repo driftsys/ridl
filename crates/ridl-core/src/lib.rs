@@ -6,9 +6,11 @@
 
 pub mod db;
 pub mod diag;
+pub mod manifest;
 
 pub use db::{InputFile, RidlDatabase, parse_file};
 pub use diag::{
     DiagCode, Diagnostic, FileId, FixIt, Label, Severity, SourceMap, Span, house_style_message,
     render,
 };
+pub use manifest::{Manifest, ManifestKind, parse_manifest};
