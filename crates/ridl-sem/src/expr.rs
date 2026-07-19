@@ -13,18 +13,31 @@
 //! - [`collect_refs`] — the resolved reads of one clause, the input to the
 //!   task 12 observer stubs.
 
+use std::collections::HashMap;
+
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
 use ridl_syntax::SyntaxKind;
 use ridl_syntax::ast::{self, AstNode};
 use rowan::TextRange;
 
 use crate::resolve::{Resolution, Symbol, SymbolKind};
+use crate::scalar::ExactValue;
 
 // ==========================================================================
 // Types
 // ==========================================================================
 
-/// The five type domains a subset expression inhabits (expr-core §5.1).
+/// The primitive a numeric type is backed by (typl §4). Carried by the numeric
+/// domain because the `%` rule is a rule about the operand's **type** and not
+/// about how a literal happens to be spelled (expr-core §5.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumericBacking {
+    Integer,
+    Float,
+}
+
+/// The five type domains a subset expression inhabits (expr-core §5.1), plus
+/// the carrier for a declared value whose type is outside them.
 ///
 /// Every named reference inside a domain is the **fully qualified**
 /// `package.Name` form ([`qualified_ref`]) — never a bare name and never an
@@ -35,8 +48,8 @@ pub enum ExprType {
     Boolean,
     /// A numeric value: the canonical named-type reference, or the empty
     /// string for a bare numeric literal, which unifies with any numeric
-    /// operand (expr-core §5.2).
-    Numeric(String),
+    /// operand (expr-core §5.2). The backing decides the `%` rule.
+    Numeric(String, NumericBacking),
     Duration,
     /// An enum-typed value; the canonical enum reference.
     EnumType(String),
@@ -44,6 +57,12 @@ pub enum ExprType {
     /// the field encoding built by [`ExprType::tuple`]; it is opaque outside
     /// this module.
     Tuple(String),
+    /// A declared value whose type is outside the five domains — a
+    /// string-backed type, a struct, a union, a stream. It is carried rather
+    /// than dropped so that naming it reports the real form (expr-core §8
+    /// wants a message naming the offending form) instead of claiming the name
+    /// does not resolve. The string describes the declared type.
+    Unsupported(String),
 }
 
 impl ExprType {
@@ -52,9 +71,10 @@ impl ExprType {
     /// (`None`) — naming it in an expression is RIDL-306, not a missing field.
     ///
     /// The encoding is `name=CODE` pairs joined by `;`, where `CODE` is `B`
-    /// (boolean), `N:ref` (numeric — `ref` may be empty), `D` (duration),
-    /// `E:ref` (enum), or `?` (outside the subset). A tuple field is a named
-    /// type, so the encoding never nests.
+    /// (boolean), `Ni:ref`/`Nf:ref` (integer- and float-backed numeric — `ref`
+    /// may be empty), `D` (duration), `E:ref` (enum), or `U:declared` (outside
+    /// the subset). A tuple field is a named type, so the encoding never
+    /// nests.
     pub fn tuple(fields: &[(String, Option<ExprType>)]) -> ExprType {
         let encoded = fields
             .iter()
@@ -68,23 +88,25 @@ impl ExprType {
     pub fn describe(&self) -> String {
         match self {
             ExprType::Boolean => "boolean".to_string(),
-            ExprType::Numeric(name) if name.is_empty() => "a numeric literal".to_string(),
-            ExprType::Numeric(name) => format!("`{name}`"),
+            ExprType::Numeric(name, _) if name.is_empty() => "a numeric literal".to_string(),
+            ExprType::Numeric(name, _) => format!("`{name}`"),
             ExprType::Duration => "duration".to_string(),
             ExprType::EnumType(name) => format!("`{name}`"),
             ExprType::Tuple(_) => "a tuple".to_string(),
+            ExprType::Unsupported(declared) => format!("`{declared}`"),
         }
     }
 
-    /// The type of the tuple field `name`: `None` when the tuple has no such
-    /// field, `Some(None)` when the field's type is outside the subset.
-    fn tuple_field(encoded: &str, name: &str) -> Option<Option<ExprType>> {
+    /// The type of the tuple field `name` — `None` when the tuple has no such
+    /// field. A field outside the subset decodes as
+    /// [`ExprType::Unsupported`].
+    fn tuple_field(encoded: &str, name: &str) -> Option<ExprType> {
         encoded
             .split(';')
             .filter(|entry| !entry.is_empty())
             .find_map(|entry| {
                 let (field, code) = entry.split_once('=')?;
-                (field == name).then(|| decode_field(code))
+                (field == name).then(|| decode_field(code))?
             })
     }
 }
@@ -92,12 +114,15 @@ impl ExprType {
 fn encode_field(field: Option<&ExprType>) -> String {
     match field {
         Some(ExprType::Boolean) => "B".to_string(),
-        Some(ExprType::Numeric(name)) => format!("N:{name}"),
+        Some(ExprType::Numeric(name, NumericBacking::Integer)) => format!("Ni:{name}"),
+        Some(ExprType::Numeric(name, NumericBacking::Float)) => format!("Nf:{name}"),
         Some(ExprType::Duration) => "D".to_string(),
         Some(ExprType::EnumType(name)) => format!("E:{name}"),
+        Some(ExprType::Unsupported(declared)) => format!("U:{declared}"),
         // A tuple field is a named type, so a nested tuple is unreachable
-        // through the grammar; it encodes as untypeable rather than panicking.
-        Some(ExprType::Tuple(_)) | None => "?".to_string(),
+        // through the grammar; it encodes as unsupported rather than panicking.
+        Some(ExprType::Tuple(_)) => "U:a tuple".to_string(),
+        None => "U:a type outside the guaranteed subset".to_string(),
     }
 }
 
@@ -105,13 +130,47 @@ fn decode_field(code: &str) -> Option<ExprType> {
     match code {
         "B" => Some(ExprType::Boolean),
         "D" => Some(ExprType::Duration),
-        "?" => None,
         _ => match code.split_once(':') {
-            Some(("N", name)) => Some(ExprType::Numeric(name.to_string())),
+            Some(("Ni", name)) => {
+                Some(ExprType::Numeric(name.to_string(), NumericBacking::Integer))
+            }
+            Some(("Nf", name)) => Some(ExprType::Numeric(name.to_string(), NumericBacking::Float)),
             Some(("E", name)) => Some(ExprType::EnumType(name.to_string())),
+            Some(("U", declared)) => Some(ExprType::Unsupported(declared.to_string())),
             _ => None,
         },
     }
+}
+
+/// One enum type as a contract expression needs it: the canonical reference
+/// plus the member names `Enum.MEMBER` may name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumDecl {
+    pub reference: String,
+    pub members: Vec<String>,
+}
+
+impl EnumDecl {
+    fn has_member(&self, name: &str) -> bool {
+        self.members.iter().any(|member| member == name)
+    }
+}
+
+/// The package-level declarations a contract expression may name, **resolved**
+/// (expr-core §6 items 4 and 5).
+///
+/// A [`Resolution`] maps a name to a symbol — its kind and defining package —
+/// which is not enough to type a contract: a constant's declared type and an
+/// enum's member list both live in the declaration. Carrying them resolved is
+/// what lets a constant type nominally (typl §5.7) and an unknown enum member
+/// be rejected.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ContractVocabulary {
+    /// Constants by the name the file binds, with the type of the declared
+    /// value.
+    pub consts: HashMap<String, ExprType>,
+    /// Enum types by the name the file binds.
+    pub enums: HashMap<String, EnumDecl>,
 }
 
 /// The reference environment one `require`/`ensure` clause resolves against
@@ -121,14 +180,19 @@ fn decode_field(code: &str) -> Option<ExprType> {
 /// §6 scopes the two clauses: an `ensure` has `result` set and no signals (the
 /// ridl §13 table scopes it to `result` and parameters); a `require` has no
 /// `result` and carries the enclosing interface's own signals.
+///
+/// A parameter, signal, or `result` whose declared type is outside the five
+/// domains is present and typed [`ExprType::Unsupported`] rather than absent,
+/// so naming it reports what it is instead of claiming it does not resolve.
 pub struct ContractScope<'a> {
     pub params: &'a [(String, ExprType)],
-    /// `Some` only for an `ensure` on a query whose return type is one of the
-    /// five domains.
+    /// `Some` for an `ensure` on a query — the clause-kind discriminator.
     pub result: Option<ExprType>,
     /// The enclosing interface's own signals — populated for a `require` only.
     pub signals: &'a [(String, ExprType)],
-    /// Package-local and imported names: constants and enum types.
+    /// Constants and enum types, resolved to their declarations.
+    pub vocabulary: &'a ContractVocabulary,
+    /// The package view, for classifying a name that is none of the above.
     pub resolution: &'a Resolution,
 }
 
@@ -167,13 +231,10 @@ pub fn qualified_ref(symbol: &Symbol) -> String {
 /// expression and not the file it came from, so the caller stamps the real
 /// file id on the way into its own diagnostic list.
 ///
-/// Two limitations of the E2 subset checker are deliberate and recorded here.
-/// Enum **member** names are not validated — `ContractScope` carries the
-/// package resolution, which resolves the enum type but holds no member list —
-/// so `Gear.TYPO` types as `Gear`. And the integer-backed test for `%` is
-/// decided on literal operands only, because [`ExprType::Numeric`] carries a
-/// type reference and not its backing class; `%` over a float-backed named
-/// type passes in E2.
+/// Names resolve against [`ContractScope`], whose vocabulary carries resolved
+/// declarations: a constant is typed by its declaration and unifies nominally
+/// like any other named value, and an enum member is checked against the
+/// enum's member list.
 pub fn check_contract_expr(
     expr: &ast::Expr,
     scope: &ContractScope,
@@ -222,7 +283,8 @@ fn infer_literal(literal: &ast::LiteralExpr, out: &mut Vec<Diagnostic>) -> Optio
     // A missing token is a parse error, already reported.
     let token = literal.token()?;
     match token.kind() {
-        SyntaxKind::IntNumber | SyntaxKind::FloatNumber => Some(ExprType::Numeric(String::new())),
+        SyntaxKind::IntNumber => Some(ExprType::Numeric(String::new(), NumericBacking::Integer)),
+        SyntaxKind::FloatNumber => Some(ExprType::Numeric(String::new(), NumericBacking::Float)),
         SyntaxKind::Duration => Some(ExprType::Duration),
         SyntaxKind::TrueKw | SyntaxKind::FalseKw => Some(ExprType::Boolean),
         SyntaxKind::String | SyntaxKind::Regex => {
@@ -246,30 +308,30 @@ fn infer_path(
     let name = token.text();
     let range = token.text_range();
     if let Some(found) = lookup(scope.params, name) {
-        return Some(found);
+        return in_domain(found, name, "parameter", range, out);
     }
     if name == "result" {
         return match &scope.result {
-            Some(found) => Some(found.clone()),
+            Some(found) => in_domain(found.clone(), name, "query result", range, out),
             None => {
                 error(
                     out,
                     range,
-                    "`result` is not in scope here — `result` exists in an `ensure` on a query whose return type is inside the guaranteed subset (expr-core §6)".to_string(),
+                    "`result` is not in scope here — `result` exists in an `ensure` on a query (expr-core §6)".to_string(),
                 );
                 None
             }
         };
     }
     if let Some(found) = lookup(scope.signals, name) {
-        return Some(found);
+        return in_domain(found, name, "signal", range, out);
+    }
+    if let Some(found) = scope.vocabulary.consts.get(name) {
+        // A constant carries its declared type, so it unifies nominally like
+        // any other named value (expr-core §5.2, typl §5.7).
+        return in_domain(found.clone(), name, "constant", range, out);
     }
     match scope.resolution.symbols.get(name) {
-        // The E2 approximation: a constant types as a bare numeric literal, so
-        // it unifies with any numeric operand. `ContractScope` carries the
-        // resolution, which names the declaration but does not carry its
-        // declared type.
-        Some(symbol) if symbol.kind == SymbolKind::Const => Some(ExprType::Numeric(String::new())),
         Some(symbol) if symbol.kind == SymbolKind::Enum => {
             error(
                 out,
@@ -294,6 +356,32 @@ fn infer_path(
             error(out, range, unresolved_message(name, scope));
             None
         }
+    }
+}
+
+/// Reports a reference whose declared type is outside the five domains
+/// (expr-core §5.1) and passes every other type through. The reference is in
+/// the environment — it is the **type** that is outside the subset — so the
+/// message names the declared form rather than claiming the name is unknown.
+fn in_domain(
+    found: ExprType,
+    name: &str,
+    noun: &str,
+    range: TextRange,
+    out: &mut Vec<Diagnostic>,
+) -> Option<ExprType> {
+    match found {
+        ExprType::Unsupported(declared) => {
+            error(
+                out,
+                range,
+                format!(
+                    "`{name}` is a {noun} of type `{declared}`, which is outside the guaranteed subset — a contract expression types boolean, numeric, duration, enum, and tuple values (expr-core §5.1)"
+                ),
+            );
+            None
+        }
+        typed => Some(typed),
     }
 }
 
@@ -337,7 +425,7 @@ fn infer_prefix(
             }
         }
         SyntaxKind::Minus => {
-            if matches!(operand, ExprType::Numeric(_)) {
+            if matches!(operand, ExprType::Numeric(..)) {
                 Some(operand)
             } else {
                 error(
@@ -380,8 +468,22 @@ fn infer_member(
     }
 
     if is_screaming_snake(&name) {
-        if let Some(reference) = enum_type_head(&base, scope) {
-            return Some(ExprType::EnumType(reference));
+        if let Some(declared) = enum_type_head(&base, scope) {
+            // An unknown member is as much a broken reference as an unknown
+            // identifier: nothing downstream — the task 12 observers, the
+            // E2.11 property runner — has a value to bind to it.
+            if !declared.has_member(&name) {
+                error(
+                    out,
+                    range,
+                    format!(
+                        "`{}` has no member `{name}` (expr-core §5.3)",
+                        declared.reference
+                    ),
+                );
+                return None;
+            }
+            return Some(ExprType::EnumType(declared.reference.clone()));
         }
         // The left of an enum member access is not an enum type name. The
         // base may itself be the offending form — `pkg.Name.MEMBER` reports
@@ -403,17 +505,7 @@ fn infer_member(
 
     match infer(&base, scope, out)? {
         ExprType::Tuple(encoded) => match ExprType::tuple_field(&encoded, &name) {
-            Some(Some(field)) => Some(field),
-            Some(None) => {
-                error(
-                    out,
-                    range,
-                    format!(
-                        "tuple field `{name}` has a type outside the guaranteed subset (expr-core §5.1)"
-                    ),
-                );
-                None
-            }
+            Some(field) => in_domain(field, &name, "tuple field", range, out),
             None => {
                 error(
                     out,
@@ -437,19 +529,21 @@ fn infer_member(
     }
 }
 
-/// The canonical enum reference when `base` is a bare name that resolves to an
-/// enum type and is not shadowed by a value in scope.
-fn enum_type_head(base: &ast::Expr, scope: &ContractScope) -> Option<String> {
+/// The enum declaration when `base` is a bare name that resolves to an enum
+/// type and is not shadowed by a value in scope.
+fn enum_type_head<'a>(base: &ast::Expr, scope: &'a ContractScope) -> Option<&'a EnumDecl> {
     let ast::Expr::Path(path) = base else {
         return None;
     };
     let token = path.name_token()?;
     let name = token.text();
-    if lookup(scope.params, name).is_some() || lookup(scope.signals, name).is_some() {
+    if lookup(scope.params, name).is_some()
+        || lookup(scope.signals, name).is_some()
+        || scope.vocabulary.consts.contains_key(name)
+    {
         return None;
     }
-    let symbol = scope.resolution.symbols.get(name)?;
-    (symbol.kind == SymbolKind::Enum).then(|| qualified_ref(symbol))
+    scope.vocabulary.enums.get(name)
 }
 
 fn infer_binary(
@@ -487,7 +581,7 @@ fn infer_binary(
             let unifies = match (&lhs, &rhs) {
                 (ExprType::Boolean, ExprType::Boolean) => true,
                 (ExprType::Duration, ExprType::Duration) => true,
-                (ExprType::Numeric(left), ExprType::Numeric(right)) => {
+                (ExprType::Numeric(left, _), ExprType::Numeric(right, _)) => {
                     unify_numeric(left, right).is_some()
                 }
                 (ExprType::EnumType(left), ExprType::EnumType(right)) => left == right,
@@ -507,7 +601,7 @@ fn infer_binary(
         SyntaxKind::Lt | SyntaxKind::Le | SyntaxKind::Gt | SyntaxKind::Ge => {
             let ordered = match (&lhs, &rhs) {
                 (ExprType::Duration, ExprType::Duration) => true,
-                (ExprType::Numeric(left), ExprType::Numeric(right)) => {
+                (ExprType::Numeric(left, _), ExprType::Numeric(right, _)) => {
                     unify_numeric(left, right).is_some()
                 }
                 _ => false,
@@ -538,7 +632,11 @@ fn infer_binary(
         | SyntaxKind::Slash
         | SyntaxKind::Percent => {
             let result = match (&lhs, &rhs) {
-                (ExprType::Numeric(left), ExprType::Numeric(right)) => unify_numeric(left, right),
+                (
+                    ExprType::Numeric(left, left_backing),
+                    ExprType::Numeric(right, right_backing),
+                ) => unify_numeric(left, right)
+                    .map(|unified| (unified, unify_backing(*left_backing, *right_backing))),
                 _ => None,
             };
             let Some(result) = result else {
@@ -559,18 +657,23 @@ fn infer_binary(
                 }
                 return None;
             };
-            if token.kind() == SyntaxKind::Percent
-                && (has_float_literal(binary.lhs().as_ref())
-                    || has_float_literal(binary.rhs().as_ref()))
-            {
+            let (reference, backing) = result;
+            // The `%` rule is about the operands' declared backing, not about
+            // how a literal is spelled: `speed % window` over two float-backed
+            // named types is as much an error as `speed % 0.5`.
+            if token.kind() == SyntaxKind::Percent && backing != NumericBacking::Integer {
                 error(
                     out,
                     range,
-                    "`%` requires integer-backed operands (expr-core §5.3)".to_string(),
+                    format!(
+                        "`%` requires integer-backed operands, found {} and {} (expr-core §5.3)",
+                        lhs.describe(),
+                        rhs.describe()
+                    ),
                 );
                 return None;
             }
-            Some(ExprType::Numeric(result))
+            Some(ExprType::Numeric(reference, backing))
         }
         _ => None,
     }
@@ -597,14 +700,12 @@ fn mismatch(op: &str, expected: &str, lhs: &ExprType, rhs: &ExprType) -> String 
     )
 }
 
-/// Whether an operand is written as a float literal — the part of the
-/// integer-backed rule for `%` that is decidable from the expression alone.
-fn has_float_literal(expr: Option<&ast::Expr>) -> bool {
-    match expr {
-        Some(ast::Expr::Literal(literal)) => literal.float_number_token().is_some(),
-        Some(ast::Expr::Paren(paren)) => has_float_literal(paren.inner().as_ref()),
-        Some(ast::Expr::Prefix(prefix)) => has_float_literal(prefix.operand().as_ref()),
-        _ => false,
+/// The backing of an arithmetic result: float-backed as soon as either operand
+/// is, so `%` rejects a float-backed operand wherever it appears.
+fn unify_backing(left: NumericBacking, right: NumericBacking) -> NumericBacking {
+    match (left, right) {
+        (NumericBacking::Integer, NumericBacking::Integer) => NumericBacking::Integer,
+        _ => NumericBacking::Float,
     }
 }
 
@@ -773,10 +874,36 @@ fn render(expr: &ast::Expr, min: u8, out: &mut String) {
         }
         ast::Expr::Literal(literal) => {
             if let Some(token) = literal.token() {
-                out.push_str(token.text());
+                out.push_str(&normalize_literal(token.kind(), token.text()));
             }
         }
     }
+}
+
+/// The canonical spelling of a literal token.
+///
+/// A numeric literal renders through the exact-scalar representation, so two
+/// spellings of one value — `0.0` and `0.00`, `1.50` and `1.5` — render
+/// identically and a respelling is not a contract edit (expr-core §7: values
+/// are exact rationals). A literal written with a fractional part keeps one:
+/// `250.0` does not collapse to `250`, which keeps the rendering close to what
+/// the author wrote. A literal the exact parser cannot read is left verbatim.
+///
+/// Duration literals are not normalized across units — `1s` and `1000ms` are
+/// one value but render as written; unifying them is a wider change than this
+/// story's canonical-text rule.
+fn normalize_literal(kind: SyntaxKind, text: &str) -> String {
+    if !matches!(kind, SyntaxKind::IntNumber | SyntaxKind::FloatNumber) {
+        return text.to_string();
+    }
+    let Some(value) = ExactValue::parse(text) else {
+        return text.to_string();
+    };
+    let rendered = value.to_decimal_string();
+    if text.contains('.') && !rendered.contains('.') {
+        return format!("{rendered}.0");
+    }
+    rendered
 }
 
 // ==========================================================================
@@ -836,12 +963,7 @@ fn walk_refs(expr: &ast::Expr, scope: &ContractScope, refs: &mut ExprRefs) {
                 refs.uses_result = true;
             } else if lookup(scope.signals, name).is_some() {
                 push_once(&mut refs.signals, name);
-            } else if scope
-                .resolution
-                .symbols
-                .get(name)
-                .is_some_and(|symbol| symbol.kind == SymbolKind::Const)
-            {
+            } else if scope.vocabulary.consts.contains_key(name) {
                 push_once(&mut refs.consts, name);
             }
         }
@@ -873,10 +995,27 @@ mod tests {
             .unwrap_or_else(|| panic!("`{text}` does not parse as a contract expression"))
     }
 
-    /// A resolution holding the Appendix A vocabulary: `Speed` and `Torque`
+    /// The resolved vocabulary a contract may name: `MAX_SPEED : Speed`,
+    /// `MAX_COUNT : Count` (integer-backed), and the `GearPosition` enum with
+    /// its members.
+    fn vocabulary() -> ContractVocabulary {
+        let mut built = ContractVocabulary::default();
+        built.consts.insert("MAX_SPEED".to_string(), speed());
+        built.consts.insert("MAX_COUNT".to_string(), count());
+        built.enums.insert(
+            "GearPosition".to_string(),
+            EnumDecl {
+                reference: "veh.common.GearPosition".to_string(),
+                members: vec!["PARK".to_string(), "DRIVE".to_string()],
+            },
+        );
+        built
+    }
+
+    /// A resolution holding the Appendix A symbol view: `Speed` and `Torque`
     /// (types), `GearPosition` (enum), `MAX_SPEED` (constant), `DoorPayload`
     /// (struct).
-    fn vocabulary(db: &RidlDatabase) -> Resolution {
+    fn resolution(db: &RidlDatabase) -> Resolution {
         let file = InputFile::new(db, "veh/common.typl".to_string(), String::new());
         let mut symbols = HashMap::new();
         for (name, kind) in [
@@ -906,7 +1045,16 @@ mod tests {
     }
 
     fn speed() -> ExprType {
-        ExprType::Numeric("veh.common.Speed".to_string())
+        ExprType::Numeric("veh.common.Speed".to_string(), NumericBacking::Float)
+    }
+
+    /// An integer-backed named type — the `%` rule's legal operand.
+    fn count() -> ExprType {
+        ExprType::Numeric("veh.common.Count".to_string(), NumericBacking::Integer)
+    }
+
+    fn torque() -> ExprType {
+        ExprType::Numeric("veh.common.Torque".to_string(), NumericBacking::Float)
     }
 
     fn gear() -> ExprType {
@@ -925,7 +1073,8 @@ mod tests {
     #[test]
     fn ridl_13_examples_type_check_clean() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
 
         // `command setRange(min: Speed, max: Speed)`
         let set_range = [("min".to_string(), speed()), ("max".to_string(), speed())];
@@ -934,6 +1083,7 @@ mod tests {
                 params: &set_range,
                 result: None,
                 signals: &[],
+                vocabulary: &vocabulary,
                 resolution: &resolution,
             };
             let (ty, diagnostics) = check_contract_expr(&parse_expr(text), &scope);
@@ -947,6 +1097,7 @@ mod tests {
             params: &window,
             result: None,
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(&parse_expr("window > 0ms"), &require);
@@ -957,6 +1108,7 @@ mod tests {
             params: &window,
             result: Some(speed()),
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(&parse_expr("result >= 0.0"), &ensure);
@@ -971,6 +1123,7 @@ mod tests {
             params: &position,
             result: None,
             signals: &signals,
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(
@@ -989,6 +1142,7 @@ mod tests {
             params: &[],
             result: Some(tuple),
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) =
@@ -1002,11 +1156,13 @@ mod tests {
     #[test]
     fn ridl_306_unknown_reference() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let scope = ContractScope {
             params: &[],
             result: None,
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(&parse_expr("unknownName > 0"), &scope);
@@ -1022,7 +1178,8 @@ mod tests {
     #[test]
     fn ridl_306_cross_domain_arithmetic() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let params = [
             ("speed".to_string(), speed()),
             ("window".to_string(), ExprType::Duration),
@@ -1031,6 +1188,7 @@ mod tests {
             params: &params,
             result: None,
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(&parse_expr("speed + window > 0"), &scope);
@@ -1041,18 +1199,17 @@ mod tests {
     #[test]
     fn ridl_306_cross_named_type_arithmetic() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let params = [
             ("speed".to_string(), speed()),
-            (
-                "torque".to_string(),
-                ExprType::Numeric("veh.common.Torque".to_string()),
-            ),
+            ("torque".to_string(), torque()),
         ];
         let scope = ContractScope {
             params: &params,
             result: None,
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(&parse_expr("speed + torque > 0.0"), &scope);
@@ -1063,11 +1220,13 @@ mod tests {
     #[test]
     fn ridl_306_non_boolean_root() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let scope = ContractScope {
             params: &[],
             result: None,
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(&parse_expr("3"), &scope);
@@ -1085,11 +1244,13 @@ mod tests {
         // ridl §13 scopes an `ensure` to `result` and the parameters, so the
         // scope of an ensure carries no signals at all.
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let scope = ContractScope {
             params: &[],
             result: Some(speed()),
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(&parse_expr("currentSpeed >= 0.0"), &scope);
@@ -1108,12 +1269,14 @@ mod tests {
         // `veh.common.GearPosition.PARK` parses into nested member access
         // although expr-core §3.1 declares it inexpressible.
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let params = [("position".to_string(), gear())];
         let scope = ContractScope {
             params: &params,
             result: None,
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(
@@ -1132,7 +1295,8 @@ mod tests {
     #[test]
     fn ridl_306_further_boundary_forms() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let params = [
             ("speed".to_string(), speed()),
             ("window".to_string(), ExprType::Duration),
@@ -1161,6 +1325,7 @@ mod tests {
                 params: &params,
                 result: None,
                 signals: &[],
+                vocabulary: &vocabulary,
                 resolution: &resolution,
             };
             let (ty, diagnostics) = check_contract_expr(&parse_expr(text), &scope);
@@ -1175,12 +1340,14 @@ mod tests {
     #[test]
     fn ridl_305_ensure_without_result() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let params = [("window".to_string(), ExprType::Duration)];
         let scope = ContractScope {
             params: &params,
             result: Some(speed()),
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let (ty, diagnostics) = check_contract_expr(&parse_expr("window > 0ms"), &scope);
@@ -1227,13 +1394,15 @@ mod tests {
     #[test]
     fn collect_refs_reads_the_appendix_a_set_gear_require() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let params = [("position".to_string(), gear())];
         let signals = [("currentSpeed".to_string(), speed())];
         let scope = ContractScope {
             params: &params,
             result: None,
             signals: &signals,
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let refs = collect_refs(
@@ -1249,12 +1418,14 @@ mod tests {
     #[test]
     fn collect_refs_reads_constants_and_result() {
         let db = RidlDatabase::default();
-        let resolution = vocabulary(&db);
+        let resolution = resolution(&db);
+        let vocabulary = vocabulary();
         let params = [("max".to_string(), speed())];
         let scope = ContractScope {
             params: &params,
             result: Some(speed()),
             signals: &[],
+            vocabulary: &vocabulary,
             resolution: &resolution,
         };
         let refs = collect_refs(&parse_expr("result <= MAX_SPEED && result >= max"), &scope);

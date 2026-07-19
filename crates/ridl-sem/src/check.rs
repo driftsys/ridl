@@ -170,6 +170,7 @@ pub fn check_package(
         diagnostics: default_diagnostics,
         default_timing,
         interface_signals: Vec::new(),
+        contract_vocabulary: None,
     };
 
     let mut decls = Vec::new();
@@ -364,6 +365,9 @@ struct Checker<'db> {
     /// Set by [`Checker::lower_interface`] before its members are lowered and
     /// cleared after; empty everywhere else.
     interface_signals: Vec<(String, ExprType)>,
+    /// The package's resolved constants and enums (expr-core §6), built on the
+    /// first contract clause of the package and reused for the rest.
+    contract_vocabulary: Option<expr::ContractVocabulary>,
 }
 
 /// The primitive class a scalar constraint is validated against.
@@ -2631,15 +2635,14 @@ impl Checker<'_> {
         // Pre-pass: the interface's own signals, typed for the contract
         // environment. A `require` on any interaction may read them (ridl §13),
         // including one declared later in the body, so they are gathered before
-        // the members are lowered. A signal whose payload type is outside the
-        // guaranteed subset is left out — naming it in a contract is RIDL-306.
+        // the members are lowered.
         self.interface_signals = def
             .members()
             .filter_map(|member| match member {
                 ast::InterfaceMember::Signal(signal) => {
                     let name = member_name(signal.name())?;
                     let payload = signal.payload()?;
-                    Some((name, self.expr_type_of_field_type(&payload)?))
+                    Some((name, self.expr_type_of_field_type(&payload)))
                 }
                 _ => None,
             })
@@ -3029,48 +3032,69 @@ impl Checker<'_> {
 
     // --- the contract environment (E2 task 11) ----------------------------
 
-    /// The contract-expression type of a declared type reference, or `None`
-    /// when the declaration is outside the five expr-core domains (§5.1) — a
-    /// struct, a union, an enumset, a string- or bytes-backed type, or a name
-    /// that does not resolve. Silent: every one of these paths is resolved and
-    /// reported by the surrounding lowering already.
-    fn expr_type_of_field_type(&self, field_type: &ast::FieldType) -> Option<ExprType> {
-        // An optional, array, map, or tuple payload has no subset domain.
-        let ast::FieldType::Path(path) = field_type else {
-            return None;
+    /// The contract-expression type of a declared type reference, resolved in
+    /// `resolution`'s view. A declaration outside the five expr-core domains
+    /// (§5.1) — a struct, a union, an enumset, a string- or bytes-backed type,
+    /// a name that does not resolve — is [`ExprType::Unsupported`] carrying
+    /// what it is, so a contract naming it reports the real form rather than
+    /// claiming the name is unknown. Silent: each of these paths is resolved
+    /// and reported by the surrounding lowering already.
+    fn expr_type_of_path_in(&self, resolution: &Resolution, path: &ast::PathType) -> ExprType {
+        let written = significant_text(path.syntax());
+        let Some(symbol) = self.lookup_path_in(resolution, path) else {
+            return ExprType::Unsupported(written);
         };
-        self.expr_type_of_path(path)
-    }
-
-    fn expr_type_of_path(&self, path: &ast::PathType) -> Option<ExprType> {
-        let symbol = self.lookup_path(path)?;
         match symbol.kind {
-            SymbolKind::Enum => Some(ExprType::EnumType(expr::qualified_ref(&symbol))),
+            SymbolKind::Enum => ExprType::EnumType(expr::qualified_ref(&symbol)),
             SymbolKind::Type => {
                 let reference = expr::qualified_ref(&symbol);
                 // The one duration-domain inhabitant (expr-core §5.1); its
                 // `ms` backing would otherwise read as an ordinary numeric.
                 if reference == "ridl.std.Duration" {
-                    return Some(ExprType::Duration);
+                    return ExprType::Duration;
                 }
-                let Definition::Type(decl) = self.find_definition(&symbol)? else {
-                    return None;
+                let Some(Definition::Type(decl)) = self.find_definition(&symbol) else {
+                    return ExprType::Unsupported(reference);
                 };
                 match backing_class(decl.backing()) {
-                    BackingClass::Integer | BackingClass::Float => {
-                        Some(ExprType::Numeric(reference))
+                    BackingClass::Integer => {
+                        ExprType::Numeric(reference, expr::NumericBacking::Integer)
                     }
-                    BackingClass::Boolean => Some(ExprType::Boolean),
-                    BackingClass::Str | BackingClass::Bytes | BackingClass::Unknown => None,
+                    BackingClass::Float => {
+                        ExprType::Numeric(reference, expr::NumericBacking::Float)
+                    }
+                    BackingClass::Boolean => ExprType::Boolean,
+                    BackingClass::Str | BackingClass::Bytes | BackingClass::Unknown => {
+                        ExprType::Unsupported(reference)
+                    }
                 }
             }
-            _ => None,
+            _ => ExprType::Unsupported(expr::qualified_ref(&symbol)),
+        }
+    }
+
+    /// The same, resolved in the checked package's own view.
+    fn expr_type_of_path(&self, path: &ast::PathType) -> ExprType {
+        self.expr_type_of_path_in(&self.resolution, path)
+    }
+
+    fn expr_type_of_field_type(&self, field_type: &ast::FieldType) -> ExprType {
+        match field_type {
+            ast::FieldType::Path(path) => self.expr_type_of_path(path),
+            ast::FieldType::Primitive(node) => {
+                ExprType::Unsupported(significant_text(node.syntax()))
+            }
+            ast::FieldType::Tuple(_) => ExprType::Unsupported("a tuple".to_string()),
+            ast::FieldType::Array(_) => ExprType::Unsupported("an array".to_string()),
+            ast::FieldType::Map(_) => ExprType::Unsupported("a map".to_string()),
+            ast::FieldType::Optional(_) => ExprType::Unsupported("an optional".to_string()),
         }
     }
 
     /// The typed parameter environment of an interaction (expr-core §6 item 1).
-    /// A parameter outside the subset domains is left out; naming it in a
-    /// contract is RIDL-306.
+    /// Every named parameter is present: one whose type is outside the subset
+    /// domains carries [`ExprType::Unsupported`], so naming it is RIDL-306 with
+    /// a message about its type and not about resolution.
     fn param_expr_types(&self, params: Option<&ast::ParamList>) -> Vec<(String, ExprType)> {
         let Some(params) = params else {
             return Vec::new();
@@ -3079,41 +3103,142 @@ impl Checker<'_> {
             .params()
             .filter_map(|param| {
                 let name = member_name(param.name())?;
-                let ast::ParamType::Field(field_type) = param.param_type()? else {
-                    return None;
+                let declared = match param.param_type()? {
+                    ast::ParamType::Field(field_type) => self.expr_type_of_field_type(&field_type),
+                    ast::ParamType::Stream(_) => ExprType::Unsupported("a stream".to_string()),
                 };
-                Some((name, self.expr_type_of_field_type(&field_type)?))
+                Some((name, declared))
             })
             .collect()
     }
 
     /// The type of `result` in an `ensure` (expr-core §6 item 2): the named
     /// return type, the named-field tuple, or the success arm of an inline
-    /// fallible return — an `ensure` observes the value the query returned. A
-    /// stream return and any type outside the subset domains yield `None`, and
-    /// `result` then does not resolve.
-    fn result_expr_type(&self, return_type: &ast::ReturnType) -> Option<ExprType> {
+    /// fallible return — an `ensure` observes the value the query returned.
+    /// A return shape outside the subset domains carries
+    /// [`ExprType::Unsupported`].
+    fn result_expr_type(&self, return_type: &ast::ReturnType) -> ExprType {
         if let Some(tuple) = return_type.tuple_type() {
             let fields: Vec<(String, Option<ExprType>)> = tuple
                 .fields()
                 .filter_map(|field| {
                     let name = member_name(field.name())?;
-                    let field_type = field.field_type();
                     Some((
                         name,
-                        field_type.and_then(|found| self.expr_type_of_field_type(&found)),
+                        field
+                            .field_type()
+                            .map(|found| self.expr_type_of_field_type(&found)),
                     ))
                 })
                 .collect();
             if fields.is_empty() {
-                return None;
+                return ExprType::Unsupported("an empty tuple".to_string());
             }
-            return Some(ExprType::tuple(&fields));
+            return ExprType::tuple(&fields);
         }
         if let Some(fallible) = return_type.fallible_type() {
-            return self.expr_type_of_path(&fallible.ok()?);
+            return match fallible.ok() {
+                Some(ok) => self.expr_type_of_path(&ok),
+                None => ExprType::Unsupported("a fallible return".to_string()),
+            };
         }
-        self.expr_type_of_path(&return_type.type_ref()?)
+        if return_type.stream_type().is_some() {
+            return ExprType::Unsupported("a stream".to_string());
+        }
+        match return_type.type_ref() {
+            Some(path) => self.expr_type_of_path(&path),
+            None => ExprType::Unsupported("an unknown return type".to_string()),
+        }
+    }
+
+    /// The resolved package-level vocabulary a contract may name (expr-core §6
+    /// items 4 and 5): every constant with the type of its declared value, and
+    /// every enum with its member list.
+    ///
+    /// Each declaration is resolved in **its own** package's view: a constant
+    /// imported from another package names its type there, and the checked
+    /// package need not import that type to compare against the constant.
+    fn build_contract_vocabulary(&self) -> expr::ContractVocabulary {
+        let mut vocabulary = expr::ContractVocabulary::default();
+        for (bound, symbol) in &self.resolution.symbols {
+            match symbol.kind {
+                SymbolKind::Const => {
+                    let mut visiting = HashSet::new();
+                    vocabulary
+                        .consts
+                        .insert(bound.clone(), self.const_expr_type(symbol, &mut visiting));
+                }
+                SymbolKind::Enum => {
+                    let Some(Definition::Enum(decl)) = self.find_definition(symbol) else {
+                        continue;
+                    };
+                    vocabulary.enums.insert(
+                        bound.clone(),
+                        expr::EnumDecl {
+                            reference: expr::qualified_ref(symbol),
+                            members: decl
+                                .values()
+                                .filter_map(|value| member_name(value.name()))
+                                .collect(),
+                        },
+                    );
+                }
+                _ => {}
+            }
+        }
+        vocabulary
+    }
+
+    /// The type of a constant's value: its declared type when annotated,
+    /// otherwise the type of the literal it holds. A `const = const` chain is
+    /// followed to its root, guarded against cycles by `visiting`.
+    fn const_expr_type(
+        &self,
+        symbol: &Symbol,
+        visiting: &mut HashSet<(String, String)>,
+    ) -> ExprType {
+        let unknown = || ExprType::Unsupported("an unresolved constant".to_string());
+        if !visiting.insert((symbol.package.clone(), symbol.name.clone())) {
+            return unknown();
+        }
+        let Some(Definition::Const(decl)) = self.find_definition(symbol) else {
+            return unknown();
+        };
+        let Some(package) = self.package_handle(&symbol.package) else {
+            return unknown();
+        };
+        let resolution = resolve_package(self.db, self.ws, package, self.std);
+        // The declared type wins — it is what makes `MAX_SPEED` a `Speed` and
+        // not a bare literal (expr-core §9, typl §5.7).
+        if let Some(type_ref) = decl.type_ref() {
+            return self.expr_type_of_path_in(&resolution, &type_ref);
+        }
+        let Some(literal) = decl.value() else {
+            return unknown();
+        };
+        match literal_kind(&literal) {
+            // An unannotated numeric constant is a bare literal, which unifies
+            // with any numeric operand (expr-core §5.2). Its backing follows
+            // the written form, the same rule the literal itself follows.
+            LitKind::Number { .. } => ExprType::Numeric(
+                String::new(),
+                if literal.float_number_token().is_some() {
+                    expr::NumericBacking::Float
+                } else {
+                    expr::NumericBacking::Integer
+                },
+            ),
+            LitKind::Bool(_) => ExprType::Boolean,
+            LitKind::Str(_) => ExprType::Unsupported("a string constant".to_string()),
+            LitKind::Regex(_) => ExprType::Unsupported("a regex constant".to_string()),
+            LitKind::ConstRef(name) => match resolution.symbols.get(&name) {
+                Some(target) if target.kind == SymbolKind::Const => {
+                    self.const_expr_type(&target.clone(), visiting)
+                }
+                _ => unknown(),
+            },
+            LitKind::Malformed => unknown(),
+        }
     }
 
     /// Type-checks and lowers the `require`/`ensure` predicates of an
@@ -3144,6 +3269,13 @@ impl Checker<'_> {
             return Vec::new();
         };
         let signals = self.interface_signals.clone();
+        // The package vocabulary is resolved once per package and moved out of
+        // `self` for the duration of the walk, which needs `&mut self` for the
+        // diagnostics.
+        let vocabulary = match self.contract_vocabulary.take() {
+            Some(built) => built,
+            None => self.build_contract_vocabulary(),
+        };
         let mut contracts = Vec::new();
         for attribute in block.attributes() {
             let Some(predicate) = attribute.predicate_kind() else {
@@ -3163,12 +3295,14 @@ impl Checker<'_> {
                     params,
                     result: None,
                     signals: &signals,
+                    vocabulary: &vocabulary,
                     resolution: &self.resolution,
                 },
                 ast::PredicateKind::Ensure => ContractScope {
                     params,
                     result: result.clone(),
                     signals: &[],
+                    vocabulary: &vocabulary,
                     resolution: &self.resolution,
                 },
             };
@@ -3190,6 +3324,7 @@ impl Checker<'_> {
                 observer_id: String::new(),
             });
         }
+        self.contract_vocabulary = Some(vocabulary);
         contracts
     }
 
@@ -3242,9 +3377,12 @@ impl Checker<'_> {
             .and_then(|return_type| self.lower_query_return(&return_type));
         self.check_member_attrs(query.syntax(), MemberKind::Query);
         let param_types = self.param_expr_types(query.params().as_ref());
-        let result_type = query
-            .return_type()
-            .and_then(|declared| self.result_expr_type(&declared));
+        // A query always has a `result` in an `ensure`; a return shape outside
+        // the subset carries its own unsupported reason.
+        let result_type = Some(match query.return_type() {
+            Some(declared) => self.result_expr_type(&declared),
+            None => ExprType::Unsupported("an absent return type".to_string()),
+        });
         let contracts = self.lower_contracts(query.syntax(), true, &param_types, result_type);
         v2::QueryDef {
             params,
@@ -5811,7 +5949,9 @@ mod tests {
 type Speed  : km/h [0.0..300.0 step 0.5]\n\
 type Torque : N.m  [0.0..900.0 step 0.5]\n\
 type Count  : integer [0..1000]\n\
+type Ratio  : float [0.0..1.0 step 0.1]\n\
 const MAX_SPEED : Speed = 250.0\n\
+const MAX_COUNT : Count = 500\n\
 enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
 
     #[test]
@@ -5870,6 +6010,210 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
                 checked.diagnostics
             );
         }
+    }
+
+    #[test]
+    fn constants_unify_nominally_by_their_declared_type() {
+        // A constant carries its declared type, so a cross-named-type
+        // comparison against it is as much an error as any other
+        // (expr-core §5.2 — two named types never unify; typl §5.7).
+        for (name, body) in [
+            (
+                "float-backed named type against a `Speed` constant",
+                "command c(t: Torque) [ require t < MAX_SPEED ]",
+            ),
+            (
+                "integer-backed named type against a `Speed` parameter",
+                "command c(s: Speed) [ require s < MAX_COUNT ]",
+            ),
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!("{CONTRACT_PRELUDE}interface I {{\n  {body}\n}}\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["RIDL-306"],
+                "{name}: {:?}",
+                checked.diagnostics
+            );
+        }
+
+        // The expr-core §9 walk of `require max <= MAX_SPEED`: a `Speed`
+        // parameter against a `Speed` constant, ordered over one named type.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(max: Speed) [ require max <= MAX_SPEED ]\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    #[test]
+    fn remainder_reads_the_operand_backing_not_the_literal_spelling() {
+        // `%` is integer-backed only (expr-core §5.3). The rule is about the
+        // operands' declared types, so a float-backed named type is rejected
+        // even where every literal in sight is written as an integer.
+        for (name, body) in [
+            (
+                "two float-backed named types",
+                "command c(a: Speed, b: Speed) [ require a % b == 0.0 ]",
+            ),
+            (
+                "a float-backed constant",
+                "command c(a: Speed) [ require a % MAX_SPEED == 0.0 ]",
+            ),
+            (
+                "a bare float-backed type",
+                "command c(a: Ratio, b: Ratio) [ require a % b == 0.0 ]",
+            ),
+            (
+                "an integer-backed type against a float literal",
+                "command c(a: Count) [ require a % 0.5 == 0 ]",
+            ),
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!("{CONTRACT_PRELUDE}interface I {{\n  {body}\n}}\n"),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["RIDL-306"],
+                "{name}: {:?}",
+                checked.diagnostics
+            );
+        }
+
+        // Integer-backed operands, named and literal, are the legal form.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(a: Count, b: Count) [\n    require a % b == 0\n    require a % MAX_COUNT == 0\n  ]\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    #[test]
+    fn ridl_306_unknown_enum_member() {
+        // An unknown member is as broken a reference as an unknown identifier:
+        // the task 12 observers and the E2.11 property runner have no value to
+        // bind to it.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(p: GearPosition) [ require p != GearPosition.TYPO ]\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-306"]);
+        assert!(
+            checked.diagnostics[0].message.contains("TYPO"),
+            "the message names the member: {}",
+            checked.diagnostics[0].message
+        );
+
+        // A declared member is accepted.
+        let good = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(p: GearPosition) [ require p != GearPosition.PARK ]\n}}\n"
+            ),
+        );
+        assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
+    }
+
+    #[test]
+    fn out_of_domain_parameter_reports_its_type_not_its_resolution() {
+        // `l` IS a parameter — what is outside the subset is its type — so the
+        // message must name the declared form (expr-core §8).
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(l: Label) [ require l == \"x\" ]\n}}\n"
+            ),
+        );
+        assert!(
+            codes(&checked).iter().all(|code| *code == "RIDL-306"),
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let message = &checked.diagnostics[0].message;
+        assert!(
+            message.contains("parameter") && message.contains("ridl.std.Label"),
+            "the message names the parameter and its type: {message}"
+        );
+        assert!(
+            !message.contains("does not resolve"),
+            "the parameter resolves; its type is the problem: {message}"
+        );
+    }
+
+    #[test]
+    fn respelling_a_literal_does_not_change_contract_source() {
+        // A respelled literal is the same exact rational (expr-core §7), so it
+        // must not read as a contract edit in `ridl diff`.
+        let sources = |literal: &str| {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "{CONTRACT_PRELUDE}interface I {{\n  query q(): Speed [ ensure result >= {literal} ]\n}}\n"
+                ),
+            );
+            assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+            query_def(&checked, "q").contracts[0].source.clone()
+        };
+        assert_eq!(sources("0.0"), "result >= 0.0");
+        assert_eq!(sources("0.00"), sources("0.0"));
+        assert_eq!(
+            sources("250.0"),
+            "result >= 250.0",
+            "a whole float keeps its form"
+        );
+        assert_eq!(sources("1.50"), "result >= 1.5");
+    }
+
+    #[test]
+    fn an_imported_constant_carries_the_type_of_its_own_package() {
+        // The constant's type is resolved in the package that declares it, so
+        // the checked package does not have to import `Speed` to compare a
+        // `Speed` value against `MAX_SPEED`.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "veh.common",
+            "package veh.common\n\
+type Speed : km/h [0.0..300.0 step 0.5]\n\
+type Torque : N.m [0.0..900.0 step 0.5]\n\
+const MAX_SPEED : Speed = 250.0\n",
+        );
+        let cluster = ridl_package(
+            &db,
+            "veh.cluster",
+            "package veh.cluster\n\
+import veh.common.Speed\n\
+import veh.common.Torque\n\
+import veh.common.MAX_SPEED\n\
+interface I {\n\
+  command ok(s: Speed) [ require s <= MAX_SPEED ]\n\
+  command bad(t: Torque) [ require t <= MAX_SPEED ]\n\
+}\n",
+        );
+        let ws = Workspace::new(&db, vec![cluster, common], BTreeMap::new());
+        let checked = check_package(&db, ws, cluster, std);
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-306"],
+            "only the `Torque` comparison is a type error: {:?}",
+            checked.diagnostics
+        );
+        assert!(
+            checked.diagnostics[0].message.contains("veh.common.Torque")
+                && checked.diagnostics[0].message.contains("veh.common.Speed"),
+            "the message names both named types: {}",
+            checked.diagnostics[0].message
+        );
     }
 
     #[test]
@@ -6576,8 +6920,8 @@ interface VehicleStatus {
 
     #[test]
     fn appendix_a_contracts_lower_kind_and_source_text() {
-        // Task 6 lowers `Contract.kind` and the written source text only;
-        // canonicalization and the reference fields are tasks 10–11.
+        // Task 11 lowers `Contract.kind` and the canonical source text; the
+        // observer reference fields are task 12.
         let checked = check_appendix_a();
         let Some(v2::decl::Kind::CommandDef(set_gear)) = &interaction(&checked, "setGear").kind
         else {
