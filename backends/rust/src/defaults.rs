@@ -17,18 +17,20 @@ use crate::{
 };
 use proc_macro2::TokenStream;
 use quote::quote;
-use ridl_ir::v1;
+use ridl_ir::v2;
 
 /// The right-hand side of `fn default() -> Self` for a top-level declaration,
 /// or `None` when the type is not fully Default-constructible.
-pub(crate) fn decl_default_expr(ctx: &Ctx, decl: &v1::Decl) -> Option<TokenStream> {
+pub(crate) fn decl_default_expr(ctx: &Ctx, decl: &v2::Decl) -> Option<TokenStream> {
     match &decl.kind {
-        Some(v1::decl::Kind::TypeDef(td)) => type_def_default(&decl.name, td),
-        Some(v1::decl::Kind::StructDef(sd)) => struct_default(ctx, &decl.name, sd),
-        Some(v1::decl::Kind::EnumDef(ed)) => enum_default(&decl.name, ed),
-        Some(v1::decl::Kind::EnumSetDef(_)) => Some(enum_set_default(&decl.name)),
-        Some(v1::decl::Kind::UnionDef(ud)) => union_default(ctx, &decl.name, ud),
-        Some(v1::decl::Kind::ConstDef(_)) | None => None,
+        Some(v2::decl::Kind::TypeDef(td)) => type_def_default(&decl.name, td),
+        Some(v2::decl::Kind::StructDef(sd)) => struct_default(ctx, &decl.name, sd),
+        Some(v2::decl::Kind::EnumDef(ed)) => enum_default(&decl.name, ed),
+        Some(v2::decl::Kind::EnumSetDef(_)) => Some(enum_set_default(&decl.name)),
+        Some(v2::decl::Kind::UnionDef(ud)) => union_default(ctx, &decl.name, ud),
+        // Interaction kinds ride `Interface.interactions`, never a package
+        // decl; the interaction codegen is E2 task 15. No Default either way.
+        Some(_) | None => None,
     }
 }
 
@@ -43,7 +45,7 @@ struct Slot<'a> {
     hint: &'a str,
 }
 
-fn type_def_default(name: &str, td: &v1::TypeDef) -> Option<TokenStream> {
+fn type_def_default(name: &str, td: &v2::TypeDef) -> Option<TokenStream> {
     let init = td.init.as_ref()?;
     if !init.derivable {
         return None;
@@ -76,11 +78,11 @@ fn scalar_default_value(backing: ScalarBacking, value: Option<&str>) -> Option<T
     }
 }
 
-fn struct_default(ctx: &Ctx, name: &str, sd: &v1::StructDef) -> Option<TokenStream> {
+fn struct_default(ctx: &Ctx, name: &str, sd: &v2::StructDef) -> Option<TokenStream> {
     let name_id = ident(name);
     let mut inits = Vec::new();
     for member in &sd.members {
-        if let Some(v1::struct_member::Member::Field(field)) = &member.member {
+        if let Some(v2::struct_member::Member::Field(field)) = &member.member {
             let ft = field.r#type.as_ref()?;
             let fname = ident(&field.name);
             let hint = format!("{}{}", camel_case(name), camel_case(&field.name));
@@ -104,7 +106,7 @@ fn struct_default(ctx: &Ctx, name: &str, sd: &v1::StructDef) -> Option<TokenStre
 pub(crate) fn tuple_default_expr(
     ctx: &Ctx,
     name: &str,
-    tuple: &v1::TupleType,
+    tuple: &v2::TupleType,
 ) -> Option<TokenStream> {
     let name_id = ident(name);
     let mut inits = Vec::new();
@@ -124,21 +126,21 @@ pub(crate) fn tuple_default_expr(
     Some(quote! { #name_id { #(#inits),* } })
 }
 
-fn slot_default(ctx: &Ctx, ft: &v1::FieldType, slot: &Slot) -> Option<TokenStream> {
+fn slot_default(ctx: &Ctx, ft: &v2::FieldType, slot: &Slot) -> Option<TokenStream> {
     if ft.optional {
         return Some(quote! { None });
     }
     match &ft.kind {
-        Some(v1::field_type::Kind::Named(reference)) => named_default(ctx, reference, slot),
-        Some(v1::field_type::Kind::Primitive(prim)) => primitive_default(*prim, slot),
-        Some(v1::field_type::Kind::InlineScalar(td)) => {
+        Some(v2::field_type::Kind::Named(reference)) => named_default(ctx, reference, slot),
+        Some(v2::field_type::Kind::Primitive(prim)) => primitive_default(*prim, slot),
+        Some(v2::field_type::Kind::InlineScalar(td)) => {
             if slot.flag == Some(false) {
                 None
             } else {
                 scalar_default_value(backing_scalar(td), slot.init_value)
             }
         }
-        Some(v1::field_type::Kind::Tuple(tuple)) => {
+        Some(v2::field_type::Kind::Tuple(tuple)) => {
             if tuple_default_expr(ctx, slot.hint, tuple).is_some() {
                 let id = ident(slot.hint);
                 Some(quote! { #id::default() })
@@ -146,9 +148,12 @@ fn slot_default(ctx: &Ctx, ft: &v1::FieldType, slot: &Slot) -> Option<TokenStrea
                 None
             }
         }
-        Some(v1::field_type::Kind::Array(array)) => array_default(ctx, array, slot),
-        Some(v1::field_type::Kind::Map(map)) => map_default(ctx, map, slot),
-        None => None,
+        Some(v2::field_type::Kind::Array(array)) => array_default(ctx, array, slot),
+        Some(v2::field_type::Kind::Map(map)) => map_default(ctx, map, slot),
+        // A stream is an interaction-position type (ridl §12.3); it never
+        // reaches a struct or tuple field in checked IR, and it has no
+        // Default either way.
+        Some(v2::field_type::Kind::Stream(_)) | None => None,
     }
 }
 
@@ -170,7 +175,7 @@ fn named_default(ctx: &Ctx, reference: &str, slot: &Slot) -> Option<TokenStream>
         }
     } else if let Some(decl) = ctx.lookup(reference) {
         match &decl.kind {
-            Some(v1::decl::Kind::TypeDef(td)) => {
+            Some(v2::decl::Kind::TypeDef(td)) => {
                 type_def_default(reference, td)?;
                 let path = type_path(reference);
                 if let Some(declared) = slot.declared_init {
@@ -209,17 +214,17 @@ fn named_same_package_default(ctx: &Ctx, reference: &str) -> Option<TokenStream>
 }
 
 fn primitive_default(prim: i32, slot: &Slot) -> Option<TokenStream> {
-    match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
-        v1::PrimitiveType::Integer => Some(numeric_tokens(slot.init_value.unwrap_or("0"), false)),
-        v1::PrimitiveType::Float => Some(numeric_tokens(slot.init_value.unwrap_or("0"), true)),
-        v1::PrimitiveType::Boolean => Some(bool_tokens(slot.init_value.unwrap_or("false"))),
-        v1::PrimitiveType::String if slot.flag != Some(false) => Some(quote! { String::new() }),
-        v1::PrimitiveType::Bytes if slot.flag != Some(false) => Some(quote! { Vec::new() }),
+    match v2::PrimitiveType::try_from(prim).unwrap_or(v2::PrimitiveType::Unspecified) {
+        v2::PrimitiveType::Integer => Some(numeric_tokens(slot.init_value.unwrap_or("0"), false)),
+        v2::PrimitiveType::Float => Some(numeric_tokens(slot.init_value.unwrap_or("0"), true)),
+        v2::PrimitiveType::Boolean => Some(bool_tokens(slot.init_value.unwrap_or("false"))),
+        v2::PrimitiveType::String if slot.flag != Some(false) => Some(quote! { String::new() }),
+        v2::PrimitiveType::Bytes if slot.flag != Some(false) => Some(quote! { Vec::new() }),
         _ => None,
     }
 }
 
-fn array_default(ctx: &Ctx, array: &v1::ArrayType, slot: &Slot) -> Option<TokenStream> {
+fn array_default(ctx: &Ctx, array: &v2::ArrayType, slot: &Slot) -> Option<TokenStream> {
     let element = array.element.as_ref()?;
     let hint = format!("{}Element", slot.hint);
     let element_slot = Slot {
@@ -243,7 +248,7 @@ fn array_default(ctx: &Ctx, array: &v1::ArrayType, slot: &Slot) -> Option<TokenS
     }
 }
 
-fn map_default(ctx: &Ctx, map: &v1::MapType, slot: &Slot) -> Option<TokenStream> {
+fn map_default(ctx: &Ctx, map: &v2::MapType, slot: &Slot) -> Option<TokenStream> {
     if map.min == 0 {
         return Some(quote! { Vec::new() });
     }
@@ -267,7 +272,7 @@ fn map_default(ctx: &Ctx, map: &v1::MapType, slot: &Slot) -> Option<TokenStream>
     Some(quote! { (0..#count).map(|_| (#key, #value)).collect() })
 }
 
-fn enum_default(name: &str, ed: &v1::EnumDef) -> Option<TokenStream> {
+fn enum_default(name: &str, ed: &v2::EnumDef) -> Option<TokenStream> {
     // The value 0 if declared, else the lowest declared value (typl §5.8).
     let chosen = ed
         .values
@@ -285,7 +290,7 @@ fn enum_set_default(name: &str) -> TokenStream {
     quote! { #name_id(0) }
 }
 
-fn union_default(ctx: &Ctx, name: &str, ud: &v1::UnionDef) -> Option<TokenStream> {
+fn union_default(ctx: &Ctx, name: &str, ud: &v2::UnionDef) -> Option<TokenStream> {
     // The first arm's init (typl §5.8). The arm references a named type.
     let first = ud.arms.first()?;
     let arm_default = if first.type_ref.contains('.') {

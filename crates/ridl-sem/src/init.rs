@@ -1,9 +1,9 @@
 //! Init-value derivation (typl language reference §5.8; docs/ROADMAP.md epic
-//! E1.9). Every lowered [`v1::TypeDef`] and [`v1::Field`] carries a populated
-//! [`v1::InitValue`] — either the source-declared `= value` (validated as
+//! E1.9). Every lowered [`v2::TypeDef`] and [`v2::Field`] carries a populated
+//! [`v2::InitValue`] — either the source-declared `= value` (validated as
 //! TYPL-109 by the checker) or the value derived here per the §5.8 table.
 //!
-//! The [`v1::InitValue`] carrier has three states (documented on the proto
+//! The [`v2::InitValue`] carrier has three states (documented on the proto
 //! message):
 //!
 //! - `{ derivable: true, value: Some(text) }` — a **scalar** init: the
@@ -22,13 +22,13 @@
 //! stays a terminating canonical decimal string (ADR-0007 decision 9); a raw
 //! `numer/denom` fraction never reaches the IR.
 
-use ridl_ir::v1;
+use ridl_ir::v2;
 
 use crate::scalar::ExactValue;
 
 /// A scalar init: derivable, with the canonical text form of the value.
-fn scalar(value: &str) -> v1::InitValue {
-    v1::InitValue {
+fn scalar(value: &str) -> v2::InitValue {
+    v2::InitValue {
         derivable: true,
         value: Some(value.to_string()),
     }
@@ -36,8 +36,8 @@ fn scalar(value: &str) -> v1::InitValue {
 
 /// A composite or absent init: derivable, with no materialized scalar value —
 /// a consumer reconstructs it from the member inits (typl §5.8).
-fn composite() -> v1::InitValue {
-    v1::InitValue {
+fn composite() -> v2::InitValue {
+    v2::InitValue {
         derivable: true,
         value: None,
     }
@@ -45,19 +45,19 @@ fn composite() -> v1::InitValue {
 
 /// A non-derivable init (TYPL-115): no value can be synthesised and none was
 /// declared.
-fn not_derivable() -> v1::InitValue {
-    v1::InitValue {
+fn not_derivable() -> v2::InitValue {
+    v2::InitValue {
         derivable: false,
         value: None,
     }
 }
 
-/// Derives the init of a scalar [`v1::TypeDef`] from its backing and constraint
+/// Derives the init of a scalar [`v2::TypeDef`] from its backing and constraint
 /// (typl §5.8). Used for a named `type` declaration and for an inline
 /// constrained scalar in field position. The `TypeDef` carries its resolved
 /// `constraint` (exact decimal bounds, length bounds, `match` pattern) but not
 /// yet an `init`.
-pub fn derive_type_init(type_def: &v1::TypeDef) -> v1::InitValue {
+pub fn derive_type_init(type_def: &v2::TypeDef) -> v2::InitValue {
     let constraint = type_def.constraint.as_ref();
     match type_def
         .backing
@@ -66,12 +66,12 @@ pub fn derive_type_init(type_def: &v1::TypeDef) -> v1::InitValue {
     {
         // A unit backing is numeric (its underlying primitive is `float`,
         // typl §5.1).
-        Some(v1::backing::Kind::Unit(_)) => numeric_init(constraint),
-        Some(v1::backing::Kind::Primitive(code)) => match primitive(*code) {
-            v1::PrimitiveType::Boolean => scalar("false"),
-            v1::PrimitiveType::Integer | v1::PrimitiveType::Float => numeric_init(constraint),
-            v1::PrimitiveType::String | v1::PrimitiveType::Bytes => string_init(constraint),
-            v1::PrimitiveType::Unspecified => composite(),
+        Some(v2::backing::Kind::Unit(_)) => numeric_init(constraint),
+        Some(v2::backing::Kind::Primitive(code)) => match primitive(*code) {
+            v2::PrimitiveType::Boolean => scalar("false"),
+            v2::PrimitiveType::Integer | v2::PrimitiveType::Float => numeric_init(constraint),
+            v2::PrimitiveType::String | v2::PrimitiveType::Bytes => string_init(constraint),
+            v2::PrimitiveType::Unspecified => composite(),
         },
         None => composite(),
     }
@@ -81,19 +81,19 @@ pub fn derive_type_init(type_def: &v1::TypeDef) -> v1::InitValue {
 /// an inline constraint (typl §5.8). A bare `string`/`bytes` field is rejected
 /// elsewhere (TYPL-208); its derived init follows the default `[0..256]` bound,
 /// which admits the empty value.
-pub fn derive_primitive_init(primitive: v1::PrimitiveType) -> v1::InitValue {
+pub fn derive_primitive_init(primitive: v2::PrimitiveType) -> v2::InitValue {
     match primitive {
-        v1::PrimitiveType::Boolean => scalar("false"),
-        v1::PrimitiveType::Integer | v1::PrimitiveType::Float => scalar("0"),
-        v1::PrimitiveType::String | v1::PrimitiveType::Bytes => scalar(""),
-        v1::PrimitiveType::Unspecified => composite(),
+        v2::PrimitiveType::Boolean => scalar("false"),
+        v2::PrimitiveType::Integer | v2::PrimitiveType::Float => scalar("0"),
+        v2::PrimitiveType::String | v2::PrimitiveType::Bytes => scalar(""),
+        v2::PrimitiveType::Unspecified => composite(),
     }
 }
 
 /// The numeric derived init (typl §5.8): `0` when it lies within the range,
 /// otherwise the range minimum. Bounds are the exact decimal strings the
 /// checker resolved during lowering.
-fn numeric_init(constraint: Option<&v1::Constraint>) -> v1::InitValue {
+fn numeric_init(constraint: Option<&v2::Constraint>) -> v2::InitValue {
     let min = constraint
         .and_then(|constraint| constraint.min.as_deref())
         .and_then(ExactValue::parse);
@@ -108,7 +108,7 @@ fn numeric_init(constraint: Option<&v1::Constraint>) -> v1::InitValue {
 /// zero with an open minimum, the maximum). The chosen value is always rendered
 /// through [`ExactValue::to_decimal_string`] so the IR keeps a terminating
 /// canonical decimal.
-pub fn numeric_zero_or_min(min: Option<ExactValue>, max: Option<ExactValue>) -> v1::InitValue {
+pub fn numeric_zero_or_min(min: Option<ExactValue>, max: Option<ExactValue>) -> v2::InitValue {
     let zero = ExactValue::parse("0").expect("`0` parses");
     let above_min = min.as_ref().is_none_or(|bound| zero.0 >= bound.0);
     let below_max = max.as_ref().is_none_or(|bound| zero.0 <= bound.0);
@@ -117,7 +117,7 @@ pub fn numeric_zero_or_min(min: Option<ExactValue>, max: Option<ExactValue>) -> 
     } else {
         min.or(max).unwrap_or(zero)
     };
-    v1::InitValue {
+    v2::InitValue {
         derivable: true,
         value: Some(value.to_decimal_string()),
     }
@@ -125,7 +125,7 @@ pub fn numeric_zero_or_min(min: Option<ExactValue>, max: Option<ExactValue>) -> 
 
 /// The string/bytes derived init (typl §5.8): the empty value when the bounds
 /// admit length 0 and no `match` pattern is present, otherwise not derivable.
-pub fn string_init(constraint: Option<&v1::Constraint>) -> v1::InitValue {
+pub fn string_init(constraint: Option<&v2::Constraint>) -> v2::InitValue {
     let has_pattern = constraint.is_some_and(|constraint| {
         constraint.pattern.is_some() || constraint.pattern_const.is_some()
     });
@@ -150,18 +150,18 @@ pub fn string_init(constraint: Option<&v1::Constraint>) -> v1::InitValue {
 /// own init. The optional flag wins: an optional field is absent by default,
 /// which is always derivable.
 pub fn derive_field_init(
-    field_type: &v1::FieldType,
-    resolve_named: &dyn Fn(&str) -> v1::InitValue,
-) -> v1::InitValue {
+    field_type: &v2::FieldType,
+    resolve_named: &dyn Fn(&str) -> v2::InitValue,
+) -> v2::InitValue {
     if field_type.optional {
         // Optional fields are absent in the derived init (typl §5.8).
         return composite();
     }
     match &field_type.kind {
-        Some(v1::field_type::Kind::Primitive(code)) => derive_primitive_init(primitive(*code)),
-        Some(v1::field_type::Kind::InlineScalar(type_def)) => derive_type_init(type_def),
-        Some(v1::field_type::Kind::Named(name)) => resolve_named(name),
-        Some(v1::field_type::Kind::Tuple(tuple)) => {
+        Some(v2::field_type::Kind::Primitive(code)) => derive_primitive_init(primitive(*code)),
+        Some(v2::field_type::Kind::InlineScalar(type_def)) => derive_type_init(type_def),
+        Some(v2::field_type::Kind::Named(name)) => resolve_named(name),
+        Some(v2::field_type::Kind::Tuple(tuple)) => {
             // A tuple derives to each field's init; it is derivable only when
             // every field is (typl §5.8).
             let derivable = tuple.fields.iter().all(|field| {
@@ -170,12 +170,12 @@ pub fn derive_field_init(
                     .as_ref()
                     .is_none_or(|inner| derive_field_init(inner, resolve_named).derivable)
             });
-            v1::InitValue {
+            v2::InitValue {
                 derivable,
                 value: None,
             }
         }
-        Some(v1::field_type::Kind::Array(array)) => {
+        Some(v2::field_type::Kind::Array(array)) => {
             // A collection derives to a `min`-count of element inits: empty
             // (derivable) when `min == 0`, otherwise derivable only when the
             // element is (typl §5.8).
@@ -183,40 +183,43 @@ pub fn derive_field_init(
                 .element
                 .as_ref()
                 .is_none_or(|inner| derive_field_init(inner, resolve_named).derivable);
-            v1::InitValue {
+            v2::InitValue {
                 derivable: array.min == 0 || element,
                 value: None,
             }
         }
-        Some(v1::field_type::Kind::Map(map)) => {
+        Some(v2::field_type::Kind::Map(map)) => {
             let value = map
                 .value
                 .as_ref()
                 .is_none_or(|inner| derive_field_init(inner, resolve_named).derivable);
-            v1::InitValue {
+            v2::InitValue {
                 derivable: map.min == 0 || value,
                 value: None,
             }
         }
+        // A stream is an interaction-position type (ridl §12.3); it never
+        // reaches a struct field in checked IR and carries no init.
+        Some(v2::field_type::Kind::Stream(_)) => not_derivable(),
         None => composite(),
     }
 }
 
 /// The primitive enum from its wire code, defaulting to `Unspecified` for an
 /// out-of-range value.
-fn primitive(code: i32) -> v1::PrimitiveType {
-    v1::PrimitiveType::try_from(code).unwrap_or(v1::PrimitiveType::Unspecified)
+fn primitive(code: i32) -> v2::PrimitiveType {
+    v2::PrimitiveType::try_from(code).unwrap_or(v2::PrimitiveType::Unspecified)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn boolean() -> v1::TypeDef {
-        v1::TypeDef {
-            backing: Some(v1::Backing {
-                kind: Some(v1::backing::Kind::Primitive(
-                    v1::PrimitiveType::Boolean as i32,
+    fn boolean() -> v2::TypeDef {
+        v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Boolean as i32,
                 )),
             }),
             constraint: None,
@@ -226,14 +229,14 @@ mod tests {
         }
     }
 
-    fn numeric(min: &str, max: &str) -> v1::TypeDef {
-        v1::TypeDef {
-            backing: Some(v1::Backing {
-                kind: Some(v1::backing::Kind::Primitive(
-                    v1::PrimitiveType::Integer as i32,
+    fn numeric(min: &str, max: &str) -> v2::TypeDef {
+        v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Integer as i32,
                 )),
             }),
-            constraint: Some(v1::Constraint {
+            constraint: Some(v2::Constraint {
                 min: Some(min.to_string()),
                 max: Some(max.to_string()),
                 step: None,
@@ -248,14 +251,14 @@ mod tests {
         }
     }
 
-    fn string(len_min: u64, len_max: u64, pattern: Option<&str>) -> v1::TypeDef {
-        v1::TypeDef {
-            backing: Some(v1::Backing {
-                kind: Some(v1::backing::Kind::Primitive(
-                    v1::PrimitiveType::String as i32,
+    fn string(len_min: u64, len_max: u64, pattern: Option<&str>) -> v2::TypeDef {
+        v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
                 )),
             }),
-            constraint: Some(v1::Constraint {
+            constraint: Some(v2::Constraint {
                 min: None,
                 max: None,
                 step: None,
@@ -270,7 +273,7 @@ mod tests {
         }
     }
 
-    fn some(value: &str) -> v1::InitValue {
+    fn some(value: &str) -> v2::InitValue {
         scalar(value)
     }
 

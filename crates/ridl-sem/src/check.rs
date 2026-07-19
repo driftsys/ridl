@@ -1,6 +1,7 @@
 //! The package checker: lowers every declaration of a resolved package to IR
-//! v1 and runs the typl composite and scalar checks (docs/ROADMAP.md epic
-//! E1.7a; typl language reference §4–§12, §16).
+//! v2 and runs the typl composite and scalar checks plus the ridl interaction
+//! checks (docs/ROADMAP.md epics E1.7a, E2.1b–c; typl language reference
+//! §4–§12, §16; ridl language reference §3–§14, §16).
 //!
 //! Diagnostics accumulate; lowering continues past errors — the checker never
 //! returns a hard error (ADR-0004 §5). Every check lowers as far as honesty
@@ -29,7 +30,7 @@ use std::collections::HashSet;
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, package_of};
-use ridl_ir::v1;
+use ridl_ir::v2;
 use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, HasName};
 use ridl_syntax::{Profile, SyntaxKind};
 use rowan::{NodeOrToken, TextRange};
@@ -54,7 +55,7 @@ use crate::ucum::parse_ucum;
 /// onto its own source map with [`ridl_core::diag::remap_diagnostics`].
 #[derive(Debug, Clone, PartialEq)]
 pub struct CheckedPackage {
-    pub ir: v1::Package,
+    pub ir: v2::Package,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -96,7 +97,7 @@ pub fn checked_interface(def: &ast::InterfaceDef) -> CheckedInterface {
     }
 }
 
-/// Checks `pkg` and lowers it to IR v1 (typl reference §4–§12, §16.2–§16.3).
+/// Checks `pkg` and lowers it to IR v2 (typl reference §4–§12, §16.2–§16.3).
 ///
 /// `std` is the embedded `ridl.std` package, threaded in exactly as
 /// [`resolve_package`] takes it (its constructor needs `&mut RidlDatabase`,
@@ -133,6 +134,7 @@ pub fn check_package(
     };
 
     let mut decls = Vec::new();
+    let mut interfaces = Vec::new();
     let mut composite_starts = Vec::new();
     for (index, file) in files.iter().enumerate() {
         checker.current_file = index;
@@ -152,13 +154,13 @@ pub fn check_package(
                 decls.push(decl);
             }
         }
-        // The E2.1b interaction structural pass — diagnostics only, nothing
-        // lowered until task 6.
+        // The ridl interaction layer (E2.1b structural checks, E2.1c
+        // lowering): interfaces land in `Package.interfaces` in source order.
         for interface in source.interfaces() {
             if !checker.is_winner(*file, &interface) {
                 continue;
             }
-            checker.check_interface(&interface);
+            interfaces.push(checker.lower_interface(&interface));
         }
         // Stream-position narrowing runs on ridl-profile files only: in a
         // `.typl` parse the parser itself reports every stream as TYPL-301.
@@ -170,9 +172,13 @@ pub fn check_package(
     checker.check_recursion(&composite_starts);
 
     CheckedPackage {
-        ir: v1::Package {
+        ir: v2::Package {
             name: package_name,
             decls,
+            interfaces,
+            // The `service` declaration has no grammar yet (E2 task 12+);
+            // nothing lowers here until it does.
+            services: Vec::new(),
         },
         diagnostics: checker.diagnostics,
     }
@@ -311,8 +317,8 @@ enum BackingClass {
 /// A lowered scalar constraint plus the exact bounds kept for init/const
 /// validation.
 struct ScalarParts {
-    constraint: Option<v1::Constraint>,
-    width: Option<v1::type_def::Width>,
+    constraint: Option<v2::Constraint>,
+    width: Option<v2::type_def::Width>,
     min: Option<ExactValue>,
     max: Option<ExactValue>,
 }
@@ -383,7 +389,7 @@ enum PathTarget {
 /// The result of lowering one field type: the IR type plus the exact scalar
 /// bounds when the type is a scalar (used to validate a declared init).
 struct LoweredType {
-    ty: v1::FieldType,
+    ty: v2::FieldType,
     /// Exact numeric bounds when the field type is a numeric scalar, used to
     /// validate a numeric declared init (TYPL-109).
     scalar_bounds: Option<(Option<ExactValue>, Option<ExactValue>)>,
@@ -391,11 +397,11 @@ struct LoweredType {
     /// scalar — inline (`name : string [0..8]`) or a named string/bytes `type`.
     /// Used to validate a declared string/bytes init (TYPL-109); the numeric
     /// path reads `scalar_bounds` instead.
-    init_constraint: Option<v1::Constraint>,
+    init_constraint: Option<v2::Constraint>,
 }
 
 impl LoweredType {
-    fn plain(ty: v1::FieldType) -> Self {
+    fn plain(ty: v2::FieldType) -> Self {
         LoweredType {
             ty,
             scalar_bounds: None,
@@ -631,15 +637,15 @@ impl Checker<'_> {
 
     // --- declarations -----------------------------------------------------
 
-    fn lower_definition(&mut self, definition: &Definition) -> Option<v1::Decl> {
+    fn lower_definition(&mut self, definition: &Definition) -> Option<v2::Decl> {
         let name = declared_name(definition)?;
         let kind = match definition {
-            Definition::Type(decl) => v1::decl::Kind::TypeDef(self.lower_type(&name, decl)),
-            Definition::Const(decl) => v1::decl::Kind::ConstDef(self.lower_const(&name, decl)),
-            Definition::Struct(decl) => v1::decl::Kind::StructDef(self.lower_struct(decl)),
-            Definition::Enum(decl) => v1::decl::Kind::EnumDef(self.lower_enum(decl)),
-            Definition::EnumSet(decl) => v1::decl::Kind::EnumSetDef(self.lower_enum_set(decl)),
-            Definition::Union(decl) => v1::decl::Kind::UnionDef(self.lower_union(decl)),
+            Definition::Type(decl) => v2::decl::Kind::TypeDef(self.lower_type(&name, decl)),
+            Definition::Const(decl) => v2::decl::Kind::ConstDef(self.lower_const(&name, decl)),
+            Definition::Struct(decl) => v2::decl::Kind::StructDef(self.lower_struct(decl)),
+            Definition::Enum(decl) => v2::decl::Kind::EnumDef(self.lower_enum(decl)),
+            Definition::EnumSet(decl) => v2::decl::Kind::EnumSetDef(self.lower_enum_set(decl)),
+            Definition::Union(decl) => v2::decl::Kind::UnionDef(self.lower_union(decl)),
         };
         // TYPL-212: `error` is failure vocabulary for composites only
         // (typl §10.1) — struct, enum, union.
@@ -656,9 +662,9 @@ impl Checker<'_> {
             );
         }
         let visibility = if definition.is_internal() {
-            v1::Visibility::Internal
+            v2::Visibility::Internal
         } else {
-            v1::Visibility::Public
+            v2::Visibility::Public
         };
 
         // Doc-comment body, @labels, and @deprecated (typl §14). TYPL-405 warns
@@ -683,13 +689,16 @@ impl Checker<'_> {
         // TYPL-005: a public declaration must not expose an `internal` type.
         self.check_internal_exposure(definition, &name);
 
-        Some(v1::Decl {
+        Some(v2::Decl {
             name,
             visibility: visibility as i32,
             is_error: definition.is_error(),
             doc: doc_info.doc,
             labels: doc_info.labels,
             deprecated: doc_info.deprecated,
+            // Package-level declarations carry no interaction ordinal
+            // (ridl §11).
+            ordinal: 0,
             kind: Some(kind),
         })
     }
@@ -745,7 +754,7 @@ impl Checker<'_> {
         }
     }
 
-    fn lower_type(&mut self, name: &str, decl: &ast::TypeDef) -> v1::TypeDef {
+    fn lower_type(&mut self, name: &str, decl: &ast::TypeDef) -> v2::TypeDef {
         let (backing, class) = self.lower_backing(decl.backing());
         let span = decl
             .backing()
@@ -754,7 +763,7 @@ impl Checker<'_> {
         let parts = self.lower_scalar(class, decl.constraint(), span);
         let (declared_init, declared) =
             self.lower_declared_init(decl.init_value(), &parts, DiagCode::TYPL_109);
-        let mut type_def = v1::TypeDef {
+        let mut type_def = v2::TypeDef {
             backing,
             constraint: parts.constraint,
             declared_init,
@@ -782,14 +791,14 @@ impl Checker<'_> {
     fn lower_backing(
         &mut self,
         backing: Option<ast::Backing>,
-    ) -> (Option<v1::Backing>, BackingClass) {
+    ) -> (Option<v2::Backing>, BackingClass) {
         match backing {
             None => (None, BackingClass::Unknown),
             Some(ast::Backing::Primitive(node)) => {
                 let (primitive, class) = primitive_of(&node);
                 (
-                    Some(v1::Backing {
-                        kind: Some(v1::backing::Kind::Primitive(primitive as i32)),
+                    Some(v2::Backing {
+                        kind: Some(v2::backing::Kind::Primitive(primitive as i32)),
                     }),
                     class,
                 )
@@ -810,8 +819,8 @@ impl Checker<'_> {
                     }
                 };
                 (
-                    Some(v1::Backing {
-                        kind: Some(v1::backing::Kind::Unit(unit)),
+                    Some(v2::Backing {
+                        kind: Some(v2::backing::Kind::Unit(unit)),
                     }),
                     BackingClass::Float,
                 )
@@ -819,7 +828,7 @@ impl Checker<'_> {
         }
     }
 
-    fn lower_const(&mut self, name: &str, decl: &ast::ConstDef) -> v1::ConstDef {
+    fn lower_const(&mut self, name: &str, decl: &ast::ConstDef) -> v2::ConstDef {
         let value_literal = decl.value();
         let value_kind = value_literal.as_ref().map(literal_kind);
         let value_range = value_literal
@@ -929,7 +938,7 @@ impl Checker<'_> {
                 None,
             ),
         };
-        v1::ConstDef {
+        v2::ConstDef {
             type_ref,
             value,
             regex,
@@ -1046,7 +1055,7 @@ impl Checker<'_> {
             return ScalarParts {
                 constraint: None,
                 // §4.2 last row: no range derives int64.
-                width: Some(v1::type_def::Width::IntWidth(v1::IntWidth::I64 as i32)),
+                width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::I64 as i32)),
                 min: None,
                 max: None,
             };
@@ -1102,8 +1111,8 @@ impl Checker<'_> {
                 min: effective_min,
                 max: effective_max,
             }) {
-                Ok(width) => Some(v1::type_def::Width::IntWidth(
-                    v1::IntWidth::from(width) as i32
+                Ok(width) => Some(v2::type_def::Width::IntWidth(
+                    v2::IntWidth::from(width) as i32
                 )),
                 Err(error) => {
                     debug_assert_eq!(error.code(), "TYPL-111");
@@ -1118,7 +1127,7 @@ impl Checker<'_> {
             }
         };
         ScalarParts {
-            constraint: Some(v1::Constraint {
+            constraint: Some(v2::Constraint {
                 min: min.as_ref().map(ExactValue::to_decimal_string),
                 max: max.as_ref().map(ExactValue::to_decimal_string),
                 step: None,
@@ -1149,7 +1158,7 @@ impl Checker<'_> {
             missing_constraint_warning(self, decl_span);
             return ScalarParts {
                 constraint: None,
-                width: Some(v1::type_def::Width::FloatWidth(v1::FloatWidth::F64 as i32)),
+                width: Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32)),
                 min: None,
                 max: None,
             };
@@ -1254,12 +1263,12 @@ impl Checker<'_> {
             } else {
                 crate::scalar::FloatWidth::F64
             };
-            Some(v1::type_def::Width::FloatWidth(
-                v1::FloatWidth::from(width) as i32
+            Some(v2::type_def::Width::FloatWidth(
+                v2::FloatWidth::from(width) as i32
             ))
         };
         ScalarParts {
-            constraint: Some(v1::Constraint {
+            constraint: Some(v2::Constraint {
                 min: min.as_ref().map(ExactValue::to_decimal_string),
                 max: max.as_ref().map(ExactValue::to_decimal_string),
                 step: step.as_ref().map(ExactValue::to_decimal_string),
@@ -1339,7 +1348,7 @@ impl Checker<'_> {
         }
 
         ScalarParts {
-            constraint: Some(v1::Constraint {
+            constraint: Some(v2::Constraint {
                 min: None,
                 max: None,
                 step: None,
@@ -1368,7 +1377,7 @@ impl Checker<'_> {
         init: Option<ast::InitValue>,
         parts: &ScalarParts,
         violation: DiagCode,
-    ) -> (Option<String>, Option<v1::InitValue>) {
+    ) -> (Option<String>, Option<v2::InitValue>) {
         let Some(literal) = init.as_ref().and_then(ast::InitValue::literal) else {
             return (None, None);
         };
@@ -1416,7 +1425,7 @@ impl Checker<'_> {
         };
         (
             Some(text.clone()),
-            Some(v1::InitValue {
+            Some(v2::InitValue {
                 derivable: true,
                 value: Some(text),
             }),
@@ -1477,7 +1486,7 @@ impl Checker<'_> {
 
     // --- structs ----------------------------------------------------------
 
-    fn lower_struct(&mut self, decl: &ast::StructDef) -> v1::StructDef {
+    fn lower_struct(&mut self, decl: &ast::StructDef) -> v2::StructDef {
         // Pre-pass: the reserved tombstones, for TYPL-210/211.
         let mut reserved_names: HashSet<String> = HashSet::new();
         let mut reserved_values: HashSet<i64> = HashSet::new();
@@ -1497,8 +1506,8 @@ impl Checker<'_> {
                     // A tombstone implies evolution; an evolved struct is
                     // never emitted as a fixed inline layout.
                     fixed = false;
-                    members.push(v1::StructMember {
-                        member: Some(v1::struct_member::Member::Reserved(lower_reserved(
+                    members.push(v2::StructMember {
+                        member: Some(v2::struct_member::Member::Reserved(lower_reserved(
                             &entry, ordinal,
                         ))),
                     });
@@ -1521,13 +1530,13 @@ impl Checker<'_> {
                     {
                         fixed = false;
                     }
-                    members.push(v1::StructMember {
-                        member: Some(v1::struct_member::Member::Field(lowered)),
+                    members.push(v2::StructMember {
+                        member: Some(v2::struct_member::Member::Field(lowered)),
                     });
                 }
             }
         }
-        v1::StructDef {
+        v2::StructDef {
             members,
             fixed_layout: fixed && ordinal > 0,
         }
@@ -1543,7 +1552,7 @@ impl Checker<'_> {
         self.field_type_is_fixed(&self.resolution, &field_type, &mut visiting)
     }
 
-    fn lower_field(&mut self, field: &ast::FieldDef, ordinal: u32) -> v1::Field {
+    fn lower_field(&mut self, field: &ast::FieldDef, ordinal: u32) -> v2::Field {
         let name = member_name(field.name()).unwrap_or_default();
         let lowered = field
             .field_type()
@@ -1572,7 +1581,7 @@ impl Checker<'_> {
             Some(init) => Some(init),
             None => lowered.as_ref().map(|l| self.derive_field_init(&l.ty)),
         };
-        v1::Field {
+        v2::Field {
             name,
             ordinal,
             r#type: lowered.map(|l| l.ty),
@@ -1586,7 +1595,7 @@ impl Checker<'_> {
 
     /// Derives a field's init from its lowered field type (typl §5.8), resolving
     /// a named reference to the referenced type's own init. See [`crate::init`].
-    fn derive_field_init(&self, field_type: &v1::FieldType) -> v1::InitValue {
+    fn derive_field_init(&self, field_type: &v2::FieldType) -> v2::InitValue {
         init::derive_field_init(field_type, &|name| self.named_ref_init(name))
     }
 
@@ -1596,10 +1605,10 @@ impl Checker<'_> {
     /// derivable composite the consumer reconstructs (a `union` inherits its
     /// first arm's derivability). An unresolved reference — already reported by
     /// the type-resolution pass — is treated as a derivable composite.
-    fn named_ref_init(&self, canonical: &str) -> v1::InitValue {
+    fn named_ref_init(&self, canonical: &str) -> v2::InitValue {
         match self.resolve_canonical(canonical) {
             Some(symbol) => self.named_type_init(&symbol),
-            None => v1::InitValue {
+            None => v2::InitValue {
                 derivable: true,
                 value: None,
             },
@@ -1607,11 +1616,11 @@ impl Checker<'_> {
     }
 
     /// The derived init of a resolved named type (typl §5.8).
-    fn named_type_init(&self, symbol: &Symbol) -> v1::InitValue {
+    fn named_type_init(&self, symbol: &Symbol) -> v2::InitValue {
         match symbol.kind {
             SymbolKind::Type => {
                 let Some(Definition::Type(decl)) = self.find_definition(symbol) else {
-                    return v1::InitValue {
+                    return v2::InitValue {
                         derivable: true,
                         value: None,
                     };
@@ -1621,7 +1630,7 @@ impl Checker<'_> {
                     return init;
                 }
                 match backing_class(decl.backing()) {
-                    BackingClass::Boolean => v1::InitValue {
+                    BackingClass::Boolean => v2::InitValue {
                         derivable: true,
                         value: Some("false".to_string()),
                     },
@@ -1632,33 +1641,33 @@ impl Checker<'_> {
                     BackingClass::Str | BackingClass::Bytes => {
                         init::string_init(self.named_string_constraint(symbol).as_ref())
                     }
-                    BackingClass::Unknown => v1::InitValue {
+                    BackingClass::Unknown => v2::InitValue {
                         derivable: true,
                         value: None,
                     },
                 }
             }
             SymbolKind::Enum => self.enum_default_init(symbol),
-            SymbolKind::EnumSet => v1::InitValue {
+            SymbolKind::EnumSet => v2::InitValue {
                 // The empty set — no bits set (typl §5.8).
                 derivable: true,
                 value: Some(String::new()),
             },
-            SymbolKind::Struct => v1::InitValue {
+            SymbolKind::Struct => v2::InitValue {
                 derivable: true,
                 value: None,
             },
-            SymbolKind::Union => v1::InitValue {
+            SymbolKind::Union => v2::InitValue {
                 derivable: self.union_is_derivable(symbol),
                 value: None,
             },
-            SymbolKind::Const => v1::InitValue {
+            SymbolKind::Const => v2::InitValue {
                 derivable: false,
                 value: None,
             },
             // Unreachable through `resolve_type_path`, which rejects an
             // interface in type position; kept derivable as the safe default.
-            SymbolKind::Interface => v1::InitValue {
+            SymbolKind::Interface => v2::InitValue {
                 derivable: true,
                 value: None,
             },
@@ -1668,7 +1677,7 @@ impl Checker<'_> {
     /// The materialized value of a named type's own declared `= value` init
     /// (typl §5.8), or `None` when the type declares no init. A constant-valued
     /// init resolves through the const chain in the type's defining package.
-    fn declared_type_init(&self, decl: &ast::TypeDef, symbol: &Symbol) -> Option<v1::InitValue> {
+    fn declared_type_init(&self, decl: &ast::TypeDef, symbol: &Symbol) -> Option<v2::InitValue> {
         let literal = decl.init_value()?.literal()?;
         let value = match literal_kind(&literal) {
             LitKind::Number { value } => value.to_decimal_string(),
@@ -1685,7 +1694,7 @@ impl Checker<'_> {
             }
             LitKind::Regex(_) | LitKind::Malformed => return None,
         };
-        Some(v1::InitValue {
+        Some(v2::InitValue {
             derivable: true,
             value: Some(value),
         })
@@ -1694,9 +1703,9 @@ impl Checker<'_> {
     /// The derived enum init (typl §5.8): the value `0` when an enum value
     /// declares it, otherwise the lowest declared value. A degenerate enum with
     /// no integer-valued members is not derivable.
-    fn enum_default_init(&self, symbol: &Symbol) -> v1::InitValue {
+    fn enum_default_init(&self, symbol: &Symbol) -> v2::InitValue {
         let Some(Definition::Enum(decl)) = self.find_definition(symbol) else {
-            return v1::InitValue {
+            return v2::InitValue {
                 derivable: true,
                 value: None,
             };
@@ -1711,15 +1720,15 @@ impl Checker<'_> {
             )
             .collect();
         match values.iter().copied().min() {
-            Some(_) if values.contains(&0) => v1::InitValue {
+            Some(_) if values.contains(&0) => v2::InitValue {
                 derivable: true,
                 value: Some("0".to_string()),
             },
-            Some(lowest) => v1::InitValue {
+            Some(lowest) => v2::InitValue {
                 derivable: true,
                 value: Some(lowest.to_string()),
             },
-            None => v1::InitValue {
+            None => v2::InitValue {
                 derivable: false,
                 value: None,
             },
@@ -1781,7 +1790,7 @@ impl Checker<'_> {
     /// The length bounds and `match` pattern of a named string/bytes `type`, as
     /// an IR constraint (read-only, no diagnostics), for init validation and
     /// derivation. `None` when the symbol is not a string/bytes type.
-    fn named_string_constraint(&self, symbol: &Symbol) -> Option<v1::Constraint> {
+    fn named_string_constraint(&self, symbol: &Symbol) -> Option<v2::Constraint> {
         let Definition::Type(decl) = self.find_definition(symbol)? else {
             return None;
         };
@@ -1792,7 +1801,7 @@ impl Checker<'_> {
         let constraint = decl.constraint();
         let (len_min, len_max) = self.string_len_bounds(constraint.as_ref());
         let (pattern, pattern_const) = self.string_pattern(constraint.as_ref());
-        Some(v1::Constraint {
+        Some(v2::Constraint {
             min: None,
             max: None,
             step: None,
@@ -1866,7 +1875,7 @@ impl Checker<'_> {
                     .field_type()
                     .map(|inner| self.lower_field_type(&inner, map_key))
                     .unwrap_or_else(|| {
-                        LoweredType::plain(v1::FieldType {
+                        LoweredType::plain(v2::FieldType {
                             optional: false,
                             kind: None,
                         })
@@ -1879,16 +1888,16 @@ impl Checker<'_> {
             ast::FieldType::Tuple(tuple) => {
                 let fields = tuple
                     .fields()
-                    .map(|field| v1::TupleField {
+                    .map(|field| v2::TupleField {
                         name: member_name(field.name()).unwrap_or_default(),
                         r#type: field
                             .field_type()
                             .map(|inner| self.lower_field_type(&inner, false).ty),
                     })
                     .collect();
-                LoweredType::plain(v1::FieldType {
+                LoweredType::plain(v2::FieldType {
                     optional: false,
-                    kind: Some(v1::field_type::Kind::Tuple(v1::TupleType { fields })),
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType { fields })),
                 })
             }
             ast::FieldType::Array(array) => {
@@ -1901,9 +1910,9 @@ impl Checker<'_> {
                     DiagCode::TYPL_201,
                     "array",
                 );
-                LoweredType::plain(v1::FieldType {
+                LoweredType::plain(v2::FieldType {
                     optional: false,
-                    kind: Some(v1::field_type::Kind::Array(Box::new(v1::ArrayType {
+                    kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
                         element,
                         min,
                         max,
@@ -1921,9 +1930,9 @@ impl Checker<'_> {
                     DiagCode::TYPL_202,
                     "map",
                 );
-                LoweredType::plain(v1::FieldType {
+                LoweredType::plain(v2::FieldType {
                     optional: false,
-                    kind: Some(v1::field_type::Kind::Map(Box::new(v1::MapType {
+                    kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
                         key,
                         value,
                         min,
@@ -1947,17 +1956,17 @@ impl Checker<'_> {
                     .then(|| self.named_string_constraint(&symbol))
                     .flatten();
                 LoweredType {
-                    ty: v1::FieldType {
+                    ty: v2::FieldType {
                         optional: false,
-                        kind: Some(v1::field_type::Kind::Named(self.canonical_ref(&symbol))),
+                        kind: Some(v2::field_type::Kind::Named(self.canonical_ref(&symbol))),
                     },
                     scalar_bounds,
                     init_constraint,
                 }
             }
-            PathTarget::Unresolved(written) => LoweredType::plain(v1::FieldType {
+            PathTarget::Unresolved(written) => LoweredType::plain(v2::FieldType {
                 optional: false,
-                kind: Some(v1::field_type::Kind::Named(written)),
+                kind: Some(v2::field_type::Kind::Named(written)),
             }),
         }
     }
@@ -1980,11 +1989,11 @@ impl Checker<'_> {
                     .then(|| parts.constraint.clone())
                     .flatten();
                 LoweredType {
-                    ty: v1::FieldType {
+                    ty: v2::FieldType {
                         optional: false,
-                        kind: Some(v1::field_type::Kind::InlineScalar(Box::new(v1::TypeDef {
-                            backing: Some(v1::Backing {
-                                kind: Some(v1::backing::Kind::Primitive(primitive as i32)),
+                        kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+                            backing: Some(v2::Backing {
+                                kind: Some(v2::backing::Kind::Primitive(primitive as i32)),
                             }),
                             constraint: parts.constraint,
                             declared_init: None,
@@ -2022,9 +2031,9 @@ impl Checker<'_> {
                         BackingClass::Boolean | BackingClass::Unknown => {}
                     }
                 }
-                LoweredType::plain(v1::FieldType {
+                LoweredType::plain(v2::FieldType {
                     optional: false,
-                    kind: Some(v1::field_type::Kind::Primitive(primitive as i32)),
+                    kind: Some(v2::field_type::Kind::Primitive(primitive as i32)),
                 })
             }
         }
@@ -2032,7 +2041,7 @@ impl Checker<'_> {
 
     /// Lowers a map key, enforcing the §12.2 key shape: a named string type
     /// or a primitive (TYPL-209).
-    fn lower_map_key(&mut self, key: &ast::FieldType) -> v1::FieldType {
+    fn lower_map_key(&mut self, key: &ast::FieldType) -> v2::FieldType {
         match key {
             ast::FieldType::Primitive(_) => self.lower_field_type(key, true).ty,
             ast::FieldType::Path(path) => match self.resolve_type_path(path) {
@@ -2047,14 +2056,14 @@ impl Checker<'_> {
                             ),
                         );
                     }
-                    v1::FieldType {
+                    v2::FieldType {
                         optional: false,
-                        kind: Some(v1::field_type::Kind::Named(self.canonical_ref(&symbol))),
+                        kind: Some(v2::field_type::Kind::Named(self.canonical_ref(&symbol))),
                     }
                 }
-                PathTarget::Unresolved(written) => v1::FieldType {
+                PathTarget::Unresolved(written) => v2::FieldType {
                     optional: false,
-                    kind: Some(v1::field_type::Kind::Named(written)),
+                    kind: Some(v2::field_type::Kind::Named(written)),
                 },
             },
             _ => {
@@ -2115,7 +2124,7 @@ impl Checker<'_> {
 
     // --- enums, enum sets -------------------------------------------------
 
-    fn lower_enum(&mut self, decl: &ast::EnumDef) -> v1::EnumDef {
+    fn lower_enum(&mut self, decl: &ast::EnumDef) -> v2::EnumDef {
         // Pre-pass over the tombstones for TYPL-210/211.
         let mut reserved_names: HashSet<String> = HashSet::new();
         let mut reserved_values: HashSet<i64> = HashSet::new();
@@ -2183,18 +2192,18 @@ impl Checker<'_> {
                     format!("duplicate enum value {value}"),
                 );
             }
-            values.push(v1::EnumValue {
+            values.push(v2::EnumValue {
                 name,
                 value,
                 doc: String::new(),
             });
         }
-        v1::EnumDef { values, reserved }
+        v2::EnumDef { values, reserved }
     }
 
-    fn lower_enum_set(&mut self, decl: &ast::EnumSetDef) -> v1::EnumSetDef {
+    fn lower_enum_set(&mut self, decl: &ast::EnumSetDef) -> v2::EnumSetDef {
         let mut backing_enum = None;
-        let mut bits: Vec<v1::EnumValue> = Vec::new();
+        let mut bits: Vec<v2::EnumValue> = Vec::new();
 
         if let Some(backing_ref) = decl.backing_ref() {
             // The derived form (§9.2): copy the backing enum's values so
@@ -2217,7 +2226,7 @@ impl Checker<'_> {
                             else {
                                 continue;
                             };
-                            bits.push(v1::EnumValue {
+                            bits.push(v2::EnumValue {
                                 name,
                                 value: bit,
                                 doc: String::new(),
@@ -2266,7 +2275,7 @@ impl Checker<'_> {
                         format!("duplicate enumset bit position {value}"),
                     );
                 }
-                bits.push(v1::EnumValue {
+                bits.push(v2::EnumValue {
                     name,
                     value,
                     doc: String::new(),
@@ -2291,16 +2300,16 @@ impl Checker<'_> {
                 highest = highest.max(bit.value as u32);
             }
         }
-        v1::EnumSetDef {
+        v2::EnumSetDef {
             backing_enum,
             bits,
-            width: v1::IntWidth::from(enumset_width(highest)) as i32,
+            width: v2::IntWidth::from(enumset_width(highest)) as i32,
         }
     }
 
     // --- unions -----------------------------------------------------------
 
-    fn lower_union(&mut self, decl: &ast::UnionDef) -> v1::UnionDef {
+    fn lower_union(&mut self, decl: &ast::UnionDef) -> v2::UnionDef {
         let mut reserved_names: HashSet<String> = HashSet::new();
         let mut reserved_values: HashSet<i64> = HashSet::new();
         for entry in decl.reserved() {
@@ -2366,7 +2375,7 @@ impl Checker<'_> {
             if let Some(is_error) = arm_is_error {
                 resolved_kinds.push(is_error);
             }
-            arms.push(v1::UnionArm {
+            arms.push(v2::UnionArm {
                 name,
                 ordinal,
                 type_ref,
@@ -2422,7 +2431,7 @@ impl Checker<'_> {
             }
         }
 
-        v1::UnionDef {
+        v2::UnionDef {
             arms,
             is_result,
             reserved,
@@ -2490,7 +2499,12 @@ impl Checker<'_> {
     //   combination already draws its kind rule.
 
     /// The structural rules of one interface (ridl §16, E2 task 5).
-    fn check_interface(&mut self, def: &ast::InterfaceDef) {
+    /// Checks one interface and lowers it to its IR shape (ridl §14.0, §11;
+    /// E2.1b–c): the structural diagnostics accumulate exactly as in the
+    /// E2.1b pass, and every surviving member lowers to an interaction
+    /// `Decl` with its §11 ordinal — the same assignment
+    /// [`checked_interface`] computes.
+    fn lower_interface(&mut self, def: &ast::InterfaceDef) -> v2::Interface {
         // TYPL-212: `error` is failure vocabulary for composites only
         // (typl §10.1) — an interface is not one.
         if def.is_error() {
@@ -2537,6 +2551,8 @@ impl Checker<'_> {
         }
 
         let mut seen: HashSet<String> = HashSet::new();
+        let mut interactions = Vec::new();
+        let mut ordinal = 0u32;
         for member in def.members() {
             if !matches!(member, ast::InterfaceMember::Reserved(_))
                 && let Some(name) = member_name(member.name())
@@ -2550,8 +2566,9 @@ impl Checker<'_> {
                     );
                 }
                 if !seen.insert(name.clone()) {
-                    // RIDL-402: first wins; the loser is excluded from
-                    // lowering ([`checked_interface`]) and not re-checked.
+                    // RIDL-402: first wins; the loser is excluded from the
+                    // lowering, is not re-checked, and holds no ordinal slot
+                    // — the same rule [`checked_interface`] applies.
                     self.error(
                         DiagCode::RIDL_402,
                         range,
@@ -2560,40 +2577,101 @@ impl Checker<'_> {
                     continue;
                 }
             }
-            match &member {
-                ast::InterfaceMember::Signal(signal) => self.check_signal(signal),
-                ast::InterfaceMember::Event(event) => self.check_event(event),
-                ast::InterfaceMember::Command(command) => self.check_command(command),
-                ast::InterfaceMember::Query(query) => self.check_query(query),
-                ast::InterfaceMember::Final(fin) => self.check_final(fin),
-                ast::InterfaceMember::Reserved(_) => {}
+            ordinal += 1;
+            interactions.push(self.lower_interaction(&member, ordinal));
+        }
+
+        let doc_info = docs::scan(&def.doc_comments());
+        let visibility = if def.is_internal() {
+            v2::Visibility::Internal
+        } else {
+            v2::Visibility::Public
+        };
+        v2::Interface {
+            name: declared_name(def).unwrap_or_default(),
+            visibility: visibility as i32,
+            doc: doc_info.doc,
+            labels: doc_info.labels,
+            deprecated: doc_info.deprecated,
+            interactions,
+        }
+    }
+
+    /// Lowers one surviving interface member to its interaction `Decl`
+    /// (ridl §14.1): the doc envelope (typl §14 through the E1 scanner), the
+    /// §11 ordinal, and the kind. Visibility and `is_error` stay unset on
+    /// interactions.
+    fn lower_interaction(&mut self, member: &ast::InterfaceMember, ordinal: u32) -> v2::Decl {
+        let kind = match member {
+            ast::InterfaceMember::Signal(signal) => {
+                v2::decl::Kind::SignalDef(self.lower_signal(signal))
             }
+            ast::InterfaceMember::Event(event) => v2::decl::Kind::EventDef(self.lower_event(event)),
+            ast::InterfaceMember::Command(command) => {
+                v2::decl::Kind::CommandDef(self.lower_command(command))
+            }
+            ast::InterfaceMember::Query(query) => v2::decl::Kind::QueryDef(self.lower_query(query)),
+            ast::InterfaceMember::Final(fin) => v2::decl::Kind::FinalDef(self.lower_final(fin)),
+            // The tombstone stores its ordinal twice — on the `Decl`
+            // envelope AND in `Reserved`. The schema cannot enforce the
+            // agreement, so the lowering sets both from the one counter.
+            ast::InterfaceMember::Reserved(entry) => {
+                v2::decl::Kind::ReservedSlot(lower_reserved(entry, ordinal))
+            }
+        };
+        let doc_info = docs::scan(&member.doc_comments());
+        v2::Decl {
+            // A tombstone's `Decl` name stays empty — the retired name lives
+            // in `Reserved.name` (typl §7.4).
+            name: match member {
+                ast::InterfaceMember::Reserved(_) => String::new(),
+                _ => member_name(member.name()).unwrap_or_default(),
+            },
+            visibility: v2::Visibility::Unspecified as i32,
+            is_error: false,
+            doc: doc_info.doc,
+            labels: doc_info.labels,
+            deprecated: doc_info.deprecated,
+            ordinal,
+            kind: Some(kind),
         }
     }
 
     /// `signal Name : type_ref init_value? timing?` (ridl §4.1, Appendix C).
-    fn check_signal(&mut self, signal: &ast::SignalDef) {
+    fn lower_signal(&mut self, signal: &ast::SignalDef) -> v2::SignalDef {
+        let mut payload = String::new();
+        let mut declared_init = None;
+        let mut init = None;
         match signal.payload() {
-            Some(ast::FieldType::Path(path)) => {
-                if let PathTarget::Symbol(symbol) = self.resolve_type_path(&path) {
+            Some(ast::FieldType::Path(path)) => match self.resolve_type_path(&path) {
+                PathTarget::Symbol(symbol) => {
+                    payload = self.canonical_ref(&symbol);
                     match signal.init_value() {
                         // RIDL-110: the bare `= value` override validates
                         // against the payload constraints — the E1 scalar
-                        // validation with the ridl code (§4.4). Recorded
-                        // debt (E2 ledger M2): the leniency is E1's exactly —
-                        // a type-mismatched literal (`= true` on a numeric
-                        // payload), a value off the `step` grid, or an
-                        // override on a non-`type` payload all pass silently,
-                        // as they do for struct fields — although the §16.1
-                        // RIDL-110 wording reads broader.
-                        Some(init) => {
+                        // validation with the ridl code (§4.4) — and lowers
+                        // as `declared_init` in canonical text (ADR-0008
+                        // decision 2). Recorded debt (E2 ledger M2): the
+                        // leniency is E1's exactly — a type-mismatched
+                        // literal (`= true` on a numeric payload), a value
+                        // off the `step` grid, or an override on a
+                        // non-`type` payload all pass silently, as they do
+                        // for struct fields — although the §16.1 RIDL-110
+                        // wording reads broader.
+                        Some(init_value) => {
                             let parts = self.payload_scalar_parts(&symbol);
-                            self.lower_declared_init(Some(init), &parts, DiagCode::RIDL_110);
+                            (declared_init, init) = self.lower_declared_init(
+                                Some(init_value),
+                                &parts,
+                                DiagCode::RIDL_110,
+                            );
                         }
                         // RIDL-109: no override, so the payload type's own
-                        // init must derive (typl §5.8 through ridl §4.4).
+                        // init must derive (typl §5.8 through ridl §4.4);
+                        // the derived value rides along either way.
                         None => {
-                            if !self.named_type_init(&symbol).derivable {
+                            let derived = self.named_type_init(&symbol);
+                            if !derived.derivable {
                                 self.error(
                                     DiagCode::RIDL_109,
                                     path.syntax().text_range(),
@@ -2603,10 +2681,14 @@ impl Checker<'_> {
                                     ),
                                 );
                             }
+                            init = Some(derived);
                         }
                     }
                 }
-            }
+                // Unresolved: already reported; the written text is carried
+                // for honest lowering (the E1 rule).
+                PathTarget::Unresolved(written) => payload = written,
+            },
             Some(other) => self.error(
                 DiagCode::FORM_102,
                 other.syntax().text_range(),
@@ -2617,14 +2699,24 @@ impl Checker<'_> {
             None => {}
         }
         self.check_member_attrs(signal.syntax(), MemberKind::Signal);
+        v2::SignalDef {
+            payload,
+            declared_init,
+            init,
+            // Timing lowers empty in E2.1c (`mode = UNSPECIFIED`); task 9
+            // resolves the real bounds (ADR-0008 decision 12).
+            timing: Some(v2::Timing::default()),
+        }
     }
 
     /// `event Name : type_ref timing?` (ridl §5.1, Appendix C).
-    fn check_event(&mut self, event: &ast::EventDef) {
+    fn lower_event(&mut self, event: &ast::EventDef) -> v2::EventDef {
+        let mut payload = String::new();
         match event.payload() {
-            Some(ast::FieldType::Path(path)) => {
-                self.resolve_type_path(&path);
-            }
+            Some(ast::FieldType::Path(path)) => match self.resolve_type_path(&path) {
+                PathTarget::Symbol(symbol) => payload = self.canonical_ref(&symbol),
+                PathTarget::Unresolved(written) => payload = written,
+            },
             Some(other) => self.error(
                 DiagCode::FORM_102,
                 other.syntax().text_range(),
@@ -2642,11 +2734,18 @@ impl Checker<'_> {
             );
         }
         self.check_member_attrs(event.syntax(), MemberKind::Event);
+        v2::EventDef {
+            payload,
+            // Timing lowers empty in E2.1c; task 9 resolves the bounds.
+            timing: Some(v2::Timing::default()),
+        }
     }
 
     /// `command Name '(' params ')' attr_block?` (ridl §6.1, Appendix C).
-    fn check_command(&mut self, command: &ast::CommandDef) {
-        // RIDL-104: a command always returns `()`.
+    fn lower_command(&mut self, command: &ast::CommandDef) -> v2::CommandDef {
+        // RIDL-104: a command always returns `()` — the erroneous return
+        // shape is reported and not lowered (a `CommandDef` has no return
+        // field to carry it).
         if let Some(return_type) = command.return_type() {
             self.error(
                 DiagCode::RIDL_104,
@@ -2662,15 +2761,18 @@ impl Checker<'_> {
                 "timing annotation not valid on command".to_string(),
             );
         }
-        if let Some(params) = command.params() {
-            self.check_params(&params, "command");
-        }
+        let params = command
+            .params()
+            .map(|params| self.lower_params(&params, "command"))
+            .unwrap_or_default();
         self.check_member_attrs(command.syntax(), MemberKind::Command);
+        let contracts = lower_contracts(command.syntax(), false);
+        v2::CommandDef { params, contracts }
     }
 
     /// `query Name '(' params ')' ':' return_type attr_block?` (ridl §7.1,
     /// Appendix C; inline `T | E` per general form §6.1, ADR-0008 decision 1).
-    fn check_query(&mut self, query: &ast::QueryDef) {
+    fn lower_query(&mut self, query: &ast::QueryDef) -> v2::QueryDef {
         if let Some(timing) = query.timing() {
             self.error(
                 DiagCode::FORM_102,
@@ -2678,59 +2780,94 @@ impl Checker<'_> {
                 "timing annotation not valid on query".to_string(),
             );
         }
-        if let Some(params) = query.params() {
-            self.check_params(&params, "query");
-        }
-        if let Some(return_type) = query.return_type() {
-            self.check_query_return(&return_type);
-        }
+        let params = query
+            .params()
+            .map(|params| self.lower_params(&params, "query"))
+            .unwrap_or_default();
+        let return_type = query
+            .return_type()
+            .and_then(|return_type| self.lower_query_return(&return_type));
         self.check_member_attrs(query.syntax(), MemberKind::Query);
+        let contracts = lower_contracts(query.syntax(), true);
+        v2::QueryDef {
+            params,
+            return_type,
+            contracts,
+        }
     }
 
-    /// The four return shapes: named type, named-field tuple, stream, and
-    /// inline fallible `T | E`. An empty tuple is RIDL-105.
-    fn check_query_return(&mut self, return_type: &ast::ReturnType) {
-        if let Some(tuple) = return_type.tuple_type() {
+    /// The four return shapes (ridl §7): named type, named-field tuple, and
+    /// stream lower as `ReturnType.value`; the inline fallible `T | E`
+    /// lowers as `ReturnType.fallible`. An empty tuple is RIDL-105 and
+    /// lowers nothing — a query returning `()` has no representable return.
+    fn lower_query_return(&mut self, return_type: &ast::ReturnType) -> Option<v2::ReturnType> {
+        let kind = if let Some(tuple) = return_type.tuple_type() {
             if tuple.fields().next().is_none() {
                 self.error(
                     DiagCode::RIDL_105,
                     return_type.syntax().text_range(),
                     "query returning `()` — a query must return a value; use `command`".to_string(),
                 );
-                return;
+                return None;
             }
-            self.resolve_paths_in(tuple.syntax());
+            let lowered = self.lower_field_type(&ast::FieldType::Tuple(tuple), false);
+            v2::return_type::Kind::Value(lowered.ty)
         } else if let Some(stream) = return_type.stream_type() {
-            self.check_stream_element(&stream);
+            v2::return_type::Kind::Value(self.lower_stream(&stream))
         } else if let Some(fallible) = return_type.fallible_type() {
-            if let Some(ok) = fallible.ok() {
-                self.resolve_type_path(&ok);
-            }
-            if let Some(err) = fallible.err() {
-                self.resolve_type_path(&err);
-            }
+            let ok = fallible
+                .ok()
+                .map(|path| self.lower_type_ref(&path))
+                .unwrap_or_default();
+            let err = fallible
+                .err()
+                .map(|path| self.lower_type_ref(&path))
+                .unwrap_or_default();
+            v2::return_type::Kind::Fallible(v2::FallibleType { ok, err })
         } else if let Some(path) = return_type.type_ref() {
-            self.resolve_type_path(&path);
+            v2::return_type::Kind::Value(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Named(self.lower_type_ref(&path))),
+            })
+        } else {
+            return None;
+        };
+        Some(v2::ReturnType { kind: Some(kind) })
+    }
+
+    /// Resolves a type reference to its canonical IR string: `pkg.Name` for
+    /// a cross-package reference, the bare name for a same-package one, and
+    /// the written text when unresolved (already reported; honest lowering).
+    fn lower_type_ref(&mut self, path: &ast::PathType) -> String {
+        match self.resolve_type_path(path) {
+            PathTarget::Symbol(symbol) => self.canonical_ref(&symbol),
+            PathTarget::Unresolved(written) => written,
         }
     }
 
     /// `final Name : (type_ref | array_type)` (ridl §8, Appendix C) — no
     /// init, no timing, no attribute block (RIDL-106).
-    fn check_final(&mut self, fin: &ast::FinalDef) {
-        match fin.payload() {
-            Some(ast::FieldType::Path(path)) => {
-                self.resolve_type_path(&path);
+    fn lower_final(&mut self, fin: &ast::FinalDef) -> v2::FinalDef {
+        let payload = match fin.payload() {
+            Some(ast::FieldType::Path(path)) => Some(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Named(self.lower_type_ref(&path))),
+            }),
+            // An array payload lowers through the E1 field-type path, which
+            // resolves the element and validates the bounds (typl §12.1).
+            Some(array @ ast::FieldType::Array(_)) => Some(self.lower_field_type(&array, false).ty),
+            Some(other) => {
+                self.error(
+                    DiagCode::FORM_102,
+                    other.syntax().text_range(),
+                    "final payload must be a named type or an array".to_string(),
+                );
+                None
             }
-            Some(ast::FieldType::Array(array)) => self.resolve_paths_in(array.syntax()),
-            Some(other) => self.error(
-                DiagCode::FORM_102,
-                other.syntax().text_range(),
-                "final payload must be a named type or an array".to_string(),
-            ),
             // A stream payload (FORM-102, `check_stream_positions`) or a
             // parse error already reported.
-            None => {}
-        }
+            None => None,
+        };
         if let Some(init) = init_value_child(fin.syntax()) {
             self.error(
                 DiagCode::FORM_102,
@@ -2753,63 +2890,75 @@ impl Checker<'_> {
             );
         }
         self.check_member_attrs(fin.syntax(), MemberKind::Final);
+        v2::FinalDef { payload }
     }
 
     /// `param_type = type_ref | stream_type` (ridl Appendix C) — `noun`
-    /// names the callable kind in the FORM-102 message.
-    fn check_params(&mut self, params: &ast::ParamList, noun: &str) {
-        for param in params.params() {
-            match param.param_type() {
-                Some(ast::ParamType::Field(ast::FieldType::Path(path))) => {
-                    self.resolve_type_path(&path);
+    /// names the callable kind in the FORM-102 message. A parameter whose
+    /// shape is rejected lowers with no type (already reported).
+    fn lower_params(&mut self, params: &ast::ParamList, noun: &str) -> Vec<v2::Param> {
+        params
+            .params()
+            .map(|param| {
+                let r#type = match param.param_type() {
+                    Some(ast::ParamType::Field(ast::FieldType::Path(path))) => {
+                        Some(v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::Named(self.lower_type_ref(&path))),
+                        })
+                    }
+                    Some(ast::ParamType::Field(other)) => {
+                        self.error(
+                            DiagCode::FORM_102,
+                            other.syntax().text_range(),
+                            format!("{noun} parameter must be a named type or a stream"),
+                        );
+                        None
+                    }
+                    Some(ast::ParamType::Stream(stream)) => Some(self.lower_stream(&stream)),
+                    None => None,
+                };
+                v2::Param {
+                    name: member_name(param.name()).unwrap_or_default(),
+                    r#type,
                 }
-                Some(ast::ParamType::Field(other)) => self.error(
-                    DiagCode::FORM_102,
-                    other.syntax().text_range(),
-                    format!("{noun} parameter must be a named type or a stream"),
-                ),
-                Some(ast::ParamType::Stream(stream)) => self.check_stream_element(&stream),
-                None => {}
-            }
-        }
+            })
+            .collect()
     }
 
-    /// RIDL-202: a stream element is a named type or raw `string`/`bytes`
-    /// (ridl §12.2). A primitive keyword element parses as a path.
-    fn check_stream_element(&mut self, stream: &ast::StreamType) {
-        if let Some(path) = stream.element_type() {
+    /// Lowers a stream `<T>` to `FieldType.stream` (ridl §12). RIDL-202: the
+    /// element is a named type or raw `string`/`bytes` (§12.2); a primitive
+    /// keyword element parses as a path, is reported, and lowers its written
+    /// text (honest lowering).
+    fn lower_stream(&mut self, stream: &ast::StreamType) -> v2::FieldType {
+        let element = if let Some(path) = stream.element_type() {
             if primitive_path_keyword(&path).is_some() {
                 self.error(
                     DiagCode::RIDL_202,
                     path.syntax().text_range(),
                     "stream element type must be a named type, `string`, or `bytes`".to_string(),
                 );
+                Some(v2::stream_type::Element::Named(significant_text(
+                    path.syntax(),
+                )))
             } else {
-                self.resolve_type_path(&path);
+                Some(v2::stream_type::Element::Named(self.lower_type_ref(&path)))
             }
-        }
-        // A raw `string`/`bytes` element is the §12.2 exception; a missing
-        // element was a parse error.
-    }
-
-    /// Resolves every named-type reference under `node` — tuple fields and
-    /// array elements resolve exactly as struct fields do. Primitive keyword
-    /// paths inside stream elements are skipped: the stream's position is
-    /// already flagged, and they name no symbol.
-    fn resolve_paths_in(&mut self, node: &ridl_syntax::SyntaxNode) {
-        let paths: Vec<ast::PathType> = node
-            .descendants()
-            .filter_map(ast::PathType::cast)
-            .filter(|path| {
-                !(primitive_path_keyword(path).is_some()
-                    && path
-                        .syntax()
-                        .parent()
-                        .is_some_and(|parent| parent.kind() == SyntaxKind::StreamType))
-            })
-            .collect();
-        for path in paths {
-            self.resolve_type_path(&path);
+        } else if stream.string_token().is_some() {
+            Some(v2::stream_type::Element::Primitive(
+                v2::PrimitiveType::String as i32,
+            ))
+        } else if stream.bytes_token().is_some() {
+            Some(v2::stream_type::Element::Primitive(
+                v2::PrimitiveType::Bytes as i32,
+            ))
+        } else {
+            // A missing element was a parse error.
+            None
+        };
+        v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Stream(v2::StreamType { element })),
         }
     }
 
@@ -3264,19 +3413,19 @@ fn backing_class(backing: Option<ast::Backing>) -> BackingClass {
 }
 
 /// The IR primitive and backing class of a `PrimitiveType` node.
-fn primitive_of(node: &ast::PrimitiveType) -> (v1::PrimitiveType, BackingClass) {
+fn primitive_of(node: &ast::PrimitiveType) -> (v2::PrimitiveType, BackingClass) {
     if node.boolean_token().is_some() {
-        (v1::PrimitiveType::Boolean, BackingClass::Boolean)
+        (v2::PrimitiveType::Boolean, BackingClass::Boolean)
     } else if node.integer_token().is_some() {
-        (v1::PrimitiveType::Integer, BackingClass::Integer)
+        (v2::PrimitiveType::Integer, BackingClass::Integer)
     } else if node.float_token().is_some() {
-        (v1::PrimitiveType::Float, BackingClass::Float)
+        (v2::PrimitiveType::Float, BackingClass::Float)
     } else if node.string_token().is_some() {
-        (v1::PrimitiveType::String, BackingClass::Str)
+        (v2::PrimitiveType::String, BackingClass::Str)
     } else if node.bytes_token().is_some() {
-        (v1::PrimitiveType::Bytes, BackingClass::Bytes)
+        (v2::PrimitiveType::Bytes, BackingClass::Bytes)
     } else {
-        (v1::PrimitiveType::Unspecified, BackingClass::Unknown)
+        (v2::PrimitiveType::Unspecified, BackingClass::Unknown)
     }
 }
 
@@ -3319,7 +3468,47 @@ fn primitive_path_keyword(path: &ast::PathType) -> Option<String> {
     }
 }
 
-fn lower_reserved(entry: &ast::ReservedEntry, ordinal: u32) -> v1::Reserved {
+/// Lowers the `require`/`ensure` predicates of an interaction's attribute
+/// block to `Contract` observer stubs (ridl §13). E2.1c carries only the
+/// clause kind and the raw expr token text as `source`; task 11 (E2.4)
+/// replaces `source` with the canonical rendering and fills `signal_refs`,
+/// `param_refs`, and `uses_result`, and task 12 (E2.5) assigns `observer_id`
+/// — all left empty here. `allow_ensure` is false on a command, where
+/// `ensure` is RIDL-302 (already reported) and the `CommandDef` proto admits
+/// `require` only; the malformed clause lowers nothing. Flag and assignment
+/// attributes carry no predicate and are skipped (their diagnostics come from
+/// `check_member_attrs`).
+fn lower_contracts(node: &ridl_syntax::SyntaxNode, allow_ensure: bool) -> Vec<v2::Contract> {
+    let Some(block) = node.children().find_map(ast::AttrBlock::cast) else {
+        return Vec::new();
+    };
+    block
+        .attributes()
+        .filter_map(|attribute| {
+            let kind = match attribute.predicate_kind()? {
+                ast::PredicateKind::Require => v2::ContractKind::Require,
+                ast::PredicateKind::Ensure if allow_ensure => v2::ContractKind::Ensure,
+                ast::PredicateKind::Ensure => return None,
+            };
+            // The written source text of the expr, spacing preserved; task 11
+            // (E2.4) replaces it with the canonical one-line rendering.
+            let source = attribute
+                .expr()
+                .map(|expr| expr.syntax().text().to_string())
+                .unwrap_or_default();
+            Some(v2::Contract {
+                kind: kind as i32,
+                source,
+                signal_refs: Vec::new(),
+                param_refs: Vec::new(),
+                uses_result: false,
+                observer_id: String::new(),
+            })
+        })
+        .collect()
+}
+
+fn lower_reserved(entry: &ast::ReservedEntry, ordinal: u32) -> v2::Reserved {
     let name = member_name(entry.name());
     let value = entry
         .literal()
@@ -3327,7 +3516,7 @@ fn lower_reserved(entry: &ast::ReservedEntry, ordinal: u32) -> v1::Reserved {
             LitKind::Number { value } => exact_to_i64(&value),
             _ => None,
         });
-    v1::Reserved {
+    v2::Reserved {
         ordinal,
         name,
         value,
@@ -3436,7 +3625,7 @@ mod tests {
     }
 
     /// The declaration named `name`, or a panic naming what is there.
-    fn decl<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v1::Decl {
+    fn decl<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::Decl {
         checked
             .ir
             .decls
@@ -3450,22 +3639,22 @@ mod tests {
             })
     }
 
-    fn type_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v1::TypeDef {
-        let Some(v1::decl::Kind::TypeDef(def)) = &decl(checked, name).kind else {
+    fn type_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::TypeDef {
+        let Some(v2::decl::Kind::TypeDef(def)) = &decl(checked, name).kind else {
             panic!("`{name}` is not a type def");
         };
         def
     }
 
-    fn struct_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v1::StructDef {
-        let Some(v1::decl::Kind::StructDef(def)) = &decl(checked, name).kind else {
+    fn struct_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::StructDef {
+        let Some(v2::decl::Kind::StructDef(def)) = &decl(checked, name).kind else {
             panic!("`{name}` is not a struct def");
         };
         def
     }
 
-    fn union_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v1::UnionDef {
-        let Some(v1::decl::Kind::UnionDef(def)) = &decl(checked, name).kind else {
+    fn union_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::UnionDef {
+        let Some(v2::decl::Kind::UnionDef(def)) = &decl(checked, name).kind else {
             panic!("`{name}` is not a union def");
         };
         def
@@ -3474,7 +3663,7 @@ mod tests {
     // --- the Appendix B golden -------------------------------------------
 
     /// The full Appendix B package lowers end to end with no diagnostics, and
-    /// its IR v1 JSON is pinned as the reviewed golden snapshot.
+    /// its IR v2 JSON is pinned as the reviewed golden snapshot.
     #[test]
     fn appendix_b_lowers_clean_end_to_end() {
         let checked = check_source("veh.common", APPENDIX_B);
@@ -3484,7 +3673,7 @@ mod tests {
             checked.diagnostics,
         );
         assert_eq!(checked.ir.name, "veh.common");
-        insta::assert_snapshot!("appendix_b_ir", v1::to_json_pretty(&checked.ir));
+        insta::assert_snapshot!("appendix_b_ir", v2::to_json_pretty(&checked.ir));
     }
 
     /// `fixed_layout` is derived per struct: every field fixed-width and
@@ -3541,12 +3730,12 @@ mod tests {
             .filter(|decl| decl.name == "Speed")
             .collect();
         assert_eq!(speeds.len(), 1, "the duplicate lowers exactly once");
-        let Some(v1::decl::Kind::TypeDef(def)) = &speeds[0].kind else {
+        let Some(v2::decl::Kind::TypeDef(def)) = &speeds[0].kind else {
             panic!("Speed is a type def");
         };
         assert_eq!(
             def.backing.as_ref().unwrap().kind,
-            Some(v1::backing::Kind::Unit("km/h".to_string())),
+            Some(v2::backing::Kind::Unit("km/h".to_string())),
             "the first declaration's unit wins",
         );
         // The TYPL-009 itself is the resolver's diagnostic, not the checker's.
@@ -3559,20 +3748,20 @@ mod tests {
     // --- backing lowering -------------------------------------------------
 
     /// A primitive-backed type lowers to `Backing { primitive }` — the E0
-    /// `unit: "integer"` artifact must not carry into IR v1.
+    /// `unit: "integer"` artifact must not carry into IR v2.
     #[test]
     fn primitive_backing_lowers_to_backing_primitive() {
         let checked = check_source("app", "package app\ntype Counter : integer [0..65535]\n");
         let def = type_def(&checked, "Counter");
         assert_eq!(
             def.backing.as_ref().unwrap().kind,
-            Some(v1::backing::Kind::Primitive(
-                v1::PrimitiveType::Integer as i32
+            Some(v2::backing::Kind::Primitive(
+                v2::PrimitiveType::Integer as i32
             )),
         );
         assert_eq!(
             def.width,
-            Some(v1::type_def::Width::IntWidth(v1::IntWidth::U16 as i32)),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
         );
         let constraint = def.constraint.as_ref().unwrap();
         assert_eq!(constraint.min.as_deref(), Some("0"));
@@ -3590,11 +3779,11 @@ mod tests {
         let def = type_def(&checked, "Speed");
         assert_eq!(
             def.backing.as_ref().unwrap().kind,
-            Some(v1::backing::Kind::Unit("km/h".to_string())),
+            Some(v2::backing::Kind::Unit("km/h".to_string())),
         );
         assert_eq!(
             def.width,
-            Some(v1::type_def::Width::FloatWidth(v1::FloatWidth::F32 as i32)),
+            Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F32 as i32)),
             "[0.0..250.0 step 0.5] has 501 values and representable bounds",
         );
         let constraint = def.constraint.as_ref().unwrap();
@@ -3611,7 +3800,7 @@ mod tests {
         // "no range" derives int64 (§4.2 last row).
         assert_eq!(
             type_def(&checked, "Counter").width,
-            Some(v1::type_def::Width::IntWidth(v1::IntWidth::I64 as i32)),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::I64 as i32)),
         );
     }
 
@@ -3623,7 +3812,7 @@ mod tests {
         // No step: count-based inference falls back to float64 (§4.3).
         assert_eq!(
             type_def(&checked, "Gain").width,
-            Some(v1::type_def::Width::FloatWidth(v1::FloatWidth::F64 as i32)),
+            Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32)),
         );
     }
 
@@ -3692,7 +3881,7 @@ mod tests {
         assert!(checked.diagnostics[0].message.contains("TOO_FAST"));
         assert!(checked.diagnostics[0].message.contains("Speed"));
         // The value is representable, so the const still lowers.
-        let Some(v1::decl::Kind::ConstDef(def)) = &decl(&checked, "TOO_FAST").kind else {
+        let Some(v2::decl::Kind::ConstDef(def)) = &decl(&checked, "TOO_FAST").kind else {
             panic!("TOO_FAST is a const def");
         };
         assert_eq!(def.value, "300");
@@ -3711,7 +3900,7 @@ mod tests {
         assert_eq!(def.declared_init.as_deref(), Some("300"));
         assert_eq!(
             def.init,
-            Some(v1::InitValue {
+            Some(v2::InitValue {
                 derivable: true,
                 value: Some("300".to_string()),
             }),
@@ -3730,7 +3919,7 @@ mod tests {
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         assert_eq!(
             type_def(&checked, "Speed").init,
-            Some(v1::InitValue {
+            Some(v2::InitValue {
                 derivable: true,
                 value: Some("0".to_string()),
             }),
@@ -3739,7 +3928,7 @@ mod tests {
         // rendered as the canonical `0` — with `declared_init` still absent.
         assert_eq!(
             type_def(&checked, "Gain").init,
-            Some(v1::InitValue {
+            Some(v2::InitValue {
                 derivable: true,
                 value: Some("0".to_string()),
             }),
@@ -3800,7 +3989,7 @@ mod tests {
         );
         assert_eq!(
             type_def(&chained, "X").width,
-            Some(v1::type_def::Width::IntWidth(v1::IntWidth::U8 as i32)),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
             "[0..255] via the const chain derives uint8",
         );
 
@@ -3836,7 +4025,7 @@ mod tests {
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         assert_eq!(
             type_def(&checked, "X").width,
-            Some(v1::type_def::Width::IntWidth(v1::IntWidth::U64 as i32)),
+            Some(v2::type_def::Width::IntWidth(v2::IntWidth::U64 as i32)),
             "[0..] fills the open side with the int64 edge and derives uint64",
         );
     }
@@ -3996,7 +4185,7 @@ mod tests {
             "package app\nenum Warning { LOW_FUEL = 0, CHECK_ENGINE = 1 }\nenumset WarningFlags : Warning\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
-        let Some(v1::decl::Kind::EnumSetDef(def)) = &decl(&checked, "WarningFlags").kind else {
+        let Some(v2::decl::Kind::EnumSetDef(def)) = &decl(&checked, "WarningFlags").kind else {
             panic!("WarningFlags is an enumset def");
         };
         assert_eq!(def.backing_enum.as_deref(), Some("Warning"));
@@ -4005,7 +4194,7 @@ mod tests {
             vec![0, 1],
             "the derived form copies the backing enum's values",
         );
-        assert_eq!(def.width, v1::IntWidth::U8 as i32);
+        assert_eq!(def.width, v2::IntWidth::U8 as i32);
     }
 
     // --- TYPL-208/209: string/bytes fields and map keys -------------------
@@ -4022,14 +4211,14 @@ mod tests {
     fn constrained_bytes_field_is_an_inline_scalar() {
         let checked = check_source("app", "package app\nstruct S { frame : bytes [8] }\n");
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
-        let v1::struct_member::Member::Field(field) = struct_def(&checked, "S").members[0]
+        let v2::struct_member::Member::Field(field) = struct_def(&checked, "S").members[0]
             .member
             .as_ref()
             .unwrap()
         else {
             panic!("expected a field");
         };
-        let Some(v1::field_type::Kind::InlineScalar(inline)) = &field.r#type.as_ref().unwrap().kind
+        let Some(v2::field_type::Kind::InlineScalar(inline)) = &field.r#type.as_ref().unwrap().kind
         else {
             panic!("expected an inline scalar");
         };
@@ -4066,18 +4255,18 @@ mod tests {
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         let members = &struct_def(&checked, "DriverProfile").members;
         assert_eq!(members.len(), 3);
-        let v1::struct_member::Member::Field(name_field) = members[0].member.as_ref().unwrap()
+        let v2::struct_member::Member::Field(name_field) = members[0].member.as_ref().unwrap()
         else {
             panic!("member 1 is a field");
         };
         assert_eq!((name_field.name.as_str(), name_field.ordinal), ("name", 1));
-        let v1::struct_member::Member::Reserved(tombstone) = members[1].member.as_ref().unwrap()
+        let v2::struct_member::Member::Reserved(tombstone) = members[1].member.as_ref().unwrap()
         else {
             panic!("member 2 is reserved");
         };
         assert_eq!(tombstone.ordinal, 2);
         assert_eq!(tombstone.name.as_deref(), Some("legacyChecksum"));
-        let v1::struct_member::Member::Field(speed_field) = members[2].member.as_ref().unwrap()
+        let v2::struct_member::Member::Field(speed_field) = members[2].member.as_ref().unwrap()
         else {
             panic!("member 3 is a field");
         };
@@ -4267,7 +4456,7 @@ mod tests {
         assert_eq!(checked.diagnostics[0].severity, Severity::Info);
         assert_eq!(
             type_def(&checked, "Vin").init,
-            Some(v1::InitValue {
+            Some(v2::InitValue {
                 derivable: false,
                 value: None,
             }),
@@ -4410,8 +4599,8 @@ mod tests {
     // --- E1.9: init derivation (§5.8) and TYPL-115 ------------------------
 
     /// A scalar `InitValue`.
-    fn iv(derivable: bool, value: Option<&str>) -> v1::InitValue {
-        v1::InitValue {
+    fn iv(derivable: bool, value: Option<&str>) -> v2::InitValue {
+        v2::InitValue {
             derivable,
             value: value.map(str::to_string),
         }
@@ -4423,12 +4612,12 @@ mod tests {
         checked: &CheckedPackage,
         struct_name: &str,
         field_name: &str,
-    ) -> Option<v1::InitValue> {
+    ) -> Option<v2::InitValue> {
         struct_def(checked, struct_name)
             .members
             .iter()
             .find_map(|member| match member.member.as_ref()? {
-                v1::struct_member::Member::Field(field) if field.name == field_name => {
+                v2::struct_member::Member::Field(field) if field.name == field_name => {
                     Some(field.init.clone())
                 }
                 _ => None,
@@ -5319,5 +5508,501 @@ interface VehicleStatus {
             matches!(checked.members[5].0, ast::InterfaceMember::Reserved(_)),
             "#6 is the reserved tombstone",
         );
+    }
+
+    // --- the E2.1c lowering to IR v2 --------------------------------------
+
+    /// The veh.common vocabulary the Appendix A contract package imports.
+    const APPENDIX_A_COMMON: &str = "\
+package veh.common
+
+/// Vehicle speed over ground
+type Speed       : km/h [0.0..MAX_SPEED step 0.5]
+
+/// Coolant / ambient temperature
+type Temperature : Cel  [-40.0..125.0 step 0.1]
+
+const MAX_SPEED : Speed = 250.0
+
+enum GearPosition {
+  PARK    = 0
+  DRIVE   = 1
+  REVERSE = 2
+  NEUTRAL = 3
+}
+
+enum Warning {
+  LOW_FUEL     = 0
+  CHECK_ENGINE = 1
+  DOOR_OPEN    = 2
+  SEATBELT     = 3
+}
+
+enumset WarningFlags : Warning
+";
+
+    /// The ridl reference Appendix A package — the local vocabulary plus the
+    /// full `VehicleStatus` contract, member for member.
+    const APPENDIX_A_PACKAGE: &str = "\
+package veh.cluster
+
+import veh.common.Speed
+import veh.common.Temperature
+import veh.common.MAX_SPEED
+import veh.common.GearPosition
+import veh.common.WarningFlags
+
+// --- vocabulary local to this contract ---
+
+struct DoorPayload {
+  sensorId : integer [0..15]
+  isOpen   : boolean
+}
+
+struct DiagFilter {
+  severity : integer [0..5]
+  category : Label?
+}
+
+struct FaultEvent {
+  code      : integer [0..65535]
+  message   : Message
+  timestamp : Timestamp
+}
+
+error enum DiagError {
+  FILTER_INVALID   = 0
+  STORAGE_BUSY     = 1
+  ACCESS_DENIED    = 2
+}
+
+struct FaultPage {
+  faults : [FaultEvent; 0..64]
+}
+
+union FaultPageResult {
+  page : FaultPage
+  err  : DiagError
+}
+
+// --- the contract ---
+
+/**
+ * Main vehicle status interface.
+ * @labels SIL_B, CAL_2, PRIVATE
+ */
+interface VehicleStatus {
+
+  /// Current vehicle speed
+  signal currentSpeed : Speed @10ms
+
+  /// Engine temperature
+  signal engineTemp : Temperature @[20ms..100ms]
+
+  /// Active warnings
+  signal warnings : WarningFlags @[50ms..1s]
+
+  /// Raised on every door state change
+  event doorOpened : DoorPayload @[50ms..500ms]
+
+  /// Request a gear change
+  command setGear(position: GearPosition) [
+    require position != GearPosition.PARK || currentSpeed == 0.0
+  ]
+
+  reserved resetCounters
+
+  /// Sliding-window average
+  query getAverageSpeed(window: Duration): Speed [
+    require window > 0ms
+    ensure  result >= 0.0
+  ]
+
+  /// Fault history as a finite stream
+  query streamFaults(filter: DiagFilter): <FaultEvent>
+
+  /// Paged fault snapshot
+  query getFaultPage(filter: DiagFilter): FaultPageResult
+
+  final softwareVersion : Version
+  final capabilities    : [Label; 0..32]
+}
+";
+
+    /// Checks the two-package Appendix A workspace and returns the checked
+    /// `veh.cluster` package.
+    fn check_appendix_a() -> CheckedPackage {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(&db, "veh.common", APPENDIX_A_COMMON);
+        let cluster = ridl_package(&db, "veh.cluster", APPENDIX_A_PACKAGE);
+        let ws = Workspace::new(&db, vec![cluster, common], BTreeMap::new());
+        check_package(&db, ws, cluster, std)
+    }
+
+    /// The interaction `Decl` named `name` in the first lowered interface.
+    fn interaction<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::Decl {
+        checked
+            .ir
+            .interfaces
+            .first()
+            .unwrap_or_else(|| panic!("no interface lowered"))
+            .interactions
+            .iter()
+            .find(|decl| decl.name == name)
+            .unwrap_or_else(|| panic!("no interaction `{name}`"))
+    }
+
+    /// The `QueryDef` of the interaction named `name`.
+    fn query_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::QueryDef {
+        let Some(v2::decl::Kind::QueryDef(query)) = &interaction(checked, name).kind else {
+            panic!("`{name}` is not a query");
+        };
+        query
+    }
+
+    /// The `SignalDef` of the interaction named `name`.
+    fn signal_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::SignalDef {
+        let Some(v2::decl::Kind::SignalDef(signal)) = &interaction(checked, name).kind else {
+            panic!("`{name}` is not a signal");
+        };
+        signal
+    }
+
+    #[test]
+    fn appendix_a_lowers_clean_and_its_ir_v2_json_is_the_golden() {
+        let checked = check_appendix_a();
+        assert!(
+            checked.diagnostics.is_empty(),
+            "Appendix A must lower clean, got: {:?}",
+            checked.diagnostics,
+        );
+        assert_eq!(checked.ir.name, "veh.cluster");
+        assert_eq!(checked.ir.interfaces.len(), 1);
+        let interface = &checked.ir.interfaces[0];
+        assert_eq!(interface.name, "VehicleStatus");
+        assert_eq!(interface.visibility, v2::Visibility::Public as i32);
+        assert_eq!(interface.doc, "Main vehicle status interface.");
+        assert_eq!(interface.labels, ["SIL_B", "CAL_2", "PRIVATE"]);
+        insta::assert_snapshot!("appendix_a_ir", v2::to_json_pretty(&checked.ir));
+    }
+
+    #[test]
+    fn appendix_a_interactions_carry_the_worked_ordinals() {
+        // ridl §11 via the T5 assignment: 1-based, declaration order, one
+        // sequence across all kinds, the tombstone counted at #6 (its Decl
+        // name stays empty — the retired name lives in `Reserved.name`).
+        let checked = check_appendix_a();
+        let walk: Vec<(&str, u32)> = checked.ir.interfaces[0]
+            .interactions
+            .iter()
+            .map(|decl| (decl.name.as_str(), decl.ordinal))
+            .collect();
+        assert_eq!(
+            walk,
+            [
+                ("currentSpeed", 1),
+                ("engineTemp", 2),
+                ("warnings", 3),
+                ("doorOpened", 4),
+                ("setGear", 5),
+                ("", 6),
+                ("getAverageSpeed", 7),
+                ("streamFaults", 8),
+                ("getFaultPage", 9),
+                ("softwareVersion", 10),
+                ("capabilities", 11),
+            ],
+        );
+    }
+
+    #[test]
+    fn appendix_a_tombstone_stores_its_ordinal_twice_and_they_agree() {
+        // The T1 review contract note: the tombstone's ordinal is stored on
+        // the `Decl` envelope AND inside `Reserved`; the schema cannot
+        // enforce the agreement, so the lowering must.
+        let checked = check_appendix_a();
+        let tombstone = &checked.ir.interfaces[0].interactions[5];
+        assert_eq!(tombstone.ordinal, 6);
+        let Some(v2::decl::Kind::ReservedSlot(reserved)) = &tombstone.kind else {
+            panic!("#6 is not a reserved tombstone: {:?}", tombstone.kind);
+        };
+        assert_eq!(
+            reserved.ordinal, tombstone.ordinal,
+            "Decl.ordinal and Reserved.ordinal must agree",
+        );
+        assert_eq!(reserved.name.as_deref(), Some("resetCounters"));
+    }
+
+    #[test]
+    fn appendix_a_stream_return_lowers_to_field_type_stream() {
+        let checked = check_appendix_a();
+        let query = query_def(&checked, "streamFaults");
+        let Some(v2::field_type::Kind::Named(param)) =
+            &query.params[0].r#type.as_ref().unwrap().kind
+        else {
+            panic!("the filter parameter is not a named type");
+        };
+        assert_eq!(param, "DiagFilter", "same-package references stay bare");
+        let Some(v2::return_type::Kind::Value(value)) = &query.return_type.as_ref().unwrap().kind
+        else {
+            panic!("streamFaults does not return a plain value");
+        };
+        let Some(v2::field_type::Kind::Stream(stream)) = &value.kind else {
+            panic!("streamFaults does not return a stream");
+        };
+        assert_eq!(
+            stream.element,
+            Some(v2::stream_type::Element::Named("FaultEvent".to_string())),
+        );
+    }
+
+    #[test]
+    fn appendix_a_named_result_union_returns_as_a_named_value() {
+        // Appendix A's getFaultPage returns the NAMED union `FaultPageResult`
+        // — a named `ReturnType.value`, never a synthesized fallible.
+        let checked = check_appendix_a();
+        let query = query_def(&checked, "getFaultPage");
+        let Some(v2::return_type::Kind::Value(value)) = &query.return_type.as_ref().unwrap().kind
+        else {
+            panic!("getFaultPage does not return a plain value");
+        };
+        assert_eq!(
+            value.kind,
+            Some(v2::field_type::Kind::Named("FaultPageResult".to_string())),
+        );
+    }
+
+    #[test]
+    fn appendix_a_payloads_and_finals_lower_canonical_references() {
+        let checked = check_appendix_a();
+        // Imported payloads are fully qualified `pkg.Name` — never an alias,
+        // never the bare imported spelling.
+        assert_eq!(
+            signal_def(&checked, "currentSpeed").payload,
+            "veh.common.Speed"
+        );
+        assert_eq!(
+            signal_def(&checked, "warnings").payload,
+            "veh.common.WarningFlags"
+        );
+        // `final` payloads: an implicit `ridl.std` name is cross-package.
+        let Some(v2::decl::Kind::FinalDef(version)) =
+            &interaction(&checked, "softwareVersion").kind
+        else {
+            panic!("softwareVersion is not a final");
+        };
+        assert_eq!(
+            version.payload.as_ref().unwrap().kind,
+            Some(v2::field_type::Kind::Named("ridl.std.Version".to_string())),
+        );
+        let Some(v2::decl::Kind::FinalDef(caps)) = &interaction(&checked, "capabilities").kind
+        else {
+            panic!("capabilities is not a final");
+        };
+        let Some(v2::field_type::Kind::Array(array)) = &caps.payload.as_ref().unwrap().kind else {
+            panic!("capabilities is not an array");
+        };
+        assert_eq!((array.min, array.max), (0, 32));
+        assert_eq!(
+            array.element.as_ref().unwrap().kind,
+            Some(v2::field_type::Kind::Named("ridl.std.Label".to_string())),
+        );
+    }
+
+    #[test]
+    fn appendix_a_contracts_lower_kind_and_source_text() {
+        // Task 6 lowers `Contract.kind` and the written source text only;
+        // canonicalization and the reference fields are tasks 10–11.
+        let checked = check_appendix_a();
+        let Some(v2::decl::Kind::CommandDef(set_gear)) = &interaction(&checked, "setGear").kind
+        else {
+            panic!("setGear is not a command");
+        };
+        assert_eq!(set_gear.contracts.len(), 1);
+        assert_eq!(set_gear.contracts[0].kind, v2::ContractKind::Require as i32);
+        assert_eq!(
+            set_gear.contracts[0].source,
+            "position != GearPosition.PARK || currentSpeed == 0.0",
+        );
+        let average = query_def(&checked, "getAverageSpeed");
+        let kinds_and_sources: Vec<(i32, &str)> = average
+            .contracts
+            .iter()
+            .map(|contract| (contract.kind, contract.source.as_str()))
+            .collect();
+        assert_eq!(
+            kinds_and_sources,
+            [
+                (v2::ContractKind::Require as i32, "window > 0ms"),
+                (v2::ContractKind::Ensure as i32, "result >= 0.0"),
+            ],
+        );
+    }
+
+    #[test]
+    fn appendix_a_timing_lowers_empty_until_task_9() {
+        // Task 6 lowers `Timing` empty (`mode = TIMING_MODE_UNSPECIFIED`);
+        // task 9 resolves the real bounds.
+        let checked = check_appendix_a();
+        assert_eq!(
+            signal_def(&checked, "currentSpeed").timing,
+            Some(v2::Timing {
+                mode: v2::TimingMode::Unspecified as i32,
+                min_us: None,
+                max_us: None,
+                default_applied: false,
+            }),
+        );
+    }
+
+    #[test]
+    fn inline_fallible_return_lowers_as_return_type_fallible() {
+        // The corpus variant of Appendix A's getFaultPage: the inline
+        // `FaultPage | DiagError` form (gf §6.1) lowers as
+        // `ReturnType.fallible` with both arms canonical.
+        let checked = check_ridl(
+            "app",
+            "package app\nstruct FaultPage {\n  count : integer [0..64]\n}\nerror enum DiagError {\n  STORAGE_BUSY = 0\n}\ninterface I {\n  query getFaultPage(): FaultPage | DiagError\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let query = query_def(&checked, "getFaultPage");
+        let Some(v2::return_type::Kind::Fallible(fallible)) =
+            &query.return_type.as_ref().unwrap().kind
+        else {
+            panic!("the inline T | E return did not lower as fallible");
+        };
+        assert_eq!(fallible.ok, "FaultPage");
+        assert_eq!(fallible.err, "DiagError");
+    }
+
+    #[test]
+    fn mixed_typl_and_ridl_files_lower_both_surfaces_into_one_package() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let typl = InputFile::new(
+            &db,
+            "app/types.typl".to_string(),
+            "package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n".to_string(),
+        );
+        let ridl = InputFile::new(
+            &db,
+            "app/contract.ridl".to_string(),
+            "package app\ninterface I {\n  signal s : Speed @10ms\n}\n".to_string(),
+        );
+        let pkg = Package::new(
+            &db,
+            "app".to_string(),
+            vec![typl, ridl],
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let checked = check_package(&db, ws, pkg, std);
+        assert!(
+            checked.diagnostics.is_empty(),
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert_eq!(checked.ir.decls.len(), 1, "the typl surface lowers");
+        assert_eq!(checked.ir.decls[0].name, "Speed");
+        assert_eq!(checked.ir.decls[0].ordinal, 0);
+        assert_eq!(checked.ir.interfaces.len(), 1, "the ridl surface lowers");
+        assert_eq!(signal_def(&checked, "s").payload, "Speed");
+    }
+
+    #[test]
+    fn signal_declared_init_lowers_on_the_real_path() {
+        // The T1 fixture coverage gap closes here: the bare `= value`
+        // channel-init override (ADR-0008 decision 2) reaches
+        // `SignalDef.declared_init` from real source, in canonical decimal
+        // text, and `init` resolves to it. A constant reference resolves
+        // through the E1 const chain.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}const CRUISE = 120.0\ninterface I {{\n  signal a : Speed = 42.0 @10ms\n  signal b : Speed = CRUISE @10ms\n  signal c : Speed @10ms\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let a = signal_def(&checked, "a");
+        assert_eq!(a.declared_init.as_deref(), Some("42"));
+        assert_eq!(a.init.as_ref().unwrap().value.as_deref(), Some("42"));
+        let b = signal_def(&checked, "b");
+        assert_eq!(b.declared_init.as_deref(), Some("120"));
+        assert_eq!(b.init.as_ref().unwrap().value.as_deref(), Some("120"));
+        // No override: the payload type's own derived init rides along.
+        let c = signal_def(&checked, "c");
+        assert_eq!(c.declared_init, None);
+        assert!(c.init.as_ref().unwrap().derivable);
+    }
+
+    #[test]
+    fn interaction_doc_tags_lower_into_the_decl_envelope() {
+        // The E1 doc-tag scanner applied to interactions: prose body in
+        // `doc`, `@labels` in `labels`, `@deprecated` in `deprecated`.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  /// Current speed\n  /// @labels SAFETY(D), CAL_1\n  /// @deprecated \"use speedV2\"\n  signal speed : Speed @10ms\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let decl = interaction(&checked, "speed");
+        assert_eq!(decl.doc, "Current speed");
+        assert_eq!(decl.labels, ["SAFETY(D)", "CAL_1"]);
+        assert_eq!(decl.deprecated.as_deref(), Some("use speedV2"));
+        // Interactions carry no visibility and no error modifier.
+        assert_eq!(decl.visibility, v2::Visibility::Unspecified as i32);
+        assert!(!decl.is_error);
+    }
+
+    #[test]
+    fn payload_lowers_the_canonical_reference_never_the_alias() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let veh = package(
+            &db,
+            "veh.common",
+            "package veh.common\ntype Speed: km/h [0.0..300.0 step 0.5]\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport veh.common.Speed as Velocity\ninterface I {\n  signal s : Velocity @10ms\n}\n",
+        );
+        let ws = Workspace::new(&db, vec![app, veh], BTreeMap::new());
+        let checked = check_package(&db, ws, app, std);
+        assert!(
+            checked.diagnostics.is_empty(),
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert_eq!(signal_def(&checked, "s").payload, "veh.common.Speed");
+    }
+
+    #[test]
+    fn ridl_402_duplicate_lowers_first_wins_into_the_ir() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n  event a : Speed\n  query b(): Speed\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-402"]);
+        let walk: Vec<(&str, u32, bool)> = checked.ir.interfaces[0]
+            .interactions
+            .iter()
+            .map(|decl| {
+                (
+                    decl.name.as_str(),
+                    decl.ordinal,
+                    matches!(decl.kind, Some(v2::decl::Kind::SignalDef(_))),
+                )
+            })
+            .collect();
+        // The losing `event a` re-declaration is excluded, holds no ordinal
+        // slot, and the surviving contract stays contiguous.
+        assert_eq!(walk, [("a", 1, true), ("b", 2, false)]);
     }
 }

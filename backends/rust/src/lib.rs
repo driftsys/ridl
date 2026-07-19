@@ -1,8 +1,8 @@
-//! IR v1 package to Rust source plus an extern-C header (ADR-0004 section 7,
+//! IR v2 package to Rust source plus an extern-C header (ADR-0004 section 7,
 //! ADR-0007 decision 13).
 //!
 //! The full E1.12 backend over the typl surface. Each declaration in a
-//! [`v1::Package`] is realized twice: once as idiomatic Rust (the language
+//! [`v2::Package`] is realized twice: once as idiomatic Rust (the language
 //! layer of typl reference Appendix D — every integer is `i64`, every float is
 //! `f64`) and once, where the C ABI admits it, as an entry in a companion C
 //! header. Named scalar types become `#[repr(transparent)]` newtypes so unit
@@ -21,7 +21,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use ridl_ir::v1;
+use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
@@ -54,11 +54,11 @@ pub struct GenerateError {
 /// rather than panicking `format_ident!`. As a final guard the assembled token
 /// stream is parsed with `syn::parse2`; a parse failure (a codegen bug) surfaces
 /// as a `GenerateError` instead of unformatted output.
-pub fn generate(package: &v1::Package) -> Result<Generated, GenerateError> {
+pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let ctx = Ctx::new(package);
 
     let mut items: Vec<TokenStream> = Vec::new();
-    let mut tuples: Vec<(String, v1::TupleType)> = Vec::new();
+    let mut tuples: Vec<(String, v2::TupleType)> = Vec::new();
 
     for decl in &package.decls {
         items.push(emit_decl(&ctx, decl, &mut tuples));
@@ -98,7 +98,7 @@ pub fn generate(package: &v1::Package) -> Result<Generated, GenerateError> {
 /// declaration (cross-package references stay unresolved by design — this
 /// backend generates one package at a time).
 pub(crate) struct Ctx<'a> {
-    decls: HashMap<&'a str, &'a v1::Decl>,
+    decls: HashMap<&'a str, &'a v2::Decl>,
     /// The set of declaration names currently being expanded by the
     /// Default-derivation recursion. It guards against a cyclic IR: a
     /// same-package composite that reaches itself would otherwise recurse
@@ -108,7 +108,7 @@ pub(crate) struct Ctx<'a> {
 }
 
 impl<'a> Ctx<'a> {
-    fn new(package: &'a v1::Package) -> Self {
+    fn new(package: &'a v2::Package) -> Self {
         let decls = package
             .decls
             .iter()
@@ -122,7 +122,7 @@ impl<'a> Ctx<'a> {
 
     /// The declaration named `name` in this package, or `None` for a
     /// cross-package (dotted) or unknown reference.
-    pub(crate) fn lookup(&self, name: &str) -> Option<&'a v1::Decl> {
+    pub(crate) fn lookup(&self, name: &str) -> Option<&'a v2::Decl> {
         self.decls.get(name).copied()
     }
 
@@ -144,15 +144,18 @@ impl<'a> Ctx<'a> {
 // Declaration emission.
 // ---------------------------------------------------------------------------
 
-fn emit_decl(ctx: &Ctx, decl: &v1::Decl, tuples: &mut Vec<(String, v1::TupleType)>) -> TokenStream {
+fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<(String, v2::TupleType)>) -> TokenStream {
     let item = match &decl.kind {
-        Some(v1::decl::Kind::TypeDef(td)) => emit_type_def(decl, td),
-        Some(v1::decl::Kind::ConstDef(cd)) => return emit_const(ctx, decl, cd),
-        Some(v1::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, tuples),
-        Some(v1::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed),
-        Some(v1::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd),
-        Some(v1::decl::Kind::UnionDef(ud)) => emit_union(decl, ud),
-        None => return quote! {},
+        Some(v2::decl::Kind::TypeDef(td)) => emit_type_def(decl, td),
+        Some(v2::decl::Kind::ConstDef(cd)) => return emit_const(ctx, decl, cd),
+        Some(v2::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, tuples),
+        Some(v2::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed),
+        Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd),
+        Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud),
+        // Interaction kinds ride `Interface.interactions`, never a package
+        // decl; the interaction codegen is E2 task 15. Interfaces and
+        // services are accepted and passed through untouched here.
+        Some(_) | None => return quote! {},
     };
 
     let default_impl = defaults::decl_default_expr(ctx, decl)
@@ -166,7 +169,7 @@ fn emit_decl(ctx: &Ctx, decl: &v1::Decl, tuples: &mut Vec<(String, v1::TupleType
 }
 
 /// A named scalar type becomes a `#[repr(transparent)]` newtype (typl §5.7).
-fn emit_type_def(decl: &v1::Decl, td: &v1::TypeDef) -> TokenStream {
+fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
     let attrs = decl_attrs(decl);
@@ -183,7 +186,7 @@ fn emit_type_def(decl: &v1::Decl, td: &v1::TypeDef) -> TokenStream {
 /// `&'static str` rather than a value of the newtype: `String` cannot be
 /// constructed in a `const` context. This asymmetry is documented in the C
 /// header and here.
-fn emit_const(ctx: &Ctx, decl: &v1::Decl, cd: &v1::ConstDef) -> TokenStream {
+fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
     let attrs = decl_attrs(decl);
     let vis = vis_tokens(decl.visibility);
     let name = ident(&decl.name);
@@ -228,23 +231,23 @@ fn emit_const(ctx: &Ctx, decl: &v1::Decl, cd: &v1::ConstDef) -> TokenStream {
         }
     } else if let Some(prim) = primitive_keyword(type_ref) {
         match prim {
-            v1::PrimitiveType::Integer => {
+            v2::PrimitiveType::Integer => {
                 let value = numeric_tokens(&cd.value, false);
                 quote! { #attrs #vis const #name: i64 = #value; }
             }
-            v1::PrimitiveType::Float => {
+            v2::PrimitiveType::Float => {
                 let value = numeric_tokens(&cd.value, true);
                 quote! { #attrs #vis const #name: f64 = #value; }
             }
-            v1::PrimitiveType::Boolean => {
+            v2::PrimitiveType::Boolean => {
                 let value = bool_tokens(&cd.value);
                 quote! { #attrs #vis const #name: bool = #value; }
             }
-            v1::PrimitiveType::String => {
+            v2::PrimitiveType::String => {
                 let value = cd.value.as_str();
                 quote! { #attrs #vis const #name: &str = #value; }
             }
-            v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified => quote! {},
+            v2::PrimitiveType::Bytes | v2::PrimitiveType::Unspecified => quote! {},
         }
     } else {
         // A cross-package or unresolved constant type: the backing is unknown
@@ -254,9 +257,9 @@ fn emit_const(ctx: &Ctx, decl: &v1::Decl, cd: &v1::ConstDef) -> TokenStream {
 }
 
 fn emit_struct(
-    decl: &v1::Decl,
-    sd: &v1::StructDef,
-    tuples: &mut Vec<(String, v1::TupleType)>,
+    decl: &v2::Decl,
+    sd: &v2::StructDef,
+    tuples: &mut Vec<(String, v2::TupleType)>,
 ) -> TokenStream {
     let name = ident(&decl.name);
     let attrs = decl_attrs(decl);
@@ -268,12 +271,12 @@ fn emit_struct(
     };
 
     let fields = sd.members.iter().filter_map(|member| match &member.member {
-        Some(v1::struct_member::Member::Field(field)) => {
+        Some(v2::struct_member::Member::Field(field)) => {
             Some(emit_field(&decl.name, field, tuples))
         }
         // A reserved tombstone occupies an ordinal but emits no field
         // (typl §7.4).
-        Some(v1::struct_member::Member::Reserved(_)) | None => None,
+        Some(v2::struct_member::Member::Reserved(_)) | None => None,
     });
 
     quote! {
@@ -287,8 +290,8 @@ fn emit_struct(
 
 fn emit_field(
     parent: &str,
-    field: &v1::Field,
-    tuples: &mut Vec<(String, v1::TupleType)>,
+    field: &v2::Field,
+    tuples: &mut Vec<(String, v2::TupleType)>,
 ) -> TokenStream {
     let field_name = ident(&field.name);
     let attrs = field_attrs(field);
@@ -303,7 +306,7 @@ fn emit_field(
 
 /// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
 /// Variant names keep their typl `SCREAMING_SNAKE` spelling.
-fn emit_enum(decl: &v1::Decl, ed: &v1::EnumDef) -> TokenStream {
+fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
     let name = ident(&decl.name);
     let attrs = decl_attrs(decl);
     let vis = vis_tokens(decl.visibility);
@@ -327,7 +330,7 @@ fn emit_enum(decl: &v1::Decl, ed: &v1::EnumDef) -> TokenStream {
 /// An enum set becomes a `#[repr(transparent)]` newtype over `i64` (the
 /// language layer width, Appendix D) with one associated bit constant per bit
 /// position (typl §9).
-fn emit_enum_set(decl: &v1::Decl, esd: &v1::EnumSetDef) -> TokenStream {
+fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
     let name = ident(&decl.name);
     let attrs = decl_attrs(decl);
     let vis = vis_tokens(decl.visibility);
@@ -350,7 +353,7 @@ fn emit_enum_set(decl: &v1::Decl, esd: &v1::EnumSetDef) -> TokenStream {
 
 /// A union becomes a `pub enum` with one variant per arm; arm names are
 /// CamelCased (typl §10). Reserved arms are skipped.
-fn emit_union(decl: &v1::Decl, ud: &v1::UnionDef) -> TokenStream {
+fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef) -> TokenStream {
     let name = ident(&decl.name);
     let attrs = decl_attrs(decl);
     let vis = vis_tokens(decl.visibility);
@@ -375,8 +378,8 @@ fn emit_union(decl: &v1::Decl, ud: &v1::UnionDef) -> TokenStream {
 fn emit_tuple_struct(
     ctx: &Ctx,
     name: &str,
-    tuple: &v1::TupleType,
-    tuples: &mut Vec<(String, v1::TupleType)>,
+    tuple: &v2::TupleType,
+    tuples: &mut Vec<(String, v2::TupleType)>,
 ) -> TokenStream {
     let name_id = ident(name);
     let fields = tuple.fields.iter().map(|field| {
@@ -410,21 +413,21 @@ fn emit_tuple_struct(
 /// The Rust type of a field. Tuple field types generate a named nested struct
 /// (recorded in `tuples`); the struct name is `hint` (CamelCase of the path).
 pub(crate) fn field_type_tokens(
-    ft: &v1::FieldType,
+    ft: &v2::FieldType,
     hint: &str,
-    tuples: &mut Vec<(String, v1::TupleType)>,
+    tuples: &mut Vec<(String, v2::TupleType)>,
 ) -> TokenStream {
     let inner = match &ft.kind {
-        Some(v1::field_type::Kind::Named(name)) => type_path(name),
-        Some(v1::field_type::Kind::Primitive(prim)) => primitive_tokens(*prim),
-        Some(v1::field_type::Kind::InlineScalar(td)) => inline_scalar_tokens(td),
-        Some(v1::field_type::Kind::Tuple(tuple)) => {
+        Some(v2::field_type::Kind::Named(name)) => type_path(name),
+        Some(v2::field_type::Kind::Primitive(prim)) => primitive_tokens(*prim),
+        Some(v2::field_type::Kind::InlineScalar(td)) => inline_scalar_tokens(td),
+        Some(v2::field_type::Kind::Tuple(tuple)) => {
             let tuple_name = hint.to_string();
             tuples.push((tuple_name.clone(), tuple.clone()));
             let id = ident(&tuple_name);
             quote! { #id }
         }
-        Some(v1::field_type::Kind::Array(array)) => {
+        Some(v2::field_type::Kind::Array(array)) => {
             let element = array
                 .element
                 .as_ref()
@@ -437,7 +440,7 @@ pub(crate) fn field_type_tokens(
                 quote! { Vec<#element> }
             }
         }
-        Some(v1::field_type::Kind::Map(map)) => {
+        Some(v2::field_type::Kind::Map(map)) => {
             let key = map
                 .key
                 .as_ref()
@@ -450,7 +453,9 @@ pub(crate) fn field_type_tokens(
                 .unwrap_or_else(|| quote! { () });
             quote! { Vec<(#key, #value)> }
         }
-        None => quote! { () },
+        // A stream is an interaction-position type (ridl §12.3); it never
+        // reaches a struct or tuple field in checked IR. Kept total.
+        Some(v2::field_type::Kind::Stream(_)) | None => quote! { () },
     };
 
     if ft.optional {
@@ -462,7 +467,7 @@ pub(crate) fn field_type_tokens(
 
 /// The Rust newtype inner type for a named scalar backing (Appendix D language
 /// layer): unit and float back to `f64`, integer to `i64`.
-fn newtype_inner(td: &v1::TypeDef) -> TokenStream {
+fn newtype_inner(td: &v2::TypeDef) -> TokenStream {
     match backing_scalar(td) {
         ScalarBacking::Float => quote! { f64 },
         ScalarBacking::Integer => quote! { i64 },
@@ -472,7 +477,7 @@ fn newtype_inner(td: &v1::TypeDef) -> TokenStream {
     }
 }
 
-fn inline_scalar_tokens(td: &v1::TypeDef) -> TokenStream {
+fn inline_scalar_tokens(td: &v2::TypeDef) -> TokenStream {
     match backing_scalar(td) {
         ScalarBacking::Float => quote! { f64 },
         ScalarBacking::Integer => quote! { i64 },
@@ -483,13 +488,13 @@ fn inline_scalar_tokens(td: &v1::TypeDef) -> TokenStream {
 }
 
 fn primitive_tokens(prim: i32) -> TokenStream {
-    match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
-        v1::PrimitiveType::Boolean => quote! { bool },
-        v1::PrimitiveType::Integer => quote! { i64 },
-        v1::PrimitiveType::Float => quote! { f64 },
-        v1::PrimitiveType::String => quote! { String },
-        v1::PrimitiveType::Bytes => quote! { Vec<u8> },
-        v1::PrimitiveType::Unspecified => quote! { () },
+    match v2::PrimitiveType::try_from(prim).unwrap_or(v2::PrimitiveType::Unspecified) {
+        v2::PrimitiveType::Boolean => quote! { bool },
+        v2::PrimitiveType::Integer => quote! { i64 },
+        v2::PrimitiveType::Float => quote! { f64 },
+        v2::PrimitiveType::String => quote! { String },
+        v2::PrimitiveType::Bytes => quote! { Vec<u8> },
+        v2::PrimitiveType::Unspecified => quote! { () },
     }
 }
 
@@ -534,16 +539,16 @@ pub(crate) enum ScalarBacking {
 
 /// The Rust-layer scalar class of a type definition's backing. A unit backing
 /// implies float (typl §5.1).
-pub(crate) fn backing_scalar(td: &v1::TypeDef) -> ScalarBacking {
+pub(crate) fn backing_scalar(td: &v2::TypeDef) -> ScalarBacking {
     match td.backing.as_ref().and_then(|b| b.kind.as_ref()) {
-        Some(v1::backing::Kind::Unit(_)) => ScalarBacking::Float,
-        Some(v1::backing::Kind::Primitive(prim)) => {
-            match v1::PrimitiveType::try_from(*prim).unwrap_or(v1::PrimitiveType::Unspecified) {
-                v1::PrimitiveType::Boolean => ScalarBacking::Boolean,
-                v1::PrimitiveType::Integer => ScalarBacking::Integer,
-                v1::PrimitiveType::Float => ScalarBacking::Float,
-                v1::PrimitiveType::String => ScalarBacking::String,
-                v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified => ScalarBacking::Bytes,
+        Some(v2::backing::Kind::Unit(_)) => ScalarBacking::Float,
+        Some(v2::backing::Kind::Primitive(prim)) => {
+            match v2::PrimitiveType::try_from(*prim).unwrap_or(v2::PrimitiveType::Unspecified) {
+                v2::PrimitiveType::Boolean => ScalarBacking::Boolean,
+                v2::PrimitiveType::Integer => ScalarBacking::Integer,
+                v2::PrimitiveType::Float => ScalarBacking::Float,
+                v2::PrimitiveType::String => ScalarBacking::String,
+                v2::PrimitiveType::Bytes | v2::PrimitiveType::Unspecified => ScalarBacking::Bytes,
             }
         }
         None => ScalarBacking::Float,
@@ -554,19 +559,19 @@ pub(crate) fn backing_scalar(td: &v1::TypeDef) -> ScalarBacking {
 /// reference does not name a scalar `TypeDef` in this package.
 fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<ScalarBacking> {
     match &ctx.lookup(reference)?.kind {
-        Some(v1::decl::Kind::TypeDef(td)) => Some(backing_scalar(td)),
+        Some(v2::decl::Kind::TypeDef(td)) => Some(backing_scalar(td)),
         _ => None,
     }
 }
 
 /// Maps a typl primitive keyword written as a type reference to its primitive.
-fn primitive_keyword(reference: &str) -> Option<v1::PrimitiveType> {
+fn primitive_keyword(reference: &str) -> Option<v2::PrimitiveType> {
     match reference {
-        "boolean" => Some(v1::PrimitiveType::Boolean),
-        "integer" => Some(v1::PrimitiveType::Integer),
-        "float" => Some(v1::PrimitiveType::Float),
-        "string" => Some(v1::PrimitiveType::String),
-        "bytes" => Some(v1::PrimitiveType::Bytes),
+        "boolean" => Some(v2::PrimitiveType::Boolean),
+        "integer" => Some(v2::PrimitiveType::Integer),
+        "float" => Some(v2::PrimitiveType::Float),
+        "string" => Some(v2::PrimitiveType::String),
+        "bytes" => Some(v2::PrimitiveType::Bytes),
         _ => None,
     }
 }
@@ -575,13 +580,13 @@ fn primitive_keyword(reference: &str) -> Option<v1::PrimitiveType> {
 // Attributes: docs, deprecation, visibility.
 // ---------------------------------------------------------------------------
 
-fn decl_attrs(decl: &v1::Decl) -> TokenStream {
+fn decl_attrs(decl: &v2::Decl) -> TokenStream {
     let doc = doc_attrs(&decl.doc);
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
     quote! { #doc #deprecated }
 }
 
-fn field_attrs(field: &v1::Field) -> TokenStream {
+fn field_attrs(field: &v2::Field) -> TokenStream {
     let doc = doc_attrs(&field.doc);
     let deprecated = deprecated_attr(field.deprecated.as_deref());
     quote! { #doc #deprecated }
@@ -611,8 +616,8 @@ fn deprecated_attr(reason: Option<&str>) -> TokenStream {
 }
 
 fn vis_tokens(visibility: i32) -> TokenStream {
-    match v1::Visibility::try_from(visibility).unwrap_or(v1::Visibility::Unspecified) {
-        v1::Visibility::Internal => quote! { pub(crate) },
+    match v2::Visibility::try_from(visibility).unwrap_or(v2::Visibility::Unspecified) {
+        v2::Visibility::Internal => quote! { pub(crate) },
         _ => quote! { pub },
     }
 }

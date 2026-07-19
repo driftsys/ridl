@@ -1,6 +1,6 @@
 ---
 source: crates/ridlc/tests/golden.rs
-expression: "ridl_ir::v1::to_json_pretty(&output.package)"
+expression: "ridl_ir::v2::to_json_pretty(&output.package)"
 ---
 {
   "name": "fixtures",
@@ -12,6 +12,7 @@ expression: "ridl_ir::v1::to_json_pretty(&output.package)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -46,6 +47,7 @@ expression: "ridl_ir::v1::to_json_pretty(&output.package)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "Speed",
@@ -54,5 +56,7 @@ expression: "ridl_ir::v1::to_json_pretty(&output.package)"
         }
       }
     }
-  ]
+  ],
+  "interfaces": [],
+  "services": []
 }

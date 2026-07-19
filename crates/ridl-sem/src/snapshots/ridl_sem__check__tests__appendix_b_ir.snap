@@ -1,6 +1,6 @@
 ---
 source: crates/ridl-sem/src/check.rs
-expression: "v1::to_json_pretty(&checked.ir)"
+expression: "v2::to_json_pretty(&checked.ir)"
 ---
 {
   "name": "veh.common",
@@ -12,6 +12,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "Vehicle speed over ground",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -46,6 +47,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "Coolant / ambient temperature",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -80,6 +82,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "Engine crankshaft speed",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -114,6 +117,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "Normalised ratio",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -148,6 +152,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -182,6 +187,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -216,6 +222,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "Speed",
@@ -231,6 +238,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "Speed",
@@ -246,6 +254,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "integer",
@@ -261,6 +270,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "RPM",
@@ -276,6 +286,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "EnumDef": {
           "values": [
@@ -311,6 +322,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "EnumDef": {
           "values": [
@@ -346,6 +358,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "EnumSetDef": {
           "backing_enum": "Warning",
@@ -382,6 +395,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -441,6 +455,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -564,6 +579,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -721,6 +737,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "UnionDef": {
           "arms": [
@@ -749,6 +766,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -808,6 +826,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -867,6 +886,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -937,5 +957,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
         }
       }
     }
-  ]
+  ],
+  "interfaces": [],
+  "services": []
 }
