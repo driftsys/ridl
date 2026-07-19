@@ -280,15 +280,17 @@ fn apply_imports(
         let first_for_name = !seen_local.contains(record.local_name.as_str());
 
         if let Some(url) = &record.remote_url {
-            // The import itself is valid; the remote package is just not
-            // materialized yet (fetch lands in E1.6). Informational, no code.
+            // The import itself is valid; remote materialization is not yet
+            // wired into the compile path, so the remote package is not
+            // available here (a known limitation, tracked as epic debt).
+            // Informational, no code.
             diagnostics.push(diagnostic(
                 DiagCode::NONE,
                 Severity::Info,
                 record.file_id,
                 record.range,
                 format!(
-                    "remote import `{}` is not yet available: `{url}` (remote fetch lands in E1.6)",
+                    "remote import `{}` is not yet available: `{url}` (remote materialization is not yet wired into the compile path)",
                     record.package_path
                 ),
             ));
