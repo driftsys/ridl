@@ -38,6 +38,7 @@ SourceFile =
   imports:Import*
   definitions:Definition*
   interfaces:InterfaceDef*
+  services:ServiceDef*
 
 PackageDecl =
   'package' QualifiedName
@@ -257,6 +258,26 @@ Timing =
 
 TimingRange =
   min:'duration'? '..' max:'duration'?
+
+// ---------- ridl services (E2.13, ridl reference §14.5) ----------
+//
+// `service_def` is absent from the ridl reference Appendix C; E2 task 8
+// authors it (recorded for the close-out doc sync). A `service` is the
+// global, published declaration of an interface — either naming a shared
+// interface shape after `:`, or carrying an inline body of interactions for
+// a one-off global contract (§14.5). The dotted global name is
+// reverse-domain, like a package (ADR-0002 §1). The inline body reuses the
+// `InterfaceMember` alternation, so an inline shape runs the same structural
+// pass as an interface. `ServiceDef::inline_members()` yields its members;
+// `ServiceDef::interface_ref()` is the named shape; `DottedName::segments()`
+// (hand-written in src/ast.rs) reads the name segments.
+ServiceDef =
+  'service' name:DottedName (':' interface_ref:PathType | '{' (inline_members:InterfaceMember ','?)* '}')
+
+// A dotted global name — `veh.adas.cruise` (ADR-0002 §1). Consumers read the
+// segment tokens through `DottedName::segments()` in src/ast.rs.
+DottedName =
+  'ident' ('.' 'ident')*
 
 // ---------- Attributes (general form §4.2–§4.3, E2 task 4) ----------
 //

@@ -41,6 +41,9 @@ impl SourceFile {
     pub fn interfaces(&self) -> AstChildren<InterfaceDef> {
         support::children(&self.syntax)
     }
+    pub fn services(&self) -> AstChildren<ServiceDef> {
+        support::children(&self.syntax)
+    }
 }
 /// A `PackageDecl` node (`family.ungram` rule `PackageDecl`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -118,6 +121,45 @@ impl InterfaceDef {
     }
     pub fn interface_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::InterfaceKw)
+    }
+    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn r_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBrace)
+    }
+}
+/// A `ServiceDef` node (`family.ungram` rule `ServiceDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ServiceDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for ServiceDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::ServiceDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl ServiceDef {
+    pub fn name(&self) -> Option<DottedName> {
+        support::child(&self.syntax)
+    }
+    pub fn interface_ref(&self) -> Option<PathType> {
+        support::child(&self.syntax)
+    }
+    pub fn inline_members(&self) -> AstChildren<InterfaceMember> {
+        support::children(&self.syntax)
+    }
+    pub fn service_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::ServiceKw)
+    }
+    pub fn colon_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Colon)
     }
     pub fn l_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::LBrace)
@@ -1261,6 +1303,27 @@ impl TimingRange {
     }
     pub fn dotdot_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::DotDot)
+    }
+}
+/// A `DottedName` node (`family.ungram` rule `DottedName`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DottedName {
+    syntax: SyntaxNode,
+}
+impl AstNode for DottedName {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::DottedName).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl DottedName {
+    pub fn ident_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Ident)
+    }
+    pub fn dot_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Dot)
     }
 }
 /// A `Attribute` node (`family.ungram` rule `Attribute`).

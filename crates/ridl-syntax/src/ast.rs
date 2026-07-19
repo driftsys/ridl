@@ -398,6 +398,20 @@ impl HasDocComments for CommandDef {}
 impl HasDocComments for QueryDef {}
 impl HasDocComments for FinalDef {}
 impl HasDocComments for InterfaceMember {}
+impl HasDocComments for ServiceDef {}
+
+impl DottedName {
+    /// The `lowercase_id` segments of the dotted name, in source order — the
+    /// three `ident` tokens of `veh.adas.cruise` (ridl reference §14.5). The
+    /// dots between them are excluded; a consumer that needs the full dotted
+    /// text concatenates the significant tokens of the node instead.
+    pub fn segments(&self) -> impl Iterator<Item = SyntaxToken> + '_ {
+        self.syntax()
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .filter(|token| token.kind() == SyntaxKind::Ident)
+    }
+}
 
 // --- position-sensitive accessors ----------------------------------------
 
