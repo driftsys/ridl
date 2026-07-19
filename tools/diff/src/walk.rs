@@ -315,7 +315,7 @@ fn diff_interface(
         let member_path = format!("{pkg}/{iface}/{name}");
         if let Some((new_ord, new_decl)) = new_live_map.get(name) {
             matched.push((name, *old_ord, *new_ord));
-            diff_interaction(&member_path, old_decl, new_decl, changes);
+            diff_interaction(iface, &member_path, old_decl, new_decl, changes);
         } else if let Some(reserved_ord) = new_reserved.get(name) {
             // A tombstone must hold the retired interaction's own ordinal
             // (ridl §11). A tombstone placed elsewhere lets the surviving
@@ -499,8 +499,16 @@ fn anchor_ordinals(
 }
 
 /// Compares two matched interactions of the same name: kind, then the
-/// kind-specific contract-carrying fields, then the doc envelope.
-fn diff_interaction(path: &str, old: &v2::Decl, new: &v2::Decl, changes: &mut Vec<Change>) {
+/// kind-specific contract-carrying fields, then the doc envelope. `iface` is the
+/// enclosing interface name, needed to derive an inline `T | E` transport
+/// identity (ADR-0008 decision 4).
+fn diff_interaction(
+    iface: &str,
+    path: &str,
+    old: &v2::Decl,
+    new: &v2::Decl,
+    changes: &mut Vec<Change>,
+) {
     if envelope_differs(old, new) {
         emit(changes, path.to_string(), Category::DocOnly, None, None);
     }
@@ -591,8 +599,8 @@ fn diff_interaction(path: &str, old: &v2::Decl, new: &v2::Decl, changes: &mut Ve
                     changes,
                     path.to_string(),
                     Category::ReturnChanged,
-                    Some(return_str(a.return_type.as_ref())),
-                    Some(return_str(b.return_type.as_ref())),
+                    Some(return_str(iface, old.ordinal, a.return_type.as_ref())),
+                    Some(return_str(iface, new.ordinal, b.return_type.as_ref())),
                 );
             }
             if a.contracts != b.contracts {
@@ -885,15 +893,25 @@ fn contracts_str(contracts: &[v2::Contract]) -> String {
     format!("[{}]", rendered.join("; "))
 }
 
-fn return_str(return_type: Option<&v2::ReturnType>) -> String {
+/// Renders a query return shape.
+///
+/// An inline `T | E` renders with its synthesized transport identity alongside
+/// the arms (ADR-0008 decision 4: interface + interaction ordinal + ordered arm
+/// types). The identity is what a backend keys on, so a report that only showed
+/// the arm spelling would hide which of the two changed things actually moved —
+/// the same arms at a different ordinal are a different identity.
+fn return_str(iface: &str, ordinal: u32, return_type: Option<&v2::ReturnType>) -> String {
     let Some(return_type) = return_type else {
         return "()".to_string();
     };
     match &return_type.kind {
         Some(v2::return_type::Kind::Value(value)) => field_type_str(value),
-        Some(v2::return_type::Kind::Fallible(fallible)) => {
-            format!("{} | {}", fallible.ok, fallible.err)
-        }
+        Some(v2::return_type::Kind::Fallible(fallible)) => format!(
+            "{} | {} (transport identity {})",
+            fallible.ok,
+            fallible.err,
+            v2::fallible_transport_identity(iface, ordinal, fallible)
+        ),
         None => "()".to_string(),
     }
 }

@@ -1,0 +1,10 @@
+package veh.cluster
+
+type Speed: km/h [0.0..250.0 step 0.5]
+type DoorState: integer [0..1]
+
+interface VehicleStatus {
+  signal currentSpeed: Speed @10ms
+  event doorOpened: DoorState
+  event hoodOpened: DoorState
+}

@@ -8,24 +8,28 @@
 //! never by `ridlc`, so the compiler stays a pure source→IR function (the ISO
 //! 26262 tool-qualification boundary, ADR-0008 decision 9).
 //!
-//! The walk itself lives in [`walk`]. This module owns the vocabulary
-//! ([`Verdict`], [`Category`], [`Change`], [`DiffReport`]), the set-level
-//! comparison ([`diff_sets`]), snapshot loading ([`load_ir_json`]), and
-//! rendering ([`render_text`], [`render_json`]).
+//! The comparison has two halves. The walk ([`walk`]) says *what* structurally
+//! differs, emitting one [`Change`] per difference with a [`Category`]; the
+//! classifier ([`classify`], E2.8b) says which *direction* that difference moved
+//! in and settles its [`Verdict`]. Splitting them is what lets a single
+//! structural category — an appended interaction, a changed timing — carry
+//! opposite verdicts depending on the direction, without the walk needing both
+//! snapshots at every emission site.
 //!
-//! The verdicts this task assigns are **provisional**: a change is compatible
-//! only when it strictly appends or retires with a tombstone
-//! ([`Category::DocOnly`], [`Category::InteractionAppended`],
-//! [`Category::DeclAdded`], [`Category::InteractionRetired`]); every other
-//! category is treated as breaking. The full directional classifier (ADR-0008
-//! decision 14) replaces this rule in E2.8b (task 17) without changing the
-//! categories the walk emits.
+//! This module owns the vocabulary ([`Verdict`], [`Category`], [`Change`],
+//! [`DiffReport`]), the set-level comparison ([`diff_sets`]), snapshot loading
+//! ([`load_ir_json`]), and rendering ([`render_text`], [`render_json`]). The
+//! classification table itself is documented per category by [`explain`], which
+//! `ridl diff --explain` prints.
 
 use std::path::Path;
 
 use ridl_ir::v2::Package;
 
+mod classify;
 mod walk;
+
+pub use classify::{CATEGORIES, category_from_word, classify, explain};
 
 #[cfg(test)]
 mod tests;
@@ -137,20 +141,13 @@ impl std::fmt::Display for LoadError {
 
 impl std::error::Error for LoadError {}
 
-/// The provisional verdict of a category in this task (ADR-0008 decision 9 is
-/// realized in full by the E2.8b classifier). Only strict additions and
-/// tombstoned retirements are compatible; everything else is breaking.
-pub(crate) fn provisional_verdict(category: Category) -> Verdict {
-    match category {
-        Category::DocOnly
-        | Category::InteractionAppended
-        | Category::DeclAdded
-        | Category::InteractionRetired => Verdict::Compatible,
-        _ => Verdict::Breaking,
-    }
-}
-
-/// Appends one change, stamping it with its provisional verdict.
+/// Appends one change.
+///
+/// The verdict is stamped breaking here and settled by [`classify`] once the
+/// walk of the containing package pair is complete — the classifier needs both
+/// snapshots, which the walk does not carry down to every emission site.
+/// Breaking is the safe placeholder: a change that somehow escaped
+/// classification would gate rather than pass.
 pub(crate) fn emit(
     changes: &mut Vec<Change>,
     path: String,
@@ -161,10 +158,17 @@ pub(crate) fn emit(
     changes.push(Change {
         path,
         category,
-        verdict: provisional_verdict(category),
+        verdict: Verdict::Breaking,
         before,
         after,
     });
+}
+
+/// Settles the verdict of every change the walk of one package pair produced.
+fn classify_all(changes: &mut [Change], old: &Package, new: &Package) {
+    for change in changes {
+        change.verdict = classify(change, old, new);
+    }
 }
 
 /// Assembles a [`DiffReport`], deriving the report verdict as the maximum over
@@ -183,6 +187,7 @@ pub(crate) fn report(changes: Vec<Change>) -> DiffReport {
 pub fn diff_packages(old: &Package, new: &Package) -> DiffReport {
     let mut changes = Vec::new();
     walk::walk_packages(old, new, &mut changes);
+    classify_all(&mut changes, old, new);
     report(changes)
 }
 
@@ -195,28 +200,46 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
     let old_by: BTreeMap<&str, &Package> = old.iter().map(|pkg| (pkg.name.as_str(), pkg)).collect();
     let new_by: BTreeMap<&str, &Package> = new.iter().map(|pkg| (pkg.name.as_str(), pkg)).collect();
 
+    // Each matched pair is walked and classified against its own two snapshots,
+    // because the classifier resolves a change's path back into the packages it
+    // came from.
     let mut changes = Vec::new();
     for (name, old_pkg) in &old_by {
         match new_by.get(name) {
-            Some(new_pkg) => walk::walk_packages(old_pkg, new_pkg, &mut changes),
-            None => emit(
-                &mut changes,
-                (*name).to_string(),
-                Category::DeclRemoved,
-                Some(format!("package {name}")),
-                None,
-            ),
+            Some(new_pkg) => {
+                let mut pair = Vec::new();
+                walk::walk_packages(old_pkg, new_pkg, &mut pair);
+                classify_all(&mut pair, old_pkg, new_pkg);
+                changes.append(&mut pair);
+            }
+            // A package present on one side only: the change classifies on its
+            // category alone, so the one snapshot stands for both.
+            None => {
+                let mut pair = Vec::new();
+                emit(
+                    &mut pair,
+                    (*name).to_string(),
+                    Category::DeclRemoved,
+                    Some(format!("package {name}")),
+                    None,
+                );
+                classify_all(&mut pair, old_pkg, old_pkg);
+                changes.append(&mut pair);
+            }
         }
     }
-    for name in new_by.keys() {
+    for (name, new_pkg) in &new_by {
         if !old_by.contains_key(name) {
+            let mut pair = Vec::new();
             emit(
-                &mut changes,
+                &mut pair,
                 (*name).to_string(),
                 Category::DeclAdded,
                 None,
                 Some(format!("package {name}")),
             );
+            classify_all(&mut pair, new_pkg, new_pkg);
+            changes.append(&mut pair);
         }
     }
     report(changes)
@@ -239,8 +262,9 @@ pub(crate) fn verdict_word(verdict: Verdict) -> &'static str {
 }
 
 /// The stable snake_case word for a category — the single source of truth for
-/// both renderers.
-pub(crate) fn category_word(category: Category) -> &'static str {
+/// both renderers and for `ridl diff --explain`, which takes a category exactly
+/// as the report prints it.
+pub fn category_word(category: Category) -> &'static str {
     match category {
         Category::DeclAdded => "decl_added",
         Category::DeclRemoved => "decl_removed",
