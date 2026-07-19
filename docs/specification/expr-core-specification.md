@@ -45,7 +45,7 @@ is a shared core that the profiles surface in their own positions:
   (ridl §13; carrier production `attribute = "require" expr | "ensure" expr`,
   ridl Appendix C; the three-form attribute model is the family general form
   working spec §4.2)
-- **uxdl** — the same predicate attributes on `action` and `fetch`
+- **uxdl** — the corresponding predicate attributes on `action` and `fetch`
 - **rmdl** — the expression layer of functions and models (rmdl §4 states: "The
   expression grammar below is shared verbatim with the `expr` core")
 - **typl** — future `invariant` predicates on structs, and the const-evaluable
@@ -137,9 +137,16 @@ Structural rules fixed by these productions:
   reading of `<` exists only in parameter-type and return-type position; the two
   positions never overlap.
 - **Zero durations are legal in expression position.** `require window > 0ms`
-  (ridl §13) depends on `0ms` as a comparison operand. RIDL-102's prohibition of
-  zero durations applies to timing annotations (ridl §9, §16.1), not to
-  expression operands.
+  (ridl §13) depends on `0ms` as a comparison operand. ridl §2.1 currently
+  defines the duration literal as "a positive integer followed by a time-unit
+  suffix", scopes the token to timing annotations and time-typed contract
+  expressions, and states "Zero duration is not permitted (RIDL-102)" with no
+  scoping of that sentence. This document scopes it: the zero prohibition
+  applies to **timing annotations only** — RIDL-102 fires in timing-annotation
+  resolution (ridl §9, §16.1) — while the token itself (`int_lit` plus suffix,
+  ridl Appendix C) admits zero in expression position. The ridl §2.1 sentence
+  needs the matching scope-narrowing edit; that is deferred to the E2 close-out
+  ridl-reference doc-sync (ADR-0008 decision 1), not made here.
 
 ### 3.2 The function layer — V2 (E5.1, forward-looking)
 
@@ -248,6 +255,10 @@ A subset expression types into one of five domains:
 | **enum**     | an enum-typed value; `Enum.MEMBER` access                                                              |
 | **tuple**    | a tuple-typed value with named fields (a tuple-returning query's `result`)                             |
 
+A reference typed outside these five domains is outside the subset. In
+particular, field access on a **struct-typed** reference (`filter.severity`) is
+grammatical (§3.1) but is not tuple-field access — it is RIDL-306 in E2.
+
 ### 5.2 Nominal typing — no implicit cross-type anything
 
 Typing is nominal per typl §5.7. Two named types never unify, even with
@@ -351,7 +362,11 @@ the rmdl reference oracle (E5) must agree bit-for-bit, so the domains are exact
   environment — there is nothing in the grammar that can diverge. The single
   evaluation fault is **division by zero** (`/` or `%` with a zero divisor),
   which surfaces as a defined fault (the rmdl §8 step-fault lineage: guarding
-  divisors is the author's obligation), never as undefined behavior.
+  divisors is the author's obligation), never as undefined behavior. RMDL-105's
+  provably-nonzero-divisor check (rmdl §3.2) applies to `function` definitions
+  only; it never applies to contract-position subset terms, whose
+  division-by-zero semantics is this defined fault — so a V1-legal division
+  stays V2-legal, as the layer rule (§2) requires.
 
 ---
 
@@ -361,16 +376,17 @@ In E2, **any expression form outside the guaranteed subset is RIDL-306** (error)
 — one code for the whole boundary, with a message naming the offending form.
 That includes, non-exhaustively:
 
-| Form                                                     | Example                              |
-| -------------------------------------------------------- | ------------------------------------ |
-| any V2 production (§3.2)                                 | `if`, `let`, `case`, calls, `all(…)` |
-| unresolved reference / name outside the environment (§6) | `require unknownName > 0`            |
-| `result` in a `require`; a signal read in an `ensure`    | `ensure currentSpeed >= 0.0`         |
-| cross-named-type arithmetic or comparison (§5.2)         | `require speed + window > 0`         |
-| duration arithmetic (§5.3)                               | `require window + 10ms < 1s`         |
-| `%` over non-integer-backed operands (§5.3)              | `require speed % 0.5 == 0.0`         |
-| non-boolean root (§5.3)                                  | `require 3`                          |
-| string/bytes operands; enum ordering (§5.3)              | `require name == "x"`                |
+| Form                                                        | Example                              |
+| ----------------------------------------------------------- | ------------------------------------ |
+| any V2 production (§3.2)                                    | `if`, `let`, `case`, calls, `all(…)` |
+| unresolved reference / name outside the environment (§6)    | `require unknownName > 0`            |
+| `result` in a `require`; a signal read in an `ensure`       | `ensure currentSpeed >= 0.0`         |
+| cross-named-type arithmetic or comparison (§5.2)            | `require speed + window > 0`         |
+| duration arithmetic (§5.3)                                  | `require window + 10ms < 1s`         |
+| struct-field access — struct-typed base, not a tuple (§5.1) | `require filter.severity >= 4`       |
+| `%` over non-integer-backed operands (§5.3)                 | `require speed % 0.5 == 0.0`         |
+| non-boolean root (§5.3)                                     | `require 3`                          |
+| string/bytes operands; enum ordering (§5.3)                 | `require name == "x"`                |
 
 The boundary is **lifted per-form as E5.1 lands**: when a V2 form is
 implemented, it leaves RIDL-306's scope; forms that remain illegal in the
@@ -419,8 +435,8 @@ that produced it:
    Rejected: an unchecked string cannot be type-checked, canonicalized, or
    diffed; it fails the general-form deletion test (an attribute must have a
    machine consumer, and a machine cannot consume what it cannot parse); and it
-   silently rots as the interface evolves. The whole value of `require`/
-   `ensure` is that the compiler owns them.
+   silently becomes outdated as the interface evolves. The whole value of
+   `require`/ `ensure` is that the compiler owns them.
 2. **The full E5 grammar now** (implement functions, conditionals, and
    combinators in E2). Rejected: sequencing (ADR-0004, ADR-0008 decision 10).
    The function layer is L-sized, needs the totality checks (RMDL-1xx) that only
