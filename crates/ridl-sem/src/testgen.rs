@@ -57,7 +57,7 @@ pub fn float_values(r: &FloatRange) -> impl Strategy<Value = f64> {
             let step = step.0.clone();
             // n_max = floor((max - min) / step): the highest grid index whose
             // value stays at or below `max`, so every drawn value is in range.
-            let n_max = grid_index_ceiling(&r.min.0, &r.max.0, &step);
+            let n_max = max_grid_index(&r.min.0, &r.max.0, &step);
             (0u64..=n_max)
                 .prop_map(move |n| grid_value(&min, &step, n))
                 .boxed()
@@ -115,11 +115,11 @@ pub fn violations(r: &IntRange) -> Vec<i64> {
 }
 
 /// `floor((max - min) / step)` as a saturating `u64` — the highest grid index
-/// whose value `min + n·step` stays at or below `max`. `step` is positive (the
-/// checker rejects a non-positive step as TYPL-105 before a value is
+/// `n` whose value `min + n·step` stays at or below `max`. `step` is positive
+/// (the checker rejects a non-positive step as TYPL-105 before a value is
 /// generated); a non-positive step here yields `0` so the strategy still draws
 /// the single value `min`.
-fn grid_index_ceiling(min: &BigRational, max: &BigRational, step: &BigRational) -> u64 {
+fn max_grid_index(min: &BigRational, max: &BigRational, step: &BigRational) -> u64 {
     if step.numer().sign() != Sign::Plus {
         return 0;
     }
@@ -239,15 +239,15 @@ mod tests {
     }
 
     #[test]
-    fn grid_index_ceiling_counts_whole_steps() {
+    fn max_grid_index_counts_whole_steps() {
         // [0.0..250.0 step 0.5]: 500 whole steps, index 0..=500 (501 values).
         assert_eq!(
-            grid_index_ceiling(&exact("0.0").0, &exact("250.0").0, &exact("0.5").0),
+            max_grid_index(&exact("0.0").0, &exact("250.0").0, &exact("0.5").0),
             500
         );
         // A step larger than the span leaves only the single value min.
         assert_eq!(
-            grid_index_ceiling(&exact("0.0").0, &exact("1.0").0, &exact("5.0").0),
+            max_grid_index(&exact("0.0").0, &exact("1.0").0, &exact("5.0").0),
             0
         );
     }

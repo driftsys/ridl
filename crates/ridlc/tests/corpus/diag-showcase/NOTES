@@ -64,3 +64,8 @@ distinct/broken manifest, or the network. None is a defect in this corpus.
 
 TYPL-107, TYPL-205, and TYPL-401/402/403 are deferred in E1 and are not
 implemented, so they are absent by design.
+
+- **TYPL-301, TYPL-303, TYPL-304** — the other profile-boundary codes. They
+  reject constructs the E2 family grammar must first parse, so they are deferred
+  with it; only TYPL-302 (duration or timing in a typl context) ships in E1,
+  because the family lexer already produces the tokens.
