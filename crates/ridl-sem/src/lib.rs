@@ -4,9 +4,10 @@
 //! (ADR-0006 decision 2).
 
 pub mod check;
+pub mod docs;
 pub mod resolve;
 pub mod scalar;
 pub mod ucum;
 
-pub use check::{CheckedPackage, check_package};
+pub use check::{CheckedPackage, ConstValue, check_package, const_value};
 pub use resolve::{Resolution, Symbol, SymbolKind, resolve_package};

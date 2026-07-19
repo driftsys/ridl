@@ -1,6 +1,5 @@
 ---
 source: crates/ridl-sem/src/check.rs
-assertion_line: 2075
 expression: "v1::to_json_pretty(&checked.ir)"
 ---
 {
@@ -10,7 +9,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "name": "Speed",
       "visibility": 1,
       "is_error": false,
-      "doc": "",
+      "doc": "Vehicle speed over ground",
       "labels": [],
       "deprecated": null,
       "kind": {
@@ -41,7 +40,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "name": "Temperature",
       "visibility": 1,
       "is_error": false,
-      "doc": "",
+      "doc": "Coolant / ambient temperature",
       "labels": [],
       "deprecated": null,
       "kind": {
@@ -72,7 +71,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "name": "RPM",
       "visibility": 1,
       "is_error": false,
-      "doc": "",
+      "doc": "Engine crankshaft speed",
       "labels": [],
       "deprecated": null,
       "kind": {
@@ -103,7 +102,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
       "name": "Ratio",
       "visibility": 1,
       "is_error": false,
-      "doc": "",
+      "doc": "Normalised ratio",
       "labels": [],
       "deprecated": null,
       "kind": {

@@ -30,9 +30,10 @@ use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_ir::v1;
 use ridl_syntax::SyntaxKind;
-use ridl_syntax::ast::{self, AstNode, Definition, HasModifiers};
-use rowan::TextRange;
+use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers};
+use rowan::{NodeOrToken, TextRange};
 
+use crate::docs;
 use crate::resolve::{
     Resolution, Symbol, SymbolKind, declared_name, declared_symbols, name_range,
     qualified_segments, resolve_package, significant_text, source_file,
@@ -122,6 +123,106 @@ pub fn check_package(
         },
         diagnostics: checker.diagnostics,
     }
+}
+
+// ==========================================================================
+// Constant evaluation (typl §6; Appendix E scalar rule — constants as bounds)
+// ==========================================================================
+
+/// A constant's value, resolved for use in range bounds and init values
+/// (typl §6.1–§6.2): an exact numeric value, a boolean, a text value, or a
+/// regex constant's source text (delimiters included).
+///
+/// Consumed by the init-derivation pass (task 15) through [`const_value`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConstValue {
+    Number(ExactValue),
+    Bool(bool),
+    Text(String),
+    Regex(String),
+}
+
+/// The value of the constant named `name`, looked up in `res` and evaluated by
+/// following `const = const` chains to a literal (typl §6.1). Returns `None`
+/// when the name is not a constant, its value is malformed, or the chain hits a
+/// cycle.
+///
+/// Following a chain re-resolves each referenced constant in the package that
+/// defines the constant holding the reference, so an imported constant is
+/// evaluated in its own package's view. A `(package, name)` visited set breaks
+/// cycles: a constant that references itself directly or transitively yields
+/// `None` rather than looping forever.
+///
+/// Deviation from the task 14 interface, on record: the interface sketched
+/// `const_value(res, name)`, but a constant's value lives in its source file,
+/// reachable only through the salsa database — a bare `&Resolution` cannot read
+/// it, and chain-following re-resolves packages. The database, workspace, and
+/// embedded `ridl.std` are therefore threaded in. Task 15 runs inside
+/// `check_package`, which already holds all three.
+pub fn const_value(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    res: &Resolution,
+    name: &str,
+) -> Option<ConstValue> {
+    let symbol = res.symbols.get(name)?.clone();
+    let mut visited = HashSet::new();
+    const_value_of_symbol(db, ws, std, symbol, &mut visited)
+}
+
+/// Evaluates the constant `symbol` names, following `const = const` chains.
+/// `visited` carries the `(package, name)` pairs already seen, breaking cycles.
+fn const_value_of_symbol(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    symbol: Symbol,
+    visited: &mut HashSet<(String, String)>,
+) -> Option<ConstValue> {
+    if symbol.kind != SymbolKind::Const {
+        return None;
+    }
+    if !visited.insert((symbol.package.clone(), symbol.name.clone())) {
+        return None; // a const cycle — stop rather than loop
+    }
+    let source = source_file(db, symbol.file);
+    let Definition::Const(decl) = source
+        .definitions()
+        .find(|definition| name_range(definition) == symbol.range)?
+    else {
+        return None;
+    };
+    match literal_kind(&decl.value()?) {
+        LitKind::Number { value } => Some(ConstValue::Number(value)),
+        LitKind::Bool(flag) => Some(ConstValue::Bool(flag)),
+        LitKind::Str(text) => Some(ConstValue::Text(text)),
+        LitKind::Regex(text) => Some(ConstValue::Regex(text)),
+        LitKind::ConstRef(next) => {
+            // The referenced constant resolves in the package that declares the
+            // constant holding the reference (typl §3.2 name resolution).
+            let package = const_package_handle(db, ws, std, &symbol.package)?;
+            let resolution = resolve_package(db, ws, package, std);
+            let next_symbol = resolution.symbols.get(&next)?.clone();
+            const_value_of_symbol(db, ws, std, next_symbol, visited)
+        }
+        LitKind::Malformed => None,
+    }
+}
+
+/// The package handle for a package name during constant evaluation: the
+/// embedded `ridl.std` or a workspace member (which includes the package under
+/// check — every member belongs to its own workspace).
+fn const_package_handle(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    name: &str,
+) -> Option<Package> {
+    if name == std.name(db) {
+        return Some(std);
+    }
+    package_of(db, ws, name.to_string())
 }
 
 // ==========================================================================
@@ -368,19 +469,19 @@ impl Checker<'_> {
             .find(|definition| name_range(definition) == symbol.range)
     }
 
-    /// The numeric value of a constant, resolved in the context of `package`
-    /// (one level — a const referencing another const is task 14 territory).
-    fn const_numeric_value_in(&self, package: Package, name: &str) -> Option<ExactValue> {
+    /// The value of a constant, resolved in `package`'s context, following
+    /// `const = const` chains through the free [`const_value`] (cycle-guarded).
+    fn const_value_in(&self, package: Package, name: &str) -> Option<ConstValue> {
         let resolution = resolve_package(self.db, self.ws, package, self.std);
-        let symbol = resolution.symbols.get(name)?.clone();
-        if symbol.kind != SymbolKind::Const {
-            return None;
-        }
-        let Definition::Const(decl) = self.find_definition(&symbol)? else {
-            return None;
-        };
-        match literal_kind(&decl.value()?) {
-            LitKind::Number { value } => Some(value),
+        const_value(self.db, self.ws, self.std, &resolution, name)
+    }
+
+    /// The exact numeric value of a constant in `package`'s context, or `None`
+    /// when the name is missing, non-numeric, or cyclic. A chained constant
+    /// (`const MAX = BASE`) resolves through [`Checker::const_value_in`].
+    fn const_numeric_value_in(&self, package: Package, name: &str) -> Option<ExactValue> {
+        match self.const_value_in(package, name)? {
+            ConstValue::Number(value) => Some(value),
             _ => None,
         }
     }
@@ -403,7 +504,9 @@ impl Checker<'_> {
     }
 
     /// The numeric value of a scalar literal in the checked package's context:
-    /// a number directly, or a named constant resolved one level.
+    /// a number directly, or a named constant resolved through the const chain.
+    /// Silent — a bound that must report an unresolved constant uses
+    /// [`Checker::resolve_range_bound`] instead.
     fn numeric_literal(&self, literal: &ast::Literal) -> Option<ExactValue> {
         self.numeric_literal_in(self.pkg, literal)
     }
@@ -412,6 +515,40 @@ impl Checker<'_> {
         match literal_kind(literal) {
             LitKind::Number { value } => Some(value),
             LitKind::ConstRef(name) => self.const_numeric_value_in(package, &name),
+            _ => None,
+        }
+    }
+
+    /// Resolves a range-bound literal (`min`, `max`, or `step`) to its exact
+    /// value, emitting a diagnostic when a constant reference does not resolve
+    /// to a number. §16.2 defines no code for a malformed bound constant: a
+    /// referenced constant that exists but is non-numeric borrows TYPL-105 (the
+    /// documented borrow — the type-mismatch arm), while an unknown or cyclic
+    /// constant reference is the T6 description-first codeless message. Either
+    /// way the width defers (the bound is written but unresolved) — the caller's
+    /// `unresolved_bound` check still sees a `None`.
+    fn resolve_range_bound(&mut self, literal: &ast::Literal) -> Option<ExactValue> {
+        match literal_kind(literal) {
+            LitKind::Number { value } => Some(value),
+            LitKind::ConstRef(name) => match self.const_value_in(self.pkg, &name) {
+                Some(ConstValue::Number(value)) => Some(value),
+                Some(_) => {
+                    self.error(
+                        DiagCode::TYPL_105,
+                        literal.syntax().text_range(),
+                        format!("range bound constant `{name}` is not numeric"),
+                    );
+                    None
+                }
+                None => {
+                    self.error(
+                        DiagCode::NONE,
+                        literal.syntax().text_range(),
+                        format!("unknown constant `{name}` in range bound"),
+                    );
+                    None
+                }
+            },
             _ => None,
         }
     }
@@ -447,17 +584,89 @@ impl Checker<'_> {
         } else {
             v1::Visibility::Public
         };
+
+        // Doc-comment body, @labels, and @deprecated (typl §14). TYPL-405 warns
+        // when @deprecated carries no reason string; TYPL-404 warns on a blank
+        // line between the doc comment and the definition (§16.5).
+        let doc_info = docs::scan(&definition.doc_comments());
+        if doc_info.deprecated_missing_reason() {
+            self.warning(
+                DiagCode::TYPL_405,
+                name_range(definition),
+                format!("`@deprecated` on `{name}` has no reason string"),
+            );
+        }
+        if blank_line_before_definition(definition) {
+            self.warning(
+                DiagCode::TYPL_404,
+                name_range(definition),
+                format!("blank line between the doc comment and `{name}`"),
+            );
+        }
+
+        // TYPL-005: a public declaration must not expose an `internal` type.
+        self.check_internal_exposure(definition, &name);
+
         Some(v1::Decl {
             name,
             visibility: visibility as i32,
             is_error: definition.is_error(),
-            // Doc semantics (body, @labels, @deprecated) land with the task 14
-            // doc scanner.
-            doc: String::new(),
-            labels: Vec::new(),
-            deprecated: None,
+            doc: doc_info.doc,
+            labels: doc_info.labels,
+            deprecated: doc_info.deprecated,
             kind: Some(kind),
         })
+    }
+
+    /// TYPL-005: a public declaration must not expose an `internal` type in its
+    /// fields, arms, backing, or range-bound constants (typl §3.3). Only
+    /// same-package internal declarations are reachable — a foreign `internal`
+    /// name never resolves (typl §3.3), so it cannot leak here. Internal
+    /// declarations are exempt: they may reference each other freely.
+    fn check_internal_exposure(&mut self, definition: &Definition, decl_name: &str) {
+        if definition.is_internal() {
+            return;
+        }
+        // Collect exposures first (immutable resolver reads), then report.
+        let mut exposures: Vec<(TextRange, &'static str, String)> = Vec::new();
+        for descendant in definition.syntax().descendants() {
+            // A named-type reference: field, arm, map key/value, or an enumset
+            // backing enum.
+            if let Some(path) = ast::PathType::cast(descendant.clone()) {
+                if let Some(symbol) = self.lookup_path(&path)
+                    && symbol.internal
+                    && symbol.package == self.package_name
+                {
+                    exposures.push((path.syntax().text_range(), "type", symbol.name.clone()));
+                }
+                continue;
+            }
+            // A range-bound or `match` constant: an `Ident` inside a `Literal`
+            // sitting in a `Constraint` (never an init value).
+            if let Some(literal) = ast::Literal::cast(descendant)
+                && literal
+                    .syntax()
+                    .ancestors()
+                    .any(|ancestor| ancestor.kind() == SyntaxKind::Constraint)
+                && let LitKind::ConstRef(const_name) = literal_kind(&literal)
+                && let Some(symbol) = self.resolution.symbols.get(&const_name)
+                && symbol.internal
+                && symbol.package == self.package_name
+            {
+                exposures.push((
+                    literal.syntax().text_range(),
+                    "constant",
+                    symbol.name.clone(),
+                ));
+            }
+        }
+        for (range, noun, exposed) in exposures {
+            self.error(
+                DiagCode::TYPL_005,
+                range,
+                format!("public `{decl_name}` exposes internal {noun} `{exposed}`"),
+            );
+        }
     }
 
     fn lower_type(&mut self, decl: &ast::TypeDef) -> v1::TypeDef {
@@ -520,10 +729,16 @@ impl Checker<'_> {
     fn lower_const(&mut self, name: &str, decl: &ast::ConstDef) -> v1::ConstDef {
         let value_literal = decl.value();
         let value_kind = value_literal.as_ref().map(literal_kind);
+        let value_range = value_literal
+            .as_ref()
+            .map(|literal| literal.syntax().text_range())
+            .unwrap_or_default();
 
         // The declared type: a primitive keyword as written, or a named-type
-        // reference in canonical form. Absent for regex constants.
+        // reference in canonical form. Absent for regex constants. The resolved
+        // named-type symbol is kept for the §5.7 nominal identity check.
         let mut bounds: Option<(Option<ExactValue>, Option<ExactValue>, String)> = None;
+        let mut target_type: Option<Symbol> = None;
         let type_ref = decl.type_ref().map(|path| {
             if let Some(keyword) = primitive_path_keyword(&path) {
                 return keyword;
@@ -531,10 +746,11 @@ impl Checker<'_> {
             match self.resolve_type_path(&path) {
                 PathTarget::Symbol(symbol) => {
                     let canonical = self.canonical_ref(&symbol);
-                    if symbol.kind == SymbolKind::Type
-                        && let Some((min, max)) = self.named_scalar_bounds(&symbol)
-                    {
-                        bounds = Some((min, max, canonical.clone()));
+                    if symbol.kind == SymbolKind::Type {
+                        if let Some((min, max)) = self.named_scalar_bounds(&symbol) {
+                            bounds = Some((min, max, canonical.clone()));
+                        }
+                        target_type = Some(symbol.clone());
                     }
                     canonical
                 }
@@ -547,13 +763,9 @@ impl Checker<'_> {
             (&value_kind, &bounds)
             && out_of_bounds(value, min.as_ref(), max.as_ref())
         {
-            let range = value_literal
-                .as_ref()
-                .map(|literal| literal.syntax().text_range())
-                .unwrap_or_default();
             self.error(
                 DiagCode::TYPL_108,
-                range,
+                value_range,
                 format!(
                     "const `{name}` value {} outside `{type_name}` range [{}, {}]",
                     value.to_decimal_string(),
@@ -561,6 +773,27 @@ impl Checker<'_> {
                     render_bound(max.as_ref()),
                 ),
             );
+        }
+
+        // TYPL-108, §5.7 nominal identity: a const of a named type is never
+        // initialized from a value of another named type. A value that
+        // references a const of a different named type is the reachable case.
+        if let (Some(LitKind::ConstRef(source_name)), Some(target)) = (&value_kind, &target_type)
+            && let Some((target_display, source_display)) =
+                self.nominal_init_violation(target, source_name)
+        {
+            self.error(
+                DiagCode::TYPL_108,
+                value_range,
+                format!(
+                    "const `{name}` of type `{target_display}` cannot be initialized from `{source_name}` of type `{source_display}` — nominal types are not interchangeable (§5.7)",
+                ),
+            );
+        }
+
+        // TYPL-106: a regex constant's pattern must be a valid ECMA-262 regex.
+        if let Some(LitKind::Regex(text)) = &value_kind {
+            self.validate_regex(text, value_range);
         }
 
         let (value, regex) = match value_kind {
@@ -602,6 +835,62 @@ impl Checker<'_> {
             .max()
             .and_then(|literal| self.numeric_literal_in(package, &literal));
         Some((min, max))
+    }
+
+    /// The nominal violation for `const target = source_name`, if any: the
+    /// display names of the two named types when `source_name` is a constant of
+    /// a named type distinct from `target`'s (§5.7, TYPL-108). `None` when the
+    /// source is not a constant, is not named-typed, or shares `target`'s type.
+    fn nominal_init_violation(
+        &self,
+        target: &Symbol,
+        source_name: &str,
+    ) -> Option<(String, String)> {
+        let source = self.resolution.symbols.get(source_name)?;
+        if source.kind != SymbolKind::Const {
+            return None;
+        }
+        let source_type = self.const_named_type(source)?;
+        if (source_type.package.as_str(), source_type.name.as_str())
+            == (target.package.as_str(), target.name.as_str())
+        {
+            return None;
+        }
+        Some((self.canonical_ref(target), self.canonical_ref(&source_type)))
+    }
+
+    /// The named type a constant declares (`const X : T`, T a named type), as
+    /// the resolved type [`Symbol`], resolved in the constant's own defining
+    /// package. `None` when the constant is primitive-typed, untyped, or its
+    /// type does not resolve to a named type.
+    fn const_named_type(&self, symbol: &Symbol) -> Option<Symbol> {
+        let Definition::Const(decl) = self.find_definition(symbol)? else {
+            return None;
+        };
+        let path = decl.type_ref()?;
+        if primitive_path_keyword(&path).is_some() {
+            return None;
+        }
+        let package = self.package_handle(&symbol.package)?;
+        let resolution = resolve_package(self.db, self.ws, package, self.std);
+        match self.lookup_path_in(&resolution, &path) {
+            Some(type_symbol) if type_symbol.kind == SymbolKind::Type => Some(type_symbol),
+            _ => None,
+        }
+    }
+
+    /// Validates a regex literal's pattern with the `regress` ECMA-262 engine
+    /// (typl §2.7; ADR-0007 decision 10), emitting TYPL-106 on invalid syntax.
+    /// A typl regex literal carries its `/…/` delimiters; the engine parses the
+    /// body between them.
+    fn validate_regex(&mut self, raw: &str, range: TextRange) {
+        if regress::Regex::new(regex_body(raw)).is_err() {
+            self.error(
+                DiagCode::TYPL_106,
+                range,
+                "invalid regular expression syntax".to_string(),
+            );
+        }
     }
 
     // --- scalar constraints -----------------------------------------------
@@ -646,17 +935,16 @@ impl Checker<'_> {
         let max_literal = constraint.max();
         let min = min_literal
             .as_ref()
-            .and_then(|literal| self.numeric_literal(literal));
+            .and_then(|literal| self.resolve_range_bound(literal));
         let max = max_literal
             .as_ref()
-            .and_then(|literal| self.numeric_literal(literal));
-        // A bound that is written but does not resolve numerically (an
-        // unresolvable or chained constant reference) is not an omitted
-        // bound: taking the §5.5 default would derive a definite width that
-        // flips when the constant later resolves (task 14's `const_value`) —
-        // a silent wire break. The width is deferred instead (the TYPL-111
-        // shape); the unknown-constant diagnostic itself is task 14
-        // territory.
+            .and_then(|literal| self.resolve_range_bound(literal));
+        // A bound that is written but does not resolve numerically (an unknown,
+        // cyclic, or non-numeric constant reference) is not an omitted bound:
+        // taking the §5.5 default would derive a definite width that flips when
+        // the constant later resolves — a silent wire break. The width defers
+        // instead (the TYPL-111 shape); `resolve_range_bound` has already
+        // reported the unresolved constant.
         let unresolved_bound =
             (min_literal.is_some() && min.is_none()) || (max_literal.is_some() && max.is_none());
 
@@ -750,18 +1038,19 @@ impl Checker<'_> {
         let max_literal = constraint.max();
         let min = min_literal
             .as_ref()
-            .and_then(|literal| self.numeric_literal(literal));
+            .and_then(|literal| self.resolve_range_bound(literal));
         let max = max_literal
             .as_ref()
-            .and_then(|literal| self.numeric_literal(literal));
+            .and_then(|literal| self.resolve_range_bound(literal));
 
         let step_literal = constraint.step();
         let step = step_literal
             .as_ref()
-            .and_then(|literal| self.numeric_literal(literal));
+            .and_then(|literal| self.resolve_range_bound(literal));
         // Same rule as the integer path: a written-but-unresolved bound or
-        // step must not silently derive a definite width — defer it until
-        // the constant resolves (task 14).
+        // step must not silently derive a definite width — defer it. The
+        // unresolved constant has already been reported by
+        // `resolve_range_bound`.
         let unresolved_bound = (min_literal.is_some() && min.is_none())
             || (max_literal.is_some() && max.is_none())
             || (step_literal.is_some() && step.is_none());
@@ -909,14 +1198,20 @@ impl Checker<'_> {
                 constraint.as_ref().and_then(ast::Constraint::match_pattern)
         {
             match literal_kind(&match_literal) {
-                LitKind::Regex(text) => pattern = Some(text),
+                LitKind::Regex(text) => {
+                    // TYPL-106: an inline `match` regex is validated here; a
+                    // named regex constant is validated at its own declaration.
+                    self.validate_regex(&text, match_literal.syntax().text_range());
+                    pattern = Some(text);
+                }
                 LitKind::ConstRef(name) => match self.const_regex_value(&name) {
                     Some((text, canonical)) => {
                         pattern = Some(text);
                         pattern_const = Some(canonical);
                     }
-                    // An unresolved or non-regex pattern constant: TYPL-106
-                    // (regex validation) is task 14 scope; carry the name.
+                    // An unresolved or non-regex pattern constant: carry the
+                    // name. Its regex validity (TYPL-106) is checked where the
+                    // constant is declared.
                     None => pattern_const = Some(name),
                 },
                 _ => {}
@@ -940,8 +1235,11 @@ impl Checker<'_> {
     }
 
     /// Lowers a declared `= value` init, validating it against the scalar
-    /// bounds (TYPL-109). Returns `(declared_init, init)`; both stay absent
-    /// when no init is declared — derivation is the task 15 pass.
+    /// bounds (TYPL-109): a numeric init against the numeric range, a
+    /// string/bytes init against the length bound and, where the type carries a
+    /// `match` pattern, against that pattern (see [`Checker::check_string_init`]).
+    /// Returns `(declared_init, init)`; both stay absent when no init is
+    /// declared — derivation is the task 15 pass.
     fn lower_declared_init(
         &mut self,
         init: Option<ast::InitValue>,
@@ -967,7 +1265,10 @@ impl Checker<'_> {
                 value.to_decimal_string()
             }
             LitKind::Bool(flag) => flag.to_string(),
-            LitKind::Str(text) => text,
+            LitKind::Str(text) => {
+                self.check_string_init(&text, parts, literal.syntax().text_range());
+                text
+            }
             LitKind::ConstRef(name) => match self.const_numeric_value_in(self.pkg, &name) {
                 Some(value) => {
                     if out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
@@ -996,6 +1297,51 @@ impl Checker<'_> {
                 value: Some(text),
             }),
         )
+    }
+
+    /// Checks a declared string/bytes init against the type's length bound and,
+    /// where a `match` pattern is present, against that pattern (TYPL-109,
+    /// §5.8). Length is measured in Unicode scalar values; the string's own
+    /// escape processing is not applied (the raw inner text is measured).
+    /// Pattern conformance uses ECMA-262 `test` semantics — a match anywhere in
+    /// the string; typl patterns are anchored with `^`…`$`. An invalid pattern
+    /// is skipped here (TYPL-106 reports it at the pattern's own site). Only
+    /// `type` definitions reach this with a populated `constraint`; an inline
+    /// scalar struct field carries only numeric bounds through the field path,
+    /// so its string init is length-checked only where the field's type is a
+    /// named string `type`.
+    fn check_string_init(&mut self, text: &str, parts: &ScalarParts, range: TextRange) {
+        let Some(constraint) = &parts.constraint else {
+            return;
+        };
+        let length = text.chars().count() as u64;
+        if let Some(min) = constraint.len_min
+            && length < min
+        {
+            self.error(
+                DiagCode::TYPL_109,
+                range,
+                format!("init string length {length} is below the declared minimum {min}"),
+            );
+        } else if let Some(max) = constraint.len_max
+            && length > max
+        {
+            self.error(
+                DiagCode::TYPL_109,
+                range,
+                format!("init string length {length} exceeds the declared maximum {max}"),
+            );
+        }
+        if let Some(pattern) = &constraint.pattern
+            && let Ok(regex) = regress::Regex::new(regex_body(pattern))
+            && regex.find(text).is_none()
+        {
+            self.error(
+                DiagCode::TYPL_109,
+                range,
+                format!("init string `{text}` does not match the type's `match` pattern"),
+            );
+        }
     }
 
     // --- structs ----------------------------------------------------------
@@ -1894,6 +2240,31 @@ impl Checker<'_> {
 
 // --- free helpers ---------------------------------------------------------
 
+/// The ECMA-262 body of a typl regex literal — its text without the enclosing
+/// `/…/` delimiters (typl §2.7).
+fn regex_body(raw: &str) -> &str {
+    raw.strip_prefix('/')
+        .and_then(|rest| rest.strip_suffix('/'))
+        .unwrap_or(raw)
+}
+
+/// Whether a blank line separates `definition`'s doc comment from the
+/// definition (TYPL-404). Only meaningful when a doc comment is attached; the
+/// check reads the whitespace token immediately before the definition — two or
+/// more newlines is a blank line. Doc comments are trivia, so the AST attaches
+/// them across the blank line even though the spec warns about the gap.
+fn blank_line_before_definition(definition: &Definition) -> bool {
+    if definition.doc_comments().is_empty() {
+        return false;
+    }
+    matches!(
+        definition.syntax().prev_sibling_or_token(),
+        Some(NodeOrToken::Token(token))
+            if token.kind() == SyntaxKind::Whitespace
+                && token.text().matches('\n').count() >= 2
+    )
+}
+
 /// The declared name of a body member (field, arm, enum value, bit,
 /// tombstone) — these nodes carry a `name()` accessor but not the `HasName`
 /// trait.
@@ -2362,14 +2733,13 @@ mod tests {
         assert_eq!(type_def(&checked, "Gain").declared_init, None);
     }
 
-    /// A bound that is written but does not resolve numerically (an
-    /// unresolvable or chained constant reference) must not take the
-    /// omitted-bound default: a definite width would be wrong and would flip
-    /// when the constant later resolves (task 14's `const_value`) — a silent
-    /// wire break. The width stays unset instead; the unknown-constant
-    /// diagnostic itself is task 14 territory.
+    /// A bound written as an undefined constant defers the width — a definite
+    /// width would flip once the constant resolves — and now also reports the
+    /// unknown constant (the T13 bound-diagnostic closure). §16.2 defines no
+    /// bound-specific code, so the message is the T6 codeless unknown-reference
+    /// shape.
     #[test]
-    fn written_but_unresolved_bound_defers_the_width() {
+    fn written_but_unresolved_bound_defers_and_reports() {
         let checked = check_source("app", "package app\ntype X : integer [0..TYPO]\n");
         let def = type_def(&checked, "X");
         assert_eq!(
@@ -2382,12 +2752,66 @@ mod tests {
             constraint.max, None,
             "the unresolved bound lowers as absent"
         );
-        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(checked.diagnostics.len(), 1);
+        assert!(
+            checked.diagnostics[0].code.is_empty(),
+            "no §16 code for a bound const"
+        );
+        assert_eq!(
+            checked.diagnostics[0].message,
+            "unknown constant `TYPO` in range bound",
+        );
 
         // The float path has the same shape.
         let float = check_source("app", "package app\ntype Y : float [0.0..TYPO step 0.5]\n");
         assert_eq!(type_def(&float, "Y").width, None);
-        assert!(codes(&float).is_empty(), "got: {:?}", float.diagnostics);
+        assert_eq!(codes(&float), vec![""], "got: {:?}", float.diagnostics);
+        assert!(float.diagnostics[0].message.contains("TYPO"));
+    }
+
+    /// A chained constant bound (`const MAX = BASE`) resolves through the const
+    /// chain: the width derives and no diagnostic fires. The cycle guard keeps a
+    /// self-referential constant used in a bound from looping — it reports the
+    /// unknown-constant message once instead.
+    #[test]
+    fn chained_constant_bound_resolves_and_cycle_is_guarded() {
+        let chained = check_source(
+            "app",
+            "package app\nconst BASE = 255\nconst MAX = BASE\ntype X : integer [0..MAX]\n",
+        );
+        assert!(
+            codes(&chained).is_empty(),
+            "the chained const resolves, got: {:?}",
+            chained.diagnostics,
+        );
+        assert_eq!(
+            type_def(&chained, "X").width,
+            Some(v1::type_def::Width::IntWidth(v1::IntWidth::U8 as i32)),
+            "[0..255] via the const chain derives uint8",
+        );
+
+        // A self-referential constant must not loop; the bound reports it once.
+        let cyclic = check_source(
+            "app",
+            "package app\nconst LOOP = LOOP\ntype Y : integer [0..LOOP]\n",
+        );
+        assert_eq!(codes(&cyclic), vec![""], "got: {:?}", cyclic.diagnostics);
+        assert!(cyclic.diagnostics[0].message.contains("LOOP"));
+        assert_eq!(type_def(&cyclic, "Y").width, None);
+    }
+
+    /// A range bound that references a non-numeric constant borrows TYPL-105 —
+    /// the documented borrow, since §16.2 scopes 105 to `step` and defines no
+    /// code for a malformed bound constant.
+    #[test]
+    fn non_numeric_constant_bound_borrows_typl_105() {
+        let checked = check_source(
+            "app",
+            "package app\nconst FLAG = true\ntype X : integer [0..FLAG]\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-105"]);
+        assert!(checked.diagnostics[0].message.contains("FLAG"));
+        assert_eq!(type_def(&checked, "X").width, None);
     }
 
     /// §5.5: a bound genuinely omitted from source still takes the
@@ -2733,5 +3157,227 @@ mod tests {
              error union ServiceFault { diag : DiagError, plain : Plain }\n",
         );
         assert_eq!(codes(&checked), vec!["TYPL-214"]);
+    }
+
+    // --- const_value: the shipped interface (task 15 consumes it) ---------
+
+    /// `const_value` follows `const = const` chains to a literal and guards
+    /// cycles with a `(package, name)` visited set.
+    #[test]
+    fn const_value_follows_chains_and_guards_cycles() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = package(
+            &db,
+            "app",
+            "package app\nconst BASE = 42\nconst MID = BASE\nconst TOP = MID\nconst LOOP = LOOP\n",
+        );
+        let ws = Workspace::new(&db, vec![app], BTreeMap::new());
+        let resolution = resolve_package(&db, ws, app, std);
+
+        assert_eq!(
+            const_value(&db, ws, std, &resolution, "TOP"),
+            Some(ConstValue::Number(ExactValue::parse("42").unwrap())),
+            "a const->const->const chain resolves to the literal",
+        );
+        assert_eq!(
+            const_value(&db, ws, std, &resolution, "LOOP"),
+            None,
+            "a self-referential const is cycle-guarded to None",
+        );
+        assert_eq!(const_value(&db, ws, std, &resolution, "MISSING"), None);
+    }
+
+    // --- TYPL-108: §5.7 nominal identity for const inits ------------------
+
+    /// §5.7: a const of a named type is never initialized from a value of
+    /// another named type. `Speed` and `Torque` are both float-backed and
+    /// nominally distinct — a `Speed` const initialized from a `Torque` const
+    /// is TYPL-108.
+    #[test]
+    fn typl_108_nominal_const_init_from_a_different_named_type() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             type Speed  : km/h [0.0..250.0 step 0.5]\n\
+             type Torque : N.m  [0.0..1000.0 step 0.5]\n\
+             const MAX_TORQUE : Torque = 1000.0\n\
+             const FAST       : Speed  = MAX_TORQUE\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-108"]);
+        assert!(checked.diagnostics[0].message.contains("Speed"));
+        assert!(checked.diagnostics[0].message.contains("Torque"));
+    }
+
+    /// A const of a named type initialized from another const of the *same*
+    /// named type is fine (nominal identity holds).
+    #[test]
+    fn same_named_type_const_init_is_clean() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             type Speed : km/h [0.0..250.0 step 0.5]\n\
+             const MAX_SPEED : Speed = 250.0\n\
+             const CRUISE    : Speed = MAX_SPEED\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    // --- TYPL-106: regex validation (regress) -----------------------------
+
+    #[test]
+    fn typl_106_invalid_regex_constant() {
+        let checked = check_source("app", "package app\nconst BAD = /[/\n");
+        assert_eq!(codes(&checked), vec!["TYPL-106"]);
+    }
+
+    #[test]
+    fn typl_106_invalid_inline_match_regex() {
+        let checked = check_source("app", "package app\ntype Bad : string [1..10 match /[/]\n");
+        assert_eq!(codes(&checked), vec!["TYPL-106"]);
+    }
+
+    /// A valid regex constant reused in a `match` bound is clean — the constant
+    /// is validated at its declaration, not re-validated at the use site.
+    #[test]
+    fn valid_regex_constant_and_match_are_clean() {
+        let checked = check_source(
+            "app",
+            "package app\nconst VIN = /^[A-HJ-NPR-Z0-9]{17}$/\ntype Vin : string [17 match VIN]\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    // --- TYPL-005: internal-type exposure ---------------------------------
+
+    #[test]
+    fn typl_005_public_struct_exposes_internal_field_type() {
+        let checked = check_source(
+            "app",
+            "package app\ninternal type Secret : integer [0..10]\nstruct Public { s : Secret }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-005"]);
+        assert!(checked.diagnostics[0].message.contains("Secret"));
+    }
+
+    /// An `internal` declaration may reference an `internal` type freely — the
+    /// contract surface is not widened.
+    #[test]
+    fn internal_declaration_may_reference_an_internal_type() {
+        let checked = check_source(
+            "app",
+            "package app\ninternal type Secret : integer [0..10]\ninternal struct Helper { s : Secret }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// A public type exposing an `internal` constant in a range bound is
+    /// TYPL-005 (§3.3 "bounds constants").
+    #[test]
+    fn typl_005_public_type_exposes_internal_bound_constant() {
+        let checked = check_source(
+            "app",
+            "package app\ninternal const SECRET_MAX = 100\ntype Level : integer [0..SECRET_MAX]\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-005"]);
+        assert!(checked.diagnostics[0].message.contains("SECRET_MAX"));
+    }
+
+    // --- TYPL-404/405 and doc metadata (§14) ------------------------------
+
+    #[test]
+    fn deprecated_with_reason_populates_ir_without_warning() {
+        let checked = check_source(
+            "app",
+            "package app\n/// @deprecated \"use Velocity\"\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            decl(&checked, "Speed").deprecated.as_deref(),
+            Some("use Velocity"),
+        );
+    }
+
+    #[test]
+    fn typl_405_deprecated_without_reason() {
+        let checked = check_source(
+            "app",
+            "package app\n/// @deprecated\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-405"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+        // The declaration is still marked deprecated, with an empty reason.
+        assert_eq!(decl(&checked, "Speed").deprecated.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn typl_404_blank_line_between_doc_and_definition() {
+        let checked = check_source(
+            "app",
+            "package app\n/// Vehicle speed\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-404"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+        // The doc still attaches despite the gap.
+        assert_eq!(decl(&checked, "Speed").doc, "Vehicle speed");
+    }
+
+    #[test]
+    fn labels_land_in_the_ir() {
+        let checked = check_source(
+            "app",
+            "package app\n/// @labels SAFETY(D), CALIBRATION\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            decl(&checked, "Speed").labels,
+            vec!["SAFETY(D)", "CALIBRATION"],
+        );
+    }
+
+    #[test]
+    fn doc_body_lands_in_the_ir() {
+        let checked = check_source(
+            "app",
+            "package app\n/// Vehicle speed over ground\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+        );
+        assert_eq!(decl(&checked, "Speed").doc, "Vehicle speed over ground");
+    }
+
+    // --- TYPL-109: string/bytes init conformance --------------------------
+
+    #[test]
+    fn typl_109_string_init_too_long() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Tag : string [0..4] = \"toolong\"\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-109"]);
+        assert!(checked.diagnostics[0].message.contains("length"));
+    }
+
+    #[test]
+    fn typl_109_string_init_does_not_match_pattern() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Code : string [1..8 match /^[A-Z]+$/] = \"abc\"\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-109"]);
+        assert!(checked.diagnostics[0].message.contains("pattern"));
+    }
+
+    #[test]
+    fn conforming_string_init_is_clean() {
+        let ok_len = check_source("app", "package app\ntype Tag : string [0..8] = \"hello\"\n");
+        assert!(codes(&ok_len).is_empty(), "got: {:?}", ok_len.diagnostics);
+        let ok_pattern = check_source(
+            "app",
+            "package app\ntype Code : string [1..8 match /^[A-Z]+$/] = \"ABC\"\n",
+        );
+        assert!(
+            codes(&ok_pattern).is_empty(),
+            "got: {:?}",
+            ok_pattern.diagnostics,
+        );
     }
 }
