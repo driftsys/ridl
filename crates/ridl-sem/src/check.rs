@@ -2157,6 +2157,18 @@ impl Checker<'_> {
                     format!("enum value `{name}` re-declares a `reserved` name"),
                 );
             }
+            // RIDL-307 (warning): an `error` enum must not re-declare a
+            // Stratum-2 contract-error category name — reserved vocabulary
+            // (ridl §10.2). Checked wherever error enums lower, both profiles.
+            if decl.is_error() && STRATUM_2_CATEGORIES.contains(&name.as_str()) {
+                self.warning(
+                    DiagCode::RIDL_307,
+                    member_name_range(value_node.name(), value_node.syntax()),
+                    format!(
+                        "`error` enum value `{name}` is a reserved Stratum-2 contract-error category — choose a different name"
+                    ),
+                );
+            }
             let literal = value_node.value();
             let value = literal
                 .as_ref()
@@ -2815,19 +2827,70 @@ impl Checker<'_> {
         } else if let Some(stream) = return_type.stream_type() {
             v2::return_type::Kind::Value(self.lower_stream(&stream))
         } else if let Some(fallible) = return_type.fallible_type() {
-            let ok = fallible
-                .ok()
-                .map(|path| self.lower_type_ref(&path))
-                .unwrap_or_default();
-            let err = fallible
-                .err()
-                .map(|path| self.lower_type_ref(&path))
-                .unwrap_or_default();
+            // gf §6.1: the left arm is a non-error success type; the right arm
+            // is exactly one error type. An error-typed left arm is the
+            // arm-order mistake — the dominant diagnostic, so the right arm is
+            // not separately reported; otherwise a non-error right arm draws
+            // the "not an error type" message. Both are RIDL-303 (a fallible
+            // return with no success path). The arms lower canonically either
+            // way (honest lowering); the transport identity is derived, never
+            // stored (ADR-0008 decision 4).
+            let ok_path = fallible.ok();
+            let err_path = fallible.err();
+            let (ok, ok_symbol) = match &ok_path {
+                Some(path) => self.resolve_arm(path),
+                None => (String::new(), None),
+            };
+            let (err, err_symbol) = match &err_path {
+                Some(path) => self.resolve_arm(path),
+                None => (String::new(), None),
+            };
+            if let (Some(path), Some(symbol)) = (&ok_path, &ok_symbol)
+                && symbol.is_error
+            {
+                self.error(
+                    DiagCode::RIDL_303,
+                    path.syntax().text_range(),
+                    format!(
+                        "success arm `{}` is an error type — write `T | E` with the error arm second",
+                        symbol.name
+                    ),
+                );
+            } else if let (Some(path), Some(symbol)) = (&err_path, &err_symbol)
+                && !symbol.is_error
+            {
+                self.error(
+                    DiagCode::RIDL_303,
+                    path.syntax().text_range(),
+                    format!(
+                        "`{}` is not an error type — compose failure kinds into an error union first",
+                        symbol.name
+                    ),
+                );
+            }
             v2::return_type::Kind::Fallible(v2::FallibleType { ok, err })
         } else if let Some(path) = return_type.type_ref() {
+            // RIDL-303: a bare error type in return position has no success
+            // path (ridl §10.1) — a bare error `enum`/`struct`/`union` or a
+            // named `error union` alike. A named *result* union is not an
+            // error type (it is `is_result`), so it lowers here legally; its
+            // canonical-form lint (RIDL-308) is task 19, not an error.
+            let (named, symbol) = self.resolve_arm(&path);
+            if let Some(symbol) = &symbol
+                && symbol.is_error
+            {
+                self.error(
+                    DiagCode::RIDL_303,
+                    path.syntax().text_range(),
+                    format!(
+                        "query returns a bare error type `{}` — a query with no success path is not a query",
+                        symbol.name
+                    ),
+                );
+            }
             v2::return_type::Kind::Value(v2::FieldType {
                 optional: false,
-                kind: Some(v2::field_type::Kind::Named(self.lower_type_ref(&path))),
+                kind: Some(v2::field_type::Kind::Named(named)),
             })
         } else {
             return None;
@@ -2843,6 +2906,58 @@ impl Checker<'_> {
             PathTarget::Symbol(symbol) => self.canonical_ref(&symbol),
             PathTarget::Unresolved(written) => written,
         }
+    }
+
+    /// Resolves a fallible-return arm or a parameter type to its canonical IR
+    /// string plus the resolved symbol — the symbol carries the `is_error`
+    /// flag the arm rules (RIDL-303) and the parameter rule (RIDL-304) read.
+    /// An unresolved reference carries its written text (already reported).
+    fn resolve_arm(&mut self, path: &ast::PathType) -> (String, Option<Symbol>) {
+        match self.resolve_type_path(path) {
+            PathTarget::Symbol(symbol) => (self.canonical_ref(&symbol), Some(symbol)),
+            PathTarget::Unresolved(written) => (written, None),
+        }
+    }
+
+    /// Whether `symbol` names a typl **result union** — a non-error union with
+    /// exactly one error arm and one success arm (typl §10.2). Recomputed from
+    /// the union's arms here because the `is_result` flag lives only in the
+    /// lowered IR; each arm resolves in the union's own defining package
+    /// (mirrors [`Checker::lower_union`]). An unresolved or primitive arm makes
+    /// the union not a clean result union.
+    fn union_is_result(&self, symbol: &Symbol) -> bool {
+        if symbol.kind != SymbolKind::Union {
+            return false;
+        }
+        let Some(Definition::Union(decl)) = self.find_definition(symbol) else {
+            return false;
+        };
+        if decl.is_error() {
+            return false;
+        }
+        let Some(package) = self.package_handle(&symbol.package) else {
+            return false;
+        };
+        let resolution = resolve_package(self.db, self.ws, package, self.std);
+        let mut error_arms = 0usize;
+        let mut success_arms = 0usize;
+        for child in decl.syntax().children() {
+            let Some(arm) = ast::UnionArm::cast(child) else {
+                continue;
+            };
+            let Some(path) = arm.type_ref() else {
+                return false;
+            };
+            if primitive_path_keyword(&path).is_some() {
+                return false;
+            }
+            match self.lookup_path_in(&resolution, &path) {
+                Some(arm_symbol) if arm_symbol.is_error => error_arms += 1,
+                Some(_) => success_arms += 1,
+                None => return false,
+            }
+        }
+        error_arms == 1 && success_arms == 1
     }
 
     /// `final Name : (type_ref | array_type)` (ridl §8, Appendix C) — no
@@ -2900,11 +3015,38 @@ impl Checker<'_> {
         params
             .params()
             .map(|param| {
+                let name = member_name(param.name()).unwrap_or_default();
                 let r#type = match param.param_type() {
                     Some(ast::ParamType::Field(ast::FieldType::Path(path))) => {
+                        let (canonical, symbol) = self.resolve_arm(&path);
+                        // RIDL-304 (warning): an error-typed or result-union
+                        // parameter sends failure toward a provider — the
+                        // wrong direction for the failure channel (ridl §10.1,
+                        // §16.3).
+                        if let Some(symbol) = &symbol {
+                            if symbol.is_error {
+                                self.warning(
+                                    DiagCode::RIDL_304,
+                                    path.syntax().text_range(),
+                                    format!(
+                                        "{noun} parameter `{name}` has error type `{}` — failure flowing toward a provider",
+                                        symbol.name
+                                    ),
+                                );
+                            } else if self.union_is_result(symbol) {
+                                self.warning(
+                                    DiagCode::RIDL_304,
+                                    path.syntax().text_range(),
+                                    format!(
+                                        "{noun} parameter `{name}` has result-union type `{}` — failure flowing toward a provider",
+                                        symbol.name
+                                    ),
+                                );
+                            }
+                        }
                         Some(v2::FieldType {
                             optional: false,
-                            kind: Some(v2::field_type::Kind::Named(self.lower_type_ref(&path))),
+                            kind: Some(v2::field_type::Kind::Named(canonical)),
                         })
                     }
                     Some(ast::ParamType::Field(other)) => {
@@ -2918,10 +3060,7 @@ impl Checker<'_> {
                     Some(ast::ParamType::Stream(stream)) => Some(self.lower_stream(&stream)),
                     None => None,
                 };
-                v2::Param {
-                    name: member_name(param.name()).unwrap_or_default(),
-                    r#type,
-                }
+                v2::Param { name, r#type }
             })
             .collect()
     }
@@ -3378,6 +3517,16 @@ const GF_ATTRIBUTE_KEYS: &[&str] = &[
     "invariant",
     "labels",
     "deprecated",
+];
+
+/// The Stratum-2 contract-error category names (ridl §10.2): implicit,
+/// standardized, derived — never declared as error-type values. An `error`
+/// enum re-declaring any of these draws RIDL-307 (reserved vocabulary).
+const STRATUM_2_CATEGORIES: &[&str] = &[
+    "INVALID_VALUE",
+    "PRECONDITION_FAILED",
+    "CONTRACT_BROKEN",
+    "UNKNOWN_INTERACTION",
 ];
 
 /// Whether `kind` is a typl definition keyword — the RIDL-107 trigger when it
@@ -5874,6 +6023,229 @@ interface VehicleStatus {
         };
         assert_eq!(fallible.ok, "FaultPage");
         assert_eq!(fallible.err, "DiagError");
+    }
+
+    // --- E2.3 errors-as-data: inline `T | E` semantics (task 10) ----------
+
+    /// A clean fallible-return vocabulary: a success struct, an error enum, a
+    /// param type, and a non-error scalar for the arm-rule tests.
+    const FALLIBLE_VOCAB: &str = "package app\nstruct CalReport {\n  count : integer [0..64]\n}\nerror enum CalError {\n  SENSOR_UNAVAILABLE = 0\n}\ntype Axle: integer [0..3]\ntype Speed: km/h [0.0..300.0 step 0.5]\n";
+
+    #[test]
+    fn fallible_query_checks_clean_and_lowers_canonical_arms() {
+        // gf §6.1: `query calibrate(axle: Axle): CalReport | CalError` — a
+        // non-error left arm, exactly one error right arm — checks clean and
+        // lowers as `ReturnType.fallible` with both arms canonical.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalReport | CalError\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let query = query_def(&checked, "calibrate");
+        let Some(v2::return_type::Kind::Fallible(fallible)) =
+            &query.return_type.as_ref().unwrap().kind
+        else {
+            panic!("calibrate did not lower as fallible");
+        };
+        assert_eq!(fallible.ok, "CalReport");
+        assert_eq!(fallible.err, "CalError");
+        // ADR-0008 decision 4: the transport identity is not stored — a
+        // consumer derives it from the interface, the ordinal, and the arms.
+        let decl = interaction(&checked, "calibrate");
+        assert_eq!(
+            v2::fallible_transport_identity("I", decl.ordinal, fallible),
+            "I#1:CalReport|CalError",
+        );
+    }
+
+    #[test]
+    fn fallible_arm_err_lowers_cross_package_canonical() {
+        // The IR JSON shows `"fallible": { "ok": "CalReport", "err":
+        // "veh.common.CalError" }` — a same-package success arm bare, a
+        // cross-package error arm fully qualified.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "veh.common",
+            "package veh.common\nerror enum CalError {\n  SENSOR_UNAVAILABLE = 0\n}\n",
+        );
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport veh.common.CalError\nstruct CalReport {\n  count : integer [0..64]\n}\ntype Axle: integer [0..3]\ninterface I {\n  query calibrate(axle: Axle): CalReport | CalError\n}\n",
+        );
+        let ws = Workspace::new(&db, vec![app, common], BTreeMap::new());
+        let checked = check_package(&db, ws, app, std);
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let query = query_def(&checked, "calibrate");
+        let Some(v2::return_type::Kind::Fallible(fallible)) =
+            &query.return_type.as_ref().unwrap().kind
+        else {
+            panic!("calibrate did not lower as fallible");
+        };
+        assert_eq!(fallible.ok, "CalReport");
+        assert_eq!(fallible.err, "veh.common.CalError");
+        let json = v2::to_json_pretty(&checked.ir);
+        assert!(
+            json.contains("\"ok\": \"CalReport\"")
+                && json.contains("\"err\": \"veh.common.CalError\""),
+            "IR JSON must show the canonical fallible arms; got:\n{json}",
+        );
+    }
+
+    #[test]
+    fn swapped_arms_success_arm_is_error_draws_ridl_303() {
+        // `CalError | CalReport` — the error arm written first. Exactly one
+        // RIDL-303 naming the arm-order mistake; the non-error right arm is not
+        // separately reported.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError | CalReport\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-303"]);
+        assert!(
+            checked.diagnostics[0].message.contains("success arm")
+                && checked.diagnostics[0].message.contains("is an error type"),
+            "got: {}",
+            checked.diagnostics[0].message,
+        );
+    }
+
+    #[test]
+    fn right_arm_not_error_draws_ridl_303() {
+        // `CalReport | Speed` — the right arm is a non-error type. RIDL-303
+        // with the gf §6.1 wording.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalReport | Speed\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-303"]);
+        assert!(
+            checked.diagnostics[0]
+                .message
+                .contains("is not an error type"),
+            "got: {}",
+            checked.diagnostics[0].message,
+        );
+    }
+
+    #[test]
+    fn bare_error_type_return_draws_ridl_303() {
+        // `query f(): CalError` — a bare error type has no success path.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-303"]);
+        // It still lowers honestly as a named value (the shape is representable).
+        let query = query_def(&checked, "calibrate");
+        assert!(matches!(
+            &query.return_type.as_ref().unwrap().kind,
+            Some(v2::return_type::Kind::Value(_)),
+        ));
+    }
+
+    #[test]
+    fn both_arms_error_draws_ridl_303() {
+        // `CalError | CalError` — the success (left) arm is an error type.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError | CalError\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-303"]);
+        assert!(
+            checked.diagnostics[0].message.contains("success arm"),
+            "got: {}",
+            checked.diagnostics[0].message,
+        );
+    }
+
+    #[test]
+    fn error_typed_param_draws_ridl_304() {
+        // `command c(e: CalError)` — an error-typed parameter (warning).
+        let checked = check_ridl(
+            "app",
+            &format!("{FALLIBLE_VOCAB}interface I {{\n  command c(e: CalError)\n}}\n"),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-304"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn result_union_param_draws_ridl_304() {
+        // A result-union parameter also flows failure toward a provider
+        // (RIDL-304, warning) — recomputed from the union's arms.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{FALLIBLE_VOCAB}union CalOutcome {{\n  ok : CalReport\n  err : CalError\n}}\ninterface I {{\n  query q(outcome: CalOutcome): CalReport | CalError\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-304"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn error_enum_stratum_2_category_draws_ridl_307() {
+        // An `error` enum declaring a reserved Stratum-2 category name draws
+        // RIDL-307 (warning) — checked wherever error enums lower, both
+        // profiles. All four category names fire.
+        for category in [
+            "INVALID_VALUE",
+            "PRECONDITION_FAILED",
+            "CONTRACT_BROKEN",
+            "UNKNOWN_INTERACTION",
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!("package app\nerror enum X {{\n  {category} = 0\n}}\n"),
+            );
+            assert_eq!(codes(&checked), vec!["RIDL-307"], "category `{category}`");
+            assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+        }
+    }
+
+    #[test]
+    fn ordinary_error_enum_value_is_clean() {
+        // A non-reserved value name in an error enum draws nothing.
+        let checked = check_ridl(
+            "app",
+            "package app\nerror enum X {\n  SENSOR_UNAVAILABLE = 0\n}\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    #[test]
+    fn named_result_union_return_stays_legal() {
+        // gf §6.1: a named result union in return position is legal typl data
+        // and lowers as `ReturnType.value`. The canonical-form lint (RIDL-308)
+        // is task 19, not an error here.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{FALLIBLE_VOCAB}union CalOutcome {{\n  ok : CalReport\n  err : CalError\n}}\ninterface I {{\n  query calibrate(axle: Axle): CalOutcome\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let query = query_def(&checked, "calibrate");
+        assert_eq!(
+            query.return_type.as_ref().unwrap().kind,
+            Some(v2::return_type::Kind::Value(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Named("CalOutcome".to_string())),
+            })),
+        );
     }
 
     #[test]
