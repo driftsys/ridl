@@ -7027,6 +7027,7 @@ interface VehicleStatus {
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
         )
     }
 
@@ -7039,7 +7040,7 @@ interface VehicleStatus {
         reference
     }
 
-    const CRUISE_CONTROL: &str = "package veh.common\ntype Flag: boolean\ninterface CruiseControl {\n  signal engaged : Flag\n}\n";
+    const CRUISE_CONTROL: &str = "package veh.common\ntype Flag: boolean\ninterface CruiseControl {\n  signal engaged : Flag @10ms\n}\n";
 
     #[test]
     fn catalog_and_ir_agree_when_the_import_is_in_another_file() {
@@ -7091,7 +7092,7 @@ interface VehicleStatus {
         let adas = ridl_package(
             &db,
             "veh.adas",
-            "package veh.adas\nimport veh.common.CruiseControl\ntype Flag: boolean\ninterface CruiseControl {\n  signal engaged : Flag\n}\nservice veh.adas.cruise : CruiseControl\n",
+            "package veh.adas\nimport veh.common.CruiseControl\ntype Flag: boolean\ninterface CruiseControl {\n  signal engaged : Flag @10ms\n}\nservice veh.adas.cruise : CruiseControl\n",
         );
         let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
 

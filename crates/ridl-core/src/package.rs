@@ -395,6 +395,7 @@ mod tests {
             vec![file(db, &format!("{}.ridl", name.replace('.', "/")), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
         )
     }
 
