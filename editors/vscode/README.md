@@ -1,10 +1,14 @@
 # RIDL for VS Code
 
-Editor support for `.typl` files: TextMate syntax highlighting and an LSP client
-that connects to `ridl-lsp` (`crates/ridl-lsp`) for diagnostics and quick fixes.
+Editor support for `.typl` and `.ridl` files: TextMate syntax highlighting and
+an LSP client that connects to `ridl-lsp` (`crates/ridl-lsp`) for diagnostics,
+quick fixes, hovers, ordinal inlay hints, navigation, completion, and rename.
 
-This extension covers the `typl` language only. The other family languages
-(`ridl`, `uxdl`, `rmdl`, `rsdl`) are sequenced separately in `docs/ROADMAP.md`.
+This extension covers the `typl` and `ridl` languages. One server serves both:
+the compiler selects the profile from the file extension, so a `.ridl` interface
+and the `.typl` vocabulary it imports are checked together. The remaining family
+languages (`uxdl`, `rmdl`, `rsdl`) are sequenced separately in
+`docs/ROADMAP.md`.
 
 ## Prerequisites
 
@@ -38,9 +42,14 @@ This produces a `.vsix` file, for example `ridl-vscode-0.0.1.vsix`.
 code --install-extension ridl-vscode-0.0.1.vsix
 ```
 
-Open a folder containing `.typl` files. The extension activates on the `typl`
-language, highlights the file, and starts `ridl-lsp` to publish diagnostics and
-quick fixes.
+Open a folder containing `.typl` or `.ridl` files. The extension activates on
+the `typl` and `ridl` languages, highlights the file, and starts `ridl-lsp` to
+publish diagnostics and quick fixes.
+
+On a `.ridl` file the server additionally renders the ridl §11 ordinal beside
+every interaction and `reserved` tombstone, expands an interaction's resolved
+timing into the per-kind reading of family general form §6.2 on hover, and
+offers the interaction keywords inside an interface body.
 
 Marketplace publishing is deferred to a maintainer act (like the crates.io
 release) and is not part of this build.
@@ -59,5 +68,5 @@ npm run watch
 ```
 
 Then use the VS Code "Run Extension" launch configuration (Extension Development
-Host) against this folder, or open a `.typl` file in an instance of VS Code
-started with `--extensionDevelopmentPath=editors/vscode`.
+Host) against this folder, or open a `.typl` or `.ridl` file in an instance of
+VS Code started with `--extensionDevelopmentPath=editors/vscode`.

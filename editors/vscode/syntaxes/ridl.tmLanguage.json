@@ -1,0 +1,99 @@
+{
+  "name": "ridl",
+  "scopeName": "source.ridl",
+  "fileTypes": ["ridl"],
+  "information_for_contributors": [
+    "Keyword list source of truth: crates/ridl-syntax/src/keywords.rs (RIDL_KEYWORDS).",
+    "A .ridl file is a typl file plus the ridl interaction layer, so this grammar",
+    "includes the typl patterns by reference (source.typl#...) rather than copying",
+    "them — the typl half never drifts. What it adds is the nine ridl keywords",
+    "(interface service signal event command query final require ensure), the `@`",
+    "timing annotation of ridl §9, the duration literals of ridl §2.1, and the",
+    "inline fallible return `T | E` of family general form §6.1.",
+    "Update this grammar and keywords.rs together when the registry changes."
+  ],
+  "patterns": [
+    { "include": "source.typl#comments" },
+    { "include": "source.typl#strings" },
+    { "include": "source.typl#regexp" },
+    { "include": "#timing" },
+    { "include": "#durations" },
+    { "include": "source.typl#numbers" },
+    { "include": "#keywords-declaration" },
+    { "include": "#keywords-interaction" },
+    { "include": "#keywords-contract" },
+    { "include": "source.typl#keywords-control" },
+    { "include": "source.typl#keywords-modifier" },
+    { "include": "source.typl#keywords-storage" },
+    { "include": "source.typl#keywords-other" },
+    { "include": "source.typl#constants-language" },
+    { "include": "source.typl#primitives" },
+    { "include": "source.typl#screaming-snake" },
+    { "include": "source.typl#type-names" },
+    { "include": "#operators" },
+    { "include": "source.typl#punctuation" }
+  ],
+  "repository": {
+    "durations": {
+      "comment": "ridl §2.1 duration literals. Matched before the typl numbers so `10ms` never highlights as the integer `10` followed by a bare word.",
+      "name": "constant.numeric.duration.ridl",
+      "match": "-?\\b[0-9]+(?:\\.[0-9]+)?(?:us|ms|min|h|s)\\b"
+    },
+    "timing": {
+      "comment": "ridl §9 — the `@` timing annotation, in both its strict-periodic `@Xms` and its `@[min..max]` range form. General form §6.2 fixes one generic meaning for the bounds: min is a rate floor, max a staleness bound.",
+      "patterns": [
+        {
+          "match": "(@)\\s*(-?[0-9]+(?:\\.[0-9]+)?(?:us|ms|min|h|s))\\b",
+          "captures": {
+            "1": { "name": "keyword.operator.timing.ridl" },
+            "2": { "name": "constant.numeric.duration.ridl" }
+          }
+        },
+        {
+          "begin": "(@)\\s*(\\[)",
+          "beginCaptures": {
+            "1": { "name": "keyword.operator.timing.ridl" },
+            "2": { "name": "punctuation.section.brackets.begin.ridl" }
+          },
+          "end": "\\]",
+          "endCaptures": {
+            "0": { "name": "punctuation.section.brackets.end.ridl" }
+          },
+          "patterns": [
+            { "include": "#durations" },
+            { "match": "\\.\\.", "name": "keyword.operator.range.ridl" }
+          ]
+        }
+      ]
+    },
+    "keywords-declaration": {
+      "comment": "ridl §14 — the abstract shape and its global published declaration.",
+      "match": "\\b(interface|service)\\b",
+      "name": "storage.type.ridl"
+    },
+    "keywords-interaction": {
+      "comment": "ridl §4–§8 — the five interaction kinds.",
+      "match": "\\b(signal|event|command|query|final)\\b",
+      "name": "keyword.declaration.interaction.ridl"
+    },
+    "keywords-contract": {
+      "comment": "ridl §13 — the require/ensure contract clauses.",
+      "match": "\\b(require|ensure)\\b",
+      "name": "keyword.control.contract.ridl"
+    },
+    "operators": {
+      "patterns": [
+        {
+          "comment": "The expression operators of a require/ensure clause (ridl §13). Matched before the fallible pipe so `||` is never read as two returns.",
+          "match": "\\|\\||&&|==|!=|<=|>=|[<>]|!",
+          "name": "keyword.operator.logical.ridl"
+        },
+        {
+          "comment": "General form §6.1 — the inline fallible return `T | E` (ridl §7, §10.1).",
+          "match": "(?<!\\|)\\|(?!\\|)",
+          "name": "keyword.operator.fallible.ridl"
+        }
+      ]
+    }
+  }
+}

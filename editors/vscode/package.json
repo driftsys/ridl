@@ -1,7 +1,7 @@
 {
   "name": "ridl-vscode",
-  "displayName": "RIDL (typl)",
-  "description": "Syntax highlighting and a language server client for typl, the RIDL family's type language.",
+  "displayName": "RIDL (typl + ridl)",
+  "description": "Syntax highlighting and a language server client for the RIDL family: typl, the type language, and ridl, the interface description language.",
   "version": "0.0.1",
   "publisher": "driftsys",
   "private": true,
@@ -30,6 +30,17 @@
           ".typl"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "ridl",
+        "aliases": [
+          "ridl",
+          "RIDL interface description"
+        ],
+        "extensions": [
+          ".ridl"
+        ],
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
@@ -37,6 +48,11 @@
         "language": "typl",
         "scopeName": "source.typl",
         "path": "./syntaxes/typl.tmLanguage.json"
+      },
+      {
+        "language": "ridl",
+        "scopeName": "source.ridl",
+        "path": "./syntaxes/ridl.tmLanguage.json"
       }
     ],
     "configuration": {
