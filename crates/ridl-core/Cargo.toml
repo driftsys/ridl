@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+default = ["fs"]
+# Filesystem discovery (`workspace::load_workspace`). Off for the
+# wasm32-unknown-unknown build (ADR-0007 decision 5).
+fs = []
+
 [dependencies]
 codespan-reporting.workspace = true
 ridl-ir = { path = "../ridl-ir" }
