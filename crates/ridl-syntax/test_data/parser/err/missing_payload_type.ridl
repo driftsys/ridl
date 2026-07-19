@@ -1,0 +1,6 @@
+package veh.err
+
+interface Broken {
+  signal speed :
+  event doorOpened : DoorPayload
+}

@@ -1,0 +1,17 @@
+package veh.events
+
+/// Event shapes (ridl reference §5).
+interface EventShapes {
+
+  /// Raised on every door state change; stale after 500ms.
+  event doorOpened : DoorPayload @[50ms..500ms]
+
+  /// Half-open bounds parse on events too.
+  event speedLimitExceeded : SpeedLimitPayload @[100ms..]
+
+  /// Upper bound only, in seconds.
+  event parkAssistWarning : ParkWarning @[..2s]
+
+  /// Untimed event.
+  event ignitionChanged : IgnitionPayload
+}

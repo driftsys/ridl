@@ -703,6 +703,8 @@ impl<'a> Parser<'a> {
                 }
                 Some(SyntaxKind::Comma) => self.bump(),
                 Some(SyntaxKind::ReservedKw) => self.reserved_entry(),
+                Some(SyntaxKind::SignalKw) => self.value_interaction(SyntaxKind::SignalDef),
+                Some(SyntaxKind::EventKw) => self.value_interaction(SyntaxKind::EventDef),
                 // An unclosed `{`: the body ran into the next top-level
                 // declaration. Report the missing brace and hand the
                 // declaration back, exactly as `block_body` does.
@@ -717,6 +719,123 @@ impl<'a> Parser<'a> {
                     ) || is_interaction_start(kind)
                         || is_top_level_start(kind)
                 }),
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    /// The shared `kw Name ':' payload InitValue? annotations` shape of the
+    /// three value interactions — `SignalDef`, `EventDef`, and `FinalDef`.
+    /// The bare `= value` init comes before the timing (ADR-0008 decision
+    /// 2). The reference allows the init on signals only and timing on
+    /// signals and events; here all three kinds accept an init, a timing,
+    /// and an attr block, and the checker narrows (RIDL-106/-301, task 5).
+    fn value_interaction(&mut self, kind: SyntaxKind) {
+        self.start(kind);
+        self.bump(); // 'signal' | 'event' | 'final'
+        self.name();
+        self.expect(SyntaxKind::Colon);
+        self.field_type();
+        self.init_value_opt();
+        self.interaction_annotations();
+        self.builder.finish_node();
+    }
+
+    /// The lenient trailing annotations of an interaction: at most one
+    /// [`Timing`](SyntaxKind::Timing) and at most one
+    /// [`AttrBlock`](SyntaxKind::AttrBlock), in either order. Which kinds
+    /// may carry which annotation is checker scope (RIDL-104/-106/-301,
+    /// task 5); the parser accepts both on every interaction.
+    fn interaction_annotations(&mut self) {
+        let mut seen_timing = false;
+        let mut seen_attrs = false;
+        loop {
+            match self.current() {
+                Some(SyntaxKind::At) if !seen_timing => {
+                    seen_timing = true;
+                    self.timing();
+                }
+                Some(SyntaxKind::LBracket) if !seen_attrs => {
+                    seen_attrs = true;
+                    self.attr_block();
+                }
+                _ => break,
+            }
+        }
+    }
+
+    /// `Timing = '@' ('duration' | '[' TimingRange ']')` — strict periodic
+    /// or range (ridl reference §9). Callers have confirmed the `@`.
+    fn timing(&mut self) {
+        self.start(SyntaxKind::Timing);
+        self.bump(); // '@'
+        if self.at(SyntaxKind::Duration) {
+            self.bump();
+        } else if self.at(SyntaxKind::LBracket) {
+            self.bump();
+            self.timing_range();
+            self.expect(SyntaxKind::RBracket);
+        } else {
+            self.error_at_current("FORM-101", "expected a duration or `[`".to_string());
+        }
+        self.builder.finish_node();
+    }
+
+    /// `TimingRange = 'duration'? '..' 'duration'?` — both bounds or the
+    /// half-open forms `min..` and `..max` (ridl reference §9). A range
+    /// with neither bound is a structural error (FORM-101).
+    fn timing_range(&mut self) {
+        self.start(SyntaxKind::TimingRange);
+        let has_min = self.at(SyntaxKind::Duration);
+        if has_min {
+            self.bump();
+        }
+        self.expect(SyntaxKind::DotDot);
+        let has_max = self.at(SyntaxKind::Duration);
+        if has_max {
+            self.bump();
+        }
+        if !has_min && !has_max {
+            self.error_at_current("FORM-101", "expected a duration".to_string());
+        }
+        self.builder.finish_node();
+    }
+
+    /// A balanced `[ … ]` after an interaction signature, held as an
+    /// [`AttrBlock`](SyntaxKind::AttrBlock) of raw tokens with no inner
+    /// structure — lossless. The attribute grammar replaces this placeholder
+    /// in task 4. An unclosed block stops at an interaction or body
+    /// boundary (FORM-103) instead of swallowing the rest of the interface.
+    fn attr_block(&mut self) {
+        self.start(SyntaxKind::AttrBlock);
+        self.bump(); // '['
+        let mut depth = 1usize;
+        loop {
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `[`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::LBracket) => {
+                    depth += 1;
+                    self.bump();
+                }
+                Some(SyntaxKind::RBracket) => {
+                    depth -= 1;
+                    self.bump();
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                Some(kind)
+                    if kind == SyntaxKind::RBrace
+                        || is_interaction_start(kind)
+                        || is_top_level_start(kind) =>
+                {
+                    self.error_at_current("FORM-103", "unclosed `[`".to_string());
+                    break;
+                }
+                Some(_) => self.bump(),
             }
         }
         self.builder.finish_node();

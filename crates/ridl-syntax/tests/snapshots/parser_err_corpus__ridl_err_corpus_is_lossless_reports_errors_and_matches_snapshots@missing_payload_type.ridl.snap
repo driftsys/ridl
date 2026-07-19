@@ -1,0 +1,46 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/missing_payload_type.ridl
+---
+SourceFile@0..88
+  PackageDecl@0..15
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..15
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..15 "err"
+  Whitespace@15..17 "\n\n"
+  InterfaceDef@17..87
+    InterfaceKw@17..26 "interface"
+    Whitespace@26..27 " "
+    Name@27..33
+      Ident@27..33 "Broken"
+    Whitespace@33..34 " "
+    LBrace@34..35 "{"
+    Whitespace@35..38 "\n  "
+    SignalDef@38..55
+      SignalKw@38..44 "signal"
+      Whitespace@44..45 " "
+      Name@45..50
+        Ident@45..50 "speed"
+      Whitespace@50..51 " "
+      Colon@51..52 ":"
+      Whitespace@52..55 "\n  "
+    EventDef@55..85
+      EventKw@55..60 "event"
+      Whitespace@60..61 " "
+      Name@61..71
+        Ident@61..71 "doorOpened"
+      Whitespace@71..72 " "
+      Colon@72..73 ":"
+      Whitespace@73..74 " "
+      PathType@74..85
+        QualifiedName@74..85
+          Ident@74..85 "DoorPayload"
+    Whitespace@85..86 "\n"
+    RBrace@86..87 "}"
+  Whitespace@87..88 "\n"
+errors:
+  FORM-101 55..60 expected a type

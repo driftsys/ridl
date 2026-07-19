@@ -50,3 +50,28 @@ fn err_corpus_is_lossless_reports_errors_and_matches_snapshots() {
         insta::assert_snapshot!(dump(&parsed));
     });
 }
+
+/// The ridl half of the err corpus (epic E2.1a): broken `.ridl` input parsed
+/// under [`Profile::Ridl`], with the same lossless, at-least-one-diagnostic
+/// recovery contract.
+#[test]
+fn ridl_err_corpus_is_lossless_reports_errors_and_matches_snapshots() {
+    insta::glob!("../test_data/parser/err", "*.ridl", |path| {
+        let input = std::fs::read_to_string(path).expect("a readable corpus file");
+        let parsed = parse(&input, Profile::Ridl);
+
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "recovery is not lossless for {}",
+            path.display(),
+        );
+        assert!(
+            !parsed.errors().is_empty(),
+            "err-corpus file {} must report at least one diagnostic",
+            path.display(),
+        );
+
+        insta::assert_snapshot!(dump(&parsed));
+    });
+}
