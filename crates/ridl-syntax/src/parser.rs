@@ -705,6 +705,8 @@ impl<'a> Parser<'a> {
                 Some(SyntaxKind::ReservedKw) => self.reserved_entry(),
                 Some(SyntaxKind::SignalKw) => self.value_interaction(SyntaxKind::SignalDef),
                 Some(SyntaxKind::EventKw) => self.value_interaction(SyntaxKind::EventDef),
+                Some(SyntaxKind::CommandKw) => self.callable_interaction(SyntaxKind::CommandDef),
+                Some(SyntaxKind::QueryKw) => self.callable_interaction(SyntaxKind::QueryDef),
                 // An unclosed `{`: the body ran into the next top-level
                 // declaration. Report the missing brace and hand the
                 // declaration back, exactly as `block_body` does.
@@ -739,6 +741,118 @@ impl<'a> Parser<'a> {
         self.init_value_opt();
         self.interaction_annotations();
         self.builder.finish_node();
+    }
+
+    /// The shared `kw Name '(' params ')' (':' ReturnType)? annotations`
+    /// shape of the two callable interactions — `CommandDef` and
+    /// `QueryDef`. A command's return type is lenient here (RIDL-104,
+    /// checker scope); a query's is mandatory — a missing `:` draws
+    /// FORM-101 (ridl reference §6.1, §7.1).
+    fn callable_interaction(&mut self, kind: SyntaxKind) {
+        self.start(kind);
+        self.bump(); // 'command' | 'query'
+        self.name();
+        self.param_list();
+        if self.at(SyntaxKind::Colon) {
+            self.bump();
+            self.return_type();
+        } else if kind == SyntaxKind::QueryDef {
+            self.error_at_current("FORM-101", "expected `:` and a return type".to_string());
+        }
+        self.interaction_annotations();
+        self.builder.finish_node();
+    }
+
+    /// `ParamList = '(' (params:Param ','?)* ')'` — separator commas are
+    /// direct children of the list node, mirroring the block-body
+    /// discipline (typl reference §15.2). No node is built when the `(` is
+    /// missing, so `CommandDef::params()` sees `None`.
+    fn param_list(&mut self) {
+        if !self.at(SyntaxKind::LParen) {
+            self.error_at_current("FORM-101", "expected `(`".to_string());
+            return;
+        }
+        self.start(SyntaxKind::ParamList);
+        self.bump(); // '('
+        loop {
+            self.eat_trivia();
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `(`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::RParen) => {
+                    self.bump();
+                    break;
+                }
+                Some(SyntaxKind::Comma) => self.bump(),
+                Some(SyntaxKind::Ident) => self.param(),
+                // An unclosed `(`: the list ran into an interaction, body,
+                // or top-level boundary. Report it and hand the token back.
+                Some(kind)
+                    if kind == SyntaxKind::RBrace
+                        || is_interaction_start(kind)
+                        || is_top_level_start(kind) =>
+                {
+                    self.error_at_current("FORM-103", "unclosed `(`".to_string());
+                    break;
+                }
+                Some(_) => self.err_and_recover("in a parameter list", |kind| {
+                    matches!(
+                        kind,
+                        SyntaxKind::RParen
+                            | SyntaxKind::Comma
+                            | SyntaxKind::Ident
+                            | SyntaxKind::RBrace
+                    ) || is_interaction_start(kind)
+                        || is_top_level_start(kind)
+                }),
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    /// `Param = Name ':' (FieldType | StreamType)` — a named typl type, a
+    /// tuple (typl §11), or a stream `<T>` (ridl reference §12.1); the
+    /// stream parses through the shared field-type dispatch.
+    fn param(&mut self) {
+        self.start(SyntaxKind::Param);
+        self.name();
+        self.expect(SyntaxKind::Colon);
+        self.field_type();
+        self.builder.finish_node();
+    }
+
+    /// `ReturnType = PathType | TupleType | StreamType | FallibleType` —
+    /// the four return shapes (ridl reference §7.1). A named type followed
+    /// by `|` extends into `FallibleType = ok '|' err` (general form §6.1,
+    /// ADR-0008 decision 1). No node is built when no shape starts here, so
+    /// `return_type()` accessors see `None`.
+    fn return_type(&mut self) {
+        self.eat_trivia();
+        match self.current() {
+            Some(SyntaxKind::LParen) => {
+                self.start(SyntaxKind::ReturnType);
+                self.tuple_type();
+                self.builder.finish_node();
+            }
+            _ if self.at_path_segment() => {
+                self.start(SyntaxKind::ReturnType);
+                let checkpoint = self.builder.checkpoint();
+                self.path_type();
+                if self.at(SyntaxKind::Pipe) {
+                    self.builder
+                        .start_node_at(checkpoint, SyntaxKind::FallibleType.into());
+                    self.bump(); // '|'
+                    self.path_type();
+                    self.builder.finish_node();
+                }
+                self.builder.finish_node();
+            }
+            _ => {
+                self.error_at_current("FORM-101", "expected a return type".to_string());
+            }
+        }
     }
 
     /// The lenient trailing annotations of an interaction: at most one

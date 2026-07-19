@@ -1,0 +1,150 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/commands.ridl
+---
+SourceFile@0..519
+  PackageDecl@0..20
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..20
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..20 "commands"
+  Whitespace@20..22 "\n\n"
+  DocComment@22..62 "/// Command shapes (r ..."
+  Whitespace@62..63 "\n"
+  InterfaceDef@63..518
+    InterfaceKw@63..72 "interface"
+    Whitespace@72..73 " "
+    Name@73..86
+      Ident@73..86 "CommandShapes"
+    Whitespace@86..87 " "
+    LBrace@87..88 "{"
+    Whitespace@88..92 "\n\n  "
+    DocComment@92..151 "/// One parameter plu ..."
+    Whitespace@151..154 "\n  "
+    CommandDef@154..264
+      CommandKw@154..161 "command"
+      Whitespace@161..162 " "
+      Name@162..169
+        Ident@162..169 "setGear"
+      ParamList@169..193
+        LParen@169..170 "("
+        Param@170..192
+          Name@170..178
+            Ident@170..178 "position"
+          Colon@178..179 ":"
+          Whitespace@179..180 " "
+          PathType@180..192
+            QualifiedName@180..192
+              Ident@180..192 "GearPosition"
+        RParen@192..193 ")"
+      Whitespace@193..194 " "
+      AttrBlock@194..264
+        LBracket@194..195 "["
+        Whitespace@195..200 "\n    "
+        RequireKw@200..207 "require"
+        Whitespace@207..208 " "
+        Ident@208..216 "position"
+        Whitespace@216..217 " "
+        Neq@217..219 "!="
+        Whitespace@219..220 " "
+        Ident@220..232 "GearPosition"
+        Dot@232..233 "."
+        Ident@233..237 "PARK"
+        Whitespace@237..238 " "
+        PipePipe@238..240 "||"
+        Whitespace@240..241 " "
+        Ident@241..253 "currentSpeed"
+        Whitespace@253..254 " "
+        EqEq@254..256 "=="
+        Whitespace@256..257 " "
+        FloatNumber@257..260 "0.0"
+        Whitespace@260..263 "\n  "
+        RBracket@263..264 "]"
+    Whitespace@264..268 "\n\n  "
+    DocComment@268..286 "/// No parameters."
+    Whitespace@286..289 "\n  "
+    CommandDef@289..310
+      CommandKw@289..296 "command"
+      Whitespace@296..297 " "
+      Name@297..308
+        Ident@297..308 "resetFaults"
+      ParamList@308..310
+        LParen@308..309 "("
+        RParen@309..310 ")"
+    Whitespace@310..314 "\n\n  "
+    DocComment@314..361 "/// Two parameters; a ..."
+    Whitespace@361..364 "\n  "
+    CommandDef@364..422
+      CommandKw@364..371 "command"
+      Whitespace@371..372 " "
+      Name@372..381
+        Ident@372..381 "setTarget"
+      ParamList@381..422
+        LParen@381..382 "("
+        Param@382..393
+          Name@382..386
+            Ident@382..386 "goal"
+          Colon@386..387 ":"
+          Whitespace@387..388 " "
+          PathType@388..393
+            QualifiedName@388..393
+              Ident@388..393 "Speed"
+        Comma@393..394 ","
+        Whitespace@394..395 " "
+        Param@395..421
+          Name@395..399
+            Ident@395..399 "mode"
+          Colon@399..400 ":"
+          Whitespace@400..401 " "
+          PathType@401..421
+            QualifiedName@401..421
+              Ident@401..404 "veh"
+              Dot@404..405 "."
+              Ident@405..411 "common"
+              Dot@411..412 "."
+              Ident@412..421 "DriveMode"
+        RParen@421..422 ")"
+    Whitespace@422..426 "\n\n  "
+    DocComment@426..465 "/// A tuple parameter ..."
+    Whitespace@465..468 "\n  "
+    CommandDef@468..516
+      CommandKw@468..475 "command"
+      Whitespace@475..476 " "
+      Name@476..482
+        Ident@476..482 "moveTo"
+      ParamList@482..516
+        LParen@482..483 "("
+        Param@483..515
+          Name@483..487
+            Ident@483..487 "pose"
+          Colon@487..488 ":"
+          Whitespace@488..489 " "
+          TupleType@489..515
+            LParen@489..490 "("
+            TupleField@490..501
+              Name@490..491
+                Ident@490..491 "x"
+              Colon@491..492 ":"
+              Whitespace@492..493 " "
+              PathType@493..501
+                QualifiedName@493..501
+                  Ident@493..501 "Distance"
+            Comma@501..502 ","
+            Whitespace@502..503 " "
+            TupleField@503..514
+              Name@503..504
+                Ident@503..504 "y"
+              Colon@504..505 ":"
+              Whitespace@505..506 " "
+              PathType@506..514
+                QualifiedName@506..514
+                  Ident@506..514 "Distance"
+            RParen@514..515 ")"
+        RParen@515..516 ")"
+    Whitespace@516..517 "\n"
+    RBrace@517..518 "}"
+  Whitespace@518..519 "\n"
+errors: none

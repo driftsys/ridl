@@ -1,0 +1,19 @@
+package veh.commands
+
+/// Command shapes (ridl reference §6).
+interface CommandShapes {
+
+  /// One parameter plus the raw attribute placeholder block.
+  command setGear(position: GearPosition) [
+    require position != GearPosition.PARK || currentSpeed == 0.0
+  ]
+
+  /// No parameters.
+  command resetFaults()
+
+  /// Two parameters; a qualified type reference.
+  command setTarget(goal: Speed, mode: veh.common.DriveMode)
+
+  /// A tuple parameter type (typl §11).
+  command moveTo(pose: (x: Distance, y: Distance))
+}
