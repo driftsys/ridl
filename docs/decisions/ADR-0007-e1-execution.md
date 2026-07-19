@@ -5,7 +5,9 @@
 Accepted — 2026-07-18. Scope: epic E1 only (docs/ROADMAP.md). Decisions here
 refine ADR-0002 and ADR-0004 for the typl implementation; none of them changes a
 prior ADR choice. Recorded so the delegating maintainer can review them after
-the fact, following the ADR-0006 pattern.
+the fact, following the ADR-0006 pattern. Decision 17 was added at epic
+close-out, when gardening reconciled the plan's data model against the merged
+code.
 
 ## Context
 
@@ -15,8 +17,8 @@ distribution, the type system with exact ranges and units, coded diagnostics, IR
 v1, the Rust + extern-C backend, `ridl fmt`, the LSP, and a VS Code extension.
 ADR-0004 fixes the stack and ADR-0002 the module semantics, but a set of
 execution-level choices was still open. The execution plan lives at
-`docs/wip/2026-07-18-e1-typl-tooling-spine-plan.md` (archived to docs/archive
-when the epic closes) and cites these decisions by number.
+`docs/archive/2026-07-18-e1-typl-tooling-spine-plan.md` (moved from `docs/wip/`
+at epic close) and cites these decisions by number.
 
 ## Decision
 
@@ -140,6 +142,18 @@ when the epic closes) and cites these decisions by number.
     `cargo clippy --workspace --all-targets -- -D warnings`) remains the merge
     gate for every E1 PR, unchanged.
 
+17. **The imports data model is per-package, not workspace-flat.** Each
+    `Package` carries its own `imports` map (the `[imports]` table from that
+    package's own `ridl.toml`); `Workspace.imports` holds only the
+    workspace-root `[imports]`. The resolver applies the typl / ADR-0002 §5
+    precedence in order — a name resolves against the requesting member's own
+    imports, then the workspace-root imports, then errors — so a member's
+    imports never leak to sibling members and a workspace-root pin cannot
+    silently shadow a member pin. The execution plan's original single flattened
+    `Workspace.imports` map could not express this (a member `[imports]` would
+    leak to siblings and conflicting pins would resolve last-wins). Implemented
+    in T8 (#118) and consumed by the resolver in T9 (#120).
+
 ## Consequences
 
 - Positive: the generated AST removes the E0 accessor debt wholesale; a single
@@ -163,5 +177,5 @@ when the epic closes) and cites these decisions by number.
 - ADR-0006 — E0 execution decisions (the pattern this follows).
 - docs/ROADMAP.md — epic E1 stories and exit criteria.
 - docs/specification/typl-language-reference.md — the language E1 builds.
-- docs/wip/2026-07-18-e1-typl-tooling-spine-plan.md — the execution plan citing
-  these decisions.
+- docs/archive/2026-07-18-e1-typl-tooling-spine-plan.md — the execution plan
+  citing these decisions.

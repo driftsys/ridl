@@ -29,7 +29,7 @@ scopes = [
   "ci",
   "hooks",
   "deps",
-  # compiler workspace crates (docs/ROADMAP.md, epic E0)
+  # compiler workspace crates (docs/ROADMAP.md, epics E0–E1)
   "ridl-syntax",
   "ridl-core",
   "ridl-ir",

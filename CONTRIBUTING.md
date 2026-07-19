@@ -30,9 +30,10 @@ manager as needed.
    (e.g. `docs(rmdl): …`, `docs(adr): …`). `git-std` lints commit messages
    against `.git-std.toml` and drives changelog generation from them. The
    configured scopes are the five languages (`typl`/`ridl`/`uxdl`/`rmdl`/
-   `rsdl`), `family`, `roadmap`, `adr`, the compiler crates
-   (`ridl-syntax`/`ridl-core`/`ridl-ir`/`ridlc`/`backends`), and the repo-wide
-   scopes (`repo`/`docs`/`ci`/`hooks`/`deps`).
+   `rsdl`), `family`, `roadmap`, `adr`, the compiler workspace scopes
+   (`ridl-syntax`/`ridl-core`/`ridl-sem`/`ridl-ir`/`ridlc`/`ridl-lsp`/
+   `backends`/`tools`/`xtask`/`editors`), and the repo-wide scopes
+   (`repo`/`docs`/`ci`/`hooks`/`deps`).
 4. Run `just verify` before opening a PR — commit-message lint over your branch
    range, then `just build`.
 5. Open a PR. CI runs the same gates.

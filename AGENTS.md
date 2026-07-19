@@ -6,9 +6,11 @@ A shared vocabulary layer (`typl`) plus four description languages over it
 (`ridl`, `uxdl`, `rmdl`, `rsdl`), sharing one toolchain and one IR.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace. The
-walking-skeleton compiler (epic E0) is built — five compiler crates under
-`crates/` plus `backends/rust`; the rest of the toolchain is sequenced in the
+(ADRs), the implementation roadmap, and the compiler workspace. The typl v0.1
+toolchain (epic E1) is built — seven crates under `crates/` (`ridl-syntax`,
+`ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`, `ridl`, `ridl-lsp`) plus
+`backends/rust`, `tools/fmt`, `xtask`, and the `editors/vscode` extension; the
+four description languages (`ridl`, `uxdl`, `rmdl`, `rsdl`) are sequenced in the
 roadmap. See `docs/technotes/walking-skeleton-architecture.md` for the as-built
 map.
 
@@ -25,7 +27,7 @@ map.
 - `docs/specification/{typl,ridl,uxdl,rmdl,rsdl}-language-reference.md` — the
   five language references.
 - `docs/decisions/` — ADR-0002 (module system), ADR-0004 (sequencing and stack),
-  ADR-0005 (agent enablement).
+  ADR-0005 (agent enablement), ADR-0006 (E0 execution), ADR-0007 (E1 execution).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 

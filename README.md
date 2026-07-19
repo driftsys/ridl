@@ -6,7 +6,10 @@ description languages over it, sharing one grammar, one toolchain, and one
 intermediate representation (IR).
 
 This repository collects the language specifications, the cross-cutting design
-specs, the architecture decision records (ADRs), and the implementation roadmap.
+specs, the architecture decision records (ADRs), the implementation roadmap, and
+the compiler workspace. The typl v0.1 preview toolchain (epic E1) — compiler,
+`ridl fmt`, an LSP server, and a VS Code extension — is built; the four
+description languages are sequenced in the roadmap.
 
 ## The family
 
@@ -24,6 +27,19 @@ standalone member, and rsdl is the apex that composes the others.
 ## Repository layout
 
 ```
+crates/                         The compiler workspace (typl v0.1 preview)
+├── ridl-syntax/                Lexer, parser, lossless CST, generated typed AST
+├── ridl-core/                  Salsa database, manifest, lockfile, fetch, diagnostics
+├── ridl-sem/                   Resolver + checker (per-profile semantic passes)
+├── ridl-ir/                    IR v1 protobuf schema + generated types
+├── ridlc/                      Compiler driver (check / build / emit)
+├── ridl/                       Porcelain facade (check / build / fmt)
+└── ridl-lsp/                   Language server (diagnostics, hover, goto, rename, inlay)
+backends/rust/                  Rust + extern-C code generation over the IR
+tools/fmt/                      The `ridl fmt` engine (rowan-based)
+editors/vscode/                 VS Code extension (TextMate grammar + LSP client)
+xtask/                          Workspace automation (ungrammar codegen, drift checks)
+Cargo.toml                      Cargo workspace root
 docs/
 ├── ROADMAP.md                  Implementation backlog — epics, stories, V1/V2 release plan
 ├── getting-started.md          Getting started with RIDL
@@ -39,12 +55,18 @@ docs/
 │   ├── ridl-family-concept.md      Concept note — the family direction (pre-ADR)
 │   ├── family-general-form.md      Cross-profile syntax, typing, and attribute rules
 │   └── skill-ridl-authoring-outline.md
-├── archive/                    Superseded documents
-│   └── ridl-language-reference-v0.1.md   Split into typl + ridl v0.2
+├── technotes/                  Informative architecture notes (bind nothing)
+│   └── walking-skeleton-architecture.md   The typl toolchain, as built
+├── archive/                    Superseded documents + landed epic plans
+│   ├── ridl-language-reference-v0.1.md   Split into typl + ridl v0.2
+│   ├── 2026-07-18-e0-walking-skeleton-plan.md
+│   └── 2026-07-18-e1-typl-tooling-spine-plan.md
 └── decisions/                  Architecture Decision Records
     ├── ADR-0002-module-system.md
     ├── ADR-0004-implementation-sequencing-and-stack.md
-    └── ADR-0005-agent-enablement.md
+    ├── ADR-0005-agent-enablement.md
+    ├── ADR-0006-walking-skeleton-execution.md
+    └── ADR-0007-e1-execution.md
 ```
 
 ## Where to start
@@ -86,13 +108,13 @@ against `.git-std.toml`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
 ## Status
 
 All documents are working drafts (typl / ridl / uxdl / rmdl / rsdl at
-v0.1–v0.2). The design is captured; the walking-skeleton compiler (epic E0,
-`crates/` + `backends/rust`) is built, and the rest of the implementation is
-sequenced in the roadmap.
+v0.1–v0.2). The design is captured; the typl v0.1 preview toolchain (epic E1 —
+compiler, `ridl fmt`, LSP, and VS Code extension) is built over the shared
+grammar and IR, and the four description languages are sequenced in the roadmap.
 
 ## A note on ADR numbering
 
-The ADRs present here are 0002, 0004, and 0005. ADR-0001 and ADR-0003 are not in
+The ADRs present here are 0002 and 0004–0007. ADR-0001 and ADR-0003 are not in
 this repository — ADR-0003 ("the family decision") is noted as not-yet-written
 in the family overview.
 
