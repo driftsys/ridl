@@ -1,0 +1,956 @@
+//! The comparison walk over two resolved IR v2 packages.
+//!
+//! The walk matches package declarations, interfaces, services, and
+//! interactions by name within their container, then compares the aspects
+//! that carry contract identity — ordinals, payloads, timings, returns,
+//! parameters, contracts, widths, constraints, and inits — emitting one
+//! [`Change`](crate::Change) per difference with an honest path.
+//!
+//! Ordinal analysis (ridl §11) is done on the surviving interactions of an
+//! interface. A new interaction is [`InteractionAppended`](crate::Category::InteractionAppended)
+//! when it sits after every pre-existing interaction and
+//! [`InteractionInserted`](crate::Category::InteractionInserted) otherwise; a
+//! surviving interaction whose *relative* order changed is
+//! [`InteractionReordered`](crate::Category::InteractionReordered). Ordinal
+//! shifts that are mere consequences of an insert or a removal elsewhere are
+//! not reported a second time — the insert or removal that caused them already
+//! is.
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use ridl_ir::v2;
+
+use crate::{Category, Change, emit};
+
+/// Walks two matched packages, appending every difference to `changes`.
+pub(crate) fn walk_packages(old: &v2::Package, new: &v2::Package, changes: &mut Vec<Change>) {
+    let pkg = new.name.as_str();
+    diff_decls(pkg, &old.decls, &new.decls, changes);
+    diff_interfaces(pkg, &old.interfaces, &new.interfaces, changes);
+    diff_services(pkg, &old.services, &new.services, changes);
+}
+
+// ==========================================================================
+// Package-level typl declarations.
+// ==========================================================================
+
+fn diff_decls(pkg: &str, old: &[v2::Decl], new: &[v2::Decl], changes: &mut Vec<Change>) {
+    let old_by: BTreeMap<&str, &v2::Decl> = old.iter().map(|d| (d.name.as_str(), d)).collect();
+    let new_by: BTreeMap<&str, &v2::Decl> = new.iter().map(|d| (d.name.as_str(), d)).collect();
+
+    for (name, old_decl) in &old_by {
+        match new_by.get(name) {
+            Some(new_decl) => diff_decl(pkg, name, old_decl, new_decl, changes),
+            None => emit(
+                changes,
+                format!("{pkg}/{name}"),
+                Category::DeclRemoved,
+                Some(decl_kind_name(old_decl).to_string()),
+                None,
+            ),
+        }
+    }
+    for (name, new_decl) in &new_by {
+        if !old_by.contains_key(name) {
+            emit(
+                changes,
+                format!("{pkg}/{name}"),
+                Category::DeclAdded,
+                None,
+                Some(decl_kind_name(new_decl).to_string()),
+            );
+        }
+    }
+}
+
+fn diff_decl(pkg: &str, name: &str, old: &v2::Decl, new: &v2::Decl, changes: &mut Vec<Change>) {
+    let path = format!("{pkg}/{name}");
+    if envelope_differs(old, new) {
+        emit(changes, path.clone(), Category::DocOnly, None, None);
+    }
+
+    use v2::decl::Kind;
+    match (&old.kind, &new.kind) {
+        (Some(Kind::TypeDef(a)), Some(Kind::TypeDef(b))) => diff_type_def(&path, a, b, changes),
+        (Some(Kind::ConstDef(a)), Some(Kind::ConstDef(b))) => {
+            if a != b {
+                emit(
+                    changes,
+                    path,
+                    Category::InitChanged,
+                    Some(const_str(a)),
+                    Some(const_str(b)),
+                );
+            }
+        }
+        (Some(Kind::StructDef(a)), Some(Kind::StructDef(b))) => {
+            diff_composite(
+                &path,
+                struct_member_names(a),
+                struct_member_names(b),
+                a == b,
+                changes,
+            );
+        }
+        (Some(Kind::EnumDef(a)), Some(Kind::EnumDef(b))) => {
+            diff_composite(
+                &path,
+                enum_value_names(a),
+                enum_value_names(b),
+                a == b,
+                changes,
+            );
+        }
+        (Some(Kind::EnumSetDef(a)), Some(Kind::EnumSetDef(b))) => {
+            diff_composite(
+                &path,
+                enum_set_bit_names(a),
+                enum_set_bit_names(b),
+                a == b,
+                changes,
+            );
+        }
+        (Some(Kind::UnionDef(a)), Some(Kind::UnionDef(b))) => {
+            diff_composite(
+                &path,
+                union_arm_names(a),
+                union_arm_names(b),
+                a == b,
+                changes,
+            );
+        }
+        (old_kind, new_kind) => {
+            if kind_discriminant(old_kind) != kind_discriminant(new_kind) {
+                emit(
+                    changes,
+                    path,
+                    Category::KindChanged,
+                    Some(kind_name_opt(old_kind).to_string()),
+                    Some(kind_name_opt(new_kind).to_string()),
+                );
+            }
+        }
+    }
+}
+
+fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec<Change>) {
+    if a.backing != b.backing || a.width != b.width {
+        emit(
+            changes,
+            path.to_string(),
+            Category::WidthChanged,
+            Some(type_repr_str(a)),
+            Some(type_repr_str(b)),
+        );
+    }
+    if a.constraint != b.constraint {
+        emit(
+            changes,
+            path.to_string(),
+            Category::ConstraintChanged,
+            Some(constraint_str(a.constraint.as_ref())),
+            Some(constraint_str(b.constraint.as_ref())),
+        );
+    }
+    if a.declared_init != b.declared_init || a.init != b.init {
+        emit(
+            changes,
+            path.to_string(),
+            Category::InitChanged,
+            Some(type_init_str(a)),
+            Some(type_init_str(b)),
+        );
+    }
+}
+
+/// A coarse comparison of a composite type body (struct fields, enum values,
+/// enum-set bits, union arms) by member name. A member present on one side is
+/// an addition or removal; a member changed in place is a single
+/// `ConstraintChanged`. The fine-grained per-member classification is E2.8b's
+/// job (task 17).
+fn diff_composite(
+    path: &str,
+    old_names: Vec<String>,
+    new_names: Vec<String>,
+    equal: bool,
+    changes: &mut Vec<Change>,
+) {
+    if equal {
+        return;
+    }
+    let old_set: BTreeSet<&String> = old_names.iter().collect();
+    let new_set: BTreeSet<&String> = new_names.iter().collect();
+    let mut structural = false;
+    for name in &new_names {
+        if !old_set.contains(name) {
+            emit(
+                changes,
+                format!("{path}/{name}"),
+                Category::DeclAdded,
+                None,
+                Some(name.clone()),
+            );
+            structural = true;
+        }
+    }
+    for name in &old_names {
+        if !new_set.contains(name) {
+            emit(
+                changes,
+                format!("{path}/{name}"),
+                Category::DeclRemoved,
+                Some(name.clone()),
+                None,
+            );
+            structural = true;
+        }
+    }
+    if !structural {
+        emit(
+            changes,
+            path.to_string(),
+            Category::ConstraintChanged,
+            None,
+            None,
+        );
+    }
+}
+
+// ==========================================================================
+// Interfaces and interactions.
+// ==========================================================================
+
+fn diff_interfaces(
+    pkg: &str,
+    old: &[v2::Interface],
+    new: &[v2::Interface],
+    changes: &mut Vec<Change>,
+) {
+    let old_by: BTreeMap<&str, &v2::Interface> = old.iter().map(|i| (i.name.as_str(), i)).collect();
+    let new_by: BTreeMap<&str, &v2::Interface> = new.iter().map(|i| (i.name.as_str(), i)).collect();
+
+    for (name, old_iface) in &old_by {
+        match new_by.get(name) {
+            Some(new_iface) => {
+                if interface_envelope_differs(old_iface, new_iface) {
+                    emit(
+                        changes,
+                        format!("{pkg}/{name}"),
+                        Category::DocOnly,
+                        None,
+                        None,
+                    );
+                }
+                diff_interface(pkg, name, old_iface, new_iface, changes);
+            }
+            None => emit(
+                changes,
+                format!("{pkg}/{name}"),
+                Category::DeclRemoved,
+                Some("interface".to_string()),
+                None,
+            ),
+        }
+    }
+    for name in new_by.keys() {
+        if !old_by.contains_key(name) {
+            emit(
+                changes,
+                format!("{pkg}/{name}"),
+                Category::DeclAdded,
+                None,
+                Some("interface".to_string()),
+            );
+        }
+    }
+}
+
+/// The core interaction walk for one matched interface (used for both a
+/// top-level interface and a service's inline shape).
+fn diff_interface(
+    pkg: &str,
+    iface: &str,
+    old: &v2::Interface,
+    new: &v2::Interface,
+    changes: &mut Vec<Change>,
+) {
+    let old_live = live_interactions(old);
+    let new_live = live_interactions(new);
+    let old_reserved = reserved_names(old);
+    let new_reserved = reserved_names(new);
+
+    let old_live_names: BTreeSet<&str> = old_live.iter().map(|(name, ..)| *name).collect();
+    let new_live_map: BTreeMap<&str, (u32, &v2::Decl)> = new_live
+        .iter()
+        .map(|(name, ord, decl)| (*name, (*ord, *decl)))
+        .collect();
+
+    // (name, old ordinal, new ordinal) for interactions present on both sides.
+    let mut matched: Vec<(&str, u32, u32)> = Vec::new();
+
+    for (name, old_ord, old_decl) in &old_live {
+        let member_path = format!("{pkg}/{iface}/{name}");
+        if let Some((new_ord, new_decl)) = new_live_map.get(name) {
+            matched.push((name, *old_ord, *new_ord));
+            diff_interaction(&member_path, old_decl, new_decl, changes);
+        } else if new_reserved.contains(name) {
+            emit(
+                changes,
+                member_path,
+                Category::InteractionRetired,
+                Some(interaction_desc(old_decl)),
+                Some("reserved".to_string()),
+            );
+        } else {
+            emit(
+                changes,
+                member_path,
+                Category::InteractionRemoved,
+                Some(interaction_desc(old_decl)),
+                None,
+            );
+        }
+    }
+
+    let anchor_ordinals = anchor_ordinals(&matched, new);
+    for (name, new_ord, new_decl) in &new_live {
+        if old_live_names.contains(name) {
+            continue;
+        }
+        let member_path = format!("{pkg}/{iface}/{name}");
+        if old_reserved.contains(name) {
+            emit(
+                changes,
+                member_path,
+                Category::ReservedNameRedeclared,
+                Some("reserved".to_string()),
+                Some(interaction_desc(new_decl)),
+            );
+        } else {
+            let category = if anchor_ordinals.iter().any(|&anchor| anchor > *new_ord) {
+                Category::InteractionInserted
+            } else {
+                Category::InteractionAppended
+            };
+            emit(
+                changes,
+                member_path,
+                category,
+                None,
+                Some(interaction_desc(new_decl)),
+            );
+        }
+    }
+
+    detect_reorders(pkg, iface, &matched, changes);
+}
+
+/// Flags surviving interactions whose relative order within the interface
+/// changed. An absolute-ordinal change that preserves relative order is a
+/// consequence of an insert or removal elsewhere and is not reported here.
+fn detect_reorders(
+    pkg: &str,
+    iface: &str,
+    matched: &[(&str, u32, u32)],
+    changes: &mut Vec<Change>,
+) {
+    let old_rank = rank_by(matched, |(_, old_ord, _)| *old_ord);
+    let new_rank = rank_by(matched, |(_, _, new_ord)| *new_ord);
+    for (name, old_ord, new_ord) in matched {
+        if old_rank[name] != new_rank[name] {
+            emit(
+                changes,
+                format!("{pkg}/{iface}/{name}"),
+                Category::InteractionReordered,
+                Some(old_ord.to_string()),
+                Some(new_ord.to_string()),
+            );
+        }
+    }
+}
+
+/// Ranks matched interaction names by a chosen ordinal, returning name → rank.
+fn rank_by<'a>(
+    matched: &[(&'a str, u32, u32)],
+    key: impl Fn(&(&'a str, u32, u32)) -> u32,
+) -> BTreeMap<&'a str, usize> {
+    let mut order: Vec<&(&'a str, u32, u32)> = matched.iter().collect();
+    order.sort_by_key(|entry| key(entry));
+    order
+        .iter()
+        .enumerate()
+        .map(|(rank, (name, _, _))| (*name, rank))
+        .collect()
+}
+
+/// The new-side ordinals of interactions that existed before the change —
+/// surviving interactions and reserved tombstones. A new interaction sitting
+/// before any of these was inserted, not appended.
+fn anchor_ordinals(matched: &[(&str, u32, u32)], new: &v2::Interface) -> Vec<u32> {
+    let mut ordinals: Vec<u32> = matched.iter().map(|(_, _, new_ord)| *new_ord).collect();
+    for decl in &new.interactions {
+        if matches!(&decl.kind, Some(v2::decl::Kind::ReservedSlot(_))) {
+            ordinals.push(decl.ordinal);
+        }
+    }
+    ordinals
+}
+
+/// Compares two matched interactions of the same name: kind, then the
+/// kind-specific contract-carrying fields, then the doc envelope.
+fn diff_interaction(path: &str, old: &v2::Decl, new: &v2::Decl, changes: &mut Vec<Change>) {
+    if envelope_differs(old, new) {
+        emit(changes, path.to_string(), Category::DocOnly, None, None);
+    }
+
+    use v2::decl::Kind;
+    match (&old.kind, &new.kind) {
+        (Some(Kind::SignalDef(a)), Some(Kind::SignalDef(b))) => {
+            if a.payload != b.payload {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::PayloadChanged,
+                    Some(a.payload.clone()),
+                    Some(b.payload.clone()),
+                );
+            }
+            if a.declared_init != b.declared_init || a.init != b.init {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::InitChanged,
+                    Some(signal_init_str(a)),
+                    Some(signal_init_str(b)),
+                );
+            }
+            if a.timing != b.timing {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::TimingChanged,
+                    Some(timing_str(a.timing.as_ref())),
+                    Some(timing_str(b.timing.as_ref())),
+                );
+            }
+        }
+        (Some(Kind::EventDef(a)), Some(Kind::EventDef(b))) => {
+            if a.payload != b.payload {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::PayloadChanged,
+                    Some(a.payload.clone()),
+                    Some(b.payload.clone()),
+                );
+            }
+            if a.timing != b.timing {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::TimingChanged,
+                    Some(timing_str(a.timing.as_ref())),
+                    Some(timing_str(b.timing.as_ref())),
+                );
+            }
+        }
+        (Some(Kind::CommandDef(a)), Some(Kind::CommandDef(b))) => {
+            if a.params != b.params {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::ParamsChanged,
+                    Some(params_str(&a.params)),
+                    Some(params_str(&b.params)),
+                );
+            }
+            if a.contracts != b.contracts {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::ContractChanged,
+                    Some(contracts_str(&a.contracts)),
+                    Some(contracts_str(&b.contracts)),
+                );
+            }
+        }
+        (Some(Kind::QueryDef(a)), Some(Kind::QueryDef(b))) => {
+            if a.params != b.params {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::ParamsChanged,
+                    Some(params_str(&a.params)),
+                    Some(params_str(&b.params)),
+                );
+            }
+            if a.return_type != b.return_type {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::ReturnChanged,
+                    Some(return_str(a.return_type.as_ref())),
+                    Some(return_str(b.return_type.as_ref())),
+                );
+            }
+            if a.contracts != b.contracts {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::ContractChanged,
+                    Some(contracts_str(&a.contracts)),
+                    Some(contracts_str(&b.contracts)),
+                );
+            }
+        }
+        (Some(Kind::FinalDef(a)), Some(Kind::FinalDef(b))) => {
+            if a.payload != b.payload {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::PayloadChanged,
+                    Some(field_type_opt_str(a.payload.as_ref())),
+                    Some(field_type_opt_str(b.payload.as_ref())),
+                );
+            }
+        }
+        (old_kind, new_kind) => {
+            emit(
+                changes,
+                path.to_string(),
+                Category::KindChanged,
+                Some(kind_name_opt(old_kind).to_string()),
+                Some(kind_name_opt(new_kind).to_string()),
+            );
+        }
+    }
+}
+
+// ==========================================================================
+// Services.
+// ==========================================================================
+
+fn diff_services(pkg: &str, old: &[v2::Service], new: &[v2::Service], changes: &mut Vec<Change>) {
+    let old_by: BTreeMap<&str, &v2::Service> = old.iter().map(|s| (s.name.as_str(), s)).collect();
+    let new_by: BTreeMap<&str, &v2::Service> = new.iter().map(|s| (s.name.as_str(), s)).collect();
+
+    for (name, old_svc) in &old_by {
+        match new_by.get(name) {
+            Some(new_svc) => diff_service(pkg, name, old_svc, new_svc, changes),
+            None => emit(
+                changes,
+                format!("{pkg}/{name}"),
+                Category::DeclRemoved,
+                Some("service".to_string()),
+                None,
+            ),
+        }
+    }
+    for name in new_by.keys() {
+        if !old_by.contains_key(name) {
+            emit(
+                changes,
+                format!("{pkg}/{name}"),
+                Category::DeclAdded,
+                None,
+                Some("service".to_string()),
+            );
+        }
+    }
+}
+
+fn diff_service(
+    pkg: &str,
+    name: &str,
+    old: &v2::Service,
+    new: &v2::Service,
+    changes: &mut Vec<Change>,
+) {
+    let path = format!("{pkg}/{name}");
+    if old.doc != new.doc
+        || old.labels != new.labels
+        || old.deprecated != new.deprecated
+        || old.visibility != new.visibility
+    {
+        emit(changes, path.clone(), Category::DocOnly, None, None);
+    }
+
+    use v2::service::Shape;
+    match (&old.shape, &new.shape) {
+        (Some(Shape::InterfaceRef(a)), Some(Shape::InterfaceRef(b))) => {
+            if a != b {
+                emit(
+                    changes,
+                    path,
+                    Category::ServiceChanged,
+                    Some(a.clone()),
+                    Some(b.clone()),
+                );
+            }
+        }
+        (Some(Shape::Inline(a)), Some(Shape::Inline(b))) => {
+            diff_interface(pkg, name, a, b, changes);
+        }
+        (old_shape, new_shape) => {
+            emit(
+                changes,
+                path,
+                Category::ServiceChanged,
+                Some(shape_desc(old_shape).to_string()),
+                Some(shape_desc(new_shape).to_string()),
+            );
+        }
+    }
+}
+
+// ==========================================================================
+// Collectors.
+// ==========================================================================
+
+/// The live interactions of an interface — every member that is not a reserved
+/// tombstone — as (name, ordinal, decl).
+fn live_interactions(iface: &v2::Interface) -> Vec<(&str, u32, &v2::Decl)> {
+    iface
+        .interactions
+        .iter()
+        .filter_map(|decl| match &decl.kind {
+            Some(v2::decl::Kind::ReservedSlot(_)) | None => None,
+            Some(_) => Some((decl.name.as_str(), decl.ordinal, decl)),
+        })
+        .collect()
+}
+
+/// The names retired by `reserved` tombstones in an interface body.
+fn reserved_names(iface: &v2::Interface) -> BTreeSet<&str> {
+    iface
+        .interactions
+        .iter()
+        .filter_map(|decl| match &decl.kind {
+            Some(v2::decl::Kind::ReservedSlot(reserved)) => reserved.name.as_deref(),
+            _ => None,
+        })
+        .collect()
+}
+
+fn struct_member_names(def: &v2::StructDef) -> Vec<String> {
+    def.members
+        .iter()
+        .filter_map(|member| match &member.member {
+            Some(v2::struct_member::Member::Field(field)) => Some(field.name.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+fn enum_value_names(def: &v2::EnumDef) -> Vec<String> {
+    def.values.iter().map(|value| value.name.clone()).collect()
+}
+
+fn enum_set_bit_names(def: &v2::EnumSetDef) -> Vec<String> {
+    def.bits.iter().map(|bit| bit.name.clone()).collect()
+}
+
+fn union_arm_names(def: &v2::UnionDef) -> Vec<String> {
+    def.arms.iter().map(|arm| arm.name.clone()).collect()
+}
+
+// ==========================================================================
+// Envelope comparison.
+// ==========================================================================
+
+fn envelope_differs(old: &v2::Decl, new: &v2::Decl) -> bool {
+    old.doc != new.doc
+        || old.labels != new.labels
+        || old.deprecated != new.deprecated
+        || old.visibility != new.visibility
+}
+
+fn interface_envelope_differs(old: &v2::Interface, new: &v2::Interface) -> bool {
+    old.doc != new.doc
+        || old.labels != new.labels
+        || old.deprecated != new.deprecated
+        || old.visibility != new.visibility
+}
+
+// ==========================================================================
+// Renderers — honest, compact before/after strings.
+// ==========================================================================
+
+fn decl_kind_name(decl: &v2::Decl) -> &'static str {
+    kind_name_opt(&decl.kind)
+}
+
+fn kind_name_opt(kind: &Option<v2::decl::Kind>) -> &'static str {
+    use v2::decl::Kind;
+    match kind {
+        Some(Kind::TypeDef(_)) => "type",
+        Some(Kind::ConstDef(_)) => "const",
+        Some(Kind::StructDef(_)) => "struct",
+        Some(Kind::EnumDef(_)) => "enum",
+        Some(Kind::EnumSetDef(_)) => "enum set",
+        Some(Kind::UnionDef(_)) => "union",
+        Some(Kind::SignalDef(_)) => "signal",
+        Some(Kind::EventDef(_)) => "event",
+        Some(Kind::CommandDef(_)) => "command",
+        Some(Kind::QueryDef(_)) => "query",
+        Some(Kind::FinalDef(_)) => "final",
+        Some(Kind::ReservedSlot(_)) => "reserved",
+        None => "declaration",
+    }
+}
+
+/// A stable discriminant for a decl kind, so a variant switch is a
+/// `KindChanged` while a same-variant edit is not.
+fn kind_discriminant(kind: &Option<v2::decl::Kind>) -> u8 {
+    use v2::decl::Kind;
+    match kind {
+        None => 0,
+        Some(Kind::TypeDef(_)) => 1,
+        Some(Kind::ConstDef(_)) => 2,
+        Some(Kind::StructDef(_)) => 3,
+        Some(Kind::EnumDef(_)) => 4,
+        Some(Kind::EnumSetDef(_)) => 5,
+        Some(Kind::UnionDef(_)) => 6,
+        Some(Kind::SignalDef(_)) => 7,
+        Some(Kind::EventDef(_)) => 8,
+        Some(Kind::CommandDef(_)) => 9,
+        Some(Kind::QueryDef(_)) => 10,
+        Some(Kind::FinalDef(_)) => 11,
+        Some(Kind::ReservedSlot(_)) => 12,
+    }
+}
+
+fn interaction_desc(decl: &v2::Decl) -> String {
+    format!("{} {}", kind_name_opt(&decl.kind), decl.name)
+}
+
+fn shape_desc(shape: &Option<v2::service::Shape>) -> &'static str {
+    match shape {
+        Some(v2::service::Shape::InterfaceRef(_)) => "interface reference",
+        Some(v2::service::Shape::Inline(_)) => "inline shape",
+        None => "(none)",
+    }
+}
+
+fn timing_str(timing: Option<&v2::Timing>) -> String {
+    let Some(timing) = timing else {
+        return "(none)".to_string();
+    };
+    let mode = match v2::TimingMode::try_from(timing.mode) {
+        Ok(v2::TimingMode::StrictPeriodic) => "strict",
+        Ok(v2::TimingMode::Range) => "range",
+        _ => "unspecified",
+    };
+    let min = timing.min_us.as_deref().unwrap_or("_");
+    let max = timing.max_us.as_deref().unwrap_or("_");
+    let default = if timing.default_applied {
+        " (default)"
+    } else {
+        ""
+    };
+    format!("{mode} [{min}us..{max}us]{default}")
+}
+
+fn params_str(params: &[v2::Param]) -> String {
+    let rendered: Vec<String> = params
+        .iter()
+        .map(|param| {
+            format!(
+                "{}: {}",
+                param.name,
+                field_type_opt_str(param.r#type.as_ref())
+            )
+        })
+        .collect();
+    format!("({})", rendered.join(", "))
+}
+
+fn contracts_str(contracts: &[v2::Contract]) -> String {
+    let rendered: Vec<String> = contracts
+        .iter()
+        .map(|contract| {
+            let kind = match v2::ContractKind::try_from(contract.kind) {
+                Ok(v2::ContractKind::Require) => "require",
+                Ok(v2::ContractKind::Ensure) => "ensure",
+                _ => "clause",
+            };
+            format!("{kind} {}", contract.source)
+        })
+        .collect();
+    format!("[{}]", rendered.join("; "))
+}
+
+fn return_str(return_type: Option<&v2::ReturnType>) -> String {
+    let Some(return_type) = return_type else {
+        return "()".to_string();
+    };
+    match &return_type.kind {
+        Some(v2::return_type::Kind::Value(value)) => field_type_str(value),
+        Some(v2::return_type::Kind::Fallible(fallible)) => {
+            format!("{} | {}", fallible.ok, fallible.err)
+        }
+        None => "()".to_string(),
+    }
+}
+
+fn field_type_opt_str(field_type: Option<&v2::FieldType>) -> String {
+    field_type
+        .map(field_type_str)
+        .unwrap_or_else(|| "()".to_string())
+}
+
+fn field_type_str(field_type: &v2::FieldType) -> String {
+    use v2::field_type::Kind;
+    let mut rendered = match &field_type.kind {
+        Some(Kind::Named(name)) => name.clone(),
+        Some(Kind::Primitive(primitive)) => primitive_name(*primitive).to_string(),
+        Some(Kind::InlineScalar(_)) => "<inline scalar>".to_string(),
+        Some(Kind::Tuple(tuple)) => {
+            let fields: Vec<String> = tuple
+                .fields
+                .iter()
+                .map(|field| {
+                    format!(
+                        "{}: {}",
+                        field.name,
+                        field_type_opt_str(field.r#type.as_ref())
+                    )
+                })
+                .collect();
+            format!("({})", fields.join(", "))
+        }
+        Some(Kind::Array(array)) => format!(
+            "[{}; {}..{}]",
+            field_type_opt_str(array.element.as_deref()),
+            array.min,
+            array.max
+        ),
+        Some(Kind::Map(map)) => format!(
+            "{{{}: {}}}",
+            field_type_opt_str(map.key.as_deref()),
+            field_type_opt_str(map.value.as_deref())
+        ),
+        Some(Kind::Stream(stream)) => match &stream.element {
+            Some(v2::stream_type::Element::Named(name)) => format!("<{name}>"),
+            Some(v2::stream_type::Element::Primitive(primitive)) => {
+                format!("<{}>", primitive_name(*primitive))
+            }
+            None => "<>".to_string(),
+        },
+        None => "?".to_string(),
+    };
+    if field_type.optional {
+        rendered.push('?');
+    }
+    rendered
+}
+
+fn primitive_name(primitive: i32) -> &'static str {
+    match v2::PrimitiveType::try_from(primitive) {
+        Ok(v2::PrimitiveType::Boolean) => "boolean",
+        Ok(v2::PrimitiveType::Integer) => "integer",
+        Ok(v2::PrimitiveType::Float) => "float",
+        Ok(v2::PrimitiveType::String) => "string",
+        Ok(v2::PrimitiveType::Bytes) => "bytes",
+        _ => "unspecified",
+    }
+}
+
+fn const_str(def: &v2::ConstDef) -> String {
+    if let Some(regex) = &def.regex {
+        return format!("regex {regex}");
+    }
+    match &def.type_ref {
+        Some(type_ref) => format!("{}: {}", type_ref, def.value),
+        None => def.value.clone(),
+    }
+}
+
+fn type_repr_str(def: &v2::TypeDef) -> String {
+    let backing = match def
+        .backing
+        .as_ref()
+        .and_then(|backing| backing.kind.as_ref())
+    {
+        Some(v2::backing::Kind::Primitive(primitive)) => primitive_name(*primitive).to_string(),
+        Some(v2::backing::Kind::Unit(unit)) => unit.clone(),
+        None => "?".to_string(),
+    };
+    match &def.width {
+        Some(v2::type_def::Width::IntWidth(width)) => {
+            format!("{backing} {}", int_width_name(*width))
+        }
+        Some(v2::type_def::Width::FloatWidth(width)) => {
+            format!("{backing} {}", float_width_name(*width))
+        }
+        None => backing,
+    }
+}
+
+fn int_width_name(width: i32) -> &'static str {
+    match v2::IntWidth::try_from(width) {
+        Ok(v2::IntWidth::U8) => "u8",
+        Ok(v2::IntWidth::I8) => "i8",
+        Ok(v2::IntWidth::U16) => "u16",
+        Ok(v2::IntWidth::I16) => "i16",
+        Ok(v2::IntWidth::U32) => "u32",
+        Ok(v2::IntWidth::I32) => "i32",
+        Ok(v2::IntWidth::U64) => "u64",
+        Ok(v2::IntWidth::I64) => "i64",
+        _ => "unspecified",
+    }
+}
+
+fn float_width_name(width: i32) -> &'static str {
+    match v2::FloatWidth::try_from(width) {
+        Ok(v2::FloatWidth::F32) => "f32",
+        Ok(v2::FloatWidth::F64) => "f64",
+        _ => "unspecified",
+    }
+}
+
+fn constraint_str(constraint: Option<&v2::Constraint>) -> String {
+    let Some(constraint) = constraint else {
+        return "(none)".to_string();
+    };
+    let mut parts = Vec::new();
+    if let Some(min) = &constraint.min {
+        parts.push(format!("min={min}"));
+    }
+    if let Some(max) = &constraint.max {
+        parts.push(format!("max={max}"));
+    }
+    if let Some(step) = &constraint.step {
+        parts.push(format!("step={step}"));
+    }
+    if let Some(len_min) = constraint.len_min {
+        parts.push(format!("len_min={len_min}"));
+    }
+    if let Some(len_max) = constraint.len_max {
+        parts.push(format!("len_max={len_max}"));
+    }
+    if let Some(pattern) = &constraint.pattern {
+        parts.push(format!("pattern={pattern}"));
+    }
+    format!("[{}]", parts.join(" "))
+}
+
+fn type_init_str(def: &v2::TypeDef) -> String {
+    if let Some(declared) = &def.declared_init {
+        return declared.clone();
+    }
+    match def.init.as_ref().and_then(|init| init.value.as_ref()) {
+        Some(value) => value.clone(),
+        None => "(none)".to_string(),
+    }
+}
+
+fn signal_init_str(def: &v2::SignalDef) -> String {
+    if let Some(declared) = &def.declared_init {
+        return declared.clone();
+    }
+    match def.init.as_ref().and_then(|init| init.value.as_ref()) {
+        Some(value) => value.clone(),
+        None => "(none)".to_string(),
+    }
+}

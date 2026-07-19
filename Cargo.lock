@@ -1156,8 +1156,11 @@ version = "0.0.0"
 dependencies = [
  "clap",
  "ridl-core",
+ "ridl-diff",
  "ridl-fmt",
+ "ridl-ir",
  "ridlc",
+ "serde_json",
 ]
 
 [[package]]
@@ -1199,6 +1202,15 @@ dependencies = [
  "tar",
  "toml",
  "ureq",
+]
+
+[[package]]
+name = "ridl-diff"
+version = "0.0.0"
+dependencies = [
+ "ridl-ir",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
