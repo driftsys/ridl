@@ -54,15 +54,25 @@ fn type_def_default(name: &str, td: &v1::TypeDef) -> Option<TokenStream> {
 }
 
 /// The inner value of a newtype default for a scalar backing. A derivable
-/// numeric or unit type carries its init text (`"0"` or `min`); a derivable
-/// string or bytes type admits length 0, so it defaults to the empty value.
+/// numeric or unit type carries its init text (`"0"` or `min`). A string type
+/// with a declared init emits that init verbatim as a string literal; without a
+/// declared init the derivable case admits length 0 and defaults to the empty
+/// string (I1). A bytes type with a declared init has no faithful literal form
+/// here, so it gets no Default rather than a wrong (empty) one; the derivable
+/// zero-length case defaults to the empty vector.
 fn scalar_default_value(backing: ScalarBacking, value: Option<&str>) -> Option<TokenStream> {
     match backing {
         ScalarBacking::Float => Some(numeric_tokens(value?, true)),
         ScalarBacking::Integer => Some(numeric_tokens(value?, false)),
         ScalarBacking::Boolean => Some(bool_tokens(value.unwrap_or("false"))),
-        ScalarBacking::String => Some(quote! { String::new() }),
-        ScalarBacking::Bytes => Some(quote! { Vec::new() }),
+        ScalarBacking::String => match value {
+            Some(text) if !text.is_empty() => Some(quote! { #text.to_string() }),
+            _ => Some(quote! { String::new() }),
+        },
+        ScalarBacking::Bytes => match value {
+            Some(text) if !text.is_empty() => None,
+            _ => Some(quote! { Vec::new() }),
+        },
     }
 }
 
@@ -144,10 +154,15 @@ fn slot_default(ctx: &Ctx, ft: &v1::FieldType, slot: &Slot) -> Option<TokenStrea
 
 fn named_default(ctx: &Ctx, reference: &str, slot: &Slot) -> Option<TokenStream> {
     if reference.contains('.') {
-        // Cross-package: trust the enclosing field's T15 flag. A declared init
-        // on such a field cannot be wrapped without the remote backing, so the
-        // referenced type's own default is used.
-        if slot.flag == Some(true) {
+        // Cross-package: the remote backing is not resolvable here. A declared
+        // init on such a field cannot be faithfully wrapped without that
+        // backing, and substituting the referenced type's own default would
+        // emit a wrong value — worse than none — so the containing struct gets
+        // no Default at all (I2). Without a declared init, trust the enclosing
+        // field's T15 flag and use the referenced type's own default.
+        if slot.declared_init.is_some() {
+            None
+        } else if slot.flag == Some(true) {
             let path = type_path(reference);
             Some(quote! { #path::default() })
         } else {
@@ -176,9 +191,21 @@ fn named_default(ctx: &Ctx, reference: &str, slot: &Slot) -> Option<TokenStream>
 
 fn named_same_package_default(ctx: &Ctx, reference: &str) -> Option<TokenStream> {
     let decl = ctx.lookup(reference)?;
-    decl_default_expr(ctx, decl)?;
-    let path = type_path(reference);
-    Some(quote! { #path::default() })
+    // Guard the one recursion point into a same-package declaration's Default.
+    // A cyclic composite (`struct S { next: S }`) is TYPL-206 upstream, but the
+    // backend must not trust that gate: on a cycle it denies a Default rather
+    // than recurse forever and overflow the stack (C1b, defense in depth).
+    if !ctx.enter_default(reference) {
+        return None;
+    }
+    let derivable = decl_default_expr(ctx, decl).is_some();
+    ctx.leave_default(reference);
+    if derivable {
+        let path = type_path(reference);
+        Some(quote! { #path::default() })
+    } else {
+        None
+    }
 }
 
 fn primitive_default(prim: i32, slot: &Slot) -> Option<TokenStream> {

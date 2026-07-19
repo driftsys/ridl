@@ -1135,3 +1135,294 @@ fn keyword_field_name_is_raw_escaped() {
         "a keyword field name must be raw-escaped, got:\n{source}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Epic E1 whole-epic review — regression fixtures.
+// ---------------------------------------------------------------------------
+
+/// `type RawFrame : bytes [8]` — a bytes-backed named scalar type with a fixed
+/// length. It has no fixed C ABI: the C header refuses its typedef and the
+/// Rust backend realizes it as `Vec<u8>`.
+fn bytes_frame_decl() -> v1::Decl {
+    public_decl(
+        "RawFrame",
+        v1::decl::Kind::TypeDef(v1::TypeDef {
+            backing: Some(v1::Backing {
+                kind: Some(v1::backing::Kind::Primitive(
+                    v1::PrimitiveType::Bytes as i32,
+                )),
+            }),
+            constraint: Some(v1::Constraint {
+                len_min: Some(8),
+                len_max: Some(8),
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(true, Some(""))),
+            width: None,
+        }),
+    )
+}
+
+/// C1b: a non-optional self-reference `struct S { next: S }` is a cycle. The
+/// checker rejects it (TYPL-206), but the backend must not trust that gate:
+/// the Default recursion must terminate rather than overflow the stack.
+#[test]
+fn recursive_struct_default_terminates() {
+    let recursive = v1::StructDef {
+        members: vec![field_member(named_field(
+            "next",
+            1,
+            "S",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let generated = generate(&package(
+        "veh.common",
+        vec![public_decl("S", v1::decl::Kind::StructDef(recursive))],
+    ))
+    .expect("a cyclic struct's Default derivation must terminate, not overflow");
+    assert!(
+        !generated.rust_source.contains("impl Default for S"),
+        "a cyclic struct must get no Default, got:\n{}",
+        generated.rust_source
+    );
+}
+
+/// I1: `type Plate : string [8..9 match P] = "AA-000-AA"` — the declared init
+/// makes the type derivable and IS its default, so the backend emits the
+/// declared value, never an empty string.
+#[test]
+fn declared_string_init_becomes_the_default() {
+    let plate = v1::decl::Kind::TypeDef(v1::TypeDef {
+        backing: Some(v1::Backing {
+            kind: Some(v1::backing::Kind::Primitive(
+                v1::PrimitiveType::String as i32,
+            )),
+        }),
+        constraint: Some(v1::Constraint {
+            len_min: Some(8),
+            len_max: Some(9),
+            ..constraint(None, None, None)
+        }),
+        declared_init: Some("AA-000-AA".to_string()),
+        init: Some(init_value(true, Some("AA-000-AA"))),
+        width: None,
+    });
+    let source = rust_for(vec![public_decl("Plate", plate)]);
+    assert!(
+        source.contains("impl Default for Plate"),
+        "a declared-init string type gets a Default, got:\n{source}"
+    );
+    assert!(
+        source.contains("\"AA-000-AA\"") && source.contains("to_string"),
+        "the Default must be the declared init, not an empty string, got:\n{source}"
+    );
+    assert!(
+        !source.contains("String::new()"),
+        "the empty-string form is only for the derived case, got:\n{source}"
+    );
+}
+
+/// I2: a cross-package field with a declared init cannot be faithfully wrapped
+/// without the remote backing; emitting the referenced type's own default would
+/// be a wrong value, so the whole struct gets no Default.
+#[test]
+fn cross_package_declared_init_omits_the_default() {
+    let field = v1::Field {
+        declared_init: Some("1".to_string()),
+        ..named_field(
+            "gearIndex",
+            1,
+            "veh.other.GearIndex",
+            false,
+            init_value(true, Some("1")),
+        )
+    };
+    let struct_def = v1::StructDef {
+        members: vec![field_member(field)],
+        fixed_layout: false,
+    };
+    let source = rust_for(vec![public_decl(
+        "Selection",
+        v1::decl::Kind::StructDef(struct_def),
+    )]);
+    assert!(
+        !source.contains("impl Default for Selection"),
+        "a struct with a cross-package declared-init field must get no Default, got:\n{source}"
+    );
+}
+
+/// I2: the same-package equivalent CAN be wrapped: the backend knows
+/// `GearIndex`'s integer backing, so the declared init 1 wraps to `GearIndex(1)`.
+#[test]
+fn same_package_declared_init_gets_the_correct_default() {
+    let gear_index = public_decl(
+        "GearIndex",
+        primitive_type(
+            v1::PrimitiveType::Integer,
+            init_value(true, Some("0")),
+            Some(v1::type_def::Width::IntWidth(v1::IntWidth::U8 as i32)),
+        ),
+    );
+    let field = v1::Field {
+        declared_init: Some("1".to_string()),
+        ..named_field(
+            "gearIndex",
+            1,
+            "GearIndex",
+            false,
+            init_value(true, Some("1")),
+        )
+    };
+    let struct_def = v1::StructDef {
+        members: vec![field_member(field)],
+        fixed_layout: false,
+    };
+    let source = rust_for(vec![
+        gear_index,
+        public_decl("Selection", v1::decl::Kind::StructDef(struct_def)),
+    ]);
+    assert!(
+        source.contains("impl Default for Selection"),
+        "the same-package equivalent gets a Default, got:\n{source}"
+    );
+    assert!(
+        source.contains("GearIndex(1)"),
+        "the declared init 1 must wrap to GearIndex(1), got:\n{source}"
+    );
+}
+
+/// M1: the IR stores a regex constant's source with its `/…/` delimiters; the
+/// emitted `&str` must hold the pattern only.
+#[test]
+fn regex_const_strips_its_delimiters() {
+    let source = rust_for(vec![public_decl(
+        "PLATE_PATTERN",
+        v1::decl::Kind::ConstDef(v1::ConstDef {
+            type_ref: None,
+            value: String::new(),
+            regex: Some("/^[A-Z]{2}-[0-9]{3}$/".to_string()),
+        }),
+    )]);
+    assert!(
+        source.contains("PLATE_PATTERN: &str = \"^[A-Z]{2}-[0-9]{3}$\""),
+        "the regex const must emit its pattern without delimiters, got:\n{source}"
+    );
+    assert!(
+        !source.contains("/^[A-Z]"),
+        "the surrounding slash delimiters must be stripped, got:\n{source}"
+    );
+}
+
+/// C2: `c_field_type` never emits a dangling type name. A `fixed_layout` struct
+/// whose field references a bytes-backed named type (a defensive case the
+/// checker's C2 rule normally prevents) is downgraded to the not-representable
+/// block rather than emitted as a repr(C) struct naming an undeclared typedef.
+#[test]
+fn c_field_type_guards_a_dangling_named_reference() {
+    let frame = v1::StructDef {
+        members: vec![field_member(named_field(
+            "data",
+            1,
+            "RawFrame",
+            false,
+            init_value(false, None),
+        ))],
+        // Set true to exercise the guard directly, simulating a malformed IR
+        // the checker's C2 rule would not produce.
+        fixed_layout: true,
+    };
+    let Generated { c_header, .. } = generate(&package(
+        "veh.common",
+        vec![
+            bytes_frame_decl(),
+            public_decl("Frame", v1::decl::Kind::StructDef(frame)),
+        ],
+    ))
+    .expect("generation succeeds");
+    assert!(
+        !c_header.contains("veh_common_raw_frame data"),
+        "the guard must keep the undeclared bytes typedef out of the struct, got:\n{c_header}"
+    );
+    assert!(
+        c_header.contains("struct Frame"),
+        "Frame must fall into the not-representable block, got:\n{c_header}"
+    );
+}
+
+/// C2: the generated C header for a package whose struct holds a bytes-backed
+/// named field compiles under `cc -std=c11 -fsyntax-only`. The bytes-backed type
+/// and the struct that holds it have no fixed C ABI, so they land in the
+/// not-representable comment block; an all-scalar struct is still a repr(C)
+/// struct. Skipped when `cc` is not installed.
+#[test]
+fn bytes_named_field_c_header_compiles_with_cc() {
+    let reading = v1::StructDef {
+        members: vec![field_member(named_field(
+            "value",
+            1,
+            "Speed",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: true,
+    };
+    // A bytes-backed named field makes the struct non-fixed (the checker's C2
+    // rule); it is not emitted as a repr(C) struct.
+    let frame = v1::StructDef {
+        members: vec![field_member(named_field(
+            "data",
+            1,
+            "RawFrame",
+            false,
+            init_value(false, None),
+        ))],
+        fixed_layout: false,
+    };
+    let decls = vec![
+        speed_decl(),
+        bytes_frame_decl(),
+        public_decl("Reading", v1::decl::Kind::StructDef(reading)),
+        public_decl("Frame", v1::decl::Kind::StructDef(frame)),
+    ];
+    let Generated { c_header, .. } =
+        generate(&package("veh.common", decls)).expect("generation succeeds");
+
+    assert!(
+        c_header.contains("} veh_common_reading;"),
+        "the all-scalar struct is emitted as a repr(C) struct, got:\n{c_header}"
+    );
+    assert!(
+        c_header.contains("not representable in C ABI"),
+        "the bytes-backed shapes are listed as not representable, got:\n{c_header}"
+    );
+    assert!(
+        !c_header.contains("veh_common_raw_frame data"),
+        "the C header must not reference the undeclared bytes typedef, got:\n{c_header}"
+    );
+
+    // The header must parse as C11. A missing C compiler skips the check.
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let header_path = dir.path().join("veh_common.h");
+    let unit_path = dir.path().join("veh_common.c");
+    std::fs::write(&header_path, &c_header).expect("the header is written");
+    std::fs::write(
+        &unit_path,
+        format!("#include \"{}\"\n", header_path.display()),
+    )
+    .expect("the translation unit is written");
+    match std::process::Command::new("cc")
+        .args(["-std=c11", "-fsyntax-only"])
+        .arg(&unit_path)
+        .status()
+    {
+        Ok(status) => assert!(
+            status.success(),
+            "the generated C header must pass cc -std=c11 -fsyntax-only:\n{c_header}"
+        ),
+        Err(_) => eprintln!("skipping cc syntax check: cc is not available"),
+    }
+}

@@ -183,7 +183,7 @@ pub fn module_name_from_path(path: &str) -> String {
 /// `diagnostics` gathers every diagnostic the workspace produced — the loader's
 /// (manifest and package↔directory law), the parser's, the resolver's, and the
 /// checker's — each already remapped onto `sources`, so a caller renders them
-/// with [`render`](ridl_core::diag::render) and keys the exit code on the
+/// with [`render`](ridl_core::diag::render()) and keys the exit code on the
 /// presence of an [`Error`](Severity::Error). `checked` carries the per-package
 /// IR so the language server can serve it (E1.15).
 pub struct WorkspaceOutput {
@@ -265,7 +265,11 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
 }
 
 /// Runs `build`: everything [`run_check`] does, plus it writes the selected
-/// `emits` for every checked package into `out_dir`.
+/// `emits` for every checked package into `out_dir` — but only when the whole
+/// run produced no error-severity diagnostic, whether from the compile or from
+/// remote-import materialization (a manifest, lockfile, or fetch error, MANI-1xx).
+/// An error-bearing build renders its diagnostics and exits non-zero without
+/// writing any artifact (C1).
 ///
 /// The artifact base name is the file stem in single-file mode (preserving the
 /// E0 `<input-stem>.rs` contract) and the full dotted package name otherwise, so
@@ -287,19 +291,36 @@ pub fn run_build(
         sources,
     } = load_and_check(&mut db, entry)?;
 
-    std::fs::create_dir_all(out_dir)?;
-    let single_file = entry.is_file() && manifest_root_of(entry).is_none();
-    let file_stem = module_name_from_path(&entry.to_string_lossy());
-    for package in &checked {
-        let base = if single_file {
-            file_stem.clone()
-        } else {
-            package.ir.name.clone()
-        };
-        write_emits(out_dir, &base, &package.ir, emits, &mut diagnostics)?;
+    // Materialize remote imports and round-trip the lockfile before the emit
+    // gate, so any error it raises (a manifest, lockfile, or fetch problem,
+    // MANI-1xx — for example a frozen build with no `ridl.lock`) joins the
+    // compile diagnostics and suppresses code generation, exactly like a
+    // compile error does.
+    diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));
+
+    // A build must not emit artifacts for a workspace that failed: code
+    // generation over error-bearing IR produces invalid or misleading output,
+    // and a malformed IR could even crash a backend (C1). `check` never runs
+    // codegen; `build` matches that by skipping every emit — Rust, C header,
+    // and ir-json alike — when any error-severity diagnostic is present, from
+    // the compile or from materialization. Warnings and info do not gate.
+    let succeeded = !diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error);
+    if succeeded {
+        std::fs::create_dir_all(out_dir)?;
+        let single_file = entry.is_file() && manifest_root_of(entry).is_none();
+        let file_stem = module_name_from_path(&entry.to_string_lossy());
+        for package in &checked {
+            let base = if single_file {
+                file_stem.clone()
+            } else {
+                package.ir.name.clone()
+            };
+            write_emits(out_dir, &base, &package.ir, emits, &mut diagnostics)?;
+        }
     }
 
-    diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));
     Ok(CliRun {
         diagnostics,
         sources,

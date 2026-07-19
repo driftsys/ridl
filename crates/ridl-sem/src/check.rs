@@ -2388,6 +2388,12 @@ impl Checker<'_> {
     /// Whether a field type is fixed-width in the given package view.
     /// `visiting` breaks reference cycles (a recursive shape is TYPL-206
     /// elsewhere; here it is simply not fixed).
+    ///
+    /// A string- or bytes-backed field is never fixed, even with a fixed length
+    /// bound: the Rust backend realizes those backings as `String` and
+    /// `Vec<u8>` (not `[u8; N]`), which carry no `#[repr(C)]` ABI, and the C
+    /// header has no fixed C type for them. Excluding them keeps `fixed_layout`
+    /// an honest promise — a fixed-layout struct really is a clean C ABI (C2).
     fn field_type_is_fixed(
         &self,
         resolution: &Resolution,
@@ -2400,11 +2406,7 @@ impl Checker<'_> {
                 let (_, class) = primitive_of(node);
                 match class {
                     BackingClass::Boolean | BackingClass::Integer | BackingClass::Float => true,
-                    BackingClass::Str | BackingClass::Bytes => node
-                        .constraint()
-                        .and_then(|constraint| constraint.len())
-                        .is_some_and(|bound| self.bound_is_fixed(&bound)),
-                    BackingClass::Unknown => false,
+                    BackingClass::Str | BackingClass::Bytes | BackingClass::Unknown => false,
                 }
             }
             ast::FieldType::Path(path) => match self.lookup_path_in(resolution, path) {
@@ -2457,11 +2459,12 @@ impl Checker<'_> {
                             BackingClass::Boolean | BackingClass::Integer | BackingClass::Float => {
                                 true
                             }
-                            BackingClass::Str | BackingClass::Bytes => decl
-                                .constraint()
-                                .and_then(|constraint| constraint.len())
-                                .is_some_and(|bound| self.bound_is_fixed(&bound)),
-                            BackingClass::Unknown => false,
+                            // A string/bytes-backed named type is never fixed,
+                            // even with a fixed length bound — see
+                            // `field_type_is_fixed` (C2).
+                            BackingClass::Str | BackingClass::Bytes | BackingClass::Unknown => {
+                                false
+                            }
                         }
                     }
                     None => false,
@@ -2870,12 +2873,34 @@ mod tests {
         let checked = check_source("veh.common", APPENDIX_B);
         assert!(struct_def(&checked, "SpeedLimitPayload").fixed_layout);
         assert!(struct_def(&checked, "SensorReading").fixed_layout);
-        assert!(struct_def(&checked, "RawWheelFrame").fixed_layout);
         // DriverProfile has an optional field; SensorFault holds a
-        // variable-length Message; SensorBounds holds bounded collections.
+        // variable-length Message; SensorBounds holds bounded collections;
+        // RawWheelFrame holds a bytes-backed `frame` field, which is not a
+        // fixed C ABI even at a fixed length (C2).
         assert!(!struct_def(&checked, "DriverProfile").fixed_layout);
         assert!(!struct_def(&checked, "SensorFault").fixed_layout);
         assert!(!struct_def(&checked, "SensorBounds").fixed_layout);
+        assert!(!struct_def(&checked, "RawWheelFrame").fixed_layout);
+    }
+
+    /// A struct whose field resolves to a string- or bytes-backed named type is
+    /// not fixed_layout, even at a fixed length: those backings carry no fixed C
+    /// ABI (C2). A struct of all fixed-width scalars stays fixed_layout.
+    #[test]
+    fn string_or_bytes_backed_named_field_is_not_fixed_layout() {
+        let checked = check_source(
+            "veh.common",
+            "package veh.common\n\
+             type Frame : bytes [8]\n\
+             type Tag   : string [4]\n\
+             type Speed : km/h [0.0..250.0 step 0.5]\n\
+             struct HasBytes  { frame : Frame }\n\
+             struct HasString { tag : Tag }\n\
+             struct AllScalar { a : Speed b : Speed }\n",
+        );
+        assert!(!struct_def(&checked, "HasBytes").fixed_layout);
+        assert!(!struct_def(&checked, "HasString").fixed_layout);
+        assert!(struct_def(&checked, "AllScalar").fixed_layout);
     }
 
     // --- first-wins lowering (cross-seam fact 2) --------------------------

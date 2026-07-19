@@ -43,10 +43,10 @@ const FETCH_TIMEOUT: Duration = Duration::from_secs(30);
 /// Downloads the artifact at `url` and returns its bytes.
 ///
 /// The entire call — connect, send, and receive — is bounded by
-/// [`FETCH_TIMEOUT`] (30 seconds): a stalled or trickling server is a
+/// `FETCH_TIMEOUT` (30 seconds): a stalled or trickling server is a
 /// [`FetchError`], never a hang. A non-2xx HTTP status, a transport failure, or
 /// a body over the 10 MB read limit is also a [`FetchError`]. Callers validate
-/// the URL first (see [`is_fetchable_url`]); `ureq` will still reject a
+/// the URL first (see `is_fetchable_url`); `ureq` will still reject a
 /// malformed URL here.
 pub fn fetch(url: &str) -> Result<Vec<u8>, FetchError> {
     fetch_with_timeout(url, FETCH_TIMEOUT)

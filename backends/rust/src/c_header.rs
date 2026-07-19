@@ -185,7 +185,19 @@ fn c_field_type(package: &v1::Package, field: &v1::Field) -> Option<String> {
     }
     match &ft.kind {
         Some(v1::field_type::Kind::Named(reference)) => {
-            Some(c_ident_for_ref(&package.name, reference))
+            // A same-package reference must name a type this header actually
+            // emits; otherwise the field would reference an undeclared typedef
+            // (C2). With string/bytes-backed types excluded from `fixed_layout`,
+            // a `fixed_layout` struct never reaches this guard's `None` arm, but
+            // it keeps the emitter from ever writing a dangling type name. A
+            // cross-package reference names a type in another package's header,
+            // which the consumer includes alongside this one (documented in the
+            // template).
+            if reference.contains('.') || same_package_ref_is_c_representable(package, reference) {
+                Some(c_ident_for_ref(&package.name, reference))
+            } else {
+                None
+            }
         }
         Some(v1::field_type::Kind::Primitive(prim)) => c_primitive_type(*prim).map(str::to_string),
         Some(v1::field_type::Kind::InlineScalar(td)) => {
@@ -193,6 +205,23 @@ fn c_field_type(package: &v1::Package, field: &v1::Field) -> Option<String> {
         }
         _ => None,
     }
+}
+
+/// Whether a same-package named reference resolves to a declaration this header
+/// emits as a nameable C type: a scalar typedef with a fixed C ABI, an enum, an
+/// enum-set mask type, or a `fixed_layout` struct. A string/bytes-backed type, a
+/// union, a variable-layout struct, or an unknown name is not nameable here.
+fn same_package_ref_is_c_representable(package: &v1::Package, reference: &str) -> bool {
+    package
+        .decls
+        .iter()
+        .find(|decl| decl.name == reference)
+        .is_some_and(|decl| match &decl.kind {
+            Some(v1::decl::Kind::TypeDef(td)) => c_scalar_type(backing_scalar(td)).is_some(),
+            Some(v1::decl::Kind::EnumDef(_) | v1::decl::Kind::EnumSetDef(_)) => true,
+            Some(v1::decl::Kind::StructDef(sd)) => sd.fixed_layout,
+            _ => false,
+        })
 }
 
 fn c_primitive_type(prim: i32) -> Option<&'static str> {

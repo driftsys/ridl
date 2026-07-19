@@ -288,3 +288,122 @@ pub mod ridl {
         "the pipeline's generated Rust for veh-common must compile, source:\n{source}"
     );
 }
+
+/// The generated Rust of every package in the entry rooted at `entry`, as
+/// `(package-name, rust-source)` pairs, in workspace order.
+fn generated_packages(entry: &Path) -> Vec<(String, String)> {
+    let mut db = RidlDatabase::default();
+    let std = std_package(&mut db);
+    let workspace = load_workspace(&mut db, entry)
+        .expect("a corpus entry loads")
+        .workspace;
+    let packages: Vec<Package> = workspace.packages(&db).clone();
+    packages
+        .iter()
+        .map(|pkg| {
+            let name = pkg.name(&db).clone();
+            let checked = check_package(&db, workspace, *pkg, std);
+            let generated = ridl_backend_rust::generate(&checked.ir)
+                .expect("a clean entry's IR generates Rust");
+            (name, generated.rust_source)
+        })
+        .collect()
+}
+
+/// A tree of Rust modules keyed by dotted package name, so several generated
+/// packages compose as nested modules that share their common name prefixes
+/// (`veh.common` and `veh.cluster` both nest under one `mod veh`).
+#[derive(Default)]
+struct ModuleTree {
+    children: std::collections::BTreeMap<String, ModuleTree>,
+    body: Option<String>,
+}
+
+impl ModuleTree {
+    fn insert(&mut self, segments: &[&str], body: String) {
+        match segments.split_first() {
+            None => self.body = Some(body),
+            Some((head, rest)) => self
+                .children
+                .entry((*head).to_string())
+                .or_default()
+                .insert(rest, body),
+        }
+    }
+
+    fn render(&self, out: &mut String) {
+        if let Some(body) = &self.body {
+            out.push_str(body);
+            out.push('\n');
+        }
+        for (name, child) in &self.children {
+            out.push_str(&format!("pub mod {name} {{\n"));
+            child.render(out);
+            out.push_str("}\n");
+        }
+    }
+}
+
+/// The two-member workspace's generated Rust composes: nesting each package
+/// under its dotted module path (`crate::veh::common`, `crate::veh::cluster`)
+/// and compiling the whole together with `rustc` succeeds. This proves the
+/// cross-package references are crate-anchored (`crate::veh::common::Speed`), so
+/// a consumer can drop the generated packages in as sibling modules without
+/// hand-injecting `use` items (I4).
+#[test]
+fn workspace_two_members_composed_compiles_with_rustc() {
+    const PRELUDE: &str = "\
+pub mod ridl {
+    pub mod std {
+        pub struct Name(pub String);
+        pub struct Message(pub String);
+        pub struct Label(pub String);
+        pub struct Timestamp(pub i64);
+    }
+}
+";
+    let packages = generated_packages(Path::new("tests/corpus/workspace-two-members"));
+    let mut tree = ModuleTree::default();
+    for (name, body) in &packages {
+        let segments: Vec<&str> = name.split('.').collect();
+        tree.insert(&segments, body.clone());
+    }
+    let mut composed = String::new();
+    tree.render(&mut composed);
+    let source = format!("{PRELUDE}\n{composed}");
+
+    let dir = std::env::temp_dir().join(format!(
+        "ridlc_corpus_composed_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock reads a time after the unix epoch")
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).expect("the temp dir is created");
+    let source_path = dir.join("composed.rs");
+    let meta_path = dir.join("composed.rmeta");
+    std::fs::write(&source_path, &source).expect("the composed source is written");
+
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+
+    let succeeded = status.success();
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        succeeded,
+        "the composed workspace-two-members Rust must compile, source:\n{source}"
+    );
+}

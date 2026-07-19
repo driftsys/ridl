@@ -1366,7 +1366,7 @@ fn whole_file() -> lt::Range {
     range((0, 0), (1_000, 0))
 }
 
-/// The server advertises the inlay-hint capability, closing the E1.15 LSP
+/// The server advertises the inlay-hint capability, closing the E1.16 LSP
 /// feature set.
 #[test]
 fn advertises_the_inlay_hint_capability() {

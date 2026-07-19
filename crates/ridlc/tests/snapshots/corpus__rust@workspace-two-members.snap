@@ -26,12 +26,12 @@ impl Default for Temperature {
 /// Instrument-cluster reading, carrying a speed from the common package.
 #[repr(C)]
 pub struct ClusterReading {
-    pub speed: veh::common::Speed,
+    pub speed: crate::veh::common::Speed,
 }
 impl Default for ClusterReading {
     fn default() -> Self {
         ClusterReading {
-            speed: veh::common::Speed::default(),
+            speed: crate::veh::common::Speed::default(),
         }
     }
 }
