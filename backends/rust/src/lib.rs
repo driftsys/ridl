@@ -17,12 +17,13 @@
 //! emitted for a type only when every field it transitively contains is
 //! derivable. The IR `InitValue.derivable` flag on a composite-typed field is a
 //! one-level flag, so same-package composite references are re-checked by
-//! recursion rather than trusted (see [`defaults`]).
+//! recursion rather than trusted (see the `defaults` module).
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use ridl_ir::v1;
-use std::collections::HashMap;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 
 mod c_header;
 mod defaults;
@@ -47,7 +48,7 @@ pub struct GenerateError {
 /// Generates Rust source and the extern-C header for `package`.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking. Every
-/// emitted identifier is produced through [`ident`], which escapes Rust
+/// emitted identifier is produced through `ident`, which escapes Rust
 /// keywords as raw identifiers, so a typl name that happens to be a Rust
 /// keyword (for example a field named `override`) is emitted as `r#override`
 /// rather than panicking `format_ident!`. As a final guard the assembled token
@@ -98,6 +99,12 @@ pub fn generate(package: &v1::Package) -> Result<Generated, GenerateError> {
 /// backend generates one package at a time).
 pub(crate) struct Ctx<'a> {
     decls: HashMap<&'a str, &'a v1::Decl>,
+    /// The set of declaration names currently being expanded by the
+    /// Default-derivation recursion. It guards against a cyclic IR: a
+    /// same-package composite that reaches itself would otherwise recurse
+    /// forever (C1b). The recursion inserts a name on entry and removes it on
+    /// exit, so between top-level declarations the set is empty.
+    visiting: RefCell<HashSet<String>>,
 }
 
 impl<'a> Ctx<'a> {
@@ -107,13 +114,29 @@ impl<'a> Ctx<'a> {
             .iter()
             .map(|decl| (decl.name.as_str(), decl))
             .collect();
-        Ctx { decls }
+        Ctx {
+            decls,
+            visiting: RefCell::new(HashSet::new()),
+        }
     }
 
     /// The declaration named `name` in this package, or `None` for a
     /// cross-package (dotted) or unknown reference.
     pub(crate) fn lookup(&self, name: &str) -> Option<&'a v1::Decl> {
         self.decls.get(name).copied()
+    }
+
+    /// Marks `name` as being expanded by the Default recursion. Returns `true`
+    /// when it was newly inserted, `false` when it is already on the expansion
+    /// stack — a reference cycle that the caller must not recurse into (C1b).
+    pub(crate) fn enter_default(&self, name: &str) -> bool {
+        self.visiting.borrow_mut().insert(name.to_string())
+    }
+
+    /// Removes `name` from the Default-recursion expansion stack, balancing a
+    /// prior [`enter_default`](Ctx::enter_default) that returned `true`.
+    pub(crate) fn leave_default(&self, name: &str) {
+        self.visiting.borrow_mut().remove(name);
     }
 }
 
@@ -165,9 +188,13 @@ fn emit_const(ctx: &Ctx, decl: &v1::Decl, cd: &v1::ConstDef) -> TokenStream {
     let vis = vis_tokens(decl.visibility);
     let name = ident(&decl.name);
 
-    // A regex constant declares no type; it holds the pattern source text.
+    // A regex constant declares no type; it holds the pattern source text. The
+    // IR stores that text with its typl `/…/` delimiters, which are syntax, not
+    // pattern content, so they are stripped before the `&str` value is emitted:
+    // the const holds the pattern a consumer can feed to a regex engine (M1).
     if let Some(regex) = &cd.regex {
-        return quote! { #attrs #vis const #name: &str = #regex; };
+        let pattern = strip_regex_delimiters(regex);
+        return quote! { #attrs #vis const #name: &str = #pattern; };
     }
 
     let Some(type_ref) = cd.type_ref.as_deref() else {
@@ -466,17 +493,30 @@ fn primitive_tokens(prim: i32) -> TokenStream {
     }
 }
 
-/// A resolved type reference: a bare `Ident` for a same-package name, a `::`
-/// path for a cross-package `pkg.Name` reference (typl §3.2). The dotted path
-/// maps directly to Rust module path segments.
+/// A resolved type reference: a bare `Ident` for a same-package name, a
+/// `crate::`-anchored path for a cross-package `pkg.Name` reference (typl §3.2).
+/// The dotted package path maps directly to Rust module path segments. The
+/// `crate::` anchor lets a consumer compose several generated packages as
+/// sibling modules rooted at the crate — `crate::veh::common::Speed` resolves
+/// from any module, whereas a bare `veh::common::Speed` only resolves from the
+/// crate root (I4).
 pub(crate) fn type_path(reference: &str) -> TokenStream {
     if reference.contains('.') {
         let segments = reference.split('.').map(ident);
-        quote! { #(#segments)::* }
+        quote! { crate #(:: #segments)* }
     } else {
         let id = ident(reference);
         quote! { #id }
     }
+}
+
+/// Strips a regex literal's surrounding `/…/` delimiters, leaving the pattern
+/// body. A value without both delimiters is returned unchanged.
+fn strip_regex_delimiters(regex: &str) -> &str {
+    regex
+        .strip_prefix('/')
+        .and_then(|rest| rest.strip_suffix('/'))
+        .unwrap_or(regex)
 }
 
 // ---------------------------------------------------------------------------

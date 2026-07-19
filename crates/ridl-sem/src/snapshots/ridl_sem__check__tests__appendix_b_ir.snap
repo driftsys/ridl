@@ -933,7 +933,7 @@ expression: "v1::to_json_pretty(&checked.ir)"
               }
             }
           ],
-          "fixed_layout": true
+          "fixed_layout": false
         }
       }
     }
