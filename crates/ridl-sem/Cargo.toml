@@ -12,6 +12,7 @@ ridl-core = { path = "../ridl-core" }
 ridl-ir = { path = "../ridl-ir" }
 ridl-syntax = { path = "../ridl-syntax" }
 rowan.workspace = true
+salsa.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
