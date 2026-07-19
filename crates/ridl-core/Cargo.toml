@@ -12,6 +12,7 @@ ridl-syntax = { path = "../ridl-syntax" }
 rowan.workspace = true
 salsa.workspace = true
 serde.workspace = true
+toml.workspace = true
 
 [dev-dependencies]
 insta.workspace = true

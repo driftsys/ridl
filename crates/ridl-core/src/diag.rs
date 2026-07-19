@@ -18,8 +18,9 @@
 //!   after the general form's own "shared form namespace". This module is the
 //!   SSOT the error index (E4.2) will read; the full FORM catalogue is defined
 //!   here as [`FORM_CATALOG`] even for codes no pass emits yet.
-//! - `MANI-…` — manifest, lockfile, cache, and fetch. Introduced by later
-//!   tasks (E1.5, E1.6); not defined here yet.
+//! - `MANI-…` — manifest, lockfile, cache, and fetch. The manifest `0xx` codes
+//!   are defined here as [`MANI_CATALOG`] (E1.5); the distribution `1xx` codes
+//!   (lockfile, cache, fetch) arrive with E1.6.
 //!
 //! # The [`FileId`] bridge
 //!
@@ -90,6 +91,26 @@ impl DiagCode {
     pub const TYPL_108: DiagCode = DiagCode("TYPL-108");
     /// Timing annotation or duration literal in a typl context (typl §16.4).
     pub const TYPL_302: DiagCode = DiagCode("TYPL-302");
+
+    // --- MANI manifest (0xx) — ADR-0007 decision 2, ADR-0002 §4 ---
+    /// The `ridl.toml` text is not valid TOML.
+    pub const MANI_001: DiagCode = DiagCode("MANI-001");
+    /// The manifest declares both `[package]` and `[workspace]`; the two modes
+    /// are mutually exclusive (ADR-0002 §4).
+    pub const MANI_002: DiagCode = DiagCode("MANI-002");
+    /// The manifest declares neither `[package]` nor `[workspace]` (ADR-0002 §4).
+    pub const MANI_003: DiagCode = DiagCode("MANI-003");
+    /// A workspace member's own manifest declares `[workspace]`; nested
+    /// workspaces are forbidden (ADR-0002 §4). Defined here, but emitted by the
+    /// package loader (E1.3, task 8) when a member manifest is read — a single
+    /// manifest parsed in isolation cannot know it is a member.
+    pub const MANI_004: DiagCode = DiagCode("MANI-004");
+    /// An unrecognized key in the manifest or one of its sections (warning).
+    pub const MANI_005: DiagCode = DiagCode("MANI-005");
+    /// The package name is not lowercase dot-separated segments (ADR-0002 §1).
+    pub const MANI_006: DiagCode = DiagCode("MANI-006");
+    /// An `[imports]` value is not a valid import URL.
+    pub const MANI_007: DiagCode = DiagCode("MANI-007");
 }
 
 /// A diagnostic's severity. Warnings and info diagnostics arrive with later
@@ -263,6 +284,49 @@ pub const FORM_CATALOG: &[CatalogEntry] = &[
     },
 ];
 
+/// The manifest MANI catalogue (ADR-0007 decision 2): the manifest `0xx` codes
+/// the `ridl.toml` parser (E1.5) and the package loader (E1.3) emit. Listed here
+/// even for `MANI-004`, whose emission site is the loader rather than the
+/// standalone parser, so the error index (E4.2) has one authoritative source.
+/// The distribution `1xx` codes (lockfile, cache, fetch) arrive with E1.6.
+pub const MANI_CATALOG: &[CatalogEntry] = &[
+    CatalogEntry {
+        code: DiagCode::MANI_001,
+        severity: Severity::Error,
+        summary: "invalid manifest TOML",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_002,
+        severity: Severity::Error,
+        summary: "manifest declares both `[package]` and `[workspace]`",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_003,
+        severity: Severity::Error,
+        summary: "manifest declares neither `[package]` nor `[workspace]`",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_004,
+        severity: Severity::Error,
+        summary: "nested workspace: a member manifest declares `[workspace]`",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_005,
+        severity: Severity::Warning,
+        summary: "unknown manifest key",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_006,
+        severity: Severity::Error,
+        summary: "invalid package name",
+    },
+    CatalogEntry {
+        code: DiagCode::MANI_007,
+        severity: Severity::Error,
+        summary: "invalid import URL",
+    },
+];
+
 /// Polishes a raw parser message into the house diagnostic style —
 /// description-first, with backticked names (fixes issue #102). Most parser
 /// messages are already house-style and pass through unchanged; the parser's
@@ -369,5 +433,33 @@ mod tests {
                 .all(|entry| entry.severity == Severity::Error),
             "every FORM code is an error",
         );
+    }
+
+    #[test]
+    fn mani_catalog_is_complete_and_ordered() {
+        let codes: Vec<&str> = MANI_CATALOG
+            .iter()
+            .map(|entry| entry.code.as_str())
+            .collect();
+        assert_eq!(
+            codes,
+            vec![
+                "MANI-001", "MANI-002", "MANI-003", "MANI-004", "MANI-005", "MANI-006", "MANI-007",
+            ],
+        );
+        // Every MANI code is an error except the unknown-key warning (MANI-005).
+        for entry in MANI_CATALOG {
+            let expected = if entry.code == DiagCode::MANI_005 {
+                Severity::Warning
+            } else {
+                Severity::Error
+            };
+            assert_eq!(
+                entry.severity,
+                expected,
+                "unexpected severity for {}",
+                entry.code.as_str(),
+            );
+        }
     }
 }
