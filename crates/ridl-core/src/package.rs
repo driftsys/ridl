@@ -1,11 +1,13 @@
 //! The salsa package model (docs/ROADMAP.md epic E1.3, ADR-0002 §1).
 //!
 //! A **package is a directory** (ADR-0002 §1): a named set of [`InputFile`]s
-//! loaded as one unit. A [`Workspace`] holds every loaded [`Package`] plus the
-//! `[imports]` map pre-merged per ADR-0002 §5. Both are salsa inputs — the
-//! filesystem loader ([`load_workspace`](crate::workspace::load_workspace),
-//! behind the `fs` feature) builds them; queries downstream read them through
-//! the database, so an edit to one file invalidates only that file's parse.
+//! loaded as one unit, carrying its own manifest's `[imports]`. A
+//! [`Workspace`] holds every loaded [`Package`] plus the workspace root's
+//! `[imports]`, kept separate so the ADR-0002 §5 resolution order stays
+//! expressible per member. Both are salsa inputs — the filesystem loader
+//! ([`load_workspace`](crate::workspace::load_workspace), behind the `fs`
+//! feature) builds them; queries downstream read them through the database,
+//! so an edit to one file invalidates only that file's parse.
 //!
 //! This module touches no filesystem: it defines the inputs, the
 //! [`package_of`] lookup query, and the pure package-declaration reader the
@@ -30,23 +32,33 @@ pub enum PackageOrigin {
     Std,
 }
 
-/// One loaded package: its dotted name (e.g. `veh.common`), its files, and
-/// where it came from.
+/// One loaded package: its dotted name (e.g. `veh.common`), its files, where
+/// it came from, and its own manifest's `[imports]` map.
+///
+/// `imports` is ADR-0002 §5 step 2: the `[imports]` of the manifest governing
+/// this package's directory tree. It shadows the workspace `[imports]` for
+/// this package only — a member's pin is never visible to a sibling member.
+/// Every package loaded from one manifest's tree (the root and its
+/// subdirectory packages) carries that manifest's map; a single-file package
+/// and `ridl.std` carry an empty map.
 #[salsa::input(debug)]
 pub struct Package {
     pub name: String,
     #[returns(ref)]
     pub files: Vec<InputFile>,
     pub origin: PackageOrigin,
+    #[returns(ref)]
+    pub imports: BTreeMap<String, String>,
 }
 
-/// Every loaded package plus the merged `[imports]` map.
+/// Every loaded package plus the workspace root's own `[imports]` map.
 ///
-/// The map holds ADR-0002 §5 steps 2–3 pre-merged: the workspace root's
-/// `[imports]` is the base and each member's package `[imports]` is inserted
-/// over it, so a member entry shadows the workspace entry for the same logical
-/// name. Step 1 (workspace members) is checked against `packages` before this
-/// map is consulted.
+/// `imports` is ADR-0002 §5 step 3 only — the shared default for every
+/// member. It is **not** merged with member maps: the task 9 resolver walks
+/// the order itself — workspace member ([`package_of`]) → the referencing
+/// package's own [`Package::imports`] → this map → error. In a standalone
+/// package load the manifest's `[imports]` ride on the packages and this map
+/// is empty.
 #[salsa::input(debug)]
 pub struct Workspace {
     #[returns(ref)]
@@ -118,12 +130,14 @@ mod tests {
             "veh.common".to_string(),
             vec![file(&db, "veh-common/a.typl", "package veh.common")],
             PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
         );
         let cluster = Package::new(
             &db,
             "veh.cluster".to_string(),
             vec![file(&db, "veh-cluster/b.typl", "package veh.cluster")],
             PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
         );
         let ws = Workspace::new(&db, vec![common, cluster], BTreeMap::new());
 

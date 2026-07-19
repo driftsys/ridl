@@ -16,9 +16,9 @@
 //! TYPL-002 (the task 20 CLI contract).
 //!
 //! Problems in loaded content — manifest diagnostics, the law violations, a
-//! nested workspace (MANI-004), a broken member — are accumulated
-//! [`Diagnostic`]s, never an error return (ADR-0004 §5). `std::io::Error` is
-//! reserved for real filesystem failures.
+//! nested workspace (MANI-004), a broken member (MANI-008), a file that is
+//! not valid UTF-8 — are accumulated [`Diagnostic`]s, never an error return
+//! (ADR-0004 §5). `std::io::Error` is reserved for real filesystem failures.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -53,10 +53,13 @@ pub struct LoadedWorkspace {
 ///   above the directory is the root; a `[package]` manifest loads that
 ///   package's directory tree, a `[workspace]` manifest loads every member.
 ///
-/// The workspace `[imports]` map is pre-merged per ADR-0002 §5: the workspace
-/// root's `[imports]` is the base and each member's `[imports]` is inserted
-/// over it (members in declaration order), so a member entry shadows the
-/// workspace entry for the same logical name.
+/// `[imports]` maps stay scoped per ADR-0002 §5: each [`Package`] carries the
+/// `[imports]` of the manifest governing its directory tree (step 2), and
+/// [`Workspace::imports`] holds only the workspace root's `[imports]` (step
+/// 3, the shared default). Nothing is merged — a member's pin never leaks to
+/// a sibling member; the task 9 resolver walks the order itself. In a
+/// standalone package load the manifest's `[imports]` ride on its packages
+/// and [`Workspace::imports`] is empty.
 pub fn load_workspace(db: &mut RidlDatabase, entry: &Path) -> io::Result<LoadedWorkspace> {
     let mut loader = Loader::default();
 
@@ -82,7 +85,7 @@ pub fn load_workspace(db: &mut RidlDatabase, entry: &Path) -> io::Result<LoadedW
         ));
     }
 
-    let workspace = Workspace::new(&*db, loader.packages, loader.imports);
+    let workspace = Workspace::new(&*db, loader.packages, loader.workspace_imports);
     Ok(LoadedWorkspace {
         workspace,
         diagnostics: loader.diagnostics,
@@ -97,13 +100,19 @@ fn find_manifest_root(dir: &Path) -> Option<PathBuf> {
         .map(Path::to_path_buf)
 }
 
+/// One loaded file plus its `package` declarations (dotted name, source
+/// range), as [`Loader::load_file`] returns them.
+type LoadedFile = (InputFile, Vec<(String, TextRange)>);
+
 /// The accumulating state of one [`load_workspace`] run.
 #[derive(Default)]
 struct Loader {
     sources: SourceMap,
     diagnostics: Vec<Diagnostic>,
     packages: Vec<Package>,
-    imports: BTreeMap<String, String>,
+    /// The workspace root's own `[imports]` (ADR-0002 §5 step 3). Stays empty
+    /// in a standalone package load and in single-file mode.
+    workspace_imports: BTreeMap<String, String>,
 }
 
 impl Loader {
@@ -120,13 +129,14 @@ impl Loader {
         };
         match kind {
             ManifestKind::Package { name, .. } => {
-                self.imports.extend(imports);
-                self.load_package_tree(db, root, &name)?;
+                // A standalone package: the manifest's `[imports]` ride on its
+                // packages; the workspace map stays empty.
+                self.load_package_tree(db, root, &name, &imports)?;
             }
             ManifestKind::Workspace { members } => {
-                // ADR-0002 §5 step 3: the workspace `[imports]` is the base;
-                // member `[imports]` (step 2) are inserted over it below.
-                self.imports.extend(imports);
+                // ADR-0002 §5 step 3: the workspace root's `[imports]` is the
+                // shared default. Member maps are never merged into it.
+                self.workspace_imports = imports;
                 for member in &members {
                     self.load_member(db, root, member, file_id, &text)?;
                 }
@@ -148,11 +158,10 @@ impl Loader {
     ) -> io::Result<()> {
         let manifest_path = workspace_root.join(member).join("ridl.toml");
         if !manifest_path.is_file() {
-            // T7 records member paths unvalidated; the loader validates them.
-            // No MANI code is cataloged for a broken member path, so the
-            // diagnostic carries the `NONE` sentinel.
+            // T7 records member paths unvalidated; the loader validates them
+            // against the filesystem (MANI-008).
             self.diagnostics.push(error(
-                DiagCode::NONE,
+                DiagCode::MANI_008,
                 workspace_file,
                 member_entry_range(workspace_text, member),
                 format!("workspace member `{member}` has no `ridl.toml`"),
@@ -178,9 +187,10 @@ impl Loader {
                 ));
             }
             ManifestKind::Package { name, .. } => {
-                // ADR-0002 §5 step 2: member entries shadow the workspace base.
-                self.imports.extend(imports);
-                self.load_package_tree(db, &workspace_root.join(member), &name)?;
+                // ADR-0002 §5 step 2: the member's `[imports]` ride on the
+                // member's packages only — never merged into the workspace
+                // map, never visible to a sibling member.
+                self.load_package_tree(db, &workspace_root.join(member), &name, &imports)?;
             }
         }
         Ok(())
@@ -189,21 +199,28 @@ impl Loader {
     /// Loads the package rooted at `dir` under the package name `name`, then
     /// every subdirectory as its own package named by its path — the
     /// package↔directory law's "the name mirrors the directory path relative
-    /// to the manifest root" (ADR-0002 §1). Directories are visited in name
-    /// order; hidden directories and directories with their own `ridl.toml`
-    /// (separate package roots) are skipped.
+    /// to the manifest root" (ADR-0002 §1). Every package in the tree carries
+    /// `imports`, the governing manifest's `[imports]`. Directories are
+    /// visited in name order; hidden directories, symlinked directories
+    /// (following them could revisit the tree in a cycle), and directories
+    /// with their own `ridl.toml` (separate package roots) are skipped.
     fn load_package_tree(
         &mut self,
         db: &mut RidlDatabase,
         dir: &Path,
         name: &str,
+        imports: &BTreeMap<String, String>,
     ) -> io::Result<()> {
         let mut typl_files = Vec::new();
         let mut subdirs = Vec::new();
         for entry in fs::read_dir(dir)? {
-            let path = entry?.path();
+            let entry = entry?;
+            let path = entry.path();
+            let is_symlink = entry.file_type()?.is_symlink();
             if path.is_dir() {
-                subdirs.push(path);
+                if !is_symlink {
+                    subdirs.push(path);
+                }
             } else if path.extension().is_some_and(|ext| ext == "typl") {
                 typl_files.push(path);
             }
@@ -214,14 +231,16 @@ impl Loader {
         if !typl_files.is_empty() {
             let mut files = Vec::new();
             for path in &typl_files {
-                let (input, _) = self.load_file(db, path, Some(name))?;
-                files.push(input);
+                if let Some((input, _)) = self.load_file(db, path, Some(name))? {
+                    files.push(input);
+                }
             }
             self.packages.push(Package::new(
                 &*db,
                 name.to_string(),
                 files,
                 PackageOrigin::WorkspaceMember,
+                imports.clone(),
             ));
         }
 
@@ -233,17 +252,22 @@ impl Loader {
             if dir_name.starts_with('.') || subdir.join("ridl.toml").is_file() {
                 continue;
             }
-            self.load_package_tree(db, &subdir, &format!("{name}.{dir_name}"))?;
+            self.load_package_tree(db, &subdir, &format!("{name}.{dir_name}"), imports)?;
         }
         Ok(())
     }
 
     /// Loads one bare `.typl` file as a synthetic package named from its
     /// declared package — single-file mode, exempt from TYPL-002 (TYPL-001
-    /// still applies). With no usable declaration the parser has already
-    /// reported FORM-104, and the file stem names the package.
+    /// still applies). With no usable declaration the file stem names the
+    /// package; the parser's FORM-104 for the missing declaration lives on
+    /// `parse_file(..).errors()`, like every parse error — loader diagnostics
+    /// carry only the manifest and law findings.
     fn load_single_file(&mut self, db: &mut RidlDatabase, path: &Path) -> io::Result<()> {
-        let (input, decls) = self.load_file(db, path, None)?;
+        let Some((input, decls)) = self.load_file(db, path, None)? else {
+            // A non-UTF8 file: the diagnostic is recorded, nothing loads.
+            return Ok(());
+        };
         let name = decls
             .first()
             .map(|(name, _)| name.clone())
@@ -258,6 +282,7 @@ impl Loader {
             name,
             vec![input],
             PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
         ));
         Ok(())
     }
@@ -266,15 +291,33 @@ impl Loader {
     /// salsa query, and enforces the package↔directory law: every `package`
     /// declaration after the first is TYPL-001; when `expected` is given and
     /// the first declared name differs, TYPL-002 with the declaration line as
-    /// the primary span. Returns the input plus the file's declarations.
+    /// the primary span. Returns the input plus the file's declarations, or
+    /// `None` for a file that is not valid UTF-8 — recorded as a diagnostic
+    /// and skipped, never an abort of the whole load (ADR-0004 §5).
     fn load_file(
         &mut self,
         db: &mut RidlDatabase,
         path: &Path,
         expected: Option<&str>,
-    ) -> io::Result<(InputFile, Vec<(String, TextRange)>)> {
-        let text = fs::read_to_string(path)?;
+    ) -> io::Result<Option<LoadedFile>> {
         let path_str = path_string(path);
+        let text = match fs::read_to_string(path) {
+            Ok(text) => text,
+            Err(err) if err.kind() == io::ErrorKind::InvalidData => {
+                // No text means no spans; the diagnostic points at the start
+                // of the interned (empty) file. No code is cataloged for a
+                // broken source encoding, so it carries the `NONE` sentinel.
+                let file_id = self.sources.file_id(&path_str, "");
+                self.diagnostics.push(error(
+                    DiagCode::NONE,
+                    file_id,
+                    byte_range(0, 0),
+                    format!("`{path_str}` is not valid UTF-8; the file is skipped"),
+                ));
+                return Ok(None);
+            }
+            Err(err) => return Err(err),
+        };
         let file_id = self.sources.file_id(&path_str, &text);
         let input = InputFile::new(&*db, path_str, text);
 
@@ -304,7 +347,7 @@ impl Loader {
                 ),
             ));
         }
-        Ok((input, decls))
+        Ok(Some((input, decls)))
     }
 }
 
@@ -426,6 +469,16 @@ mod tests {
         assert_eq!(packages.len(), 1, "one package directory, one package");
         assert_eq!(packages[0].name(&db).as_str(), "veh.common");
         assert_eq!(*packages[0].origin(&db), PackageOrigin::WorkspaceMember);
+        assert_eq!(
+            packages[0].imports(&db),
+            &BTreeMap::new(),
+            "a manifest without `[imports]` yields an empty package map",
+        );
+        assert_eq!(
+            loaded.workspace.imports(&db),
+            &BTreeMap::new(),
+            "a standalone load leaves the workspace map empty",
+        );
 
         let files = packages[0].files(&db).clone();
         assert_eq!(files.len(), 2, "both .typl files load");
@@ -529,11 +582,12 @@ mod tests {
         );
     }
 
-    /// (d) Workspace mode loads every member and pre-merges `[imports]` per
-    /// ADR-0002 §5: the member entry shadows the workspace entry for the same
-    /// logical name; workspace-only and member-only entries survive.
+    /// (d) Workspace mode loads every member and keeps `[imports]` scoped per
+    /// ADR-0002 §5: each member package carries only its own manifest's map
+    /// (step 2 — a member's pin never leaks to a sibling), and the workspace
+    /// map holds only the root's `[imports]` (step 3), never a merge.
     #[test]
-    fn workspace_mode_loads_members_and_merges_imports() {
+    fn workspace_mode_scopes_imports_per_package() {
         let dir = TempDir::new("workspace");
         dir.write(
             "ridl.toml",
@@ -546,7 +600,7 @@ mod tests {
         dir.write("m-one/one.typl", "package veh.one\ntype A: m\n");
         dir.write(
             "m-two/ridl.toml",
-            "[package]\nname = \"veh.two\"\nversion = \"1.0.0\"\n",
+            "[package]\nname = \"veh.two\"\nversion = \"1.0.0\"\n\n[imports]\n\"two.only\" = \"https://registry.example.com/two/only@v1.0.0\"\n",
         );
         dir.write("m-two/two.typl", "package veh.two\ntype B: s\n");
 
@@ -562,23 +616,51 @@ mod tests {
             "both members load, in member order"
         );
 
-        let imports = loaded.workspace.imports(&db).clone();
+        // Step 3: the workspace map is the root's `[imports]`, un-merged —
+        // the member pin for `third.dep` must NOT overwrite the root's.
+        let workspace_imports = loaded.workspace.imports(&db).clone();
         assert_eq!(
-            imports.get("third.dep").map(String::as_str),
-            Some("https://mirror.example.com/third/dep@v2.0.0"),
-            "the member `[imports]` entry shadows the workspace entry (§5 step 2 over step 3)",
+            workspace_imports.get("third.dep").map(String::as_str),
+            Some("https://registry.example.com/third/dep@v1.0.0"),
+            "the workspace map keeps the root pin, not the member pin",
         );
         assert_eq!(
-            imports.get("shared.util").map(String::as_str),
+            workspace_imports.get("shared.util").map(String::as_str),
             Some("https://registry.example.com/shared/util@v1.0.0"),
-            "a workspace-only entry survives the merge",
+        );
+        assert_eq!(workspace_imports.len(), 2, "no member entry leaks upward");
+
+        // Step 2: each member package carries its own manifest's map only.
+        let one_imports = packages[0].imports(&db).clone();
+        assert_eq!(
+            one_imports.get("third.dep").map(String::as_str),
+            Some("https://mirror.example.com/third/dep@v2.0.0"),
+            "the member's own pin shadows the workspace default for it alone",
         );
         assert_eq!(
-            imports.get("member.only").map(String::as_str),
+            one_imports.get("member.only").map(String::as_str),
             Some("https://registry.example.com/member/only@v1.0.0"),
-            "a member-only entry survives the merge",
         );
-        assert_eq!(imports.len(), 3);
+        assert!(
+            !one_imports.contains_key("two.only"),
+            "a sibling's pin never leaks into another member",
+        );
+        assert_eq!(one_imports.len(), 2, "no workspace entry is merged in");
+
+        let two_imports = packages[1].imports(&db).clone();
+        assert_eq!(
+            two_imports.get("two.only").map(String::as_str),
+            Some("https://registry.example.com/two/only@v1.0.0"),
+        );
+        assert!(
+            !two_imports.contains_key("member.only"),
+            "the sibling's pin never leaks into this member",
+        );
+        assert!(
+            !two_imports.contains_key("third.dep"),
+            "neither the root default nor the sibling's pin is merged in",
+        );
+        assert_eq!(two_imports.len(), 1);
     }
 
     /// (e) A member manifest that declares `[workspace]` is a nested
@@ -620,11 +702,10 @@ mod tests {
         assert_eq!(names, vec!["veh.good"], "the nested member loads nothing");
     }
 
-    /// A workspace member path with no manifest is reported (uncoded — no
-    /// MANI code is cataloged for it) and skipped; the rest of the workspace
-    /// still loads.
+    /// A workspace member path with no manifest is MANI-008 and skipped; the
+    /// rest of the workspace still loads.
     #[test]
-    fn a_missing_member_directory_is_reported_and_skipped() {
+    fn mani_008_on_a_missing_member_directory() {
         let dir = TempDir::new("missing-member");
         dir.write(
             "ridl.toml",
@@ -638,11 +719,8 @@ mod tests {
 
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the workspace loads");
-        assert_eq!(loaded.diagnostics.len(), 1);
-        assert!(
-            loaded.diagnostics[0].code.is_empty(),
-            "no MANI code is cataloged"
-        );
+        assert_eq!(codes(&loaded.diagnostics), vec!["MANI-008"]);
+        assert_eq!(loaded.diagnostics[0].severity, Severity::Error);
         assert!(loaded.diagnostics[0].message.contains("m-gone"));
 
         let packages = loaded.workspace.packages(&db).clone();
@@ -651,11 +729,15 @@ mod tests {
     }
 
     /// A subdirectory of a package root is its own package, named by its
-    /// directory path relative to the manifest root (ADR-0002 §1).
+    /// directory path relative to the manifest root (ADR-0002 §1); every
+    /// package in the tree carries the governing manifest's `[imports]`.
     #[test]
     fn a_subdirectory_is_its_own_package_named_by_its_path() {
         let dir = TempDir::new("subdir");
-        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n[imports]\n\"some.dep\" = \"https://registry.example.com/some/dep@v1.0.0\"\n",
+        );
         dir.write("a.typl", "package veh.common\ntype A: m\n");
         dir.write("types/t.typl", "package veh.common.types\ntype T: s\n");
 
@@ -666,6 +748,65 @@ mod tests {
         let packages = loaded.workspace.packages(&db).clone();
         let names: Vec<String> = packages.iter().map(|p| p.name(&db).clone()).collect();
         assert_eq!(names, vec!["veh.common", "veh.common.types"]);
+        for package in &packages {
+            assert_eq!(
+                package.imports(&db).get("some.dep").map(String::as_str),
+                Some("https://registry.example.com/some/dep@v1.0.0"),
+                "every package in the manifest's tree carries its `[imports]`",
+            );
+        }
+        assert_eq!(
+            loaded.workspace.imports(&db),
+            &BTreeMap::new(),
+            "a standalone load leaves the workspace map empty",
+        );
+    }
+
+    /// A symlinked directory is not followed by the tree walk — following it
+    /// could revisit the tree in a cycle and duplicate packages endlessly.
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_directory_is_not_followed() {
+        let dir = TempDir::new("symlink");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.typl", "package veh.common\ntype A: m\n");
+        // A symlink pointing back at the package root: a cycle.
+        std::os::unix::fs::symlink(dir.path(), dir.path().join("loop"))
+            .expect("create the directory symlink");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 1, "the symlink cycle adds no packages");
+        assert_eq!(packages[0].name(&db).as_str(), "veh.common");
+    }
+
+    /// A `.typl` file that is not valid UTF-8 becomes a diagnostic and is
+    /// skipped; the rest of the package still loads (ADR-0004 §5 — never a
+    /// hard error for content problems).
+    #[test]
+    fn a_non_utf8_file_is_reported_and_skipped() {
+        let dir = TempDir::new("non-utf8");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.typl", "package veh.common\ntype A: m\n");
+        fs::write(dir.path().join("bad.typl"), [0xFF, 0xFE, 0x00, 0x9F])
+            .expect("write the non-UTF8 fixture");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the load continues");
+        assert_eq!(loaded.diagnostics.len(), 1);
+        assert!(
+            loaded.diagnostics[0].message.contains("UTF-8"),
+            "the diagnostic names the encoding problem",
+        );
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 1);
+        let files = packages[0].files(&db).clone();
+        assert_eq!(files.len(), 1, "only the valid file loads");
+        assert!(files[0].path(&db).ends_with("a.typl"));
     }
 
     /// (g) Single-file mode: a bare `.typl` file with no manifest up the tree

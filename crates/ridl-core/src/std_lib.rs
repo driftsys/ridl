@@ -26,7 +26,13 @@ pub fn std_package(db: &mut RidlDatabase) -> Package {
         return package;
     }
     let file = InputFile::new(&*db, RIDL_STD_PATH.to_string(), RIDL_STD_SOURCE.to_string());
-    let package = Package::new(&*db, "ridl.std".to_string(), vec![file], PackageOrigin::Std);
+    let package = Package::new(
+        &*db,
+        "ridl.std".to_string(),
+        vec![file],
+        PackageOrigin::Std,
+        std::collections::BTreeMap::new(),
+    );
     let _ = db.std_package_cache.set(package);
     package
 }
@@ -46,6 +52,10 @@ mod tests {
 
         assert_eq!(package.name(&db).as_str(), "ridl.std");
         assert_eq!(*package.origin(&db), PackageOrigin::Std);
+        assert!(
+            package.imports(&db).is_empty(),
+            "the built-in package has no manifest and no imports",
+        );
 
         let files = package.files(&db);
         assert_eq!(files.len(), 1, "ridl.std is a single embedded file");
