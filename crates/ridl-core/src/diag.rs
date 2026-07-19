@@ -277,6 +277,16 @@ impl DiagCode {
     /// declaration-start position in a `.ridl` parse. Emitted by the parser
     /// (E2 task 2).
     pub const RIDL_403: DiagCode = DiagCode("RIDL-403");
+    /// Duplicate `service` name across the whole workspace — the service
+    /// catalog is a flat global namespace (ridl §14.5, §16.4). Emitted
+    /// workspace-wide by `service_catalog` (E2 task 8). The reference numbers
+    /// it in the 1xx band while listing it under the §16.4 evolution/profile
+    /// table — a documented anomaly kept as written (ADR-0008 decision 6).
+    pub const RIDL_140: DiagCode = DiagCode("RIDL-140");
+    /// A `service` names a type that is not an `interface`, and has no inline
+    /// shape (ridl §14.5, §16.4). Emitted per-package by the checker (E2 task
+    /// 8). Kept in the 1xx band per ADR-0008 decision 6 (see RIDL-140).
+    pub const RIDL_141: DiagCode = DiagCode("RIDL-141");
 
     // --- MANI manifest (0xx) — ADR-0007 decision 2, ADR-0002 §4 ---
     /// The `ridl.toml` text is not valid TOML.

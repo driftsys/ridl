@@ -158,6 +158,11 @@ pub enum SyntaxKind {
     PathExpr,
     ParenExpr,
     LiteralExpr,
+    // Nodes of the ridl service grammar (`family.ungram`, epic E2.13 — ridl
+    // reference §14.5). `service_def` is authored by E2 task 8 (absent from
+    // Appendix C).
+    ServiceDef,
+    DottedName,
     /// A recovery node: error recovery wraps the tokens it skips in one of
     /// these, so broken input still produces a lossless tree. It is the one
     /// node kind with no rule in `family.ungram`, and the last variant — the

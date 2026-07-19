@@ -1,0 +1,23 @@
+package veh.services
+
+interface CruiseControl {
+  signal engaged : Boolean
+  command setLever(lever: LeverInput)
+}
+
+interface DoorControl {
+  signal locked : Boolean
+}
+
+interface MotorControl {
+  signal rpm : Rpm
+}
+
+service veh.adas.cruise      : CruiseControl
+service veh.body.doors       : DoorControl
+service veh.powertrain.motor : MotorControl
+
+service veh.hvac.cabin {
+  signal  temperature : Temperature @[1s..10s]
+  command setTarget(t: Temperature)
+}

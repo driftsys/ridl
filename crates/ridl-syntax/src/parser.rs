@@ -188,6 +188,7 @@ fn is_top_level_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::EnumsetKw
             | SyntaxKind::UnionKw
             | SyntaxKind::InterfaceKw
+            | SyntaxKind::ServiceKw
     )
 }
 
@@ -467,6 +468,7 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::UnionKw
                     | SyntaxKind::InterfaceKw,
                 ) => self.definition(),
+                Some(SyntaxKind::ServiceKw) => self.service_def(),
                 Some(SyntaxKind::ReservedWord) => {
                     if !self.profile_boundary_at_top_level() {
                         self.err_and_recover("at top level", is_top_level_start);
@@ -731,6 +733,18 @@ impl<'a> Parser<'a> {
             self.builder.finish_node();
             return;
         }
+        self.interface_body();
+        self.builder.finish_node();
+    }
+
+    /// The interaction-body loop shared by an `interface` body and a
+    /// `service` inline body (E2.13): the opening `{` has already been
+    /// consumed. Members are announced by the five interaction keywords, and
+    /// those keywords plus the top-level starters are the recovery sync
+    /// points, so garbage inside a body resynchronizes at the next
+    /// interaction. A `service` inline body runs the same structural pass as
+    /// an interface (ridl reference §14.5).
+    fn interface_body(&mut self) {
         loop {
             self.eat_trivia();
             match self.current() {
@@ -758,7 +772,7 @@ impl<'a> Parser<'a> {
                 // `}` ahead the guard fails and the keyword falls through to
                 // the unclosed-`{` arm below, exactly like the remaining
                 // top-level keywords (`package`, `import`, `internal`,
-                // `error`, `interface`).
+                // `error`, `interface`, `service`).
                 Some(kind)
                     if is_typl_definition_start(kind) && self.interface_body_close_ahead() =>
                 {
@@ -782,6 +796,59 @@ impl<'a> Parser<'a> {
                 }),
             }
         }
+    }
+
+    /// `ServiceDef = 'service' DottedName (':' interface_ref:PathType | '{'
+    /// (inline_members ','?)* '}')` — the global published declaration of an
+    /// interface (ridl reference §14.5, E2.13). The `service_def` production
+    /// is absent from Appendix C; E2 task 8 authors it. The named-shape form
+    /// names an interface after `:`; the inline form carries an interaction
+    /// body reusing [`Parser::interface_body`], so the checker runs the same
+    /// structural pass over it (RIDL-401/-402). A service takes no
+    /// `internal`/`error` modifiers — it is a global, published contract.
+    fn service_def(&mut self) {
+        self.start(SyntaxKind::ServiceDef);
+        self.bump(); // 'service'
+        self.dotted_name();
+        match self.current() {
+            Some(SyntaxKind::Colon) => {
+                self.bump(); // ':'
+                self.path_type();
+            }
+            Some(SyntaxKind::LBrace) => {
+                self.bump(); // '{'
+                self.interface_body();
+            }
+            _ => self.error_at_current(
+                "FORM-101",
+                "expected `:` and an interface, or `{` and an inline shape".to_string(),
+            ),
+        }
+        self.builder.finish_node();
+    }
+
+    /// `DottedName = 'ident' ('.' 'ident')*` — a dotted global service name
+    /// (`veh.adas.cruise`, ADR-0002 §1). Each segment is a plain identifier;
+    /// a trailing `.` with no segment after it is FORM-101.
+    fn dotted_name(&mut self) {
+        self.start(SyntaxKind::DottedName);
+        if self.at(SyntaxKind::Ident) {
+            self.bump();
+            while self.at(SyntaxKind::Dot) {
+                self.bump(); // '.'
+                if self.at(SyntaxKind::Ident) {
+                    self.bump();
+                } else {
+                    self.error_at_current(
+                        "FORM-101",
+                        "expected a name segment after `.`".to_string(),
+                    );
+                    break;
+                }
+            }
+        } else {
+            self.error_at_current("FORM-101", "expected a service name".to_string());
+        }
         self.builder.finish_node();
     }
 
@@ -803,7 +870,10 @@ impl<'a> Parser<'a> {
                 SyntaxKind::LBrace => depth += 1,
                 SyntaxKind::RBrace if depth == 0 => return true,
                 SyntaxKind::RBrace => depth -= 1,
-                SyntaxKind::PackageKw | SyntaxKind::ImportKw | SyntaxKind::InterfaceKw
+                SyntaxKind::PackageKw
+                | SyntaxKind::ImportKw
+                | SyntaxKind::InterfaceKw
+                | SyntaxKind::ServiceKw
                     if depth == 0 =>
                 {
                     return false;

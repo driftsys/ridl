@@ -30,7 +30,7 @@ use ridl_core::db::InputFile;
 use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
-use ridl_core::package::{Package, PackageOrigin, Workspace};
+use ridl_core::package::{Package, PackageOrigin, Workspace, service_catalog};
 use ridl_core::{
     Cache, Frozen, LoadedWorkspace, RidlDatabase, load_workspace, materialize_imports, parse_file,
     read_lockfile, std_package, write_lockfile,
@@ -396,6 +396,22 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
             &render_ids,
         ));
         checked.push(checked_pkg);
+    }
+
+    // The workspace-wide service catalog (E2.13): its RIDL-140 duplicate-name
+    // diagnostics span the whole workspace, so they carry FileIds indexing
+    // every file in package-then-file order — the order `service_catalog`
+    // interns them. Rebuild that order onto the render source map and remap,
+    // mirroring the per-package remap above.
+    let catalog = service_catalog(db, workspace, std);
+    if !catalog.diagnostics.is_empty() {
+        let mut catalog_render_ids = Vec::new();
+        for pkg in &packages {
+            for file in pkg.files(db) {
+                catalog_render_ids.push(sources.file_id(file.path(db), file.text(db)));
+            }
+        }
+        diagnostics.extend(remap_diagnostics(catalog.diagnostics, &catalog_render_ids));
     }
 
     Ok(Compiled {
