@@ -1,0 +1,8 @@
+package veh.err
+
+interface Broken {
+  struct Extra { a: Speed }
+  signal speed : Speed @10ms
+  enum Mode { A, B }
+  event changed : Speed
+}

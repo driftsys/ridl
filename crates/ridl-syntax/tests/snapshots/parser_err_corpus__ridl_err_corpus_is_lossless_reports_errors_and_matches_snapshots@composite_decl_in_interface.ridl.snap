@@ -1,0 +1,84 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+assertion_line: 75
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/composite_decl_in_interface.ridl
+---
+SourceFile@0..140
+  PackageDecl@0..15
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..15
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..15 "err"
+  Whitespace@15..17 "\n\n"
+  InterfaceDef@17..139
+    InterfaceKw@17..26 "interface"
+    Whitespace@26..27 " "
+    Name@27..33
+      Ident@27..33 "Broken"
+    Whitespace@33..34 " "
+    LBrace@34..35 "{"
+    Whitespace@35..38 "\n  "
+    ErrorNode@38..63
+      StructKw@38..44 "struct"
+      Whitespace@44..45 " "
+      Ident@45..50 "Extra"
+      Whitespace@50..51 " "
+      LBrace@51..52 "{"
+      Whitespace@52..53 " "
+      Ident@53..54 "a"
+      Colon@54..55 ":"
+      Whitespace@55..56 " "
+      Ident@56..61 "Speed"
+      Whitespace@61..62 " "
+      RBrace@62..63 "}"
+    Whitespace@63..66 "\n  "
+    SignalDef@66..92
+      SignalKw@66..72 "signal"
+      Whitespace@72..73 " "
+      Name@73..78
+        Ident@73..78 "speed"
+      Whitespace@78..79 " "
+      Colon@79..80 ":"
+      Whitespace@80..81 " "
+      PathType@81..86
+        QualifiedName@81..86
+          Ident@81..86 "Speed"
+      Whitespace@86..87 " "
+      Timing@87..92
+        At@87..88 "@"
+        Duration@88..92 "10ms"
+    Whitespace@92..95 "\n  "
+    ErrorNode@95..113
+      EnumKw@95..99 "enum"
+      Whitespace@99..100 " "
+      Ident@100..104 "Mode"
+      Whitespace@104..105 " "
+      LBrace@105..106 "{"
+      Whitespace@106..107 " "
+      Ident@107..108 "A"
+      Comma@108..109 ","
+      Whitespace@109..110 " "
+      Ident@110..111 "B"
+      Whitespace@111..112 " "
+      RBrace@112..113 "}"
+    Whitespace@113..116 "\n  "
+    EventDef@116..137
+      EventKw@116..121 "event"
+      Whitespace@121..122 " "
+      Name@122..129
+        Ident@122..129 "changed"
+      Whitespace@129..130 " "
+      Colon@130..131 ":"
+      Whitespace@131..132 " "
+      PathType@132..137
+        QualifiedName@132..137
+          Ident@132..137 "Speed"
+    Whitespace@137..138 "\n"
+    RBrace@138..139 "}"
+  Whitespace@139..140 "\n"
+errors:
+  FORM-102 38..44 unexpected token in an interface body
+  FORM-102 95..99 unexpected token in an interface body

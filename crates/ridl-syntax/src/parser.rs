@@ -40,8 +40,10 @@
 //! command, query, and final; an attr block parses on signal, event, and
 //! final; an init value parses on event and final; a stream `<T>` parses in
 //! every type position, including signal/event payloads and struct fields;
-//! a typl definition inside an interface body recovers into a body-local
-//! `ErrorNode` (E2 task 5 attaches RIDL-107 from its leading keyword).
+//! a typl definition inside an interface body whose `}` still lies ahead
+//! recovers into one body-local `ErrorNode` (E2 task 5 attaches RIDL-107
+//! from its leading keyword), while a body with no `}` ahead reports an
+//! unclosed `{` and keeps the declarations that follow it.
 //! The rejections are checker scope (RIDL-104/-106/-107/-201/-301, E2
 //! task 5).
 //!
@@ -203,11 +205,13 @@ fn is_interaction_start(kind: SyntaxKind) -> bool {
     )
 }
 
-/// Whether `kind` is a typl definition keyword. Inside an interface body these
-/// recover into a body-local [`ErrorNode`](SyntaxKind::ErrorNode) — the ridl
-/// reference forbids type declarations there (§14.1) and reserves RIDL-107 for
-/// them (§16.1, checker scope, E2 task 5) — unlike the remaining top-level
-/// keywords, which signal an unclosed `{`.
+/// Whether `kind` is a typl definition keyword. Inside an interface body
+/// whose `}` still lies ahead, these recover into a body-local
+/// [`ErrorNode`](SyntaxKind::ErrorNode) — the ridl reference forbids type
+/// declarations there (§14.1) and reserves RIDL-107 for them (§16.1, checker
+/// scope, E2 task 5). In a body with no `}` ahead they signal an unclosed
+/// `{` exactly like the remaining top-level keywords, so a genuinely
+/// unclosed interface keeps the declarations that follow it.
 fn is_typl_definition_start(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -746,19 +750,21 @@ impl<'a> Parser<'a> {
                 Some(SyntaxKind::QueryKw) => self.callable_interaction(SyntaxKind::QueryDef),
                 Some(SyntaxKind::FinalKw) => self.value_interaction(SyntaxKind::FinalDef),
                 // A typl definition keyword inside the body: the body holds
-                // interactions and tombstones only (ridl §14.1), so the
-                // declaration recovers into a body-local ErrorNode for the
-                // checker to code as RIDL-107 (E2 task 5). The remaining
+                // interactions and tombstones only (ridl §14.1). When the
+                // body's `}` still lies ahead, the declaration recovers into
+                // a body-local ErrorNode — brace-aware, so a composite body
+                // stays inside it and the members after it keep their place
+                // — for the checker to code as RIDL-107 (E2 task 5). With no
+                // `}` ahead the guard fails and the keyword falls through to
+                // the unclosed-`{` arm below, exactly like the remaining
                 // top-level keywords (`package`, `import`, `internal`,
-                // `error`, `interface`) still signal an unclosed `{` below.
-                Some(kind) if is_typl_definition_start(kind) => {
-                    self.err_and_recover("in an interface body", |kind| {
-                        matches!(
-                            kind,
-                            SyntaxKind::RBrace | SyntaxKind::Comma | SyntaxKind::ReservedKw
-                        ) || is_interaction_start(kind)
-                            || is_top_level_start(kind)
-                    })
+                // `error`, `interface`).
+                Some(kind)
+                    if is_typl_definition_start(kind) && self.interface_body_close_ahead() =>
+                {
+                    let (code, message) = self.unexpected_token_diag("in an interface body");
+                    self.error_at_current(code, message);
+                    self.recover_definition_in_body();
                 }
                 // An unclosed `{`: the body ran into the next top-level
                 // declaration. Report the missing brace and hand the
@@ -775,6 +781,68 @@ impl<'a> Parser<'a> {
                         || is_top_level_start(kind)
                 }),
             }
+        }
+        self.builder.finish_node();
+    }
+
+    /// Whether the interface body being parsed still closes: scans forward,
+    /// brace-aware, for an `RBrace` at depth 0 before the end of input or an
+    /// unambiguous new-top-level marker (`package`, `import`, `interface`).
+    /// Decides the recovery for a typl definition keyword inside a body: a
+    /// body-local ErrorNode when the body closes (RIDL-107, checker scope),
+    /// an unclosed-`{` report when it does not. The scan runs through the
+    /// definition keywords themselves — several stray declarations inside
+    /// one closed body must all recover in place.
+    fn interface_body_close_ahead(&self) -> bool {
+        let mut depth = 0usize;
+        for token in self.tokens[self.significant_pos()..]
+            .iter()
+            .filter(|token| !token.kind.is_trivia())
+        {
+            match token.kind {
+                SyntaxKind::LBrace => depth += 1,
+                SyntaxKind::RBrace if depth == 0 => return true,
+                SyntaxKind::RBrace => depth -= 1,
+                SyntaxKind::PackageKw | SyntaxKind::ImportKw | SyntaxKind::InterfaceKw
+                    if depth == 0 =>
+                {
+                    return false;
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    /// Consumes one stray typl declaration inside an interface body into a
+    /// single [`ErrorNode`](SyntaxKind::ErrorNode). Brace-aware, unlike
+    /// [`Parser::recover`]: a composite body (`struct`/`enum`/… with its
+    /// `{ … }`, commas included) is consumed whole, so the declaration's own
+    /// `}` is never taken for the interface's closer and the members after
+    /// it stay in the body. At depth 0 the interface sync set applies. The
+    /// caller has confirmed the body's `}` lies ahead
+    /// ([`Parser::interface_body_close_ahead`]), so the loop terminates
+    /// there at the latest.
+    fn recover_definition_in_body(&mut self) {
+        self.start(SyntaxKind::ErrorNode);
+        self.bump(); // the typl definition keyword
+        let mut depth = 0usize;
+        while let Some(kind) = self.current() {
+            match kind {
+                SyntaxKind::LBrace => depth += 1,
+                SyntaxKind::RBrace if depth > 0 => depth -= 1,
+                _ if depth == 0
+                    && (matches!(
+                        kind,
+                        SyntaxKind::RBrace | SyntaxKind::Comma | SyntaxKind::ReservedKw
+                    ) || is_interaction_start(kind)
+                        || is_top_level_start(kind)) =>
+                {
+                    break;
+                }
+                _ => {}
+            }
+            self.bump();
         }
         self.builder.finish_node();
     }

@@ -1,9 +1,10 @@
 ---
 source: crates/ridl-syntax/tests/parser_err_corpus.rs
+assertion_line: 75
 expression: dump(&parsed)
-input_file: crates/ridl-syntax/test_data/parser/err/unclosed_interface_brace.ridl
+input_file: crates/ridl-syntax/test_data/parser/err/unclosed_interface_then_composite.ridl
 ---
-SourceFile@0..94
+SourceFile@0..107
   PackageDecl@0..15
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -36,7 +37,7 @@ SourceFile@0..94
         At@59..60 "@"
         Duration@60..64 "10ms"
     Whitespace@64..66 "\n\n"
-  TypeDef@66..93
+  TypeDef@66..80
     TypeKw@66..70 "type"
     Whitespace@70..71 " "
     Name@71..76
@@ -44,17 +45,27 @@ SourceFile@0..94
     Whitespace@76..77 " "
     Colon@77..78 ":"
     Whitespace@78..79 " "
-    PrimitiveType@79..86
-      IntegerKw@79..86 "integer"
-    Whitespace@86..87 " "
-    Constraint@87..93
-      LBracket@87..88 "["
-      Literal@88..89
-        IntNumber@88..89 "0"
-      DotDot@89..91 ".."
-      Literal@91..92
-        IntNumber@91..92 "1"
-      RBracket@92..93 "]"
-  Whitespace@93..94 "\n"
+    UnitExpr@79..80
+      Ident@79..80 "m"
+  Whitespace@80..82 "\n\n"
+  StructDef@82..106
+    StructKw@82..88 "struct"
+    Whitespace@88..89 " "
+    Name@89..93
+      Ident@89..93 "Uses"
+    Whitespace@93..94 " "
+    LBrace@94..95 "{"
+    Whitespace@95..96 " "
+    FieldDef@96..104
+      Name@96..97
+        Ident@96..97 "f"
+      Colon@97..98 ":"
+      Whitespace@98..99 " "
+      PathType@99..104
+        QualifiedName@99..104
+          Ident@99..104 "After"
+    Whitespace@104..105 " "
+    RBrace@105..106 "}"
+  Whitespace@106..107 "\n"
 errors:
   FORM-103 66..70 unclosed `{`

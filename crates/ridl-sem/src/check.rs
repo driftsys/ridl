@@ -2522,7 +2522,11 @@ impl Checker<'_> {
             }
         }
 
-        // Pre-pass: the reserved tombstone names (ridl §11).
+        // Pre-pass: the reserved tombstone names (ridl §11). Recorded debt
+        // (E2 ledger M1): duplicate `reserved` tombstones in one interface
+        // are silent here although each occupies an ordinal slot and shifts
+        // the later ordinals — whether that deserves a diagnostic (TYPL-211
+        // is the struct-side precedent) is decided in a later task.
         let mut reserved: HashSet<String> = HashSet::new();
         for member in def.members() {
             if let ast::InterfaceMember::Reserved(entry) = &member
@@ -2575,7 +2579,13 @@ impl Checker<'_> {
                     match signal.init_value() {
                         // RIDL-110: the bare `= value` override validates
                         // against the payload constraints — the E1 scalar
-                        // validation with the ridl code (§4.4).
+                        // validation with the ridl code (§4.4). Recorded
+                        // debt (E2 ledger M2): the leniency is E1's exactly —
+                        // a type-mismatched literal (`= true` on a numeric
+                        // payload), a value off the `step` grid, or an
+                        // override on a non-`type` payload all pass silently,
+                        // as they do for struct fields — although the §16.1
+                        // RIDL-110 wording reads broader.
                         Some(init) => {
                             let parts = self.payload_scalar_parts(&symbol);
                             self.lower_declared_init(Some(init), &parts, DiagCode::RIDL_110);
@@ -3209,6 +3219,9 @@ impl MemberKind {
 /// The attribute keys the general form §4.3 table defines (the key forms —
 /// `require`/`ensure` parse as predicates, never as keys). A key outside
 /// this list is FORM-106; inside it but not consumable here, FORM-107.
+/// Recorded debt (E2 ledger M3): in E2 no key is consumable, so a flat list
+/// suffices; the task that first consumes a key (`persist`, `labels`, …)
+/// must turn this into the full gf §4.3 key×kind allow-list.
 const GF_ATTRIBUTE_KEYS: &[&str] = &[
     "default",
     "init",
@@ -4802,6 +4815,45 @@ mod tests {
             &format!("{PRELUDE}interface I {{\n  struct S {{ a: Speed }}\n}}\n"),
         );
         assert_eq!(codes(&composite), vec!["RIDL-107"]);
+    }
+
+    #[test]
+    fn interface_members_survive_an_in_body_composite_declaration() {
+        // The T5 review fix: the in-body recovery is brace-aware, so a
+        // composite declaration's own `}` (and an enum's commas) never close
+        // the interface — the members after it keep their place and their
+        // ordinals, and each stray declaration draws its own RIDL-107.
+        let text = format!(
+            "{PRELUDE}interface I {{\n  struct Extra {{ a: Speed }}\n  signal s : Speed @10ms\n  enum Mode {{ A, B }}\n  event e : Speed\n}}\n"
+        );
+        let checked = check_ridl("app", &text);
+        assert_eq!(codes(&checked), vec!["RIDL-107", "RIDL-107"]);
+
+        let db = RidlDatabase::default();
+        let interface = first_interface(&db, &text);
+        let walk = ordinal_walk(&checked_interface(&interface));
+        assert_eq!(walk, vec![("s".to_string(), 1), ("e".to_string(), 2)]);
+    }
+
+    #[test]
+    fn unclosed_interface_keeps_the_following_declarations() {
+        // The T5 review fix, second manifestation: a genuinely unclosed `{`
+        // reports FORM-103 at parse and hands the following declarations —
+        // brace-carrying ones included — back to the package level, so their
+        // symbols stay and nothing cascades.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package(
+            &db,
+            "app",
+            "package app\ntype Speed: km/h [0.0..300.0 step 0.5]\ninterface I {\n  signal s : Speed @10ms\n\ntype After : integer [0..1]\n\nstruct Uses { f: After }\n",
+        );
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        let resolution = resolve_package(&db, ws, pkg, std);
+        assert!(resolution.symbols.contains_key("After"), "`After` survives");
+        assert!(resolution.symbols.contains_key("Uses"), "`Uses` survives");
+        let checked = check_package(&db, ws, pkg, std);
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
     }
 
     #[test]
