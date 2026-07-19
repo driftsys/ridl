@@ -223,6 +223,45 @@ fn frozen_without_lockfile_is_mani_103() {
     );
 }
 
+/// `build --frozen` on a package with a remote import but no `ridl.lock` fails
+/// with MANI-103 and writes no artifact: a manifest/lockfile error suppresses
+/// code generation exactly like a compile error, because materialization runs
+/// before the emit gate (C1).
+#[test]
+fn frozen_build_without_lockfile_writes_nothing() {
+    let dir = TempDir::new("frozen-build");
+    dir.write(
+        "pkg/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n\n[imports]\n\"other.dep\" = \"https://registry.example.com/other/dep@v1.0.0\"\n",
+    );
+    dir.write("pkg/speed.typl", SPEED_SOURCE);
+    let out = TempDir::new("frozen-build-out");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().join("pkg").as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--frozen".as_ref(),
+    ]);
+    assert_eq!(
+        code, 1,
+        "a missing lockfile under --frozen must exit 1, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("MANI-103"),
+        "the missing lockfile entry must render MANI-103, got:\n{stderr}"
+    );
+    assert!(
+        !out.path().join("veh.common.rs").exists(),
+        "a manifest/lockfile error must write no Rust artifact"
+    );
+    assert!(
+        !dir.path().join("pkg").join("ridl.lock").exists(),
+        "a frozen build must never write the lockfile"
+    );
+}
+
 /// `build` on an error-bearing package writes no artifacts and exits 1: code
 /// generation over error-bearing IR is skipped, matching `check` (C1). A
 /// non-optional recursive struct is TYPL-206; before the build gate it also
