@@ -440,9 +440,7 @@ impl StreamType {
         self.syntax()
             .children_with_tokens()
             .filter_map(|element| element.into_token())
-            .find(|token| {
-                matches!(token.kind(), SyntaxKind::StringKw | SyntaxKind::BytesKw)
-            })
+            .find(|token| matches!(token.kind(), SyntaxKind::StringKw | SyntaxKind::BytesKw))
     }
 }
 

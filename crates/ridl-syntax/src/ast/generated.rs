@@ -4,11 +4,15 @@
 //! xtask drift test regenerates this file into a buffer and fails
 //! when the committed text differs.
 
+use super::AstChildren;
+use super::AstNode;
+use super::Backing;
+use super::Definition;
+use super::FieldType;
+use super::InterfaceMember;
+use super::ParamType;
+use super::StructMember;
 use super::support;
-use super::{
-    AstChildren, AstNode, Backing, Definition, FieldType, InterfaceMember, ParamType,
-    StructMember,
-};
 use crate::syntax_kind::{SyntaxKind, SyntaxNode, SyntaxToken};
 /// A `SourceFile` node (`family.ungram` rule `SourceFile`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

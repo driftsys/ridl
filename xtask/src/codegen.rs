@@ -387,14 +387,19 @@ pub(crate) fn generate() -> String {
         .iter()
         .map(|name| format_ident!("{name}"))
         .collect();
+    // One `use` per item: single-item imports are stable under rustfmt, so
+    // the committed file satisfies `cargo fmt --check` and the drift test at
+    // the same time regardless of how long the enum list grows.
     let children_import = if uses_children {
-        quote! { AstChildren, }
+        quote! { use super::AstChildren; }
     } else {
         quote! {}
     };
     let file: syn::File = syn::parse2(quote! {
+        #children_import
+        use super::AstNode;
+        #(use super::#enum_idents;)*
         use super::support;
-        use super::{#children_import AstNode, #(#enum_idents),*};
         use crate::syntax_kind::{SyntaxKind, SyntaxNode, SyntaxToken};
 
         #structs
