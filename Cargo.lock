@@ -1143,6 +1143,7 @@ dependencies = [
 name = "ridl-sem"
 version = "0.0.0"
 dependencies = [
+ "insta",
  "num-bigint",
  "num-rational",
  "proptest",

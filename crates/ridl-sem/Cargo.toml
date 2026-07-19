@@ -15,4 +15,5 @@ rowan.workspace = true
 salsa.workspace = true
 
 [dev-dependencies]
+insta.workspace = true
 proptest.workspace = true
