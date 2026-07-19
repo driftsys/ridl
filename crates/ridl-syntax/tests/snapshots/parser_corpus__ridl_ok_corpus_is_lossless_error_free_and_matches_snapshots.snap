@@ -1,0 +1,65 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/interface_shell.ridl
+---
+SourceFile@0..299
+  PackageDecl@0..17
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..17
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..17 "shell"
+  Whitespace@17..19 "\n\n"
+  DocComment@19..54 "/// An empty contract ..."
+  Whitespace@54..55 "\n"
+  InterfaceDef@55..74
+    InterfaceKw@55..64 "interface"
+    Whitespace@64..65 " "
+    Name@65..70
+      Ident@65..70 "Empty"
+    Whitespace@70..71 " "
+    LBrace@71..72 "{"
+    Whitespace@72..73 "\n"
+    RBrace@73..74 "}"
+  Whitespace@74..76 "\n\n"
+  DocComment@76..139 "/// Tombstones are th ..."
+  Whitespace@139..140 "\n"
+  InterfaceDef@140..217
+    InterfaceKw@140..149 "interface"
+    Whitespace@149..150 " "
+    Name@150..162
+      Ident@150..162 "OnlyReserved"
+    Whitespace@162..163 " "
+    LBrace@163..164 "{"
+    Whitespace@164..167 "\n  "
+    ReservedEntry@167..189
+      ReservedKw@167..175 "reserved"
+      Whitespace@175..176 " "
+      Name@176..189
+        Ident@176..189 "resetCounters"
+    Whitespace@189..192 "\n  "
+    ReservedEntry@192..215
+      ReservedKw@192..200 "reserved"
+      Whitespace@200..201 " "
+      Name@201..215
+        Ident@201..215 "legacyChecksum"
+    Whitespace@215..216 "\n"
+    RBrace@216..217 "}"
+  Whitespace@217..219 "\n\n"
+  DocComment@219..268 "/// The internal modi ..."
+  Whitespace@268..269 "\n"
+  InterfaceDef@269..298
+    InternalKw@269..277 "internal"
+    Whitespace@277..278 " "
+    InterfaceKw@278..287 "interface"
+    Whitespace@287..288 " "
+    Name@288..294
+      Ident@288..294 "Hidden"
+    Whitespace@294..295 " "
+    LBrace@295..296 "{"
+    Whitespace@296..297 "\n"
+    RBrace@297..298 "}"
+  Whitespace@298..299 "\n"
+errors: none

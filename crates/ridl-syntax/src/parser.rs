@@ -155,6 +155,8 @@ fn is_value_token(kind: SyntaxKind) -> bool {
 /// Whether `kind` starts a top-level construct. These are the
 /// resynchronization points recovery falls back to, both at the file level
 /// and when a block body runs past an unclosed `}` into the next declaration.
+/// `interface` joins the set with E2.1a; under [`Profile::Typl`] it never
+/// occurs (the word lexes to `ReservedWord` there).
 fn is_top_level_start(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -168,6 +170,21 @@ fn is_top_level_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::EnumKw
             | SyntaxKind::EnumsetKw
             | SyntaxKind::UnionKw
+            | SyntaxKind::InterfaceKw
+    )
+}
+
+/// Whether `kind` starts an interaction inside an interface body — the five
+/// interaction keywords (E2.1a). They join the recovery sync set inside
+/// interface bodies, so garbage resynchronizes at the next interaction.
+fn is_interaction_start(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::SignalKw
+            | SyntaxKind::EventKw
+            | SyntaxKind::CommandKw
+            | SyntaxKind::QueryKw
+            | SyntaxKind::FinalKw
     )
 }
 
@@ -411,7 +428,8 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::StructKw
                     | SyntaxKind::EnumKw
                     | SyntaxKind::EnumsetKw
-                    | SyntaxKind::UnionKw,
+                    | SyntaxKind::UnionKw
+                    | SyntaxKind::InterfaceKw,
                 ) => self.definition(),
                 Some(SyntaxKind::ReservedWord) => {
                     if !self.profile_boundary_at_top_level() {
@@ -501,6 +519,7 @@ impl<'a> Parser<'a> {
             Some(SyntaxKind::EnumKw) => self.enum_def(),
             Some(SyntaxKind::EnumsetKw) => self.enum_set_def(),
             Some(SyntaxKind::UnionKw) => self.union_def(),
+            Some(SyntaxKind::InterfaceKw) => self.interface_def(),
             _ => self.err_and_recover("in a definition", is_top_level_start),
         }
     }
@@ -649,6 +668,57 @@ impl<'a> Parser<'a> {
         self.name();
         self.expect(SyntaxKind::Colon);
         self.path_type();
+        self.builder.finish_node();
+    }
+
+    // --- ridl interaction productions (E2.1a, ridl reference Appendix C) --
+
+    /// `InterfaceDef = 'internal'? 'error'? 'interface' Name '{' (members
+    /// ','?)* '}'` — an interface body holds interactions and `reserved`
+    /// tombstones only (ridl reference §14.1); a type declaration inside it
+    /// is RIDL-107, checker scope. The body loop is the interaction
+    /// counterpart of [`Parser::block_body`]: members are announced by the
+    /// five interaction keywords instead of an `Ident`, and those keywords
+    /// are the recovery sync points, so garbage inside a body
+    /// resynchronizes at the next interaction.
+    fn interface_def(&mut self) {
+        self.start(SyntaxKind::InterfaceDef);
+        self.modifiers();
+        self.bump(); // 'interface'
+        self.name();
+        if !self.block_open() {
+            self.builder.finish_node();
+            return;
+        }
+        loop {
+            self.eat_trivia();
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::RBrace) => {
+                    self.bump();
+                    break;
+                }
+                Some(SyntaxKind::Comma) => self.bump(),
+                Some(SyntaxKind::ReservedKw) => self.reserved_entry(),
+                // An unclosed `{`: the body ran into the next top-level
+                // declaration. Report the missing brace and hand the
+                // declaration back, exactly as `block_body` does.
+                Some(kind) if is_top_level_start(kind) => {
+                    self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                    break;
+                }
+                Some(_) => self.err_and_recover("in an interface body", |kind| {
+                    matches!(
+                        kind,
+                        SyntaxKind::RBrace | SyntaxKind::Comma | SyntaxKind::ReservedKw
+                    ) || is_interaction_start(kind)
+                        || is_top_level_start(kind)
+                }),
+            }
+        }
         self.builder.finish_node();
     }
 

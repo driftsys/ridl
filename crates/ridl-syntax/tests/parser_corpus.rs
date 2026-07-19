@@ -47,3 +47,28 @@ fn ok_corpus_is_lossless_error_free_and_matches_snapshots() {
         insta::assert_snapshot!(dump(&parsed));
     });
 }
+
+/// The ridl half of the ok corpus (epic E2.1a): every `.ridl` file parses
+/// under [`Profile::Ridl`] with the same lossless, zero-error contract.
+#[test]
+fn ridl_ok_corpus_is_lossless_error_free_and_matches_snapshots() {
+    insta::glob!("../test_data/parser/ok", "*.ridl", |path| {
+        let input = std::fs::read_to_string(path).expect("a readable corpus file");
+        let parsed = parse(&input, Profile::Ridl);
+
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "parse is not lossless for {}",
+            path.display(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "ok-corpus file {} must parse with zero errors, got: {:?}",
+            path.display(),
+            parsed.errors(),
+        );
+
+        insta::assert_snapshot!(dump(&parsed));
+    });
+}
