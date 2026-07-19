@@ -45,6 +45,20 @@ test:
         echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
+# Check the compiler crates build for wasm32-unknown-unknown with fs/fetch
+# off (ADR-0007 decision 5) — the E4.4 browser playground guard.
+wasm-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f Cargo.toml ]; then
+        rustup target add wasm32-unknown-unknown
+        cargo check --target wasm32-unknown-unknown \
+            -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir \
+            --no-default-features
+    else
+        echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
+    fi
+
 # Full local gate: compile the code, run the tests, then run the lint checks.
 build: compile test check
 
