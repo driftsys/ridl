@@ -88,7 +88,7 @@ pub fn import_at(
         return None;
     }
     let reference = Reference {
-        segments: qualified_segments(&qualified),
+        segments: qualified_segments(qualified.syntax()),
         range: last.text_range(),
     };
     let resolution = resolve_package(db, ws, pkg, std);
@@ -207,7 +207,7 @@ fn reference_at(token: &SyntaxToken) -> Option<Reference> {
                 }
                 let qualified = QualifiedName::cast(node.clone()).expect("kind checked");
                 return Some(Reference {
-                    segments: qualified_segments(&qualified),
+                    segments: qualified_segments(qualified.syntax()),
                     range: node.text_range(),
                 });
             }
@@ -253,7 +253,7 @@ fn references_in(source: &SourceFile) -> Vec<Reference> {
                 }
                 let qualified = QualifiedName::cast(node.clone()).expect("kind checked");
                 out.push(Reference {
-                    segments: qualified_segments(&qualified),
+                    segments: qualified_segments(qualified.syntax()),
                     range: node.text_range(),
                 });
             }
@@ -317,13 +317,13 @@ pub(crate) fn identifier_at(root: &SyntaxNode, offset: TextSize) -> Option<Synta
     }
 }
 
-/// The dot-separated segments of a qualified name, read by token so keyword
-/// path segments (`veh.integer`) survive verbatim — the same rule the resolver
-/// applies (typl §3.2).
-fn qualified_segments(qualified: &QualifiedName) -> Vec<String> {
+/// The dot-separated segments of a qualified name (its node), read by token so
+/// keyword path segments (`veh.integer`) survive verbatim — the same rule the
+/// resolver applies (typl §3.2). Shared by navigation, completion, and rename.
+pub(crate) fn qualified_segments(node: &SyntaxNode) -> Vec<String> {
     let mut segments = Vec::new();
     let mut current = String::new();
-    for element in qualified.syntax().children_with_tokens() {
+    for element in node.children_with_tokens() {
         let Some(token) = element.into_token() else {
             continue;
         };

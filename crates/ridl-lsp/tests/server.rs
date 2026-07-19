@@ -1220,3 +1220,99 @@ fn prepare_rename_validates_the_cursor() {
     shut_down(&client, 12);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+/// (CRITICAL-1 regression) Renaming a symbol imported under an alias rewrites
+/// the import line's imported-name segment but leaves the alias usage intact —
+/// the alias binds the local name, so rewriting the usage would unbind it.
+#[test]
+fn rename_leaves_an_alias_usage_intact() {
+    let dir = TempDir::new("rename-alias");
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"veh-common\", \"app\"]\n",
+    );
+    std::fs::create_dir_all(dir.path().join("veh-common")).expect("create veh-common");
+    std::fs::create_dir_all(dir.path().join("app")).expect("create app");
+    dir.write(
+        "veh-common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    let veh = dir.write(
+        "veh-common/lib.typl",
+        "package veh.common\ntype Speed: km/h\n",
+    );
+    dir.write(
+        "app/ridl.toml",
+        "[package]\nname = \"app\"\nversion = \"1.0.0\"\n",
+    );
+    // `Speed` is imported under the alias `Velocity`, then used as `Velocity`.
+    let app = dir.write(
+        "app/lib.typl",
+        "package app\nimport veh.common.Speed as Velocity\nstruct Cabin { primary: Velocity }\n",
+    );
+    let veh_uri = uri_of(&veh);
+    let app_uri = uri_of(&app);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let edit = rename_at(&client, 10, veh_uri.clone(), pos(1, 7), "Rapidity");
+
+    // The declaration in veh.common is rewritten.
+    let veh_edits = edits_for(&edit, &veh_uri);
+    assert_eq!(veh_edits.len(), 1, "the declaration only: {veh_edits:?}");
+    assert_eq!(veh_edits[0].new_text, "Rapidity");
+
+    // In app, ONLY the import line's imported-name segment is rewritten. The
+    // `Velocity` usage on line 2 is left untouched — rewriting it would leave
+    // `Rapidity` unbound.
+    let app_edits = edits_for(&edit, &app_uri);
+    assert_eq!(
+        app_edits.len(),
+        1,
+        "only the import segment, not the alias usage: {app_edits:?}",
+    );
+    // `import veh.common.Speed as Velocity` on line 1: `Speed` spans 18..23.
+    assert_eq!(
+        app_edits[0].range,
+        range((1, 18), (1, 23)),
+        "the import segment"
+    );
+    assert_eq!(app_edits[0].new_text, "Rapidity");
+    assert!(
+        app_edits.iter().all(|edit| edit.range.start.line != 2),
+        "no edit touches the `Velocity` usage on line 2: {app_edits:?}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// (CRITICAL-2 regression) A `ridl.std` symbol is not renameable: prepareRename
+/// returns null and rename fails, so no partial edit that drops the built-in
+/// declaration while rewriting user references is ever produced.
+#[test]
+fn a_std_symbol_is_not_renameable() {
+    let uri = path_to_uri("/ridl-lsp-std/std.typl").expect("an absolute synthetic path");
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || ridl_lsp::server::run(server_side));
+    initialize(&client, None);
+
+    // A user struct referencing the built-in `ridl.std` type `Timestamp`.
+    did_open(&client, &uri, "package demo\nstruct S { at: Timestamp }\n");
+
+    // `Timestamp` on line 1 starts at column 15.
+    let prepared = prepare_rename_at(&client, 10, uri.clone(), pos(1, 16));
+    assert!(
+        prepared.is_none(),
+        "a ridl.std symbol cannot be renamed: {prepared:?}",
+    );
+
+    // Rename itself fails rather than emitting a partial edit.
+    let response = rename_raw(&client, 11, uri.clone(), pos(1, 16), "Instant");
+    assert!(
+        response.response_result.is_err(),
+        "renaming a std symbol fails: {response:?}",
+    );
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}

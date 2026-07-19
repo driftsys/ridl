@@ -32,9 +32,9 @@
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace};
 use ridl_sem::{Symbol, SymbolKind, resolve_package};
+use ridl_syntax::SyntaxNode;
 use ridl_syntax::ast::AstNode;
 use ridl_syntax::keywords;
-use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::{TextRange, TextSize};
 
 use crate::nav;
@@ -85,6 +85,13 @@ pub fn prepare(
     offset: TextSize,
 ) -> Option<TextRange> {
     let located = locate(db, ws, std, pkg, file, offset)?;
+    // A symbol declared in the embedded `ridl.std` cannot be renamed — the
+    // built-in source has no editable file, so any edit would be partial (the
+    // declaration is dropped while user references are rewritten). Green-lighting
+    // it here would let a rename silently corrupt the user's file, so refuse.
+    if is_builtin(db, std, &located.symbol) {
+        return None;
+    }
     Some(nav::final_segment_range(db, file, located.reference))
 }
 
@@ -107,6 +114,19 @@ pub fn rename(
     let located = locate(db, ws, std, pkg, file, offset).ok_or(RenameError::NotRenameable)?;
     let target = located.symbol;
 
+    // Reject: a symbol declared in the embedded `ridl.std`. Its declaration
+    // lives in a built-in source with no editable file, so the declaration edit
+    // would be silently dropped while user references are rewritten, leaving them
+    // dangling. Refuse the whole rename rather than emit a partial edit.
+    if is_builtin(db, std, &target) {
+        return Err(RenameError::NotRenameable);
+    }
+
+    // Renaming to the current name is a no-op, not a collision.
+    if new_name == target.name {
+        return Ok(Vec::new());
+    }
+
     // Reject: a reserved word.
     if keywords::is_reserved(new_name) {
         return Err(RenameError::Reserved(new_name.to_string()));
@@ -127,11 +147,23 @@ pub fn rename(
         range: target.range,
     }];
 
-    // Every resolved reference, narrowed to its final segment.
+    // Every resolved reference, narrowed to its final segment. A reference
+    // spelled with an alias (`import pkg.Speed as Velocity` then a `Velocity`
+    // usage) resolves to the target but is written with the alias, not the old
+    // name; rewriting it would unbind the alias and break the file. Only
+    // references spelled with the old name (bare `Speed` or qualified
+    // `pkg.Speed`) are rewritten here — the import-statement pass below rewrites
+    // the imported-name segment while leaving the alias intact.
     for (reference_file, range) in nav::find_references(db, ws, std, packages, &target) {
+        let segment = nav::final_segment_range(db, reference_file, range);
+        let text = reference_file.text(db);
+        let segment_text = &text[usize::from(segment.start())..usize::from(segment.end())];
+        if segment_text != target.name {
+            continue;
+        }
         edits.push(Edit {
             file: reference_file,
-            range: nav::final_segment_range(db, reference_file, range),
+            range: segment,
         });
     }
 
@@ -255,34 +287,18 @@ fn declares(
         .any(|symbol| symbol.name == name && symbol.package == *package_name)
 }
 
+/// Whether `symbol` is declared in the embedded `ridl.std` package — a built-in
+/// source with no editable file, so it cannot be a rename target.
+fn is_builtin(db: &dyn salsa::Database, std: Package, symbol: &Symbol) -> bool {
+    symbol.package == *std.name(db)
+}
+
 /// Whether an import path binds `target`: its final segment is the target's name
 /// and the package path is the target's package.
 fn import_binds(qualified: &SyntaxNode, target: &Symbol) -> bool {
-    let segments = qualified_segments(qualified);
+    let segments = nav::qualified_segments(qualified);
     let Some((base, path)) = segments.split_last() else {
         return false;
     };
     base == &target.name && path.join(".") == target.package
-}
-
-/// The dot-separated segments of a qualified name, read by token so keyword
-/// path segments survive verbatim (mirrors the resolver's own reader).
-fn qualified_segments(node: &SyntaxNode) -> Vec<String> {
-    let mut segments = Vec::new();
-    let mut current = String::new();
-    for element in node.children_with_tokens() {
-        let Some(token) = element.into_token() else {
-            continue;
-        };
-        if token.kind().is_trivia() {
-            continue;
-        }
-        if token.kind() == SyntaxKind::Dot {
-            segments.push(std::mem::take(&mut current));
-        } else {
-            current.push_str(token.text());
-        }
-    }
-    segments.push(current);
-    segments
 }

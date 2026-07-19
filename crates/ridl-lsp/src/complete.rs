@@ -289,7 +289,7 @@ fn import_path_prefix(source: &SourceFile, offset: TextSize) -> Option<String> {
         .filter_map(Import::cast)
         .find(|import| import.syntax().text_range().contains_inclusive(offset))?;
     let qualified = import.qualified_name()?;
-    let mut segments = qualified_segments(qualified.syntax());
+    let mut segments = crate::nav::qualified_segments(qualified.syntax());
     // Drop the final (partial) segment: `veh.common.` → the empty trailing
     // segment, `veh.common` → the `common` being typed.
     segments.pop();
@@ -297,28 +297,6 @@ fn import_path_prefix(source: &SourceFile, offset: TextSize) -> Option<String> {
         return None;
     }
     Some(segments.join("."))
-}
-
-/// The dot-separated segments of a qualified name, read by token so keyword
-/// path segments survive verbatim (mirrors the resolver's own reader).
-fn qualified_segments(node: &SyntaxNode) -> Vec<String> {
-    let mut segments = Vec::new();
-    let mut current = String::new();
-    for element in node.children_with_tokens() {
-        let Some(token) = element.into_token() else {
-            continue;
-        };
-        if token.kind().is_trivia() {
-            continue;
-        }
-        if token.kind() == SyntaxKind::Dot {
-            segments.push(std::mem::take(&mut current));
-        } else {
-            current.push_str(token.text());
-        }
-    }
-    segments.push(current);
-    segments
 }
 
 /// The completion-item kind for a named type used in a type position.
