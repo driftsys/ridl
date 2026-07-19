@@ -108,8 +108,59 @@ impl DiagCode {
     pub const TYPL_008: DiagCode = DiagCode("TYPL-008");
     /// Duplicate definition of the same name in a package (typl §16.1).
     pub const TYPL_009: DiagCode = DiagCode("TYPL-009");
+    /// `integer` without a range constraint (typl §16.2). Warning.
+    pub const TYPL_101: DiagCode = DiagCode("TYPL-101");
+    /// `float` without both a range and a `step` (typl §16.2). Warning.
+    pub const TYPL_102: DiagCode = DiagCode("TYPL-102");
+    /// `string`/`bytes` without explicit bounds — the default `[0..256]` is
+    /// applied (typl §4.4–§4.5, §16.2). Warning.
+    pub const TYPL_103: DiagCode = DiagCode("TYPL-103");
+    /// Range `min > max` (typl §16.2).
+    pub const TYPL_104: DiagCode = DiagCode("TYPL-104");
+    /// `step` type mismatch, non-positive, or larger than the range
+    /// (typl §16.2).
+    pub const TYPL_105: DiagCode = DiagCode("TYPL-105");
     /// `const` value violates its declared type constraints (typl §16.2).
     pub const TYPL_108: DiagCode = DiagCode("TYPL-108");
+    /// Init (`= value`) incompatible with the type/field constraints
+    /// (typl §16.2).
+    pub const TYPL_109: DiagCode = DiagCode("TYPL-109");
+    /// Unknown or malformed UCUM unit expression (typl §16.2).
+    pub const TYPL_110: DiagCode = DiagCode("TYPL-110");
+    /// Integer range bound (or enumset bit position) outside the `int64`
+    /// domain (typl §4.2, §16.2).
+    pub const TYPL_111: DiagCode = DiagCode("TYPL-111");
+    /// Array without explicit bounds (typl §16.3).
+    pub const TYPL_201: DiagCode = DiagCode("TYPL-201");
+    /// Map without explicit bounds (typl §16.3).
+    pub const TYPL_202: DiagCode = DiagCode("TYPL-202");
+    /// Enum values not unique / not explicitly assigned (typl §16.3).
+    pub const TYPL_203: DiagCode = DiagCode("TYPL-203");
+    /// Union arm with a primitive type (typl §16.3).
+    pub const TYPL_204: DiagCode = DiagCode("TYPL-204");
+    /// Recursive composite reference, direct or transitive (typl §16.3).
+    pub const TYPL_206: DiagCode = DiagCode("TYPL-206");
+    /// Enumset bit positions not unique (typl §16.3).
+    pub const TYPL_207: DiagCode = DiagCode("TYPL-207");
+    /// `string`/`bytes` used directly as a field type (typl §16.3).
+    pub const TYPL_208: DiagCode = DiagCode("TYPL-208");
+    /// Map key is not a named string type or a primitive (typl §16.3).
+    pub const TYPL_209: DiagCode = DiagCode("TYPL-209");
+    /// Field, arm, or enum value re-declared under a `reserved` name or value
+    /// (typl §16.3).
+    pub const TYPL_210: DiagCode = DiagCode("TYPL-210");
+    /// Duplicate `reserved` entry (typl §16.3). Warning. The "dangling"
+    /// half of the §16.3 rule (a name/value never previously used) needs the
+    /// previous IR snapshot and belongs to `ridl-diff` (E2.8).
+    pub const TYPL_211: DiagCode = DiagCode("TYPL-211");
+    /// `error` modifier on a declaration other than `enum`, `struct`, `union`
+    /// (typl §16.3).
+    pub const TYPL_212: DiagCode = DiagCode("TYPL-212");
+    /// Union mixing error and non-error arms without the result-union shape
+    /// (typl §16.3).
+    pub const TYPL_213: DiagCode = DiagCode("TYPL-213");
+    /// `error union` containing a non-error-typed arm (typl §16.3).
+    pub const TYPL_214: DiagCode = DiagCode("TYPL-214");
     /// Timing annotation or duration literal in a typl context (typl §16.4).
     pub const TYPL_302: DiagCode = DiagCode("TYPL-302");
 
@@ -264,6 +315,36 @@ impl SourceMap {
         });
         id
     }
+}
+
+/// Remaps per-package diagnostics onto a renderer's [`SourceMap`] ids.
+///
+/// The package-scoped passes (`resolve_package`, `check_package` in
+/// `ridl-sem`) stamp their spans with a [`FileId`] that indexes the package's
+/// `files` **in order** — they run inside salsa queries and cannot share the
+/// caller's [`SourceMap`]. A renderer first interns each package file into its
+/// own map (collecting the issued ids in the same file order), then calls this
+/// to rewrite every span onto those ids. [`FileId::DETACHED`] spans and any
+/// index past `render_ids` are left untouched.
+pub fn remap_diagnostics(
+    diagnostics: impl IntoIterator<Item = Diagnostic>,
+    render_ids: &[FileId],
+) -> Vec<Diagnostic> {
+    let remap_file =
+        |file: FileId| -> FileId { render_ids.get(file.0 as usize).copied().unwrap_or(file) };
+    diagnostics
+        .into_iter()
+        .map(|mut diagnostic| {
+            diagnostic.primary.file = remap_file(diagnostic.primary.file);
+            for label in &mut diagnostic.labels {
+                label.span.file = remap_file(label.span.file);
+            }
+            for fixit in &mut diagnostic.fixits {
+                fixit.span.file = remap_file(fixit.span.file);
+            }
+            diagnostic
+        })
+        .collect()
 }
 
 /// One row of a diagnostic catalogue: a code, its default severity, and a short
@@ -466,6 +547,55 @@ mod tests {
         let a_again = map.file_id("a.typl", "type A: m");
         assert_ne!(a, b, "distinct paths get distinct ids");
         assert_eq!(a, a_again, "the same path interns to the same id");
+    }
+
+    #[test]
+    fn remap_diagnostics_rewrites_package_relative_ids() {
+        // A render map that already interned an unrelated file, so the render
+        // ids do not coincide with the package-relative indices.
+        let mut render = SourceMap::new();
+        let _other = render.file_id("other.typl", "");
+        let a = render.file_id("pkg/a.typl", "type A: m");
+        let b = render.file_id("pkg/b.typl", "type B: s");
+        let render_ids = vec![a, b];
+
+        let span = |file: FileId| Span {
+            file,
+            range: TextRange::default(),
+        };
+        let diagnostic = |file: FileId| Diagnostic {
+            code: DiagCode::TYPL_009,
+            severity: Severity::Error,
+            message: "duplicate declaration of `X`".to_string(),
+            primary: span(file),
+            labels: vec![Label {
+                span: span(file),
+                message: "first declared here".to_string(),
+            }],
+            fixits: Vec::new(),
+        };
+
+        // Package-relative ids 0 and 1, plus a detached diagnostic.
+        let mut pass_map = SourceMap::new();
+        let pkg_a = pass_map.file_id("pkg/a.typl", "type A: m");
+        let pkg_b = pass_map.file_id("pkg/b.typl", "type B: s");
+        let remapped = remap_diagnostics(
+            vec![
+                diagnostic(pkg_a),
+                diagnostic(pkg_b),
+                diagnostic(FileId::DETACHED),
+            ],
+            &render_ids,
+        );
+
+        assert_eq!(remapped[0].primary.file, a);
+        assert_eq!(remapped[0].labels[0].span.file, a);
+        assert_eq!(remapped[1].primary.file, b);
+        assert_eq!(
+            remapped[2].primary.file,
+            FileId::DETACHED,
+            "a detached diagnostic stays detached",
+        );
     }
 
     #[test]
