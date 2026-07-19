@@ -1,0 +1,9 @@
+package diag.showcase
+
+type BeforeGarbage : integer [0..10]
+
+// FORM-102: stray tokens where a declaration is expected. The parser skips them
+// as an error node and resynchronizes at the next top-level keyword.
+] } = garbage 99
+
+type AfterGarbage : integer [0..10]

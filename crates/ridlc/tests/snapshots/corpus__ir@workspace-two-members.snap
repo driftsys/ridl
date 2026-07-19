@@ -1,0 +1,123 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.ir_json
+input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
+---
+// ===== package veh.common =====
+{
+  "name": "veh.common",
+  "decls": [
+    {
+      "name": "Speed",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "Vehicle speed over ground",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Unit": "km/h"
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "250",
+            "step": "0.5",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "Temperature",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "Coolant temperature",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Unit": "Cel"
+            }
+          },
+          "constraint": {
+            "min": "-40",
+            "max": "125",
+            "step": "0.1",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    }
+  ]
+}
+
+// ===== package veh.cluster =====
+{
+  "name": "veh.cluster",
+  "decls": [
+    {
+      "name": "ClusterReading",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "Instrument-cluster reading, carrying a speed from the common package.",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "speed",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "veh.common.Speed"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": true
+        }
+      }
+    }
+  ]
+}

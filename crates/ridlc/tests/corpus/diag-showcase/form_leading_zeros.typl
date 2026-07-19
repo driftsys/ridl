@@ -1,0 +1,4 @@
+package diag.showcase
+
+// FORM-005: leading zeros in an integer literal.
+type LeadingZeros : integer [0..007]

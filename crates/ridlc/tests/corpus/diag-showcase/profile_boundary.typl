@@ -1,0 +1,8 @@
+package diag.showcase
+
+// TYPL-302: a duration literal in a typl context. The family lexer recognizes
+// `10ms` as a duration everywhere; the typl profile rejects it. In init
+// position the duration token is consumed as the value, so TYPL-302 stands
+// alone (a duration in a constraint would also fail a positional parser check
+// and add a FORM-101).
+const TIMEOUT : integer = 10ms

@@ -1,0 +1,262 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.diagnostics
+input_file: crates/ridlc/tests/corpus/diag-showcase/ridl.toml
+---
+warning[MANI-005]: unknown key `edition` in `[package]`
+  ┌─ tests/corpus/diag-showcase/ridl.toml:1:1
+  │
+1 │ [package]
+  │ ^^^^^^^^^
+
+error[MANI-007]: invalid import URL `ghost://not-a-url` for `ghost.pkg`; expected an `http://` or `https://` URL with a host
+  ┌─ tests/corpus/diag-showcase/ridl.toml:9:15
+  │
+9 │ "ghost.pkg" = "ghost://not-a-url"
+  │               ^^^^^^^^^^^^^^^^^^^
+
+error[TYPL-001]: more than one `package` declaration in this file
+  ┌─ tests/corpus/diag-showcase/double_package.typl:2:1
+  │
+2 │ package diag.extra
+  │ ^^^^^^^^^^^^^^^^^^
+
+error[TYPL-002]: package name `diag.wrong` does not mirror the directory path; every file in this directory must declare `package diag.showcase`
+  ┌─ tests/corpus/diag-showcase/wrong_package.typl:1:1
+  │
+1 │ package diag.wrong
+  │ ^^^^^^^^^^^^^^^^^^
+
+error[TYPL-201]: array without explicit bounds
+  ┌─ tests/corpus/diag-showcase/composites.typl:9:8
+  │
+9 │   xs : [Speed]
+  │        ^^^^^^^
+
+error[FORM-101]: expected `;`
+  ┌─ tests/corpus/diag-showcase/composites.typl:9:14
+  │
+9 │   xs : [Speed]
+  │              ^
+
+error[TYPL-202]: map without explicit bounds
+   ┌─ tests/corpus/diag-showcase/composites.typl:14:7
+   │
+14 │   m : [Label : Name]
+   │       ^^^^^^^^^^^^^^
+
+error[FORM-101]: expected `;`
+   ┌─ tests/corpus/diag-showcase/composites.typl:14:20
+   │
+14 │   m : [Label : Name]
+   │                    ^
+
+error[TYPL-203]: duplicate enum value 0
+   ┌─ tests/corpus/diag-showcase/composites.typl:20:12
+   │
+20 │   SECOND = 0
+   │            ^
+
+error[TYPL-204]: union arm `ok` has primitive type `integer` — arms reference named types only
+   ┌─ tests/corpus/diag-showcase/composites.typl:29:9
+   │
+29 │   ok  : integer
+   │         ^^^^^^^
+
+error[TYPL-206]: recursive composite reference: `SelfReferential` -> `SelfReferential`
+   ┌─ tests/corpus/diag-showcase/composites.typl:36:8
+   │
+36 │ struct SelfReferential {
+   │        ^^^^^^^^^^^^^^^
+
+error[TYPL-207]: duplicate enumset bit position 0
+   ┌─ tests/corpus/diag-showcase/composites.typl:43:11
+   │
+43 │   BIT_B = 0
+   │           ^
+
+error[TYPL-208]: `string` must not be used directly as a field type — define a named `type`
+   ┌─ tests/corpus/diag-showcase/composites.typl:48:7
+   │
+48 │   s : string
+   │       ^^^^^^
+
+error[TYPL-209]: map key `Speed` is not a named string type or a primitive
+   ┌─ tests/corpus/diag-showcase/composites.typl:53:8
+   │
+53 │   m : [Speed : Name; 0..4]
+   │        ^^^^^
+
+error[TYPL-210]: field `legacyChecksum` re-declares a `reserved` name
+   ┌─ tests/corpus/diag-showcase/composites.typl:59:3
+   │
+59 │   legacyChecksum : Name
+   │   ^^^^^^^^^^^^^^
+
+warning[TYPL-211]: duplicate `reserved` entry `legacy`
+   ┌─ tests/corpus/diag-showcase/composites.typl:65:3
+   │
+65 │   reserved legacy
+   │   ^^^^^^^^^^^^^^^
+
+error[TYPL-212]: `error` is not valid on a `type` declaration — only `struct`, `enum`, and `union`
+   ┌─ tests/corpus/diag-showcase/composites.typl:70:12
+   │
+70 │ error type BadErrorType : integer [0..1]
+   │            ^^^^^^^^^^^^
+
+error[TYPL-213]: union mixes 2 success and 1 error arms — a result union has exactly one of each
+   ┌─ tests/corpus/diag-showcase/composites.typl:82:7
+   │
+82 │ union ThreeArmMix {
+   │       ^^^^^^^^^^^
+
+error[TYPL-214]: `error union` arm `plain` is not error-typed
+   ┌─ tests/corpus/diag-showcase/composites.typl:97:11
+   │
+97 │   plain : PlainArm
+   │           ^^^^^^^^
+
+error[FORM-005]: integer literal has leading zeros
+  ┌─ tests/corpus/diag-showcase/form_leading_zeros.typl:4:33
+  │
+4 │ type LeadingZeros : integer [0..007]
+  │                                 ^^^
+
+error[FORM-101]: expected `:`
+  ┌─ tests/corpus/diag-showcase/form_missing_colon.typl:4:19
+  │
+4 │ type MissingColon integer [0..10]
+  │                   ^^^^^^^
+
+error[FORM-104]: missing `package` declaration
+  ┌─ tests/corpus/diag-showcase/form_missing_package.typl:3:1
+  │
+3 │ type NoPackageDeclared : integer [0..10]
+  │ ^^^^
+
+error[FORM-105]: reserved word `signal` used as identifier
+  ┌─ tests/corpus/diag-showcase/form_reserved_word.typl:4:6
+  │
+4 │ type signal : km/h [0.0..250.0 step 0.5]
+  │      ^^^^^^
+
+error[FORM-103]: unclosed `{`
+  ┌─ tests/corpus/diag-showcase/form_unclosed_brace.typl:8:1
+  │
+8 │ 
+  │ ^
+
+error[FORM-102]: unexpected token at top level
+  ┌─ tests/corpus/diag-showcase/form_unexpected_token.typl:7:1
+  │
+7 │ ] } = garbage 99
+  │ ^
+
+error[TYPL-003]: wildcard imports are not permitted
+  ┌─ tests/corpus/diag-showcase/imports_and_dupes.typl:4:1
+  │
+4 │ import phantom.pkg.*
+  │ ^^^^^^^^^^^^^^^^^^^
+
+error[FORM-101]: expected a name after `.`
+  ┌─ tests/corpus/diag-showcase/imports_and_dupes.typl:4:20
+  │
+4 │ import phantom.pkg.*
+  │                    ^
+
+error[TYPL-009]: duplicate declaration of `Duplicated`
+  ┌─ tests/corpus/diag-showcase/imports_and_dupes.typl:9:6
+  │
+9 │ type Duplicated : m/s [0.0..70.0 step 0.5]
+  │      ^^^^^^^^^^
+
+error[TYPL-302]: duration literal in typl context
+  ┌─ tests/corpus/diag-showcase/profile_boundary.typl:8:27
+  │
+8 │ const TIMEOUT : integer = 10ms
+  │                           ^^^^
+
+warning[TYPL-101]: `integer` without a range constraint
+  ┌─ tests/corpus/diag-showcase/scalars.typl:8:25
+  │
+8 │ type UnboundedCounter : integer
+  │                         ^^^^^^^
+
+warning[TYPL-102]: `float` without both a range and a `step`
+   ┌─ tests/corpus/diag-showcase/scalars.typl:11:22
+   │
+11 │ type UnboundedGain : float [0.0..1.0]
+   │                      ^^^^^
+
+warning[TYPL-103]: `string` without explicit bounds; the default `[0..256]` applies
+   ┌─ tests/corpus/diag-showcase/scalars.typl:15:18
+   │
+15 │ type LooseText : string
+   │                  ^^^^^^
+
+error[TYPL-104]: range minimum 10 is greater than maximum 0
+   ┌─ tests/corpus/diag-showcase/scalars.typl:18:30
+   │
+18 │ type InvertedRange : integer [10..0]
+   │                              ^^^^^^^
+
+error[TYPL-105]: `step` must be positive
+   ┌─ tests/corpus/diag-showcase/scalars.typl:21:39
+   │
+21 │ type ZeroStep : float [0.0..10.0 step 0.0]
+   │                                       ^^^
+
+error[TYPL-110]: unknown or malformed UCUM unit expression `xyz`
+   ┌─ tests/corpus/diag-showcase/scalars.typl:24:20
+   │
+24 │ type UnknownUnit : xyz [0.0..1.0 step 0.1]
+   │                    ^^^
+
+error[TYPL-111]: integer range bound outside the `int64` domain `[-2^63..2^63-1]`
+   ┌─ tests/corpus/diag-showcase/scalars.typl:27:26
+   │
+27 │ type HugeRange : integer [0..9223372036854775808]
+   │                          ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[TYPL-108]: const `TOO_FAST` value 300 outside `Speed` range [0, 250]
+   ┌─ tests/corpus/diag-showcase/scalars.typl:31:26
+   │
+31 │ const TOO_FAST : Speed = 300.0
+   │                          ^^^^^
+
+error[TYPL-109]: init value 300 is outside the declared range [0..250]
+   ┌─ tests/corpus/diag-showcase/scalars.typl:34:47
+   │
+34 │ type Overshoot : km/h [0.0..250.0 step 0.5] = 300.0
+   │                                               ^^^^^
+
+note[TYPL-115]: type `Handle` has no derivable init value and no declared `= value`
+   ┌─ tests/corpus/diag-showcase/scalars.typl:39:6
+   │
+39 │ type Handle : string [3..8 match HANDLE_PATTERN]
+   │      ^^^^^^
+
+error[TYPL-106]: invalid regular expression syntax
+   ┌─ tests/corpus/diag-showcase/scalars.typl:42:19
+   │
+42 │ const BAD_REGEX = /[/
+   │                   ^^^
+
+error[TYPL-005]: public `Level` exposes internal constant `SECRET_MAX`
+   ┌─ tests/corpus/diag-showcase/scalars.typl:46:26
+   │
+46 │ type Level : integer [0..SECRET_MAX]
+   │                          ^^^^^^^^^^
+
+warning[TYPL-405]: `@deprecated` on `OldSpeed` has no reason string
+   ┌─ tests/corpus/diag-showcase/scalars.typl:50:6
+   │
+50 │ type OldSpeed : km/h [0.0..250.0 step 0.5]
+   │      ^^^^^^^^
+
+warning[TYPL-404]: blank line between the doc comment and `Ambient`
+   ┌─ tests/corpus/diag-showcase/scalars.typl:55:6
+   │
+55 │ type Ambient : Cel [-40.0..125.0 step 0.1]
+   │      ^^^^^^^

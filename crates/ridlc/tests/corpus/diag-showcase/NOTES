@@ -1,0 +1,66 @@
+# diag-showcase coverage notes
+
+This package is crafted so its compile emits one instance of every diagnostic
+that a single package's source and manifest can trigger. The `@diag-showcase`
+diagnostics snapshot (`crates/ridlc/tests/snapshots/`) is the de-facto
+diagnostic index until the error-index website (E4.2).
+
+The runner keeps this package's diagnostics snapshot to coded pipeline
+diagnostics only. Code generation over the deliberately broken IR is not
+meaningful, so a backend failure is recorded in the Rust snapshot rather than
+folded into the diagnostics index.
+
+## Codes exercised here
+
+- FORM: 005, 101, 102, 103, 104, 105.
+- TYPL: 001, 002, 003, 005, 009, 101, 102, 103, 104, 105, 106, 108, 109, 110,
+  111, 115, 201, 202, 203, 204, 206, 207, 208, 209, 210, 211, 212, 213, 214,
+  302, 404, 405.
+- MANI: 005, 007.
+
+## Codes NOT exercisable from this single package
+
+Each is either not emitted by any E1 pass yet, or needs more than one package, a
+distinct/broken manifest, or the network. None is a defect in this corpus.
+
+### Cataloged but not emitted by any E1 pass
+
+- **FORM-001** (invalid character), **FORM-002** (unterminated string),
+  **FORM-003** (unterminated regex), **FORM-004** (unterminated block comment).
+  The lexer emits `Error` tokens for these inputs, but the parser reports them
+  as FORM-101/FORM-102 rather than the specific lexical code; an unterminated
+  block comment likewise surfaces as FORM-102. The codes exist in
+  `ridl_core::diag::FORM_CATALOG` for the error index (E4.2) but no pass emits
+  them in E1. Recorded so the gap is visible.
+
+### Need more than one package (resolver / cross-package)
+
+- **TYPL-004** (circular package import) — needs two workspace members that
+  import each other.
+- **TYPL-006** (colliding imports without an alias) — needs two importable
+  packages exposing the same symbol name.
+- **TYPL-007** (unused import) — needs a resolvable (bound) import left unused.
+- **TYPL-008** (needless import alias) — needs a resolvable import aliased with
+  no collision.
+
+### Need a distinct or broken manifest
+
+- **MANI-001** (invalid TOML), **MANI-002** (both `[package]` and
+  `[workspace]`), **MANI-003** (neither section) — each stops the manifest from
+  loading, so it cannot coexist with a working package in the same entry.
+- **MANI-006** (invalid package name) — would rename the whole package; it needs
+  its own manifest with an invalid name.
+- **MANI-004** (nested workspace), **MANI-008** (missing member directory) — need
+  a `[workspace]` manifest with members.
+
+### Need the network, a lockfile, or `--frozen`
+
+- **MANI-101** (fetch failed), **MANI-102** (hash mismatch), **MANI-103**
+  (`--frozen` with a missing lockfile entry), **MANI-104** (`--frozen` with an
+  unfetched import). These are distribution diagnostics driven by remote imports
+  and the `--frozen` flag, outside a plain source compile.
+
+## Deferred codes (ADR-0007 decision 10)
+
+TYPL-107, TYPL-205, and TYPL-401/402/403 are deferred in E1 and are not
+implemented, so they are absent by design.

@@ -1,0 +1,37 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.rust
+input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
+---
+// ===== package veh.common =====
+/// Vehicle speed over ground
+#[repr(transparent)]
+pub struct Speed(pub f64);
+impl Default for Speed {
+    fn default() -> Self {
+        Speed(0.0)
+    }
+}
+/// Coolant temperature
+#[repr(transparent)]
+pub struct Temperature(pub f64);
+impl Default for Temperature {
+    fn default() -> Self {
+        Temperature(0.0)
+    }
+}
+
+
+// ===== package veh.cluster =====
+/// Instrument-cluster reading, carrying a speed from the common package.
+#[repr(C)]
+pub struct ClusterReading {
+    pub speed: veh::common::Speed,
+}
+impl Default for ClusterReading {
+    fn default() -> Self {
+        ClusterReading {
+            speed: veh::common::Speed::default(),
+        }
+    }
+}

@@ -1,0 +1,55 @@
+package diag.showcase
+
+// Scalar and constant diagnostics. Each declaration below triggers exactly one
+// checker diagnostic; the names are unique across the whole package so no
+// unrelated duplicate (TYPL-009) fires.
+
+// TYPL-101: `integer` without a range constraint (warning).
+type UnboundedCounter : integer
+
+// TYPL-102: `float` without both a range and a `step` (warning).
+type UnboundedGain : float [0.0..1.0]
+
+// TYPL-103: `string` without explicit bounds — the default [0..256] is applied
+// (warning).
+type LooseText : string
+
+// TYPL-104: range minimum greater than maximum.
+type InvertedRange : integer [10..0]
+
+// TYPL-105: a non-positive `step`.
+type ZeroStep : float [0.0..10.0 step 0.0]
+
+// TYPL-110: an unknown UCUM unit atom.
+type UnknownUnit : xyz [0.0..1.0 step 0.1]
+
+// TYPL-111: an integer bound outside the int64 domain (2^63).
+type HugeRange : integer [0..9223372036854775808]
+
+// TYPL-108: a const value outside its named type's range.
+type Speed : km/h [0.0..250.0 step 0.5]
+const TOO_FAST : Speed = 300.0
+
+// TYPL-109: a declared init outside the range.
+type Overshoot : km/h [0.0..250.0 step 0.5] = 300.0
+
+// TYPL-115: a `match`-typed string has no derivable init and no declared
+// value (info).
+const HANDLE_PATTERN = /^[a-z]{3,8}$/
+type Handle : string [3..8 match HANDLE_PATTERN]
+
+// TYPL-106: an invalid regex constant.
+const BAD_REGEX = /[/
+
+// TYPL-005: a public type exposes an `internal` bound constant.
+internal const SECRET_MAX = 100
+type Level : integer [0..SECRET_MAX]
+
+// TYPL-405: an `@deprecated` doc tag without a reason string (warning).
+/// @deprecated
+type OldSpeed : km/h [0.0..250.0 step 0.5]
+
+// TYPL-404: a blank line between a doc comment and its definition (warning).
+/// Ambient temperature
+
+type Ambient : Cel [-40.0..125.0 step 0.1]

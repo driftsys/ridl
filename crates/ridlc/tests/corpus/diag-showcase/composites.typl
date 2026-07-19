@@ -1,0 +1,98 @@
+package diag.showcase
+
+// Composite diagnostics (typl §16.3). `Speed`, `Counter`, and the ridl.std
+// types `Name`, `Label`, and `Message` are the referenced vocabulary; `Speed`
+// is declared in `scalars.typl` and resolves package-wide.
+
+// TYPL-201: an array without bounds.
+struct UnboundedArray {
+  xs : [Speed]
+}
+
+// TYPL-202: a map without bounds.
+struct UnboundedMap {
+  m : [Label : Name]
+}
+
+// TYPL-203: a duplicate enum value.
+enum DupEnumValue {
+  FIRST = 0
+  SECOND = 0
+}
+
+// TYPL-204: a union arm with a primitive type.
+type Counter : integer [0..255]
+error struct ArmFault {
+  code : Counter
+}
+union PrimitiveArm {
+  ok  : integer
+  err : ArmFault
+}
+
+// TYPL-206: a directly recursive composite. The self-reference is optional so
+// the reference cycle the checker flags does not become an infinitely sized
+// (or infinitely Default-deriving) type in the generated Rust.
+struct SelfReferential {
+  next : SelfReferential?
+}
+
+// TYPL-207: duplicate enumset bit positions.
+enumset DuplicateBits {
+  BIT_A = 0
+  BIT_B = 0
+}
+
+// TYPL-208: a bare `string` used directly as a field type.
+struct BareStringField {
+  s : string
+}
+
+// TYPL-209: a map key that is not a named string type or a primitive.
+struct BadMapKey {
+  m : [Speed : Name; 0..4]
+}
+
+// TYPL-210: a field redeclared under a `reserved` name.
+struct RedeclaredReserved {
+  reserved legacyChecksum
+  legacyChecksum : Name
+}
+
+// TYPL-211: a duplicate `reserved` entry (warning).
+struct DuplicateReserved {
+  reserved legacy
+  reserved legacy
+  keep : Name
+}
+
+// TYPL-212: the `error` modifier on a type definition.
+error type BadErrorType : integer [0..1]
+
+// TYPL-213: a three-arm mix of error and non-error arms.
+struct ReadingResult {
+  value : Speed
+}
+struct ExtraResult {
+  value : Speed
+}
+error struct MixFault {
+  message : Message
+}
+union ThreeArmMix {
+  ok    : ReadingResult
+  extra : ExtraResult
+  err   : MixFault
+}
+
+// TYPL-214: an `error union` containing a non-error-typed arm.
+error enum DiagKind {
+  FILTER_INVALID = 0
+}
+struct PlainArm {
+  name : Name
+}
+error union ServiceFault {
+  diag  : DiagKind
+  plain : PlainArm
+}

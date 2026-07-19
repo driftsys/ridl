@@ -1,0 +1,4 @@
+package diag.showcase
+
+// FORM-101: a missing token — the `:` before the backing type is absent.
+type MissingColon integer [0..10]

@@ -1,0 +1,4 @@
+package diag.showcase
+
+// FORM-105: a reserved family word (`signal`) used as an identifier.
+type signal : km/h [0.0..250.0 step 0.5]

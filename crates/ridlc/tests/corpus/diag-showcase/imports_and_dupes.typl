@@ -1,0 +1,9 @@
+package diag.showcase
+
+// TYPL-003: a wildcard import (shape-rejected before resolution).
+import phantom.pkg.*
+
+// TYPL-009: a duplicate declaration in the package — the later one is flagged,
+// the first wins.
+type Duplicated : km/h [0.0..250.0 step 0.5]
+type Duplicated : m/s [0.0..70.0 step 0.5]
