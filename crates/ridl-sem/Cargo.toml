@@ -8,7 +8,13 @@ repository.workspace = true
 [dependencies]
 num-bigint.workspace = true
 num-rational.workspace = true
-ridl-core = { path = "../ridl-core" }
+# ridl-sem only uses ridl-core's db/diag/package/std_lib modules, none of
+# which sit behind the fs/fetch features, so the default features (fetch,
+# which implies fs) are turned off here. Leaving the default on would pull
+# `ureq` (and transitively `ring`) into the wasm32-unknown-unknown build
+# even with `--no-default-features` on ridl-sem itself (ADR-0007 decision 5,
+# E1.19).
+ridl-core = { path = "../ridl-core", default-features = false }
 ridl-ir = { path = "../ridl-ir" }
 ridl-syntax = { path = "../ridl-syntax" }
 rowan.workspace = true
