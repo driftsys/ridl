@@ -1,0 +1,13 @@
+[package]
+name = "ridl-backend-ts"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ridl-ir = { path = "../../crates/ridl-ir" }
+
+[dev-dependencies]
+insta.workspace = true
+tempfile = "3.15.0"
