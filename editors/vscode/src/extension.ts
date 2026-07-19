@@ -1,9 +1,12 @@
-// The RIDL VS Code extension entry point (docs/ROADMAP.md epic E1.17).
+// The RIDL VS Code extension entry point (docs/ROADMAP.md epics E1.17,
+// E2.10b).
 //
-// Activates on the `typl` language and starts an LSP client over stdio
-// against the `ridl-lsp` binary (crates/ridl-lsp). The binary path comes
-// from the `ridl.serverPath` setting, falling back to `ridl-lsp` resolved
-// from PATH.
+// Activates on the `typl` and `ridl` languages and starts one LSP client over
+// stdio against the `ridl-lsp` binary (crates/ridl-lsp). One server serves both
+// languages: the compiler selects the profile from the file extension, so a
+// `.ridl` file and a `.typl` file of the same package are checked together. The
+// binary path comes from the `ridl.serverPath` setting, falling back to
+// `ridl-lsp` resolved from PATH.
 
 import * as vscode from "vscode";
 import {
@@ -34,7 +37,7 @@ export async function deactivate(): Promise<void> {
   }
 }
 
-/** Builds the language client: stdio transport to `ridl-lsp`, scoped to `.typl` files. */
+/** Builds the language client: stdio transport to `ridl-lsp`, scoped to `.typl` and `.ridl` files. */
 function createClient(): LanguageClient {
   const serverOptions: ServerOptions = {
     command: resolveServerPath(),
@@ -42,7 +45,10 @@ function createClient(): LanguageClient {
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ scheme: "file", language: "typl" }],
+    documentSelector: [
+      { scheme: "file", language: "typl" },
+      { scheme: "file", language: "ridl" },
+    ],
   };
 
   // The client id "ridl" ties this client to the `ridl.trace.server` setting:

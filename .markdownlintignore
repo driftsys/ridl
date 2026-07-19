@@ -1,0 +1,19 @@
+# .markdownlintignore — markdownlint's committed exclusion list (gitignore
+# syntax). markdownlint-cli auto-detects this file; paths listed here are not
+# linted and not rewritten by `--fix`.
+#
+# This file exists instead of `--ignore` flags on the command line. A
+# markdownlint-cli `--ignore` argument is `lstat`ed: a real directory expands
+# to its whole subtree, but a glob string throws, falls to the catch branch,
+# and becomes a pattern matched against `.md` file paths. No `.md` path ends
+# in `node_modules`, so `--ignore '**/node_modules'` matched nothing at all,
+# and `--ignore book` worked only because `book/` happened to exist as a real
+# directory at lint time. Keeping the list here also keeps the `fmt` and
+# `check` recipes from drifting apart, and mirrors the `.primignore`
+# convention.
+
+# Vendored dependencies — the VS Code extension's, and any other.
+node_modules/
+
+# mdBook build output.
+book/

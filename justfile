@@ -14,15 +14,16 @@ default:
     @just --list
 
 # Reformat the connective tissue (Markdown/JSON/YAML/TOML) in place with prim,
-# then auto-fix Markdown style findings.
+# then auto-fix Markdown style findings. Exclusions live in .markdownlintignore,
+# which markdownlint auto-detects — see that file for why not `--ignore`.
 fmt:
     prim .
-    markdownlint '**/*.md' --ignore book --ignore '**/node_modules' --fix
+    markdownlint '**/*.md' --fix
 
 # Lint gate — no writes: prim --check (formatting) + markdownlint (style).
 check:
     prim --check .
-    markdownlint '**/*.md' --ignore book --ignore '**/node_modules'
+    markdownlint '**/*.md'
 
 # Compile the Rust workspace (the Cargo.toml guard is a defensive
 # fallback for partial checkouts, not a "lands later" gate).

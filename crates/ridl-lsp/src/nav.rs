@@ -14,7 +14,7 @@
 use ridl_core::db::{InputFile, parse_file};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_sem::{Resolution, Symbol, resolve_package};
-use ridl_syntax::ast::{AstNode, Import, QualifiedName, SourceFile};
+use ridl_syntax::ast::{AstNode, DottedName, Import, QualifiedName, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{TextRange, TextSize, TokenAtOffset};
 
@@ -340,7 +340,14 @@ pub(crate) fn qualified_segments(node: &SyntaxNode) -> Vec<String> {
     segments
 }
 
-/// Whether a syntax kind is one of the six top-level definition kinds.
+/// Whether a syntax kind is a top-level definition kind: the six typl shapes
+/// plus `interface`, which shares the one declaration namespace with them (the
+/// resolver enters interface names as [`SymbolKind::Interface`] symbols, so a
+/// service's shape reference and an interface's own name both resolve).
+///
+/// `service` is deliberately absent: a service's dotted name lives in the
+/// workspace catalog namespace, not the declaration namespace, and is never a
+/// symbol.
 fn is_definition(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -350,7 +357,22 @@ fn is_definition(kind: SyntaxKind) -> bool {
             | SyntaxKind::EnumDef
             | SyntaxKind::EnumSetDef
             | SyntaxKind::UnionDef
+            | SyntaxKind::InterfaceDef
     )
+}
+
+/// The dotted text of a `DottedName` node — a service's global name
+/// (ridl §14.5) — read token by token so trivia never leaks in. This is the
+/// key `v2::Service.name` carries, so it is what the IR lookup matches on.
+pub(crate) fn dotted_text(name: &DottedName) -> Option<String> {
+    let text: String = name
+        .syntax()
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| !token.kind().is_trivia())
+        .map(|token| token.text().to_string())
+        .collect();
+    (!text.is_empty()).then_some(text)
 }
 
 /// The parsed [`SourceFile`] of one input, through the memoized parse query.
