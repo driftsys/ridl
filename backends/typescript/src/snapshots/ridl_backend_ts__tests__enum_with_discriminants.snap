@@ -1,0 +1,14 @@
+---
+source: backends/typescript/src/tests.rs
+expression: ts_for(decls)
+---
+export enum GearPosition {
+  PARK = 0,
+  DRIVE = 1,
+  REVERSE = 2,
+  NEUTRAL = 3,
+}
+
+export function initGearPosition(): GearPosition {
+  return GearPosition.PARK;
+}

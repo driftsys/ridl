@@ -1176,6 +1176,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "ridl-backend-ts"
+version = "0.0.0"
+dependencies = [
+ "insta",
+ "ridl-ir",
+ "tempfile",
+]
+
+[[package]]
 name = "ridl-core"
 version = "0.0.0"
 dependencies = [

@@ -1,0 +1,40 @@
+---
+source: backends/typescript/src/tests.rs
+expression: ts_for(decls)
+---
+/**
+ * Vehicle speed over ground
+ *
+ * @unit km/h
+ * @range [0.0..250.0 step 0.5]
+ */
+export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
+
+export function initSpeed(): Speed {
+  return 0.0 as Speed;
+}
+
+export const MAX_SPEED = 250.0;
+
+export const MAX_GEAR = 6;
+
+/**
+ * @range [0..18446744073709551615]
+ */
+export type Odometer = bigint & { readonly __ridl: 'veh.common.Odometer' };
+
+export function initOdometer(): Odometer {
+  return 0n as Odometer;
+}
+
+export const MAX_ODOMETER = 18446744073709551615n;
+
+export type Greeting = string & { readonly __ridl: 'veh.common.Greeting' };
+
+export function initGreeting(): Greeting {
+  return '' as Greeting;
+}
+
+export const BANNER = 'hello' as const;
+
+export const VIN_PATTERN = '^[A-HJ-NPR-Z0-9]{17}$' as const;

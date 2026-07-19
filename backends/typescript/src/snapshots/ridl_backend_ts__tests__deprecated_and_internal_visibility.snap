@@ -1,0 +1,31 @@
+---
+source: backends/typescript/src/tests.rs
+expression: source
+---
+/**
+ * Vehicle speed over ground
+ *
+ * @unit km/h
+ * @range [0.0..250.0 step 0.5]
+ * @deprecated use Velocity
+ */
+export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
+
+export function initSpeed(): Speed {
+  return 0.0 as Speed;
+}
+
+/**
+ * @deprecated
+ */
+export type OldFlag = boolean & { readonly __ridl: 'veh.common.OldFlag' };
+
+export function initOldFlag(): OldFlag {
+  return false as OldFlag;
+}
+
+type RawTicks = number & { readonly __ridl: 'veh.common.RawTicks' };
+
+function initRawTicks(): RawTicks {
+  return 0 as RawTicks;
+}
