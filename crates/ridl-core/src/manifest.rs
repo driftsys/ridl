@@ -74,10 +74,16 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
         Ok(raw) => raw,
         Err(err) => {
             let range = err.span().unwrap_or(0..text.len());
-            let message = err
-                .to_string()
+            // The span already draws the caret at the location, so the message
+            // carries the reason, not the location. A `toml` error renders as a
+            // multi-line block whose first line is the location header
+            // ("TOML parse error at line 2, column 5") and whose last line is
+            // the description ("key with no value, expected `=`"); the last line
+            // is the description-first text the house style wants (T6).
+            let rendered = err.to_string();
+            let message = rendered
                 .lines()
-                .next()
+                .last()
                 .unwrap_or("invalid TOML")
                 .trim()
                 .to_string();
@@ -207,6 +213,9 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
         // Unreachable: the typed parse already accepted this text.
         Err(_) => return,
     };
+    // The allowed-key lists below must stay in sync with the fields of
+    // `RawPackage` and `RawWorkspace`: a field added there without a matching
+    // entry here would wrongly warn as an unknown key.
     for (key, value) in &doc {
         match key.as_str() {
             "package" => check_section_keys(file_id, "package", value, &["name", "version"], diags),
@@ -397,6 +406,32 @@ members = [\"veh-common\", \"veh-cluster\", \"veh-adas\"]
         assert!(manifest.is_none(), "invalid TOML yields no manifest");
         assert_eq!(codes(&diags), vec!["MANI-001"]);
         assert_eq!(diags[0].severity, Severity::Error);
+        // The message carries the reason (description-first, T6 house style),
+        // not the "TOML parse error at line …" location header.
+        assert!(
+            diags[0].message.contains("expected `=`"),
+            "MANI-001 message must carry the reason, got {:?}",
+            diags[0].message,
+        );
+        assert!(
+            !diags[0].message.contains("TOML parse error at line"),
+            "MANI-001 message must not be the location header, got {:?}",
+            diags[0].message,
+        );
+    }
+
+    #[test]
+    fn mani_001_carries_type_error_reason() {
+        // A wrong-typed field value is a schema error; its reason must survive.
+        let (manifest, diags) = parse("[package]\nname = 123\nversion = \"1.0.0\"\n");
+        assert!(manifest.is_none());
+        assert_eq!(codes(&diags), vec!["MANI-001"]);
+        assert!(
+            diags[0].message.contains("invalid type"),
+            "MANI-001 message must carry the type-mismatch reason, got {:?}",
+            diags[0].message,
+        );
+        assert!(!diags[0].message.contains("TOML parse error at line"));
     }
 
     #[test]
