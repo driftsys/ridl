@@ -44,7 +44,7 @@ use rowan::TextRange;
 use salsa::Setter as _;
 
 use crate::convert::{self, LineIndex};
-use crate::{hover, nav};
+use crate::{complete, hover, nav, rename};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -61,9 +61,10 @@ pub fn run(connection: Connection) -> Result<(), Error> {
 }
 
 /// The capability set: incremental text sync with open/close notifications,
-/// quick-fix code actions (E1.15a), and hover, goto-definition, and
-/// find-references (E1.15b). The later E1.15 tasks add completion and rename
-/// (c) and inlay hints (d) to this same struct.
+/// quick-fix code actions (E1.15a), hover, goto-definition, and find-references
+/// (E1.15b), and completion and rename (E1.15c). Rename advertises
+/// `prepareProvider` so the client validates the cursor and the new name before
+/// applying an edit. The last E1.15 task adds inlay hints (d) to this struct.
 fn server_capabilities() -> lt::ServerCapabilities {
     lt::ServerCapabilities {
         text_document_sync: Some(lt::TextDocumentSyncCapability::Options(
@@ -82,6 +83,16 @@ fn server_capabilities() -> lt::ServerCapabilities {
         hover_provider: Some(lt::HoverProviderCapability::Simple(true)),
         definition_provider: Some(lt::OneOf::Left(true)),
         references_provider: Some(lt::OneOf::Left(true)),
+        completion_provider: Some(lt::CompletionOptions {
+            // `.` completes an import path; `:` a type position. Identifier
+            // characters need not be listed — the client triggers on those.
+            trigger_characters: Some(vec![":".to_string(), ".".to_string()]),
+            ..Default::default()
+        }),
+        rename_provider: Some(lt::OneOf::Right(lt::RenameOptions {
+            prepare_provider: Some(true),
+            work_done_progress_options: Default::default(),
+        })),
         ..Default::default()
     }
 }
@@ -268,6 +279,43 @@ impl ServerState {
             lt::request::References::METHOD => {
                 match serde_json::from_value::<lt::ReferenceParams>(request.params) {
                     Ok(params) => Response::new_ok(request.id, self.references(&params)),
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            lt::request::Completion::METHOD => {
+                match serde_json::from_value::<lt::CompletionParams>(request.params) {
+                    Ok(params) => Response::new_ok(request.id, self.completion(&params)),
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            lt::request::PrepareRenameRequest::METHOD => {
+                match serde_json::from_value::<lt::TextDocumentPositionParams>(request.params) {
+                    Ok(params) => Response::new_ok(request.id, self.prepare_rename(&params)),
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            lt::request::Rename::METHOD => {
+                match serde_json::from_value::<lt::RenameParams>(request.params) {
+                    Ok(params) => match self.rename(&params) {
+                        Ok(edit) => Response::new_ok(request.id, edit),
+                        Err(err) => Response::new_err(
+                            request.id,
+                            ErrorCode::RequestFailed as i32,
+                            err.message(),
+                        ),
+                    },
                     Err(err) => Response::new_err(
                         request.id,
                         ErrorCode::InvalidParams as i32,
@@ -571,6 +619,94 @@ impl ServerState {
             }
         }
         Some(locations)
+    }
+
+    /// `textDocument/completion`: the items offered for the cursor position,
+    /// dispatched by the syntactic context the cursor sits in (E1.15c).
+    fn completion(&mut self, params: &lt::CompletionParams) -> Option<lt::CompletionResponse> {
+        let position = params.text_document_position.position;
+        let path = convert::uri_to_path(&params.text_document_position.text_document.uri)?;
+        let (file, package) = self.locate(&path)?;
+        let offset = self.line_index_of(file).offset(position);
+        let packages = self.search_packages();
+        let items = complete::completion(
+            &self.db,
+            self.workspace,
+            self.std,
+            package,
+            file,
+            offset,
+            &packages,
+        );
+        Some(lt::CompletionResponse::Array(items))
+    }
+
+    /// `textDocument/prepareRename`: the name span the cursor is on when it is a
+    /// renameable symbol, so the client can validate before applying (E1.15c).
+    fn prepare_rename(
+        &mut self,
+        params: &lt::TextDocumentPositionParams,
+    ) -> Option<lt::PrepareRenameResponse> {
+        let path = convert::uri_to_path(&params.text_document.uri)?;
+        let (file, package) = self.locate(&path)?;
+        let offset = self.line_index_of(file).offset(params.position);
+        let range = rename::prepare(&self.db, self.workspace, self.std, package, file, offset)?;
+        let lsp_range = self.line_index_of(file).range(range);
+        Some(lt::PrepareRenameResponse::Range(lsp_range))
+    }
+
+    /// `textDocument/rename`: the workspace edit renaming the symbol under the
+    /// cursor, or a [`RenameError`](rename::RenameError) the caller turns into an
+    /// LSP error response (E1.15c).
+    fn rename(
+        &mut self,
+        params: &lt::RenameParams,
+    ) -> Result<lt::WorkspaceEdit, rename::RenameError> {
+        let position = params.text_document_position.position;
+        let path = convert::uri_to_path(&params.text_document_position.text_document.uri)
+            .ok_or(rename::RenameError::NotRenameable)?;
+        let (file, package) = self
+            .locate(&path)
+            .ok_or(rename::RenameError::NotRenameable)?;
+        let offset = self.line_index_of(file).offset(position);
+        let packages = self.search_packages();
+        let edits = rename::rename(
+            &self.db,
+            self.workspace,
+            self.std,
+            package,
+            file,
+            offset,
+            &packages,
+            &params.new_name,
+        )?;
+        Ok(self.workspace_edit(edits, &params.new_name))
+    }
+
+    /// Groups rename edits into a [`lt::WorkspaceEdit`], mapping each edited
+    /// input to its `file://` URI and its byte range to an LSP range. An input
+    /// with no `file://` URI (the embedded `ridl.std`) is dropped.
+    fn workspace_edit(&mut self, edits: Vec<rename::Edit>, new_name: &str) -> lt::WorkspaceEdit {
+        // `WorkspaceEdit.changes` is keyed by `lsp_types::Uri`, whose inner
+        // cache cell trips `mutable_key_type`; the key's identity (the URI
+        // string) never mutates.
+        #[allow(clippy::mutable_key_type)]
+        let mut changes: HashMap<lt::Uri, Vec<lt::TextEdit>> = HashMap::new();
+        for edit in edits {
+            let Some(uri) = convert::path_to_uri(edit.file.path(&self.db)) else {
+                continue;
+            };
+            let range = self.line_index_of(edit.file).range(edit.range);
+            changes.entry(uri).or_default().push(lt::TextEdit {
+                range,
+                new_text: new_name.to_string(),
+            });
+        }
+        lt::WorkspaceEdit {
+            changes: Some(changes),
+            document_changes: None,
+            change_annotations: None,
+        }
     }
 
     /// The input and package for a document path: an overlay file, or a loaded

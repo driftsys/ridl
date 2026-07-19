@@ -22,7 +22,9 @@
 //! through the memoized queries, so editing one file re-checks only the
 //! package that file belongs to.
 
+pub mod complete;
 pub mod convert;
 pub mod hover;
 pub mod nav;
+pub mod rename;
 pub mod server;

@@ -14,7 +14,7 @@
 use ridl_core::db::{InputFile, parse_file};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_sem::{Resolution, Symbol, resolve_package};
-use ridl_syntax::ast::{AstNode, QualifiedName, SourceFile};
+use ridl_syntax::ast::{AstNode, Import, QualifiedName, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{TextRange, TextSize, TokenAtOffset};
 
@@ -56,6 +56,59 @@ pub fn symbol_at(
         symbol,
         reference: reference.range,
     })
+}
+
+/// Resolves a cursor sitting on the imported-symbol segment of an `import`
+/// statement to the declared [`Symbol`] the import binds.
+///
+/// [`symbol_at`] returns `None` inside an import path — `reference_at` skips
+/// tokens under a [`SyntaxKind::Import`] ancestor, because an import line is not
+/// a reference the resolver walks. Rename still has to start from the import
+/// line (the cursor is often there), so this entry point resolves the final
+/// path segment (`import veh.common.Speed` → the `Speed` in `veh.common`) the
+/// same way a qualified reference resolves, and reports the segment span rename
+/// rewrites in place. A cursor on a package-path segment (`common`) is not an
+/// imported symbol and yields `None` — package rename is out of scope.
+pub fn import_at(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    std: Package,
+    pkg: Package,
+    file: InputFile,
+    offset: TextSize,
+) -> Option<Located> {
+    let source = source_file(db, file);
+    let token = identifier_at(source.syntax(), offset)?;
+    let import = token.parent_ancestors().find_map(Import::cast)?;
+    let qualified = import.qualified_name()?;
+    // The imported symbol is the last non-`.` token of the path; the alias
+    // (`as VS`) is a separate `Name` child, so it is never this token.
+    let last = last_segment_token(&qualified)?;
+    if last.text_range() != token.text_range() {
+        return None;
+    }
+    let reference = Reference {
+        segments: qualified_segments(&qualified),
+        range: last.text_range(),
+    };
+    let resolution = resolve_package(db, ws, pkg, std);
+    let symbol = resolve_reference(db, ws, std, pkg, &resolution, &reference)?;
+    Some(Located {
+        symbol,
+        reference: last.text_range(),
+    })
+}
+
+/// The final path segment token of a qualified name — its last non-trivia,
+/// non-`.` token. This is the imported symbol name in an `import` path and the
+/// referenced name in a qualified reference (the only part rename rewrites).
+pub(crate) fn last_segment_token(qualified: &QualifiedName) -> Option<SyntaxToken> {
+    qualified
+        .syntax()
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| !token.kind().is_trivia() && token.kind() != SyntaxKind::Dot)
+        .last()
 }
 
 /// Every reference across `packages` that resolves to the same symbol as
@@ -218,6 +271,31 @@ fn references_in(source: &SourceFile) -> Vec<Reference> {
         }
     }
     out
+}
+
+/// The span of the final path segment inside a reference `range` in `file` —
+/// the sub-range rename rewrites in place.
+///
+/// [`find_references`] returns the span of the whole reference: a single name
+/// for a bare reference, but the whole `pkg.Name` for a qualified one. Rename
+/// must touch only the final `Name` segment, so this narrows a qualified
+/// reference to its last token and leaves a bare reference unchanged.
+pub fn final_segment_range(
+    db: &dyn salsa::Database,
+    file: InputFile,
+    range: TextRange,
+) -> TextRange {
+    let source = source_file(db, file);
+    match source.syntax().covering_element(range) {
+        rowan::NodeOrToken::Token(token) => token.text_range(),
+        rowan::NodeOrToken::Node(node) => node
+            .descendants_with_tokens()
+            .filter_map(|element| element.into_token())
+            .filter(|token| !token.kind().is_trivia() && token.kind() != SyntaxKind::Dot)
+            .last()
+            .map(|token| token.text_range())
+            .unwrap_or(range),
+    }
 }
 
 /// The identifier token at `offset`, preferring an `Ident` when the offset
