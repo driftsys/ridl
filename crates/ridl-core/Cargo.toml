@@ -6,10 +6,14 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = ["fs"]
-# Filesystem discovery (`workspace::load_workspace`). Off for the
-# wasm32-unknown-unknown build (ADR-0007 decision 5).
+default = ["fetch"]
+# Filesystem discovery (`workspace::load_workspace`) plus the lockfile
+# (`lock`). Off for the wasm32-unknown-unknown build (ADR-0007 decision 5).
 fs = []
+# Network package fetch (`fetch`, `cache`) — pulls `ureq`, `sha2`, and `tar`.
+# Implies `fs` because fetch writes the content-addressed cache to disk
+# (ADR-0007 decision 5). Off for the wasm32-unknown-unknown build.
+fetch = ["fs", "dep:ureq", "dep:sha2", "dep:tar"]
 
 [dependencies]
 codespan-reporting.workspace = true
@@ -18,7 +22,10 @@ ridl-syntax = { path = "../ridl-syntax" }
 rowan.workspace = true
 salsa.workspace = true
 serde.workspace = true
+sha2 = { workspace = true, optional = true }
+tar = { workspace = true, optional = true }
 toml.workspace = true
+ureq = { workspace = true, optional = true }
 
 [dev-dependencies]
 insta.workspace = true
