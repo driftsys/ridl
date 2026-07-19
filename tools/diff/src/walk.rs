@@ -7,14 +7,37 @@
 //! [`Change`](crate::Change) per difference with an honest path.
 //!
 //! Ordinal analysis (ridl §11) is done on the surviving interactions of an
-//! interface. A new interaction is [`InteractionAppended`](crate::Category::InteractionAppended)
-//! when it sits after every pre-existing interaction and
+//! interface. A new slot is [`InteractionAppended`](crate::Category::InteractionAppended)
+//! when it sits after every pre-existing slot and
 //! [`InteractionInserted`](crate::Category::InteractionInserted) otherwise; a
 //! surviving interaction whose *relative* order changed is
-//! [`InteractionReordered`](crate::Category::InteractionReordered). Ordinal
-//! shifts that are mere consequences of an insert or a removal elsewhere are
-//! not reported a second time — the insert or removal that caused them already
-//! is.
+//! [`InteractionReordered`](crate::Category::InteractionReordered).
+//!
+//! A surviving interaction whose *absolute* ordinal shifted while its relative
+//! order held is not reported a second time. That suppression is sound only
+//! because every cause of such a shift is itself reported as breaking, so the
+//! report verdict can never come out compatible while a wire identity moved
+//! (ADR-0008 decision 14 lists "shifts or reuses a wire identity" first among
+//! breaking changes). The causes are exhaustive:
+//!
+//! 1. an interaction added ahead of it — `InteractionInserted`;
+//! 2. an interaction removed ahead of it with no tombstone —
+//!    `InteractionRemoved`;
+//! 3. an interaction retired to a tombstone in its own slot — no shift at all;
+//! 4. an interaction retired to a tombstone written out of its slot —
+//!    `InteractionRemoved`, because the freed slot is what the survivors slide
+//!    into;
+//! 5. a tombstone dropped ahead of it — `InteractionRemoved`, a permanent wire
+//!    reservation cannot be released;
+//! 6. a tombstone moved — `InteractionReordered`;
+//! 7. a tombstone minted ahead of it for a name the old snapshot never held —
+//!    `InteractionInserted`.
+//!
+//! Cases 4 through 7 are why tombstones carry their ordinal through the
+//! comparison rather than being compared as a bare set of names: a retirement
+//! is compatible, so a tombstone edit that shifts a wire identity would
+//! otherwise reach no `Change` at all and the classifier downstream would have
+//! nothing left to judge.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -293,14 +316,31 @@ fn diff_interface(
         if let Some((new_ord, new_decl)) = new_live_map.get(name) {
             matched.push((name, *old_ord, *new_ord));
             diff_interaction(&member_path, old_decl, new_decl, changes);
-        } else if new_reserved.contains(name) {
-            emit(
-                changes,
-                member_path,
-                Category::InteractionRetired,
-                Some(interaction_desc(old_decl)),
-                Some("reserved".to_string()),
-            );
+        } else if let Some(reserved_ord) = new_reserved.get(name) {
+            // A tombstone must hold the retired interaction's own ordinal
+            // (ridl §11). A tombstone placed elsewhere lets the surviving
+            // interactions slide into the freed slot — a wire break that the
+            // relative-order check below cannot see.
+            if *reserved_ord == *old_ord {
+                emit(
+                    changes,
+                    member_path,
+                    Category::InteractionRetired,
+                    Some(interaction_desc(old_decl)),
+                    Some("reserved".to_string()),
+                );
+            } else {
+                emit(
+                    changes,
+                    member_path,
+                    Category::InteractionRemoved,
+                    Some(format!(
+                        "{} at ordinal {old_ord}",
+                        interaction_desc(old_decl)
+                    )),
+                    Some(format!("reserved at ordinal {reserved_ord}")),
+                );
+            }
         } else {
             emit(
                 changes,
@@ -312,13 +352,63 @@ fn diff_interface(
         }
     }
 
-    let anchor_ordinals = anchor_ordinals(&matched, new);
+    // A tombstone is a permanent wire reservation (ridl §11). Dropping one, or
+    // moving it, lets every later interaction slide down into the freed slot —
+    // a wire break invisible to the relative-order check below.
+    for (name, old_ord) in &old_reserved {
+        if new_live_map.contains_key(name) {
+            continue; // handled as ReservedNameRedeclared below.
+        }
+        match new_reserved.get(name) {
+            Some(new_ord) if new_ord == old_ord => {}
+            Some(new_ord) => emit(
+                changes,
+                format!("{pkg}/{iface}/{name}"),
+                Category::InteractionReordered,
+                Some(format!("reserved at ordinal {old_ord}")),
+                Some(format!("reserved at ordinal {new_ord}")),
+            ),
+            None => emit(
+                changes,
+                format!("{pkg}/{iface}/{name}"),
+                Category::InteractionRemoved,
+                Some(format!("reserved at ordinal {old_ord}")),
+                None,
+            ),
+        }
+    }
+
+    let anchor_ordinals = anchor_ordinals(&matched, new, &old_live_names, &old_reserved);
+
+    // A tombstone minted for a name the old snapshot never held reserves a
+    // fresh slot. At the end of the body that is harmless; written earlier it
+    // pushes every later interaction down one slot — the same wire break as an
+    // inserted interaction, and the last shift cause that would otherwise reach
+    // no `Change` at all.
+    for (name, new_ord) in &new_reserved {
+        if old_live_names.contains(name) || old_reserved.contains_key(name) {
+            continue;
+        }
+        let category = if anchor_ordinals.iter().any(|&anchor| anchor > *new_ord) {
+            Category::InteractionInserted
+        } else {
+            Category::InteractionAppended
+        };
+        emit(
+            changes,
+            format!("{pkg}/{iface}/{name}"),
+            category,
+            None,
+            Some(format!("reserved at ordinal {new_ord}")),
+        );
+    }
+
     for (name, new_ord, new_decl) in &new_live {
         if old_live_names.contains(name) {
             continue;
         }
         let member_path = format!("{pkg}/{iface}/{name}");
-        if old_reserved.contains(name) {
+        if old_reserved.contains_key(name) {
             emit(
                 changes,
                 member_path,
@@ -347,7 +437,9 @@ fn diff_interface(
 
 /// Flags surviving interactions whose relative order within the interface
 /// changed. An absolute-ordinal change that preserves relative order is a
-/// consequence of an insert or removal elsewhere and is not reported here.
+/// consequence of a slot added or released elsewhere and is not reported here;
+/// see the module documentation for why every such cause is independently
+/// reported as breaking.
 fn detect_reorders(
     pkg: &str,
     iface: &str,
@@ -383,13 +475,23 @@ fn rank_by<'a>(
         .collect()
 }
 
-/// The new-side ordinals of interactions that existed before the change —
-/// surviving interactions and reserved tombstones. A new interaction sitting
-/// before any of these was inserted, not appended.
-fn anchor_ordinals(matched: &[(&str, u32, u32)], new: &v2::Interface) -> Vec<u32> {
+/// The new-side ordinals of the slots that existed before the change —
+/// surviving interactions and the tombstones of names the old snapshot already
+/// held. A new slot sitting before any of these was inserted, not appended. A
+/// tombstone minted in this change is new content, so it is not itself an
+/// anchor.
+fn anchor_ordinals(
+    matched: &[(&str, u32, u32)],
+    new: &v2::Interface,
+    old_live_names: &BTreeSet<&str>,
+    old_reserved: &BTreeMap<&str, u32>,
+) -> Vec<u32> {
     let mut ordinals: Vec<u32> = matched.iter().map(|(_, _, new_ord)| *new_ord).collect();
     for decl in &new.interactions {
-        if matches!(&decl.kind, Some(v2::decl::Kind::ReservedSlot(_))) {
+        if let Some(v2::decl::Kind::ReservedSlot(reserved)) = &decl.kind
+            && let Some(name) = reserved.name.as_deref()
+            && (old_live_names.contains(name) || old_reserved.contains_key(name))
+        {
             ordinals.push(decl.ordinal);
         }
     }
@@ -620,13 +722,16 @@ fn live_interactions(iface: &v2::Interface) -> Vec<(&str, u32, &v2::Decl)> {
         .collect()
 }
 
-/// The names retired by `reserved` tombstones in an interface body.
-fn reserved_names(iface: &v2::Interface) -> BTreeSet<&str> {
+/// The names retired by `reserved` tombstones in an interface body, each with
+/// the ordinal its tombstone holds.
+fn reserved_names(iface: &v2::Interface) -> BTreeMap<&str, u32> {
     iface
         .interactions
         .iter()
         .filter_map(|decl| match &decl.kind {
-            Some(v2::decl::Kind::ReservedSlot(reserved)) => reserved.name.as_deref(),
+            Some(v2::decl::Kind::ReservedSlot(reserved)) => {
+                reserved.name.as_deref().map(|name| (name, decl.ordinal))
+            }
             _ => None,
         })
         .collect()

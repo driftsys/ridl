@@ -448,3 +448,245 @@ fn render_json_matches_the_stable_schema() {
     assert_eq!(change["before"], "DoorEvent");
     assert_eq!(change["after"], "DoorState");
 }
+
+// --------------------------------------------------------------------------
+// Tombstone slot integrity (ridl §11).
+//
+// A tombstone holds the ordinal it retired. A tombstone edit that frees a slot
+// lets the surviving interactions slide into it — a wire-identity shift, which
+// ADR-0008 decision 14 lists first among breaking changes. Because a straight
+// retirement is compatible, these shifts must reach a `Change` here or the
+// classifier downstream has nothing to judge.
+// --------------------------------------------------------------------------
+
+/// Retiring `b` but writing `reserved b` at the end frees ordinal 2, so the
+/// surviving `c` slides 3 -> 2. This is not a compatible retirement.
+#[test]
+fn a_tombstone_written_out_of_its_slot_is_breaking() {
+    let old = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![
+                signal("a", 1, "T"),
+                signal("b", 2, "T"),
+                signal("c", 3, "T"),
+            ],
+        ),
+    );
+    let new = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![signal("a", 1, "T"), signal("c", 2, "T"), reserved("b", 3)],
+        ),
+    );
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "an out-of-slot tombstone frees a wire slot, got {:?}",
+        report.changes
+    );
+    assert!(
+        report
+            .changes
+            .iter()
+            .all(|change| change.category != Category::InteractionRetired),
+        "an out-of-slot tombstone is not a compatible retirement, got {:?}",
+        report.changes
+    );
+}
+
+/// Deleting a `reserved b` tombstone releases ordinal 2, so `c` slides 3 -> 2.
+/// A wire reservation is permanent (ridl §11).
+#[test]
+fn dropping_a_tombstone_is_breaking() {
+    let old = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![signal("a", 1, "T"), reserved("b", 2), signal("c", 3, "T")],
+        ),
+    );
+    let new = pkg(
+        "veh.cluster",
+        interface("I", vec![signal("a", 1, "T"), signal("c", 2, "T")]),
+    );
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "a dropped tombstone frees a wire slot, got {:?}",
+        report.changes
+    );
+    assert!(
+        report.changes.iter().any(|change| {
+            change.category == Category::InteractionRemoved && change.path == "veh.cluster/I/b"
+        }),
+        "the dropped tombstone is itself a change, got {:?}",
+        report.changes
+    );
+}
+
+/// Moving a tombstone to a different slot shifts the interactions between the
+/// two positions.
+#[test]
+fn moving_a_tombstone_is_breaking() {
+    let old = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![signal("a", 1, "T"), reserved("b", 2), signal("c", 3, "T")],
+        ),
+    );
+    let new = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![signal("a", 1, "T"), signal("c", 2, "T"), reserved("b", 3)],
+        ),
+    );
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "a moved tombstone shifts wire identities, got {:?}",
+        report.changes
+    );
+}
+
+/// Control: a tombstone written in the retired interaction's own slot keeps
+/// every later ordinal, so the retirement stays compatible.
+#[test]
+fn a_tombstone_written_in_its_slot_is_compatible() {
+    let old = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![
+                signal("a", 1, "T"),
+                signal("b", 2, "T"),
+                signal("c", 3, "T"),
+            ],
+        ),
+    );
+    let new = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![signal("a", 1, "T"), reserved("b", 2), signal("c", 3, "T")],
+        ),
+    );
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.changes.len(),
+        1,
+        "one change, got {:?}",
+        report.changes
+    );
+    assert_eq!(report.changes[0].category, Category::InteractionRetired);
+    assert_eq!(report.verdict, Verdict::Compatible);
+}
+
+/// Control: retiring the last interaction shifts nothing.
+#[test]
+fn retiring_the_last_interaction_is_compatible() {
+    let old = pkg(
+        "veh.cluster",
+        interface("I", vec![signal("a", 1, "T"), signal("b", 2, "T")]),
+    );
+    let new = pkg(
+        "veh.cluster",
+        interface("I", vec![signal("a", 1, "T"), reserved("b", 2)]),
+    );
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.changes.len(),
+        1,
+        "one change, got {:?}",
+        report.changes
+    );
+    assert_eq!(report.changes[0].category, Category::InteractionRetired);
+    assert_eq!(report.verdict, Verdict::Compatible);
+}
+
+/// Control: an untouched tombstone is no change at all.
+#[test]
+fn an_unchanged_tombstone_is_identical() {
+    let iface = interface(
+        "I",
+        vec![signal("a", 1, "T"), reserved("b", 2), signal("c", 3, "T")],
+    );
+    let old = pkg("veh.cluster", iface.clone());
+    let new = pkg("veh.cluster", iface);
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Identical);
+    assert!(report.changes.is_empty(), "got {:?}", report.changes);
+}
+
+/// A tombstone minted mid-body for a name that was never live pushes every
+/// later interaction down a slot — the same wire break as an inserted
+/// interaction.
+#[test]
+fn a_fresh_tombstone_before_the_end_is_breaking() {
+    let old = pkg(
+        "veh.cluster",
+        interface("I", vec![signal("a", 1, "T"), signal("b", 2, "T")]),
+    );
+    let new = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![signal("a", 1, "T"), reserved("z", 2), signal("b", 3, "T")],
+        ),
+    );
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "a fresh mid-body tombstone shifts later ordinals, got {:?}",
+        report.changes
+    );
+    assert!(
+        report.changes.iter().any(|change| {
+            change.category == Category::InteractionInserted && change.path == "veh.cluster/I/z"
+        }),
+        "the minted tombstone is reported at its own path, got {:?}",
+        report.changes
+    );
+}
+
+/// Control: a fresh tombstone appended at the end reserves an unused slot and
+/// shifts nothing.
+#[test]
+fn a_fresh_tombstone_at_the_end_is_compatible() {
+    let old = pkg(
+        "veh.cluster",
+        interface("I", vec![signal("a", 1, "T"), signal("b", 2, "T")]),
+    );
+    let new = pkg(
+        "veh.cluster",
+        interface(
+            "I",
+            vec![signal("a", 1, "T"), signal("b", 2, "T"), reserved("z", 3)],
+        ),
+    );
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.changes.len(),
+        1,
+        "one change, got {:?}",
+        report.changes
+    );
+    assert_eq!(report.changes[0].category, Category::InteractionAppended);
+    assert_eq!(report.verdict, Verdict::Compatible);
+}
