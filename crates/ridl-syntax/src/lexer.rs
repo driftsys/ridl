@@ -26,7 +26,7 @@
 
 use logos::Logos;
 
-use crate::keywords;
+use crate::keywords::{self, Profile};
 use crate::syntax_kind::SyntaxKind;
 
 /// A lexed token: its [`SyntaxKind`] and the exact source slice it covers.
@@ -118,6 +118,33 @@ enum RawToken {
     #[token("-")]
     Minus,
 
+    // Expression operators (ridl reference §13, expr core). Family tokens
+    // like durations: recognised under every profile, rejected by the typl
+    // grammar. `logos` picks the longest match, so `<=` outranks `<`, `==`
+    // outranks two `=`, and `||` outranks two `|`.
+    #[token("<")]
+    Lt,
+    #[token("<=")]
+    Le,
+    #[token(">")]
+    Gt,
+    #[token(">=")]
+    Ge,
+    #[token("==")]
+    EqEq,
+    #[token("!=")]
+    Neq,
+    #[token("&&")]
+    AmpAmp,
+    #[token("||")]
+    PipePipe,
+    #[token("!")]
+    Bang,
+    #[token("+")]
+    Plus,
+    #[token("*")]
+    Star,
+
     #[regex(r"[ \t\r\n]+")]
     Whitespace,
 }
@@ -156,6 +183,17 @@ impl From<RawToken> for SyntaxKind {
             RawToken::Pipe => SyntaxKind::Pipe,
             RawToken::Percent => SyntaxKind::Percent,
             RawToken::Minus => SyntaxKind::Minus,
+            RawToken::Lt => SyntaxKind::Lt,
+            RawToken::Le => SyntaxKind::Le,
+            RawToken::Gt => SyntaxKind::Gt,
+            RawToken::Ge => SyntaxKind::Ge,
+            RawToken::EqEq => SyntaxKind::EqEq,
+            RawToken::Neq => SyntaxKind::Neq,
+            RawToken::AmpAmp => SyntaxKind::AmpAmp,
+            RawToken::PipePipe => SyntaxKind::PipePipe,
+            RawToken::Bang => SyntaxKind::Bang,
+            RawToken::Plus => SyntaxKind::Plus,
+            RawToken::Star => SyntaxKind::Star,
             RawToken::Whitespace => SyntaxKind::Whitespace,
         }
     }
@@ -168,14 +206,20 @@ struct Raw {
     end: usize,
 }
 
-/// Lexes `input` into a flat token stream.
+/// Lexes `input` into a flat token stream under `profile`.
 ///
 /// Total: concatenating `token.text` for every returned token reproduces
 /// `input` byte for byte. Input the family lexer does not recognise becomes
 /// [`SyntaxKind::Error`] tokens rather than aborting the lex.
-pub fn lex(input: &str) -> Vec<Token<'_>> {
+///
+/// The profile decides only which registry words are active keywords: under
+/// [`Profile::Typl`] the stream is identical to the E1 lexer's; under
+/// [`Profile::Ridl`] the nine ridl words lex to their keyword variants.
+/// Everything else — durations, `@`, the expr operators — is a family token
+/// in both profiles; the parser draws the profile boundaries.
+pub fn lex(input: &str, profile: Profile) -> Vec<Token<'_>> {
     let raws = raw_tokens(input);
-    refine(input, &raws)
+    refine(input, &raws, profile)
 }
 
 /// Runs `logos` and lifts regex literals out of the raw stream (typl reference
@@ -260,8 +304,10 @@ fn scan_regex(input: &str, start: usize) -> (SyntaxKind, usize) {
     (SyntaxKind::Error, bytes.len())
 }
 
-/// Merges duration literals and maps identifiers against the family registry.
-fn refine<'a>(input: &'a str, raws: &[Raw]) -> Vec<Token<'a>> {
+/// Merges duration literals and maps identifiers against the family registry:
+/// a keyword `profile` uses becomes its keyword kind, any other registry word
+/// becomes [`SyntaxKind::ReservedWord`], everything else stays an `Ident`.
+fn refine<'a>(input: &'a str, raws: &[Raw], profile: Profile) -> Vec<Token<'a>> {
     let mut out = Vec::with_capacity(raws.len());
     let mut i = 0;
     while i < raws.len() {
@@ -285,7 +331,7 @@ fn refine<'a>(input: &'a str, raws: &[Raw]) -> Vec<Token<'a>> {
 
         let text = &input[raw.start..raw.end];
         let kind = if raw.kind == SyntaxKind::Ident {
-            keywords::typl_keyword(text).unwrap_or(if keywords::is_reserved(text) {
+            keywords::keyword_in(profile, text).unwrap_or(if keywords::is_reserved(text) {
                 SyntaxKind::ReservedWord
             } else {
                 SyntaxKind::Ident
@@ -364,10 +410,117 @@ mod tests {
         tokens.iter().map(|t| t.text).collect()
     }
 
+    /// The kinds of the significant (non-trivia) tokens under `profile`.
+    fn kinds_in(profile: Profile, input: &str) -> Vec<SyntaxKind> {
+        lex(input, profile)
+            .iter()
+            .filter(|t| !t.kind.is_trivia())
+            .map(|t| t.kind)
+            .collect()
+    }
+
+    // E2 task 2 step (a): the nine ridl words lex to their keyword variants
+    // under `Profile::Ridl` and stay `ReservedWord` under `Profile::Typl`.
+    #[test]
+    fn ridl_words_lex_by_profile() {
+        for (word, kind) in [
+            ("interface", SyntaxKind::InterfaceKw),
+            ("service", SyntaxKind::ServiceKw),
+            ("signal", SyntaxKind::SignalKw),
+            ("event", SyntaxKind::EventKw),
+            ("command", SyntaxKind::CommandKw),
+            ("query", SyntaxKind::QueryKw),
+            ("final", SyntaxKind::FinalKw),
+            ("require", SyntaxKind::RequireKw),
+            ("ensure", SyntaxKind::EnsureKw),
+        ] {
+            assert_eq!(
+                kinds_in(Profile::Ridl, word),
+                vec![kind],
+                "`{word}` must lex to its keyword variant under Ridl",
+            );
+            assert_eq!(
+                kinds_in(Profile::Typl, word),
+                vec![SyntaxKind::ReservedWord],
+                "`{word}` must stay ReservedWord under Typl",
+            );
+        }
+    }
+
+    #[test]
+    fn other_profile_words_stay_reserved_in_both_profiles() {
+        for word in ["view", "model", "component", "automaton"] {
+            for profile in [Profile::Typl, Profile::Ridl] {
+                assert_eq!(
+                    kinds_in(profile, word),
+                    vec![SyntaxKind::ReservedWord],
+                    "`{word}` must stay ReservedWord under {profile:?}",
+                );
+            }
+        }
+    }
+
+    // E2 task 2 step (b), lexer half: durations and `@` are ordinary tokens
+    // under Ridl (the parser draws no TYPL-302 there — see the parser tests).
+    #[test]
+    fn durations_and_at_lex_clean_under_ridl() {
+        assert_eq!(kinds_in(Profile::Ridl, "10ms"), vec![SyntaxKind::Duration]);
+        assert_eq!(kinds_in(Profile::Ridl, "@"), vec![SyntaxKind::At]);
+    }
+
+    // E2 task 2 step (c): the expr operator tokens.
+    #[test]
+    fn expr_operators_lex_under_both_profiles() {
+        for profile in [Profile::Typl, Profile::Ridl] {
+            assert_eq!(
+                kinds_in(profile, "a >= b && !c"),
+                vec![
+                    SyntaxKind::Ident,
+                    SyntaxKind::Ge,
+                    SyntaxKind::Ident,
+                    SyntaxKind::AmpAmp,
+                    SyntaxKind::Bang,
+                    SyntaxKind::Ident,
+                ],
+            );
+        }
+    }
+
+    #[test]
+    fn every_expr_operator_token_lexes() {
+        assert_eq!(
+            kinds_in(Profile::Ridl, "< <= > >= == != && || ! + *"),
+            vec![
+                SyntaxKind::Lt,
+                SyntaxKind::Le,
+                SyntaxKind::Gt,
+                SyntaxKind::Ge,
+                SyntaxKind::EqEq,
+                SyntaxKind::Neq,
+                SyntaxKind::AmpAmp,
+                SyntaxKind::PipePipe,
+                SyntaxKind::Bang,
+                SyntaxKind::Plus,
+                SyntaxKind::Star,
+            ],
+        );
+    }
+
+    // E2 task 2 step (d): `T | E` still lexes with the single `Pipe`.
+    #[test]
+    fn union_pipe_lexes_unchanged() {
+        for profile in [Profile::Typl, Profile::Ridl] {
+            assert_eq!(
+                kinds_in(profile, "T | E"),
+                vec![SyntaxKind::Ident, SyntaxKind::Pipe, SyntaxKind::Ident],
+            );
+        }
+    }
+
     #[test]
     fn fixture_round_trips_with_no_errors() {
         let input = include_str!("../fixtures/walking_skeleton.typl");
-        let tokens = lex(input);
+        let tokens = lex(input, Profile::Typl);
         assert_eq!(concat(&tokens), input, "token texts must reproduce input");
         assert!(
             tokens.iter().all(|t| t.kind != SyntaxKind::Error),
@@ -377,7 +530,7 @@ mod tests {
 
     #[test]
     fn range_dots_do_not_get_swallowed_by_float_regex() {
-        let tokens = lex("0.0..250.0");
+        let tokens = lex("0.0..250.0", Profile::Typl);
         let kinds: Vec<_> = tokens.iter().map(|t| t.kind).collect();
         assert_eq!(
             kinds,
@@ -391,7 +544,7 @@ mod tests {
 
     #[test]
     fn slash_separated_unit_lexes_as_ident_slash_ident() {
-        let tokens = lex("km/h");
+        let tokens = lex("km/h", Profile::Typl);
         let kinds: Vec<_> = tokens.iter().map(|t| t.kind).collect();
         assert_eq!(
             kinds,
@@ -401,7 +554,7 @@ mod tests {
 
     #[test]
     fn line_comment_is_one_token() {
-        let tokens = lex("// x");
+        let tokens = lex("// x", Profile::Typl);
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].kind, SyntaxKind::LineComment);
         assert_eq!(tokens[0].text, "// x");
@@ -410,7 +563,7 @@ mod tests {
     #[test]
     fn unknown_byte_yields_error_and_still_round_trips() {
         let input = "$";
-        let tokens = lex(input);
+        let tokens = lex(input, Profile::Typl);
         assert_eq!(concat(&tokens), input);
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].kind, SyntaxKind::Error);
@@ -418,7 +571,7 @@ mod tests {
 
     #[test]
     fn keywords_lex_distinctly_from_ident() {
-        let tokens = lex("type const step notAKeyword");
+        let tokens = lex("type const step notAKeyword", Profile::Typl);
         let kinds: Vec<_> = tokens
             .iter()
             .filter(|t| t.kind != SyntaxKind::Whitespace)
@@ -435,13 +588,10 @@ mod tests {
         );
     }
 
-    /// The kinds of the significant (non-trivia) tokens, in order.
+    /// The kinds of the significant (non-trivia) tokens under `Profile::Typl`,
+    /// in order — the E1 tests below all pin the typl profile's behavior.
     fn significant_kinds(input: &str) -> Vec<SyntaxKind> {
-        lex(input)
-            .iter()
-            .filter(|t| !t.kind.is_trivia())
-            .map(|t| t.kind)
-            .collect()
+        kinds_in(Profile::Typl, input)
     }
 
     // Step (a): every used keyword lexes to its variant; every reserved word to
@@ -449,7 +599,7 @@ mod tests {
     #[test]
     fn every_used_keyword_lexes_to_its_variant() {
         for word in keywords::FAMILY_RESERVED {
-            let tokens = lex(word);
+            let tokens = lex(word, Profile::Typl);
             assert_eq!(tokens.len(), 1, "`{word}` must lex to one token");
             let expected = keywords::typl_keyword(word).unwrap_or(SyntaxKind::ReservedWord);
             assert_eq!(tokens[0].kind, expected, "`{word}` lexed to the wrong kind");
@@ -488,7 +638,7 @@ mod tests {
 
     #[test]
     fn regex_literal_after_eq_is_one_token() {
-        let tokens = lex(r"const V = /a\/b/");
+        let tokens = lex(r"const V = /a\/b/", Profile::Typl);
         let regex: Vec<_> = tokens
             .iter()
             .filter(|t| t.kind == SyntaxKind::Regex)
@@ -499,7 +649,7 @@ mod tests {
 
     #[test]
     fn unterminated_regex_is_error_to_end_of_line() {
-        let tokens = lex("const V = /abc\n");
+        let tokens = lex("const V = /abc\n", Profile::Typl);
         let last_significant = tokens
             .iter()
             .rev()
@@ -514,7 +664,7 @@ mod tests {
         // The exact `ridl.std` Date declaration (typl reference Appendix A,
         // §5.3): the regex literal follows the `match` keyword, not `=`.
         let line = r"type Date : string [10 match /^\d{4}-\d{2}-\d{2}$/]";
-        let tokens = lex(line);
+        let tokens = lex(line, Profile::Typl);
         assert!(
             tokens.iter().all(|t| t.kind != SyntaxKind::Error),
             "no error tokens expected: {tokens:?}",
@@ -564,7 +714,7 @@ mod tests {
     // Step (f): strings with escapes, and unterminated strings.
     #[test]
     fn string_with_escape_is_one_token() {
-        let tokens = lex(r#""a\nb""#);
+        let tokens = lex(r#""a\nb""#, Profile::Typl);
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].kind, SyntaxKind::String);
         assert_eq!(tokens[0].text, r#""a\nb""#);
@@ -572,7 +722,7 @@ mod tests {
 
     #[test]
     fn unterminated_string_is_error_to_end_of_line() {
-        let tokens = lex("\"abc\n");
+        let tokens = lex("\"abc\n", Profile::Typl);
         assert_eq!(tokens[0].kind, SyntaxKind::Error);
         assert_eq!(tokens[0].text, "\"abc");
         // The newline survives as its own trivia token (losslessness).
@@ -582,14 +732,14 @@ mod tests {
     // Step (g): block comments do not nest.
     #[test]
     fn block_comment_is_one_token() {
-        let tokens = lex("/* block */");
+        let tokens = lex("/* block */", Profile::Typl);
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].kind, SyntaxKind::BlockComment);
     }
 
     #[test]
     fn block_comment_ends_at_first_close() {
-        let tokens = lex("/* /* */");
+        let tokens = lex("/* /* */", Profile::Typl);
         assert_eq!(tokens.len(), 1, "no nesting: {tokens:?}");
         assert_eq!(tokens[0].kind, SyntaxKind::BlockComment);
         assert_eq!(tokens[0].text, "/* /* */");
@@ -598,18 +748,18 @@ mod tests {
     #[test]
     fn doc_comments_are_distinct_from_plain_comments() {
         assert_eq!(significant_kinds("/// doc"), Vec::<SyntaxKind>::new());
-        let doc_line = lex("/// doc");
+        let doc_line = lex("/// doc", Profile::Typl);
         assert_eq!(doc_line[0].kind, SyntaxKind::DocComment);
-        let doc_block = lex("/** doc */");
+        let doc_block = lex("/** doc */", Profile::Typl);
         assert_eq!(doc_block[0].kind, SyntaxKind::DocComment);
-        let plain = lex("// doc");
+        let plain = lex("// doc", Profile::Typl);
         assert_eq!(plain[0].kind, SyntaxKind::LineComment);
     }
 
     // Step (h): leading zeros lex as one IntNumber; flagging is the parser's job.
     #[test]
     fn leading_zeros_lex_as_one_integer() {
-        let tokens = lex("042");
+        let tokens = lex("042", Profile::Typl);
         assert_eq!(tokens.len(), 1);
         assert_eq!(tokens[0].kind, SyntaxKind::IntNumber);
         assert_eq!(tokens[0].text, "042");

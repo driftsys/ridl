@@ -39,7 +39,19 @@ pub enum SyntaxKind {
     MatchKw,
     ReservedKw,
     ErrorKw,
-    /// A family-registry word that the typl profile does not use (typl
+    // Keywords the ridl profile activates beyond typl's set (ridl reference
+    // §2.3): the interaction and container words plus the expr-core pair.
+    // Under `Profile::Typl` these words still lex to `ReservedWord`.
+    InterfaceKw,
+    ServiceKw,
+    SignalKw,
+    EventKw,
+    CommandKw,
+    QueryKw,
+    FinalKw,
+    RequireKw,
+    EnsureKw,
+    /// A family-registry word that the active profile does not use (typl
     /// reference §1.4). Reserved in every profile, never a valid identifier.
     ReservedWord,
     // Names and literals.
@@ -68,6 +80,20 @@ pub enum SyntaxKind {
     Pipe,
     Percent,
     Minus,
+    // Expression operators (ridl reference §13, general form expr core).
+    // Family tokens like `Duration`: the lexer recognises them under every
+    // profile; the typl grammar simply never accepts them.
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    EqEq,
+    Neq,
+    AmpAmp,
+    PipePipe,
+    Bang,
+    Plus,
+    Star,
     // Trivia and the catch-all for unrecognised input.
     Whitespace,
     LineComment,

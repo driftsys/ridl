@@ -57,7 +57,7 @@
 //! and the non-trivia token set unchanged, and stays idempotent.
 
 use ridl_syntax::{
-    SyntaxKind, SyntaxNode,
+    Profile, SyntaxKind, SyntaxNode,
     ast::{AstNode, SourceFile},
 };
 use rowan::NodeOrToken;
@@ -77,13 +77,15 @@ pub enum FormatOutcome {
     ParseErrors(Vec<ridl_syntax::SyntaxError>),
 }
 
-/// Formats `text` into the canonical tight style.
+/// Formats `text` into the canonical tight style, parsing it under `profile`
+/// (`Profile::Typl` for a `.typl` file, `Profile::Ridl` for a `.ridl` file —
+/// the formatting rules themselves are profile-independent).
 ///
 /// A syntactically valid input yields [`FormatOutcome::Formatted`]; an input
 /// with any parse error yields [`FormatOutcome::ParseErrors`] and is not
 /// rewritten.
-pub fn format(text: &str) -> FormatOutcome {
-    let parse = ridl_syntax::parse(text);
+pub fn format(text: &str, profile: Profile) -> FormatOutcome {
+    let parse = ridl_syntax::parse(text, profile);
     if !parse.errors().is_empty() {
         return FormatOutcome::ParseErrors(parse.errors().to_vec());
     }
@@ -772,7 +774,7 @@ mod tests {
     use super::*;
 
     fn formatted(input: &str) -> String {
-        match format(input) {
+        match format(input, Profile::Typl) {
             FormatOutcome::Formatted(s) => s,
             FormatOutcome::ParseErrors(errors) => {
                 panic!("expected a formatted result, got parse errors: {errors:?}")
@@ -783,7 +785,7 @@ mod tests {
     #[test]
     fn broken_input_returns_parse_errors_untouched() {
         // A missing `package` is FORM-104; a broken file is never rewritten.
-        let outcome = format("type 123 :: [\n");
+        let outcome = format("type 123 :: [\n", Profile::Typl);
         let FormatOutcome::ParseErrors(errors) = outcome else {
             panic!("expected parse errors for broken input");
         };
@@ -793,7 +795,7 @@ mod tests {
     #[test]
     fn missing_package_is_a_parse_error_not_a_format() {
         assert!(matches!(
-            format("type Speed: km/h\n"),
+            format("type Speed: km/h\n", Profile::Typl),
             FormatOutcome::ParseErrors(_)
         ));
     }

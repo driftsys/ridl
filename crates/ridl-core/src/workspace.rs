@@ -5,15 +5,16 @@
 //! sits behind the default-on `fs` feature (ADR-0007 decision 5) so the crate
 //! still builds for `wasm32-unknown-unknown` with `--no-default-features`.
 //!
-//! [`load_workspace`] walks from an entry path — a `.typl` file, a package
+//! [`load_workspace`] walks from an entry path — a source file, a package
 //! directory, or a workspace root — reads the `ridl.toml` manifests, loads
-//! every `.typl` file into [`InputFile`] inputs, and enforces the
-//! package↔directory law (typl reference §3.1): every file in a package
-//! directory must declare that directory's package name (TYPL-002), and more
-//! than one `package` declaration in a file is TYPL-001. A bare `.typl` file
-//! with no manifest anywhere up the tree loads in **single-file mode**: one
-//! synthetic package named from the file's declared package, exempt from
-//! TYPL-002 (the task 20 CLI contract).
+//! every source file (`.typl` and `.ridl` alike — a package may mix both, E2
+//! task 2) into [`InputFile`] inputs, and enforces the package↔directory law
+//! (typl reference §3.1): every file in a package directory must declare that
+//! directory's package name (TYPL-002), and more than one `package`
+//! declaration in a file is TYPL-001. A bare `.typl` or `.ridl` file with no
+//! manifest anywhere up the tree loads in **single-file mode**: one synthetic
+//! package named from the file's declared package, exempt from TYPL-002 (the
+//! task 20 CLI contract).
 //!
 //! Problems in loaded content — manifest diagnostics, the law violations, a
 //! nested workspace (MANI-004), a broken member (MANI-008), a file that is
@@ -47,8 +48,9 @@ pub struct LoadedWorkspace {
 ///
 /// `entry` may be:
 ///
-/// - a `.typl` file — the nearest `ridl.toml` up the tree is the root; with no
-///   manifest anywhere up the tree the file loads in single-file mode;
+/// - a `.typl` or `.ridl` file — the nearest `ridl.toml` up the tree is the
+///   root; with no manifest anywhere up the tree the file loads in
+///   single-file mode;
 /// - a package directory or workspace root — the nearest `ridl.toml` at or
 ///   above the directory is the root; a `[package]` manifest loads that
 ///   package's directory tree, a `[workspace]` manifest loads every member.
@@ -211,7 +213,7 @@ impl Loader {
         name: &str,
         imports: &BTreeMap<String, String>,
     ) -> io::Result<()> {
-        let mut typl_files = Vec::new();
+        let mut source_files = Vec::new();
         let mut subdirs = Vec::new();
         for entry in fs::read_dir(dir)? {
             let entry = entry?;
@@ -221,16 +223,19 @@ impl Loader {
                 if !is_symlink {
                     subdirs.push(path);
                 }
-            } else if path.extension().is_some_and(|ext| ext == "typl") {
-                typl_files.push(path);
+            } else if path
+                .extension()
+                .is_some_and(|ext| ext == "typl" || ext == "ridl")
+            {
+                source_files.push(path);
             }
         }
-        typl_files.sort();
+        source_files.sort();
         subdirs.sort();
 
-        if !typl_files.is_empty() {
+        if !source_files.is_empty() {
             let mut files = Vec::new();
-            for path in &typl_files {
+            for path in &source_files {
                 if let Some((input, _)) = self.load_file(db, path, Some(name))? {
                     files.push(input);
                 }
@@ -257,7 +262,7 @@ impl Loader {
         Ok(())
     }
 
-    /// Loads one bare `.typl` file as a synthetic package named from its
+    /// Loads one bare source file as a synthetic package named from its
     /// declared package — single-file mode, exempt from TYPL-002 (TYPL-001
     /// still applies). With no usable declaration the file stem names the
     /// package; the parser's FORM-104 for the missing declaration lives on
@@ -287,7 +292,7 @@ impl Loader {
         Ok(())
     }
 
-    /// Reads one `.typl` file into an [`InputFile`], parses it through the
+    /// Reads one source file into an [`InputFile`], parses it through the
     /// salsa query, and enforces the package↔directory law: every `package`
     /// declaration after the first is TYPL-001; when `expected` is given and
     /// the first declared name differs, TYPL-002 with the declaration line as
@@ -759,6 +764,54 @@ mod tests {
             loaded.workspace.imports(&db),
             &BTreeMap::new(),
             "a standalone load leaves the workspace map empty",
+        );
+    }
+
+    /// E2 task 2 step (g): a package directory may mix `.typl` and `.ridl`
+    /// files — `.ridl` is accepted everywhere `.typl` is, under the same
+    /// package↔directory law.
+    #[test]
+    fn a_package_directory_mixes_typl_and_ridl_files() {
+        let dir = TempDir::new("mixed");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.typl", "package veh.common\ntype A: m\n");
+        dir.write("b.ridl", "package veh.common\ntype B: s\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(loaded.diagnostics, Vec::new(), "a clean mixed package");
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 1, "one package directory, one package");
+        let files = packages[0].files(&db).clone();
+        assert_eq!(files.len(), 2, "both the .typl and the .ridl file load");
+        for file in &files {
+            assert_eq!(
+                parse_file(&db, *file).errors(),
+                &[],
+                "both files parse clean"
+            );
+        }
+        assert!(files.iter().any(|f| f.path(&db).ends_with("a.typl")));
+        assert!(files.iter().any(|f| f.path(&db).ends_with("b.ridl")));
+    }
+
+    /// Single-file mode accepts a bare `.ridl` entry, like a bare `.typl`.
+    #[test]
+    fn single_file_mode_accepts_a_bare_ridl_entry() {
+        let dir = TempDir::new("single-ridl");
+        let path = dir.write("iface.ridl", "package veh.iface\ntype A: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        assert_eq!(loaded.diagnostics, Vec::new(), "exempt from TYPL-002");
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 1, "one synthetic package");
+        assert_eq!(
+            packages[0].name(&db).as_str(),
+            "veh.iface",
+            "named from the file's declared package",
         );
     }
 

@@ -7,7 +7,7 @@
 
 use std::fmt::Write as _;
 
-use ridl_syntax::{Parse, parse};
+use ridl_syntax::{Parse, Profile, parse};
 
 /// The review dump: the full CST (nodes, tokens, ranges) plus the errors.
 fn dump(parse: &Parse) -> String {
@@ -29,7 +29,7 @@ fn dump(parse: &Parse) -> String {
 fn ok_corpus_is_lossless_error_free_and_matches_snapshots() {
     insta::glob!("../test_data/parser/ok", "*.typl", |path| {
         let input = std::fs::read_to_string(path).expect("a readable corpus file");
-        let parsed = parse(&input);
+        let parsed = parse(&input, Profile::Typl);
 
         assert_eq!(
             parsed.syntax().text().to_string(),

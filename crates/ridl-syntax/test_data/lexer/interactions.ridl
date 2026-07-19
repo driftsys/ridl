@@ -1,0 +1,22 @@
+package veh.engine
+
+// A lexer-only corpus file (the interaction grammar lands with E2 task 3):
+// the nine ridl words, durations, the `@` sigil, and the expr operator
+// tokens the ridl profile activates (ridl reference §2).
+
+interface EngineStatus
+service engine.status
+
+/// Engine speed, published every cycle.
+signal speed: Speed = 0.0 @ 10ms
+event overTemp: Temperature @ [1ms..100ms]
+command setTarget(goal: Speed)
+query currentGear(): Gear
+final vin: string [17]
+
+require goal >= 0.0 && goal <= 250.0
+ensure result != CURRENT_GEAR || !stale
+
+5us 10ms 1s
+a < b, a <= b, a > b, a >= b, a == b, a + b, a * b
+T | E

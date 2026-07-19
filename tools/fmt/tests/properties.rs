@@ -18,7 +18,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ridl_fmt::{FormatOutcome, format};
-use ridl_syntax::SyntaxKind;
+use ridl_syntax::{Profile, SyntaxKind};
 
 /// The `ok` parser corpus files, sorted by name.
 fn ok_corpus_files() -> Vec<PathBuf> {
@@ -35,7 +35,7 @@ fn ok_corpus_files() -> Vec<PathBuf> {
 }
 
 fn format_ok(text: &str, context: &str) -> String {
-    match format(text) {
+    match format(text, Profile::Typl) {
         FormatOutcome::Formatted(out) => out,
         FormatOutcome::ParseErrors(errors) => {
             panic!("{context} produced parse errors: {errors:?}")
@@ -56,7 +56,7 @@ fn is_comment(kind: SyntaxKind) -> bool {
 /// invariant the formatter must not disturb — only whitespace and separator
 /// commas may change.
 fn content_tokens(text: &str) -> Vec<(SyntaxKind, String)> {
-    ridl_syntax::parse(text)
+    ridl_syntax::parse(text, Profile::Typl)
         .syntax()
         .descendants_with_tokens()
         .filter_map(|element| element.into_token())

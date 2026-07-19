@@ -43,7 +43,8 @@ enum Command {
         #[arg(long)]
         frozen: bool,
     },
-    /// Reformat `.typl` files in place (defaults to the current directory).
+    /// Reformat `.typl` and `.ridl` files in place (defaults to the current
+    /// directory).
     Fmt {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -87,7 +88,8 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     }
 }
 
-/// Formats every `.typl` file under `path`.
+/// Formats every `.typl` and `.ridl` file under `path`, each parsed under the
+/// profile its extension selects.
 ///
 /// A file with parse errors is never rewritten (a formatter must not eat broken
 /// code); its diagnostics render to stderr and the run exits 1. In `--check`
@@ -98,7 +100,7 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
     let mut any_would_change = false;
     let mut any_broken = false;
 
-    for file in collect_typl_files(path) {
+    for file in collect_source_files(path) {
         let text = match std::fs::read_to_string(&file) {
             Ok(text) => text,
             Err(err) => {
@@ -106,7 +108,8 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
                 return ExitCode::from(2);
             }
         };
-        match format(&text) {
+        let profile = ridl_core::profile_of_path(&file.to_string_lossy());
+        match format(&text, profile) {
             FormatOutcome::Formatted(formatted) => {
                 if formatted != text {
                     any_would_change = true;
@@ -134,9 +137,9 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
     }
 }
 
-/// Every `.typl` file under `path`: `path` itself when it is a file, otherwise a
-/// recursive walk that skips hidden directories.
-fn collect_typl_files(path: &Path) -> Vec<PathBuf> {
+/// Every `.typl` and `.ridl` file under `path`: `path` itself when it is a
+/// file, otherwise a recursive walk that skips hidden directories.
+fn collect_source_files(path: &Path) -> Vec<PathBuf> {
     if path.is_file() {
         return vec![path.to_path_buf()];
     }
@@ -156,7 +159,10 @@ fn collect_typl_files(path: &Path) -> Vec<PathBuf> {
                 if !hidden {
                     stack.push(child);
                 }
-            } else if child.extension().is_some_and(|ext| ext == "typl") {
+            } else if child
+                .extension()
+                .is_some_and(|ext| ext == "typl" || ext == "ridl")
+            {
                 files.push(child);
             }
         }

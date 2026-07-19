@@ -5,12 +5,31 @@
 //! does not accept. This module is the single source of truth the lexer maps
 //! identifiers against, and the source the E4.7 governance test will later read.
 //!
-//! A `.typl` identifier that matches a keyword the typl profile uses lexes to
+//! An identifier that matches a keyword the active [`Profile`] uses lexes to
 //! that keyword's [`SyntaxKind`]; one that matches any other registry word lexes
 //! to [`SyntaxKind::ReservedWord`]; anything else stays an
 //! [`Ident`](SyntaxKind::Ident).
 
 use crate::syntax_kind::SyntaxKind;
+
+/// The profile a source file is lexed and parsed under (ridl reference §2,
+/// ADR-0008): which member of the family the file is written in. The profile
+/// selects which registry words are active keywords — every other registry
+/// word stays [`SyntaxKind::ReservedWord`] — and where the parser draws its
+/// profile-boundary diagnostics (TYPL-304 / RIDL-403).
+///
+/// `ridl-core` derives the profile from the file extension
+/// (`profile_of_path`): `.ridl` selects [`Profile::Ridl`], everything else
+/// parses as typl.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Profile {
+    /// `.typl` — the vocabulary layer. Behavior is identical to the E1
+    /// toolchain: only the typl keywords are active.
+    Typl,
+    /// `.ridl` — the interface-description layer. The typl keywords plus the
+    /// nine ridl words are active; durations and `@` are ordinary tokens.
+    Ridl,
+}
 
 /// The keywords the typl profile uses (typl reference §1.4), paired with the
 /// token kind each lexes to. Every entry here is also present in
@@ -37,6 +56,22 @@ const TYPL_KEYWORDS: &[(&str, SyntaxKind)] = &[
     ("match", SyntaxKind::MatchKw),
     ("reserved", SyntaxKind::ReservedKw),
     ("error", SyntaxKind::ErrorKw),
+];
+
+/// The nine words the ridl profile activates beyond typl's set (ridl reference
+/// §2.3): the interaction and container keywords plus the two expr-core words
+/// (`require`/`ensure`). Every entry here is also present in
+/// [`FAMILY_RESERVED`]; the `family_registry_is_consistent` test guards that.
+const RIDL_KEYWORDS: &[(&str, SyntaxKind)] = &[
+    ("interface", SyntaxKind::InterfaceKw),
+    ("service", SyntaxKind::ServiceKw),
+    ("signal", SyntaxKind::SignalKw),
+    ("event", SyntaxKind::EventKw),
+    ("command", SyntaxKind::CommandKw),
+    ("query", SyntaxKind::QueryKw),
+    ("final", SyntaxKind::FinalKw),
+    ("require", SyntaxKind::RequireKw),
+    ("ensure", SyntaxKind::EnsureKw),
 ];
 
 /// The full family reserved-word registry (typl reference §1.4): the words the
@@ -150,6 +185,26 @@ pub fn typl_keyword(text: &str) -> Option<SyntaxKind> {
         .map(|(_, kind)| *kind)
 }
 
+/// The [`SyntaxKind`] one of the nine ridl words lexes to under
+/// [`Profile::Ridl`], or `None` if `text` is not one of them. The parser also
+/// uses this table to spot an interaction keyword in a typl parse (TYPL-304).
+pub fn ridl_keyword(text: &str) -> Option<SyntaxKind> {
+    RIDL_KEYWORDS
+        .iter()
+        .find(|(word, _)| *word == text)
+        .map(|(_, kind)| *kind)
+}
+
+/// The [`SyntaxKind`] `text` lexes to as an active keyword of `profile`, or
+/// `None` when the profile does not use it — it may still be a reserved word
+/// of another profile ([`is_reserved`]) or an ordinary identifier.
+pub fn keyword_in(profile: Profile, text: &str) -> Option<SyntaxKind> {
+    match profile {
+        Profile::Typl => typl_keyword(text),
+        Profile::Ridl => typl_keyword(text).or_else(|| ridl_keyword(text)),
+    }
+}
+
 /// Whether `text` is reserved anywhere in the family — a keyword the typl
 /// profile uses or a word reserved for another profile. A reserved word may not
 /// be used as an identifier in any profile.
@@ -163,11 +218,19 @@ mod tests {
 
     #[test]
     fn family_registry_is_consistent() {
-        // Every keyword the typl profile uses is in the family registry.
-        for (word, _) in TYPL_KEYWORDS {
+        // Every keyword the typl or ridl profile uses is in the family
+        // registry.
+        for (word, _) in TYPL_KEYWORDS.iter().chain(RIDL_KEYWORDS) {
             assert!(
                 FAMILY_RESERVED.contains(word),
                 "used keyword `{word}` is missing from FAMILY_RESERVED",
+            );
+        }
+        // No word is claimed by both profiles' own tables.
+        for (word, _) in RIDL_KEYWORDS {
+            assert!(
+                typl_keyword(word).is_none(),
+                "`{word}` is in both TYPL_KEYWORDS and RIDL_KEYWORDS",
             );
         }
         // The registry has no duplicate entries.
@@ -177,6 +240,28 @@ mod tests {
                 "duplicate registry word `{word}`",
             );
         }
+    }
+
+    #[test]
+    fn keyword_in_maps_per_profile() {
+        // A typl keyword is active in both profiles.
+        assert_eq!(keyword_in(Profile::Typl, "type"), Some(SyntaxKind::TypeKw));
+        assert_eq!(keyword_in(Profile::Ridl, "type"), Some(SyntaxKind::TypeKw));
+        // A ridl word is active under Ridl only.
+        assert_eq!(keyword_in(Profile::Typl, "signal"), None);
+        assert_eq!(
+            keyword_in(Profile::Ridl, "signal"),
+            Some(SyntaxKind::SignalKw)
+        );
+        assert_eq!(
+            keyword_in(Profile::Ridl, "ensure"),
+            Some(SyntaxKind::EnsureKw)
+        );
+        // A word of another profile is active in neither.
+        assert_eq!(keyword_in(Profile::Typl, "model"), None);
+        assert_eq!(keyword_in(Profile::Ridl, "model"), None);
+        // An ordinary identifier is never a keyword.
+        assert_eq!(keyword_in(Profile::Ridl, "Speed"), None);
     }
 
     #[test]
