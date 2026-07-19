@@ -37,7 +37,9 @@ pub use fetch::{FetchError, Frozen, fetch, materialize_imports};
 #[cfg(feature = "fs")]
 pub use lock::{LockEntry, Lockfile, read_lockfile, write_lockfile};
 pub use manifest::{Manifest, ManifestKind, parse_manifest};
-pub use package::{Package, PackageOrigin, Workspace, package_of};
+pub use package::{
+    CatalogEntry, Package, PackageOrigin, ServiceCatalog, Workspace, package_of, service_catalog,
+};
 pub use std_lib::std_package;
 #[cfg(feature = "fs")]
 pub use workspace::{LoadedWorkspace, load_workspace};

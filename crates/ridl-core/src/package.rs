@@ -13,12 +13,14 @@
 //! [`package_of`] lookup query, and the pure package-declaration reader the
 //! loader's law checks build on.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 
-use ridl_syntax::ast::{AstNode as _, SourceFile};
+use ridl_syntax::SyntaxNode;
+use ridl_syntax::ast::{AstNode as _, ServiceDef, SourceFile};
 use rowan::TextRange;
 
 use crate::db::InputFile;
+use crate::diag::{DiagCode, Diagnostic, Label, Severity, SourceMap, Span};
 
 /// Where a package's sources come from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -120,6 +122,168 @@ fn dotted_name(name: &ridl_syntax::ast::QualifiedName) -> String {
         .collect()
 }
 
+// ==========================================================================
+// The service catalog (E2.13, ridl reference §14.5)
+// ==========================================================================
+
+/// One entry of the [`ServiceCatalog`]: the package that declared a service
+/// and the interface it names.
+///
+/// `interface_ref` is the canonical interface reference — a bare `Name` for a
+/// same-package or unresolved shape, a fully qualified `pkg.Name` when the
+/// name resolves through the declaring file's imports — or the empty string
+/// for a service with an inline shape (ridl §14.5).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CatalogEntry {
+    pub package: String,
+    pub interface_ref: String,
+}
+
+/// The system-wide service catalog: every `service` declaration across the
+/// workspace keyed by its dotted global name (ridl §14.5).
+///
+/// The catalog is the flat global namespace the whole system agrees on. A
+/// dotted name declared twice anywhere in the workspace is a RIDL-140 error
+/// (both declarations labeled). The diagnostics carry a [`FileId`] indexing
+/// the workspace's files in package-then-file order — the order
+/// [`service_catalog`] interns them — so a driver remaps them onto its render
+/// [`SourceMap`] exactly as it does the package-scoped passes.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ServiceCatalog {
+    pub entries: BTreeMap<String, CatalogEntry>,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Builds the workspace-wide [`ServiceCatalog`] and reports the RIDL-140
+/// duplicate-name diagnostics (ridl §14.5, §16.4).
+///
+/// The `std` package is threaded in for signature parity with the
+/// package-scoped passes (`resolve_package`, `check_package`); `ridl.std`
+/// declares no services, so it contributes nothing here. The catalog owns the
+/// global namespace: a service's dotted name is deliberately not a
+/// [`SymbolKind`](../../ridl_sem/resolve/enum.SymbolKind.html) — it lives in
+/// this namespace, not the type namespace — so the resolver never sees it and
+/// the catalog is the sole authority on service uniqueness.
+#[salsa::tracked(returns(clone))]
+pub fn service_catalog(db: &dyn salsa::Database, ws: Workspace, std: Package) -> ServiceCatalog {
+    // `ridl.std` carries no services; the parameter keeps the signature
+    // uniform with the package-scoped passes the callers already drive.
+    let _ = std;
+
+    // Diagnostics point into the workspace's files; their FileId indexes every
+    // file in package-then-file order, the order interned here. A driver
+    // rebuilds the same order to remap onto its render source map.
+    let mut sources = SourceMap::new();
+
+    let mut entries: BTreeMap<String, CatalogEntry> = BTreeMap::new();
+    let mut first_span: HashMap<String, Span> = HashMap::new();
+    let mut diagnostics = Vec::new();
+
+    for package in ws.packages(db) {
+        let package_name = package.name(db).clone();
+        for file in package.files(db) {
+            let file_id = sources.file_id(file.path(db), file.text(db));
+            let source = service_source(db, *file);
+            for service in source.services() {
+                let Some(dotted) = service.name() else {
+                    continue;
+                };
+                let name = significant_node_text(dotted.syntax());
+                if name.is_empty() {
+                    continue;
+                }
+                let span = Span {
+                    file: file_id,
+                    range: dotted.syntax().text_range(),
+                };
+                if let Some(&first) = first_span.get(&name) {
+                    // RIDL-140: the flat global namespace already holds this
+                    // name. Label both declarations (the first via a secondary
+                    // label, the duplicate as the primary span).
+                    diagnostics.push(Diagnostic {
+                        code: DiagCode::RIDL_140,
+                        severity: Severity::Error,
+                        message: format!(
+                            "duplicate service name `{name}` — the service catalog is a flat global namespace"
+                        ),
+                        primary: span,
+                        labels: vec![Label {
+                            span: first,
+                            message: format!("`{name}` is first declared here"),
+                        }],
+                        fixits: Vec::new(),
+                    });
+                    continue;
+                }
+                first_span.insert(name.clone(), span);
+                entries.insert(
+                    name,
+                    CatalogEntry {
+                        package: package_name.clone(),
+                        interface_ref: canonical_interface_ref(&source, &service),
+                    },
+                );
+            }
+        }
+    }
+
+    ServiceCatalog {
+        entries,
+        diagnostics,
+    }
+}
+
+/// The parsed [`SourceFile`] of one input, through the memoized parse query.
+fn service_source(db: &dyn salsa::Database, file: InputFile) -> SourceFile {
+    let parse = crate::parse_file(db, file);
+    SourceFile::cast(parse.syntax()).expect("the parser roots every tree in a SourceFile")
+}
+
+/// The canonical interface reference a service names, or the empty string for
+/// an inline shape.
+///
+/// A multi-segment reference is already package-qualified and is kept as
+/// written. A single-segment reference resolves through the declaring file's
+/// `import` statements: an imported interface name canonicalizes to its full
+/// `pkg.Name` path, while an unresolved or same-package name stays bare — the
+/// same bare/qualified split the checker's IR lowering produces.
+fn canonical_interface_ref(source: &SourceFile, service: &ServiceDef) -> String {
+    let Some(path) = service.interface_ref() else {
+        return String::new();
+    };
+    let written = significant_node_text(path.syntax());
+    if written.is_empty() || written.contains('.') {
+        return written;
+    }
+    for import in source.imports() {
+        let Some(qualified) = import.qualified_name() else {
+            continue;
+        };
+        let full = significant_node_text(qualified.syntax());
+        let base = full.rsplit('.').next().unwrap_or(full.as_str());
+        let local = import
+            .alias()
+            .and_then(|alias| alias.ident_token())
+            .map(|token| token.text().to_string())
+            .unwrap_or_else(|| base.to_string());
+        if local == written {
+            return full;
+        }
+    }
+    written
+}
+
+/// The concatenation of every non-trivia token in `node`'s subtree — the
+/// node's text with whitespace and comments removed (`veh . adas . cruise`
+/// reads as `veh.adas.cruise`).
+fn significant_node_text(node: &SyntaxNode) -> String {
+    node.descendants_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| !token.kind().is_trivia())
+        .map(|token| token.text().to_string())
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -171,5 +335,96 @@ mod tests {
         assert_eq!(decls[0].1, TextRange::new(0.into(), 18.into()));
         assert_eq!(decls[1].0, "veh.extra");
         assert_eq!(decls[1].1, TextRange::new(19.into(), 36.into()));
+    }
+
+    // --- the service catalog (E2.13, ridl reference §14.5) ---------------
+
+    fn ridl_package(db: &RidlDatabase, name: &str, text: &str) -> Package {
+        Package::new(
+            db,
+            name.to_string(),
+            vec![file(db, &format!("{}.ridl", name.replace('.', "/")), text)],
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+        )
+    }
+
+    #[test]
+    fn service_catalog_flags_a_duplicate_name_across_packages() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        // Two packages both declare `veh.adas.cruise` — the flat global
+        // namespace forbids it (RIDL-140).
+        let adas = ridl_package(
+            &db,
+            "veh.adas",
+            "package veh.adas\nservice veh.adas.cruise : Foo\n",
+        );
+        let redundant = ridl_package(
+            &db,
+            "veh.redundant",
+            "package veh.redundant\nservice veh.adas.cruise : Bar\n",
+        );
+        let ws = Workspace::new(&db, vec![adas, redundant], BTreeMap::new());
+
+        let catalog = service_catalog(&db, ws, std);
+
+        assert_eq!(catalog.diagnostics.len(), 1);
+        let diagnostic = &catalog.diagnostics[0];
+        assert_eq!(diagnostic.code, DiagCode::RIDL_140);
+        // Both declarations are labeled: the duplicate as the primary span, the
+        // first via one secondary label.
+        assert_eq!(diagnostic.labels.len(), 1);
+        // The name survives in the catalog once (the first declaration).
+        assert!(catalog.entries.contains_key("veh.adas.cruise"));
+        assert_eq!(catalog.entries["veh.adas.cruise"].package, "veh.adas");
+    }
+
+    #[test]
+    fn service_catalog_resolves_a_cross_package_interface_ref_through_imports() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = ridl_package(
+            &db,
+            "veh.common",
+            "package veh.common\ninterface CruiseControl {\n  signal engaged : boolean\n}\n",
+        );
+        let adas = ridl_package(
+            &db,
+            "veh.adas",
+            "package veh.adas\nimport veh.common.CruiseControl\nservice veh.adas.cruise : CruiseControl\n",
+        );
+        let ws = Workspace::new(&db, vec![common, adas], BTreeMap::new());
+
+        let catalog = service_catalog(&db, ws, std);
+
+        assert!(catalog.diagnostics.is_empty());
+        let entry = &catalog.entries["veh.adas.cruise"];
+        assert_eq!(entry.package, "veh.adas");
+        // The bare `CruiseControl` reference canonicalizes to its full
+        // `pkg.Name` path through the declaring file's import.
+        assert_eq!(entry.interface_ref, "veh.common.CruiseControl");
+    }
+
+    #[test]
+    fn service_catalog_records_an_inline_shape_with_an_empty_ref() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let hvac = ridl_package(
+            &db,
+            "veh.hvac",
+            "package veh.hvac\nservice veh.hvac.cabin {\n  signal temperature : boolean\n}\n",
+        );
+        let ws = Workspace::new(&db, vec![hvac], BTreeMap::new());
+
+        let catalog = service_catalog(&db, ws, std);
+
+        assert!(catalog.diagnostics.is_empty());
+        let entry = &catalog.entries["veh.hvac.cabin"];
+        assert_eq!(entry.package, "veh.hvac");
+        assert_eq!(entry.interface_ref, "");
     }
 }

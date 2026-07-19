@@ -172,6 +172,7 @@ pub fn check_package(
 
     let mut decls = Vec::new();
     let mut interfaces = Vec::new();
+    let mut services = Vec::new();
     let mut composite_starts = Vec::new();
     for (index, file) in files.iter().enumerate() {
         checker.current_file = index;
@@ -199,6 +200,14 @@ pub fn check_package(
             }
             interfaces.push(checker.lower_interface(&interface));
         }
+        // Services (E2.13): the global published declarations. Their dotted
+        // names live in the workspace catalog namespace, not the type
+        // namespace, so there is no per-package first-wins here — cross-package
+        // uniqueness is `service_catalog`'s job (RIDL-140). Every service in
+        // the package lowers to `Package.services`.
+        for service in source.services() {
+            services.push(checker.lower_service(&service));
+        }
         // Stream-position narrowing runs on ridl-profile files only: in a
         // `.typl` parse the parser itself reports every stream as TYPL-301.
         if profile_of_path(file.path(db)) == Profile::Ridl {
@@ -213,9 +222,7 @@ pub fn check_package(
             name: package_name,
             decls,
             interfaces,
-            // The `service` declaration has no grammar yet (E2 task 12+);
-            // nothing lowers here until it does.
-            services: Vec::new(),
+            services,
         },
         diagnostics: checker.diagnostics,
     }
@@ -2687,6 +2694,149 @@ impl Checker<'_> {
             deprecated: doc_info.deprecated,
             ordinal,
             kind: Some(kind),
+        }
+    }
+
+    // --- service lowering (E2.13, ridl reference §14.5) ------------------
+    //
+    // Kept in their own functions so a rebase against a concurrently edited
+    // check.rs stays clean: `lower_service` and its two helpers reuse the
+    // shared `lower_interaction`/`error` methods but add no shared code.
+
+    /// Lowers one `service` declaration to its IR shape (ridl §14.5): a
+    /// global, published declaration of an interface — either by naming a
+    /// shared shape after `:` or with an inline body. A service is
+    /// posture-neutral by design (§14.5): providing and requiring it are rsdl
+    /// concerns (§14.6), so nothing beyond the shape lowers here. Its dotted
+    /// name lives in the workspace catalog namespace, not the type namespace,
+    /// so it is never a `SymbolKind`. Services always publish with public
+    /// visibility — a global contract takes no `internal` modifier.
+    fn lower_service(&mut self, service: &ast::ServiceDef) -> v2::Service {
+        let name = service
+            .name()
+            .map(|dotted| significant_text(dotted.syntax()))
+            .unwrap_or_default();
+        let doc_info = docs::scan(&service.doc_comments());
+        let shape = match service.interface_ref() {
+            // The named-shape form: the reference must name an interface.
+            Some(path) => Some(v2::service::Shape::InterfaceRef(
+                self.lower_service_ref(&path),
+            )),
+            // The inline-shape form: an anonymous interface (`name == ""`).
+            None => Some(v2::service::Shape::Inline(
+                self.lower_service_inline(service),
+            )),
+        };
+        v2::Service {
+            name,
+            visibility: v2::Visibility::Public as i32,
+            doc: doc_info.doc,
+            labels: doc_info.labels,
+            deprecated: doc_info.deprecated,
+            shape,
+        }
+    }
+
+    /// Resolves a service's named interface shape (ridl §14.5). The reference
+    /// must name an `interface`; a type, constant, or unknown name is RIDL-141
+    /// (§16.4). Returns the canonical reference for the IR — bare same-package,
+    /// fully qualified cross-package — resolved through the declaring file's
+    /// imports.
+    fn lower_service_ref(&mut self, path: &ast::PathType) -> String {
+        let written = significant_text(path.syntax());
+        let range = path.syntax().text_range();
+        match self.lookup_path(path) {
+            Some(symbol) if symbol.kind == SymbolKind::Interface => self.canonical_ref(&symbol),
+            Some(symbol) => {
+                self.error(
+                    DiagCode::RIDL_141,
+                    range,
+                    format!("service names `{written}`, which is not an interface"),
+                );
+                self.canonical_ref(&symbol)
+            }
+            None => {
+                self.error(
+                    DiagCode::RIDL_141,
+                    range,
+                    format!("service names unknown shape `{written}` — expected an interface"),
+                );
+                written
+            }
+        }
+    }
+
+    /// Lowers a service's inline shape to an anonymous `Interface` whose
+    /// `name` is empty (ridl §14.5). Runs the same structural pass an
+    /// interface body does — RIDL-401 (an interaction re-declaring a
+    /// `reserved` name) and RIDL-402 (a duplicate interaction name,
+    /// first-wins) — on the inline body's own §11 ordinal sequence, and
+    /// RIDL-107 for a stray typl declaration inside the body.
+    fn lower_service_inline(&mut self, service: &ast::ServiceDef) -> v2::Interface {
+        // RIDL-107: a typl declaration inside the body. The parser recovers it
+        // into an ErrorNode; the code attaches when the recovered node's first
+        // token is a typl definition keyword.
+        for node in service.syntax().children() {
+            if node.kind() == SyntaxKind::ErrorNode
+                && node
+                    .children_with_tokens()
+                    .filter_map(|element| element.into_token())
+                    .find(|token| !token.kind().is_trivia())
+                    .is_some_and(|token| is_typl_definition_keyword(token.kind()))
+            {
+                self.error(
+                    DiagCode::RIDL_107,
+                    node.text_range(),
+                    "type declaration inside a service body — typl declarations live at package level"
+                        .to_string(),
+                );
+            }
+        }
+
+        let mut reserved: HashSet<String> = HashSet::new();
+        for member in service.inline_members() {
+            if let ast::InterfaceMember::Reserved(entry) = &member
+                && let Some(name) = member_name(entry.name())
+            {
+                reserved.insert(name);
+            }
+        }
+
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut interactions = Vec::new();
+        let mut ordinal = 0u32;
+        for member in service.inline_members() {
+            if !matches!(member, ast::InterfaceMember::Reserved(_))
+                && let Some(name) = member_name(member.name())
+            {
+                let range = member_name_range(member.name(), member.syntax());
+                if reserved.contains(&name) {
+                    self.error(
+                        DiagCode::RIDL_401,
+                        range,
+                        format!("interaction `{name}` re-declares a `reserved` name"),
+                    );
+                }
+                if !seen.insert(name.clone()) {
+                    self.error(
+                        DiagCode::RIDL_402,
+                        range,
+                        format!("duplicate interaction name `{name}`"),
+                    );
+                    continue;
+                }
+            }
+            ordinal += 1;
+            interactions.push(self.lower_interaction(&member, ordinal));
+        }
+
+        v2::Interface {
+            name: String::new(),
+            visibility: v2::Visibility::Unspecified as i32,
+            doc: String::new(),
+            labels: Vec::new(),
+            deprecated: None,
+            interactions,
         }
     }
 
@@ -6721,5 +6871,86 @@ interface VehicleStatus {
         // The losing `event a` re-declaration is excluded, holds no ordinal
         // slot, and the surviving contract stays contiguous.
         assert_eq!(walk, [("a", 1, true), ("b", 2, false)]);
+    }
+
+    // --- services (E2.13, ridl reference §14.5) --------------------------
+
+    #[test]
+    fn service_naming_an_interface_lowers_to_the_ir() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface CruiseControl {{\n  signal engaged : Speed @10ms\n}}\nservice veh.adas.cruise : CruiseControl\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(checked.ir.services.len(), 1);
+        let service = &checked.ir.services[0];
+        assert_eq!(service.name, "veh.adas.cruise");
+        assert_eq!(service.visibility, v2::Visibility::Public as i32);
+        assert_eq!(
+            service.shape,
+            Some(v2::service::Shape::InterfaceRef(
+                "CruiseControl".to_string()
+            )),
+        );
+    }
+
+    #[test]
+    fn ridl_141_service_names_a_type_not_an_interface() {
+        let checked = check_ridl("app", &format!("{PRELUDE}service veh.adas.speed : Speed\n"));
+        assert!(
+            codes(&checked).contains(&"RIDL-141"),
+            "got: {:?}",
+            checked.diagnostics,
+        );
+        // The service still lowers — a diagnostic does not suppress the shape.
+        assert_eq!(checked.ir.services.len(), 1);
+        assert_eq!(
+            checked.ir.services[0].shape,
+            Some(v2::service::Shape::InterfaceRef("Speed".to_string())),
+        );
+    }
+
+    #[test]
+    fn service_inline_shape_lowers_to_an_anonymous_interface() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed)\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(checked.ir.services.len(), 1);
+        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
+            panic!("inline service must lower to an inline shape");
+        };
+        // The inline interface is anonymous (ridl §14.5) with its own ordinal
+        // sequence.
+        assert_eq!(inline.name, "");
+        assert_eq!(inline.visibility, v2::Visibility::Unspecified as i32);
+        let walk: Vec<(&str, u32)> = inline
+            .interactions
+            .iter()
+            .map(|decl| (decl.name.as_str(), decl.ordinal))
+            .collect();
+        assert_eq!(walk, [("temperature", 1), ("setTarget", 2)]);
+    }
+
+    #[test]
+    fn service_inline_shape_runs_the_structural_pass() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  signal temperature : Speed @10ms\n}}\n"
+            ),
+        );
+        // The inline body runs the same duplicate-interaction check an
+        // interface body does (RIDL-402, first-wins).
+        assert_eq!(codes(&checked), vec!["RIDL-402"]);
+        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
+            panic!("inline service must lower to an inline shape");
+        };
+        assert_eq!(inline.interactions.len(), 1);
     }
 }
