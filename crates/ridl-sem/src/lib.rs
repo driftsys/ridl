@@ -5,6 +5,7 @@
 
 pub mod check;
 pub mod docs;
+pub mod expr;
 pub mod init;
 pub mod resolve;
 pub mod scalar;

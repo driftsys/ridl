@@ -36,6 +36,7 @@ use ridl_syntax::{Profile, SyntaxKind};
 use rowan::{NodeOrToken, TextRange};
 
 use crate::docs;
+use crate::expr::{self, ContractScope, ExprType};
 use crate::init;
 use crate::resolve::{
     Resolution, Symbol, SymbolKind, declared_name, declared_symbols, name_range,
@@ -168,6 +169,7 @@ pub fn check_package(
         current_file: 0,
         diagnostics: default_diagnostics,
         default_timing,
+        interface_signals: Vec::new(),
     };
 
     let mut decls = Vec::new();
@@ -357,6 +359,11 @@ struct Checker<'db> {
     /// `[defaults].timing` or the built-in `[100ms..1000ms]`, applied to every
     /// untimed signal and event (E2 task 9).
     default_timing: timing::TimingSpec,
+    /// The signals of the interface being lowered, typed for the contract
+    /// environment — the names a `require` may read (ridl §13, expr-core §6).
+    /// Set by [`Checker::lower_interface`] before its members are lowered and
+    /// cleared after; empty everywhere else.
+    interface_signals: Vec<(String, ExprType)>,
 }
 
 /// The primitive class a scalar constraint is validated against.
@@ -2621,6 +2628,23 @@ impl Checker<'_> {
             }
         }
 
+        // Pre-pass: the interface's own signals, typed for the contract
+        // environment. A `require` on any interaction may read them (ridl §13),
+        // including one declared later in the body, so they are gathered before
+        // the members are lowered. A signal whose payload type is outside the
+        // guaranteed subset is left out — naming it in a contract is RIDL-306.
+        self.interface_signals = def
+            .members()
+            .filter_map(|member| match member {
+                ast::InterfaceMember::Signal(signal) => {
+                    let name = member_name(signal.name())?;
+                    let payload = signal.payload()?;
+                    Some((name, self.expr_type_of_field_type(&payload)?))
+                }
+                _ => None,
+            })
+            .collect();
+
         let mut seen: HashSet<String> = HashSet::new();
         let mut interactions = Vec::new();
         let mut ordinal = 0u32;
@@ -2651,6 +2675,8 @@ impl Checker<'_> {
             ordinal += 1;
             interactions.push(self.lower_interaction(&member, ordinal));
         }
+
+        self.interface_signals.clear();
 
         let doc_info = docs::scan(&def.doc_comments());
         let visibility = if def.is_internal() {
@@ -3001,6 +3027,172 @@ impl Checker<'_> {
         spec.map(lower_timing_spec)
     }
 
+    // --- the contract environment (E2 task 11) ----------------------------
+
+    /// The contract-expression type of a declared type reference, or `None`
+    /// when the declaration is outside the five expr-core domains (§5.1) — a
+    /// struct, a union, an enumset, a string- or bytes-backed type, or a name
+    /// that does not resolve. Silent: every one of these paths is resolved and
+    /// reported by the surrounding lowering already.
+    fn expr_type_of_field_type(&self, field_type: &ast::FieldType) -> Option<ExprType> {
+        // An optional, array, map, or tuple payload has no subset domain.
+        let ast::FieldType::Path(path) = field_type else {
+            return None;
+        };
+        self.expr_type_of_path(path)
+    }
+
+    fn expr_type_of_path(&self, path: &ast::PathType) -> Option<ExprType> {
+        let symbol = self.lookup_path(path)?;
+        match symbol.kind {
+            SymbolKind::Enum => Some(ExprType::EnumType(expr::qualified_ref(&symbol))),
+            SymbolKind::Type => {
+                let reference = expr::qualified_ref(&symbol);
+                // The one duration-domain inhabitant (expr-core §5.1); its
+                // `ms` backing would otherwise read as an ordinary numeric.
+                if reference == "ridl.std.Duration" {
+                    return Some(ExprType::Duration);
+                }
+                let Definition::Type(decl) = self.find_definition(&symbol)? else {
+                    return None;
+                };
+                match backing_class(decl.backing()) {
+                    BackingClass::Integer | BackingClass::Float => {
+                        Some(ExprType::Numeric(reference))
+                    }
+                    BackingClass::Boolean => Some(ExprType::Boolean),
+                    BackingClass::Str | BackingClass::Bytes | BackingClass::Unknown => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// The typed parameter environment of an interaction (expr-core §6 item 1).
+    /// A parameter outside the subset domains is left out; naming it in a
+    /// contract is RIDL-306.
+    fn param_expr_types(&self, params: Option<&ast::ParamList>) -> Vec<(String, ExprType)> {
+        let Some(params) = params else {
+            return Vec::new();
+        };
+        params
+            .params()
+            .filter_map(|param| {
+                let name = member_name(param.name())?;
+                let ast::ParamType::Field(field_type) = param.param_type()? else {
+                    return None;
+                };
+                Some((name, self.expr_type_of_field_type(&field_type)?))
+            })
+            .collect()
+    }
+
+    /// The type of `result` in an `ensure` (expr-core §6 item 2): the named
+    /// return type, the named-field tuple, or the success arm of an inline
+    /// fallible return — an `ensure` observes the value the query returned. A
+    /// stream return and any type outside the subset domains yield `None`, and
+    /// `result` then does not resolve.
+    fn result_expr_type(&self, return_type: &ast::ReturnType) -> Option<ExprType> {
+        if let Some(tuple) = return_type.tuple_type() {
+            let fields: Vec<(String, Option<ExprType>)> = tuple
+                .fields()
+                .filter_map(|field| {
+                    let name = member_name(field.name())?;
+                    let field_type = field.field_type();
+                    Some((
+                        name,
+                        field_type.and_then(|found| self.expr_type_of_field_type(&found)),
+                    ))
+                })
+                .collect();
+            if fields.is_empty() {
+                return None;
+            }
+            return Some(ExprType::tuple(&fields));
+        }
+        if let Some(fallible) = return_type.fallible_type() {
+            return self.expr_type_of_path(&fallible.ok()?);
+        }
+        self.expr_type_of_path(&return_type.type_ref()?)
+    }
+
+    /// Type-checks and lowers the `require`/`ensure` predicates of an
+    /// interaction's attribute block (ridl §13, expr-core specification).
+    ///
+    /// Every clause the task 5 placement rules admit is checked against the
+    /// guaranteed subset ([`expr::check_contract_expr`]) — RIDL-306 for a form
+    /// outside it, RIDL-305 for an `ensure` that reads no `result` — and
+    /// lowers its canonical one-line rendering as `Contract.source`
+    /// (ADR-0008 decision 14). The scope shape is the ridl §13 table: a
+    /// `require` reads the parameters and the interface's own signals; an
+    /// `ensure` reads `result` and the parameters.
+    ///
+    /// `allow_ensure` is false on a command, where `ensure` is RIDL-302
+    /// (already reported) and the `CommandDef` proto admits `require` only;
+    /// the misplaced clause lowers nothing and is not type-checked. Flag and
+    /// assignment attributes carry no predicate and are skipped (their
+    /// diagnostics come from [`Checker::check_member_attrs`]). The observer
+    /// stub fields stay empty — task 12 (E2.5) fills them.
+    fn lower_contracts(
+        &mut self,
+        node: &ridl_syntax::SyntaxNode,
+        allow_ensure: bool,
+        params: &[(String, ExprType)],
+        result: Option<ExprType>,
+    ) -> Vec<v2::Contract> {
+        let Some(block) = node.children().find_map(ast::AttrBlock::cast) else {
+            return Vec::new();
+        };
+        let signals = self.interface_signals.clone();
+        let mut contracts = Vec::new();
+        for attribute in block.attributes() {
+            let Some(predicate) = attribute.predicate_kind() else {
+                continue;
+            };
+            let kind = match predicate {
+                ast::PredicateKind::Require => v2::ContractKind::Require,
+                ast::PredicateKind::Ensure if allow_ensure => v2::ContractKind::Ensure,
+                ast::PredicateKind::Ensure => continue,
+            };
+            // An empty predicate is a parse error; nothing is lowered for it.
+            let Some(clause) = attribute.expr() else {
+                continue;
+            };
+            let scope = match predicate {
+                ast::PredicateKind::Require => ContractScope {
+                    params,
+                    result: None,
+                    signals: &signals,
+                    resolution: &self.resolution,
+                },
+                ast::PredicateKind::Ensure => ContractScope {
+                    params,
+                    result: result.clone(),
+                    signals: &[],
+                    resolution: &self.resolution,
+                },
+            };
+            let (_, diagnostics) = expr::check_contract_expr(&clause, &scope);
+            // The subset checker sees one expression and not its file, so the
+            // file id is stamped here.
+            let file = self.file_ids[self.current_file];
+            self.diagnostics
+                .extend(diagnostics.into_iter().map(|mut diagnostic| {
+                    diagnostic.primary.file = file;
+                    diagnostic
+                }));
+            contracts.push(v2::Contract {
+                kind: kind as i32,
+                source: expr::canonical_expr_text(&clause),
+                signal_refs: Vec::new(),
+                param_refs: Vec::new(),
+                uses_result: false,
+                observer_id: String::new(),
+            });
+        }
+        contracts
+    }
+
     /// `command Name '(' params ')' attr_block?` (ridl §6.1, Appendix C).
     fn lower_command(&mut self, command: &ast::CommandDef) -> v2::CommandDef {
         // RIDL-104: a command always returns `()` — the erroneous return
@@ -3026,7 +3218,8 @@ impl Checker<'_> {
             .map(|params| self.lower_params(&params, "command"))
             .unwrap_or_default();
         self.check_member_attrs(command.syntax(), MemberKind::Command);
-        let contracts = lower_contracts(command.syntax(), false);
+        let param_types = self.param_expr_types(command.params().as_ref());
+        let contracts = self.lower_contracts(command.syntax(), false, &param_types, None);
         v2::CommandDef { params, contracts }
     }
 
@@ -3048,7 +3241,11 @@ impl Checker<'_> {
             .return_type()
             .and_then(|return_type| self.lower_query_return(&return_type));
         self.check_member_attrs(query.syntax(), MemberKind::Query);
-        let contracts = lower_contracts(query.syntax(), true);
+        let param_types = self.param_expr_types(query.params().as_ref());
+        let result_type = query
+            .return_type()
+            .and_then(|declared| self.result_expr_type(&declared));
+        let contracts = self.lower_contracts(query.syntax(), true, &param_types, result_type);
         v2::QueryDef {
             params,
             return_type,
@@ -3876,46 +4073,6 @@ fn primitive_path_keyword(path: &ast::PathType) -> Option<String> {
         }
         _ => None,
     }
-}
-
-/// Lowers the `require`/`ensure` predicates of an interaction's attribute
-/// block to `Contract` observer stubs (ridl §13). E2.1c carries only the
-/// clause kind and the raw expr token text as `source`; task 11 (E2.4)
-/// replaces `source` with the canonical rendering and fills `signal_refs`,
-/// `param_refs`, and `uses_result`, and task 12 (E2.5) assigns `observer_id`
-/// — all left empty here. `allow_ensure` is false on a command, where
-/// `ensure` is RIDL-302 (already reported) and the `CommandDef` proto admits
-/// `require` only; the malformed clause lowers nothing. Flag and assignment
-/// attributes carry no predicate and are skipped (their diagnostics come from
-/// `check_member_attrs`).
-fn lower_contracts(node: &ridl_syntax::SyntaxNode, allow_ensure: bool) -> Vec<v2::Contract> {
-    let Some(block) = node.children().find_map(ast::AttrBlock::cast) else {
-        return Vec::new();
-    };
-    block
-        .attributes()
-        .filter_map(|attribute| {
-            let kind = match attribute.predicate_kind()? {
-                ast::PredicateKind::Require => v2::ContractKind::Require,
-                ast::PredicateKind::Ensure if allow_ensure => v2::ContractKind::Ensure,
-                ast::PredicateKind::Ensure => return None,
-            };
-            // The written source text of the expr, spacing preserved; task 11
-            // (E2.4) replaces it with the canonical one-line rendering.
-            let source = attribute
-                .expr()
-                .map(|expr| expr.syntax().text().to_string())
-                .unwrap_or_default();
-            Some(v2::Contract {
-                kind: kind as i32,
-                source,
-                signal_refs: Vec::new(),
-                param_refs: Vec::new(),
-                uses_result: false,
-                observer_id: String::new(),
-            })
-        })
-        .collect()
 }
 
 fn lower_reserved(entry: &ast::ReservedEntry, ordinal: u32) -> v2::Reserved {
@@ -5646,6 +5803,142 @@ mod tests {
             &format!("{PRELUDE}interface I {{\n  command c() [ ensure x > 0.0 ]\n}}\n"),
         );
         assert_eq!(codes(&checked), vec!["RIDL-302"]);
+    }
+
+    /// A vocabulary rich enough for the contract cases: the `PRELUDE` speed
+    /// type plus a second named numeric type, an enum, and a constant.
+    const CONTRACT_PRELUDE: &str = "package app\n\
+type Speed  : km/h [0.0..300.0 step 0.5]\n\
+type Torque : N.m  [0.0..900.0 step 0.5]\n\
+type Count  : integer [0..1000]\n\
+const MAX_SPEED : Speed = 250.0\n\
+enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
+
+    #[test]
+    fn ridl_306_expression_outside_the_guaranteed_subset() {
+        // Every row is one expr-core §8 boundary form, checked end to end
+        // through the package checker.
+        for (name, body) in [
+            (
+                "unknown reference",
+                "command c(p: Speed) [ require unknownName > 0 ]",
+            ),
+            (
+                "cross-domain arithmetic",
+                "command c(speed: Speed, window: Duration) [ require speed + window > 0 ]",
+            ),
+            (
+                "cross-named-type arithmetic",
+                "command c(speed: Speed, torque: Torque) [ require speed + torque > 0.0 ]",
+            ),
+            ("non-boolean root", "command c(p: Speed) [ require 3 ]"),
+            (
+                "signal read in an ensure",
+                "query q(): Speed [ ensure currentSpeed >= 0.0 ]",
+            ),
+            (
+                "a qualified member chain",
+                "command c(position: GearPosition) [ require position != app.GearPosition.PARK ]",
+            ),
+            (
+                "`result` in a require",
+                "query q(): Speed [ require result >= 0.0 ]",
+            ),
+            (
+                "struct-field access",
+                "query q(n: Count): Speed [ require n.severity >= 4\n    ensure result >= 0.0 ]",
+            ),
+            (
+                "`%` over a float-backed operand",
+                "query q(n: Count): Speed [ require n % 0.5 == 0.0\n    ensure result >= 0.0 ]",
+            ),
+            (
+                "duration arithmetic",
+                "query q(w: Duration): Speed [ require w + 10ms < 1s\n    ensure result >= 0.0 ]",
+            ),
+        ] {
+            let checked = check_ridl(
+                "app",
+                &format!(
+                    "{CONTRACT_PRELUDE}interface I {{\n  signal currentSpeed : Speed @10ms\n  {body}\n}}\n"
+                ),
+            );
+            assert_eq!(
+                codes(&checked),
+                vec!["RIDL-306"],
+                "{name}: {:?}",
+                checked.diagnostics
+            );
+        }
+    }
+
+    #[test]
+    fn ridl_305_ensure_that_never_reads_result() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n  query q(window: Duration): Speed [ ensure window > 0ms ]\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-305"]);
+        assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+    }
+
+    #[test]
+    fn guaranteed_subset_forms_check_clean() {
+        // The ridl §13 guaranteed forms, including the tuple-field access and
+        // the enum-access form, over one interface.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  signal currentSpeed : Speed @10ms\n\
+  command setRange(min: Speed, max: Speed) [\n\
+    require min < max\n\
+    require max <= MAX_SPEED\n\
+  ]\n\
+  command setGear(position: GearPosition) [\n\
+    require position != GearPosition.PARK || currentSpeed == 0.0\n\
+  ]\n\
+  query getAverageSpeed(window: Duration): Speed [\n\
+    require window > 0ms\n\
+    ensure result >= 0.0\n\
+  ]\n\
+  query getRange(): (min: Speed, max: Speed) [\n\
+    ensure result.min >= 0.0 && result.max <= MAX_SPEED\n\
+  ]\n\
+  query stepsOf(n: Count): Count [\n\
+    require n % 2 == 0\n\
+    ensure result >= 0\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    #[test]
+    fn contract_source_lowers_canonical_text() {
+        // ADR-0008 decision 14: the IR carries the canonical rendering, not
+        // the written spacing, so reformatting a file is not a contract edit.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  query q(min: Speed, max: Speed): Speed [\n\
+    require (min<max)&&(max<=MAX_SPEED)\n\
+    ensure  result>=0.0\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let sources: Vec<&str> = query_def(&checked, "q")
+            .contracts
+            .iter()
+            .map(|contract| contract.source.as_str())
+            .collect();
+        assert_eq!(sources, ["min < max && max <= MAX_SPEED", "result >= 0.0"],);
     }
 
     #[test]

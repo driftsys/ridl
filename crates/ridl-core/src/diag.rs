@@ -260,6 +260,15 @@ impl DiagCode {
     /// failure flowing toward a provider (ridl §10.1, §16.3). Warning. Emitted
     /// by the checker (E2 task 10).
     pub const RIDL_304: DiagCode = DiagCode("RIDL-304");
+    /// An `ensure` clause that never references `result` — well-typed but
+    /// suspicious (ridl §13, §16.3; expr-core specification §8). Warning.
+    /// Emitted by the checker (E2 task 11).
+    pub const RIDL_305: DiagCode = DiagCode("RIDL-305");
+    /// A `require`/`ensure` expression outside the guaranteed subset (ridl §13,
+    /// §16.3; expr-core specification §8 — one code for the whole boundary,
+    /// with a message naming the offending form). Error. Emitted by the checker
+    /// (E2 task 11).
+    pub const RIDL_306: DiagCode = DiagCode("RIDL-306");
     /// An `error` enum declares a Stratum-2 contract-error category name
     /// (`INVALID_VALUE`, `PRECONDITION_FAILED`, `CONTRACT_BROKEN`,
     /// `UNKNOWN_INTERACTION`) — reserved vocabulary (ridl §10.2, §16.3).
