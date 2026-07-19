@@ -215,6 +215,68 @@ impl AstNode for FieldType {
     }
 }
 
+/// One member of an `interface` body — the `InterfaceMember` alternation
+/// (ridl reference §14.0–§14.1, epic E2.1a).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum InterfaceMember {
+    Signal(SignalDef),
+    Event(EventDef),
+    Command(CommandDef),
+    Query(QueryDef),
+    Final(FinalDef),
+    Reserved(ReservedEntry),
+}
+
+impl AstNode for InterfaceMember {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        match syntax.kind() {
+            SyntaxKind::SignalDef => SignalDef::cast(syntax).map(Self::Signal),
+            SyntaxKind::EventDef => EventDef::cast(syntax).map(Self::Event),
+            SyntaxKind::CommandDef => CommandDef::cast(syntax).map(Self::Command),
+            SyntaxKind::QueryDef => QueryDef::cast(syntax).map(Self::Query),
+            SyntaxKind::FinalDef => FinalDef::cast(syntax).map(Self::Final),
+            SyntaxKind::ReservedEntry => ReservedEntry::cast(syntax).map(Self::Reserved),
+            _ => None,
+        }
+    }
+
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            Self::Signal(it) => it.syntax(),
+            Self::Event(it) => it.syntax(),
+            Self::Command(it) => it.syntax(),
+            Self::Query(it) => it.syntax(),
+            Self::Final(it) => it.syntax(),
+            Self::Reserved(it) => it.syntax(),
+        }
+    }
+}
+
+/// The type of a command or query parameter — the `ParamType` alternation
+/// (ridl reference §6.1, §7.1, §12): a field type or a stream `<T>`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ParamType {
+    Field(FieldType),
+    Stream(StreamType),
+}
+
+impl AstNode for ParamType {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        if syntax.kind() == SyntaxKind::StreamType {
+            StreamType::cast(syntax).map(Self::Stream)
+        } else {
+            FieldType::cast(syntax).map(Self::Field)
+        }
+    }
+
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            Self::Field(it) => it.syntax(),
+            Self::Stream(it) => it.syntax(),
+        }
+    }
+}
+
 // --- the shared definition traits ----------------------------------------
 
 /// A node that declares a [`Name`].
@@ -268,6 +330,13 @@ impl HasName for EnumDef {}
 impl HasName for EnumSetDef {}
 impl HasName for UnionDef {}
 impl HasName for Definition {}
+impl HasName for InterfaceDef {}
+impl HasName for SignalDef {}
+impl HasName for EventDef {}
+impl HasName for CommandDef {}
+impl HasName for QueryDef {}
+impl HasName for FinalDef {}
+impl HasName for InterfaceMember {}
 
 impl HasModifiers for TypeDef {}
 impl HasModifiers for ConstDef {}
@@ -276,6 +345,7 @@ impl HasModifiers for EnumDef {}
 impl HasModifiers for EnumSetDef {}
 impl HasModifiers for UnionDef {}
 impl HasModifiers for Definition {}
+impl HasModifiers for InterfaceDef {}
 
 impl HasDocComments for TypeDef {}
 impl HasDocComments for ConstDef {}
@@ -284,6 +354,13 @@ impl HasDocComments for EnumDef {}
 impl HasDocComments for EnumSetDef {}
 impl HasDocComments for UnionDef {}
 impl HasDocComments for Definition {}
+impl HasDocComments for InterfaceDef {}
+impl HasDocComments for SignalDef {}
+impl HasDocComments for EventDef {}
+impl HasDocComments for CommandDef {}
+impl HasDocComments for QueryDef {}
+impl HasDocComments for FinalDef {}
+impl HasDocComments for InterfaceMember {}
 
 // --- position-sensitive accessors ----------------------------------------
 
@@ -352,6 +429,58 @@ impl ConstDef {
     /// the value literal.
     pub fn regex(&self) -> Option<SyntaxToken> {
         self.value()?.regex_token()
+    }
+}
+
+impl StreamType {
+    /// The raw `string`/`bytes` element keyword (ridl reference §12.2) —
+    /// the bare token child of the stream, present only when the element
+    /// is not a named type ([`StreamType::element_type`]).
+    pub fn element_primitive(&self) -> Option<SyntaxToken> {
+        self.syntax()
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .find(|token| {
+                matches!(token.kind(), SyntaxKind::StringKw | SyntaxKind::BytesKw)
+            })
+    }
+}
+
+impl Timing {
+    /// The strict-periodic duration — `@10ms` (ridl reference §9). `None`
+    /// for the range form, whose durations sit inside [`Timing::range`].
+    pub fn duration(&self) -> Option<SyntaxToken> {
+        support::token(self.syntax(), SyntaxKind::Duration)
+    }
+}
+
+impl TimingRange {
+    /// The lower bound — the duration before `..`. `None` on `[..max]`.
+    pub fn min(&self) -> Option<SyntaxToken> {
+        self.endpoint(false)
+    }
+
+    /// The upper bound — the duration after `..`. `None` on `[min..]`.
+    pub fn max(&self) -> Option<SyntaxToken> {
+        self.endpoint(true)
+    }
+
+    /// The first duration token before (`after_dots == false`) or after
+    /// (`after_dots == true`) the `..` anchor — both endpoints are
+    /// `duration` tokens, so position relative to `..` decides the role.
+    fn endpoint(&self, after_dots: bool) -> Option<SyntaxToken> {
+        let mut seen_dots = false;
+        for element in self.syntax().children_with_tokens() {
+            let Some(token) = element.into_token() else {
+                continue;
+            };
+            match token.kind() {
+                SyntaxKind::DotDot => seen_dots = true,
+                SyntaxKind::Duration if seen_dots == after_dots => return Some(token),
+                _ => {}
+            }
+        }
+        None
     }
 }
 

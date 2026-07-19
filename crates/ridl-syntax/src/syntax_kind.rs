@@ -131,6 +131,22 @@ pub enum SyntaxKind {
     QualifiedName,
     Literal,
     InitValue,
+    // Nodes of the ridl interaction grammar (`family.ungram`, epic E2.1a —
+    // ridl reference Appendix C, ADR-0008 decisions 1 and 2).
+    InterfaceDef,
+    SignalDef,
+    EventDef,
+    CommandDef,
+    QueryDef,
+    FinalDef,
+    Param,
+    ParamList,
+    ReturnType,
+    StreamType,
+    FallibleType,
+    Timing,
+    TimingRange,
+    AttrBlock,
     /// A recovery node: error recovery wraps the tokens it skips in one of
     /// these, so broken input still produces a lossless tree. It is the one
     /// node kind with no rule in `family.ungram`, and the last variant — the

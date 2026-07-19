@@ -5,7 +5,10 @@
 //! when the committed text differs.
 
 use super::support;
-use super::{AstChildren, AstNode, Backing, Definition, FieldType, StructMember};
+use super::{
+    AstChildren, AstNode, Backing, Definition, FieldType, InterfaceMember, ParamType,
+    StructMember,
+};
 use crate::syntax_kind::{SyntaxKind, SyntaxNode, SyntaxToken};
 /// A `SourceFile` node (`family.ungram` rule `SourceFile`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -28,6 +31,9 @@ impl SourceFile {
         support::children(&self.syntax)
     }
     pub fn definitions(&self) -> AstChildren<Definition> {
+        support::children(&self.syntax)
+    }
+    pub fn interfaces(&self) -> AstChildren<InterfaceDef> {
         support::children(&self.syntax)
     }
 }
@@ -77,6 +83,45 @@ impl Import {
     }
     pub fn as_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::AsKw)
+    }
+}
+/// A `InterfaceDef` node (`family.ungram` rule `InterfaceDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InterfaceDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for InterfaceDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::InterfaceDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl InterfaceDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn members(&self) -> AstChildren<InterfaceMember> {
+        support::children(&self.syntax)
+    }
+    pub fn internal_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::InternalKw)
+    }
+    pub fn error_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::ErrorKw)
+    }
+    pub fn interface_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::InterfaceKw)
+    }
+    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn r_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBrace)
     }
 }
 /// A `QualifiedName` node (`family.ungram` rule `QualifiedName`).
@@ -833,6 +878,378 @@ impl UnionArm {
     }
     pub fn colon_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::Colon)
+    }
+}
+/// A `SignalDef` node (`family.ungram` rule `SignalDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SignalDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for SignalDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::SignalDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl SignalDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn payload(&self) -> Option<FieldType> {
+        support::child(&self.syntax)
+    }
+    pub fn init_value(&self) -> Option<InitValue> {
+        support::child(&self.syntax)
+    }
+    pub fn timing(&self) -> Option<Timing> {
+        support::child(&self.syntax)
+    }
+    pub fn signal_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::SignalKw)
+    }
+    pub fn colon_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Colon)
+    }
+}
+/// A `EventDef` node (`family.ungram` rule `EventDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EventDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for EventDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::EventDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl EventDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn payload(&self) -> Option<FieldType> {
+        support::child(&self.syntax)
+    }
+    pub fn timing(&self) -> Option<Timing> {
+        support::child(&self.syntax)
+    }
+    pub fn event_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::EventKw)
+    }
+    pub fn colon_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Colon)
+    }
+}
+/// A `CommandDef` node (`family.ungram` rule `CommandDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CommandDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for CommandDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::CommandDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl CommandDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn params(&self) -> Option<ParamList> {
+        support::child(&self.syntax)
+    }
+    pub fn return_type(&self) -> Option<ReturnType> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn timing(&self) -> Option<Timing> {
+        support::child(&self.syntax)
+    }
+    pub fn command_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::CommandKw)
+    }
+    pub fn colon_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Colon)
+    }
+}
+/// A `QueryDef` node (`family.ungram` rule `QueryDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct QueryDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for QueryDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::QueryDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl QueryDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn params(&self) -> Option<ParamList> {
+        support::child(&self.syntax)
+    }
+    pub fn return_type(&self) -> Option<ReturnType> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn timing(&self) -> Option<Timing> {
+        support::child(&self.syntax)
+    }
+    pub fn query_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::QueryKw)
+    }
+    pub fn colon_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Colon)
+    }
+}
+/// A `FinalDef` node (`family.ungram` rule `FinalDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FinalDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for FinalDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::FinalDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl FinalDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn payload(&self) -> Option<FieldType> {
+        support::child(&self.syntax)
+    }
+    pub fn timing(&self) -> Option<Timing> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn final_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::FinalKw)
+    }
+    pub fn colon_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Colon)
+    }
+}
+/// A `Timing` node (`family.ungram` rule `Timing`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Timing {
+    syntax: SyntaxNode,
+}
+impl AstNode for Timing {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::Timing).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl Timing {
+    pub fn range(&self) -> Option<TimingRange> {
+        support::child(&self.syntax)
+    }
+    pub fn at_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::At)
+    }
+    pub fn duration_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Duration)
+    }
+    pub fn l_bracket_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBracket)
+    }
+    pub fn r_bracket_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBracket)
+    }
+}
+/// A `ParamList` node (`family.ungram` rule `ParamList`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ParamList {
+    syntax: SyntaxNode,
+}
+impl AstNode for ParamList {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::ParamList).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl ParamList {
+    pub fn params(&self) -> AstChildren<Param> {
+        support::children(&self.syntax)
+    }
+    pub fn l_paren_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LParen)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn r_paren_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RParen)
+    }
+}
+/// A `ReturnType` node (`family.ungram` rule `ReturnType`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ReturnType {
+    syntax: SyntaxNode,
+}
+impl AstNode for ReturnType {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::ReturnType).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl ReturnType {
+    pub fn type_ref(&self) -> Option<PathType> {
+        support::child(&self.syntax)
+    }
+    pub fn tuple_type(&self) -> Option<TupleType> {
+        support::child(&self.syntax)
+    }
+    pub fn stream_type(&self) -> Option<StreamType> {
+        support::child(&self.syntax)
+    }
+    pub fn fallible_type(&self) -> Option<FallibleType> {
+        support::child(&self.syntax)
+    }
+}
+/// A `AttrBlock` node (`family.ungram` rule `AttrBlock`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AttrBlock {
+    syntax: SyntaxNode,
+}
+impl AstNode for AttrBlock {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::AttrBlock).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl AttrBlock {
+    pub fn l_bracket_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBracket)
+    }
+    pub fn r_bracket_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBracket)
+    }
+}
+/// A `Param` node (`family.ungram` rule `Param`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Param {
+    syntax: SyntaxNode,
+}
+impl AstNode for Param {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::Param).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl Param {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn param_type(&self) -> Option<ParamType> {
+        support::child(&self.syntax)
+    }
+    pub fn colon_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Colon)
+    }
+}
+/// A `StreamType` node (`family.ungram` rule `StreamType`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct StreamType {
+    syntax: SyntaxNode,
+}
+impl AstNode for StreamType {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::StreamType).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl StreamType {
+    pub fn element_type(&self) -> Option<PathType> {
+        support::child(&self.syntax)
+    }
+    pub fn lt_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Lt)
+    }
+    pub fn string_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::StringKw)
+    }
+    pub fn bytes_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::BytesKw)
+    }
+    pub fn gt_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Gt)
+    }
+}
+/// A `FallibleType` node (`family.ungram` rule `FallibleType`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct FallibleType {
+    syntax: SyntaxNode,
+}
+impl AstNode for FallibleType {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::FallibleType).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl FallibleType {
+    pub fn ok(&self) -> Option<PathType> {
+        support::nth_child(&self.syntax, 0usize)
+    }
+    pub fn err(&self) -> Option<PathType> {
+        support::nth_child(&self.syntax, 1usize)
+    }
+    pub fn pipe_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Pipe)
+    }
+}
+/// A `TimingRange` node (`family.ungram` rule `TimingRange`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TimingRange {
+    syntax: SyntaxNode,
+}
+impl AstNode for TimingRange {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::TimingRange).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl TimingRange {
+    pub fn duration_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Duration)
+    }
+    pub fn dotdot_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::DotDot)
     }
 }
 /// An error-recovery node wrapping the tokens the parser skipped
