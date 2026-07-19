@@ -177,12 +177,23 @@ impl DiagCode {
     pub const TYPL_214: DiagCode = DiagCode("TYPL-214");
     /// Timing annotation or duration literal in a typl context (typl §16.4).
     pub const TYPL_302: DiagCode = DiagCode("TYPL-302");
+    /// Interaction declaration in a typl context (typl §16.4, ADR-0007
+    /// decision 10): one of the nine ridl words at declaration-start position
+    /// in a `.typl` parse. Emitted by the parser (E2 task 2).
+    pub const TYPL_304: DiagCode = DiagCode("TYPL-304");
     /// Blank line between a doc comment and its definition (typl §14, §16.5).
     /// Warning. Emitted by the checker (E1.7b).
     pub const TYPL_404: DiagCode = DiagCode("TYPL-404");
     /// `@deprecated` doc tag without a reason string (typl §14.2, §16.5).
     /// Warning. Emitted by the checker (E1.7b).
     pub const TYPL_405: DiagCode = DiagCode("TYPL-405");
+
+    // --- RIDL codes emitted in E2 so far (ridl reference §16) ---
+    /// Behaviour, user-interaction, or architecture declaration in a ridl
+    /// context (ridl §16.4): a reserved word of the uxdl/rmdl/rsdl profiles at
+    /// declaration-start position in a `.ridl` parse. Emitted by the parser
+    /// (E2 task 2).
+    pub const RIDL_403: DiagCode = DiagCode("RIDL-403");
 
     // --- MANI manifest (0xx) — ADR-0007 decision 2, ADR-0002 §4 ---
     /// The `ridl.toml` text is not valid TOML.

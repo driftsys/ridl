@@ -151,7 +151,10 @@ mod tests {
 
     #[test]
     fn package_declarations_reads_names_and_ranges() {
-        let parse = ridl_syntax::parse("package veh.common\npackage veh.extra\ntype A: m\n");
+        let parse = ridl_syntax::parse(
+            "package veh.common\npackage veh.extra\ntype A: m\n",
+            ridl_syntax::Profile::Typl,
+        );
         let source = SourceFile::cast(parse.syntax()).expect("root is a SourceFile");
         let decls = package_declarations(&source);
         assert_eq!(decls.len(), 2, "both declarations are read");

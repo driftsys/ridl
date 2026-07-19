@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use ridl_fmt::{FormatOutcome, format};
+use ridl_syntax::Profile;
 
 fn test_data(sub: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -26,7 +27,7 @@ fn typl_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 fn format_ok(text: &str, context: &str) -> String {
-    match format(text) {
+    match format(text, Profile::Typl) {
         FormatOutcome::Formatted(out) => out,
         FormatOutcome::ParseErrors(errors) => {
             panic!("{context} produced parse errors: {errors:?}")

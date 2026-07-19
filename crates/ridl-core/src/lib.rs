@@ -27,7 +27,7 @@ pub mod workspace;
 
 #[cfg(feature = "fetch")]
 pub use cache::Cache;
-pub use db::{InputFile, RidlDatabase, parse_file};
+pub use db::{InputFile, RidlDatabase, parse_file, profile_of_path};
 pub use diag::{
     DiagCode, Diagnostic, FileId, FixIt, Label, Severity, SourceMap, Span, house_style_message,
     render,

@@ -37,10 +37,17 @@
 //!
 //! # Profile boundary
 //!
-//! A `Duration` token or a stray `@` anywhere in a `.typl` parse emits
-//! **TYPL-302** (typl reference §2.8) and parsing continues. Leading zeros in
-//! an integer literal emit **FORM-005**. Every [`SyntaxError`] carries its
-//! diagnostic code; the coded `Diagnostic` model consumes it in task E1.10.
+//! The parser runs under a [`Profile`] (E2 task 2, ADR-0007 decision 10). In
+//! a `.typl` parse — byte-identical to the E1 parser — a `Duration` token or
+//! a stray `@` anywhere emits **TYPL-302** (typl reference §2.8) and parsing
+//! continues, and an interaction keyword at declaration-start position emits
+//! **TYPL-304**. In a `.ridl` parse durations and `@` are ordinary tokens,
+//! and a `ReservedWord` at declaration-start position — a word of the
+//! uxdl/rmdl/rsdl profiles — emits **RIDL-403** (ridl reference §16.4). Both
+//! declaration-start boundaries recover exactly as FORM-105 does. Leading
+//! zeros in an integer literal emit **FORM-005**. Every [`SyntaxError`]
+//! carries its diagnostic code; the coded `Diagnostic` model consumes it in
+//! task E1.10.
 //!
 //! # Error recovery
 //!
@@ -78,6 +85,7 @@
 
 use rowan::{GreenNode, GreenNodeBuilder, TextRange, TextSize};
 
+use crate::keywords::{self, Profile};
 use crate::lexer::{Token, lex};
 use crate::syntax_kind::{SyntaxKind, SyntaxNode};
 
@@ -122,9 +130,9 @@ impl PartialEq for Parse {
 
 impl Eq for Parse {}
 
-/// Parses `input` into a lossless [`Parse`].
-pub fn parse(input: &str) -> Parse {
-    let mut parser = Parser::new(lex(input));
+/// Parses `input` into a lossless [`Parse`] under `profile`.
+pub fn parse(input: &str, profile: Profile) -> Parse {
+    let mut parser = Parser::new(lex(input, profile), profile);
     parser.source_file();
     parser.finish()
 }
@@ -178,12 +186,15 @@ struct Parser<'a> {
     pos: usize,
     /// Current field-type nesting depth, bounded by [`MAX_TYPE_DEPTH`].
     depth: usize,
+    /// The profile the file parses under — where the profile-boundary
+    /// diagnostics (TYPL-302, TYPL-304, RIDL-403) are drawn.
+    profile: Profile,
     builder: GreenNodeBuilder<'static>,
     errors: Vec<SyntaxError>,
 }
 
 impl<'a> Parser<'a> {
-    fn new(tokens: Vec<Token<'a>>) -> Self {
+    fn new(tokens: Vec<Token<'a>>, profile: Profile) -> Self {
         let mut offsets = Vec::with_capacity(tokens.len() + 1);
         let mut acc = 0;
         for token in &tokens {
@@ -196,6 +207,7 @@ impl<'a> Parser<'a> {
             offsets,
             pos: 0,
             depth: 0,
+            profile,
             builder: GreenNodeBuilder::new(),
             errors: Vec::new(),
         }
@@ -322,17 +334,24 @@ impl<'a> Parser<'a> {
         });
     }
 
-    /// The diagnostic for the current unexpected token: TYPL-302 for the
-    /// profile-boundary tokens (duration literals and the `@` timing sigil,
-    /// typl reference §2.8), FORM-102 otherwise.
+    /// The diagnostic for the current unexpected token: in a `.typl` parse,
+    /// TYPL-302 for the profile-boundary tokens (duration literals and the `@`
+    /// timing sigil, typl reference §2.8); FORM-102 otherwise. Under
+    /// [`Profile::Ridl`] durations and `@` are ordinary tokens, so they draw
+    /// the generic FORM-102 like any other token the grammar cannot place.
     fn unexpected_token_diag(&self, context: &str) -> (&'static str, String) {
-        match self.current() {
-            Some(SyntaxKind::Duration) => {
-                ("TYPL-302", "duration literal in typl context".to_string())
+        if self.profile == Profile::Typl {
+            match self.current() {
+                Some(SyntaxKind::Duration) => {
+                    return ("TYPL-302", "duration literal in typl context".to_string());
+                }
+                Some(SyntaxKind::At) => {
+                    return ("TYPL-302", "timing annotation in typl context".to_string());
+                }
+                _ => {}
             }
-            Some(SyntaxKind::At) => ("TYPL-302", "timing annotation in typl context".to_string()),
-            _ => ("FORM-102", format!("unexpected token {context}")),
         }
+        ("FORM-102", format!("unexpected token {context}"))
     }
 
     /// Recovery: report the current unexpected token, then skip forward —
@@ -343,6 +362,14 @@ impl<'a> Parser<'a> {
     fn err_and_recover(&mut self, context: &str, is_sync: impl Fn(SyntaxKind) -> bool) {
         let (code, message) = self.unexpected_token_diag(context);
         self.error_at_current(code, message);
+        self.recover(is_sync);
+    }
+
+    /// The recovery half of [`err_and_recover`]: consumes the current token
+    /// and everything up to the next token `is_sync` accepts into one
+    /// [`SyntaxKind::ErrorNode`]. The profile-boundary arms (TYPL-304,
+    /// RIDL-403) share it, so they recover exactly as FORM-102/FORM-105 do.
+    fn recover(&mut self, is_sync: impl Fn(SyntaxKind) -> bool) {
         self.start(SyntaxKind::ErrorNode);
         self.bump();
         while let Some(kind) = self.current() {
@@ -386,10 +413,53 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::EnumsetKw
                     | SyntaxKind::UnionKw,
                 ) => self.definition(),
+                Some(SyntaxKind::ReservedWord) => {
+                    if !self.profile_boundary_at_top_level() {
+                        self.err_and_recover("at top level", is_top_level_start);
+                    }
+                }
                 Some(_) => self.err_and_recover("at top level", is_top_level_start),
             }
         }
         self.builder.finish_node();
+    }
+
+    /// The profile boundary at declaration-start position (ADR-0007 decision
+    /// 10, ridl reference §16.4). Called on a `ReservedWord` at the top level:
+    ///
+    /// - in a `.typl` parse, an interaction keyword (one of the nine ridl
+    ///   words) draws **TYPL-304** instead of the generic FORM-102;
+    /// - in a `.ridl` parse, any `ReservedWord` — a behaviour,
+    ///   user-interaction, or architecture word of the uxdl/rmdl/rsdl
+    ///   profiles — draws **RIDL-403**.
+    ///
+    /// Both recover exactly as FORM-105 does ([`Parser::recover`]: the run
+    /// lands in one `ErrorNode`, resynchronizing at the next top-level
+    /// keyword). Returns `false` — leaving the token untouched for the
+    /// caller's generic recovery — when neither boundary applies (a
+    /// uxdl/rmdl/rsdl word in a `.typl` parse stays a generic FORM-102).
+    fn profile_boundary_at_top_level(&mut self) -> bool {
+        let text = self.tokens[self.significant_pos()].text;
+        let (code, message) = match self.profile {
+            Profile::Typl => {
+                if keywords::ridl_keyword(text).is_none() {
+                    return false;
+                }
+                (
+                    "TYPL-304",
+                    format!("interaction declaration in typl context: `{text}`"),
+                )
+            }
+            Profile::Ridl => (
+                "RIDL-403",
+                format!(
+                    "behaviour, user-interaction, or architecture declaration in ridl context: `{text}`"
+                ),
+            ),
+        };
+        self.error_at_current(code, message);
+        self.recover(is_top_level_start);
+        true
     }
 
     /// `PackageDecl = 'package' QualifiedName`
@@ -967,10 +1037,12 @@ impl<'a> Parser<'a> {
 
     /// `Literal = '-'? ('int_number' | 'float_number' | 'string_lit' | 'true'
     /// | 'false' | 'regex' | 'ident')` — an `ident` is a constant reference
-    /// in a value position. A duration literal here is the profile boundary
-    /// (TYPL-302); an integer with leading zeros is FORM-005.
+    /// in a value position. A duration literal here in a `.typl` parse is the
+    /// profile boundary (TYPL-302); an integer with leading zeros is FORM-005.
+    /// Under [`Profile::Ridl`] a duration is an ordinary token that is simply
+    /// not a literal, so it falls through to the generic missing-value path.
     fn literal(&mut self) {
-        if self.at(SyntaxKind::Duration) {
+        if self.profile == Profile::Typl && self.at(SyntaxKind::Duration) {
             self.error_at_current("TYPL-302", "duration literal in typl context".to_string());
             self.start(SyntaxKind::ErrorNode);
             self.bump();
@@ -1087,7 +1159,7 @@ mod tests {
 
     #[test]
     fn fixture_round_trips_losslessly() {
-        let parse = parse(FIXTURE);
+        let parse = parse(FIXTURE, Profile::Typl);
         assert_eq!(
             parse.syntax().text().to_string(),
             FIXTURE,
@@ -1103,7 +1175,7 @@ mod tests {
     #[test]
     fn mangled_input_round_trips_and_reports_errors() {
         let input = "type 123 :: [";
-        let parse = parse(input);
+        let parse = parse(input, Profile::Typl);
         assert_eq!(
             parse.syntax().text().to_string(),
             input,
@@ -1118,20 +1190,24 @@ mod tests {
     #[test]
     fn parse_equality_is_green_node_identity() {
         assert_eq!(
-            parse(FIXTURE),
-            parse(FIXTURE),
+            parse(FIXTURE, Profile::Typl),
+            parse(FIXTURE, Profile::Typl),
             "parsing identical input twice must compare equal",
         );
         assert_ne!(
-            parse(FIXTURE),
-            parse("package fixtures\ntype X: m"),
+            parse(FIXTURE, Profile::Typl),
+            parse("package fixtures\ntype X: m", Profile::Typl),
             "parsing different input must not compare equal",
         );
     }
 
     /// The codes of the recorded errors, in source order.
     fn error_codes(input: &str) -> Vec<&'static str> {
-        parse(input).errors().iter().map(|e| e.code).collect()
+        parse(input, Profile::Typl)
+            .errors()
+            .iter()
+            .map(|e| e.code)
+            .collect()
     }
 
     #[test]
@@ -1148,7 +1224,7 @@ mod tests {
 
     #[test]
     fn duration_literal_flags_typl_302() {
-        let parse = parse("package p\nconst BAD = 10ms\n");
+        let parse = parse("package p\nconst BAD = 10ms\n", Profile::Typl);
         assert_eq!(
             parse.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
             vec!["TYPL-302"],
@@ -1166,10 +1242,73 @@ mod tests {
         assert_eq!(codes, vec!["TYPL-302"]);
     }
 
+    // E2 task 2 step (b), parser half: under `Profile::Ridl` durations and `@`
+    // are ordinary tokens — no TYPL-302 fires anywhere.
+    #[test]
+    fn duration_and_at_draw_no_typl_302_under_ridl() {
+        let parsed = parse("package p\nconst BAD = 10ms\n", Profile::Ridl);
+        assert!(
+            parsed.errors().iter().all(|e| e.code != "TYPL-302"),
+            "no TYPL-302 under Ridl, got: {:?}",
+            parsed.errors(),
+        );
+        let parsed = parse("package p\n@\n", Profile::Ridl);
+        assert_eq!(
+            parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+            vec!["FORM-102"],
+            "a stray `@` under Ridl is a generic unexpected token",
+        );
+    }
+
+    // E2 task 2 step (e): an interaction keyword at declaration-start in a
+    // `.typl` parse is the profile boundary — TYPL-304, recovering like
+    // FORM-105 does (ErrorNode, resync at the next top-level keyword).
+    #[test]
+    fn interaction_keyword_in_typl_flags_typl_304_and_recovers() {
+        let input = "package p\ninterface X {}\ntype Fine: m\n";
+        let parsed = parse(input, Profile::Typl);
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "TYPL-304 recovery must stay lossless",
+        );
+        assert_eq!(
+            parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+            vec!["TYPL-304"],
+        );
+        assert_eq!(def_names_in(Profile::Typl, input), vec!["Fine"]);
+
+        // The same boundary fires for every interaction kind.
+        let codes: Vec<_> = parse("package p\nsignal speed: Speed\n", Profile::Typl)
+            .errors()
+            .iter()
+            .map(|e| e.code)
+            .collect();
+        assert_eq!(codes, vec!["TYPL-304"]);
+    }
+
+    // E2 task 2 step (f): a reserved word of another profile at
+    // declaration-start in a `.ridl` parse is RIDL-403, with the same recovery.
+    #[test]
+    fn reserved_word_in_ridl_flags_ridl_403_and_recovers() {
+        let input = "package p\nmodel X {}\ntype Fine: m\n";
+        let parsed = parse(input, Profile::Ridl);
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "RIDL-403 recovery must stay lossless",
+        );
+        assert_eq!(
+            parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+            vec!["RIDL-403"],
+        );
+        assert_eq!(def_names_in(Profile::Ridl, input), vec!["Fine"]);
+    }
+
     #[test]
     fn pathological_type_nesting_does_not_panic_or_drop_text() {
         let input = format!("package p\nstruct S {{ f : {} }}\n", "[".repeat(300));
-        let parse = parse(&input);
+        let parse = parse(&input, Profile::Typl);
         assert_eq!(
             parse.syntax().text().to_string(),
             input,
@@ -1183,7 +1322,7 @@ mod tests {
         // Each `?` wraps one OptionalType; an unbounded run used to build a
         // tree deep enough to overflow the stack on traversal or drop.
         let input = format!("package p\nstruct S {{ f : T{} }}\n", "?".repeat(30_000));
-        let parse = parse(&input);
+        let parse = parse(&input, Profile::Typl);
         assert_eq!(
             parse.syntax().text().to_string(),
             input,
@@ -1207,7 +1346,7 @@ mod tests {
     #[test]
     fn error_ranges_cover_the_offending_token() {
         // `042` sits at bytes 22..25 of the input.
-        let parse = parse("package p\nconst BAD = 042\n");
+        let parse = parse("package p\nconst BAD = 042\n", Profile::Typl);
         let error = &parse.errors()[0];
         assert_eq!(error.code, "FORM-005");
         assert_eq!(
@@ -1219,8 +1358,13 @@ mod tests {
     /// The declared names of every top-level definition, in source order —
     /// the recovery proof that real declaration nodes survive garbage.
     fn def_names(input: &str) -> Vec<String> {
+        def_names_in(Profile::Typl, input)
+    }
+
+    /// [`def_names`] under an explicit profile.
+    fn def_names_in(profile: Profile, input: &str) -> Vec<String> {
         use crate::ast::{AstNode, HasName, SourceFile};
-        let file = SourceFile::cast(parse(input).syntax()).expect("root is a SourceFile");
+        let file = SourceFile::cast(parse(input, profile).syntax()).expect("root is a SourceFile");
         file.definitions()
             .filter_map(|def| Some(def.name()?.ident_token()?.text().to_string()))
             .collect()
@@ -1231,7 +1375,7 @@ mod tests {
         // Valid, then garbage, then valid: the run of stray tokens is wrapped
         // in one ErrorNode and the declaration after it is a real node again.
         let input = "package p\ntype Good: km/h\n] } garbage 9\ntype AlsoGood: integer [0..1]\n";
-        let parse = parse(input);
+        let parse = parse(input, Profile::Typl);
         assert_eq!(
             parse.syntax().text().to_string(),
             input,
@@ -1246,7 +1390,7 @@ mod tests {
         // A struct body that never closes hands the next `type` back to the
         // top level (FORM-103) instead of swallowing it.
         let input = "package p\nstruct Broken {\n  gear: integer\n\ntype After: km/h\n";
-        let parse = parse(input);
+        let parse = parse(input, Profile::Typl);
         assert_eq!(
             parse.syntax().text().to_string(),
             input,
@@ -1272,7 +1416,7 @@ mod tests {
         // rule the deep-recursion unwind piled hundreds of diagnostics on the
         // stuck tokens. Recovery now collapses the run to a handful.
         let input = format!("package p\nstruct S {{ f : {} }}\n", "[".repeat(300));
-        let parse = parse(&input);
+        let parse = parse(&input, Profile::Typl);
         assert_eq!(
             parse.syntax().text().to_string(),
             input,
@@ -1312,7 +1456,7 @@ mod tests {
         // closed shape once produced over a thousand diagnostics on unwind.
         let deep = format!("{}integer{}", "[".repeat(200), ";1]".repeat(200));
         let input = format!("package p\nstruct S {{ f : {deep} }}\n");
-        let parse = parse(&input);
+        let parse = parse(&input, Profile::Typl);
         assert_eq!(
             parse.syntax().text().to_string(),
             input,

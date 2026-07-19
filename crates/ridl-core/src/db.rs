@@ -10,7 +10,7 @@
 
 use std::sync::{Arc, Mutex, OnceLock};
 
-use ridl_syntax::{Parse, parse};
+use ridl_syntax::{Parse, Profile, parse};
 
 use crate::package::Package;
 
@@ -25,13 +25,25 @@ pub struct InputFile {
     pub text: String,
 }
 
-/// Parses one [`InputFile`] into a lossless [`Parse`].
+/// The [`Profile`] a source path selects (E2 task 2): a `.ridl` file parses
+/// under [`Profile::Ridl`]; everything else — `.typl` first of all — parses
+/// under [`Profile::Typl`].
+pub fn profile_of_path(path: &str) -> Profile {
+    if path.ends_with(".ridl") {
+        Profile::Ridl
+    } else {
+        Profile::Typl
+    }
+}
+
+/// Parses one [`InputFile`] into a lossless [`Parse`], under the profile its
+/// path selects ([`profile_of_path`]).
 ///
 /// Salsa memoizes the result and backdates on [`Parse`] equality (green-tree
 /// identity), so the body re-runs only when the file's `text` changes.
 #[salsa::tracked(returns(clone))]
 pub fn parse_file(db: &dyn salsa::Database, file: InputFile) -> Parse {
-    parse(file.text(db))
+    parse(file.text(db), profile_of_path(file.path(db)))
 }
 
 /// The concrete salsa database `ridlc` and the language server run on.
@@ -95,9 +107,41 @@ impl salsa::Database for RidlDatabase {}
 
 #[cfg(test)]
 mod tests {
-    use super::{InputFile, RidlDatabase, parse_file};
+    use super::{InputFile, RidlDatabase, parse_file, profile_of_path};
+    use ridl_syntax::Profile;
     use salsa::Setter;
     use salsa::plumbing::AsId;
+
+    #[test]
+    fn profile_of_path_selects_ridl_by_extension() {
+        assert_eq!(profile_of_path("a/b.ridl"), Profile::Ridl);
+        assert_eq!(profile_of_path("a/b.typl"), Profile::Typl);
+        assert_eq!(profile_of_path("no_extension"), Profile::Typl);
+    }
+
+    /// The profile boundary rides on the path: the same text draws TYPL-302
+    /// under a `.typl` path and the generic FORM-102 under a `.ridl` path.
+    #[test]
+    fn parse_file_derives_the_profile_from_the_path() {
+        let db = RidlDatabase::default();
+        let text = "package p\n@\n";
+        let typl = InputFile::new(&db, "x.typl".to_string(), text.to_string());
+        let ridl = InputFile::new(&db, "x.ridl".to_string(), text.to_string());
+
+        let typl_codes: Vec<_> = parse_file(&db, typl)
+            .errors()
+            .iter()
+            .map(|e| e.code)
+            .collect();
+        assert_eq!(typl_codes, vec!["TYPL-302"]);
+
+        let ridl_codes: Vec<_> = parse_file(&db, ridl)
+            .errors()
+            .iter()
+            .map(|e| e.code)
+            .collect();
+        assert_eq!(ridl_codes, vec!["FORM-102"]);
+    }
 
     /// Renders a `database_key` the way salsa's ingredient does with the
     /// database attached, e.g. `parse_file(Id(0))`.
