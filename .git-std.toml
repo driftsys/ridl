@@ -38,6 +38,7 @@ scopes = [
   "tools",
   "xtask",
   "ridl-sem",
+  "ridl-lsp",
 ]
 types = [
   "feat",
