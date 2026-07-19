@@ -29,7 +29,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
             "pattern_const": null
           },
           "declared_init": null,
-          "init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
           "width": {
             "FloatWidth": 1
           }
@@ -60,7 +63,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
             "pattern_const": null
           },
           "declared_init": null,
-          "init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
           "width": {
             "FloatWidth": 1
           }
@@ -91,7 +97,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
             "pattern_const": null
           },
           "declared_init": null,
-          "init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
           "width": {
             "FloatWidth": 1
           }
@@ -122,7 +131,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
             "pattern_const": null
           },
           "declared_init": null,
-          "init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
           "width": {
             "FloatWidth": 1
           }
@@ -153,7 +165,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
             "pattern_const": null
           },
           "declared_init": null,
-          "init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
           "width": {
             "IntWidth": 3
           }
@@ -184,7 +199,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
             "pattern_const": null
           },
           "declared_init": null,
-          "init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
           "width": {
             "FloatWidth": 1
           }
@@ -379,7 +397,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -398,7 +419,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -432,7 +456,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": false,
+                    "value": null
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -451,7 +478,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -470,7 +500,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -567,7 +600,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -595,7 +631,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -623,7 +662,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": false,
+                    "value": null
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -657,7 +699,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -719,7 +764,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -738,7 +786,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -772,7 +823,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -791,7 +845,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": false,
+                    "value": null
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -825,7 +882,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null
@@ -862,7 +922,10 @@ expression: "v1::to_json_pretty(&checked.ir)"
                     }
                   },
                   "declared_init": null,
-                  "init": null,
+                  "init": {
+                    "derivable": false,
+                    "value": null
+                  },
                   "doc": "",
                   "labels": [],
                   "deprecated": null

@@ -1,6 +1,5 @@
 ---
 source: crates/ridlc/tests/golden.rs
-assertion_line: 24
 expression: "ridl_ir::v1::to_json_pretty(&output.package)"
 ---
 {
@@ -30,7 +29,10 @@ expression: "ridl_ir::v1::to_json_pretty(&output.package)"
             "pattern_const": null
           },
           "declared_init": null,
-          "init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
           "width": {
             "FloatWidth": 1
           }
