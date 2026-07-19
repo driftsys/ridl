@@ -335,6 +335,16 @@ impl SourceMap {
         });
         id
     }
+
+    /// The path an interned [`FileId`] stands for, or `None` for an id this map
+    /// never issued (including [`FileId::DETACHED`]). This is the reverse of
+    /// [`file_id`](Self::file_id): a caller holding a diagnostic's `FileId` reads
+    /// back the file it points at without probing candidate paths.
+    pub fn path(&self, id: FileId) -> Option<&str> {
+        self.files
+            .get(id.0 as usize)
+            .map(|entry| entry.path.as_str())
+    }
 }
 
 /// Remaps per-package diagnostics onto a renderer's [`SourceMap`] ids.
@@ -567,6 +577,25 @@ mod tests {
         let a_again = map.file_id("a.typl", "type A: m");
         assert_ne!(a, b, "distinct paths get distinct ids");
         assert_eq!(a, a_again, "the same path interns to the same id");
+    }
+
+    #[test]
+    fn source_map_path_reverses_file_id() {
+        let mut map = SourceMap::new();
+        let a = map.file_id("a.typl", "type A: m");
+        let b = map.file_id("b.typl", "type B: s");
+        assert_eq!(map.path(a), Some("a.typl"));
+        assert_eq!(map.path(b), Some("b.typl"));
+        assert_eq!(
+            map.path(FileId::DETACHED),
+            None,
+            "a detached id has no path"
+        );
+        assert_eq!(
+            map.path(FileId(2)),
+            None,
+            "an id the map never issued has no path",
+        );
     }
 
     #[test]
