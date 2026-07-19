@@ -38,6 +38,7 @@ use rowan::{NodeOrToken, TextRange};
 use crate::docs;
 use crate::expr::{self, ContractScope, ExprType};
 use crate::init;
+use crate::lint;
 use crate::resolve::{
     Resolution, Symbol, SymbolKind, declared_name, declared_symbols, name_range,
     qualified_segments, resolve_package, significant_text, source_file,
@@ -232,6 +233,10 @@ pub fn check_package(
 
     checker.check_recursion(&composite_starts);
 
+    // The ridl lint pass (E2.10a): four advisory codes over the interaction
+    // declarations, emitted as ordinary diagnostics once lowering has settled.
+    lint::lint_package(&mut checker, &files);
+
     CheckedPackage {
         ir: v2::Package {
             name: package_name,
@@ -347,15 +352,15 @@ fn const_package_handle(
 // The checker context
 // ==========================================================================
 
-struct Checker<'db> {
-    db: &'db dyn salsa::Database,
-    ws: Workspace,
-    std: Package,
+pub(crate) struct Checker<'db> {
+    pub(crate) db: &'db dyn salsa::Database,
+    pub(crate) ws: Workspace,
+    pub(crate) std: Package,
     pkg: Package,
     package_name: String,
     resolution: Resolution,
     file_ids: Vec<FileId>,
-    current_file: usize,
+    pub(crate) current_file: usize,
     diagnostics: Vec<Diagnostic>,
     /// The resolved package timing default (ridl §9.1): the parsed
     /// `[defaults].timing` or the built-in `[100ms..1000ms]`, applied to every
@@ -507,18 +512,18 @@ impl Checker<'_> {
         self.diag(code, Severity::Error, range, message);
     }
 
-    fn warning(&mut self, code: DiagCode, range: TextRange, message: String) {
+    pub(crate) fn warning(&mut self, code: DiagCode, range: TextRange, message: String) {
         self.diag(code, Severity::Warning, range, message);
     }
 
-    fn info(&mut self, code: DiagCode, range: TextRange, message: String) {
+    pub(crate) fn info(&mut self, code: DiagCode, range: TextRange, message: String) {
         self.diag(code, Severity::Info, range, message);
     }
 
     /// Whether a declaration (typl definition or ridl interface) is the
     /// resolver's first-wins winner for its name — the one occurrence the
     /// checker processes (ADR-0007 decision 6).
-    fn is_winner(&self, file: InputFile, declaration: &impl HasName) -> bool {
+    pub(crate) fn is_winner(&self, file: InputFile, declaration: &impl HasName) -> bool {
         let Some(name) = declared_name(declaration) else {
             return false;
         };
@@ -534,7 +539,7 @@ impl Checker<'_> {
 
     /// The package handle for a package name: the checked package itself, the
     /// embedded `ridl.std`, or a workspace member.
-    fn package_handle(&self, name: &str) -> Option<Package> {
+    pub(crate) fn package_handle(&self, name: &str) -> Option<Package> {
         if name == self.package_name {
             return Some(self.pkg);
         }
@@ -546,7 +551,7 @@ impl Checker<'_> {
 
     /// The IR canonical form of a resolved reference: bare for same-package,
     /// fully qualified for cross-package — never an import alias.
-    fn canonical_ref(&self, symbol: &Symbol) -> String {
+    pub(crate) fn canonical_ref(&self, symbol: &Symbol) -> String {
         if symbol.package == self.package_name {
             symbol.name.clone()
         } else {
@@ -592,14 +597,18 @@ impl Checker<'_> {
     }
 
     /// Resolves a path silently against the checked package's own view.
-    fn lookup_path(&self, path: &ast::PathType) -> Option<Symbol> {
+    pub(crate) fn lookup_path(&self, path: &ast::PathType) -> Option<Symbol> {
         self.lookup_path_in(&self.resolution, path)
     }
 
     /// Resolves a path silently in a given package view: a single segment is a
     /// bare name in that view; a longer path is a fully qualified
     /// `pkg.Name` reference (typl §3.2 — no import needed).
-    fn lookup_path_in(&self, resolution: &Resolution, path: &ast::PathType) -> Option<Symbol> {
+    pub(crate) fn lookup_path_in(
+        &self,
+        resolution: &Resolution,
+        path: &ast::PathType,
+    ) -> Option<Symbol> {
         let qualified = path.qualified_name()?;
         let mut segments = qualified_segments(&qualified);
         if segments.is_empty() {
@@ -620,7 +629,7 @@ impl Checker<'_> {
     }
 
     /// Finds the AST definition a symbol points at (its file and name range).
-    fn find_definition(&self, symbol: &Symbol) -> Option<Definition> {
+    pub(crate) fn find_definition(&self, symbol: &Symbol) -> Option<Definition> {
         let source = source_file(self.db, symbol.file);
         source
             .definitions()
@@ -3576,7 +3585,7 @@ impl Checker<'_> {
     /// lowered IR; each arm resolves in the union's own defining package
     /// (mirrors [`Checker::lower_union`]). An unresolved or primitive arm makes
     /// the union not a clean result union.
-    fn union_is_result(&self, symbol: &Symbol) -> bool {
+    pub(crate) fn union_is_result(&self, symbol: &Symbol) -> bool {
         if symbol.kind != SymbolKind::Union {
             return false;
         }
@@ -6530,7 +6539,9 @@ interface I {\n\
                 "{PRELUDE}interface I {{\n  reserved resetCounters\n  query resetCounters(w: Speed): Speed\n}}\n"
             ),
         );
-        assert_eq!(codes(&checked), vec!["RIDL-401"]);
+        // `resetCounters` is also mutation-named, so the E2.10a lint fires
+        // alongside: the two rules are independent and both hold here.
+        assert_eq!(codes(&checked), vec!["RIDL-401", "RIDL-404"]);
     }
 
     #[test]
@@ -7018,9 +7029,24 @@ interface VehicleStatus {
     fn appendix_a_lowers_clean_and_its_ir_v2_json_is_the_golden() {
         let checked = check_appendix_a();
         assert!(
-            checked.diagnostics.is_empty(),
-            "Appendix A must lower clean, got: {:?}",
+            !checked
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.severity == Severity::Error),
+            "Appendix A must lower without errors, got: {:?}",
             checked.diagnostics,
+        );
+        // The one advisory the reference's own worked example earns: its
+        // `query getFaultPage(…): FaultPageResult` is the named-result-union
+        // spelling, and the E2.10a lint (RIDL-308) steers return position to
+        // the inline `FaultPage | DiagError` (general form §6.1). Appendix A
+        // is kept verbatim rather than rewritten — the gf §7 erratum that
+        // restates it is a documentation task, not this one.
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-308"],
+            "{:?}",
+            checked.diagnostics
         );
         assert_eq!(checked.ir.name, "veh.cluster");
         assert_eq!(checked.ir.interfaces.len(), 1);
@@ -7681,15 +7707,21 @@ interface VehicleStatus {
     #[test]
     fn named_result_union_return_stays_legal() {
         // gf §6.1: a named result union in return position is legal typl data
-        // and lowers as `ReturnType.value`. The canonical-form lint (RIDL-308)
-        // is task 19, not an error here.
+        // and lowers as `ReturnType.value`. It draws the canonical-form lint
+        // (RIDL-308, task 19) — a warning steering to the inline spelling,
+        // never an error, and the lowering below is unaffected by it.
         let checked = check_ridl(
             "app",
             &format!(
                 "{FALLIBLE_VOCAB}union CalOutcome {{\n  ok : CalReport\n  err : CalError\n}}\ninterface I {{\n  query calibrate(axle: Axle): CalOutcome\n}}\n"
             ),
         );
-        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-308"],
+            "got: {:?}",
+            checked.diagnostics
+        );
         let query = query_def(&checked, "calibrate");
         assert_eq!(
             query.return_type.as_ref().unwrap().kind,
