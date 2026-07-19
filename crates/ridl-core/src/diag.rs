@@ -305,6 +305,12 @@ impl DiagCode {
     /// domain time distinct from transport time is legitimate, so the message
     /// says so. Emitted by the lint pass (E2 task 19).
     pub const RIDL_406: DiagCode = DiagCode("RIDL-406");
+    /// An interaction ordinal changed against a published baseline snapshot
+    /// (ridl §11, general form §6.3). Warning. Emitted by the `ridl check` desk
+    /// check (E2 task 18), never by the compiler: the comparison reads a
+    /// workspace-local baseline, which is outside `ridlc`'s source→IR function
+    /// (ADR-0008 decisions 9 and 13).
+    pub const RIDL_407: DiagCode = DiagCode("RIDL-407");
     /// Duplicate `service` name across the whole workspace — the service
     /// catalog is a flat global namespace (ridl §14.5, §16.4). Emitted
     /// workspace-wide by `service_catalog` (E2 task 8). The reference numbers

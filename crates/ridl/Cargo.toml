@@ -12,7 +12,9 @@ ridl-core = { path = "../ridl-core" }
 ridl-diff = { path = "../../tools/diff" }
 ridl-fmt = { path = "../../tools/fmt" }
 ridl-ir = { path = "../ridl-ir" }
+ridl-syntax = { path = "../ridl-syntax" }
 ridlc = { path = "../ridlc" }
+rowan.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true

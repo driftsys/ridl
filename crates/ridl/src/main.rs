@@ -11,14 +11,25 @@
 //! `ridl-diff` engine (E2.8a). It carries its own exit contract — 0 compatible
 //! or identical, 1 breaking, 2 error (concept note §9.1, ADR-0008 decision 9) —
 //! and never touches `ridlc`'s source→IR boundary beyond compiling each side.
+//!
+//! `ridl baseline` and `ridl check --baseline` are the desk-time half of that
+//! engine (E2.9, general form §6.3): `baseline` publishes one `.ir.json`
+//! snapshot per package, and `check` compares the workspace against those
+//! snapshots and warns (RIDL-407) when an interaction's ordinal moved. Both live
+//! here rather than in `ridlc` because reading a workspace-local baseline is not
+//! part of the source→IR function the tool qualification argument covers
+//! (ADR-0008 decision 9).
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use ridl_core::diag::{SourceMap, render};
+use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, render};
 use ridl_fmt::{FormatOutcome, format};
+use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
 use ridlc::{CliRun, Emit};
+use rowan::{TextRange, TextSize};
 
 #[derive(Parser)]
 #[command(name = "ridl", about = "The RIDL toolchain")]
@@ -36,6 +47,23 @@ enum Command {
         path: PathBuf,
         #[arg(long)]
         frozen: bool,
+        /// Compare the checked workspace against a published baseline — a
+        /// directory of `.ir.json` snapshots or one snapshot file — and warn
+        /// (RIDL-407) on every interaction whose ordinal moved. Without the
+        /// flag, `.ridl/baseline/` at the workspace root is used when it
+        /// exists.
+        #[arg(long, value_name = "DIR|FILE")]
+        baseline: Option<PathBuf>,
+    },
+    /// Publish the current workspace as a baseline: one `<pkg-name>.ir.json`
+    /// snapshot per package, written to `.ridl/baseline/` at the workspace
+    /// root.
+    Baseline {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Write the snapshots here instead of `.ridl/baseline/`.
+        #[arg(long, value_name = "DIR")]
+        out: Option<PathBuf>,
     },
     /// Compile to the selected artifacts (defaults to the current directory).
     Build {
@@ -87,7 +115,12 @@ enum DiffFormat {
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
-        Command::Check { path, frozen } => finish(ridlc::run_check(&path, frozen.into())),
+        Command::Check {
+            path,
+            frozen,
+            baseline,
+        } => run_check(&path, frozen, baseline.as_deref()),
+        Command::Baseline { path, out } => run_baseline(&path, out.as_deref()),
         Command::Build {
             path,
             out_dir,
@@ -168,20 +201,31 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
 
 /// Loads one side of a diff into a set of resolved packages.
 ///
-/// An `.ir.json` file is deserialized directly; anything else (a `.typl` or
-/// `.ridl` file, a package directory, or a workspace root) is compiled in
-/// process through `ridlc::compile_workspace`. A read, parse, or compile error
-/// renders to stderr and yields exit code 2 — `ridl diff` never emits a diff
-/// report over a snapshot it could not build.
+/// Three input forms, in order:
+///
+/// 1. an `.ir.json` file — deserialized directly;
+/// 2. a directory holding `.ir.json` files — deserialized as a snapshot set.
+///    This is the form `.ridl/baseline/` takes, and an N-package workspace
+///    publishes N snapshots, so `ridl diff .ridl/baseline .` has to read the
+///    whole directory. Falling through to a compile here would silently diff
+///    the current source against itself and always report `identical`
+///    (ADR-0008 decision 14: `ridl diff` reads the workspace-local baseline);
+/// 3. anything else — a `.typl`/`.ridl` file, a package directory, or a
+///    workspace root — compiled in process through `ridlc::compile_workspace`.
+///    A directory with no `.ir.json` in it is source, and takes this path.
+///
+/// A read, parse, or compile error renders to stderr and yields exit code 2 —
+/// `ridl diff` never emits a diff report over a snapshot it could not build.
 fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     if is_ir_json(entry) {
-        return match ridl_diff::load_ir_json(entry) {
-            Ok(package) => Ok(vec![package]),
-            Err(err) => {
-                eprintln!("error: {}: {err}", entry.display());
-                Err(ExitCode::from(2))
-            }
-        };
+        return load_snapshots(&[entry.to_path_buf()]);
+    }
+
+    if entry.is_dir() {
+        let snapshots = snapshot_files(entry)?;
+        if !snapshots.is_empty() {
+            return load_snapshots(&snapshots);
+        }
     }
 
     let mut db = ridl_core::RidlDatabase::default();
@@ -216,6 +260,462 @@ fn is_ir_json(path: &Path) -> bool {
             .file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.ends_with(".ir.json"))
+}
+
+// ==========================================================================
+// The baseline-aware desk check (E2.9, general form §6.3, ADR-0008 decision 9)
+// ==========================================================================
+
+/// The change categories the desk check reports: the four that move a live
+/// interaction's ordinal, and no others.
+///
+/// General form §6.3 asks for one thing at the desk — a reorder or an insertion
+/// caught before CI, because declaration order is wire identity and a reorder
+/// looks like tidying. The other breaking categories (a payload type change, a
+/// narrowed constraint, a timing change) are already loud in review and stay
+/// `ridl diff`'s job in CI: this is the §6.3 mitigation, not a second diff gate.
+///
+/// All four classify [`Breaking`](ridl_diff::Verdict::Breaking) in every
+/// direction, so the category alone selects them.
+const ORDINAL_CATEGORIES: [ridl_diff::Category; 4] = [
+    ridl_diff::Category::InteractionInserted,
+    ridl_diff::Category::InteractionReordered,
+    ridl_diff::Category::InteractionRemoved,
+    ridl_diff::Category::ReservedNameRedeclared,
+];
+
+/// Runs `check` and, when the compile is clean and a baseline is available,
+/// the desk check on top of it.
+///
+/// The desk check only ever *adds warnings*: `ridl check` keeps its 0/1/2 exit
+/// contract, so a reordered but otherwise clean workspace still exits 0. It is
+/// also skipped entirely when the compile produced an error — a diff against
+/// IR that failed to check would report noise on top of the real problem.
+fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
+    let mut run = match ridlc::run_check(path, frozen.into()) {
+        Ok(run) => run,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
+
+    if !run.has_error() {
+        match baseline_location(path, baseline) {
+            Ok(Some(location)) => {
+                if let Err(code) = desk_check(path, &location, &mut run) {
+                    return code;
+                }
+            }
+            Ok(None) => {}
+            Err(code) => return code,
+        }
+    }
+
+    finish(Ok(run))
+}
+
+/// Publishes the workspace at `path` as a baseline.
+///
+/// The compile and the write are `ridlc`'s own `build --emit ir-json`, so the
+/// snapshot a desk compares against is byte for byte the snapshot CI compares
+/// against. One `.ir.json` holds exactly one package, so an N-package workspace
+/// writes N files, one per package name; `ridl check` matches them back up by
+/// the package name inside each file, never by file name.
+///
+/// The baseline is regenerated **wholesale**: the published directory ends up
+/// holding exactly the packages the workspace declares now, so renaming a
+/// package leaves no snapshot behind under the old name. Publishing goes
+/// through a staging directory to get that without risking the opposite
+/// failure — clearing the directory up front would destroy a good baseline
+/// whenever the workspace happens not to compile.
+fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
+    let out_dir = out
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| default_baseline_dir(path));
+    let staging = staging_dir(&out_dir);
+    let _ = std::fs::remove_dir_all(&staging);
+
+    let run = match ridlc::run_build(path, &staging, &[Emit::IrJson], false.into()) {
+        Ok(run) => run,
+        Err(err) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
+
+    // An error-bearing run wrote nothing (`ridlc` gates every emit on a clean
+    // compile), so there is nothing to publish and the existing baseline stays
+    // exactly as it was.
+    if run.has_error() {
+        let _ = std::fs::remove_dir_all(&staging);
+        return finish(Ok(run));
+    }
+
+    if let Err(err) = publish_baseline(&staging, &out_dir) {
+        let _ = std::fs::remove_dir_all(&staging);
+        eprintln!(
+            "error: cannot publish the baseline to {}: {err}",
+            out_dir.display()
+        );
+        return ExitCode::from(2);
+    }
+
+    finish(Ok(run))
+}
+
+/// The directory the snapshots are built into before they are published: a
+/// hidden sibling of `out_dir`, so the move into place is a rename within one
+/// filesystem.
+fn staging_dir(out_dir: &Path) -> PathBuf {
+    let name = out_dir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("baseline");
+    out_dir
+        .parent()
+        .unwrap_or(Path::new("."))
+        .join(format!(".{name}.staging"))
+}
+
+/// Replaces the `.ir.json` set in `out_dir` with the freshly built one in
+/// `staging`, dropping any snapshot whose package the workspace no longer
+/// declares. Only `.ir.json` files are touched: `out_dir` may be a directory a
+/// user pointed `--out` at, and nothing else in it is this command's to delete.
+fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(out_dir)?;
+    for stale in ir_json_files(out_dir)? {
+        std::fs::remove_file(stale)?;
+    }
+    for fresh in ir_json_files(staging)? {
+        let name = fresh
+            .file_name()
+            .expect("a listed snapshot path has a file name");
+        std::fs::rename(&fresh, out_dir.join(name))?;
+    }
+    std::fs::remove_dir_all(staging)
+}
+
+/// Where to read the baseline from, if anywhere.
+///
+/// An explicit `--baseline` that does not exist is an input error (exit 2) —
+/// asking for a baseline that is not there is a mistake worth hearing about.
+/// Auto-discovery is the silent path: with no flag and no `.ridl/baseline/`
+/// directory, `ridl check` behaves exactly as it did before this command
+/// existed.
+fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf>, ExitCode> {
+    match flag {
+        Some(explicit) if explicit.exists() => Ok(Some(explicit.to_path_buf())),
+        Some(explicit) => {
+            eprintln!(
+                "error: the baseline `{}` does not exist",
+                explicit.display()
+            );
+            Err(ExitCode::from(2))
+        }
+        None => {
+            let default = default_baseline_dir(entry);
+            Ok(default.is_dir().then_some(default))
+        }
+    }
+}
+
+/// `.ridl/baseline/` at the workspace root (ADR-0008 decision 14). The root is
+/// the nearest directory at or above `entry` holding a `ridl.toml` — the same
+/// root the compile scopes itself to — falling back to `entry`'s own directory
+/// when there is no manifest anywhere above it (single-file mode).
+fn default_baseline_dir(entry: &Path) -> PathBuf {
+    let start = if entry.is_file() {
+        entry.parent().unwrap_or(Path::new(".")).to_path_buf()
+    } else {
+        entry.to_path_buf()
+    };
+    let mut cursor = start.as_path();
+    loop {
+        if cursor.join("ridl.toml").is_file() {
+            return cursor.join(".ridl").join("baseline");
+        }
+        match cursor.parent() {
+            Some(parent) => cursor = parent,
+            None => break,
+        }
+    }
+    start.join(".ridl").join("baseline")
+}
+
+/// Compares the checked workspace against the baseline at `location` and
+/// appends a RIDL-407 warning for every ordinal-affecting change.
+///
+/// The workspace is compiled a second time here, through
+/// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
+/// does not hand back the IR. The cost is paid only when a baseline is actually
+/// present, and never on a run that already failed.
+fn desk_check(entry: &Path, location: &Path, run: &mut CliRun) -> Result<(), ExitCode> {
+    let baseline = load_baseline(location)?;
+    if baseline.is_empty() {
+        return Ok(());
+    }
+
+    let mut db = ridl_core::RidlDatabase::default();
+    let current: Vec<ridl_ir::v2::Package> = match ridlc::compile_workspace(&mut db, entry) {
+        Ok(output) => output
+            .checked
+            .into_iter()
+            .map(|checked| checked.ir)
+            .collect(),
+        Err(err) => {
+            eprintln!("error: {}: {err}", entry.display());
+            return Err(ExitCode::from(2));
+        }
+    };
+
+    let report = ridl_diff::diff_sets(&baseline, &current);
+    let index = DeclIndex::build(entry);
+    let mut warnings = Vec::new();
+    for change in &report.changes {
+        if !ORDINAL_CATEGORIES.contains(&change.category) {
+            continue;
+        }
+        warnings.push(Diagnostic {
+            code: DiagCode::RIDL_407,
+            severity: Severity::Warning,
+            message: format!(
+                "interaction ordinal changed against the baseline: {} ({})",
+                change.path,
+                ridl_diff::category_word(change.category),
+            ),
+            primary: index.span_of(&change.path, &mut run.sources),
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        });
+    }
+    run.diagnostics.extend(warnings);
+    Ok(())
+}
+
+/// Loads the baseline packages: every `.ir.json` in a directory, in file-name
+/// order, or the single file `location` names.
+fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+    let files = if location.is_dir() {
+        snapshot_files(location)?
+    } else {
+        vec![location.to_path_buf()]
+    };
+    load_snapshots(&files)
+}
+
+/// The `.ir.json` snapshots directly inside `dir`, in file-name order.
+fn ir_json_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| is_ir_json(path))
+        .collect();
+    files.sort();
+    Ok(files)
+}
+
+/// [`ir_json_files`] with an unreadable directory turned into exit 2 — a
+/// comparison against a directory that cannot be listed must not quietly become
+/// a comparison against nothing.
+fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, ExitCode> {
+    ir_json_files(dir).map_err(|err| {
+        eprintln!(
+            "error: cannot read the snapshot directory {}: {err}",
+            dir.display()
+        );
+        ExitCode::from(2)
+    })
+}
+
+/// Deserializes every snapshot in `files`. One that cannot be read or parsed is
+/// exit 2 — a comparison against half a baseline would be a lie about what is
+/// published.
+fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+    let mut packages = Vec::new();
+    for file in files {
+        match ridl_diff::load_ir_json(file) {
+            Ok(package) => packages.push(package),
+            Err(err) => {
+                eprintln!("error: {}: {err}", file.display());
+                return Err(ExitCode::from(2));
+            }
+        }
+    }
+    Ok(packages)
+}
+
+/// Where every interaction and interface of the current source tree is
+/// declared, so a diff path can be pointed back at the code on the desk.
+///
+/// The diff engine reads only the IR, which carries no source locations, so the
+/// span comes from a separate parse of the same tree. Matching is by name —
+/// package, interface (or service), interaction — which is exactly the identity
+/// the diff path carries.
+#[derive(Default)]
+struct DeclIndex {
+    /// The text of each indexed file, by path: the renderer needs the text as
+    /// well as the path to draw a snippet.
+    texts: BTreeMap<String, String>,
+    /// `(package, interface, interaction)` to the interaction's declaration.
+    members: BTreeMap<(String, String, String), (String, TextRange)>,
+    /// `(package, interface)` to the interface's name. This is the fallback for
+    /// a removed interaction, whose own declaration no longer exists in the
+    /// source being checked.
+    interfaces: BTreeMap<(String, String), (String, TextRange)>,
+}
+
+impl DeclIndex {
+    /// Indexes every `.typl` and `.ridl` file under `entry`. A file that cannot
+    /// be read is skipped rather than reported: the compile already ran clean
+    /// over this tree, so anything unreadable here is not the desk check's
+    /// business.
+    fn build(entry: &Path) -> Self {
+        let mut index = Self::default();
+        for file in collect_source_files(entry) {
+            let Ok(text) = std::fs::read_to_string(&file) else {
+                continue;
+            };
+            let path = file.to_string_lossy().into_owned();
+            let parse = ridl_syntax::parse(&text, ridl_core::profile_of_path(&path));
+            let Some(source) = SourceFile::cast(parse.syntax()) else {
+                continue;
+            };
+            let Some(package) = package_name(&source) else {
+                continue;
+            };
+
+            for def in source.interfaces() {
+                let Some(name) = def.name() else { continue };
+                let Some(interface) = name_text(&name) else {
+                    continue;
+                };
+                index.interfaces.insert(
+                    (package.clone(), interface.clone()),
+                    (path.clone(), name.syntax().text_range()),
+                );
+                index.record_members(&package, &interface, &path, &text, def.members());
+            }
+            // A service's inline shape is an interface body in every way that
+            // matters to wire identity, and the diff paths it produces are keyed
+            // by the service name.
+            for service in source.services() {
+                let Some(name) = service.name() else { continue };
+                let Some(service_name) = dotted_text(name.syntax()) else {
+                    continue;
+                };
+                index.record_members(
+                    &package,
+                    &service_name,
+                    &path,
+                    &text,
+                    service.inline_members(),
+                );
+            }
+
+            index.texts.insert(path, text);
+        }
+        index
+    }
+
+    /// Records one interface body's interactions.
+    fn record_members(
+        &mut self,
+        package: &str,
+        interface: &str,
+        path: &str,
+        text: &str,
+        members: impl Iterator<Item = InterfaceMember>,
+    ) {
+        for member in members {
+            let Some(name) = member.name() else { continue };
+            let Some(member_name) = name_text(&name) else {
+                continue;
+            };
+            self.members.insert(
+                (package.to_string(), interface.to_string(), member_name),
+                (path.to_string(), declaration_range(&member, text)),
+            );
+        }
+    }
+
+    /// The span a `<package>/<interface>/<interaction>` diff path points at:
+    /// the interaction's declaration, the interface's name when the interaction
+    /// itself is gone (a removal), and a detached span when neither is in the
+    /// source — a detached diagnostic renders as the coded message alone.
+    fn span_of(&self, diff_path: &str, sources: &mut SourceMap) -> Span {
+        let mut parts = diff_path.split('/');
+        let (Some(package), Some(interface), Some(member)) =
+            (parts.next(), parts.next(), parts.next())
+        else {
+            return detached_span();
+        };
+
+        let key = (
+            package.to_string(),
+            interface.to_string(),
+            member.to_string(),
+        );
+        let found = self
+            .members
+            .get(&key)
+            .or_else(|| self.interfaces.get(&(key.0, key.1)));
+        let Some((path, range)) = found else {
+            return detached_span();
+        };
+        let Some(text) = self.texts.get(path) else {
+            return detached_span();
+        };
+        Span {
+            file: sources.file_id(path, text),
+            range: *range,
+        }
+    }
+}
+
+/// A span pointing at no file at all.
+fn detached_span() -> Span {
+    Span {
+        file: FileId::DETACHED,
+        range: TextRange::empty(TextSize::new(0)),
+    }
+}
+
+/// The declaration's own range, with trailing whitespace trimmed off: a node's
+/// range can run to the start of the next line, and an underline that reaches
+/// past the declaration reads as if the next one were implicated too.
+fn declaration_range(member: &InterfaceMember, text: &str) -> TextRange {
+    let range = member.syntax().text_range();
+    let start = usize::from(range.start());
+    let end = usize::from(range.end()).min(text.len());
+    let trimmed = text
+        .get(start..end)
+        .map(|slice| slice.trim_end().len())
+        .unwrap_or(0);
+    TextRange::at(range.start(), TextSize::new(trimmed as u32))
+}
+
+/// The package a source file declares.
+fn package_name(source: &SourceFile) -> Option<String> {
+    dotted_text(source.package_decl()?.qualified_name()?.syntax())
+}
+
+/// The identifier a `Name` node carries.
+fn name_text(name: &Name) -> Option<String> {
+    Some(name.ident_token()?.text().to_string())
+}
+
+/// The dotted text of a qualified or dotted name node — its non-trivia tokens
+/// joined, e.g. `veh.cluster`.
+fn dotted_text(node: &ridl_syntax::SyntaxNode) -> Option<String> {
+    let text: String = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| !token.kind().is_trivia())
+        .map(|token| token.text().to_string())
+        .collect();
+    (!text.is_empty()).then_some(text)
 }
 
 /// Renders a check/build run's diagnostics to stderr and turns the outcome into

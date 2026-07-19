@@ -1159,7 +1159,9 @@ dependencies = [
  "ridl-diff",
  "ridl-fmt",
  "ridl-ir",
+ "ridl-syntax",
  "ridlc",
+ "rowan",
  "serde_json",
 ]
 
