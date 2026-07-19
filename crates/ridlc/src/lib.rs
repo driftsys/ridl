@@ -1,46 +1,52 @@
-//! The `ridlc` compile pipeline as a library (docs/ROADMAP.md epic E0.9,
-//! E1.10).
+//! The `ridlc` compile pipeline as a library (docs/ROADMAP.md epics E0.9,
+//! E1.10, E1.7a).
 //!
-//! [`compile`] runs the walking-skeleton pipeline end to end: it routes the
-//! source through the salsa [`parse_file`] query so the incremental query graph
-//! is exercised, then resolves names, checks and lowers to IR, and generates
-//! Rust source. The function is total: it never panics. Every parser, resolver,
-//! and checker diagnostic is mapped into a coded [`Diagnostic`] and collected
-//! into [`CompileOutput::diagnostics`], reclaiming the source offsets each pass
-//! records; if the Rust backend fails, its error joins that list and
-//! [`CompileOutput::rust_source`] is left empty. The caller (the CLI or a test)
-//! renders the diagnostics against [`CompileOutput::sources`] and decides what a
-//! non-empty diagnostic list means.
+//! [`compile`] runs the pipeline end to end over the package model: it wraps
+//! the source in a single-file synthetic package, resolves it
+//! ([`resolve_package`]), checks and lowers it to IR v1 ([`check_package`]),
+//! and generates Rust source. The function is total: it never panics. Every
+//! parser, resolver, and checker diagnostic is a coded [`Diagnostic`]
+//! collected into [`CompileOutput::diagnostics`]; if the Rust backend fails,
+//! its error joins that list and [`CompileOutput::rust_source`] is left
+//! empty. The caller (the CLI or a test) renders the diagnostics against
+//! [`CompileOutput::sources`] and decides what a non-empty diagnostic list
+//! means.
+
+use std::collections::BTreeMap;
 
 use ridl_core::db::InputFile;
-use ridl_core::diag::{
-    DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message,
-};
-use ridl_core::{RidlDatabase, parse_file};
-use ridl_sem::{check, resolve};
+use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, remap_diagnostics};
+use ridl_core::package::{Package, PackageOrigin, Workspace};
+use ridl_core::{RidlDatabase, parse_file, std_package};
+use ridl_sem::{check_package, resolve_package};
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
 
-/// The result of [`compile`]: the generated Rust source, the lowered IR module,
-/// every coded diagnostic, and the source map the diagnostics point into (for
-/// rendering).
+/// The result of [`compile`]: the generated Rust source, the lowered IR v1
+/// package, every coded diagnostic, and the source map the diagnostics point
+/// into (for rendering).
 pub struct CompileOutput {
     pub rust_source: String,
-    pub module: ridl_ir::Module,
+    pub package: ridl_ir::v1::Package,
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
 }
 
-/// Compiles `text` (named `path` for module-name derivation) end to end.
+/// Compiles `text` (registered under `path`) end to end.
 ///
-/// The pipeline is `parse_file` (through the salsa database) → `resolve` →
-/// `check` → `generate`. Diagnostics are concatenated in that order: parser
-/// errors first, then resolver, then checker, then any Rust backend error. Each
-/// pass tags its diagnostic with a stable code and a source range; this function
-/// wraps them in the coded [`Diagnostic`] model against a single interned file.
-/// The module name is the input path's file stem.
+/// The pipeline is `parse_file` (through the salsa database) →
+/// `resolve_package` → `check_package` → `generate`. Diagnostics are
+/// concatenated in that order: parser errors first, then resolver, then
+/// checker, then any Rust backend error. The source becomes a single-file
+/// synthetic package named from its `package` declaration, falling back to
+/// the path's file stem — the loader's single-file rule (E1.3).
+///
+/// The package-scoped passes stamp their spans with a [`FileId`] indexing the
+/// package's files in order; [`remap_diagnostics`] rewrites them onto this
+/// function's own [`SourceMap`] before they are merged.
 pub fn compile(path: &str, text: &str) -> CompileOutput {
-    let db = RidlDatabase::default();
+    let mut db = RidlDatabase::default();
+    let std = std_package(&mut db);
     let input = InputFile::new(&db, path.to_string(), text.to_string());
     let parse = parse_file(&db, input);
 
@@ -55,7 +61,7 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
         .map(|error| {
             error_diagnostic(
                 error.code,
-                house_style_message(&error.message),
+                ridl_core::diag::house_style_message(&error.message),
                 file,
                 error.range,
             )
@@ -63,24 +69,25 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
         .collect();
 
     let ast = SourceFile::cast(parse.syntax()).expect("parser roots every tree in a SourceFile");
-
-    let resolution = resolve(&ast);
-    diagnostics.extend(
-        resolution
-            .diagnostics
-            .iter()
-            .map(|error| error_diagnostic(error.code, error.message.clone(), file, error.range)),
+    let package_name = declared_package_name(&ast).unwrap_or_else(|| module_name_from_path(path));
+    let pkg = Package::new(
+        &db,
+        package_name,
+        vec![input],
+        PackageOrigin::WorkspaceMember,
+        BTreeMap::new(),
     );
+    let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
 
-    let module_name = module_name_from_path(path);
-    let (module, check_errors) = check(&ast, &resolution, &module_name);
-    diagnostics.extend(
-        check_errors
-            .iter()
-            .map(|error| error_diagnostic(error.code, error.message.clone(), file, error.range)),
-    );
+    let resolution = resolve_package(&db, ws, pkg, std);
+    let checked = check_package(&db, ws, pkg, std);
 
-    let rust_source = match ridl_backend_rust::generate(&module) {
+    // The single package file is the file interned above.
+    let render_ids = vec![file];
+    diagnostics.extend(remap_diagnostics(resolution.diagnostics, &render_ids));
+    diagnostics.extend(remap_diagnostics(checked.diagnostics, &render_ids));
+
+    let rust_source = match ridl_backend_rust::generate(&checked.ir) {
         Ok(source) => source,
         Err(err) => {
             // The backend does not carry source ranges yet, so its diagnostic
@@ -97,15 +104,29 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
 
     CompileOutput {
         rust_source,
-        module,
+        package: checked.ir,
         diagnostics,
         sources,
     }
 }
 
-/// Builds an error-severity [`Diagnostic`] from a pass's `code`, `message`, and
-/// source `range`. Every diagnostic the E1.10 pipeline emits is an error;
-/// warnings and info arrive with later passes.
+/// The dotted name of the file's `package` declaration, with trivia between
+/// its tokens dropped; `None` when no declaration parses (the parser already
+/// reported FORM-104).
+fn declared_package_name(ast: &SourceFile) -> Option<String> {
+    let name = ast.package_decl()?.qualified_name()?;
+    let text: String = name
+        .syntax()
+        .descendants_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| !token.kind().is_trivia())
+        .map(|token| token.text().to_string())
+        .collect();
+    (!text.is_empty()).then_some(text)
+}
+
+/// Builds an error-severity [`Diagnostic`] from a pass's `code`, `message`,
+/// and source `range`.
 fn error_diagnostic(
     code: &'static str,
     message: String,

@@ -1,22 +1,11 @@
 //! RIDL intermediate representation.
 //!
-//! Two schema versions are compiled from protobuf sources by `build.rs`
-//! (protox + prost-build, ADR-0006 decision 3):
-//!
-//! - `v0` — the walking-skeleton subset (`proto/ridl/ir/v0/ir.proto`): named
-//!   scalar types with optional units and ranges, and value constants,
-//!   grouped into a `Module`. Re-exported at the crate root until task 13 of
-//!   the E1 plan retires its last consumer.
-//! - `v1` — the typl surface with exact decimal values
-//!   (`proto/ridl/ir/v1/ir.proto`), exposed as `ridl_ir::v1`. Every numeric
-//!   value is a canonical decimal string, never a floating-point field
-//!   (ADR-0007 decision 9).
-
-mod v0 {
-    include!(concat!(env!("OUT_DIR"), "/ridl.ir.v0.rs"));
-}
-
-pub use v0::{ConstDef, Module, Range, TypeDef};
+//! The v1 schema (`proto/ridl/ir/v1/ir.proto`) is compiled from its protobuf
+//! source by `build.rs` (protox + prost-build, ADR-0006 decision 3) and
+//! exposed as [`v1`]: the typl surface with exact decimal values — every
+//! numeric value is a canonical decimal string, never a floating-point field
+//! (ADR-0007 decision 9). The E0 walking-skeleton v0 schema was removed when
+//! its last consumer moved to v1 (task 13 of the E1 plan).
 
 pub mod v1 {
     //! IR v1 — the typl surface (typl language reference §3–§12) with exact
@@ -29,55 +18,6 @@ pub mod v1 {
     pub fn to_json_pretty(package: &Package) -> String {
         serde_json::to_string_pretty(package)
             .expect("IR serialization to JSON cannot fail: the generated types hold only JSON-representable values")
-    }
-}
-
-#[cfg(test)]
-mod round_trip {
-    use crate::{ConstDef, Module, Range, TypeDef};
-    use prost::Message;
-
-    fn fixture() -> Module {
-        Module {
-            name: "vehicle".to_string(),
-            types: vec![TypeDef {
-                name: "Speed".to_string(),
-                unit: "km/h".to_string(),
-                range: Some(Range {
-                    min: 0.0,
-                    max: 250.0,
-                    step: 0.5,
-                }),
-            }],
-            consts: vec![ConstDef {
-                name: "MAX_SPEED".to_string(),
-                type_name: "Speed".to_string(),
-                value: 250.0,
-            }],
-        }
-    }
-
-    #[test]
-    fn protobuf_round_trip_preserves_module() {
-        let module = fixture();
-
-        let mut buf = Vec::new();
-        module.encode(&mut buf).expect("encode must succeed");
-        let decoded = Module::decode(buf.as_slice()).expect("decode must succeed");
-
-        assert_eq!(module, decoded);
-    }
-
-    #[test]
-    fn json_rendering_contains_type_name() {
-        let module = fixture();
-
-        let json = serde_json::to_string(&module).expect("json serialization must succeed");
-
-        assert!(
-            json.contains(r#""name":"Speed""#),
-            "json debug rendering must include the Speed type name, got: {json}"
-        );
     }
 }
 

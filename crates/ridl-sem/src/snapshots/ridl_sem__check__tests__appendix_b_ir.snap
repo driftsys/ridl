@@ -1,0 +1,879 @@
+---
+source: crates/ridl-sem/src/check.rs
+assertion_line: 2075
+expression: "v1::to_json_pretty(&checked.ir)"
+---
+{
+  "name": "veh.common",
+  "decls": [
+    {
+      "name": "Speed",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Unit": "km/h"
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "250",
+            "step": "0.5",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": null,
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "Temperature",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Unit": "Cel"
+            }
+          },
+          "constraint": {
+            "min": "-40",
+            "max": "125",
+            "step": "0.1",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": null,
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "RPM",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Unit": "/min"
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "8000",
+            "step": "10",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": null,
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "Ratio",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Unit": "%"
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "100",
+            "step": "0.1",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": null,
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "Counter",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Primitive": 2
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "65535",
+            "step": null,
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": null,
+          "width": {
+            "IntWidth": 3
+          }
+        }
+      }
+    },
+    {
+      "name": "Gain",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Primitive": 3
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "1",
+            "step": "0.01",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": null,
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "MAX_SPEED",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "Speed",
+          "value": "250",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "SPEED_LIMIT_EU",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "Speed",
+          "value": "130",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "MAX_GEAR",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "integer",
+          "value": "6",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "IDLE_RPM",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "RPM",
+          "value": "800",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "GearPosition",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "EnumDef": {
+          "values": [
+            {
+              "name": "PARK",
+              "value": 0,
+              "doc": ""
+            },
+            {
+              "name": "DRIVE",
+              "value": 1,
+              "doc": ""
+            },
+            {
+              "name": "REVERSE",
+              "value": 2,
+              "doc": ""
+            },
+            {
+              "name": "NEUTRAL",
+              "value": 3,
+              "doc": ""
+            }
+          ],
+          "reserved": []
+        }
+      }
+    },
+    {
+      "name": "Warning",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "EnumDef": {
+          "values": [
+            {
+              "name": "LOW_FUEL",
+              "value": 0,
+              "doc": ""
+            },
+            {
+              "name": "CHECK_ENGINE",
+              "value": 1,
+              "doc": ""
+            },
+            {
+              "name": "DOOR_OPEN",
+              "value": 2,
+              "doc": ""
+            },
+            {
+              "name": "SEATBELT",
+              "value": 3,
+              "doc": ""
+            }
+          ],
+          "reserved": []
+        }
+      }
+    },
+    {
+      "name": "WarningFlags",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "EnumSetDef": {
+          "backing_enum": "Warning",
+          "bits": [
+            {
+              "name": "LOW_FUEL",
+              "value": 0,
+              "doc": ""
+            },
+            {
+              "name": "CHECK_ENGINE",
+              "value": 1,
+              "doc": ""
+            },
+            {
+              "name": "DOOR_OPEN",
+              "value": 2,
+              "doc": ""
+            },
+            {
+              "name": "SEATBELT",
+              "value": 3,
+              "doc": ""
+            }
+          ],
+          "width": 1
+        }
+      }
+    },
+    {
+      "name": "SpeedLimitPayload",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "limit",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "Speed"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "actual",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "Speed"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": true
+        }
+      }
+    },
+    {
+      "name": "DriverProfile",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "name",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "ridl.std.Name"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "speed",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "Speed"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "override",
+                  "ordinal": 3,
+                  "type": {
+                    "optional": true,
+                    "kind": {
+                      "Named": "Speed"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "gears",
+                  "ordinal": 4,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "InlineScalar": {
+                        "backing": {
+                          "kind": {
+                            "Primitive": 2
+                          }
+                        },
+                        "constraint": {
+                          "min": "0",
+                          "max": "6",
+                          "step": null,
+                          "len_min": null,
+                          "len_max": null,
+                          "pattern": null,
+                          "pattern_const": null
+                        },
+                        "declared_init": null,
+                        "init": null,
+                        "width": {
+                          "IntWidth": 1
+                        }
+                      }
+                    }
+                  },
+                  "declared_init": "6",
+                  "init": {
+                    "derivable": true,
+                    "value": "6"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": false
+        }
+      }
+    },
+    {
+      "name": "SensorBounds",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "range",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Tuple": {
+                        "fields": [
+                          {
+                            "name": "min",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "Speed"
+                              }
+                            }
+                          },
+                          {
+                            "name": "max",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "Speed"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "readings",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Array": {
+                        "element": {
+                          "optional": false,
+                          "kind": {
+                            "Named": "Speed"
+                          }
+                        },
+                        "min": 8,
+                        "max": 8
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "labels",
+                  "ordinal": 3,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Array": {
+                        "element": {
+                          "optional": false,
+                          "kind": {
+                            "Named": "ridl.std.Label"
+                          }
+                        },
+                        "min": 1,
+                        "max": 16
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "meta",
+                  "ordinal": 4,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Map": {
+                        "key": {
+                          "optional": false,
+                          "kind": {
+                            "Named": "ridl.std.Label"
+                          }
+                        },
+                        "value": {
+                          "optional": false,
+                          "kind": {
+                            "Named": "ridl.std.Name"
+                          }
+                        },
+                        "min": 0,
+                        "max": 32
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": false
+        }
+      }
+    },
+    {
+      "name": "SensorResult",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "UnionDef": {
+          "arms": [
+            {
+              "name": "ok",
+              "ordinal": 1,
+              "type_ref": "SensorReading",
+              "doc": ""
+            },
+            {
+              "name": "err",
+              "ordinal": 2,
+              "type_ref": "SensorFault",
+              "doc": ""
+            }
+          ],
+          "is_result": true,
+          "reserved": []
+        }
+      }
+    },
+    {
+      "name": "SensorReading",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "value",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "Speed"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "timestamp",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "ridl.std.Timestamp"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": true
+        }
+      }
+    },
+    {
+      "name": "SensorFault",
+      "visibility": 1,
+      "is_error": true,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "code",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "Counter"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "message",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "ridl.std.Message"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": false
+        }
+      }
+    },
+    {
+      "name": "RawWheelFrame",
+      "visibility": 2,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "ticks",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "Counter"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "frame",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "InlineScalar": {
+                        "backing": {
+                          "kind": {
+                            "Primitive": 5
+                          }
+                        },
+                        "constraint": {
+                          "min": null,
+                          "max": null,
+                          "step": null,
+                          "len_min": 8,
+                          "len_max": 8,
+                          "pattern": null,
+                          "pattern_const": null
+                        },
+                        "declared_init": null,
+                        "init": null,
+                        "width": null
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": null,
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": true
+        }
+      }
+    }
+  ]
+}

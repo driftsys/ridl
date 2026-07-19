@@ -1,17 +1,17 @@
-//! Generates the IR Rust types from the protobuf schemas at build time.
+//! Generates the IR Rust types from the protobuf schema at build time.
 //!
-//! Two schema versions are compiled: v0 (walking-skeleton subset, retired by
-//! task 13 of the E1 plan) and v1 (the typl surface with exact values). The
-//! schemas are compiled with `protox`, a pure-Rust protobuf front end, so
-//! the build needs no system `protoc` binary (ADR-0006 decision 3). The
-//! resulting descriptor set is handed to `prost-build`, which emits the Rust
-//! types. `type_attribute` adds the `serde` derives so the JSON debug
-//! rendering of the IR exists (ADR-0004 §4).
+//! The v1 schema (the typl surface with exact values) is compiled with
+//! `protox`, a pure-Rust protobuf front end, so the build needs no system
+//! `protoc` binary (ADR-0006 decision 3). The resulting descriptor set is
+//! handed to `prost-build`, which emits the Rust types. `type_attribute` adds
+//! the `serde` derives so the JSON debug rendering of the IR exists
+//! (ADR-0004 §4). The E0 v0 schema was removed when its last consumer moved
+//! to v1 (task 13 of the E1 plan).
 
 use std::error::Error;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let protos = ["proto/ridl/ir/v0/ir.proto", "proto/ridl/ir/v1/ir.proto"];
+    let protos = ["proto/ridl/ir/v1/ir.proto"];
     let include = "proto";
 
     for proto in protos {

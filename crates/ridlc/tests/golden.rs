@@ -9,7 +9,7 @@ use std::process::Command;
 const FIXTURE: &str = include_str!("../../ridl-syntax/fixtures/walking_skeleton.typl");
 
 /// Compiling the fixture produces no diagnostics, and its generated Rust and
-/// lowered IR match the committed snapshots.
+/// lowered IR v1 package match the committed snapshots.
 #[test]
 fn fixture_compiles_to_committed_snapshots() {
     let output = ridlc::compile("walking_skeleton.typl", FIXTURE);
@@ -21,7 +21,7 @@ fn fixture_compiles_to_committed_snapshots() {
     );
 
     insta::assert_snapshot!("generated_rust", output.rust_source);
-    insta::assert_json_snapshot!("ir_module", output.module);
+    insta::assert_snapshot!("ir_package", ridl_ir::v1::to_json_pretty(&output.package));
 }
 
 /// A typl name that is a Rust keyword (`fn`) lexes as a valid identifier and
