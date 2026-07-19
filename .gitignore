@@ -24,3 +24,8 @@ node_modules/
 # insta pending snapshots — accepted .snap files are committed, drafts are not
 *.snap.new
 *.pending-snap
+
+# VS Code extension build output (docs/ROADMAP.md, epic E1.17)
+editors/vscode/node_modules
+editors/vscode/*.vsix
+editors/vscode/out

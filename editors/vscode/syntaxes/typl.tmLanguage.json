@@ -1,0 +1,156 @@
+{
+  "name": "typl",
+  "scopeName": "source.typl",
+  "fileTypes": ["typl"],
+  "information_for_contributors": [
+    "Keyword list source of truth: crates/ridl-syntax/src/keywords.rs (TYPL_KEYWORDS).",
+    "The 21 words below (package import as internal type const struct enum enumset union",
+    "boolean integer float string bytes true false step match reserved error) are the typl",
+    "profile's keywords per typl-language-reference.md §1.4. Update both this grammar and",
+    "keywords.rs together when the registry changes — do not let this list drift silently.",
+    "typl has no attribute blocks (family general form §4, deferred to E2): the only `@`",
+    "syntax this grammar recognises is the three doc-comment tags in §14.2, scoped inside",
+    "comments only."
+  ],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#regexp" },
+    { "include": "#numbers" },
+    { "include": "#keywords-control" },
+    { "include": "#keywords-modifier" },
+    { "include": "#keywords-storage" },
+    { "include": "#keywords-other" },
+    { "include": "#constants-language" },
+    { "include": "#primitives" },
+    { "include": "#screaming-snake" },
+    { "include": "#type-names" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.typl",
+          "begin": "/\\*\\*",
+          "end": "\\*/",
+          "patterns": [{ "include": "#doc-tags" }]
+        },
+        {
+          "name": "comment.block.typl",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.line.documentation.typl",
+          "begin": "///",
+          "end": "$",
+          "patterns": [{ "include": "#doc-tags" }]
+        },
+        {
+          "name": "comment.line.double-slash.typl",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "doc-tags": {
+      "patterns": [
+        {
+          "match": "(@see)\\s+([A-Za-z][A-Za-z0-9]*(?:\\.[A-Za-z][A-Za-z0-9]*)*)",
+          "captures": {
+            "1": { "name": "keyword.other.doctag.typl" },
+            "2": { "name": "entity.name.type.typl" }
+          }
+        },
+        {
+          "match": "(@deprecated)\\b",
+          "name": "keyword.other.doctag.typl"
+        },
+        {
+          "match": "(@labels)\\b",
+          "name": "keyword.other.doctag.typl"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.typl",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.typl",
+          "match": "\\\\([\"\\\\nrt]|u[0-9A-Fa-f]{4})"
+        }
+      ]
+    },
+    "regexp": {
+      "comment": "typl §2.7 — one-line only; a literal `/` with no closing `/` before end of line (e.g. the UCUM `/min` unit token) is intentionally left unmatched rather than risk consuming the rest of the file.",
+      "name": "string.regexp.typl",
+      "match": "/(?:\\\\.|[^/\\n\\\\])+/"
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.duration.typl",
+          "match": "-?\\b[0-9]+(?:\\.[0-9]+)?(?:us|ms|min|h|s)\\b"
+        },
+        {
+          "name": "constant.numeric.float.typl",
+          "match": "-?\\b[0-9]+\\.[0-9]+\\b"
+        },
+        {
+          "name": "constant.numeric.integer.typl",
+          "match": "-?\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "keywords-control": {
+      "match": "\\b(package|import|as)\\b",
+      "name": "keyword.control.import.typl"
+    },
+    "keywords-modifier": {
+      "match": "\\binternal\\b",
+      "name": "storage.modifier.typl"
+    },
+    "keywords-storage": {
+      "match": "\\b(type|const|struct|enum|enumset|union)\\b",
+      "name": "storage.type.typl"
+    },
+    "keywords-other": {
+      "match": "\\b(step|match|reserved|error)\\b",
+      "name": "keyword.other.typl"
+    },
+    "constants-language": {
+      "match": "\\b(true|false)\\b",
+      "name": "constant.language.boolean.typl"
+    },
+    "primitives": {
+      "match": "\\b(boolean|integer|float|string|bytes)\\b",
+      "name": "support.type.primitive.typl"
+    },
+    "screaming-snake": {
+      "match": "\\b[A-Z][A-Z0-9_]*\\b",
+      "name": "variable.other.constant.typl"
+    },
+    "type-names": {
+      "match": "\\b[A-Z][A-Za-z0-9]*\\b",
+      "name": "entity.name.type.typl"
+    },
+    "punctuation": {
+      "patterns": [
+        { "match": "\\{", "name": "punctuation.section.block.begin.typl" },
+        { "match": "\\}", "name": "punctuation.section.block.end.typl" },
+        { "match": "\\[", "name": "punctuation.section.brackets.begin.typl" },
+        { "match": "\\]", "name": "punctuation.section.brackets.end.typl" },
+        { "match": "\\(", "name": "punctuation.section.parens.begin.typl" },
+        { "match": "\\)", "name": "punctuation.section.parens.end.typl" },
+        { "match": "\\.\\.", "name": "keyword.operator.range.typl" },
+        { "match": "\\?", "name": "keyword.operator.optional.typl" },
+        { "match": "=", "name": "keyword.operator.assignment.typl" },
+        { "match": ":", "name": "punctuation.separator.key-value.typl" },
+        { "match": ",", "name": "punctuation.separator.comma.typl" },
+        { "match": "\\.", "name": "punctuation.accessor.typl" }
+      ]
+    }
+  }
+}
