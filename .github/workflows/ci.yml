@@ -57,6 +57,21 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
 
+  wasm:
+    name: wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo check --target wasm32-unknown-unknown (compiler crates, no-default-features)
+        run: |
+          cargo check --target wasm32-unknown-unknown \
+            -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir \
+            --no-default-features
+
   convco:
     name: convco
     if: github.event_name == 'pull_request'
@@ -80,7 +95,7 @@ jobs:
     if: always()
     # Every job, so a red anywhere fails the aggregate. "skipped" is accepted:
     # convco only runs on pull requests.
-    needs: [markdown, book, rust, convco]
+    needs: [markdown, book, rust, wasm, convco]
     runs-on: ubuntu-latest
     steps:
       - name: check required jobs
