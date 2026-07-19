@@ -401,6 +401,7 @@ impl ServerState {
                 vec![input],
                 PackageOrigin::WorkspaceMember,
                 BTreeMap::new(),
+                None,
             );
             self.overlays.insert(path, (input, package));
         }

@@ -203,6 +203,19 @@ impl DiagCode {
     pub const TYPL_405: DiagCode = DiagCode("TYPL-405");
 
     // --- RIDL codes emitted in E2 so far (ridl reference §16) ---
+    /// `signal` or `event` without a timing annotation — the default
+    /// `[100ms..1000ms]` (or the configured `[defaults].timing`) is applied
+    /// (ridl §9.1, §16.1). Warning. Emitted by the checker (E2 task 9).
+    pub const RIDL_100: DiagCode = DiagCode("RIDL-100");
+    /// A range annotation `@[X..Y]` whose lower bound exceeds its upper bound
+    /// (ridl §9.2, §16.1). Emitted by the checker (E2 task 9).
+    pub const RIDL_101: DiagCode = DiagCode("RIDL-101");
+    /// A zero or negative timing duration (ridl §9.2, §16.1). Emitted by the
+    /// checker (E2 task 9).
+    pub const RIDL_102: DiagCode = DiagCode("RIDL-102");
+    /// A strict-periodic `@Xms` annotation on an `event` — strict periodic is
+    /// signal only (ridl §9.2, §16.1). Emitted by the checker (E2 task 9).
+    pub const RIDL_103: DiagCode = DiagCode("RIDL-103");
     /// Explicit return type on a `command` — a command always returns `()`
     /// (ridl §6.1, §16.1). Emitted by the checker (E2 task 5).
     pub const RIDL_104: DiagCode = DiagCode("RIDL-104");
@@ -216,6 +229,10 @@ impl DiagCode {
     /// package level (ridl §14.1, §16.1). Emitted by the checker (E2 task 5)
     /// from the parser's recovered ErrorNode.
     pub const RIDL_107: DiagCode = DiagCode("RIDL-107");
+    /// A range annotation `@[X..X]` whose bounds are equal — equivalent to the
+    /// strict-periodic `@Xms` (ridl §9.2, §16.1). Warning. Emitted by the
+    /// checker (E2 task 9).
+    pub const RIDL_108: DiagCode = DiagCode("RIDL-108");
     /// Signal payload type has no derivable init value and no `= value`
     /// override (ridl §4.4, §16.1). Emitted by the checker (E2 task 5).
     pub const RIDL_109: DiagCode = DiagCode("RIDL-109");
@@ -284,6 +301,11 @@ impl DiagCode {
     /// by the package loader (E1.3), which is where member paths are resolved
     /// against the filesystem.
     pub const MANI_008: DiagCode = DiagCode("MANI-008");
+    /// The manifest `[defaults].timing` value is not a valid range (ridl §9.1,
+    /// ADR-0008 decision 13). The manifest parser stores the raw string
+    /// unparsed — `ridl-core` cannot depend on `ridl-sem` — so the checker
+    /// parses it and emits this code (E2 task 9).
+    pub const MANI_009: DiagCode = DiagCode("MANI-009");
 
     // --- MANI distribution (1xx) — lockfile, cache, fetch (E1.6, ADR-0002
     // §5, §7) ---
@@ -584,6 +606,11 @@ pub const MANI_CATALOG: &[CatalogEntry] = &[
         summary: "workspace member directory has no `ridl.toml`",
     },
     CatalogEntry {
+        code: DiagCode::MANI_009,
+        severity: Severity::Error,
+        summary: "invalid `[defaults].timing` value",
+    },
+    CatalogEntry {
         code: DiagCode::MANI_101,
         severity: Severity::Error,
         summary: "remote import fetch failed",
@@ -791,7 +818,7 @@ mod tests {
             codes,
             vec![
                 "MANI-001", "MANI-002", "MANI-003", "MANI-004", "MANI-005", "MANI-006", "MANI-007",
-                "MANI-008", "MANI-101", "MANI-102", "MANI-103", "MANI-104",
+                "MANI-008", "MANI-009", "MANI-101", "MANI-102", "MANI-103", "MANI-104",
             ],
         );
         // Every MANI code is an error except the unknown-key warning (MANI-005).

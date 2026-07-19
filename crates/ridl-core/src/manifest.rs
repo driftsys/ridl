@@ -43,12 +43,19 @@ use toml::Spanned;
 
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, Span};
 
-/// A parsed `ridl.toml` manifest: its mode-specific [`ManifestKind`] and its
-/// `[imports]` table (logical package name to URL), shared by both modes.
+/// A parsed `ridl.toml` manifest: its mode-specific [`ManifestKind`], its
+/// `[imports]` table (logical package name to URL), and the optional
+/// `[defaults].timing` string, all shared by both modes.
+///
+/// `default_timing` is the raw `[defaults].timing` text (e.g.
+/// `"[100ms..1000ms]"`), stored **unparsed**: `ridl-core` cannot depend on
+/// `ridl-sem`, so the checker parses and validates it (MANI-009) — the
+/// manifest layer only records the string (ridl §9.1, E2 task 9).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Manifest {
     pub kind: ManifestKind,
     pub imports: BTreeMap<String, String>,
+    pub default_timing: Option<String>,
 }
 
 /// The two mutually exclusive manifest modes (ADR-0002 §4).
@@ -120,6 +127,11 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
     check_unknown_keys(file_id, text, &mut diags);
 
     let imports = collect_imports(file_id, raw.imports, &mut diags);
+    // The raw `[defaults].timing` string, recorded verbatim; the checker
+    // parses it and reports MANI-009 (ridl §9.1, E2 task 9).
+    let default_timing = raw
+        .defaults
+        .and_then(|defaults| defaults.into_inner().timing);
 
     let kind = if let Some(pkg) = raw.package {
         let section_span = pkg.span();
@@ -151,7 +163,14 @@ pub fn parse_manifest(file_id: FileId, text: &str) -> (Option<Manifest>, Vec<Dia
         return (None, diags);
     };
 
-    (Some(Manifest { kind, imports }), diags)
+    (
+        Some(Manifest {
+            kind,
+            imports,
+            default_timing,
+        }),
+        diags,
+    )
 }
 
 /// The raw manifest shape `toml` deserializes into. Every leaf a diagnostic may
@@ -164,6 +183,12 @@ struct RawManifest {
     workspace: Option<Spanned<RawWorkspace>>,
     #[serde(default)]
     imports: BTreeMap<String, Spanned<String>>,
+    defaults: Option<Spanned<RawDefaults>>,
+}
+
+#[derive(Deserialize)]
+struct RawDefaults {
+    timing: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -214,12 +239,13 @@ fn check_unknown_keys(file_id: FileId, text: &str, diags: &mut Vec<Diagnostic>) 
         Err(_) => return,
     };
     // The allowed-key lists below must stay in sync with the fields of
-    // `RawPackage` and `RawWorkspace`: a field added there without a matching
-    // entry here would wrongly warn as an unknown key.
+    // `RawPackage`, `RawWorkspace`, and `RawDefaults`: a field added there
+    // without a matching entry here would wrongly warn as an unknown key.
     for (key, value) in &doc {
         match key.as_str() {
             "package" => check_section_keys(file_id, "package", value, &["name", "version"], diags),
             "workspace" => check_section_keys(file_id, "workspace", value, &["members"], diags),
+            "defaults" => check_section_keys(file_id, "defaults", value, &["timing"], diags),
             "imports" => {}
             _ => diags.push(warning(
                 DiagCode::MANI_005,
@@ -533,6 +559,55 @@ x = 1
         let no_name = "[package]\nversion = \"1.0.0\"\n";
         let (_, no_name_diags) = parse(no_name);
         assert_eq!(codes(&no_name_diags), vec!["MANI-006"]);
+    }
+
+    #[test]
+    fn defaults_timing_is_recorded_unparsed() {
+        // The `[defaults].timing` string rides through verbatim — no MANI-005,
+        // and the checker (not the manifest) validates it (ridl §9.1).
+        let text = "\
+[package]
+name = \"veh.common\"
+version = \"1.0.0\"
+
+[defaults]
+timing = \"[50ms..2s]\"
+";
+        let (manifest, diags) = parse(text);
+        assert!(
+            diags.is_empty(),
+            "a `[defaults]` section is known, got {diags:?}"
+        );
+        let manifest = manifest.expect("the manifest parses");
+        assert_eq!(manifest.default_timing.as_deref(), Some("[50ms..2s]"));
+    }
+
+    #[test]
+    fn no_defaults_section_leaves_default_timing_absent() {
+        let (manifest, diags) = parse(STANDALONE);
+        assert!(diags.is_empty());
+        assert_eq!(
+            manifest.expect("parses").default_timing,
+            None,
+            "no `[defaults]` means no configured default",
+        );
+    }
+
+    #[test]
+    fn unknown_key_inside_defaults_still_warns() {
+        let text = "\
+[package]
+name = \"veh.common\"
+version = \"1.0.0\"
+
+[defaults]
+timing = \"[100ms..1000ms]\"
+bogus = 1
+";
+        let (manifest, diags) = parse(text);
+        assert!(manifest.is_some(), "an unknown nested key still parses");
+        assert_eq!(codes(&diags), vec!["MANI-005"]);
+        assert_eq!(diags[0].severity, Severity::Warning);
     }
 
     #[test]

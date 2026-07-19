@@ -8,6 +8,7 @@ pub mod docs;
 pub mod init;
 pub mod resolve;
 pub mod scalar;
+pub mod timing;
 // The proptest range generators (E1.18). Behind the default-on `testgen`
 // feature so the wasm32-unknown-unknown check can drop proptest, whose
 // `getrandom` dependency does not build for that target (ADR-0007 decision 5).

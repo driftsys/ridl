@@ -49,6 +49,13 @@ pub struct Package {
     pub origin: PackageOrigin,
     #[returns(ref)]
     pub imports: BTreeMap<String, String>,
+    /// The raw `[defaults].timing` string that governs this package (ADR-0002
+    /// §5 precedence: package `[defaults]` shadows workspace `[defaults]`,
+    /// merged at load), or `None` when no manifest configures one — the
+    /// checker then applies the built-in `[100ms..1000ms]` (ridl §9.1). Stored
+    /// unparsed: `ridl-core` cannot depend on `ridl-sem` (E2 task 9).
+    #[returns(ref)]
+    pub default_timing: Option<String>,
 }
 
 /// Every loaded package plus the workspace root's own `[imports]` map.
@@ -131,6 +138,7 @@ mod tests {
             vec![file(&db, "veh-common/a.typl", "package veh.common")],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
         );
         let cluster = Package::new(
             &db,
@@ -138,6 +146,7 @@ mod tests {
             vec![file(&db, "veh-cluster/b.typl", "package veh.cluster")],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
         );
         let ws = Workspace::new(&db, vec![common, cluster], BTreeMap::new());
 

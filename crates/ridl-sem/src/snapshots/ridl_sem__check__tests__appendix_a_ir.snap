@@ -404,9 +404,9 @@ expression: "v2::to_json_pretty(&checked.ir)"
                 "value": "0"
               },
               "timing": {
-                "mode": 0,
-                "min_us": null,
-                "max_us": null,
+                "mode": 1,
+                "min_us": "10000",
+                "max_us": "10000",
                 "default_applied": false
               }
             }
@@ -429,9 +429,9 @@ expression: "v2::to_json_pretty(&checked.ir)"
                 "value": "0"
               },
               "timing": {
-                "mode": 0,
-                "min_us": null,
-                "max_us": null,
+                "mode": 2,
+                "min_us": "20000",
+                "max_us": "100000",
                 "default_applied": false
               }
             }
@@ -454,9 +454,9 @@ expression: "v2::to_json_pretty(&checked.ir)"
                 "value": ""
               },
               "timing": {
-                "mode": 0,
-                "min_us": null,
-                "max_us": null,
+                "mode": 2,
+                "min_us": "50000",
+                "max_us": "1000000",
                 "default_applied": false
               }
             }
@@ -474,9 +474,9 @@ expression: "v2::to_json_pretty(&checked.ir)"
             "EventDef": {
               "payload": "DoorPayload",
               "timing": {
-                "mode": 0,
-                "min_us": null,
-                "max_us": null,
+                "mode": 2,
+                "min_us": "50000",
+                "max_us": "500000",
                 "default_applied": false
               }
             }
