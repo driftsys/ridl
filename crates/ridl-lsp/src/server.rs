@@ -44,7 +44,7 @@ use rowan::TextRange;
 use salsa::Setter as _;
 
 use crate::convert::{self, LineIndex};
-use crate::{complete, hover, nav, rename};
+use crate::{complete, hover, inlay, nav, rename};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -62,9 +62,9 @@ pub fn run(connection: Connection) -> Result<(), Error> {
 
 /// The capability set: incremental text sync with open/close notifications,
 /// quick-fix code actions (E1.15a), hover, goto-definition, and find-references
-/// (E1.15b), and completion and rename (E1.15c). Rename advertises
-/// `prepareProvider` so the client validates the cursor and the new name before
-/// applying an edit. The last E1.15 task adds inlay hints (d) to this struct.
+/// (E1.15b), completion and rename (E1.15c), and inlay hints (E1.16). Rename
+/// advertises `prepareProvider` so the client validates the cursor and the new
+/// name before applying an edit. Inlay hints close the E1 LSP feature set.
 fn server_capabilities() -> lt::ServerCapabilities {
     lt::ServerCapabilities {
         text_document_sync: Some(lt::TextDocumentSyncCapability::Options(
@@ -93,6 +93,7 @@ fn server_capabilities() -> lt::ServerCapabilities {
             prepare_provider: Some(true),
             work_done_progress_options: Default::default(),
         })),
+        inlay_hint_provider: Some(lt::OneOf::Left(true)),
         ..Default::default()
     }
 }
@@ -316,6 +317,16 @@ impl ServerState {
                             err.message(),
                         ),
                     },
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            lt::request::InlayHintRequest::METHOD => {
+                match serde_json::from_value::<lt::InlayHintParams>(request.params) {
+                    Ok(params) => Response::new_ok(request.id, self.inlay_hints(&params)),
                     Err(err) => Response::new_err(
                         request.id,
                         ErrorCode::InvalidParams as i32,
@@ -639,6 +650,36 @@ impl ServerState {
             &packages,
         );
         Some(lt::CompletionResponse::Array(items))
+    }
+
+    /// `textDocument/inlayHint`: the ordinal and unit-expansion hints inside the
+    /// requested range, converted to LSP positions through the file's line
+    /// table (E1.16). A range request — only hints in the visible window are
+    /// returned.
+    fn inlay_hints(&mut self, params: &lt::InlayHintParams) -> Option<Vec<lt::InlayHint>> {
+        let path = convert::uri_to_path(&params.text_document.uri)?;
+        let (file, package) = self.locate(&path)?;
+        let index = self.line_index_of(file);
+        let range = index.text_range(params.range);
+        let hints = inlay::inlay_hints(&self.db, self.workspace, self.std, package, file, range);
+        Some(
+            hints
+                .into_iter()
+                .map(|hint| lt::InlayHint {
+                    position: index.position(hint.offset),
+                    label: lt::InlayHintLabel::String(hint.label),
+                    kind: Some(match hint.kind {
+                        inlay::HintKind::Ordinal => lt::InlayHintKind::PARAMETER,
+                        inlay::HintKind::Unit => lt::InlayHintKind::TYPE,
+                    }),
+                    text_edits: None,
+                    tooltip: None,
+                    padding_left: Some(true),
+                    padding_right: None,
+                    data: None,
+                })
+                .collect(),
+        )
     }
 
     /// `textDocument/prepareRename`: the name span the cursor is on when it is a

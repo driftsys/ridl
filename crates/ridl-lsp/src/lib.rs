@@ -25,6 +25,7 @@
 pub mod complete;
 pub mod convert;
 pub mod hover;
+pub mod inlay;
 pub mod nav;
 pub mod rename;
 pub mod server;

@@ -91,8 +91,9 @@ fn field_hover(
 }
 
 /// The 1-based ordinal of field `field_name` in struct `struct_name`, from the
-/// lowered IR.
-fn field_ordinal(ir: &v1::Package, struct_name: &str, field_name: &str) -> Option<u32> {
+/// lowered IR. Shared with the inlay-hint pass (E1.16), which renders the same
+/// ordinal beside every field.
+pub(crate) fn field_ordinal(ir: &v1::Package, struct_name: &str, field_name: &str) -> Option<u32> {
     let decl = ir.decls.iter().find(|decl| decl.name == struct_name)?;
     let Some(v1::decl::Kind::StructDef(struct_def)) = &decl.kind else {
         return None;
