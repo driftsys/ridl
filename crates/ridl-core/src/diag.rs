@@ -234,6 +234,20 @@ impl DiagCode {
     /// `ensure` on `command` — a command has no result to observe (ridl §6.1,
     /// §16.3). Emitted by the checker (E2 task 5).
     pub const RIDL_302: DiagCode = DiagCode("RIDL-302");
+    /// A fallible query return with no success path (ridl §10.1, §16.3; general
+    /// form §6.1): a bare `error` type in return position, an `error`-typed
+    /// success (left) arm of an inline `T | E`, or a non-error error (right)
+    /// arm. Error. Emitted by the checker (E2 task 10).
+    pub const RIDL_303: DiagCode = DiagCode("RIDL-303");
+    /// An `error`-typed or result-union parameter on a `command` or `query` —
+    /// failure flowing toward a provider (ridl §10.1, §16.3). Warning. Emitted
+    /// by the checker (E2 task 10).
+    pub const RIDL_304: DiagCode = DiagCode("RIDL-304");
+    /// An `error` enum declares a Stratum-2 contract-error category name
+    /// (`INVALID_VALUE`, `PRECONDITION_FAILED`, `CONTRACT_BROKEN`,
+    /// `UNKNOWN_INTERACTION`) — reserved vocabulary (ridl §10.2, §16.3).
+    /// Warning. Emitted by the checker (E2 task 10).
+    pub const RIDL_307: DiagCode = DiagCode("RIDL-307");
     /// Interaction re-declared under a `reserved` name (ridl §11, §16.4).
     /// Emitted by the checker (E2 task 5).
     pub const RIDL_401: DiagCode = DiagCode("RIDL-401");
