@@ -2877,6 +2877,20 @@ impl Checker<'_> {
             .name()
             .map(|dotted| significant_text(dotted.syntax()))
             .unwrap_or_default();
+        // An inline shape IS an interface shape (ridl §14.5), so a `require`
+        // on one of its interactions reads its own signals exactly as it does
+        // inside an `interface` body (ridl §13) — the same pre-pass.
+        self.interface_signals = service
+            .inline_members()
+            .filter_map(|member| match member {
+                ast::InterfaceMember::Signal(signal) => {
+                    let name = member_name(signal.name())?;
+                    let payload = signal.payload()?;
+                    Some((name, self.expr_type_of_field_type(&payload)))
+                }
+                _ => None,
+            })
+            .collect();
 
         let mut reserved: HashSet<String> = HashSet::new();
         for member in service.inline_members() {
@@ -2915,6 +2929,7 @@ impl Checker<'_> {
             interactions.push(self.lower_interaction(&member, ordinal));
         }
 
+        self.interface_signals.clear();
         self.interface_name.clear();
 
         v2::Interface {
@@ -3283,11 +3298,15 @@ impl Checker<'_> {
     /// Every lowered clause is also an **observer stub** (E2.5): the reads it
     /// resolves ([`expr::collect_refs`]) — signals as canonical
     /// `Interface.signalName`, parameters by name, `result` as a flag — plus
-    /// `observer_id`, the stable handle the E5 observer runtime and the
-    /// runtime test plane address (concept note §9.2). The id is
-    /// `"{Interface}.{interaction}.{require|ensure}[{i}]"` with `i` counting
-    /// the interaction's clauses **of that kind** from 0, so appending a
-    /// clause of either kind never renumbers an existing one.
+    /// `observer_id`, the handle the E5/E7 observer tooling is expected to
+    /// address a single clause by.
+    ///
+    /// The id is `"{Interface}.{interaction}.{require|ensure}[{i}]"`, and its
+    /// guarantee is precisely **positional**: `i` counts the interaction's
+    /// clauses **of that kind** from 0, so appending a clause of either kind
+    /// never renumbers an existing one. Removing a clause does renumber the
+    /// survivors of its kind — a known limitation, recorded against ADR-0008
+    /// for E5/E7 (a tombstone or explicit-index mechanism).
     fn lower_contracts(
         &mut self,
         node: &ridl_syntax::SyntaxNode,
@@ -6393,10 +6412,11 @@ interface I {\n\
 
     #[test]
     fn appending_a_clause_does_not_renumber_the_earlier_observer_ids() {
-        // The observer id is the stable handle the E5 observer runtime and the
-        // test plane address (concept note §9.2), so appending a clause must
-        // leave every earlier id untouched — which is why `i` is scoped to the
-        // clause kind rather than counted across kinds.
+        // The observer id is the handle E5/E7 observer tooling is expected to
+        // address a single clause by, so appending a clause must leave every
+        // earlier id untouched — which is why `i` is scoped to the clause kind
+        // rather than counted across kinds. (Removal is the known limitation,
+        // pinned by the test below.)
         let one_require = check_ridl(
             "app",
             &format!(
@@ -6449,6 +6469,57 @@ interface I {\n\
             .map(|stub| stub.0)
             .collect();
         assert_eq!(ids, ["I.q.require[0]", "I.q.ensure[0]"]);
+    }
+
+    #[test]
+    fn removing_a_clause_renumbers_the_survivors_known_limitation() {
+        // The index is **positional**: it is stable under append (the test
+        // above) but a clause *removal* shifts every later clause of the same
+        // kind down one, so a surviving id starts addressing a different
+        // predicate. Deleting the first of two requires moves the survivor
+        // from `[1]` to `[0]`.
+        //
+        // This is known and accepted behavior, not an oversight — pinned here
+        // so it can never be re-discovered as a regression. A tombstone or
+        // explicit-index mechanism is recorded against ADR-0008 for E5/E7.
+        let both = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  command c(min: Speed, max: Speed) [\n\
+    require min < max\n\
+    require max <= MAX_SPEED\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        let stubs = observer_stubs(&both, "c");
+        let survivor = &stubs[1];
+        assert_eq!(
+            (survivor.0, &survivor.2),
+            ("I.c.require[1]", &vec!["max"]),
+            "with both clauses present, `max <= MAX_SPEED` is `[1]`",
+        );
+
+        // The first require deleted: the same surviving predicate now answers
+        // to `[0]`.
+        let first_removed = check_ridl(
+            "app",
+            &format!(
+                "{CONTRACT_PRELUDE}interface I {{\n\
+  command c(min: Speed, max: Speed) [\n\
+    require max <= MAX_SPEED\n\
+  ]\n\
+}}\n"
+            ),
+        );
+        let stubs = observer_stubs(&first_removed, "c");
+        let survivor = &stubs[0];
+        assert_eq!(
+            (survivor.0, &survivor.2),
+            ("I.c.require[0]", &vec!["max"]),
+            "the survivor renumbers to `[0]` — the accepted limitation",
+        );
     }
 
     #[test]
@@ -7117,8 +7188,8 @@ interface VehicleStatus {
     #[test]
     fn appendix_a_contracts_lower_observer_stubs() {
         // Task 12: every clause of the Appendix A interface is an addressable
-        // observer stub — the reads it resolves plus the stable id the E5
-        // observer runtime addresses. A signal read is canonical
+        // observer stub — the reads it resolves plus the positional id E5/E7
+        // observer tooling addresses it by. A signal read is canonical
         // `Interface.signalName`; a parameter read is the bare parameter name.
         let checked = check_appendix_a();
         assert_eq!(
@@ -7839,6 +7910,44 @@ interface VehicleStatus {
             panic!("inline service must lower to an inline shape");
         };
         assert_eq!(inline.interactions.len(), 1);
+    }
+
+    #[test]
+    fn service_inline_shape_require_reads_its_sibling_signals() {
+        // An inline shape IS an interface shape (ridl §14.5), so a `require`
+        // on one of its interactions may read the shape's own signals exactly
+        // as it may inside an `interface` body (ridl §13). Reading one is
+        // clean, and it lowers as a canonical signal ref scoped to the
+        // service's dotted global name.
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) [ require temperature < t ]\n}}\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
+            panic!("inline service must lower to an inline shape");
+        };
+        let Some(v2::decl::Kind::CommandDef(set_target)) = &inline
+            .interactions
+            .iter()
+            .find(|decl| decl.name == "setTarget")
+            .expect("no `setTarget` interaction")
+            .kind
+        else {
+            panic!("setTarget is not a command");
+        };
+        assert_eq!(set_target.contracts.len(), 1);
+        assert_eq!(
+            set_target.contracts[0].signal_refs,
+            ["veh.hvac.cabin.temperature"],
+        );
+        assert_eq!(set_target.contracts[0].param_refs, ["t"]);
+        assert_eq!(
+            set_target.contracts[0].observer_id,
+            "veh.hvac.cabin.setTarget.require[0]",
+        );
     }
 
     // --- catalog/IR parity on the canonical interface reference ----------
