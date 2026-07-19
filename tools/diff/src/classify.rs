@@ -56,17 +56,82 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
         // direction, so the change is breaking.
         Category::InitChanged => Verdict::Breaking,
 
-        // Metadata carries no wire identity, and a tombstone in the retired
-        // interaction's own slot is the sanctioned retirement (ridl §11). The
-        // walk only emits `InteractionRetired` when the slot is preserved.
+        // Doc comments, labels, and deprecation notes reach no consumer's build.
+        // Visibility is not among them — it has its own category below.
+        //
+        // A tombstone in the retired interaction's own slot is the sanctioned
+        // retirement (ridl §11); the walk only emits `InteractionRetired` when
+        // the slot is preserved.
         Category::DocOnly | Category::InteractionRetired => Verdict::Compatible,
 
+        Category::VisibilityChanged => visibility(change, old, new),
         Category::InteractionAppended => appended(change, old, new),
         Category::DeclAdded => added(change, old, new),
         Category::ConstraintChanged => constraint(change, old, new),
         Category::TimingChanged => timing(change, old, new),
         Category::ContractChanged => contract(change, old, new),
     }
+}
+
+// ==========================================================================
+// Visibility.
+// ==========================================================================
+
+/// A change to the visibility a declaration is published at.
+///
+/// Visibility rides the surface grammar next to doc comments, but it is not
+/// metadata to a consumer. `internal` maps to the target's package-private
+/// mechanism — Rust `pub(crate)`, a non-exported TypeScript member (ADR-0002
+/// §8) — so narrowing `public` to `internal` deletes the declaration from every
+/// out-of-package consumer's build. That is the plainest form of "narrows a
+/// consumer-visible guarantee" in ADR-0008 decision 14, even though the byte
+/// layout on the wire never moves.
+///
+/// Widening `internal` to `public` only offers more, so it is compatible. Any
+/// direction involving an unset visibility is breaking, following the module's
+/// unlisted-is-breaking rule.
+fn visibility(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
+    let (Some(old_visibility), Some(new_visibility)) = (
+        find_visibility(old, &change.path),
+        find_visibility(new, &change.path),
+    ) else {
+        return Verdict::Breaking;
+    };
+
+    match (
+        v2::Visibility::try_from(old_visibility),
+        v2::Visibility::try_from(new_visibility),
+    ) {
+        (Ok(v2::Visibility::Internal), Ok(v2::Visibility::Public)) => Verdict::Compatible,
+        _ => Verdict::Breaking,
+    }
+}
+
+/// The visibility published at a change's path: an interaction inside an
+/// interface or service shape, or a package-level declaration, interface, or
+/// service.
+fn find_visibility(package: &v2::Package, path: &str) -> Option<i32> {
+    let mut segments = path.split('/').skip(1);
+    let name = segments.next()?;
+
+    if let Some(member) = segments.next() {
+        return find_interaction(package, name, member).map(|decl| decl.visibility);
+    }
+    if let Some(decl) = find_decl(package, name) {
+        return Some(decl.visibility);
+    }
+    if let Some(interface) = package
+        .interfaces
+        .iter()
+        .find(|interface| interface.name == name)
+    {
+        return Some(interface.visibility);
+    }
+    package
+        .services
+        .iter()
+        .find(|service| service.name == name)
+        .map(|service| service.visibility)
 }
 
 // ==========================================================================
@@ -576,13 +641,21 @@ fn find_interaction<'a>(
 /// Every slot of an interface body as (name, ordinal), tombstones included — a
 /// tombstone occupies its ordinal exactly so the slot is never reused
 /// (ridl §11).
+///
+/// A tombstone whose name is unset still holds its slot. The interface-body
+/// `reserved` form accepts a bare ordinal or a string literal as well as a
+/// name, and both lower to `Reserved { name: None }`; dropping those from the
+/// slot list would leave their ordinals looking free, and a new interaction
+/// taking one would classify as a clean append. The empty name never equals a
+/// real interaction name, so the slot is held against every reuse without
+/// matching anything.
 fn slots(interface: &v2::Interface) -> Vec<(&str, u32)> {
     interface
         .interactions
         .iter()
         .filter_map(|decl| match &decl.kind {
             Some(v2::decl::Kind::ReservedSlot(reserved)) => {
-                reserved.name.as_deref().map(|name| (name, decl.ordinal))
+                Some((reserved.name.as_deref().unwrap_or(""), decl.ordinal))
             }
             Some(_) => Some((decl.name.as_str(), decl.ordinal)),
             None => None,
@@ -654,7 +727,7 @@ fn reserved_values(reserved: &[v2::Reserved]) -> Vec<i64> {
 
 /// Every category, in the order `--explain` lists them when asked for an unknown
 /// one.
-pub const CATEGORIES: [Category; 19] = [
+pub const CATEGORIES: [Category; 20] = [
     Category::DeclAdded,
     Category::DeclRemoved,
     Category::InteractionAppended,
@@ -674,6 +747,7 @@ pub const CATEGORIES: [Category; 19] = [
     Category::ReservedNameRedeclared,
     Category::ServiceChanged,
     Category::DocOnly,
+    Category::VisibilityChanged,
 ];
 
 /// Parses the snake_case word a report prints back into its category, so
@@ -701,9 +775,17 @@ pub fn explain(category: Category) -> &'static str {
         ),
         Category::DeclRemoved => concat!(
             "A declaration, interface, or service present only in the old snapshot.\n",
-            "  breaking    always — a removed service, interface, decl, enum value,\n",
-            "              struct field, or union arm withdraws something a consumer\n",
-            "              compiled against"
+            "  breaking    a removed service, interface, decl, enum value, struct\n",
+            "              field, or union arm withdraws something a consumer compiled\n",
+            "              against\n",
+            "  caveat      a composite member retired the sanctioned way — replaced by\n",
+            "              a `reserved` tombstone in its own slot (typl 7.4) — is also\n",
+            "              reported breaking today. The body comparison is keyed on\n",
+            "              member names and does not read the `reserved` list, so it\n",
+            "              cannot yet tell that retirement from a bare deletion. This\n",
+            "              errs on the safe side; carried as debt, see the note on\n",
+            "              `diff_composite`. The interaction-level tombstone IS\n",
+            "              recognised — see interaction_retired"
         ),
         Category::InteractionAppended => concat!(
             "An interaction added after every slot that existed before.\n",
@@ -778,12 +860,22 @@ pub fn explain(category: Category) -> &'static str {
         ),
         Category::ConstraintChanged => concat!(
             "A scalar constraint changed, or a composite body changed in place.\n",
-            "  compatible  widened — min lowered, max raised, a length bound loosened, a\n",
-            "              step removed, or a pattern removed\n",
-            "  breaking    narrowed — min raised, max lowered, a length bound tightened,\n",
-            "              a step added or changed (divisibility is never proved), or a\n",
-            "              pattern added or rewritten. A composite body changed in place\n",
-            "              is breaking: the walk cannot say what moved inside it"
+            "  compatible  widened — min lowered, max raised, a length bound loosened,\n",
+            "              a step removed, a match pattern removed (by literal or by\n",
+            "              named constant), or the whole constraint dropped so the\n",
+            "              value is unbounded again\n",
+            "  breaking    narrowed — min raised, max lowered, a length bound\n",
+            "              tightened, a step added or changed (divisibility is never\n",
+            "              proved), a match pattern added or rewritten (by literal or\n",
+            "              by named constant), or a constraint appearing where there\n",
+            "              was none, which bounds a previously unbounded value. A\n",
+            "              composite body changed in place is breaking: the walk\n",
+            "              cannot say what moved inside it\n",
+            "  note        each facet is judged on its own and any one narrowing\n",
+            "              decides the change, so a mixed edit is breaking on the half\n",
+            "              that narrows. A widening that flips the resolved wire width\n",
+            "              is separately reported as width_changed, which is always\n",
+            "              breaking (typl 5.6)"
         ),
         Category::InitChanged => concat!(
             "A declared or resolved init value changed.\n",
@@ -802,8 +894,22 @@ pub fn explain(category: Category) -> &'static str {
             "              different contract at the same service name"
         ),
         Category::DocOnly => concat!(
-            "Only doc comment, labels, deprecation, or visibility metadata changed.\n",
-            "  compatible  always — none of it reaches the wire"
+            "Only doc comment, labels, or deprecation metadata changed.\n",
+            "  compatible  always — none of it reaches a consumer's build.\n",
+            "              Visibility is NOT in this category: see\n",
+            "              visibility_changed"
+        ),
+        Category::VisibilityChanged => concat!(
+            "The visibility a declaration is published at changed.\n",
+            "  compatible  internal -> public: the declaration is offered to more\n",
+            "              consumers than before\n",
+            "  breaking    public -> internal: `internal` maps to the target's\n",
+            "              package-private mechanism — Rust `pub(crate)`, a\n",
+            "              non-exported TypeScript member (ADR-0002 8) — so the\n",
+            "              declaration disappears from every out-of-package\n",
+            "              consumer's build. The wire layout does not move, but the\n",
+            "              consumer-visible guarantee narrows (ADR-0008 d14). Any\n",
+            "              direction involving an unset visibility is breaking"
         ),
     }
 }

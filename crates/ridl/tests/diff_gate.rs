@@ -233,6 +233,7 @@ fn every_reported_category_is_explainable() {
         "reserved_name_redeclared",
         "service_changed",
         "doc_only",
+        "visibility_changed",
     ] {
         let (code, stdout, stderr) =
             ridl(&["diff".as_ref(), "--explain".as_ref(), category.as_ref()]);

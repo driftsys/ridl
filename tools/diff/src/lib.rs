@@ -94,8 +94,13 @@ pub enum Category {
     ReservedNameRedeclared,
     /// A service's published shape or interface reference changed.
     ServiceChanged,
-    /// Only doc comment, labels, deprecation, or visibility metadata changed.
+    /// Only doc comment, labels, or deprecation metadata changed.
     DocOnly,
+    /// The visibility a declaration is published at changed. Separate from
+    /// [`Category::DocOnly`] because `internal` removes the declaration from
+    /// every out-of-package consumer (ADR-0002 §8), so the change has a
+    /// direction.
+    VisibilityChanged,
 }
 
 /// One difference between two snapshots, with an honest path into the IR and
@@ -285,6 +290,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::ReservedNameRedeclared => "reserved_name_redeclared",
         Category::ServiceChanged => "service_changed",
         Category::DocOnly => "doc_only",
+        Category::VisibilityChanged => "visibility_changed",
     }
 }
 

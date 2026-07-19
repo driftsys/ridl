@@ -1147,6 +1147,161 @@ fn a_doc_only_change_is_compatible() {
     assert_row(&old, &new, Category::DocOnly, Verdict::Compatible);
 }
 
+// ==========================================================================
+// Visibility.
+//
+// `internal` maps to the target's package-private mechanism (ADR-0002 §8), so
+// narrowing deletes the declaration from every out-of-package consumer. The
+// wire layout never moves, which is exactly why this was folded into the doc
+// envelope and slipped through as compatible.
+// ==========================================================================
+
+/// An interaction published at `visibility`.
+fn visible_signal(visibility: v2::Visibility) -> v2::Package {
+    let mut package = pkg(vec![signal("a", 1, "T")]);
+    package.interfaces[0].interactions[0].visibility = visibility as i32;
+    package
+}
+
+/// An interface published at `visibility`.
+fn visible_interface(visibility: v2::Visibility) -> v2::Package {
+    let mut package = pkg(vec![signal("a", 1, "T")]);
+    package.interfaces[0].visibility = visibility as i32;
+    package
+}
+
+#[test]
+fn narrowing_a_declaration_from_public_to_internal_is_breaking() {
+    let old = visible_signal(v2::Visibility::Public);
+    let new = visible_signal(v2::Visibility::Internal);
+    assert_row(&old, &new, Category::VisibilityChanged, Verdict::Breaking);
+    assert_eq!(
+        diff_packages(&old, &new).verdict,
+        Verdict::Breaking,
+        "the report must gate, not just the change"
+    );
+}
+
+#[test]
+fn widening_a_declaration_from_internal_to_public_is_compatible() {
+    let old = visible_signal(v2::Visibility::Internal);
+    let new = visible_signal(v2::Visibility::Public);
+    assert_row(&old, &new, Category::VisibilityChanged, Verdict::Compatible);
+}
+
+#[test]
+fn narrowing_an_interface_from_public_to_internal_is_breaking() {
+    let old = visible_interface(v2::Visibility::Public);
+    let new = visible_interface(v2::Visibility::Internal);
+    assert_row(&old, &new, Category::VisibilityChanged, Verdict::Breaking);
+    assert_eq!(diff_packages(&old, &new).verdict, Verdict::Breaking);
+}
+
+#[test]
+fn widening_an_interface_from_internal_to_public_is_compatible() {
+    let old = visible_interface(v2::Visibility::Internal);
+    let new = visible_interface(v2::Visibility::Public);
+    assert_row(&old, &new, Category::VisibilityChanged, Verdict::Compatible);
+}
+
+/// Visibility no longer rides the doc envelope, so a visibility edit and a doc
+/// edit are two separately classified changes rather than one `DocOnly`.
+#[test]
+fn a_visibility_change_is_not_reported_as_doc_only() {
+    let old = visible_signal(v2::Visibility::Public);
+    let new = visible_signal(v2::Visibility::Internal);
+    let report = diff_packages(&old, &new);
+    assert!(
+        report
+            .changes
+            .iter()
+            .all(|change| change.category != Category::DocOnly),
+        "visibility must not hide inside the doc envelope, got {:?}",
+        report.changes
+    );
+}
+
+// ==========================================================================
+// Tombstones without a name.
+// ==========================================================================
+
+/// A tombstone with no name — the `reserved 5` and `reserved "x"` forms both
+/// lower to `Reserved { name: None }` — still holds its ordinal. Dropping it
+/// from the slot list made the freed ordinal look unused, so a new interaction
+/// taking it classified as a clean append.
+fn nameless_reserved(ordinal: u32) -> v2::Decl {
+    v2::Decl {
+        name: String::new(),
+        visibility: v2::Visibility::Unspecified as i32,
+        is_error: false,
+        doc: String::new(),
+        labels: Vec::new(),
+        deprecated: None,
+        ordinal,
+        kind: Some(v2::decl::Kind::ReservedSlot(v2::Reserved {
+            ordinal,
+            name: None,
+            value: None,
+        })),
+    }
+}
+
+#[test]
+fn reusing_the_ordinal_of_a_nameless_tombstone_is_breaking() {
+    let old = pkg(vec![signal("a", 1, "T"), nameless_reserved(2)]);
+    let new = pkg(vec![signal("a", 1, "T"), signal("c", 2, "T")]);
+
+    let report = diff_packages(&old, &new);
+    let appended = row(&report, Category::InteractionAppended);
+    assert_eq!(appended.path, "veh.cluster/I/c");
+    assert_eq!(
+        appended.verdict,
+        Verdict::Breaking,
+        "a name-less tombstone still reserves ordinal 2, got {:?}",
+        report.changes
+    );
+    assert_eq!(report.verdict, Verdict::Breaking);
+}
+
+/// The control for the case above: the same reuse against a *named* tombstone
+/// was already breaking and must stay so.
+#[test]
+fn reusing_the_ordinal_of_a_named_tombstone_is_breaking() {
+    let old = pkg(vec![signal("a", 1, "T"), reserved("b", 2)]);
+    let new = pkg(vec![signal("a", 1, "T"), signal("c", 2, "T")]);
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        row(&report, Category::InteractionAppended).verdict,
+        Verdict::Breaking
+    );
+    assert_eq!(report.verdict, Verdict::Breaking);
+}
+
+/// And the control in the other direction: a name-less tombstone must not turn
+/// an honest append into a false breaking. `c` takes a fresh ordinal above it.
+fn nameless_tombstone_case() -> (v2::Package, v2::Package) {
+    (
+        pkg(vec![signal("a", 1, "T"), nameless_reserved(2)]),
+        pkg(vec![
+            signal("a", 1, "T"),
+            nameless_reserved(2),
+            signal("c", 3, "T"),
+        ]),
+    )
+}
+
+#[test]
+fn appending_past_a_nameless_tombstone_is_still_compatible() {
+    let (old, new) = nameless_tombstone_case();
+    assert_row(
+        &old,
+        &new,
+        Category::InteractionAppended,
+        Verdict::Compatible,
+    );
+}
+
 #[test]
 fn an_init_change_is_breaking() {
     let with_init = |init: &str| {
