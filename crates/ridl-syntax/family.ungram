@@ -1,4 +1,4 @@
-// typl.ungram — the typl profile grammar as a rowan tree shape.
+// family.ungram — the typl profile grammar as a rowan tree shape.
 //
 // Transliterated from the typl language reference, Appendix E (EBNF), per
 // ADR-0007 decision 1. This file describes the shape of the syntax tree,

@@ -12,7 +12,7 @@
 //! The E0.5 single-file resolver lived here until the checker moved onto the
 //! package model (E1.7a); the package checker (`check`) is its replacement.
 //!
-//! Reads the `typl.ungram`-generated typed AST (`ridl_syntax::ast`).
+//! Reads the `family.ungram`-generated typed AST (`ridl_syntax::ast`).
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, HashSet};

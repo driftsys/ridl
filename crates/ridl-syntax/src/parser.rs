@@ -2,7 +2,7 @@
 //! (docs/ROADMAP.md epic E1.2b, ADR-0004 §2, typl reference Appendix E).
 //!
 //! The parser consumes the flat token stream from [`crate::lex`] and builds a
-//! lossless rowan tree whose nodes match `typl.ungram` exactly: every token —
+//! lossless rowan tree whose nodes match `family.ungram` exactly: every token —
 //! including whitespace and comments — lands in the tree in source order, so
 //! [`Parse::syntax`] round-trips back to the original source for both valid
 //! and broken input. On an unexpected token the parser records a
@@ -137,7 +137,7 @@ pub fn parse(input: &str, profile: Profile) -> Parse {
     parser.finish()
 }
 
-/// Whether `kind` can be the value token of a `Literal` (`typl.ungram` rule
+/// Whether `kind` can be the value token of a `Literal` (`family.ungram` rule
 /// `Literal`, minus the optional leading `-`).
 fn is_value_token(kind: SyntaxKind) -> bool {
     matches!(

@@ -3,7 +3,7 @@
 //!
 //! The node structs and their mechanical accessors live in the `generated`
 //! module,
-//! written by `cargo xtask codegen` from `typl.ungram` and committed; an
+//! written by `cargo xtask codegen` from `family.ungram` and committed; an
 //! xtask drift test keeps the two in sync. This module adds the hand-written
 //! layer the generator does not cover:
 //!
@@ -90,7 +90,7 @@ mod support {
     }
 }
 
-// --- enums over node alternations (`typl.ungram` alternation rules) ------
+// --- enums over node alternations (`family.ungram` alternation rules) ------
 
 /// One top-level definition — the `Definition` alternation.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

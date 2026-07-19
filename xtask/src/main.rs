@@ -2,7 +2,7 @@
 //! in `.cargo/config.toml`).
 //!
 //! One task exists today: `codegen` regenerates the typed AST from
-//! `crates/ridl-syntax/typl.ungram` (ADR-0007 decision 1). The drift test
+//! `crates/ridl-syntax/family.ungram` (ADR-0007 decision 1). The drift test
 //! in [`codegen`] fails whenever the committed output is stale, so the
 //! generated file can never silently diverge from the grammar.
 
