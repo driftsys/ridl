@@ -183,7 +183,7 @@ pub fn module_name_from_path(path: &str) -> String {
 /// `diagnostics` gathers every diagnostic the workspace produced — the loader's
 /// (manifest and package↔directory law), the parser's, the resolver's, and the
 /// checker's — each already remapped onto `sources`, so a caller renders them
-/// with [`render`](ridl_core::diag::render) and keys the exit code on the
+/// with [`render`](ridl_core::diag::render()) and keys the exit code on the
 /// presence of an [`Error`](Severity::Error). `checked` carries the per-package
 /// IR so the language server can serve it (E1.15).
 pub struct WorkspaceOutput {
@@ -265,7 +265,10 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
 }
 
 /// Runs `build`: everything [`run_check`] does, plus it writes the selected
-/// `emits` for every checked package into `out_dir`.
+/// `emits` for every checked package into `out_dir` — but only when the
+/// workspace compiled without any error-severity diagnostic. An error-bearing
+/// build renders its diagnostics and exits non-zero without writing any
+/// artifact (C1).
 ///
 /// The artifact base name is the file stem in single-file mode (preserving the
 /// E0 `<input-stem>.rs` contract) and the full dotted package name otherwise, so
@@ -287,16 +290,28 @@ pub fn run_build(
         sources,
     } = load_and_check(&mut db, entry)?;
 
-    std::fs::create_dir_all(out_dir)?;
-    let single_file = entry.is_file() && manifest_root_of(entry).is_none();
-    let file_stem = module_name_from_path(&entry.to_string_lossy());
-    for package in &checked {
-        let base = if single_file {
-            file_stem.clone()
-        } else {
-            package.ir.name.clone()
-        };
-        write_emits(out_dir, &base, &package.ir, emits, &mut diagnostics)?;
+    // A build must not emit artifacts for a workspace that failed to compile:
+    // code generation over error-bearing IR produces invalid or misleading
+    // output, and a malformed IR could even crash a backend (C1). `check` never
+    // runs codegen; `build` matches that by skipping every emit — Rust, C
+    // header, and ir-json alike — when any error-severity diagnostic is present.
+    // Warnings and info do not gate. The lockfile round trip below still runs so
+    // a remote-import problem is still reported.
+    let compiles = !diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error);
+    if compiles {
+        std::fs::create_dir_all(out_dir)?;
+        let single_file = entry.is_file() && manifest_root_of(entry).is_none();
+        let file_stem = module_name_from_path(&entry.to_string_lossy());
+        for package in &checked {
+            let base = if single_file {
+                file_stem.clone()
+            } else {
+                package.ir.name.clone()
+            };
+            write_emits(out_dir, &base, &package.ir, emits, &mut diagnostics)?;
+        }
     }
 
     diagnostics.extend(materialize_and_lock(&db, workspace, entry, frozen));

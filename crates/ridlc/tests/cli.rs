@@ -223,6 +223,50 @@ fn frozen_without_lockfile_is_mani_103() {
     );
 }
 
+/// `build` on an error-bearing package writes no artifacts and exits 1: code
+/// generation over error-bearing IR is skipped, matching `check` (C1). A
+/// non-optional recursive struct is TYPL-206; before the build gate it also
+/// crashed the backend's Default recursion with a stack overflow, so this
+/// fixture proves the build both refuses to emit and does not overflow.
+#[test]
+fn build_recursive_struct_writes_nothing_and_does_not_overflow() {
+    let dir = TempDir::new("build-recursive");
+    let file = dir.write(
+        "recursive.typl",
+        "package veh.common\nstruct S {\n  next : S\n}\n",
+    );
+    let out = TempDir::new("build-recursive-out");
+
+    // The helper asserts the process exits with a code; a stack overflow would
+    // terminate it by signal (no exit code) and fail that assertion here.
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        file.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+    ]);
+    assert_eq!(
+        code, 1,
+        "an error-bearing build must exit 1, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("TYPL-206"),
+        "the recursive struct must render TYPL-206, got:\n{stderr}"
+    );
+    assert!(
+        !out.path().join("recursive.rs").exists(),
+        "an error-bearing build must write no Rust artifact"
+    );
+    assert!(
+        !out.path().join("recursive.ir.json").exists(),
+        "an error-bearing build must write no ir-json artifact"
+    );
+}
+
 /// A non-existent entry is an I/O error: exit 2.
 #[test]
 fn missing_entry_is_io_error() {
