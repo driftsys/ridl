@@ -25,21 +25,25 @@ fn fixture_compiles_to_committed_snapshots() {
 }
 
 /// A typl name that is a Rust keyword (`fn`) lexes as a valid identifier and
-/// passes parse, resolve, and check, then the Rust backend rejects it. `compile`
-/// stays total: it reports the failure as a diagnostic naming `fn` and leaves
-/// `rust_source` empty instead of panicking.
+/// passes parse, resolve, and check. The E1.12 Rust backend escapes it as a raw
+/// identifier (`r#fn`) rather than rejecting it — the raw-escaping decision the
+/// walking-skeleton backend deferred to E1.12. `compile` stays total and emits
+/// valid Rust with no diagnostic.
 #[test]
-fn keyword_type_name_is_a_backend_diagnostic_not_a_panic() {
-    let output = ridlc::compile("bad.typl", "type fn: m [0.0..1.0]\n");
+fn keyword_type_name_is_raw_escaped() {
+    let output = ridlc::compile(
+        "keyword.typl",
+        "package p\ntype fn: m [0.0..1.0 step 0.1]\n",
+    );
 
     assert!(
-        output.diagnostics.iter().any(|d| d.message.contains("fn")),
-        "expected a diagnostic naming the offending identifier, got: {:?}",
+        output.diagnostics.is_empty(),
+        "a keyword type name must not raise a diagnostic, got: {:?}",
         output.diagnostics,
     );
     assert!(
-        output.rust_source.is_empty(),
-        "a failed backend must leave rust_source empty, got:\n{}",
+        output.rust_source.contains("r#fn"),
+        "the keyword type name must be raw-escaped, got:\n{}",
         output.rust_source,
     );
 }

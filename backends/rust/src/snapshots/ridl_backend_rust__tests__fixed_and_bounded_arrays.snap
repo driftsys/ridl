@@ -1,0 +1,24 @@
+---
+source: backends/rust/src/tests.rs
+expression: rust_for(decls)
+---
+/// Vehicle speed over ground
+#[repr(transparent)]
+pub struct Speed(pub f64);
+impl Default for Speed {
+    fn default() -> Self {
+        Speed(0.0)
+    }
+}
+pub struct Samples {
+    pub readings: [Speed; 8],
+    pub history: Vec<Speed>,
+}
+impl Default for Samples {
+    fn default() -> Self {
+        Samples {
+            readings: ::core::array::from_fn(|_| Speed::default()),
+            history: (0..2).map(|_| Speed::default()).collect(),
+        }
+    }
+}

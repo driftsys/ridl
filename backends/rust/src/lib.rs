@@ -1,257 +1,644 @@
-//! IR package to Rust source text (ADR-0004 section 7, ADR-0006 decision 1).
+//! IR v1 package to Rust source plus an extern-C header (ADR-0004 section 7,
+//! ADR-0007 decision 13).
 //!
-//! The walking-skeleton emission over IR v1: each `TypeDef` declaration
-//! becomes `pub struct Name(pub f64);` and each `ConstDef` whose type
-//! resolves to one of those type declarations becomes
-//! `pub const NAME: Type = Type(value);`. Composite declarations (structs,
-//! enums, enum sets, unions) are not emitted yet — the full backend over the
-//! v1 surface is the E1.12 task. The source is built as a
-//! `proc_macro2::TokenStream` via `quote` and formatted with `prettyplease`,
-//! never by shelling out to `rustfmt`.
+//! The full E1.12 backend over the typl surface. Each declaration in a
+//! [`v1::Package`] is realized twice: once as idiomatic Rust (the language
+//! layer of typl reference Appendix D — every integer is `i64`, every float is
+//! `f64`) and once, where the C ABI admits it, as an entry in a companion C
+//! header. Named scalar types become `#[repr(transparent)]` newtypes so unit
+//! safety survives into generated code (typl reference §5.7); composites map to
+//! structs, enums, and Rust `enum` unions.
+//!
+//! Rust source is built as a [`proc_macro2::TokenStream`] with `quote` and
+//! formatted with `prettyplease`, never by shelling out to `rustfmt`. The C
+//! header is rendered from a `minijinja` template (`templates/c_header.j2`).
+//!
+//! Default derivation follows the leaf-recursion rule: an `impl Default` is
+//! emitted for a type only when every field it transitively contains is
+//! derivable. The IR `InitValue.derivable` flag on a composite-typed field is a
+//! one-level flag, so same-package composite references are re-checked by
+//! recursion rather than trusted (see [`defaults`]).
 
-use proc_macro2::{Literal, TokenStream};
-use quote::{format_ident, quote};
+use proc_macro2::{Ident, Span, TokenStream};
+use quote::quote;
 use ridl_ir::v1;
+use std::collections::HashMap;
 
-/// A failure to generate Rust source from a package.
+mod c_header;
+mod defaults;
+
+/// The two generated artifacts for one package: Rust source and the C header.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Generated {
+    pub rust_source: String,
+    pub c_header: String,
+}
+
+/// A failure to generate code from a package.
 ///
 /// Carried as a value so codegen stays total: no stage in the pipeline panics
 /// (ADR-0004 section 5). The `compile` driver folds `message` into its
 /// diagnostic list.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateError {
     pub message: String,
 }
 
-/// Generates Rust source text for `package`.
+/// Generates Rust source and the extern-C header for `package`.
 ///
-/// Emission order is all type structs first (in declaration order), then all
-/// consts (in declaration order). A `ConstDef` whose `type_ref` does not name
-/// a `TypeDef` declaration in `package` — a primitive-typed or unresolved
-/// const — is skipped rather than emitted or panicked on: the checker
-/// upstream of codegen owns those diagnostics.
-///
-/// The call is total: it returns [`GenerateError`] rather than panicking. A
-/// typl name can lex as a valid identifier yet still be a Rust keyword (for
-/// example `fn`), which cannot appear where the generated code uses it. Every
-/// emitted name is validated up front with `syn::parse_str::<syn::Ident>`,
-/// before any token is built, because `format_ident!` itself panics on a name
-/// that is neither a legal identifier nor a keyword. When any emitted name is
-/// invalid, the whole call fails with one message listing the offending names.
-/// Raw-identifier escaping and name mangling are an E1.12 backend decision,
-/// not resolved here.
-pub fn generate(package: &v1::Package) -> Result<String, GenerateError> {
-    let type_names: Vec<&str> = package
-        .decls
-        .iter()
-        .filter(|decl| matches!(decl.kind, Some(v1::decl::Kind::TypeDef(_))))
-        .map(|decl| decl.name.as_str())
-        .collect();
+/// The call is total: it returns [`GenerateError`] rather than panicking. Every
+/// emitted identifier is produced through [`ident`], which escapes Rust
+/// keywords as raw identifiers, so a typl name that happens to be a Rust
+/// keyword (for example a field named `override`) is emitted as `r#override`
+/// rather than panicking `format_ident!`. As a final guard the assembled token
+/// stream is parsed with `syn::parse2`; a parse failure (a codegen bug) surfaces
+/// as a `GenerateError` instead of unformatted output.
+pub fn generate(package: &v1::Package) -> Result<Generated, GenerateError> {
+    let ctx = Ctx::new(package);
 
-    let mut invalid_names: Vec<String> = Vec::new();
-    for name in &type_names {
-        if !is_rust_ident(name) {
-            invalid_names.push((*name).to_string());
-        }
-    }
+    let mut items: Vec<TokenStream> = Vec::new();
+    let mut tuples: Vec<(String, v1::TupleType)> = Vec::new();
+
     for decl in &package.decls {
-        // Mirror `generate_const`: a const whose type does not resolve is
-        // skipped, so its name is never emitted and never validated.
-        if let Some(v1::decl::Kind::ConstDef(const_def)) = &decl.kind
-            && const_resolves(const_def, &type_names)
-            && !is_rust_ident(&decl.name)
-        {
-            invalid_names.push(decl.name.clone());
+        items.push(emit_decl(&ctx, decl, &mut tuples));
+    }
+
+    // Tuple types generate a named nested struct each (typl §11). Process the
+    // worklist: emitting a tuple struct's fields can discover further nested
+    // tuples, which are appended and drained here.
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut index = 0;
+    while index < tuples.len() {
+        let (name, tuple) = tuples[index].clone();
+        index += 1;
+        if !seen.insert(name.clone()) {
+            continue;
         }
-    }
-    if !invalid_names.is_empty() {
-        return Err(GenerateError {
-            message: format!(
-                "generated Rust would use invalid identifier(s): {}",
-                invalid_names.join(", ")
-            ),
-        });
+        items.push(emit_tuple_struct(&ctx, &name, &tuple, &mut tuples));
     }
 
-    let structs = package.decls.iter().filter_map(|decl| match &decl.kind {
-        Some(v1::decl::Kind::TypeDef(_)) => Some(generate_struct(&decl.name)),
-        _ => None,
-    });
-    let consts = package.decls.iter().filter_map(|decl| {
-        let Some(v1::decl::Kind::ConstDef(const_def)) = &decl.kind else {
-            return None;
-        };
-        generate_const(&decl.name, const_def, &type_names)
-    });
-
-    let tokens = quote! {
-        #(#structs)*
-        #(#consts)*
-    };
-
+    let tokens = quote! { #(#items)* };
     let file: syn::File = syn::parse2(tokens).map_err(|err| GenerateError {
         message: format!("generated Rust does not parse: {err}"),
     })?;
-    Ok(prettyplease::unparse(&file))
+
+    Ok(Generated {
+        rust_source: prettyplease::unparse(&file),
+        c_header: c_header::render(package)?,
+    })
 }
 
-/// Reports whether `name` parses as a Rust identifier. Unlike
-/// `proc_macro2::Ident::new`, `syn::parse_str::<syn::Ident>` rejects reserved
-/// keywords such as `fn`, so this catches exactly the names that would later
-/// fail to parse as generated code.
-fn is_rust_ident(name: &str) -> bool {
-    syn::parse_str::<syn::Ident>(name).is_ok()
+// ---------------------------------------------------------------------------
+// Package context — same-package name lookups for the leaf-recursion rules.
+// ---------------------------------------------------------------------------
+
+/// Read-only view of a package indexed by declaration name, so the emitter and
+/// the default-derivation pass can resolve a same-package reference to its
+/// declaration (cross-package references stay unresolved by design — this
+/// backend generates one package at a time).
+pub(crate) struct Ctx<'a> {
+    decls: HashMap<&'a str, &'a v1::Decl>,
 }
 
-/// Whether a const's type reference names a `TypeDef` declaration of the
-/// same package.
-fn const_resolves(const_def: &v1::ConstDef, type_names: &[&str]) -> bool {
-    const_def
-        .type_ref
-        .as_deref()
-        .is_some_and(|type_ref| type_names.contains(&type_ref))
-}
-
-fn generate_struct(name: &str) -> TokenStream {
-    let name = format_ident!("{}", name);
-    quote! { pub struct #name(pub f64); }
-}
-
-fn generate_const(
-    name: &str,
-    const_def: &v1::ConstDef,
-    type_names: &[&str],
-) -> Option<TokenStream> {
-    if !const_resolves(const_def, type_names) {
-        return None;
+impl<'a> Ctx<'a> {
+    fn new(package: &'a v1::Package) -> Self {
+        let decls = package
+            .decls
+            .iter()
+            .map(|decl| (decl.name.as_str(), decl))
+            .collect();
+        Ctx { decls }
     }
-    // The IR carries the value as a canonical decimal string (ADR-0007
-    // decision 9); the f64 newtype emission is the walking-skeleton shape, so
-    // a value the string cannot express as f64 skips the const rather than
-    // panicking.
-    let value: f64 = const_def.value.parse().ok()?;
-    let type_name = format_ident!("{}", const_def.type_ref.as_deref()?);
-    let const_name = format_ident!("{}", name);
-    let value = Literal::f64_suffixed(value);
-    Some(quote! { pub const #const_name: #type_name = #type_name(#value); })
+
+    /// The declaration named `name` in this package, or `None` for a
+    /// cross-package (dotted) or unknown reference.
+    pub(crate) fn lookup(&self, name: &str) -> Option<&'a v1::Decl> {
+        self.decls.get(name).copied()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Declaration emission.
+// ---------------------------------------------------------------------------
+
+fn emit_decl(ctx: &Ctx, decl: &v1::Decl, tuples: &mut Vec<(String, v1::TupleType)>) -> TokenStream {
+    let item = match &decl.kind {
+        Some(v1::decl::Kind::TypeDef(td)) => emit_type_def(decl, td),
+        Some(v1::decl::Kind::ConstDef(cd)) => return emit_const(ctx, decl, cd),
+        Some(v1::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, tuples),
+        Some(v1::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed),
+        Some(v1::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd),
+        Some(v1::decl::Kind::UnionDef(ud)) => emit_union(decl, ud),
+        None => return quote! {},
+    };
+
+    let default_impl = defaults::decl_default_expr(ctx, decl)
+        .map(|expr| {
+            let name = ident(&decl.name);
+            quote! { impl Default for #name { fn default() -> Self { #expr } } }
+        })
+        .unwrap_or_default();
+
+    quote! { #item #default_impl }
+}
+
+/// A named scalar type becomes a `#[repr(transparent)]` newtype (typl §5.7).
+fn emit_type_def(decl: &v1::Decl, td: &v1::TypeDef) -> TokenStream {
+    let name = ident(&decl.name);
+    let inner = newtype_inner(td);
+    let attrs = decl_attrs(decl);
+    let vis = vis_tokens(decl.visibility);
+    quote! {
+        #attrs
+        #[repr(transparent)]
+        #vis struct #name(#vis #inner);
+    }
+}
+
+/// A constant becomes a `pub const`. A constant of a `String`-backed named type
+/// (or of the `string` primitive, or a regex constant) is realized as a
+/// `&'static str` rather than a value of the newtype: `String` cannot be
+/// constructed in a `const` context. This asymmetry is documented in the C
+/// header and here.
+fn emit_const(ctx: &Ctx, decl: &v1::Decl, cd: &v1::ConstDef) -> TokenStream {
+    let attrs = decl_attrs(decl);
+    let vis = vis_tokens(decl.visibility);
+    let name = ident(&decl.name);
+
+    // A regex constant declares no type; it holds the pattern source text.
+    if let Some(regex) = &cd.regex {
+        return quote! { #attrs #vis const #name: &str = #regex; };
+    }
+
+    let Some(type_ref) = cd.type_ref.as_deref() else {
+        return quote! {};
+    };
+
+    // A named-type constant resolves through the type's backing; a
+    // primitive-keyword constant reads the keyword directly.
+    if let Some(backing) = same_package_scalar_backing(ctx, type_ref) {
+        match backing {
+            ScalarBacking::Float => {
+                let value = numeric_tokens(&cd.value, true);
+                let type_name = type_path(type_ref);
+                quote! { #attrs #vis const #name: #type_name = #type_name(#value); }
+            }
+            ScalarBacking::Integer => {
+                let value = numeric_tokens(&cd.value, false);
+                let type_name = type_path(type_ref);
+                quote! { #attrs #vis const #name: #type_name = #type_name(#value); }
+            }
+            ScalarBacking::Boolean => {
+                let value = bool_tokens(&cd.value);
+                let type_name = type_path(type_ref);
+                quote! { #attrs #vis const #name: #type_name = #type_name(#value); }
+            }
+            ScalarBacking::String => {
+                let value = cd.value.as_str();
+                quote! { #attrs #vis const #name: &str = #value; }
+            }
+            ScalarBacking::Bytes => quote! {},
+        }
+    } else if let Some(prim) = primitive_keyword(type_ref) {
+        match prim {
+            v1::PrimitiveType::Integer => {
+                let value = numeric_tokens(&cd.value, false);
+                quote! { #attrs #vis const #name: i64 = #value; }
+            }
+            v1::PrimitiveType::Float => {
+                let value = numeric_tokens(&cd.value, true);
+                quote! { #attrs #vis const #name: f64 = #value; }
+            }
+            v1::PrimitiveType::Boolean => {
+                let value = bool_tokens(&cd.value);
+                quote! { #attrs #vis const #name: bool = #value; }
+            }
+            v1::PrimitiveType::String => {
+                let value = cd.value.as_str();
+                quote! { #attrs #vis const #name: &str = #value; }
+            }
+            v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified => quote! {},
+        }
+    } else {
+        // A cross-package or unresolved constant type: the backing is unknown
+        // here, so the constant is skipped rather than mis-typed.
+        quote! {}
+    }
+}
+
+fn emit_struct(
+    decl: &v1::Decl,
+    sd: &v1::StructDef,
+    tuples: &mut Vec<(String, v1::TupleType)>,
+) -> TokenStream {
+    let name = ident(&decl.name);
+    let attrs = decl_attrs(decl);
+    let vis = vis_tokens(decl.visibility);
+    let repr = if sd.fixed_layout {
+        quote! { #[repr(C)] }
+    } else {
+        quote! {}
+    };
+
+    let fields = sd.members.iter().filter_map(|member| match &member.member {
+        Some(v1::struct_member::Member::Field(field)) => {
+            Some(emit_field(&decl.name, field, tuples))
+        }
+        // A reserved tombstone occupies an ordinal but emits no field
+        // (typl §7.4).
+        Some(v1::struct_member::Member::Reserved(_)) | None => None,
+    });
+
+    quote! {
+        #attrs
+        #repr
+        #vis struct #name {
+            #(#fields),*
+        }
+    }
+}
+
+fn emit_field(
+    parent: &str,
+    field: &v1::Field,
+    tuples: &mut Vec<(String, v1::TupleType)>,
+) -> TokenStream {
+    let field_name = ident(&field.name);
+    let attrs = field_attrs(field);
+    let hint = format!("{}{}", camel_case(parent), camel_case(&field.name));
+    let ty = field
+        .r#type
+        .as_ref()
+        .map(|ft| field_type_tokens(ft, &hint, tuples))
+        .unwrap_or_else(|| quote! { () });
+    quote! { #attrs pub #field_name: #ty }
+}
+
+/// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
+/// Variant names keep their typl `SCREAMING_SNAKE` spelling.
+fn emit_enum(decl: &v1::Decl, ed: &v1::EnumDef) -> TokenStream {
+    let name = ident(&decl.name);
+    let attrs = decl_attrs(decl);
+    let vis = vis_tokens(decl.visibility);
+
+    let variants = ed.values.iter().map(|value| {
+        let vname = ident(&value.name);
+        let disc = int_tokens(value.value);
+        let vdoc = doc_attrs(&value.doc);
+        quote! { #vdoc #vname = #disc }
+    });
+
+    quote! {
+        #attrs
+        #[repr(i64)]
+        #vis enum #name {
+            #(#variants),*
+        }
+    }
+}
+
+/// An enum set becomes a `#[repr(transparent)]` newtype over `i64` (the
+/// language layer width, Appendix D) with one associated bit constant per bit
+/// position (typl §9).
+fn emit_enum_set(decl: &v1::Decl, esd: &v1::EnumSetDef) -> TokenStream {
+    let name = ident(&decl.name);
+    let attrs = decl_attrs(decl);
+    let vis = vis_tokens(decl.visibility);
+
+    let bits = esd.bits.iter().map(|bit| {
+        let bname = ident(&bit.name);
+        let shift = int_tokens(bit.value);
+        quote! { #vis const #bname: #name = #name(1 << #shift); }
+    });
+
+    quote! {
+        #attrs
+        #[repr(transparent)]
+        #vis struct #name(#vis i64);
+        impl #name {
+            #(#bits)*
+        }
+    }
+}
+
+/// A union becomes a `pub enum` with one variant per arm; arm names are
+/// CamelCased (typl §10). Reserved arms are skipped.
+fn emit_union(decl: &v1::Decl, ud: &v1::UnionDef) -> TokenStream {
+    let name = ident(&decl.name);
+    let attrs = decl_attrs(decl);
+    let vis = vis_tokens(decl.visibility);
+
+    let variants = ud.arms.iter().map(|arm| {
+        let vname = ident(&camel_case(&arm.name));
+        let ty = type_path(&arm.type_ref);
+        let vdoc = doc_attrs(&arm.doc);
+        quote! { #vdoc #vname(#ty) }
+    });
+
+    quote! {
+        #attrs
+        #vis enum #name {
+            #(#variants),*
+        }
+    }
+}
+
+/// Emits the generated struct for one tuple type (typl §11), plus its `Default`
+/// impl when every tuple field is derivable.
+fn emit_tuple_struct(
+    ctx: &Ctx,
+    name: &str,
+    tuple: &v1::TupleType,
+    tuples: &mut Vec<(String, v1::TupleType)>,
+) -> TokenStream {
+    let name_id = ident(name);
+    let fields = tuple.fields.iter().map(|field| {
+        let fname = ident(&field.name);
+        let hint = format!("{}{}", name, camel_case(&field.name));
+        let ty = field
+            .r#type
+            .as_ref()
+            .map(|ft| field_type_tokens(ft, &hint, tuples))
+            .unwrap_or_else(|| quote! { () });
+        quote! { pub #fname: #ty }
+    });
+
+    let struct_item = quote! {
+        pub struct #name_id {
+            #(#fields),*
+        }
+    };
+
+    let default_impl = defaults::tuple_default_expr(ctx, name, tuple)
+        .map(|expr| quote! { impl Default for #name_id { fn default() -> Self { #expr } } })
+        .unwrap_or_default();
+
+    quote! { #struct_item #default_impl }
+}
+
+// ---------------------------------------------------------------------------
+// Type mapping.
+// ---------------------------------------------------------------------------
+
+/// The Rust type of a field. Tuple field types generate a named nested struct
+/// (recorded in `tuples`); the struct name is `hint` (CamelCase of the path).
+pub(crate) fn field_type_tokens(
+    ft: &v1::FieldType,
+    hint: &str,
+    tuples: &mut Vec<(String, v1::TupleType)>,
+) -> TokenStream {
+    let inner = match &ft.kind {
+        Some(v1::field_type::Kind::Named(name)) => type_path(name),
+        Some(v1::field_type::Kind::Primitive(prim)) => primitive_tokens(*prim),
+        Some(v1::field_type::Kind::InlineScalar(td)) => inline_scalar_tokens(td),
+        Some(v1::field_type::Kind::Tuple(tuple)) => {
+            let tuple_name = hint.to_string();
+            tuples.push((tuple_name.clone(), tuple.clone()));
+            let id = ident(&tuple_name);
+            quote! { #id }
+        }
+        Some(v1::field_type::Kind::Array(array)) => {
+            let element = array
+                .element
+                .as_ref()
+                .map(|el| field_type_tokens(el, &format!("{hint}Element"), tuples))
+                .unwrap_or_else(|| quote! { () });
+            if array.min == array.max {
+                let len = usize_tokens(array.min);
+                quote! { [#element; #len] }
+            } else {
+                quote! { Vec<#element> }
+            }
+        }
+        Some(v1::field_type::Kind::Map(map)) => {
+            let key = map
+                .key
+                .as_ref()
+                .map(|k| field_type_tokens(k, &format!("{hint}Key"), tuples))
+                .unwrap_or_else(|| quote! { () });
+            let value = map
+                .value
+                .as_ref()
+                .map(|v| field_type_tokens(v, &format!("{hint}Value"), tuples))
+                .unwrap_or_else(|| quote! { () });
+            quote! { Vec<(#key, #value)> }
+        }
+        None => quote! { () },
+    };
+
+    if ft.optional {
+        quote! { Option<#inner> }
+    } else {
+        inner
+    }
+}
+
+/// The Rust newtype inner type for a named scalar backing (Appendix D language
+/// layer): unit and float back to `f64`, integer to `i64`.
+fn newtype_inner(td: &v1::TypeDef) -> TokenStream {
+    match backing_scalar(td) {
+        ScalarBacking::Float => quote! { f64 },
+        ScalarBacking::Integer => quote! { i64 },
+        ScalarBacking::Boolean => quote! { bool },
+        ScalarBacking::String => quote! { String },
+        ScalarBacking::Bytes => quote! { Vec<u8> },
+    }
+}
+
+fn inline_scalar_tokens(td: &v1::TypeDef) -> TokenStream {
+    match backing_scalar(td) {
+        ScalarBacking::Float => quote! { f64 },
+        ScalarBacking::Integer => quote! { i64 },
+        ScalarBacking::Boolean => quote! { bool },
+        ScalarBacking::String => quote! { String },
+        ScalarBacking::Bytes => quote! { Vec<u8> },
+    }
+}
+
+fn primitive_tokens(prim: i32) -> TokenStream {
+    match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
+        v1::PrimitiveType::Boolean => quote! { bool },
+        v1::PrimitiveType::Integer => quote! { i64 },
+        v1::PrimitiveType::Float => quote! { f64 },
+        v1::PrimitiveType::String => quote! { String },
+        v1::PrimitiveType::Bytes => quote! { Vec<u8> },
+        v1::PrimitiveType::Unspecified => quote! { () },
+    }
+}
+
+/// A resolved type reference: a bare `Ident` for a same-package name, a `::`
+/// path for a cross-package `pkg.Name` reference (typl §3.2). The dotted path
+/// maps directly to Rust module path segments.
+pub(crate) fn type_path(reference: &str) -> TokenStream {
+    if reference.contains('.') {
+        let segments = reference.split('.').map(ident);
+        quote! { #(#segments)::* }
+    } else {
+        let id = ident(reference);
+        quote! { #id }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Scalar backing classification (shared by emission and default derivation).
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ScalarBacking {
+    Float,
+    Integer,
+    Boolean,
+    String,
+    Bytes,
+}
+
+/// The Rust-layer scalar class of a type definition's backing. A unit backing
+/// implies float (typl §5.1).
+pub(crate) fn backing_scalar(td: &v1::TypeDef) -> ScalarBacking {
+    match td.backing.as_ref().and_then(|b| b.kind.as_ref()) {
+        Some(v1::backing::Kind::Unit(_)) => ScalarBacking::Float,
+        Some(v1::backing::Kind::Primitive(prim)) => {
+            match v1::PrimitiveType::try_from(*prim).unwrap_or(v1::PrimitiveType::Unspecified) {
+                v1::PrimitiveType::Boolean => ScalarBacking::Boolean,
+                v1::PrimitiveType::Integer => ScalarBacking::Integer,
+                v1::PrimitiveType::Float => ScalarBacking::Float,
+                v1::PrimitiveType::String => ScalarBacking::String,
+                v1::PrimitiveType::Bytes | v1::PrimitiveType::Unspecified => ScalarBacking::Bytes,
+            }
+        }
+        None => ScalarBacking::Float,
+    }
+}
+
+/// The backing class of a same-package named scalar type, or `None` when the
+/// reference does not name a scalar `TypeDef` in this package.
+fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<ScalarBacking> {
+    match &ctx.lookup(reference)?.kind {
+        Some(v1::decl::Kind::TypeDef(td)) => Some(backing_scalar(td)),
+        _ => None,
+    }
+}
+
+/// Maps a typl primitive keyword written as a type reference to its primitive.
+fn primitive_keyword(reference: &str) -> Option<v1::PrimitiveType> {
+    match reference {
+        "boolean" => Some(v1::PrimitiveType::Boolean),
+        "integer" => Some(v1::PrimitiveType::Integer),
+        "float" => Some(v1::PrimitiveType::Float),
+        "string" => Some(v1::PrimitiveType::String),
+        "bytes" => Some(v1::PrimitiveType::Bytes),
+        _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Attributes: docs, deprecation, visibility.
+// ---------------------------------------------------------------------------
+
+fn decl_attrs(decl: &v1::Decl) -> TokenStream {
+    let doc = doc_attrs(&decl.doc);
+    let deprecated = deprecated_attr(decl.deprecated.as_deref());
+    quote! { #doc #deprecated }
+}
+
+fn field_attrs(field: &v1::Field) -> TokenStream {
+    let doc = doc_attrs(&field.doc);
+    let deprecated = deprecated_attr(field.deprecated.as_deref());
+    quote! { #doc #deprecated }
+}
+
+/// One `#[doc]` attribute per line; prettyplease renders these as `///`
+/// comments. A leading space makes the rendered comment read `/// text`.
+fn doc_attrs(doc: &str) -> TokenStream {
+    if doc.is_empty() {
+        return quote! {};
+    }
+    let lines = doc.split('\n').map(|line| {
+        let text = format!(" {line}");
+        quote! { #[doc = #text] }
+    });
+    quote! { #(#lines)* }
+}
+
+/// `@deprecated` maps to `#[deprecated]`; a present-but-empty reason (the IR's
+/// `Some("")`) still emits the bare attribute (typl §14.2).
+fn deprecated_attr(reason: Option<&str>) -> TokenStream {
+    match reason {
+        Some("") => quote! { #[deprecated] },
+        Some(reason) => quote! { #[deprecated(note = #reason)] },
+        None => quote! {},
+    }
+}
+
+fn vis_tokens(visibility: i32) -> TokenStream {
+    match v1::Visibility::try_from(visibility).unwrap_or(v1::Visibility::Unspecified) {
+        v1::Visibility::Internal => quote! { pub(crate) },
+        _ => quote! { pub },
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Literals and identifiers.
+// ---------------------------------------------------------------------------
+
+/// A Rust identifier for a typl name. typl names are always character-valid
+/// identifiers (typl §2.3); the only conflict is a name that is a Rust keyword,
+/// escaped here as a raw identifier (`r#override`). The four keywords that
+/// cannot be raw identifiers (`crate`, `self`, `Self`, `super`) and the bare
+/// underscore are mangled with a trailing underscore.
+pub(crate) fn ident(name: &str) -> Ident {
+    if let Ok(parsed) = syn::parse_str::<Ident>(name) {
+        return parsed;
+    }
+    if matches!(name, "crate" | "self" | "Self" | "super" | "_") {
+        return Ident::new(&format!("{name}_"), Span::call_site());
+    }
+    Ident::new_raw(name, Span::call_site())
+}
+
+/// Numeric literal tokens from a canonical decimal string. The int/float kind
+/// comes from the caller (derived from the backing width), never from the
+/// string form: the IR drops the float form, so a float value can read `"0"`.
+/// A float literal is given a decimal point so it stays a float in Rust.
+pub(crate) fn numeric_tokens(value: &str, is_float: bool) -> TokenStream {
+    let text = if is_float && !value.contains('.') && !value.contains('e') && !value.contains('E') {
+        format!("{value}.0")
+    } else {
+        value.to_string()
+    };
+    text.parse().unwrap_or_else(|_| quote! { 0 })
+}
+
+fn int_tokens(value: i64) -> TokenStream {
+    value.to_string().parse().unwrap_or_else(|_| quote! { 0 })
+}
+
+fn usize_tokens(value: u64) -> TokenStream {
+    value.to_string().parse().unwrap_or_else(|_| quote! { 0 })
+}
+
+pub(crate) fn bool_tokens(value: &str) -> TokenStream {
+    if value == "true" {
+        quote! { true }
+    } else {
+        quote! { false }
+    }
+}
+
+/// CamelCase of a snake, screaming-snake, or camel name. Used for union variant
+/// names and generated tuple struct names.
+pub(crate) fn camel_case(name: &str) -> String {
+    name.split('_')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| {
+            let mut chars = segment.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
-mod tests {
-    use super::generate;
-    use ridl_ir::v1;
-    use std::process::Command;
-
-    fn decl(name: &str, kind: v1::decl::Kind) -> v1::Decl {
-        v1::Decl {
-            name: name.to_string(),
-            visibility: v1::Visibility::Public as i32,
-            is_error: false,
-            doc: String::new(),
-            labels: Vec::new(),
-            deprecated: None,
-            kind: Some(kind),
-        }
-    }
-
-    fn type_def(unit: &str) -> v1::decl::Kind {
-        v1::decl::Kind::TypeDef(v1::TypeDef {
-            backing: Some(v1::Backing {
-                kind: Some(v1::backing::Kind::Unit(unit.to_string())),
-            }),
-            constraint: None,
-            declared_init: None,
-            init: None,
-            width: Some(v1::type_def::Width::FloatWidth(v1::FloatWidth::F32 as i32)),
-        })
-    }
-
-    fn fixture() -> v1::Package {
-        v1::Package {
-            name: "vehicle".to_string(),
-            decls: vec![
-                decl("Speed", type_def("km/h")),
-                decl(
-                    "MAX_SPEED",
-                    v1::decl::Kind::ConstDef(v1::ConstDef {
-                        type_ref: Some("Speed".to_string()),
-                        value: "250".to_string(),
-                        regex: None,
-                    }),
-                ),
-            ],
-        }
-    }
-
-    #[test]
-    fn type_named_with_a_rust_keyword_is_an_error_not_a_panic() {
-        let package = v1::Package {
-            name: "bad".to_string(),
-            decls: vec![decl("fn", type_def("m"))],
-        };
-
-        let error = generate(&package).expect_err("a Rust keyword type name must not generate");
-
-        assert!(
-            error.message.contains("fn"),
-            "the error must name the offending identifier, got: {}",
-            error.message
-        );
-    }
-
-    #[test]
-    fn generates_struct_and_const_for_fixture_package() {
-        let source = generate(&fixture()).expect("the fixture package generates valid Rust");
-
-        assert!(
-            source.contains("pub struct Speed(pub f64)"),
-            "generated source must declare the Speed newtype, got:\n{source}"
-        );
-        assert!(
-            source.contains("pub const MAX_SPEED: Speed"),
-            "generated source must declare the MAX_SPEED constant, got:\n{source}"
-        );
-    }
-
-    #[test]
-    fn generated_source_compiles_with_rustc() {
-        let source = generate(&fixture()).expect("the fixture package generates valid Rust");
-
-        let dir = std::env::temp_dir();
-        let unique = format!(
-            "ridl_backend_rust_test_{}_{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system clock must read a time after the unix epoch")
-                .as_nanos()
-        );
-        let source_path = dir.join(format!("{unique}.rs"));
-        let rmeta_path = dir.join(format!("{unique}.rmeta"));
-
-        std::fs::write(&source_path, &source).expect("must write generated source to a temp file");
-
-        let status = Command::new("rustc")
-            .args([
-                "--edition",
-                "2024",
-                "--crate-type",
-                "lib",
-                "--emit",
-                "metadata",
-            ])
-            .arg("-o")
-            .arg(&rmeta_path)
-            .arg(&source_path)
-            .status()
-            .expect("rustc must be installed and runnable for this test to be meaningful");
-
-        std::fs::remove_file(&source_path).ok();
-        std::fs::remove_file(&rmeta_path).ok();
-
-        assert!(
-            status.success(),
-            "generated source must compile with rustc, source:\n{source}"
-        );
-    }
-}
+mod tests;

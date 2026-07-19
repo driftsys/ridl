@@ -1,0 +1,51 @@
+/* Generated from RIDL package {{ package }} (IR {{ ir_version }}).
+ *
+ * Extern-C ABI face for the typl language layer (typl reference Appendix D,
+ * ADR-0007 decision 13). This file is generated; do not edit.
+ *
+ * String-backed constants and types are omitted here rather than mapped to a
+ * value type: C has no owning string value. The generated Rust exposes them as
+ * `&str` constants (the documented asymmetry).
+ *
+ * Identifiers carrying another package's prefix (for example
+ * `ridl_std_timestamp`) are declared in that package's own generated header;
+ * include it alongside this one.
+ */
+#ifndef {{ guard }}
+#define {{ guard }}
+
+#include <stdbool.h>
+#include <stdint.h>
+{% if typedefs %}
+{% for t in typedefs -%}
+typedef {{ t.c_type }} {{ t.c_ident }};
+{% endfor -%}
+{% endif -%}
+{% for e in enums %}
+enum {{ e.c_ident }} {
+{%- for v in e.values %}
+    {{ v.name }} = {{ v.value }}{{ "," if not loop.last }}
+{%- endfor %}
+};
+{% endfor -%}
+{% for s in enumsets %}
+typedef int64_t {{ s.c_ident }};
+{%- for b in s.bits %}
+#define {{ b.name }} (1LL << {{ b.shift }})
+{%- endfor %}
+{% endfor -%}
+{% for s in structs %}
+typedef struct {
+{%- for f in s.fields %}
+    {{ f.c_type }} {{ f.name }};
+{%- endfor %}
+} {{ s.c_ident }};
+{% endfor -%}
+{% if not_representable %}
+/* not representable in C ABI:
+{%- for n in not_representable %}
+ *   {{ n }}
+{%- endfor %}
+ */
+{% endif %}
+#endif /* {{ guard }} */

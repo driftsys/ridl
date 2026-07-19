@@ -1,0 +1,40 @@
+---
+source: backends/rust/src/tests.rs
+expression: rust_for(decls)
+---
+/// Vehicle speed over ground
+#[repr(transparent)]
+pub struct Speed(pub f64);
+impl Default for Speed {
+    fn default() -> Self {
+        Speed(0.0)
+    }
+}
+#[repr(transparent)]
+pub struct Counter(pub i64);
+impl Default for Counter {
+    fn default() -> Self {
+        Counter(0)
+    }
+}
+#[repr(transparent)]
+pub struct Enabled(pub bool);
+impl Default for Enabled {
+    fn default() -> Self {
+        Enabled(false)
+    }
+}
+#[repr(transparent)]
+pub struct Label(pub String);
+impl Default for Label {
+    fn default() -> Self {
+        Label(String::new())
+    }
+}
+#[repr(transparent)]
+pub struct Blob(pub Vec<u8>);
+impl Default for Blob {
+    fn default() -> Self {
+        Blob(Vec::new())
+    }
+}
