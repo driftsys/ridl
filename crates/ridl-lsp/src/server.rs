@@ -1,0 +1,616 @@
+//! The synchronous server loop and its state (docs/ROADMAP.md epic E1.15a,
+//! ADR-0004 §6).
+//!
+//! [`run`] follows the rust-analyzer `lsp-server` pattern: an initialize
+//! handshake, then a plain loop that receives one message at a time and
+//! dispatches it — no async runtime. Because the loop is strictly
+//! sequential, a `$/cancelRequest` is dequeued only after older requests
+//! were already answered; the cancelled-set check before each dispatch is
+//! the hook the later, longer-running handlers (E1.15b–d) extend, and
+//! salsa's own cancellation applies once queries run off-thread.
+//!
+//! The state model is the incremental overlay design described in the crate
+//! docs: one workspace load at initialize, then `set_text` on the existing
+//! salsa [`InputFile`]s per edit, with every recompute going through the
+//! memoized `parse_file` / `resolve_package` / `check_package` queries.
+//!
+//! Two scope limits of this task, both by design:
+//!
+//! - The loader's own findings (manifest diagnostics and the
+//!   package↔directory law, e.g. TYPL-002) are computed once at load time —
+//!   the loader does not re-run per edit. They are published for files whose
+//!   buffer still matches the loaded text and dropped once a file is edited.
+//! - A load diagnostic whose file cannot be recovered from the load-time
+//!   [`SourceMap`] (which interns by path but exposes no reverse lookup) is
+//!   not published; `ridl check` still renders it.
+
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::path::{Path, PathBuf};
+
+use lsp_server::{Connection, ErrorCode, Message, Notification, Request, RequestId, Response};
+use lsp_types as lt;
+use lsp_types::notification::Notification as _;
+use lsp_types::request::Request as _;
+use ridl_core::db::{InputFile, RidlDatabase, parse_file};
+use ridl_core::diag::{
+    DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
+};
+use ridl_core::package::{Package, PackageOrigin, Workspace};
+use ridl_core::{LoadedWorkspace, load_workspace, std_package};
+use ridl_sem::{check_package, resolve_package};
+use ridl_syntax::ast::{AstNode as _, SourceFile};
+use salsa::Setter as _;
+
+use crate::convert::{self, LineIndex};
+
+type Error = Box<dyn std::error::Error + Send + Sync>;
+
+/// Runs the server over `connection` until the client shuts it down: the
+/// initialize handshake (including the `initialized` notification), one
+/// workspace load, the initial diagnostics publish, then the message loop.
+pub fn run(connection: Connection) -> Result<(), Error> {
+    let capabilities = serde_json::to_value(server_capabilities())?;
+    let params: lt::InitializeParams =
+        serde_json::from_value(connection.initialize(capabilities)?)?;
+    let mut state = ServerState::new(workspace_root(&params));
+    state.publish_all(&connection)?;
+    main_loop(connection, state)
+}
+
+/// The capability set this task lands: incremental text sync with open/close
+/// notifications, and quick-fix code actions. The later E1.15 tasks add
+/// hover, goto-definition, and find-references (b), completion and rename
+/// (c), and inlay hints (d) to this same struct.
+fn server_capabilities() -> lt::ServerCapabilities {
+    lt::ServerCapabilities {
+        text_document_sync: Some(lt::TextDocumentSyncCapability::Options(
+            lt::TextDocumentSyncOptions {
+                open_close: Some(true),
+                change: Some(lt::TextDocumentSyncKind::INCREMENTAL),
+                ..Default::default()
+            },
+        )),
+        code_action_provider: Some(lt::CodeActionProviderCapability::Options(
+            lt::CodeActionOptions {
+                code_action_kinds: Some(vec![lt::CodeActionKind::QUICKFIX]),
+                ..Default::default()
+            },
+        )),
+        ..Default::default()
+    }
+}
+
+/// The workspace root directory: the first workspace folder, falling back to
+/// the deprecated `rootUri` for clients that send only that.
+fn workspace_root(params: &lt::InitializeParams) -> Option<PathBuf> {
+    if let Some(folder) = params.workspace_folders.as_ref().and_then(|f| f.first()) {
+        return convert::uri_to_path(&folder.uri).map(PathBuf::from);
+    }
+    #[allow(deprecated)]
+    params
+        .root_uri
+        .as_ref()
+        .and_then(convert::uri_to_path)
+        .map(PathBuf::from)
+}
+
+/// Receives and dispatches messages until the client shuts the server down
+/// or the connection closes.
+fn main_loop(connection: Connection, mut state: ServerState) -> Result<(), Error> {
+    for message in &connection.receiver {
+        match message {
+            Message::Request(request) => {
+                if connection.handle_shutdown(&request)? {
+                    return Ok(());
+                }
+                let response = if state.cancelled.remove(&request.id) {
+                    Response::new_err(
+                        request.id,
+                        ErrorCode::RequestCanceled as i32,
+                        "the request was cancelled".to_string(),
+                    )
+                } else {
+                    state.dispatch_request(request)
+                };
+                connection.sender.send(response.into())?;
+            }
+            Message::Notification(notification) => {
+                state.dispatch_notification(notification, &connection)?;
+            }
+            // The server sends no requests of its own yet, so no responses
+            // arrive.
+            Message::Response(_) => {}
+        }
+    }
+    Ok(())
+}
+
+/// One quick fix from the latest analysis: the range of the diagnostic it
+/// fixes (for the code-action range filter) plus the ready-made action.
+struct QuickFix {
+    range: lt::Range,
+    action: lt::CodeAction,
+}
+
+/// A batch conversion result: LSP diagnostics and quick fixes, grouped by
+/// the primary span's file path.
+#[derive(Default)]
+struct Batch {
+    diagnostics: BTreeMap<String, Vec<lt::Diagnostic>>,
+    fixes: HashMap<String, Vec<QuickFix>>,
+}
+
+/// The server's whole state: the salsa database with the one loaded
+/// workspace, the overlay bookkeeping, and the latest publish results.
+struct ServerState {
+    db: RidlDatabase,
+    /// The embedded `ridl.std` package, threaded into every resolve/check.
+    std: Package,
+    /// The one `Workspace` input, loaded at initialize; empty when the
+    /// client opened no folder or the folder has no `ridl.toml`.
+    workspace: Workspace,
+    /// Every loaded workspace file, keyed by its load-time path string —
+    /// the inputs `didOpen`/`didChange` overlay via `set_text`.
+    files: HashMap<String, InputFile>,
+    /// Open files outside the loaded workspace: a fresh overlay input
+    /// wrapped in a synthetic single-file package.
+    overlays: HashMap<String, (InputFile, Package)>,
+    /// The load-time loader findings per path, converted once; dropped per
+    /// file when its buffer diverges from the loaded text (see module docs).
+    loader_diagnostics: BTreeMap<String, Vec<lt::Diagnostic>>,
+    /// Paths whose buffer text diverged from the loaded text.
+    edited: HashSet<String>,
+    /// Paths the last publish sent a non-empty list for — the set that gets
+    /// an explicit empty publish once a file turns clean.
+    published: HashSet<String>,
+    /// Quick fixes per path from the latest analysis.
+    fixes: HashMap<String, Vec<QuickFix>>,
+    /// Requests cancelled by `$/cancelRequest` and not yet dispatched.
+    cancelled: HashSet<RequestId>,
+}
+
+impl ServerState {
+    /// Loads the workspace at `root` once — the only cold, from-disk load in
+    /// the server's lifetime. Every later recompute reuses these inputs.
+    fn new(root: Option<PathBuf>) -> ServerState {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let loaded = root
+            .as_deref()
+            .and_then(|root| load_workspace(&mut db, root).ok());
+        let (workspace, load_diagnostics, mut sources) = match loaded {
+            Some(LoadedWorkspace {
+                workspace,
+                diagnostics,
+                sources,
+            }) => (workspace, diagnostics, sources),
+            None => (
+                Workspace::new(&db, Vec::new(), BTreeMap::new()),
+                Vec::new(),
+                SourceMap::new(),
+            ),
+        };
+
+        let mut files = HashMap::new();
+        for package in workspace.packages(&db) {
+            for file in package.files(&db) {
+                files.insert(file.path(&db).clone(), *file);
+            }
+        }
+        let loader_diagnostics = convert_loader_diagnostics(
+            &db,
+            &files,
+            root.as_deref(),
+            load_diagnostics,
+            &mut sources,
+        );
+
+        ServerState {
+            db,
+            std,
+            workspace,
+            files,
+            overlays: HashMap::new(),
+            loader_diagnostics,
+            edited: HashSet::new(),
+            published: HashSet::new(),
+            fixes: HashMap::new(),
+            cancelled: HashSet::new(),
+        }
+    }
+
+    /// Handles one request; shutdown and cancellation were already handled
+    /// by the loop.
+    fn dispatch_request(&mut self, request: Request) -> Response {
+        match request.method.as_str() {
+            lt::request::CodeActionRequest::METHOD => {
+                match serde_json::from_value::<lt::CodeActionParams>(request.params) {
+                    Ok(params) => Response::new_ok(request.id, self.code_actions(&params)),
+                    Err(err) => Response::new_err(
+                        request.id,
+                        ErrorCode::InvalidParams as i32,
+                        err.to_string(),
+                    ),
+                }
+            }
+            method => Response::new_err(
+                request.id,
+                ErrorCode::MethodNotFound as i32,
+                format!("unsupported method `{method}`"),
+            ),
+        }
+    }
+
+    /// Handles one notification. Document mutations re-analyze and republish;
+    /// everything the server does not track is ignored.
+    fn dispatch_notification(
+        &mut self,
+        notification: Notification,
+        connection: &Connection,
+    ) -> Result<(), Error> {
+        match notification.method.as_str() {
+            lt::notification::DidOpenTextDocument::METHOD => {
+                let params: lt::DidOpenTextDocumentParams =
+                    serde_json::from_value(notification.params)?;
+                let Some(path) = convert::uri_to_path(&params.text_document.uri) else {
+                    return Ok(());
+                };
+                self.open(path, params.text_document.text);
+                self.publish_all(connection)
+            }
+            lt::notification::DidChangeTextDocument::METHOD => {
+                let params: lt::DidChangeTextDocumentParams =
+                    serde_json::from_value(notification.params)?;
+                let Some(path) = convert::uri_to_path(&params.text_document.uri) else {
+                    return Ok(());
+                };
+                self.change(&path, &params.content_changes);
+                self.publish_all(connection)
+            }
+            lt::notification::DidCloseTextDocument::METHOD => {
+                let params: lt::DidCloseTextDocumentParams =
+                    serde_json::from_value(notification.params)?;
+                let Some(path) = convert::uri_to_path(&params.text_document.uri) else {
+                    return Ok(());
+                };
+                self.close(&path);
+                self.publish_all(connection)
+            }
+            lt::notification::Cancel::METHOD => {
+                let params: lt::CancelParams = serde_json::from_value(notification.params)?;
+                self.cancelled.insert(request_id(params.id));
+                Ok(())
+            }
+            _ => Ok(()),
+        }
+    }
+
+    /// `didOpen`: overlay the editor buffer over the loaded input, or create
+    /// a standalone overlay for a file outside the workspace.
+    fn open(&mut self, path: String, text: String) {
+        if let Some(input) = self.files.get(&path).copied() {
+            self.set_text(path, input, text);
+        } else if let Some((input, _)) = self.overlays.get(&path).copied() {
+            self.set_text(path, input, text);
+        } else {
+            let input = InputFile::new(&self.db, path.clone(), text);
+            let package = Package::new(
+                &self.db,
+                overlay_package_name(&self.db, input, &path),
+                vec![input],
+                PackageOrigin::WorkspaceMember,
+                BTreeMap::new(),
+            );
+            self.overlays.insert(path, (input, package));
+        }
+    }
+
+    /// `didChange`: applies the incremental content changes in order — each
+    /// range is relative to the text after the previous change — then drives
+    /// `set_text` once.
+    fn change(&mut self, path: &str, changes: &[lt::TextDocumentContentChangeEvent]) {
+        let input = match self.files.get(path).copied() {
+            Some(input) => input,
+            None => match self.overlays.get(path) {
+                Some((input, _)) => *input,
+                None => return,
+            },
+        };
+        let mut text = input.text(&self.db).clone();
+        for change in changes {
+            match change.range {
+                Some(range) => {
+                    let lines = convert::line_index(&text);
+                    let range = lines.text_range(range);
+                    text.replace_range(
+                        usize::from(range.start())..usize::from(range.end()),
+                        &change.text,
+                    );
+                }
+                None => text.clone_from(&change.text),
+            }
+        }
+        self.set_text(path.to_string(), input, text);
+    }
+
+    /// `didClose`: a standalone overlay is dropped (its diagnostics clear on
+    /// the next publish); a workspace file reverts to its on-disk text.
+    fn close(&mut self, path: &str) {
+        if self.overlays.remove(path).is_some() {
+            return;
+        }
+        if let Some(input) = self.files.get(path).copied()
+            && let Ok(text) = std::fs::read_to_string(path)
+        {
+            self.set_text(path.to_string(), input, text);
+        }
+    }
+
+    /// Drives `set_text` on an existing input — the edit that starts a new
+    /// salsa revision. A text that did not change is a no-op, keeping every
+    /// memo warm.
+    fn set_text(&mut self, path: String, input: InputFile, text: String) {
+        if input.text(&self.db) != &text {
+            input.set_text(&mut self.db).to(text);
+            // The loader's law findings for this file described the loaded
+            // text; they are stale from here on.
+            self.edited.insert(path);
+        }
+    }
+
+    /// Runs parse + resolve + check over every package (workspace members
+    /// and overlays) through the memoized queries and converts the result.
+    ///
+    /// The per-package passes stamp their spans with a [`FileId`] indexing
+    /// `pkg.files(db)` in order; like the `ridlc` driver, this interns each
+    /// package's files into a fresh [`SourceMap`] (collecting the issued ids
+    /// in the same file order) and rewrites the spans onto those ids with
+    /// [`remap_diagnostics`] before conversion.
+    fn analyze(&self) -> Batch {
+        let db = &self.db;
+        let mut sources = SourceMap::new();
+        let mut table: HashMap<FileId, (String, String)> = HashMap::new();
+        let mut all: Vec<Diagnostic> = Vec::new();
+
+        let overlay_packages: Vec<Package> = self
+            .overlays
+            .values()
+            .map(|(_, package)| *package)
+            .collect();
+        let packages = self.workspace.packages(db).iter().copied();
+        for package in packages.chain(overlay_packages) {
+            let files = package.files(db).clone();
+            let mut render_ids = Vec::with_capacity(files.len());
+            for file in &files {
+                let path = file.path(db);
+                let text = file.text(db);
+                let id = sources.file_id(path, text);
+                table
+                    .entry(id)
+                    .or_insert_with(|| (path.clone(), text.clone()));
+                render_ids.push(id);
+            }
+
+            for (file, id) in files.iter().zip(&render_ids) {
+                for error in parse_file(db, *file).errors() {
+                    all.push(Diagnostic {
+                        code: DiagCode(error.code),
+                        severity: Severity::Error,
+                        message: house_style_message(&error.message),
+                        primary: Span {
+                            file: *id,
+                            range: error.range,
+                        },
+                        labels: Vec::new(),
+                        fixits: Vec::new(),
+                    });
+                }
+            }
+
+            let resolution = resolve_package(db, self.workspace, package, self.std);
+            all.extend(remap_diagnostics(resolution.diagnostics, &render_ids));
+            let checked = check_package(db, self.workspace, package, self.std);
+            all.extend(remap_diagnostics(checked.diagnostics.clone(), &render_ids));
+        }
+        batch(all, &table)
+    }
+
+    /// Recomputes the diagnostics for every package, merges the still-valid
+    /// loader findings, and publishes: one notification per path with
+    /// findings, plus an explicit empty list for every path that had
+    /// findings before and is clean now.
+    fn publish_all(&mut self, connection: &Connection) -> Result<(), Error> {
+        let Batch {
+            mut diagnostics,
+            fixes,
+        } = self.analyze();
+        for (path, loader) in &self.loader_diagnostics {
+            if self.edited.contains(path) {
+                continue;
+            }
+            let entry = diagnostics.entry(path.clone()).or_default();
+            entry.splice(0..0, loader.iter().cloned());
+        }
+
+        let current: HashSet<String> = diagnostics.keys().cloned().collect();
+        for stale in self.published.difference(&current) {
+            publish(connection, stale, Vec::new())?;
+        }
+        for (path, list) in &diagnostics {
+            publish(connection, path, list.clone())?;
+        }
+        self.published = current;
+        self.fixes = fixes;
+        Ok(())
+    }
+
+    /// The quick fixes whose diagnostic touches the requested range.
+    fn code_actions(&self, params: &lt::CodeActionParams) -> Vec<lt::CodeActionOrCommand> {
+        let Some(path) = convert::uri_to_path(&params.text_document.uri) else {
+            return Vec::new();
+        };
+        let Some(fixes) = self.fixes.get(&path) else {
+            return Vec::new();
+        };
+        fixes
+            .iter()
+            .filter(|fix| ranges_touch(fix.range, params.range))
+            .map(|fix| lt::CodeActionOrCommand::CodeAction(fix.action.clone()))
+            .collect()
+    }
+}
+
+/// Sends one `textDocument/publishDiagnostics` notification for `path`.
+fn publish(
+    connection: &Connection,
+    path: &str,
+    diagnostics: Vec<lt::Diagnostic>,
+) -> Result<(), Error> {
+    let Some(uri) = convert::path_to_uri(path) else {
+        return Ok(());
+    };
+    let params = lt::PublishDiagnosticsParams {
+        uri,
+        diagnostics,
+        version: None,
+    };
+    let notification = Notification::new(
+        lt::notification::PublishDiagnostics::METHOD.to_string(),
+        params,
+    );
+    connection.sender.send(notification.into())?;
+    Ok(())
+}
+
+/// Converts coded diagnostics whose spans point into `table` (file id →
+/// path and text) into LSP diagnostics and quick fixes grouped by the
+/// primary span's path. A diagnostic whose primary file is not in `table`
+/// (a detached span) is dropped; labels and fix-its follow the same rule
+/// individually.
+fn batch(diagnostics: Vec<Diagnostic>, table: &HashMap<FileId, (String, String)>) -> Batch {
+    // One URI and line table per file the diagnostics actually reference.
+    let mut resolved: HashMap<FileId, (lt::Uri, LineIndex)> = HashMap::new();
+    let referenced = diagnostics.iter().flat_map(|diagnostic| {
+        std::iter::once(diagnostic.primary.file)
+            .chain(diagnostic.labels.iter().map(|label| label.span.file))
+            .chain(diagnostic.fixits.iter().map(|fixit| fixit.span.file))
+    });
+    for file in referenced {
+        if resolved.contains_key(&file) {
+            continue;
+        }
+        let Some((path, text)) = table.get(&file) else {
+            continue;
+        };
+        let Some(uri) = convert::path_to_uri(path) else {
+            continue;
+        };
+        resolved.insert(file, (uri, convert::line_index(text)));
+    }
+    let resolve = |file: FileId| resolved.get(&file).map(|(uri, lines)| (uri, lines));
+
+    let mut out = Batch::default();
+    for diagnostic in &diagnostics {
+        let Some(lsp) = convert::diagnostic(diagnostic, resolve) else {
+            continue;
+        };
+        let path = table[&diagnostic.primary.file].0.clone();
+        if !diagnostic.fixits.is_empty() {
+            let range = lsp.range;
+            let actions = convert::quick_fixes(&lsp, &diagnostic.fixits, resolve);
+            out.fixes
+                .entry(path.clone())
+                .or_default()
+                .extend(actions.into_iter().map(|action| QuickFix { range, action }));
+        }
+        out.diagnostics.entry(path).or_default().push(lsp);
+    }
+    out
+}
+
+/// Recovers path and text for the load-time [`FileId`]s and converts the
+/// loader's findings (manifest diagnostics, the package↔directory law) once,
+/// grouped by path.
+///
+/// [`SourceMap`] interns by path and exposes no reverse lookup, so this
+/// probes the paths the loader is known to have interned: every package
+/// file, plus every `ridl.toml` at or above a package file's directory or
+/// the workspace root. Probing a known path returns the id the loader
+/// stamped; probing a path the loader never saw mints a fresh id no load
+/// diagnostic can carry, which is harmless. Manifest texts are read back
+/// from disk (nothing edited them this early); a file that cannot be
+/// recovered drops its diagnostics from publication — `ridl check` still
+/// renders them.
+fn convert_loader_diagnostics(
+    db: &RidlDatabase,
+    files: &HashMap<String, InputFile>,
+    root: Option<&Path>,
+    diagnostics: Vec<Diagnostic>,
+    sources: &mut SourceMap,
+) -> BTreeMap<String, Vec<lt::Diagnostic>> {
+    if diagnostics.is_empty() {
+        return BTreeMap::new();
+    }
+    let mut candidates: BTreeSet<String> = files.keys().cloned().collect();
+    let manifest_dirs = files
+        .keys()
+        .flat_map(|path| Path::new(path).ancestors().skip(1))
+        .chain(root.into_iter().flat_map(Path::ancestors));
+    for dir in manifest_dirs {
+        candidates.insert(dir.join("ridl.toml").to_string_lossy().into_owned());
+    }
+
+    let mut table: HashMap<FileId, (String, String)> = HashMap::new();
+    for path in candidates {
+        let id = sources.file_id(&path, "");
+        let text = match files.get(&path) {
+            Some(input) => input.text(db).clone(),
+            None => match std::fs::read_to_string(&path) {
+                Ok(text) => text,
+                Err(_) => continue,
+            },
+        };
+        table.entry(id).or_insert((path, text));
+    }
+    // The loader emits no fix-its, so the batch's fixes stay empty.
+    batch(diagnostics, &table).diagnostics
+}
+
+/// The synthetic package name of a standalone overlay file: its declared
+/// `package` name, falling back to the file stem — the loader's single-file
+/// rule (E1.3).
+fn overlay_package_name(db: &RidlDatabase, input: InputFile, path: &str) -> String {
+    let parse = parse_file(db, input);
+    let source = SourceFile::cast(parse.syntax()).expect("parser roots every tree in a SourceFile");
+    source
+        .package_decl()
+        .and_then(|decl| decl.qualified_name())
+        .map(|name| {
+            name.syntax()
+                .descendants_with_tokens()
+                .filter_map(|element| element.into_token())
+                .filter(|token| !token.kind().is_trivia())
+                .map(|token| token.text().to_string())
+                .collect::<String>()
+        })
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| {
+            Path::new(path)
+                .file_stem()
+                .map(|stem| stem.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "package".to_string())
+        })
+}
+
+/// The `lsp_server` request id for an LSP cancel parameter.
+fn request_id(id: lt::NumberOrString) -> RequestId {
+    match id {
+        lt::NumberOrString::Number(number) => number.into(),
+        lt::NumberOrString::String(string) => string.into(),
+    }
+}
+
+/// Whether two LSP ranges share at least one position.
+fn ranges_touch(a: lt::Range, b: lt::Range) -> bool {
+    a.start <= b.end && b.start <= a.end
+}
