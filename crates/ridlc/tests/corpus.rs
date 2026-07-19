@@ -2,8 +2,8 @@
 //!
 //! Each directory under `corpus/` is a real package (or workspace) with its own
 //! `ridl.toml`. This runner compiles every entry end to end — load, parse,
-//! resolve, check and lower to IR v1, generate Rust — and snapshots three
-//! artifacts per entry: the rendered diagnostics, the IR v1 JSON, and the
+//! resolve, check and lower to IR v2, generate Rust — and snapshots three
+//! artifacts per entry: the rendered diagnostics, the IR v2 JSON, and the
 //! generated Rust. `insta::glob!` drives one iteration per entry.
 //!
 //! The diagnostics are snapshotted for every entry. The IR JSON and generated
@@ -50,7 +50,7 @@ struct Compiled {
     /// The rendered diagnostics, or a placeholder when the entry compiles
     /// clean.
     diagnostics: String,
-    /// The IR v1 JSON of every package in the entry (one section per package),
+    /// The IR v2 JSON of every package in the entry (one section per package),
     /// or a one-line note when the entry has error diagnostics.
     ir_json: String,
     /// The generated Rust of every package in the entry (one section per
@@ -78,7 +78,7 @@ fn compile_entry(entry: &Path) -> Compiled {
     let packages: Vec<Package> = workspace.packages(&db).clone();
     // The checked IR of each package, kept so code generation runs only after
     // the whole entry is known to be error-free.
-    let mut checked_irs: Vec<(String, ridl_ir::v1::Package)> = Vec::new();
+    let mut checked_irs: Vec<(String, ridl_ir::v2::Package)> = Vec::new();
 
     for pkg in &packages {
         let name = pkg.name(&db).clone();
@@ -138,7 +138,7 @@ fn compile_entry(entry: &Path) -> Compiled {
             .map(|(name, ir)| {
                 format!(
                     "// ===== package {name} =====\n{}",
-                    ridl_ir::v1::to_json_pretty(ir)
+                    ridl_ir::v2::to_json_pretty(ir)
                 )
             })
             .collect::<Vec<_>>()

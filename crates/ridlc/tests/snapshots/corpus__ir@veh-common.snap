@@ -14,6 +14,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "Vehicle speed over ground",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -48,6 +49,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "Coolant / ambient temperature",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -82,6 +84,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "Engine crankshaft speed",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -116,6 +119,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "Normalised ratio",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -150,6 +154,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -184,6 +189,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "TypeDef": {
           "backing": {
@@ -218,6 +224,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "Speed",
@@ -233,6 +240,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "Speed",
@@ -248,6 +256,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "integer",
@@ -263,6 +272,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "ConstDef": {
           "type_ref": "RPM",
@@ -278,6 +288,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "EnumDef": {
           "values": [
@@ -313,6 +324,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "EnumDef": {
           "values": [
@@ -348,6 +360,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "EnumSetDef": {
           "backing_enum": "Warning",
@@ -384,6 +397,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -443,6 +457,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -566,6 +581,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -723,6 +739,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "UnionDef": {
           "arms": [
@@ -751,6 +768,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -810,6 +828,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -869,6 +888,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
       "doc": "",
       "labels": [],
       "deprecated": null,
+      "ordinal": 0,
       "kind": {
         "StructDef": {
           "members": [
@@ -939,5 +959,7 @@ input_file: crates/ridlc/tests/corpus/veh-common/ridl.toml
         }
       }
     }
-  ]
+  ],
+  "interfaces": [],
+  "services": []
 }

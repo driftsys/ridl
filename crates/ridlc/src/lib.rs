@@ -3,7 +3,7 @@
 //!
 //! [`compile`] runs the pipeline end to end over a single source file: it wraps
 //! the source in a single-file synthetic package, resolves it
-//! ([`resolve_package`]), checks and lowers it to IR v1 ([`check_package`]),
+//! ([`resolve_package`]), checks and lowers it to IR v2 ([`check_package`]),
 //! and generates Rust source. The function is total: it never panics. Every
 //! parser, resolver, and checker diagnostic is a coded [`Diagnostic`]
 //! collected into [`CompileOutput::diagnostics`]; if the Rust backend fails,
@@ -39,12 +39,12 @@ use ridl_sem::{CheckedPackage, check_package, resolve_package};
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
 
-/// The result of [`compile`]: the generated Rust source, the lowered IR v1
+/// The result of [`compile`]: the generated Rust source, the lowered IR v2
 /// package, every coded diagnostic, and the source map the diagnostics point
 /// into (for rendering).
 pub struct CompileOutput {
     pub rust_source: String,
-    pub package: ridl_ir::v1::Package,
+    pub package: ridl_ir::v2::Package,
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
 }
@@ -225,7 +225,7 @@ pub enum Emit {
     Rust,
     /// The extern-C header, written to `<base>.h`.
     CHeader,
-    /// The lowered IR v1 as exact-decimal JSON, written to `<base>.ir.json`.
+    /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`.
     IrJson,
 }
 
@@ -470,7 +470,7 @@ fn materialize_and_lock(
 fn write_emits(
     out_dir: &Path,
     base: &str,
-    ir: &ridl_ir::v1::Package,
+    ir: &ridl_ir::v2::Package,
     emits: &[Emit],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
@@ -509,7 +509,7 @@ fn write_emits(
             Emit::IrJson => {
                 std::fs::write(
                     out_dir.join(format!("{base}.ir.json")),
-                    ridl_ir::v1::to_json_pretty(ir),
+                    ridl_ir::v2::to_json_pretty(ir),
                 )?;
             }
         }

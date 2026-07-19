@@ -9,7 +9,7 @@
 //! mantissa/exponent decomposition of the rational, never by an `as f32`
 //! round-trip.
 //!
-//! The width enums here are sem-local. Each converts into its `ridl-ir` v1
+//! The width enums here are sem-local. Each converts into its `ridl-ir` v2
 //! counterpart through a `From` implementation, so the checker (task 13) lowers
 //! a derived width into the IR with a single `.into()`.
 
@@ -266,26 +266,26 @@ pub fn validate_step(r: &FloatRange) -> Option<DiagKind> {
     None
 }
 
-impl From<IntWidth> for ridl_ir::v1::IntWidth {
+impl From<IntWidth> for ridl_ir::v2::IntWidth {
     fn from(width: IntWidth) -> Self {
         match width {
-            IntWidth::U8 => ridl_ir::v1::IntWidth::U8,
-            IntWidth::I8 => ridl_ir::v1::IntWidth::I8,
-            IntWidth::U16 => ridl_ir::v1::IntWidth::U16,
-            IntWidth::I16 => ridl_ir::v1::IntWidth::I16,
-            IntWidth::U32 => ridl_ir::v1::IntWidth::U32,
-            IntWidth::I32 => ridl_ir::v1::IntWidth::I32,
-            IntWidth::U64 => ridl_ir::v1::IntWidth::U64,
-            IntWidth::I64 => ridl_ir::v1::IntWidth::I64,
+            IntWidth::U8 => ridl_ir::v2::IntWidth::U8,
+            IntWidth::I8 => ridl_ir::v2::IntWidth::I8,
+            IntWidth::U16 => ridl_ir::v2::IntWidth::U16,
+            IntWidth::I16 => ridl_ir::v2::IntWidth::I16,
+            IntWidth::U32 => ridl_ir::v2::IntWidth::U32,
+            IntWidth::I32 => ridl_ir::v2::IntWidth::I32,
+            IntWidth::U64 => ridl_ir::v2::IntWidth::U64,
+            IntWidth::I64 => ridl_ir::v2::IntWidth::I64,
         }
     }
 }
 
-impl From<FloatWidth> for ridl_ir::v1::FloatWidth {
+impl From<FloatWidth> for ridl_ir::v2::FloatWidth {
     fn from(width: FloatWidth) -> Self {
         match width {
-            FloatWidth::F32 => ridl_ir::v1::FloatWidth::F32,
-            FloatWidth::F64 => ridl_ir::v1::FloatWidth::F64,
+            FloatWidth::F32 => ridl_ir::v2::FloatWidth::F32,
+            FloatWidth::F64 => ridl_ir::v2::FloatWidth::F64,
         }
     }
 }
@@ -700,34 +700,34 @@ mod tests {
         }
     }
 
-    // --- sem width enums lower into the IR v1 enums. ---
+    // --- sem width enums lower into the IR v2 enums. ---
 
     #[test]
     fn int_width_lowers_to_ir() {
         let cases = [
-            (IntWidth::U8, ridl_ir::v1::IntWidth::U8),
-            (IntWidth::I8, ridl_ir::v1::IntWidth::I8),
-            (IntWidth::U16, ridl_ir::v1::IntWidth::U16),
-            (IntWidth::I16, ridl_ir::v1::IntWidth::I16),
-            (IntWidth::U32, ridl_ir::v1::IntWidth::U32),
-            (IntWidth::I32, ridl_ir::v1::IntWidth::I32),
-            (IntWidth::U64, ridl_ir::v1::IntWidth::U64),
-            (IntWidth::I64, ridl_ir::v1::IntWidth::I64),
+            (IntWidth::U8, ridl_ir::v2::IntWidth::U8),
+            (IntWidth::I8, ridl_ir::v2::IntWidth::I8),
+            (IntWidth::U16, ridl_ir::v2::IntWidth::U16),
+            (IntWidth::I16, ridl_ir::v2::IntWidth::I16),
+            (IntWidth::U32, ridl_ir::v2::IntWidth::U32),
+            (IntWidth::I32, ridl_ir::v2::IntWidth::I32),
+            (IntWidth::U64, ridl_ir::v2::IntWidth::U64),
+            (IntWidth::I64, ridl_ir::v2::IntWidth::I64),
         ];
         for (sem, ir) in cases {
-            assert_eq!(ridl_ir::v1::IntWidth::from(sem), ir);
+            assert_eq!(ridl_ir::v2::IntWidth::from(sem), ir);
         }
     }
 
     #[test]
     fn float_width_lowers_to_ir() {
         assert_eq!(
-            ridl_ir::v1::FloatWidth::from(FloatWidth::F32),
-            ridl_ir::v1::FloatWidth::F32
+            ridl_ir::v2::FloatWidth::from(FloatWidth::F32),
+            ridl_ir::v2::FloatWidth::F32
         );
         assert_eq!(
-            ridl_ir::v1::FloatWidth::from(FloatWidth::F64),
-            ridl_ir::v1::FloatWidth::F64
+            ridl_ir::v2::FloatWidth::from(FloatWidth::F64),
+            ridl_ir::v2::FloatWidth::F64
         );
     }
 }

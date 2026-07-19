@@ -29,7 +29,7 @@
 
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace};
-use ridl_ir::v1;
+use ridl_ir::v2;
 use ridl_sem::check_package;
 use ridl_sem::ucum::UcumExpr;
 use ridl_syntax::ast::{
@@ -112,7 +112,7 @@ fn name_text(name: &Name) -> Option<String> {
 /// IR by field name through the shared [`field_ordinal`] walk, so tombstones
 /// are counted exactly as codegen counts them. Reserved slots carry no field
 /// name and are skipped.
-fn struct_hints(ir: &v1::Package, struct_def: &StructDef, out: &mut Vec<InlayHint>) {
+fn struct_hints(ir: &v2::Package, struct_def: &StructDef, out: &mut Vec<InlayHint>) {
     let Some(struct_name) = struct_def.name().and_then(|name| name_text(&name)) else {
         return;
     };
@@ -134,7 +134,7 @@ fn struct_hints(ir: &v1::Package, struct_def: &StructDef, out: &mut Vec<InlayHin
 
 /// Ordinal hints for a union's arms, read from the union's IR by arm name so
 /// reserved tombstone slots are counted (typl §7.4).
-fn union_hints(ir: &v1::Package, union_def: &UnionDef, out: &mut Vec<InlayHint>) {
+fn union_hints(ir: &v2::Package, union_def: &UnionDef, out: &mut Vec<InlayHint>) {
     let Some(union_name) = union_def.name().and_then(|name| name_text(&name)) else {
         return;
     };
@@ -162,7 +162,7 @@ fn union_hints(ir: &v1::Package, union_def: &UnionDef, out: &mut Vec<InlayHint>)
 /// Wire-value hints for an enum's values, read from the enum's IR by name. The
 /// number is the explicit integer value — an enum member's transport identity
 /// — not a declaration position.
-fn enum_hints(ir: &v1::Package, enum_def: &EnumDef, out: &mut Vec<InlayHint>) {
+fn enum_hints(ir: &v2::Package, enum_def: &EnumDef, out: &mut Vec<InlayHint>) {
     let Some(enum_name) = enum_def.name().and_then(|name| name_text(&name)) else {
         return;
     };
@@ -190,7 +190,7 @@ fn enum_hints(ir: &v1::Package, enum_def: &EnumDef, out: &mut Vec<InlayHint>) {
 /// Wire-value hints for an enum set's bits, read from the enum set's IR by
 /// name. The derived form (`enumset X : Enum`) has no source bits, so it
 /// contributes no hints even though the IR copies the backing enum's values.
-fn enum_set_hints(ir: &v1::Package, enum_set: &EnumSetDef, out: &mut Vec<InlayHint>) {
+fn enum_set_hints(ir: &v2::Package, enum_set: &EnumSetDef, out: &mut Vec<InlayHint>) {
     let Some(set_name) = enum_set.name().and_then(|name| name_text(&name)) else {
         return;
     };
@@ -219,7 +219,7 @@ fn enum_set_hints(ir: &v1::Package, enum_set: &EnumSetDef, out: &mut Vec<InlayHi
 /// canonical UCUM unit the checker stored, anchored after the unit expression.
 /// A non-unit backing, a type that did not lower, or a unit `display_name`
 /// cannot read back contributes no hint.
-fn unit_hint(ir: &v1::Package, type_def: &TypeDef, out: &mut Vec<InlayHint>) {
+fn unit_hint(ir: &v2::Package, type_def: &TypeDef, out: &mut Vec<InlayHint>) {
     let Some(Backing::Unit(unit_expr)) = type_def.backing() else {
         return;
     };
@@ -240,42 +240,42 @@ fn unit_hint(ir: &v1::Package, type_def: &TypeDef, out: &mut Vec<InlayHint>) {
 }
 
 /// The IR `UnionDef` of a declaration named `name`, if it lowered to one.
-fn union_ir<'a>(ir: &'a v1::Package, name: &str) -> Option<&'a v1::UnionDef> {
+fn union_ir<'a>(ir: &'a v2::Package, name: &str) -> Option<&'a v2::UnionDef> {
     match &ir.decls.iter().find(|decl| decl.name == name)?.kind {
-        Some(v1::decl::Kind::UnionDef(def)) => Some(def),
+        Some(v2::decl::Kind::UnionDef(def)) => Some(def),
         _ => None,
     }
 }
 
 /// The IR `EnumDef` of a declaration named `name`, if it lowered to one.
-fn enum_ir<'a>(ir: &'a v1::Package, name: &str) -> Option<&'a v1::EnumDef> {
+fn enum_ir<'a>(ir: &'a v2::Package, name: &str) -> Option<&'a v2::EnumDef> {
     match &ir.decls.iter().find(|decl| decl.name == name)?.kind {
-        Some(v1::decl::Kind::EnumDef(def)) => Some(def),
+        Some(v2::decl::Kind::EnumDef(def)) => Some(def),
         _ => None,
     }
 }
 
 /// The IR `EnumSetDef` of a declaration named `name`, if it lowered to one.
-fn enum_set_ir<'a>(ir: &'a v1::Package, name: &str) -> Option<&'a v1::EnumSetDef> {
+fn enum_set_ir<'a>(ir: &'a v2::Package, name: &str) -> Option<&'a v2::EnumSetDef> {
     match &ir.decls.iter().find(|decl| decl.name == name)?.kind {
-        Some(v1::decl::Kind::EnumSetDef(def)) => Some(def),
+        Some(v2::decl::Kind::EnumSetDef(def)) => Some(def),
         _ => None,
     }
 }
 
 /// The IR `TypeDef` of a declaration named `name`, if it lowered to one.
-fn type_ir<'a>(ir: &'a v1::Package, name: &str) -> Option<&'a v1::TypeDef> {
+fn type_ir<'a>(ir: &'a v2::Package, name: &str) -> Option<&'a v2::TypeDef> {
     match &ir.decls.iter().find(|decl| decl.name == name)?.kind {
-        Some(v1::decl::Kind::TypeDef(def)) => Some(def),
+        Some(v2::decl::Kind::TypeDef(def)) => Some(def),
         _ => None,
     }
 }
 
 /// The canonical UCUM unit string of a type's backing, if the backing is a
 /// unit.
-fn unit_backing(type_def: &v1::TypeDef) -> Option<String> {
+fn unit_backing(type_def: &v2::TypeDef) -> Option<String> {
     match type_def.backing.as_ref()?.kind.as_ref()? {
-        v1::backing::Kind::Unit(unit) => Some(unit.clone()),
-        v1::backing::Kind::Primitive(_) => None,
+        v2::backing::Kind::Unit(unit) => Some(unit.clone()),
+        v2::backing::Kind::Primitive(_) => None,
     }
 }

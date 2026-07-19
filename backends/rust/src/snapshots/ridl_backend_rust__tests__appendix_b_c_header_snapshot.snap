@@ -2,7 +2,7 @@
 source: backends/rust/src/tests.rs
 expression: c_header
 ---
-/* Generated from RIDL package veh.common (IR ridl.ir.v1).
+/* Generated from RIDL package veh.common (IR ridl.ir.v2).
  *
  * Extern-C ABI face for the typl language layer (typl reference Appendix D,
  * ADR-0007 decision 13). This file is generated; do not edit.

@@ -1,0 +1,712 @@
+---
+source: crates/ridl-sem/src/check.rs
+expression: "v2::to_json_pretty(&checked.ir)"
+---
+{
+  "name": "veh.cluster",
+  "decls": [
+    {
+      "name": "DoorPayload",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "sensorId",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "InlineScalar": {
+                        "backing": {
+                          "kind": {
+                            "Primitive": 2
+                          }
+                        },
+                        "constraint": {
+                          "min": "0",
+                          "max": "15",
+                          "step": null,
+                          "len_min": null,
+                          "len_max": null,
+                          "pattern": null,
+                          "pattern_const": null
+                        },
+                        "declared_init": null,
+                        "init": null,
+                        "width": {
+                          "IntWidth": 1
+                        }
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "isOpen",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Primitive": 1
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "false"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": true
+        }
+      }
+    },
+    {
+      "name": "DiagFilter",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "severity",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "InlineScalar": {
+                        "backing": {
+                          "kind": {
+                            "Primitive": 2
+                          }
+                        },
+                        "constraint": {
+                          "min": "0",
+                          "max": "5",
+                          "step": null,
+                          "len_min": null,
+                          "len_max": null,
+                          "pattern": null,
+                          "pattern_const": null
+                        },
+                        "declared_init": null,
+                        "init": null,
+                        "width": {
+                          "IntWidth": 1
+                        }
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "category",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": true,
+                    "kind": {
+                      "Named": "ridl.std.Label"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": false
+        }
+      }
+    },
+    {
+      "name": "FaultEvent",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "code",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "InlineScalar": {
+                        "backing": {
+                          "kind": {
+                            "Primitive": 2
+                          }
+                        },
+                        "constraint": {
+                          "min": "0",
+                          "max": "65535",
+                          "step": null,
+                          "len_min": null,
+                          "len_max": null,
+                          "pattern": null,
+                          "pattern_const": null
+                        },
+                        "declared_init": null,
+                        "init": null,
+                        "width": {
+                          "IntWidth": 3
+                        }
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "message",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "ridl.std.Message"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": false,
+                    "value": null
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "timestamp",
+                  "ordinal": 3,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "ridl.std.Timestamp"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": false
+        }
+      }
+    },
+    {
+      "name": "DiagError",
+      "visibility": 1,
+      "is_error": true,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "EnumDef": {
+          "values": [
+            {
+              "name": "FILTER_INVALID",
+              "value": 0,
+              "doc": ""
+            },
+            {
+              "name": "STORAGE_BUSY",
+              "value": 1,
+              "doc": ""
+            },
+            {
+              "name": "ACCESS_DENIED",
+              "value": 2,
+              "doc": ""
+            }
+          ],
+          "reserved": []
+        }
+      }
+    },
+    {
+      "name": "FaultPage",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "faults",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Array": {
+                        "element": {
+                          "optional": false,
+                          "kind": {
+                            "Named": "FaultEvent"
+                          }
+                        },
+                        "min": 0,
+                        "max": 64
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": false
+        }
+      }
+    },
+    {
+      "name": "FaultPageResult",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "UnionDef": {
+          "arms": [
+            {
+              "name": "page",
+              "ordinal": 1,
+              "type_ref": "FaultPage",
+              "doc": ""
+            },
+            {
+              "name": "err",
+              "ordinal": 2,
+              "type_ref": "DiagError",
+              "doc": ""
+            }
+          ],
+          "is_result": true,
+          "reserved": []
+        }
+      }
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "VehicleStatus",
+      "visibility": 1,
+      "doc": "Main vehicle status interface.",
+      "labels": [
+        "SIL_B",
+        "CAL_2",
+        "PRIVATE"
+      ],
+      "deprecated": null,
+      "interactions": [
+        {
+          "name": "currentSpeed",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "Current vehicle speed",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 1,
+          "kind": {
+            "SignalDef": {
+              "payload": "veh.common.Speed",
+              "declared_init": null,
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": 0,
+                "min_us": null,
+                "max_us": null,
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "engineTemp",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "Engine temperature",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 2,
+          "kind": {
+            "SignalDef": {
+              "payload": "veh.common.Temperature",
+              "declared_init": null,
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": 0,
+                "min_us": null,
+                "max_us": null,
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "warnings",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "Active warnings",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 3,
+          "kind": {
+            "SignalDef": {
+              "payload": "veh.common.WarningFlags",
+              "declared_init": null,
+              "init": {
+                "derivable": true,
+                "value": ""
+              },
+              "timing": {
+                "mode": 0,
+                "min_us": null,
+                "max_us": null,
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "doorOpened",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "Raised on every door state change",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 4,
+          "kind": {
+            "EventDef": {
+              "payload": "DoorPayload",
+              "timing": {
+                "mode": 0,
+                "min_us": null,
+                "max_us": null,
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "setGear",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "Request a gear change",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 5,
+          "kind": {
+            "CommandDef": {
+              "params": [
+                {
+                  "name": "position",
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "veh.common.GearPosition"
+                    }
+                  }
+                }
+              ],
+              "contracts": [
+                {
+                  "kind": 1,
+                  "source": "position != GearPosition.PARK || currentSpeed == 0.0",
+                  "signal_refs": [],
+                  "param_refs": [],
+                  "uses_result": false,
+                  "observer_id": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 6,
+          "kind": {
+            "ReservedSlot": {
+              "ordinal": 6,
+              "name": "resetCounters",
+              "value": null
+            }
+          }
+        },
+        {
+          "name": "getAverageSpeed",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "Sliding-window average",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 7,
+          "kind": {
+            "QueryDef": {
+              "params": [
+                {
+                  "name": "window",
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "ridl.std.Duration"
+                    }
+                  }
+                }
+              ],
+              "return_type": {
+                "kind": {
+                  "Value": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "veh.common.Speed"
+                    }
+                  }
+                }
+              },
+              "contracts": [
+                {
+                  "kind": 1,
+                  "source": "window > 0ms",
+                  "signal_refs": [],
+                  "param_refs": [],
+                  "uses_result": false,
+                  "observer_id": ""
+                },
+                {
+                  "kind": 2,
+                  "source": "result >= 0.0",
+                  "signal_refs": [],
+                  "param_refs": [],
+                  "uses_result": false,
+                  "observer_id": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "streamFaults",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "Fault history as a finite stream",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 8,
+          "kind": {
+            "QueryDef": {
+              "params": [
+                {
+                  "name": "filter",
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "DiagFilter"
+                    }
+                  }
+                }
+              ],
+              "return_type": {
+                "kind": {
+                  "Value": {
+                    "optional": false,
+                    "kind": {
+                      "Stream": {
+                        "element": {
+                          "Named": "FaultEvent"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "contracts": []
+            }
+          }
+        },
+        {
+          "name": "getFaultPage",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "Paged fault snapshot",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 9,
+          "kind": {
+            "QueryDef": {
+              "params": [
+                {
+                  "name": "filter",
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "DiagFilter"
+                    }
+                  }
+                }
+              ],
+              "return_type": {
+                "kind": {
+                  "Value": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "FaultPageResult"
+                    }
+                  }
+                }
+              },
+              "contracts": []
+            }
+          }
+        },
+        {
+          "name": "softwareVersion",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 10,
+          "kind": {
+            "FinalDef": {
+              "payload": {
+                "optional": false,
+                "kind": {
+                  "Named": "ridl.std.Version"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "capabilities",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 11,
+          "kind": {
+            "FinalDef": {
+              "payload": {
+                "optional": false,
+                "kind": {
+                  "Array": {
+                    "element": {
+                      "optional": false,
+                      "kind": {
+                        "Named": "ridl.std.Label"
+                      }
+                    },
+                    "min": 0,
+                    "max": 32
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "services": []
+}

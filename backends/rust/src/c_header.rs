@@ -8,11 +8,11 @@
 
 use crate::{GenerateError, ScalarBacking, backing_scalar};
 use minijinja::{Environment, context};
-use ridl_ir::v1;
+use ridl_ir::v2;
 use serde::Serialize;
 
 const TEMPLATE: &str = include_str!("../templates/c_header.j2");
-const IR_VERSION: &str = "ridl.ir.v1";
+const IR_VERSION: &str = "ridl.ir.v2";
 
 #[derive(Serialize)]
 struct Typedef {
@@ -56,7 +56,7 @@ struct CStruct {
     fields: Vec<CField>,
 }
 
-pub(crate) fn render(package: &v1::Package) -> Result<String, GenerateError> {
+pub(crate) fn render(package: &v2::Package) -> Result<String, GenerateError> {
     let mut typedefs: Vec<Typedef> = Vec::new();
     let mut enums: Vec<CEnum> = Vec::new();
     let mut enum_sets: Vec<CEnumSet> = Vec::new();
@@ -65,7 +65,7 @@ pub(crate) fn render(package: &v1::Package) -> Result<String, GenerateError> {
 
     for decl in &package.decls {
         match &decl.kind {
-            Some(v1::decl::Kind::TypeDef(td)) => match c_scalar_type(backing_scalar(td)) {
+            Some(v2::decl::Kind::TypeDef(td)) => match c_scalar_type(backing_scalar(td)) {
                 Some(c_type) => typedefs.push(Typedef {
                     c_type: c_type.to_string(),
                     c_ident: c_ident(&package.name, &decl.name),
@@ -75,7 +75,7 @@ pub(crate) fn render(package: &v1::Package) -> Result<String, GenerateError> {
                     decl.name
                 )),
             },
-            Some(v1::decl::Kind::EnumDef(ed)) => {
+            Some(v2::decl::Kind::EnumDef(ed)) => {
                 let ident = c_ident(&package.name, &decl.name);
                 let prefix = ident.to_uppercase();
                 enums.push(CEnum {
@@ -90,7 +90,7 @@ pub(crate) fn render(package: &v1::Package) -> Result<String, GenerateError> {
                     c_ident: ident,
                 });
             }
-            Some(v1::decl::Kind::EnumSetDef(esd)) => {
+            Some(v2::decl::Kind::EnumSetDef(esd)) => {
                 let ident = c_ident(&package.name, &decl.name);
                 let prefix = ident.to_uppercase();
                 enum_sets.push(CEnumSet {
@@ -105,14 +105,17 @@ pub(crate) fn render(package: &v1::Package) -> Result<String, GenerateError> {
                     c_ident: ident,
                 });
             }
-            Some(v1::decl::Kind::StructDef(sd)) => match c_struct(package, decl, sd) {
+            Some(v2::decl::Kind::StructDef(sd)) => match c_struct(package, decl, sd) {
                 Ok(entry) => structs.push(entry),
                 Err(reason) => not_representable.push(reason),
             },
-            Some(v1::decl::Kind::UnionDef(_)) => {
+            Some(v2::decl::Kind::UnionDef(_)) => {
                 not_representable.push(format!("union {} — tagged union", decl.name));
             }
-            Some(v1::decl::Kind::ConstDef(_)) | None => {}
+            Some(v2::decl::Kind::ConstDef(_)) | None => {}
+            // Interaction kinds ride `Interface.interactions`, never a
+            // package decl; the interaction codegen is E2 task 15.
+            Some(_) => {}
         }
     }
 
@@ -154,7 +157,7 @@ fn c_scalar_type(backing: ScalarBacking) -> Option<&'static str> {
 
 /// Builds a C struct declaration for a `fixed_layout` struct, or an error
 /// reason when the struct is not C-representable.
-fn c_struct(package: &v1::Package, decl: &v1::Decl, sd: &v1::StructDef) -> Result<CStruct, String> {
+fn c_struct(package: &v2::Package, decl: &v2::Decl, sd: &v2::StructDef) -> Result<CStruct, String> {
     if !sd.fixed_layout {
         return Err(format!(
             "struct {} — variable layout (optional, string, or collection field)",
@@ -163,7 +166,7 @@ fn c_struct(package: &v1::Package, decl: &v1::Decl, sd: &v1::StructDef) -> Resul
     }
     let mut fields = Vec::new();
     for member in &sd.members {
-        if let Some(v1::struct_member::Member::Field(field)) = &member.member {
+        if let Some(v2::struct_member::Member::Field(field)) = &member.member {
             let c_type = c_field_type(package, field)
                 .ok_or_else(|| format!("struct {} — field with no fixed C ABI", decl.name))?;
             fields.push(CField {
@@ -178,13 +181,13 @@ fn c_struct(package: &v1::Package, decl: &v1::Decl, sd: &v1::StructDef) -> Resul
     })
 }
 
-fn c_field_type(package: &v1::Package, field: &v1::Field) -> Option<String> {
+fn c_field_type(package: &v2::Package, field: &v2::Field) -> Option<String> {
     let ft = field.r#type.as_ref()?;
     if ft.optional {
         return None;
     }
     match &ft.kind {
-        Some(v1::field_type::Kind::Named(reference)) => {
+        Some(v2::field_type::Kind::Named(reference)) => {
             // A same-package reference must name a type this header actually
             // emits; otherwise the field would reference an undeclared typedef
             // (C2). With string/bytes-backed types excluded from `fixed_layout`,
@@ -199,8 +202,8 @@ fn c_field_type(package: &v1::Package, field: &v1::Field) -> Option<String> {
                 None
             }
         }
-        Some(v1::field_type::Kind::Primitive(prim)) => c_primitive_type(*prim).map(str::to_string),
-        Some(v1::field_type::Kind::InlineScalar(td)) => {
+        Some(v2::field_type::Kind::Primitive(prim)) => c_primitive_type(*prim).map(str::to_string),
+        Some(v2::field_type::Kind::InlineScalar(td)) => {
             c_scalar_type(backing_scalar(td)).map(str::to_string)
         }
         _ => None,
@@ -211,24 +214,24 @@ fn c_field_type(package: &v1::Package, field: &v1::Field) -> Option<String> {
 /// emits as a nameable C type: a scalar typedef with a fixed C ABI, an enum, an
 /// enum-set mask type, or a `fixed_layout` struct. A string/bytes-backed type, a
 /// union, a variable-layout struct, or an unknown name is not nameable here.
-fn same_package_ref_is_c_representable(package: &v1::Package, reference: &str) -> bool {
+fn same_package_ref_is_c_representable(package: &v2::Package, reference: &str) -> bool {
     package
         .decls
         .iter()
         .find(|decl| decl.name == reference)
         .is_some_and(|decl| match &decl.kind {
-            Some(v1::decl::Kind::TypeDef(td)) => c_scalar_type(backing_scalar(td)).is_some(),
-            Some(v1::decl::Kind::EnumDef(_) | v1::decl::Kind::EnumSetDef(_)) => true,
-            Some(v1::decl::Kind::StructDef(sd)) => sd.fixed_layout,
+            Some(v2::decl::Kind::TypeDef(td)) => c_scalar_type(backing_scalar(td)).is_some(),
+            Some(v2::decl::Kind::EnumDef(_) | v2::decl::Kind::EnumSetDef(_)) => true,
+            Some(v2::decl::Kind::StructDef(sd)) => sd.fixed_layout,
             _ => false,
         })
 }
 
 fn c_primitive_type(prim: i32) -> Option<&'static str> {
-    match v1::PrimitiveType::try_from(prim).unwrap_or(v1::PrimitiveType::Unspecified) {
-        v1::PrimitiveType::Integer => Some("int64_t"),
-        v1::PrimitiveType::Float => Some("double"),
-        v1::PrimitiveType::Boolean => Some("bool"),
+    match v2::PrimitiveType::try_from(prim).unwrap_or(v2::PrimitiveType::Unspecified) {
+        v2::PrimitiveType::Integer => Some("int64_t"),
+        v2::PrimitiveType::Float => Some("double"),
+        v2::PrimitiveType::Boolean => Some("bool"),
         _ => None,
     }
 }

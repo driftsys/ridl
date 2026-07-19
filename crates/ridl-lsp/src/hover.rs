@@ -11,7 +11,7 @@
 
 use ridl_core::db::InputFile;
 use ridl_core::package::{Package, Workspace, package_of};
-use ridl_ir::v1;
+use ridl_ir::v2;
 use ridl_sem::{Symbol, SymbolKind, check_package};
 use ridl_syntax::SyntaxKind;
 use ridl_syntax::ast::{AstNode, StructDef};
@@ -93,16 +93,16 @@ fn field_hover(
 /// The 1-based ordinal of field `field_name` in struct `struct_name`, from the
 /// lowered IR. Shared with the inlay-hint pass (E1.16), which renders the same
 /// ordinal beside every field.
-pub(crate) fn field_ordinal(ir: &v1::Package, struct_name: &str, field_name: &str) -> Option<u32> {
+pub(crate) fn field_ordinal(ir: &v2::Package, struct_name: &str, field_name: &str) -> Option<u32> {
     let decl = ir.decls.iter().find(|decl| decl.name == struct_name)?;
-    let Some(v1::decl::Kind::StructDef(struct_def)) = &decl.kind else {
+    let Some(v2::decl::Kind::StructDef(struct_def)) = &decl.kind else {
         return None;
     };
     struct_def
         .members
         .iter()
         .find_map(|member| match &member.member {
-            Some(v1::struct_member::Member::Field(field)) if field.name == field_name => {
+            Some(v2::struct_member::Member::Field(field)) if field.name == field_name => {
                 Some(field.ordinal)
             }
             _ => None,
@@ -141,13 +141,13 @@ fn symbol_markdown(
 
 /// Renders one IR declaration as a hover markdown block: a fenced typl
 /// signature line, then the derived width, doc comment, labels, and deprecation.
-fn render_decl(qualified: &str, decl: &v1::Decl) -> String {
+fn render_decl(qualified: &str, decl: &v2::Decl) -> String {
     let mut lines = String::new();
     lines.push_str("```typl\n");
     lines.push_str(&signature(qualified, decl));
     lines.push_str("\n```");
 
-    if let Some(v1::decl::Kind::TypeDef(type_def)) = &decl.kind
+    if let Some(v2::decl::Kind::TypeDef(type_def)) = &decl.kind
         && let Some(width) = type_def.width.as_ref().map(width_name)
     {
         lines.push_str(&format!("\n\n**Width:** `{width}`"));
@@ -166,10 +166,10 @@ fn render_decl(qualified: &str, decl: &v1::Decl) -> String {
 }
 
 /// The one-line typl signature of a declaration.
-fn signature(qualified: &str, decl: &v1::Decl) -> String {
+fn signature(qualified: &str, decl: &v2::Decl) -> String {
     let modifiers = declaration_modifiers(decl);
     match &decl.kind {
-        Some(v1::decl::Kind::TypeDef(type_def)) => {
+        Some(v2::decl::Kind::TypeDef(type_def)) => {
             format!(
                 "{modifiers}type {qualified}{}{}{}",
                 backing(type_def.backing.as_ref()),
@@ -177,7 +177,7 @@ fn signature(qualified: &str, decl: &v1::Decl) -> String {
                 init(type_def.init.as_ref(), type_def.declared_init.as_ref()),
             )
         }
-        Some(v1::decl::Kind::ConstDef(const_def)) => {
+        Some(v2::decl::Kind::ConstDef(const_def)) => {
             if let Some(regex) = &const_def.regex {
                 format!("{modifiers}const {qualified} = {regex}")
             } else {
@@ -192,19 +192,21 @@ fn signature(qualified: &str, decl: &v1::Decl) -> String {
                 )
             }
         }
-        Some(v1::decl::Kind::StructDef(_)) => format!("{modifiers}struct {qualified}"),
-        Some(v1::decl::Kind::EnumDef(_)) => format!("{modifiers}enum {qualified}"),
-        Some(v1::decl::Kind::EnumSetDef(_)) => format!("{modifiers}enumset {qualified}"),
-        Some(v1::decl::Kind::UnionDef(_)) => format!("{modifiers}union {qualified}"),
-        None => qualified.to_string(),
+        Some(v2::decl::Kind::StructDef(_)) => format!("{modifiers}struct {qualified}"),
+        Some(v2::decl::Kind::EnumDef(_)) => format!("{modifiers}enum {qualified}"),
+        Some(v2::decl::Kind::EnumSetDef(_)) => format!("{modifiers}enumset {qualified}"),
+        Some(v2::decl::Kind::UnionDef(_)) => format!("{modifiers}union {qualified}"),
+        // Interaction kinds ride `Interface.interactions`, never a package
+        // decl; interaction hovers land with the E2 LSP tasks.
+        Some(_) | None => qualified.to_string(),
     }
 }
 
 /// The `internal` / `error` modifier prefix (with a trailing space) for a
 /// declaration's signature.
-fn declaration_modifiers(decl: &v1::Decl) -> String {
+fn declaration_modifiers(decl: &v2::Decl) -> String {
     let mut prefix = String::new();
-    if decl.visibility == v1::Visibility::Internal as i32 {
+    if decl.visibility == v2::Visibility::Internal as i32 {
         prefix.push_str("internal ");
     }
     if decl.is_error {
@@ -215,10 +217,10 @@ fn declaration_modifiers(decl: &v1::Decl) -> String {
 
 /// The backing clause of a type (`: km/h`, `: integer`), or the empty string
 /// when the backing is missing.
-fn backing(backing: Option<&v1::Backing>) -> String {
+fn backing(backing: Option<&v2::Backing>) -> String {
     match backing.and_then(|backing| backing.kind.as_ref()) {
-        Some(v1::backing::Kind::Unit(unit)) => format!(" : {unit}"),
-        Some(v1::backing::Kind::Primitive(primitive)) => {
+        Some(v2::backing::Kind::Unit(unit)) => format!(" : {unit}"),
+        Some(v2::backing::Kind::Primitive(primitive)) => {
             format!(" : {}", primitive_name(*primitive))
         }
         None => String::new(),
@@ -227,7 +229,7 @@ fn backing(backing: Option<&v1::Backing>) -> String {
 
 /// The constraint clause of a type (`[0.0..250.0 step 0.5]`, `[0..256]`,
 /// `[..100]`, `match /.../`), or the empty string when there is no constraint.
-fn constraint(constraint: Option<&v1::Constraint>) -> String {
+fn constraint(constraint: Option<&v2::Constraint>) -> String {
     let Some(constraint) = constraint else {
         return String::new();
     };
@@ -259,7 +261,7 @@ fn constraint(constraint: Option<&v1::Constraint>) -> String {
 
 /// The init clause of a type (`= 0.0`): the declared init when present,
 /// otherwise the resolved derived value, otherwise the empty string.
-fn init(init: Option<&v1::InitValue>, declared: Option<&String>) -> String {
+fn init(init: Option<&v2::InitValue>, declared: Option<&String>) -> String {
     if let Some(declared) = declared {
         return format!(" = {declared}");
     }
@@ -270,45 +272,45 @@ fn init(init: Option<&v1::InitValue>, declared: Option<&String>) -> String {
 }
 
 /// The display name of a derived wire width.
-fn width_name(width: &v1::type_def::Width) -> &'static str {
+fn width_name(width: &v2::type_def::Width) -> &'static str {
     match width {
-        v1::type_def::Width::IntWidth(int_width) => int_width_name(*int_width),
-        v1::type_def::Width::FloatWidth(float_width) => float_width_name(*float_width),
+        v2::type_def::Width::IntWidth(int_width) => int_width_name(*int_width),
+        v2::type_def::Width::FloatWidth(float_width) => float_width_name(*float_width),
     }
 }
 
 /// The lowercase display name of a primitive type.
 fn primitive_name(primitive: i32) -> &'static str {
-    match v1::PrimitiveType::try_from(primitive) {
-        Ok(v1::PrimitiveType::Boolean) => "boolean",
-        Ok(v1::PrimitiveType::Integer) => "integer",
-        Ok(v1::PrimitiveType::Float) => "float",
-        Ok(v1::PrimitiveType::String) => "string",
-        Ok(v1::PrimitiveType::Bytes) => "bytes",
+    match v2::PrimitiveType::try_from(primitive) {
+        Ok(v2::PrimitiveType::Boolean) => "boolean",
+        Ok(v2::PrimitiveType::Integer) => "integer",
+        Ok(v2::PrimitiveType::Float) => "float",
+        Ok(v2::PrimitiveType::String) => "string",
+        Ok(v2::PrimitiveType::Bytes) => "bytes",
         _ => "?",
     }
 }
 
 /// The lowercase display name of an integer wire width.
 fn int_width_name(width: i32) -> &'static str {
-    match v1::IntWidth::try_from(width) {
-        Ok(v1::IntWidth::U8) => "u8",
-        Ok(v1::IntWidth::I8) => "i8",
-        Ok(v1::IntWidth::U16) => "u16",
-        Ok(v1::IntWidth::I16) => "i16",
-        Ok(v1::IntWidth::U32) => "u32",
-        Ok(v1::IntWidth::I32) => "i32",
-        Ok(v1::IntWidth::U64) => "u64",
-        Ok(v1::IntWidth::I64) => "i64",
+    match v2::IntWidth::try_from(width) {
+        Ok(v2::IntWidth::U8) => "u8",
+        Ok(v2::IntWidth::I8) => "i8",
+        Ok(v2::IntWidth::U16) => "u16",
+        Ok(v2::IntWidth::I16) => "i16",
+        Ok(v2::IntWidth::U32) => "u32",
+        Ok(v2::IntWidth::I32) => "i32",
+        Ok(v2::IntWidth::U64) => "u64",
+        Ok(v2::IntWidth::I64) => "i64",
         _ => "?",
     }
 }
 
 /// The lowercase display name of a float wire width.
 fn float_width_name(width: i32) -> &'static str {
-    match v1::FloatWidth::try_from(width) {
-        Ok(v1::FloatWidth::F32) => "f32",
-        Ok(v1::FloatWidth::F64) => "f64",
+    match v2::FloatWidth::try_from(width) {
+        Ok(v2::FloatWidth::F32) => "f32",
+        Ok(v2::FloatWidth::F64) => "f64",
         _ => "?",
     }
 }
