@@ -7,6 +7,8 @@ pub mod check;
 pub mod docs;
 pub mod expr;
 pub mod init;
+/// The ridl lint pass (E2.10a) — advisory codes over the interaction layer.
+pub mod lint;
 pub mod resolve;
 pub mod scalar;
 pub mod timing;

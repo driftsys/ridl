@@ -274,6 +274,11 @@ impl DiagCode {
     /// `UNKNOWN_INTERACTION`) — reserved vocabulary (ridl §10.2, §16.3).
     /// Warning. Emitted by the checker (E2 task 10).
     pub const RIDL_307: DiagCode = DiagCode("RIDL-307");
+    /// A named result union in query return position — the inline `T | E`
+    /// spelling is canonical there (general form §6.1, ADR-0008 decision 13).
+    /// Warning; the named spelling stays legal typl data, so this is a lint,
+    /// not an error. Emitted by the lint pass (E2 task 19).
+    pub const RIDL_308: DiagCode = DiagCode("RIDL-308");
     /// Interaction re-declared under a `reserved` name (ridl §11, §16.4).
     /// Emitted by the checker (E2 task 5).
     pub const RIDL_401: DiagCode = DiagCode("RIDL-401");
@@ -286,6 +291,20 @@ impl DiagCode {
     /// declaration-start position in a `.ridl` parse. Emitted by the parser
     /// (E2 task 2).
     pub const RIDL_403: DiagCode = DiagCode("RIDL-403");
+    /// A query named like a mutation — `set…`, `reset…`, and the rest of the
+    /// mutating verb set (ridl §7.2, §16.4): a state-mutating request belongs
+    /// to `command`. Warning. Emitted by the lint pass (E2 task 19).
+    pub const RIDL_404: DiagCode = DiagCode("RIDL-404");
+    /// One `error` type used as the failure arm of queries in three or more
+    /// distinct interfaces — the "shared across unrelated failure domains"
+    /// heuristic (ridl §10.1, §16.4). Info. Emitted by the lint pass (E2 task
+    /// 19); the threshold is three, so two interfaces stay silent.
+    pub const RIDL_405: DiagCode = DiagCode("RIDL-405");
+    /// A `signal` or `event` payload whose struct re-declares envelope
+    /// metadata — publication time or a frame counter (ridl §3.1, §16.4). Info;
+    /// domain time distinct from transport time is legitimate, so the message
+    /// says so. Emitted by the lint pass (E2 task 19).
+    pub const RIDL_406: DiagCode = DiagCode("RIDL-406");
     /// Duplicate `service` name across the whole workspace — the service
     /// catalog is a flat global namespace (ridl §14.5, §16.4). Emitted
     /// workspace-wide by `service_catalog` (E2 task 8). The reference numbers
