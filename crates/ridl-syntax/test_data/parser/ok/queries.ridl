@@ -1,0 +1,23 @@
+package veh.queries
+
+/// All four return shapes (ridl reference §7.1, general form §6.1).
+interface QueryShapes {
+
+  /// Named return; require and ensure in the raw placeholder block.
+  query getAverageSpeed(window: Duration): Speed [
+    require window > 0ms
+    ensure  result >= 0.0
+  ]
+
+  /// Named-field tuple return.
+  query getMinMax(window: Duration): (min: Speed, max: Speed)
+
+  /// Stream return.
+  query streamFaults(filter: DiagFilter): <FaultEvent>
+
+  /// Inline fallible return (general form §6.1, ADR-0008 decision 1).
+  query calibrate(axle: Axle): CalReport | CalError
+
+  /// Qualified fallible arms.
+  query fetchProfile(id: ProfileId): veh.common.Profile | veh.common.ProfileError
+}

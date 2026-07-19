@@ -1,0 +1,581 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/appendix_a_full_example.ridl
+---
+SourceFile@0..2091
+  PackageDecl@0..19
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..19
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..19 "cluster"
+  Whitespace@19..21 "\n\n"
+  Import@21..44
+    ImportKw@21..27 "import"
+    Whitespace@27..28 " "
+    QualifiedName@28..44
+      Ident@28..31 "veh"
+      Dot@31..32 "."
+      Ident@32..38 "common"
+      Dot@38..39 "."
+      Ident@39..44 "Speed"
+  Whitespace@44..45 "\n"
+  Import@45..74
+    ImportKw@45..51 "import"
+    Whitespace@51..52 " "
+    QualifiedName@52..74
+      Ident@52..55 "veh"
+      Dot@55..56 "."
+      Ident@56..62 "common"
+      Dot@62..63 "."
+      Ident@63..74 "Temperature"
+  Whitespace@74..75 "\n"
+  Import@75..102
+    ImportKw@75..81 "import"
+    Whitespace@81..82 " "
+    QualifiedName@82..102
+      Ident@82..85 "veh"
+      Dot@85..86 "."
+      Ident@86..92 "common"
+      Dot@92..93 "."
+      Ident@93..102 "MAX_SPEED"
+  Whitespace@102..103 "\n"
+  Import@103..133
+    ImportKw@103..109 "import"
+    Whitespace@109..110 " "
+    QualifiedName@110..133
+      Ident@110..113 "veh"
+      Dot@113..114 "."
+      Ident@114..120 "common"
+      Dot@120..121 "."
+      Ident@121..133 "GearPosition"
+  Whitespace@133..134 "\n"
+  Import@134..164
+    ImportKw@134..140 "import"
+    Whitespace@140..141 " "
+    QualifiedName@141..164
+      Ident@141..144 "veh"
+      Dot@144..145 "."
+      Ident@145..151 "common"
+      Dot@151..152 "."
+      Ident@152..164 "WarningFlags"
+  Whitespace@164..166 "\n\n"
+  LineComment@166..245 "// --- vocabulary loc ..."
+  Whitespace@245..247 "\n\n"
+  StructDef@247..319
+    StructKw@247..253 "struct"
+    Whitespace@253..254 " "
+    Name@254..265
+      Ident@254..265 "DoorPayload"
+    Whitespace@265..266 " "
+    LBrace@266..267 "{"
+    Whitespace@267..270 "\n  "
+    FieldDef@270..296
+      Name@270..278
+        Ident@270..278 "sensorId"
+      Whitespace@278..279 " "
+      Colon@279..280 ":"
+      Whitespace@280..281 " "
+      PrimitiveType@281..296
+        IntegerKw@281..288 "integer"
+        Whitespace@288..289 " "
+        Constraint@289..296
+          LBracket@289..290 "["
+          Literal@290..291
+            IntNumber@290..291 "0"
+          DotDot@291..293 ".."
+          Literal@293..295
+            IntNumber@293..295 "15"
+          RBracket@295..296 "]"
+    Whitespace@296..299 "\n  "
+    FieldDef@299..317
+      Name@299..305
+        Ident@299..305 "isOpen"
+      Whitespace@305..308 "   "
+      Colon@308..309 ":"
+      Whitespace@309..310 " "
+      PrimitiveType@310..317
+        BooleanKw@310..317 "boolean"
+    Whitespace@317..318 "\n"
+    RBrace@318..319 "}"
+  Whitespace@319..321 "\n\n"
+  StructDef@321..390
+    StructKw@321..327 "struct"
+    Whitespace@327..328 " "
+    Name@328..338
+      Ident@328..338 "DiagFilter"
+    Whitespace@338..339 " "
+    LBrace@339..340 "{"
+    Whitespace@340..343 "\n  "
+    FieldDef@343..368
+      Name@343..351
+        Ident@343..351 "severity"
+      Whitespace@351..352 " "
+      Colon@352..353 ":"
+      Whitespace@353..354 " "
+      PrimitiveType@354..368
+        IntegerKw@354..361 "integer"
+        Whitespace@361..362 " "
+        Constraint@362..368
+          LBracket@362..363 "["
+          Literal@363..364
+            IntNumber@363..364 "0"
+          DotDot@364..366 ".."
+          Literal@366..367
+            IntNumber@366..367 "5"
+          RBracket@367..368 "]"
+    Whitespace@368..371 "\n  "
+    FieldDef@371..388
+      Name@371..379
+        Ident@371..379 "category"
+      Whitespace@379..380 " "
+      Colon@380..381 ":"
+      Whitespace@381..382 " "
+      OptionalType@382..388
+        PathType@382..387
+          QualifiedName@382..387
+            Ident@382..387 "Label"
+        Question@387..388 "?"
+    Whitespace@388..389 "\n"
+    RBrace@389..390 "}"
+  Whitespace@390..392 "\n\n"
+  StructDef@392..492
+    StructKw@392..398 "struct"
+    Whitespace@398..399 " "
+    Name@399..409
+      Ident@399..409 "FaultEvent"
+    Whitespace@409..410 " "
+    LBrace@410..411 "{"
+    Whitespace@411..414 "\n  "
+    FieldDef@414..444
+      Name@414..418
+        Ident@414..418 "code"
+      Whitespace@418..424 "      "
+      Colon@424..425 ":"
+      Whitespace@425..426 " "
+      PrimitiveType@426..444
+        IntegerKw@426..433 "integer"
+        Whitespace@433..434 " "
+        Constraint@434..444
+          LBracket@434..435 "["
+          Literal@435..436
+            IntNumber@435..436 "0"
+          DotDot@436..438 ".."
+          Literal@438..443
+            IntNumber@438..443 "65535"
+          RBracket@443..444 "]"
+    Whitespace@444..447 "\n  "
+    FieldDef@447..466
+      Name@447..454
+        Ident@447..454 "message"
+      Whitespace@454..457 "   "
+      Colon@457..458 ":"
+      Whitespace@458..459 " "
+      PathType@459..466
+        QualifiedName@459..466
+          Ident@459..466 "Message"
+    Whitespace@466..469 "\n  "
+    FieldDef@469..490
+      Name@469..478
+        Ident@469..478 "timestamp"
+      Whitespace@478..479 " "
+      Colon@479..480 ":"
+      Whitespace@480..481 " "
+      PathType@481..490
+        QualifiedName@481..490
+          Ident@481..490 "Timestamp"
+    Whitespace@490..491 "\n"
+    RBrace@491..492 "}"
+  Whitespace@492..494 "\n\n"
+  EnumDef@494..635
+    ErrorKw@494..499 "error"
+    Whitespace@499..500 " "
+    EnumKw@500..504 "enum"
+    Whitespace@504..505 " "
+    Name@505..514
+      Ident@505..514 "DiagError"
+    Whitespace@514..515 " "
+    LBrace@515..516 "{"
+    Whitespace@516..527 "           "
+    LineComment@527..564 "// failure vocabulary ..."
+    Whitespace@564..567 "\n  "
+    EnumValue@567..587
+      Name@567..581
+        Ident@567..581 "FILTER_INVALID"
+      Whitespace@581..584 "   "
+      Eq@584..585 "="
+      Whitespace@585..586 " "
+      Literal@586..587
+        IntNumber@586..587 "0"
+    Whitespace@587..590 "\n  "
+    EnumValue@590..610
+      Name@590..602
+        Ident@590..602 "STORAGE_BUSY"
+      Whitespace@602..607 "     "
+      Eq@607..608 "="
+      Whitespace@608..609 " "
+      Literal@609..610
+        IntNumber@609..610 "1"
+    Whitespace@610..613 "\n  "
+    EnumValue@613..633
+      Name@613..626
+        Ident@613..626 "ACCESS_DENIED"
+      Whitespace@626..630 "    "
+      Eq@630..631 "="
+      Whitespace@631..632 " "
+      Literal@632..633
+        IntNumber@632..633 "2"
+    Whitespace@633..634 "\n"
+    RBrace@634..635 "}"
+  Whitespace@635..637 "\n\n"
+  StructDef@637..688
+    StructKw@637..643 "struct"
+    Whitespace@643..644 " "
+    Name@644..653
+      Ident@644..653 "FaultPage"
+    Whitespace@653..654 " "
+    LBrace@654..655 "{"
+    Whitespace@655..658 "\n  "
+    FieldDef@658..686
+      Name@658..664
+        Ident@658..664 "faults"
+      Whitespace@664..665 " "
+      Colon@665..666 ":"
+      Whitespace@666..667 " "
+      ArrayType@667..686
+        LBracket@667..668 "["
+        PathType@668..678
+          QualifiedName@668..678
+            Ident@668..678 "FaultEvent"
+        Semicolon@678..679 ";"
+        Whitespace@679..680 " "
+        Bound@680..685
+          Literal@680..681
+            IntNumber@680..681 "0"
+          DotDot@681..683 ".."
+          Literal@683..685
+            IntNumber@683..685 "64"
+        RBracket@685..686 "]"
+    Whitespace@686..687 "\n"
+    RBrace@687..688 "}"
+  Whitespace@688..690 "\n\n"
+  UnionDef@690..811
+    UnionKw@690..695 "union"
+    Whitespace@695..696 " "
+    Name@696..711
+      Ident@696..711 "FaultPageResult"
+    Whitespace@711..712 " "
+    LBrace@712..713 "{"
+    Whitespace@713..723 "          "
+    LineComment@723..771 "// result union — R ..."
+    Whitespace@771..774 "\n  "
+    UnionArm@774..790
+      Name@774..778
+        Ident@774..778 "page"
+      Whitespace@778..779 " "
+      Colon@779..780 ":"
+      Whitespace@780..781 " "
+      PathType@781..790
+        QualifiedName@781..790
+          Ident@781..790 "FaultPage"
+    Whitespace@790..793 "\n  "
+    UnionArm@793..809
+      Name@793..796
+        Ident@793..796 "err"
+      Whitespace@796..798 "  "
+      Colon@798..799 ":"
+      Whitespace@799..800 " "
+      PathType@800..809
+        QualifiedName@800..809
+          Ident@800..809 "DiagError"
+    Whitespace@809..810 "\n"
+    RBrace@810..811 "}"
+  Whitespace@811..813 "\n\n"
+  LineComment@813..836 "// --- the contract ---"
+  Whitespace@836..838 "\n\n"
+  DocComment@838..912 "/**\n * Main vehicle s ..."
+  Whitespace@912..913 "\n"
+  InterfaceDef@913..2090
+    InterfaceKw@913..922 "interface"
+    Whitespace@922..923 " "
+    Name@923..936
+      Ident@923..936 "VehicleStatus"
+    Whitespace@936..937 " "
+    LBrace@937..938 "{"
+    Whitespace@938..942 "\n\n  "
+    DocComment@942..1014 "/// Current vehicle s ..."
+    Whitespace@1014..1017 "\n  "
+    SignalDef@1017..1050
+      SignalKw@1017..1023 "signal"
+      Whitespace@1023..1024 " "
+      Name@1024..1036
+        Ident@1024..1036 "currentSpeed"
+      Whitespace@1036..1037 " "
+      Colon@1037..1038 ":"
+      Whitespace@1038..1039 " "
+      PathType@1039..1044
+        QualifiedName@1039..1044
+          Ident@1039..1044 "Speed"
+      Whitespace@1044..1045 " "
+      Timing@1045..1050
+        At@1045..1046 "@"
+        Duration@1046..1050 "10ms"
+    Whitespace@1050..1054 "\n\n  "
+    DocComment@1054..1115 "/// Engine temperatur ..."
+    Whitespace@1115..1118 "\n  "
+    SignalDef@1118..1164
+      SignalKw@1118..1124 "signal"
+      Whitespace@1124..1125 " "
+      Name@1125..1135
+        Ident@1125..1135 "engineTemp"
+      Whitespace@1135..1136 " "
+      Colon@1136..1137 ":"
+      Whitespace@1137..1138 " "
+      PathType@1138..1149
+        QualifiedName@1138..1149
+          Ident@1138..1149 "Temperature"
+      Whitespace@1149..1150 " "
+      Timing@1150..1164
+        At@1150..1151 "@"
+        LBracket@1151..1152 "["
+        TimingRange@1152..1163
+          Duration@1152..1156 "20ms"
+          DotDot@1156..1158 ".."
+          Duration@1158..1163 "100ms"
+        RBracket@1163..1164 "]"
+    Whitespace@1164..1168 "\n\n  "
+    DocComment@1168..1233 "/// Active warnings — ..."
+    Whitespace@1233..1236 "\n  "
+    SignalDef@1236..1278
+      SignalKw@1236..1242 "signal"
+      Whitespace@1242..1243 " "
+      Name@1243..1251
+        Ident@1243..1251 "warnings"
+      Whitespace@1251..1252 " "
+      Colon@1252..1253 ":"
+      Whitespace@1253..1254 " "
+      PathType@1254..1266
+        QualifiedName@1254..1266
+          Ident@1254..1266 "WarningFlags"
+      Whitespace@1266..1267 " "
+      Timing@1267..1278
+        At@1267..1268 "@"
+        LBracket@1268..1269 "["
+        TimingRange@1269..1277
+          Duration@1269..1273 "50ms"
+          DotDot@1273..1275 ".."
+          Duration@1275..1277 "1s"
+        RBracket@1277..1278 "]"
+    Whitespace@1278..1282 "\n\n  "
+    DocComment@1282..1338 "/// Raised on every d ..."
+    Whitespace@1338..1341 "\n  "
+    EventDef@1341..1386
+      EventKw@1341..1346 "event"
+      Whitespace@1346..1347 " "
+      Name@1347..1357
+        Ident@1347..1357 "doorOpened"
+      Whitespace@1357..1358 " "
+      Colon@1358..1359 ":"
+      Whitespace@1359..1360 " "
+      PathType@1360..1371
+        QualifiedName@1360..1371
+          Ident@1360..1371 "DoorPayload"
+      Whitespace@1371..1372 " "
+      Timing@1372..1386
+        At@1372..1373 "@"
+        LBracket@1373..1374 "["
+        TimingRange@1374..1385
+          Duration@1374..1378 "50ms"
+          DotDot@1378..1380 ".."
+          Duration@1380..1385 "500ms"
+        RBracket@1385..1386 "]"
+    Whitespace@1386..1390 "\n\n  "
+    DocComment@1390..1466 "/// Request a gear ch ..."
+    Whitespace@1466..1469 "\n  "
+    CommandDef@1469..1579
+      CommandKw@1469..1476 "command"
+      Whitespace@1476..1477 " "
+      Name@1477..1484
+        Ident@1477..1484 "setGear"
+      ParamList@1484..1508
+        LParen@1484..1485 "("
+        Param@1485..1507
+          Name@1485..1493
+            Ident@1485..1493 "position"
+          Colon@1493..1494 ":"
+          Whitespace@1494..1495 " "
+          PathType@1495..1507
+            QualifiedName@1495..1507
+              Ident@1495..1507 "GearPosition"
+        RParen@1507..1508 ")"
+      Whitespace@1508..1509 " "
+      AttrBlock@1509..1579
+        LBracket@1509..1510 "["
+        Whitespace@1510..1515 "\n    "
+        RequireKw@1515..1522 "require"
+        Whitespace@1522..1523 " "
+        Ident@1523..1531 "position"
+        Whitespace@1531..1532 " "
+        Neq@1532..1534 "!="
+        Whitespace@1534..1535 " "
+        Ident@1535..1547 "GearPosition"
+        Dot@1547..1548 "."
+        Ident@1548..1552 "PARK"
+        Whitespace@1552..1553 " "
+        PipePipe@1553..1555 "||"
+        Whitespace@1555..1556 " "
+        Ident@1556..1568 "currentSpeed"
+        Whitespace@1568..1569 " "
+        EqEq@1569..1571 "=="
+        Whitespace@1571..1572 " "
+        FloatNumber@1572..1575 "0.0"
+        Whitespace@1575..1578 "\n  "
+        RBracket@1578..1579 "]"
+    Whitespace@1579..1583 "\n\n  "
+    ReservedEntry@1583..1605
+      ReservedKw@1583..1591 "reserved"
+      Whitespace@1591..1592 " "
+      Name@1592..1605
+        Ident@1592..1605 "resetCounters"
+    Whitespace@1605..1615 "          "
+    LineComment@1615..1650 "// retired ordinal — ..."
+    Whitespace@1650..1654 "\n\n  "
+    DocComment@1654..1680 "/// Sliding-window av ..."
+    Whitespace@1680..1683 "\n  "
+    QueryDef@1683..1786
+      QueryKw@1683..1688 "query"
+      Whitespace@1688..1689 " "
+      Name@1689..1704
+        Ident@1689..1704 "getAverageSpeed"
+      ParamList@1704..1722
+        LParen@1704..1705 "("
+        Param@1705..1721
+          Name@1705..1711
+            Ident@1705..1711 "window"
+          Colon@1711..1712 ":"
+          Whitespace@1712..1713 " "
+          PathType@1713..1721
+            QualifiedName@1713..1721
+              Ident@1713..1721 "Duration"
+        RParen@1721..1722 ")"
+      Colon@1722..1723 ":"
+      Whitespace@1723..1724 " "
+      ReturnType@1724..1729
+        PathType@1724..1729
+          QualifiedName@1724..1729
+            Ident@1724..1729 "Speed"
+      Whitespace@1729..1730 " "
+      AttrBlock@1730..1786
+        LBracket@1730..1731 "["
+        Whitespace@1731..1736 "\n    "
+        RequireKw@1736..1743 "require"
+        Whitespace@1743..1744 " "
+        Ident@1744..1750 "window"
+        Whitespace@1750..1751 " "
+        Gt@1751..1752 ">"
+        Whitespace@1752..1753 " "
+        Duration@1753..1756 "0ms"
+        Whitespace@1756..1761 "\n    "
+        EnsureKw@1761..1767 "ensure"
+        Whitespace@1767..1769 "  "
+        Ident@1769..1775 "result"
+        Whitespace@1775..1776 " "
+        Ge@1776..1778 ">="
+        Whitespace@1778..1779 " "
+        FloatNumber@1779..1782 "0.0"
+        Whitespace@1782..1785 "\n  "
+        RBracket@1785..1786 "]"
+    Whitespace@1786..1790 "\n\n  "
+    DocComment@1790..1826 "/// Fault history as  ..."
+    Whitespace@1826..1829 "\n  "
+    QueryDef@1829..1881
+      QueryKw@1829..1834 "query"
+      Whitespace@1834..1835 " "
+      Name@1835..1847
+        Ident@1835..1847 "streamFaults"
+      ParamList@1847..1867
+        LParen@1847..1848 "("
+        Param@1848..1866
+          Name@1848..1854
+            Ident@1848..1854 "filter"
+          Colon@1854..1855 ":"
+          Whitespace@1855..1856 " "
+          PathType@1856..1866
+            QualifiedName@1856..1866
+              Ident@1856..1866 "DiagFilter"
+        RParen@1866..1867 ")"
+      Colon@1867..1868 ":"
+      Whitespace@1868..1869 " "
+      ReturnType@1869..1881
+        StreamType@1869..1881
+          Lt@1869..1870 "<"
+          PathType@1870..1880
+            QualifiedName@1870..1880
+              Ident@1870..1880 "FaultEvent"
+          Gt@1880..1881 ">"
+    Whitespace@1881..1885 "\n\n  "
+    DocComment@1885..1954 "/// Paged fault snaps ..."
+    Whitespace@1954..1957 "\n  "
+    QueryDef@1957..2012
+      QueryKw@1957..1962 "query"
+      Whitespace@1962..1963 " "
+      Name@1963..1975
+        Ident@1963..1975 "getFaultPage"
+      ParamList@1975..1995
+        LParen@1975..1976 "("
+        Param@1976..1994
+          Name@1976..1982
+            Ident@1976..1982 "filter"
+          Colon@1982..1983 ":"
+          Whitespace@1983..1984 " "
+          PathType@1984..1994
+            QualifiedName@1984..1994
+              Ident@1984..1994 "DiagFilter"
+        RParen@1994..1995 ")"
+      Colon@1995..1996 ":"
+      Whitespace@1996..1997 " "
+      ReturnType@1997..2012
+        PathType@1997..2012
+          QualifiedName@1997..2012
+            Ident@1997..2012 "FaultPageResult"
+    Whitespace@2012..2016 "\n\n  "
+    FinalDef@2016..2047
+      FinalKw@2016..2021 "final"
+      Whitespace@2021..2022 " "
+      Name@2022..2037
+        Ident@2022..2037 "softwareVersion"
+      Whitespace@2037..2038 " "
+      Colon@2038..2039 ":"
+      Whitespace@2039..2040 " "
+      PathType@2040..2047
+        QualifiedName@2040..2047
+          Ident@2040..2047 "Version"
+    Whitespace@2047..2050 "\n  "
+    FinalDef@2050..2088
+      FinalKw@2050..2055 "final"
+      Whitespace@2055..2056 " "
+      Name@2056..2068
+        Ident@2056..2068 "capabilities"
+      Whitespace@2068..2072 "    "
+      Colon@2072..2073 ":"
+      Whitespace@2073..2074 " "
+      ArrayType@2074..2088
+        LBracket@2074..2075 "["
+        PathType@2075..2080
+          QualifiedName@2075..2080
+            Ident@2075..2080 "Label"
+        Semicolon@2080..2081 ";"
+        Whitespace@2081..2082 " "
+        Bound@2082..2087
+          Literal@2082..2083
+            IntNumber@2082..2083 "0"
+          DotDot@2083..2085 ".."
+          Literal@2085..2087
+            IntNumber@2085..2087 "32"
+        RBracket@2087..2088 "]"
+    Whitespace@2088..2089 "\n"
+    RBrace@2089..2090 "}"
+  Whitespace@2090..2091 "\n"
+errors: none

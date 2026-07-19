@@ -1,0 +1,20 @@
+package veh.streams
+
+/// Stream positions and element shapes (ridl reference §12).
+interface StreamShapes {
+
+  /// Client-produced stream parameter.
+  command uploadFirmware(data: <FwBlock>)
+
+  /// Bidirectional, full-duplex.
+  query pipe(samples: <SensorSample>): <ProcessedSample>
+
+  /// Raw string element — the §12.2 exception.
+  query tailLog(filter: LogFilter): <string>
+
+  /// Raw bytes element on a parameter.
+  command pushRaw(chunk: <bytes>)
+
+  /// Qualified element type.
+  query history(range: TimeRange): <veh.common.FaultEvent>
+}

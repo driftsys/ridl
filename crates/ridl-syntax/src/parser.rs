@@ -35,6 +35,13 @@
 //! definition kind. The checker narrows these later (TYPL-2xx); the parser
 //! must not reject them.
 //!
+//! The interaction grammar (E2 task 3) follows the same discipline: a
+//! `: return_type` after a command's params parses; timing parses on
+//! command, query, and final; an attr block parses on signal, event, and
+//! final; an init value parses on event and final; a stream `<T>` parses in
+//! every type position, including signal/event payloads and struct fields.
+//! The rejections are checker scope (RIDL-104/-106/-201/-301, E2 task 5).
+//!
 //! # Profile boundary
 //!
 //! The parser runs under a [`Profile`] (E2 task 2, ADR-0007 decision 10). In
@@ -44,7 +51,11 @@
 //! **TYPL-304**. In a `.ridl` parse durations and `@` are ordinary tokens,
 //! and a `ReservedWord` at declaration-start position — a word of the
 //! uxdl/rmdl/rsdl profiles — emits **RIDL-403** (ridl reference §16.4). Both
-//! declaration-start boundaries recover exactly as FORM-105 does. Leading
+//! declaration-start boundaries recover exactly as FORM-105 does. The stream
+//! grammar parses under both profiles (E2 task 3): a `<T>` in type position
+//! builds a `StreamType` node everywhere, and in a `.typl` parse it
+//! additionally emits **TYPL-301** (`stream type in typl context`) and
+//! parsing continues. Leading
 //! zeros in an integer literal emit **FORM-005**. Every [`SyntaxError`]
 //! carries its diagnostic code; the coded `Diagnostic` model consumes it in
 //! task E1.10.
@@ -837,6 +848,11 @@ impl<'a> Parser<'a> {
                 self.tuple_type();
                 self.builder.finish_node();
             }
+            Some(SyntaxKind::Lt) => {
+                self.start(SyntaxKind::ReturnType);
+                self.stream_type();
+                self.builder.finish_node();
+            }
             _ if self.at_path_segment() => {
                 self.start(SyntaxKind::ReturnType);
                 let checkpoint = self.builder.checkpoint();
@@ -854,6 +870,28 @@ impl<'a> Parser<'a> {
                 self.error_at_current("FORM-101", "expected a return type".to_string());
             }
         }
+    }
+
+    /// `StreamType = '<' (PathType | 'string' | 'bytes') '>'` — the element
+    /// is a named type, or a bare raw `string`/`bytes` token (ridl
+    /// reference §12.2, the one exception to typl §15.3). Callers have
+    /// confirmed the `<`.
+    fn stream_type(&mut self) {
+        self.start(SyntaxKind::StreamType);
+        self.bump(); // '<'
+        if matches!(
+            self.current(),
+            Some(SyntaxKind::StringKw | SyntaxKind::BytesKw)
+        ) && self.nth(1) == Some(SyntaxKind::Gt)
+        {
+            self.bump(); // the raw element keyword
+        } else if self.at_path_segment() {
+            self.path_type();
+        } else {
+            self.error_at_current("FORM-101", "expected an element type".to_string());
+        }
+        self.expect(SyntaxKind::Gt);
+        self.builder.finish_node();
     }
 
     /// The lenient trailing annotations of an interaction: at most one
@@ -1102,6 +1140,18 @@ impl<'a> Parser<'a> {
             Some(SyntaxKind::Ident) => self.path_type(),
             Some(SyntaxKind::LParen) => self.tuple_type(),
             Some(SyntaxKind::LBracket) => self.array_or_map(checkpoint),
+            Some(SyntaxKind::Lt) => {
+                // The stream container `<T>` (ridl reference §12) parses in
+                // every type position under both profiles; in a `.typl`
+                // parse it is the profile boundary — TYPL-301 — and parsing
+                // continues (ADR-0007 decision 10). Under `Profile::Ridl`
+                // the positions where a stream is not allowed (struct
+                // fields, signal and event payloads) are checker scope.
+                if self.profile == Profile::Typl {
+                    self.error_at_current("TYPL-301", "stream type in typl context".to_string());
+                }
+                self.stream_type();
+            }
             _ => {
                 self.error_at_current("FORM-101", "expected a type".to_string());
                 return;
@@ -1589,6 +1639,38 @@ mod tests {
             .map(|e| e.code)
             .collect();
         assert_eq!(codes, vec!["TYPL-304"]);
+    }
+
+    // E2 task 3: the stream grammar parses under both profiles; in a `.typl`
+    // parse a `<T>` in type position is the profile boundary — TYPL-301 —
+    // and the StreamType node is still built, losslessly.
+    #[test]
+    fn stream_type_in_typl_flags_typl_301_and_keeps_parsing() {
+        let input = "package p\nstruct S {\n  f : <Frame>\n  g : integer [0..1]\n}\n";
+        let parsed = parse(input, Profile::Typl);
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "the TYPL-301 boundary must stay lossless",
+        );
+        assert_eq!(
+            parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+            vec!["TYPL-301"],
+        );
+        let has_stream = parsed
+            .syntax()
+            .descendants()
+            .any(|node| node.kind() == SyntaxKind::StreamType);
+        assert!(has_stream, "the stream still parses into a StreamType node");
+
+        // Under `Profile::Ridl` the same field parses with no error at all —
+        // stream placement is checker scope there.
+        let parsed = parse(input, Profile::Ridl);
+        assert!(
+            parsed.errors().is_empty(),
+            "no parser error under Ridl, got: {:?}",
+            parsed.errors(),
+        );
     }
 
     // E2 task 2 step (f): a reserved word of another profile at

@@ -1,0 +1,158 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/streams.ridl
+---
+SourceFile@0..548
+  PackageDecl@0..19
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..19
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..19 "streams"
+  Whitespace@19..21 "\n\n"
+  DocComment@21..83 "/// Stream positions  ..."
+  Whitespace@83..84 "\n"
+  InterfaceDef@84..547
+    InterfaceKw@84..93 "interface"
+    Whitespace@93..94 " "
+    Name@94..106
+      Ident@94..106 "StreamShapes"
+    Whitespace@106..107 " "
+    LBrace@107..108 "{"
+    Whitespace@108..112 "\n\n  "
+    DocComment@112..149 "/// Client-produced s ..."
+    Whitespace@149..152 "\n  "
+    CommandDef@152..191
+      CommandKw@152..159 "command"
+      Whitespace@159..160 " "
+      Name@160..174
+        Ident@160..174 "uploadFirmware"
+      ParamList@174..191
+        LParen@174..175 "("
+        Param@175..190
+          Name@175..179
+            Ident@175..179 "data"
+          Colon@179..180 ":"
+          Whitespace@180..181 " "
+          StreamType@181..190
+            Lt@181..182 "<"
+            PathType@182..189
+              QualifiedName@182..189
+                Ident@182..189 "FwBlock"
+            Gt@189..190 ">"
+        RParen@190..191 ")"
+    Whitespace@191..195 "\n\n  "
+    DocComment@195..226 "/// Bidirectional, fu ..."
+    Whitespace@226..229 "\n  "
+    QueryDef@229..283
+      QueryKw@229..234 "query"
+      Whitespace@234..235 " "
+      Name@235..239
+        Ident@235..239 "pipe"
+      ParamList@239..264
+        LParen@239..240 "("
+        Param@240..263
+          Name@240..247
+            Ident@240..247 "samples"
+          Colon@247..248 ":"
+          Whitespace@248..249 " "
+          StreamType@249..263
+            Lt@249..250 "<"
+            PathType@250..262
+              QualifiedName@250..262
+                Ident@250..262 "SensorSample"
+            Gt@262..263 ">"
+        RParen@263..264 ")"
+      Colon@264..265 ":"
+      Whitespace@265..266 " "
+      ReturnType@266..283
+        StreamType@266..283
+          Lt@266..267 "<"
+          PathType@267..282
+            QualifiedName@267..282
+              Ident@267..282 "ProcessedSample"
+          Gt@282..283 ">"
+    Whitespace@283..287 "\n\n  "
+    DocComment@287..335 "/// Raw string elemen ..."
+    Whitespace@335..338 "\n  "
+    QueryDef@338..380
+      QueryKw@338..343 "query"
+      Whitespace@343..344 " "
+      Name@344..351
+        Ident@344..351 "tailLog"
+      ParamList@351..370
+        LParen@351..352 "("
+        Param@352..369
+          Name@352..358
+            Ident@352..358 "filter"
+          Colon@358..359 ":"
+          Whitespace@359..360 " "
+          PathType@360..369
+            QualifiedName@360..369
+              Ident@360..369 "LogFilter"
+        RParen@369..370 ")"
+      Colon@370..371 ":"
+      Whitespace@371..372 " "
+      ReturnType@372..380
+        StreamType@372..380
+          Lt@372..373 "<"
+          StringKw@373..379 "string"
+          Gt@379..380 ">"
+    Whitespace@380..384 "\n\n  "
+    DocComment@384..421 "/// Raw bytes element ..."
+    Whitespace@421..424 "\n  "
+    CommandDef@424..455
+      CommandKw@424..431 "command"
+      Whitespace@431..432 " "
+      Name@432..439
+        Ident@432..439 "pushRaw"
+      ParamList@439..455
+        LParen@439..440 "("
+        Param@440..454
+          Name@440..445
+            Ident@440..445 "chunk"
+          Colon@445..446 ":"
+          Whitespace@446..447 " "
+          StreamType@447..454
+            Lt@447..448 "<"
+            BytesKw@448..453 "bytes"
+            Gt@453..454 ">"
+        RParen@454..455 ")"
+    Whitespace@455..459 "\n\n  "
+    DocComment@459..486 "/// Qualified element ..."
+    Whitespace@486..489 "\n  "
+    QueryDef@489..545
+      QueryKw@489..494 "query"
+      Whitespace@494..495 " "
+      Name@495..502
+        Ident@495..502 "history"
+      ParamList@502..520
+        LParen@502..503 "("
+        Param@503..519
+          Name@503..508
+            Ident@503..508 "range"
+          Colon@508..509 ":"
+          Whitespace@509..510 " "
+          PathType@510..519
+            QualifiedName@510..519
+              Ident@510..519 "TimeRange"
+        RParen@519..520 ")"
+      Colon@520..521 ":"
+      Whitespace@521..522 " "
+      ReturnType@522..545
+        StreamType@522..545
+          Lt@522..523 "<"
+          PathType@523..544
+            QualifiedName@523..544
+              Ident@523..526 "veh"
+              Dot@526..527 "."
+              Ident@527..533 "common"
+              Dot@533..534 "."
+              Ident@534..544 "FaultEvent"
+          Gt@544..545 ">"
+    Whitespace@545..546 "\n"
+    RBrace@546..547 "}"
+  Whitespace@547..548 "\n"
+errors: none
