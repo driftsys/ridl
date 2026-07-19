@@ -1,0 +1,15 @@
+---
+source: crates/ridlc/tests/golden.rs
+expression: "ridl_core::diag::render(&output.diagnostics, &output.sources)"
+---
+error[FORM-101]: expected `]`
+  ┌─ example.typl:2:21
+  │
+2 │ type X: integer [0..10ms]
+  │                     ^^^^
+
+error[TYPL-302]: duration literal in typl context
+  ┌─ example.typl:2:21
+  │
+2 │ type X: integer [0..10ms]
+  │                     ^^^^

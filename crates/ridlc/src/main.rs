@@ -1,15 +1,17 @@
-//! The `ridlc` command-line front end (docs/ROADMAP.md epic E0.9).
+//! The `ridlc` command-line front end (docs/ROADMAP.md epic E0.9, E1.10).
 //!
 //! `ridlc build <INPUT> --out-dir <DIR>` compiles one source file and writes
-//! `<DIR>/<input-stem>.rs`. Diagnostics print to stderr, one per line. The exit
-//! code is 0 when there are no diagnostics, 1 when there are, and 2 on an
-//! input/output error (the file cannot be read, the output directory cannot be
-//! created, or the output file cannot be written).
+//! `<DIR>/<input-stem>.rs`. Coded diagnostics render to stderr via
+//! `codespan-reporting`. The exit code is 0 when there is no error diagnostic
+//! (warnings and info alone still exit 0), 1 when at least one error diagnostic
+//! is present, and 2 on an input/output error (the file cannot be read, the
+//! output directory cannot be created, or the output file cannot be written).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
+use ridl_core::diag::{Severity, render};
 
 #[derive(Parser)]
 #[command(name = "ridlc", about = "The RIDL family compiler")]
@@ -68,13 +70,17 @@ fn build(input: &Path, out_dir: &Path) -> ExitCode {
         return ExitCode::from(2);
     }
 
-    for diagnostic in &output.diagnostics {
-        eprintln!("{diagnostic}");
-    }
+    eprint!("{}", render(&output.diagnostics, &output.sources));
 
-    if output.diagnostics.is_empty() {
-        ExitCode::SUCCESS
-    } else {
+    // Warnings and info diagnostics alone do not fail the build; only an error
+    // diagnostic drives exit 1.
+    let has_error = output
+        .diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error);
+    if has_error {
         ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
     }
 }
