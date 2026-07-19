@@ -48,4 +48,7 @@ typedef struct {
 {%- endfor %}
  */
 {% endif %}
+{%- if interactions %}
+/* not represented in the C ABI — interactions are a binding concern, not a data layout: {{ interactions | join(", ") }} */
+{% endif %}
 #endif /* {{ guard }} */

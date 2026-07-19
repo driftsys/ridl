@@ -128,6 +128,22 @@ pub(crate) fn render(package: &v2::Package) -> Result<String, GenerateError> {
         .get_template("c_header")
         .expect("the template was just added");
     let guard = format!("{}_H", package.name.replace('.', "_").to_uppercase());
+
+    // Interfaces and services describe interactions, which the C ABI does not
+    // express: they become traits in the Rust module and bindings at runtime,
+    // never a struct layout. They are listed in one trailing comment so a
+    // reader of the header knows the contract carries more than these types.
+    let interactions: Vec<String> = package
+        .interfaces
+        .iter()
+        .map(|interface| format!("interface {}", interface.name))
+        .chain(
+            package
+                .services
+                .iter()
+                .map(|service| format!("service {}", service.name)),
+        )
+        .collect();
     template
         .render(context! {
             package => package.name,
@@ -138,6 +154,7 @@ pub(crate) fn render(package: &v2::Package) -> Result<String, GenerateError> {
             enumsets => enum_sets,
             structs => structs,
             not_representable => not_representable,
+            interactions => interactions,
         })
         .map_err(|err| GenerateError {
             message: format!("C header rendering failed: {err}"),

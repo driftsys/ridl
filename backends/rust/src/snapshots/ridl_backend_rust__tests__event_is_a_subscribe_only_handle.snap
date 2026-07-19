@@ -1,0 +1,116 @@
+---
+source: backends/rust/src/tests.rs
+expression: source
+---
+/// Where a signal's current value came from (ridl §4.4, §4.5).
+///
+/// `Init` is the channel's seeded value, before the provider's first
+/// publication; `Live` is a published value; `Invalid` marks a value
+/// that violated the payload constraints — the malformed value is not
+/// delivered, but its invalidity is, so no subscriber silently holds
+/// stale last-good data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    Init,
+    Live,
+    Invalid,
+}
+/// A signal channel: state that always holds a value (ridl §4.4).
+pub trait SignalHandle<T> {
+    /// The current value and where it came from. Never fails: the
+    /// channel is seeded with the init value at creation.
+    fn read(&self) -> (T, Provenance);
+    /// Registers a subscriber. It is called immediately with the
+    /// current value, then on every change.
+    fn subscribe(&mut self, f: Box<dyn FnMut(&T, Provenance)>);
+}
+/// An event channel: occurrences, which are not state (ridl §5). There
+/// is no `read` — an occurrence that has not happened has no value.
+pub trait EventHandle<T> {
+    fn subscribe(&mut self, f: Box<dyn FnMut(&T)>);
+}
+/// A finite or unbounded sequence of payloads (ridl §12).
+///
+/// Declared here rather than taken from a runtime crate so the
+/// generated module stays dependency-free; it is shaped so an adapter
+/// to `futures::Stream` is a blanket impl.
+pub trait RidlStream {
+    type Item;
+    fn poll_next(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Option<Self::Item>>;
+}
+/// How a timing annotation constrains an interaction (ridl §9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimingMode {
+    StrictPeriodic,
+    Range,
+}
+/// One interaction's resolved timing, in exact microseconds.
+///
+/// `min_us` is the rate floor and `max_us` the staleness bound; a strict
+/// period carries the same value in both. `default_applied` records that
+/// the contract was written without a `@` annotation and the configured
+/// default was resolved in (ridl §9.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimingConst {
+    pub mode: TimingMode,
+    pub min_us: Option<u64>,
+    pub max_us: Option<u64>,
+    pub default_applied: bool,
+}
+/// Which side of an interaction a contract clause constrains (ridl §13).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContractKind {
+    Require,
+    Ensure,
+}
+/// One contract clause as data, for an observer to install.
+///
+/// `id` is the observer address the IR assigns; it is a stable identity
+/// carried verbatim, not a Rust name. `uses_result` says whether the
+/// clause reads the query's result, which an `ensure` observer must
+/// know before it can be scheduled — it cannot run until the result
+/// exists. The flag is carried rather than inferred: `source` is text,
+/// so matching on it would misread a parameter named `resultCode` or a
+/// field access `.result`, and an `ensure` clause does not always read
+/// the result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContractStub {
+    pub id: &'static str,
+    pub kind: ContractKind,
+    pub source: &'static str,
+    pub signals: &'static [&'static str],
+    pub params: &'static [&'static str],
+    pub uses_result: bool,
+}
+/// The consumer face of `VehicleStatus` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait VehicleStatusConsumer {
+    /// Raised on every door state change
+    ///
+    /// event `doorOpened` — ordinal 4 (ridl §5).
+    /// An occurrence is not state: there is no last-value cache and no provenance.
+    fn door_opened(&mut self) -> &mut dyn EventHandle<DoorPayload>;
+}
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait VehicleStatusProvider {
+    /// Raises `doorOpened` — event ordinal 4 (ridl §5).
+    fn raise_door_opened(&mut self, occurrence: DoorPayload);
+}
+/// Resolved timing for every signal and event of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9).
+pub const VEHICLE_STATUS_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "doorOpened",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(50000),
+            max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `VehicleStatus` as data, in source order, for an observer to install (ridl §13).
+pub const VEHICLE_STATUS_CONTRACTS: &[ContractStub] = &[];
