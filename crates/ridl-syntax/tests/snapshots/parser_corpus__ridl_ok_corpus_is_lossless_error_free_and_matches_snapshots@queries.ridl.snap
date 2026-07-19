@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/ok/queries.ridl
 ---
-SourceFile@0..705
+SourceFile@0..697
   PackageDecl@0..19
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -14,7 +14,7 @@ SourceFile@0..705
   Whitespace@19..21 "\n\n"
   DocComment@21..91 "/// All four return s ..."
   Whitespace@91..92 "\n"
-  InterfaceDef@92..704
+  InterfaceDef@92..696
     InterfaceKw@92..101 "interface"
     Whitespace@101..102 " "
     Name@102..113
@@ -22,195 +22,203 @@ SourceFile@0..705
     Whitespace@113..114 " "
     LBrace@114..115 "{"
     Whitespace@115..119 "\n\n  "
-    DocComment@119..185 "/// Named return; req ..."
-    Whitespace@185..188 "\n  "
-    QueryDef@188..291
-      QueryKw@188..193 "query"
-      Whitespace@193..194 " "
-      Name@194..209
-        Ident@194..209 "getAverageSpeed"
-      ParamList@209..227
-        LParen@209..210 "("
-        Param@210..226
-          Name@210..216
-            Ident@210..216 "window"
-          Colon@216..217 ":"
-          Whitespace@217..218 " "
-          PathType@218..226
-            QualifiedName@218..226
-              Ident@218..226 "Duration"
-        RParen@226..227 ")"
-      Colon@227..228 ":"
-      Whitespace@228..229 " "
-      ReturnType@229..234
-        PathType@229..234
-          QualifiedName@229..234
-            Ident@229..234 "Speed"
-      Whitespace@234..235 " "
-      AttrBlock@235..291
-        LBracket@235..236 "["
-        Whitespace@236..241 "\n    "
-        RequireKw@241..248 "require"
-        Whitespace@248..249 " "
-        Ident@249..255 "window"
-        Whitespace@255..256 " "
-        Gt@256..257 ">"
-        Whitespace@257..258 " "
-        Duration@258..261 "0ms"
-        Whitespace@261..266 "\n    "
-        EnsureKw@266..272 "ensure"
-        Whitespace@272..274 "  "
-        Ident@274..280 "result"
-        Whitespace@280..281 " "
-        Ge@281..283 ">="
-        Whitespace@283..284 " "
-        FloatNumber@284..287 "0.0"
-        Whitespace@287..290 "\n  "
-        RBracket@290..291 "]"
-    Whitespace@291..295 "\n\n  "
-    DocComment@295..324 "/// Named-field tuple ..."
-    Whitespace@324..327 "\n  "
-    QueryDef@327..386
-      QueryKw@327..332 "query"
-      Whitespace@332..333 " "
-      Name@333..342
-        Ident@333..342 "getMinMax"
-      ParamList@342..360
-        LParen@342..343 "("
-        Param@343..359
-          Name@343..349
-            Ident@343..349 "window"
-          Colon@349..350 ":"
-          Whitespace@350..351 " "
-          PathType@351..359
-            QualifiedName@351..359
-              Ident@351..359 "Duration"
-        RParen@359..360 ")"
-      Colon@360..361 ":"
-      Whitespace@361..362 " "
-      ReturnType@362..386
-        TupleType@362..386
-          LParen@362..363 "("
-          TupleField@363..373
-            Name@363..366
-              Ident@363..366 "min"
-            Colon@366..367 ":"
-            Whitespace@367..368 " "
-            PathType@368..373
-              QualifiedName@368..373
-                Ident@368..373 "Speed"
-          Comma@373..374 ","
-          Whitespace@374..375 " "
-          TupleField@375..385
-            Name@375..378
-              Ident@375..378 "max"
-            Colon@378..379 ":"
-            Whitespace@379..380 " "
-            PathType@380..385
-              QualifiedName@380..385
-                Ident@380..385 "Speed"
-          RParen@385..386 ")"
-    Whitespace@386..390 "\n\n  "
-    DocComment@390..408 "/// Stream return."
-    Whitespace@408..411 "\n  "
-    QueryDef@411..463
-      QueryKw@411..416 "query"
-      Whitespace@416..417 " "
-      Name@417..429
-        Ident@417..429 "streamFaults"
-      ParamList@429..449
-        LParen@429..430 "("
-        Param@430..448
-          Name@430..436
-            Ident@430..436 "filter"
-          Colon@436..437 ":"
-          Whitespace@437..438 " "
-          PathType@438..448
-            QualifiedName@438..448
-              Ident@438..448 "DiagFilter"
-        RParen@448..449 ")"
-      Colon@449..450 ":"
-      Whitespace@450..451 " "
-      ReturnType@451..463
-        StreamType@451..463
-          Lt@451..452 "<"
-          PathType@452..462
-            QualifiedName@452..462
-              Ident@452..462 "FaultEvent"
-          Gt@462..463 ">"
-    Whitespace@463..467 "\n\n  "
-    DocComment@467..536 "/// Inline fallible r ..."
-    Whitespace@536..539 "\n  "
-    QueryDef@539..588
-      QueryKw@539..544 "query"
-      Whitespace@544..545 " "
-      Name@545..554
-        Ident@545..554 "calibrate"
-      ParamList@554..566
-        LParen@554..555 "("
-        Param@555..565
-          Name@555..559
-            Ident@555..559 "axle"
-          Colon@559..560 ":"
-          Whitespace@560..561 " "
-          PathType@561..565
-            QualifiedName@561..565
-              Ident@561..565 "Axle"
-        RParen@565..566 ")"
-      Colon@566..567 ":"
-      Whitespace@567..568 " "
-      ReturnType@568..588
-        FallibleType@568..588
-          PathType@568..577
-            QualifiedName@568..577
-              Ident@568..577 "CalReport"
-          Whitespace@577..578 " "
-          Pipe@578..579 "|"
-          Whitespace@579..580 " "
-          PathType@580..588
-            QualifiedName@580..588
-              Ident@580..588 "CalError"
-    Whitespace@588..592 "\n\n  "
-    DocComment@592..620 "/// Qualified fallibl ..."
-    Whitespace@620..623 "\n  "
-    QueryDef@623..702
-      QueryKw@623..628 "query"
-      Whitespace@628..629 " "
-      Name@629..641
-        Ident@629..641 "fetchProfile"
-      ParamList@641..656
-        LParen@641..642 "("
-        Param@642..655
-          Name@642..644
-            Ident@642..644 "id"
-          Colon@644..645 ":"
-          Whitespace@645..646 " "
-          PathType@646..655
-            QualifiedName@646..655
-              Ident@646..655 "ProfileId"
-        RParen@655..656 ")"
-      Colon@656..657 ":"
-      Whitespace@657..658 " "
-      ReturnType@658..702
-        FallibleType@658..702
-          PathType@658..676
-            QualifiedName@658..676
-              Ident@658..661 "veh"
-              Dot@661..662 "."
-              Ident@662..668 "common"
-              Dot@668..669 "."
-              Ident@669..676 "Profile"
-          Whitespace@676..677 " "
-          Pipe@677..678 "|"
-          Whitespace@678..679 " "
-          PathType@679..702
-            QualifiedName@679..702
-              Ident@679..682 "veh"
-              Dot@682..683 "."
-              Ident@683..689 "common"
-              Dot@689..690 "."
-              Ident@690..702 "ProfileError"
-    Whitespace@702..703 "\n"
-    RBrace@703..704 "}"
-  Whitespace@704..705 "\n"
+    DocComment@119..177 "/// Named return; req ..."
+    Whitespace@177..180 "\n  "
+    QueryDef@180..283
+      QueryKw@180..185 "query"
+      Whitespace@185..186 " "
+      Name@186..201
+        Ident@186..201 "getAverageSpeed"
+      ParamList@201..219
+        LParen@201..202 "("
+        Param@202..218
+          Name@202..208
+            Ident@202..208 "window"
+          Colon@208..209 ":"
+          Whitespace@209..210 " "
+          PathType@210..218
+            QualifiedName@210..218
+              Ident@210..218 "Duration"
+        RParen@218..219 ")"
+      Colon@219..220 ":"
+      Whitespace@220..221 " "
+      ReturnType@221..226
+        PathType@221..226
+          QualifiedName@221..226
+            Ident@221..226 "Speed"
+      Whitespace@226..227 " "
+      AttrBlock@227..283
+        LBracket@227..228 "["
+        Whitespace@228..233 "\n    "
+        Attribute@233..253
+          RequireKw@233..240 "require"
+          Whitespace@240..241 " "
+          BinaryExpr@241..253
+            PathExpr@241..247
+              Ident@241..247 "window"
+            Whitespace@247..248 " "
+            Gt@248..249 ">"
+            Whitespace@249..250 " "
+            LiteralExpr@250..253
+              Duration@250..253 "0ms"
+        Whitespace@253..258 "\n    "
+        Attribute@258..279
+          EnsureKw@258..264 "ensure"
+          Whitespace@264..266 "  "
+          BinaryExpr@266..279
+            PathExpr@266..272
+              Ident@266..272 "result"
+            Whitespace@272..273 " "
+            Ge@273..275 ">="
+            Whitespace@275..276 " "
+            LiteralExpr@276..279
+              FloatNumber@276..279 "0.0"
+        Whitespace@279..282 "\n  "
+        RBracket@282..283 "]"
+    Whitespace@283..287 "\n\n  "
+    DocComment@287..316 "/// Named-field tuple ..."
+    Whitespace@316..319 "\n  "
+    QueryDef@319..378
+      QueryKw@319..324 "query"
+      Whitespace@324..325 " "
+      Name@325..334
+        Ident@325..334 "getMinMax"
+      ParamList@334..352
+        LParen@334..335 "("
+        Param@335..351
+          Name@335..341
+            Ident@335..341 "window"
+          Colon@341..342 ":"
+          Whitespace@342..343 " "
+          PathType@343..351
+            QualifiedName@343..351
+              Ident@343..351 "Duration"
+        RParen@351..352 ")"
+      Colon@352..353 ":"
+      Whitespace@353..354 " "
+      ReturnType@354..378
+        TupleType@354..378
+          LParen@354..355 "("
+          TupleField@355..365
+            Name@355..358
+              Ident@355..358 "min"
+            Colon@358..359 ":"
+            Whitespace@359..360 " "
+            PathType@360..365
+              QualifiedName@360..365
+                Ident@360..365 "Speed"
+          Comma@365..366 ","
+          Whitespace@366..367 " "
+          TupleField@367..377
+            Name@367..370
+              Ident@367..370 "max"
+            Colon@370..371 ":"
+            Whitespace@371..372 " "
+            PathType@372..377
+              QualifiedName@372..377
+                Ident@372..377 "Speed"
+          RParen@377..378 ")"
+    Whitespace@378..382 "\n\n  "
+    DocComment@382..400 "/// Stream return."
+    Whitespace@400..403 "\n  "
+    QueryDef@403..455
+      QueryKw@403..408 "query"
+      Whitespace@408..409 " "
+      Name@409..421
+        Ident@409..421 "streamFaults"
+      ParamList@421..441
+        LParen@421..422 "("
+        Param@422..440
+          Name@422..428
+            Ident@422..428 "filter"
+          Colon@428..429 ":"
+          Whitespace@429..430 " "
+          PathType@430..440
+            QualifiedName@430..440
+              Ident@430..440 "DiagFilter"
+        RParen@440..441 ")"
+      Colon@441..442 ":"
+      Whitespace@442..443 " "
+      ReturnType@443..455
+        StreamType@443..455
+          Lt@443..444 "<"
+          PathType@444..454
+            QualifiedName@444..454
+              Ident@444..454 "FaultEvent"
+          Gt@454..455 ">"
+    Whitespace@455..459 "\n\n  "
+    DocComment@459..528 "/// Inline fallible r ..."
+    Whitespace@528..531 "\n  "
+    QueryDef@531..580
+      QueryKw@531..536 "query"
+      Whitespace@536..537 " "
+      Name@537..546
+        Ident@537..546 "calibrate"
+      ParamList@546..558
+        LParen@546..547 "("
+        Param@547..557
+          Name@547..551
+            Ident@547..551 "axle"
+          Colon@551..552 ":"
+          Whitespace@552..553 " "
+          PathType@553..557
+            QualifiedName@553..557
+              Ident@553..557 "Axle"
+        RParen@557..558 ")"
+      Colon@558..559 ":"
+      Whitespace@559..560 " "
+      ReturnType@560..580
+        FallibleType@560..580
+          PathType@560..569
+            QualifiedName@560..569
+              Ident@560..569 "CalReport"
+          Whitespace@569..570 " "
+          Pipe@570..571 "|"
+          Whitespace@571..572 " "
+          PathType@572..580
+            QualifiedName@572..580
+              Ident@572..580 "CalError"
+    Whitespace@580..584 "\n\n  "
+    DocComment@584..612 "/// Qualified fallibl ..."
+    Whitespace@612..615 "\n  "
+    QueryDef@615..694
+      QueryKw@615..620 "query"
+      Whitespace@620..621 " "
+      Name@621..633
+        Ident@621..633 "fetchProfile"
+      ParamList@633..648
+        LParen@633..634 "("
+        Param@634..647
+          Name@634..636
+            Ident@634..636 "id"
+          Colon@636..637 ":"
+          Whitespace@637..638 " "
+          PathType@638..647
+            QualifiedName@638..647
+              Ident@638..647 "ProfileId"
+        RParen@647..648 ")"
+      Colon@648..649 ":"
+      Whitespace@649..650 " "
+      ReturnType@650..694
+        FallibleType@650..694
+          PathType@650..668
+            QualifiedName@650..668
+              Ident@650..653 "veh"
+              Dot@653..654 "."
+              Ident@654..660 "common"
+              Dot@660..661 "."
+              Ident@661..668 "Profile"
+          Whitespace@668..669 " "
+          Pipe@669..670 "|"
+          Whitespace@670..671 " "
+          PathType@671..694
+            QualifiedName@671..694
+              Ident@671..674 "veh"
+              Dot@674..675 "."
+              Ident@675..681 "common"
+              Dot@681..682 "."
+              Ident@682..694 "ProfileError"
+    Whitespace@694..695 "\n"
+    RBrace@695..696 "}"
+  Whitespace@696..697 "\n"
 errors: none

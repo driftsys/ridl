@@ -1,0 +1,61 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/attrs_dangling_or.ridl
+---
+SourceFile@0..209
+  PackageDecl@0..17
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..17
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..17 "attrs"
+  Whitespace@17..19 "\n\n"
+  LineComment@19..93 "// A dangling `||` wi ..."
+  Whitespace@93..94 "\n"
+  LineComment@94..143 "// FORM-101 lands whe ..."
+  Whitespace@143..144 "\n"
+  InterfaceDef@144..208
+    InterfaceKw@144..153 "interface"
+    Whitespace@153..154 " "
+    Name@154..162
+      Ident@154..162 "Dangling"
+    Whitespace@162..163 " "
+    LBrace@163..164 "{"
+    Whitespace@164..167 "\n  "
+    CommandDef@167..206
+      CommandKw@167..174 "command"
+      Whitespace@174..175 " "
+      Name@175..180
+        Ident@175..180 "check"
+      ParamList@180..189
+        LParen@180..181 "("
+        Param@181..188
+          Name@181..182
+            Ident@181..182 "a"
+          Colon@182..183 ":"
+          Whitespace@183..184 " "
+          PathType@184..188
+            QualifiedName@184..188
+              Ident@184..188 "Flag"
+        RParen@188..189 ")"
+      Whitespace@189..190 " "
+      AttrBlock@190..206
+        LBracket@190..191 "["
+        Whitespace@191..192 " "
+        Attribute@192..205
+          RequireKw@192..199 "require"
+          Whitespace@199..200 " "
+          BinaryExpr@200..205
+            PathExpr@200..201
+              Ident@200..201 "a"
+            Whitespace@201..202 " "
+            PipePipe@202..204 "||"
+            Whitespace@204..205 " "
+        RBracket@205..206 "]"
+    Whitespace@206..207 "\n"
+    RBrace@207..208 "}"
+  Whitespace@208..209 "\n"
+errors:
+  FORM-101 205..206 expected an expression

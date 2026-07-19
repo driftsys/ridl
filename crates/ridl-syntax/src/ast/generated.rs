@@ -8,6 +8,7 @@ use super::AstChildren;
 use super::AstNode;
 use super::Backing;
 use super::Definition;
+use super::Expr;
 use super::FieldType;
 use super::InterfaceMember;
 use super::ParamType;
@@ -1150,8 +1151,14 @@ impl AstNode for AttrBlock {
     }
 }
 impl AttrBlock {
+    pub fn attributes(&self) -> AstChildren<Attribute> {
+        support::children(&self.syntax)
+    }
     pub fn l_bracket_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::LBracket)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
     }
     pub fn r_bracket_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::RBracket)
@@ -1254,6 +1261,252 @@ impl TimingRange {
     }
     pub fn dotdot_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::DotDot)
+    }
+}
+/// A `Attribute` node (`family.ungram` rule `Attribute`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Attribute {
+    syntax: SyntaxNode,
+}
+impl AstNode for Attribute {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::Attribute).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl Attribute {
+    pub fn key(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn value(&self) -> Option<AttrValue> {
+        support::child(&self.syntax)
+    }
+    pub fn expr(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+    pub fn eq_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Eq)
+    }
+    pub fn require_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RequireKw)
+    }
+    pub fn ensure_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::EnsureKw)
+    }
+}
+/// A `AttrValue` node (`family.ungram` rule `AttrValue`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct AttrValue {
+    syntax: SyntaxNode,
+}
+impl AstNode for AttrValue {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::AttrValue).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl AttrValue {
+    pub fn literal(&self) -> Option<Literal> {
+        support::child(&self.syntax)
+    }
+    pub fn values(&self) -> AstChildren<AttrValue> {
+        support::children(&self.syntax)
+    }
+    pub fn l_paren_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LParen)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn r_paren_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RParen)
+    }
+}
+/// A `BinaryExpr` node (`family.ungram` rule `BinaryExpr`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct BinaryExpr {
+    syntax: SyntaxNode,
+}
+impl AstNode for BinaryExpr {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::BinaryExpr).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl BinaryExpr {
+    pub fn lhs(&self) -> Option<Expr> {
+        support::nth_child(&self.syntax, 0usize)
+    }
+    pub fn rhs(&self) -> Option<Expr> {
+        support::nth_child(&self.syntax, 1usize)
+    }
+    pub fn pipepipe_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::PipePipe)
+    }
+    pub fn ampamp_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::AmpAmp)
+    }
+    pub fn eqeq_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::EqEq)
+    }
+    pub fn neq_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Neq)
+    }
+    pub fn lt_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Lt)
+    }
+    pub fn le_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Le)
+    }
+    pub fn gt_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Gt)
+    }
+    pub fn ge_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Ge)
+    }
+    pub fn plus_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Plus)
+    }
+    pub fn minus_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Minus)
+    }
+    pub fn star_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Star)
+    }
+    pub fn slash_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Slash)
+    }
+    pub fn percent_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Percent)
+    }
+}
+/// A `PrefixExpr` node (`family.ungram` rule `PrefixExpr`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PrefixExpr {
+    syntax: SyntaxNode,
+}
+impl AstNode for PrefixExpr {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::PrefixExpr).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl PrefixExpr {
+    pub fn operand(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+    pub fn bang_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Bang)
+    }
+    pub fn minus_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Minus)
+    }
+}
+/// A `MemberExpr` node (`family.ungram` rule `MemberExpr`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MemberExpr {
+    syntax: SyntaxNode,
+}
+impl AstNode for MemberExpr {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::MemberExpr).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl MemberExpr {
+    pub fn base(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+    pub fn dot_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Dot)
+    }
+    pub fn ident_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Ident)
+    }
+}
+/// A `PathExpr` node (`family.ungram` rule `PathExpr`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PathExpr {
+    syntax: SyntaxNode,
+}
+impl AstNode for PathExpr {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::PathExpr).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl PathExpr {
+    pub fn ident_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Ident)
+    }
+}
+/// A `ParenExpr` node (`family.ungram` rule `ParenExpr`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ParenExpr {
+    syntax: SyntaxNode,
+}
+impl AstNode for ParenExpr {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::ParenExpr).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl ParenExpr {
+    pub fn inner(&self) -> Option<Expr> {
+        support::child(&self.syntax)
+    }
+    pub fn l_paren_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LParen)
+    }
+    pub fn r_paren_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RParen)
+    }
+}
+/// A `LiteralExpr` node (`family.ungram` rule `LiteralExpr`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct LiteralExpr {
+    syntax: SyntaxNode,
+}
+impl AstNode for LiteralExpr {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::LiteralExpr).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl LiteralExpr {
+    pub fn int_number_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::IntNumber)
+    }
+    pub fn float_number_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::FloatNumber)
+    }
+    pub fn string_lit_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::String)
+    }
+    pub fn true_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::TrueKw)
+    }
+    pub fn false_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::FalseKw)
+    }
+    pub fn duration_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Duration)
     }
 }
 /// An error-recovery node wrapping the tokens the parser skipped

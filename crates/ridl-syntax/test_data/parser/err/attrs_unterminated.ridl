@@ -1,0 +1,8 @@
+package veh.attrs
+
+// The attr block never closes: the parser reports FORM-103 at the interface
+// boundary instead of swallowing the rest of the file.
+interface Broken {
+  command setGear(position: GearPosition) [
+    require position != GearPosition.PARK
+}

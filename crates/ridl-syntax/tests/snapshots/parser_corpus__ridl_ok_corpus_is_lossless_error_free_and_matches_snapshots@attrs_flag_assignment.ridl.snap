@@ -1,0 +1,163 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/attrs_flag_assignment.ridl
+---
+SourceFile@0..793
+  PackageDecl@0..17
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..17
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..17 "attrs"
+  Whitespace@17..19 "\n\n"
+  LineComment@19..96 "// The non-predicate  ..."
+  Whitespace@96..97 "\n"
+  LineComment@97..174 "// attr block parses; ..."
+  Whitespace@174..175 "\n"
+  LineComment@175..227 "// scope (gf §4.3, E ..."
+  Whitespace@227..228 "\n"
+  InterfaceDef@228..792
+    InterfaceKw@228..237 "interface"
+    Whitespace@237..238 " "
+    Name@238..248
+      Ident@238..248 "FlagShapes"
+    Whitespace@248..249 " "
+    LBrace@249..250 "{"
+    Whitespace@250..254 "\n\n  "
+    LineComment@254..273 "// A bare flag key."
+    Whitespace@273..276 "\n  "
+    CommandDef@276..303
+      CommandKw@276..283 "command"
+      Whitespace@283..284 " "
+      Name@284..289
+        Ident@284..289 "reset"
+      ParamList@289..291
+        LParen@289..290 "("
+        RParen@290..291 ")"
+      Whitespace@291..292 " "
+      AttrBlock@292..303
+        LBracket@292..293 "["
+        Whitespace@293..294 " "
+        Attribute@294..301
+          Name@294..301
+            Ident@294..301 "someKey"
+        Whitespace@301..302 " "
+        RBracket@302..303 "]"
+    Whitespace@303..307 "\n\n  "
+    LineComment@307..345 "// An assignment with ..."
+    Whitespace@345..348 "\n  "
+    CommandDef@348..396
+      CommandKw@348..355 "command"
+      Whitespace@355..356 " "
+      Name@356..363
+        Ident@356..363 "setMode"
+      ParamList@363..380
+        LParen@363..364 "("
+        Param@364..379
+          Name@364..368
+            Ident@364..368 "mode"
+          Colon@368..369 ":"
+          Whitespace@369..370 " "
+          PathType@370..379
+            QualifiedName@370..379
+              Ident@370..379 "DriveMode"
+        RParen@379..380 ")"
+      Whitespace@380..381 " "
+      AttrBlock@381..396
+        LBracket@381..382 "["
+        Whitespace@382..383 " "
+        Attribute@383..394
+          Name@383..390
+            Ident@383..390 "someKey"
+          Whitespace@390..391 " "
+          Eq@391..392 "="
+          Whitespace@392..393 " "
+          AttrValue@393..394
+            Literal@393..394
+              IntNumber@393..394 "3"
+        Whitespace@394..395 " "
+        RBracket@395..396 "]"
+    Whitespace@396..400 "\n\n  "
+    LineComment@400..473 "// An assignment with ..."
+    Whitespace@473..476 "\n  "
+    LineComment@476..546 "// (`init` itself is  ..."
+    Whitespace@546..549 "\n  "
+    LineComment@549..620 "// non-reserved key s ..."
+    Whitespace@620..623 "\n  "
+    SignalDef@623..684
+      SignalKw@623..629 "signal"
+      Whitespace@629..630 " "
+      Name@630..641
+        Ident@630..641 "targetSpeed"
+      Whitespace@641..642 " "
+      Colon@642..643 ":"
+      Whitespace@643..644 " "
+      PathType@644..649
+        QualifiedName@644..649
+          Ident@644..649 "Speed"
+      Whitespace@649..650 " "
+      AttrBlock@650..684
+        LBracket@650..651 "["
+        Whitespace@651..652 " "
+        Attribute@652..673
+          Name@652..656
+            Ident@652..656 "seed"
+          Whitespace@656..657 " "
+          Eq@657..658 "="
+          Whitespace@658..659 " "
+          AttrValue@659..673
+            Literal@659..673
+              Ident@659..673 "SPEED_LIMIT_EU"
+        Comma@673..674 ","
+        Whitespace@674..675 " "
+        Attribute@675..682
+          Name@675..682
+            Ident@675..682 "persist"
+        Whitespace@682..683 " "
+        RBracket@683..684 "]"
+    Whitespace@684..688 "\n\n  "
+    LineComment@688..729 "// A parenthesised va ..."
+    Whitespace@729..732 "\n  "
+    QueryDef@732..790
+      QueryKw@732..737 "query"
+      Whitespace@737..738 " "
+      Name@738..746
+        Ident@738..746 "getState"
+      ParamList@746..748
+        LParen@746..747 "("
+        RParen@747..748 ")"
+      Colon@748..749 ":"
+      Whitespace@749..750 " "
+      ReturnType@750..760
+        PathType@750..760
+          QualifiedName@750..760
+            Ident@750..760 "DriveState"
+      Whitespace@760..761 " "
+      AttrBlock@761..790
+        LBracket@761..762 "["
+        Whitespace@762..763 " "
+        Attribute@763..788
+          Name@763..769
+            Ident@763..769 "labels"
+          Whitespace@769..770 " "
+          Eq@770..771 "="
+          Whitespace@771..772 " "
+          AttrValue@772..788
+            LParen@772..773 "("
+            AttrValue@773..778
+              Literal@773..778
+                Ident@773..778 "SIL_2"
+            Comma@778..779 ","
+            Whitespace@779..780 " "
+            AttrValue@780..787
+              Literal@780..787
+                Ident@780..787 "PRIVATE"
+            RParen@787..788 ")"
+        Whitespace@788..789 " "
+        RBracket@789..790 "]"
+    Whitespace@790..791 "\n"
+    RBrace@791..792 "}"
+  Whitespace@792..793 "\n"
+errors: none

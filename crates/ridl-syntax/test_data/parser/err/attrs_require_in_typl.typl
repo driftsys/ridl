@@ -1,0 +1,8 @@
+package p
+
+// A require/ensure attribute in a typl parse is the profile boundary
+// (TYPL-303, typl reference §16.4) — parsing continues at the next
+// declaration, so `Fine` below still parses.
+require x > 0ms
+
+type Fine : integer [0..1]

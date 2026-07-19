@@ -258,11 +258,75 @@ Timing =
 TimingRange =
   min:'duration'? '..' max:'duration'?
 
-// A balanced `[ … ]` after an interaction signature. Until E2 task 4 the
-// parser consumes the content as raw tokens (lossless, no inner
-// structure); the attribute grammar replaces this rule then.
+// ---------- Attributes (general form §4.2–§4.3, E2 task 4) ----------
+//
+// The single attr_block production: three forms — a flag key, an
+// assignment `key = const_value`, and a predicate `require|ensure expr`.
+// gf §4.2 requires at least one attribute per block; the parser accepts
+// an empty `[]` losslessly and reports FORM-101 at the closing bracket.
+// Which keys are legal on which declaration kind is a semantic allow-list
+// (gf §4.3, FORM-106/107/108) — checker scope, E2 task 5.
+
 AttrBlock =
-  '[' ']'
+  '[' (attributes:Attribute ','?)* ']'
+
+Attribute =
+  key:Name
+| key:Name '=' value:AttrValue
+| ('require' | 'ensure') expr:Expr
+
+// `const_value` (gf §4.2): a literal or a SCREAMING_SNAKE constant
+// reference (both are one `Literal` child — `ident` is a value token
+// there), or a parenthesised list of nested values.
+AttrValue =
+  Literal
+| '(' (values:AttrValue ','?)* ')'
+
+// ---------- The guaranteed-subset expr grammar (E2.4) ----------
+//
+// The expr-core specification §3.1 productions (ridl reference §13,
+// ADR-0008 decision 10), collapsed to their tree shapes: the
+// precedence-climbing parser produces exactly these six node kinds.
+// Inside an expr `<` is always the comparison operator — the stream-type
+// reading exists only in param-type and return-type position; the two
+// positions never overlap.
+
+Expr =
+  BinaryExpr
+| PrefixExpr
+| MemberExpr
+| PathExpr
+| ParenExpr
+| LiteralExpr
+
+// One binary step of or/and/cmp/add/mul. Precedence and associativity
+// live in the parser: a comparison never chains (`a < b < c` is a parse
+// error), the other levels are left-associative.
+BinaryExpr =
+  lhs:Expr
+  ('||' | '&&' | '==' | '!=' | '<' | '<=' | '>' | '>=' | '+' | '-' | '*' | '/' | '%')
+  rhs:Expr
+
+// `unary_expr = [ "!" | "-" ] postfix_expr` — at most one prefix.
+PrefixExpr =
+  ('!' | '-') operand:Expr
+
+// One `.member` postfix step: a tuple field (camelCase) or an enum
+// member (SCREAMING_SNAKE) — both are `ident` tokens.
+MemberExpr =
+  base:Expr '.' 'ident'
+
+// `path_head` — a parameter, `result`, a constant, or a type name.
+PathExpr =
+  'ident'
+
+ParenExpr =
+  '(' inner:Expr ')'
+
+// A literal or duration operand. The unary minus of a negative number is
+// a PrefixExpr here, never part of the literal token.
+LiteralExpr =
+  'int_number' | 'float_number' | 'string_lit' | 'true' | 'false' | 'duration'
 
 // ---------- Names and literals ----------
 

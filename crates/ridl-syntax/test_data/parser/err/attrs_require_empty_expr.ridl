@@ -1,0 +1,6 @@
+package veh.attrs
+
+// A predicate keyword with no expression after it: FORM-101 on the `]`.
+interface MissingExpr {
+  query getState(): DriveState [ require ]
+}

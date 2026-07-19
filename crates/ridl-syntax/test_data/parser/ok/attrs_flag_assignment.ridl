@@ -1,0 +1,21 @@
+package veh.attrs
+
+// The non-predicate attribute forms (general form §4.2) parse everywhere an
+// attr block parses; which key is legal on which declaration kind is checker
+// scope (gf §4.3, E2 task 5 — FORM-106/107/108).
+interface FlagShapes {
+
+  // A bare flag key.
+  command reset() [ someKey ]
+
+  // An assignment with a literal value.
+  command setMode(mode: DriveMode) [ someKey = 3 ]
+
+  // An assignment with a constant reference, plus a flag, comma-separated.
+  // (`init` itself is a family-reserved word — rmdl registry — so a
+  // non-reserved key stands in; reserved keys are FORM-105, err corpus.)
+  signal targetSpeed : Speed [ seed = SPEED_LIMIT_EU, persist ]
+
+  // A parenthesised value list (gf §4.7).
+  query getState(): DriveState [ labels = (SIL_2, PRIVATE) ]
+}

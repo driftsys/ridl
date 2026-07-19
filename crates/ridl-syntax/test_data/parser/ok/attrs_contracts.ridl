@@ -1,0 +1,27 @@
+package veh.attrs
+
+/// Every ridl §13 contract example, verbatim (expr-core specification §9).
+interface ContractShapes {
+
+  /// Own signal a require may read (ridl §13, §14.0).
+  signal currentSpeed : Speed @10ms
+
+  command setRange(min: Speed, max: Speed) [
+    require min < max
+    require max <= MAX_SPEED
+  ]
+
+  query getAverageSpeed(window: Duration): Speed [
+    require window > 0ms
+    ensure  result >= 0.0
+  ]
+
+  command setGear(position: GearPosition) [
+    require position != GearPosition.PARK || currentSpeed == 0.0
+  ]
+
+  /// The sixth guaranteed form — tuple-field access (expr-core spec §9).
+  query getRange(): (min: Speed, max: Speed) [
+    ensure result.min >= 0.0
+  ]
+}

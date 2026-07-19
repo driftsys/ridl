@@ -277,6 +277,43 @@ impl AstNode for ParamType {
     }
 }
 
+/// One expression of the guaranteed subset — the `Expr` alternation
+/// (expr-core specification §3.1, ridl reference §13, epic E2.4).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Expr {
+    Binary(BinaryExpr),
+    Prefix(PrefixExpr),
+    Member(MemberExpr),
+    Path(PathExpr),
+    Paren(ParenExpr),
+    Literal(LiteralExpr),
+}
+
+impl AstNode for Expr {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        match syntax.kind() {
+            SyntaxKind::BinaryExpr => BinaryExpr::cast(syntax).map(Self::Binary),
+            SyntaxKind::PrefixExpr => PrefixExpr::cast(syntax).map(Self::Prefix),
+            SyntaxKind::MemberExpr => MemberExpr::cast(syntax).map(Self::Member),
+            SyntaxKind::PathExpr => PathExpr::cast(syntax).map(Self::Path),
+            SyntaxKind::ParenExpr => ParenExpr::cast(syntax).map(Self::Paren),
+            SyntaxKind::LiteralExpr => LiteralExpr::cast(syntax).map(Self::Literal),
+            _ => None,
+        }
+    }
+
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            Self::Binary(it) => it.syntax(),
+            Self::Prefix(it) => it.syntax(),
+            Self::Member(it) => it.syntax(),
+            Self::Path(it) => it.syntax(),
+            Self::Paren(it) => it.syntax(),
+            Self::Literal(it) => it.syntax(),
+        }
+    }
+}
+
 // --- the shared definition traits ----------------------------------------
 
 /// A node that declares a [`Name`].
@@ -449,6 +486,94 @@ impl Timing {
     /// for the range form, whose durations sit inside [`Timing::range`].
     pub fn duration(&self) -> Option<SyntaxToken> {
         support::token(self.syntax(), SyntaxKind::Duration)
+    }
+}
+
+/// Which predicate keyword an [`Attribute`] carries (general form §4.2,
+/// ridl reference §13).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum PredicateKind {
+    Require,
+    Ensure,
+}
+
+impl Attribute {
+    /// The predicate keyword of a `require`/`ensure` attribute; `None` for
+    /// the flag and assignment forms.
+    pub fn predicate_kind(&self) -> Option<PredicateKind> {
+        if self.require_token().is_some() {
+            Some(PredicateKind::Require)
+        } else if self.ensure_token().is_some() {
+            Some(PredicateKind::Ensure)
+        } else {
+            None
+        }
+    }
+}
+
+/// Whether `kind` is one of the binary operators of the guaranteed subset
+/// (expr-core specification §3.1).
+fn is_binary_op(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::PipePipe
+            | SyntaxKind::AmpAmp
+            | SyntaxKind::EqEq
+            | SyntaxKind::Neq
+            | SyntaxKind::Lt
+            | SyntaxKind::Le
+            | SyntaxKind::Gt
+            | SyntaxKind::Ge
+            | SyntaxKind::Plus
+            | SyntaxKind::Minus
+            | SyntaxKind::Star
+            | SyntaxKind::Slash
+            | SyntaxKind::Percent
+    )
+}
+
+impl BinaryExpr {
+    /// The operator token of this binary step — the one direct token child
+    /// drawn from the subset operator set.
+    pub fn op_token(&self) -> Option<SyntaxToken> {
+        self.syntax()
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .find(|token| is_binary_op(token.kind()))
+    }
+}
+
+impl PrefixExpr {
+    /// The prefix operator — `!` or `-`.
+    pub fn op_token(&self) -> Option<SyntaxToken> {
+        self.syntax()
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .find(|token| matches!(token.kind(), SyntaxKind::Bang | SyntaxKind::Minus))
+    }
+}
+
+impl MemberExpr {
+    /// The member name after the `.` — a tuple field or an enum member.
+    pub fn member_token(&self) -> Option<SyntaxToken> {
+        self.ident_token()
+    }
+}
+
+impl PathExpr {
+    /// The referenced name — a parameter, `result`, a constant, or a type.
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        self.ident_token()
+    }
+}
+
+impl LiteralExpr {
+    /// The literal or duration value token.
+    pub fn token(&self) -> Option<SyntaxToken> {
+        self.syntax()
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .find(|token| !token.kind().is_trivia())
     }
 }
 
@@ -900,6 +1025,68 @@ mod tests {
                 .to_string(),
             "P",
         );
+    }
+
+    /// The attribute and expression accessors (E2.4) over a parsed tree:
+    /// the surface tasks 5, 11, 12, and 21 consume.
+    #[test]
+    fn attribute_and_expr_accessors_read_a_parsed_contract() {
+        use crate::{Profile, parse};
+
+        let input = "package p\ninterface I {\n  \
+            command setGear(position: GearPosition) [\n    \
+            require position != GearPosition.PARK || currentSpeed == 0.0\n    \
+            someKey = 3\n  ]\n}\n";
+        let parsed = parse(input, Profile::Ridl);
+        assert!(parsed.errors().is_empty(), "got: {:?}", parsed.errors());
+
+        let attr_block = parsed
+            .syntax()
+            .descendants()
+            .find_map(AttrBlock::cast)
+            .expect("an AttrBlock parses");
+        let attributes: Vec<Attribute> = attr_block.attributes().collect();
+        assert_eq!(attributes.len(), 2);
+
+        // The predicate form: kind + expr, no key, no value.
+        let predicate = &attributes[0];
+        assert_eq!(predicate.predicate_kind(), Some(PredicateKind::Require));
+        assert!(predicate.key().is_none());
+        assert!(predicate.value().is_none());
+        let Some(Expr::Binary(or)) = predicate.expr() else {
+            panic!("expected a binary root, got {:?}", predicate.expr());
+        };
+        assert_eq!(or.op_token().unwrap().text(), "||");
+        let Some(Expr::Binary(neq)) = or.lhs() else {
+            panic!("expected a binary lhs, got {:?}", or.lhs());
+        };
+        assert_eq!(neq.op_token().unwrap().text(), "!=");
+        let Some(Expr::Member(member)) = neq.rhs() else {
+            panic!("expected a member rhs, got {:?}", neq.rhs());
+        };
+        assert_eq!(member.member_token().unwrap().text(), "PARK");
+        let Some(Expr::Path(base)) = member.base() else {
+            panic!("expected a path base, got {:?}", member.base());
+        };
+        assert_eq!(base.name_token().unwrap().text(), "GearPosition");
+        let Some(Expr::Binary(eq)) = or.rhs() else {
+            panic!("expected a binary rhs, got {:?}", or.rhs());
+        };
+        let Some(Expr::Literal(zero)) = eq.rhs() else {
+            panic!("expected a literal rhs, got {:?}", eq.rhs());
+        };
+        assert_eq!(zero.token().unwrap().text(), "0.0");
+
+        // The assignment form: key + value, no predicate, no expr.
+        let assignment = &attributes[1];
+        assert!(assignment.predicate_kind().is_none());
+        assert!(assignment.expr().is_none());
+        assert_eq!(
+            assignment.key().unwrap().ident_token().unwrap().text(),
+            "someKey",
+        );
+        let value = assignment.value().expect("the assignment has a value");
+        assert_eq!(value.literal().unwrap().syntax().text().to_string(), "3");
     }
 
     #[test]

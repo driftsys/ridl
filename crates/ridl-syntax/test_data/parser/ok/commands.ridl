@@ -3,7 +3,7 @@ package veh.commands
 /// Command shapes (ridl reference §6).
 interface CommandShapes {
 
-  /// One parameter plus the raw attribute placeholder block.
+  /// One parameter plus a require predicate attribute.
   command setGear(position: GearPosition) [
     require position != GearPosition.PARK || currentSpeed == 0.0
   ]
