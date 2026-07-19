@@ -1,0 +1,56 @@
+---
+source: crates/ridlc/tests/golden.rs
+assertion_line: 24
+expression: "ridl_ir::v1::to_json_pretty(&output.package)"
+---
+{
+  "name": "fixtures",
+  "decls": [
+    {
+      "name": "Speed",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Unit": "km/h"
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "250",
+            "step": "0.5",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": null,
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "MAX_SPEED",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "Speed",
+          "value": "250",
+          "regex": null
+        }
+      }
+    }
+  ]
+}
