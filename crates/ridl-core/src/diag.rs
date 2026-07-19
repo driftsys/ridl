@@ -243,7 +243,7 @@ pub struct FileId(u32);
 impl FileId {
     /// A sentinel id for a diagnostic that is not tied to any source file. The
     /// lockfile, cache, and fetch diagnostics (MANI-1xx) concern a URL rather
-    /// than a byte span, so they carry this id; [`render`] draws them as a bare
+    /// than a byte span, so they carry this id; [`render`](render()) draws them as a bare
     /// coded message with no source snippet. No [`SourceMap`] ever issues it.
     pub const DETACHED: FileId = FileId(u32::MAX);
 }

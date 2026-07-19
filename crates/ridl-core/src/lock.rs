@@ -89,7 +89,7 @@ pub fn read_lockfile(path: &Path) -> (Option<Lockfile>, Vec<Diagnostic>) {
 }
 
 /// Serializes `lock` to TOML and writes it to `path`, replacing any existing
-/// file. The written file carries the [`LOCKFILE_HEADER`] comment.
+/// file. The written file carries the `LOCKFILE_HEADER` comment.
 pub fn write_lockfile(path: &Path, lock: &Lockfile) -> io::Result<()> {
     let body = toml::to_string_pretty(lock)
         .map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))?;

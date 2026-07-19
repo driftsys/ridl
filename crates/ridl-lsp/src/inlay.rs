@@ -11,10 +11,9 @@
 //!   enum value or enum-set bit it is the explicit integer value, because the
 //!   wire identity of an enum member is the value it declares, not its
 //!   position — showing a position there would contradict the `= N` in the
-//!   source. Every number is read from the [`CheckedPackage`](ridl_sem::
-//!   CheckedPackage) IR, never re-derived from the AST; the struct-field walk
-//!   is [`hover::field_ordinal`](crate::hover::field_ordinal), shared with
-//!   hover.
+//!   source. Every number is read from the [`CheckedPackage`](ridl_sem::CheckedPackage)
+//!   IR, never re-derived from the AST; the struct-field walk is
+//!   `hover::field_ordinal`, shared with hover.
 //! - **Unit expansion hints** render, after the UCUM code of a unit-typed
 //!   `type`, the unit's human reading (`km/h ⟨kilometer per hour⟩`), from
 //!   [`UcumExpr::display_name`](ridl_sem::ucum::UcumExpr::display_name) over

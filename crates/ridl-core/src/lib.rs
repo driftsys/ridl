@@ -1,12 +1,12 @@
 //! The RIDL family compiler core: the salsa incremental database, the queries
 //! built on the syntax layer (docs/ROADMAP.md epic E0, ADR-0004 §3), the
-//! coded [`Diagnostic`](diag::Diagnostic) model every pass emits (E1.10,
+//! coded [`Diagnostic`] model every pass emits (E1.10,
 //! ADR-0004 §5), and the ns core — manifest, package model, and filesystem
 //! discovery (E1.3, E1.5, ADR-0002). The resolver and checker moved to
 //! `ridl-sem` (ADR-0007 decision 4).
 //!
 //! Filesystem discovery ([`workspace`]) and the lockfile ([`lock`]) sit behind
-//! the default-on `fs` feature; remote fetch and the cache ([`fetch`],
+//! the default-on `fs` feature; remote fetch and the cache ([`fetch`](mod@fetch),
 //! [`cache`]) sit behind the default-on `fetch` feature, which implies `fs`
 //! (ADR-0007 decision 5). With `--no-default-features` the crate builds for
 //! `wasm32-unknown-unknown`.

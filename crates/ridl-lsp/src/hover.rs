@@ -4,7 +4,7 @@
 //! qualified name, kind, backing and canonical UCUM unit, constraint, derived
 //! wire width, init value, doc comment, labels, and deprecation — pulled from
 //! the [`CheckedPackage`](ridl_sem::CheckedPackage) IR, the richest source,
-//! keyed by the symbol [`symbol_at`](crate::nav::symbol_at) resolves. Hover on a
+//! keyed by the symbol [`symbol_at`] resolves. Hover on a
 //! struct field instead shows the field's derived ordinal (general form §6.3
 //! groundwork; the ordinal is typl §7.4), read straight from the IR so it counts
 //! reserved tombstones exactly as codegen does.

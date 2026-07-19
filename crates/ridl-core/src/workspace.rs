@@ -36,7 +36,7 @@ use crate::package::{Package, PackageOrigin, Workspace, package_declarations};
 /// The result of [`load_workspace`]: the salsa [`Workspace`] input, the
 /// diagnostics the load accumulated, and the interned path+text table the
 /// diagnostics' [`Span`]s point into (what the caller hands to
-/// [`render`](crate::diag::render)).
+/// [`render`](crate::diag::render())).
 pub struct LoadedWorkspace {
     pub workspace: Workspace,
     pub diagnostics: Vec<Diagnostic>,
