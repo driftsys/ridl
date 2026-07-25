@@ -1,0 +1,31 @@
+// The per-member checks reached through a service's *inline* shape.
+//
+// Every other file in this showcase provokes its diagnostics from a named
+// `interface`. An inline shape is a second `Interface`, stored under
+// `Service.shape` and outside `Package.interfaces`, and five separate E2
+// defects came from consumers that walked `Package.interfaces` alone. The
+// codes below are already covered from a named interface; provoking them again
+// from inside an inline shape is what makes that coverage structural rather
+// than incidental.
+
+package diag.ridl
+
+service diag.showcase.inline {
+
+  /// RIDL-201 — a stream is not a signal payload, inside an inline shape.
+  signal live : <Sample> @1s
+
+  /// RIDL-301 — a signal has no call site, inside an inline shape.
+  signal speed : Speed @10ms [
+    require speed >= 0.0
+  ]
+
+  /// RIDL-302 — a command has no result to observe, inside an inline shape.
+  command act(level: Level) [
+    ensure true
+  ]
+
+  /// RIDL-308 — the named result union steered to `T | E`, inside an inline
+  /// shape.
+  query paged(limit: Level): NamedResult
+}

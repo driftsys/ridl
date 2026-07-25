@@ -15,6 +15,14 @@ Two members, because one package cannot provoke everything:
   `diag.showcase.duplicate`, because the service catalog is a workspace-wide
   namespace and RIDL-140 cannot be provoked from a single package.
 
+`main/inline_shape.ridl` is the exception to "one file per family": it re-provokes
+RIDL-201, RIDL-301, RIDL-302 and RIDL-308 from inside a service's *inline* shape.
+Those four are already covered from a named `interface`; provoking them a second
+time through `Service.shape` is what makes inline-shape coverage structural
+rather than incidental. The per-member checks are descendant-based, so they were
+never at risk — but "never at risk" is a claim about today's implementation, and
+the file is what keeps it true.
+
 ## Codes exercised here
 
 - RIDL: 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 140, 141, 201,
@@ -49,13 +57,14 @@ against the reference §16 classification.
 None of these is worked around in the corpus. Each is written the way it
 behaves, so the snapshot pins the behaviour rather than hiding it.
 
-- **Only the first profile violation in a file is reported.** Recovery from
-  RIDL-403 / TYPL-303 / TYPL-304 resynchronizes at the next typl or ridl
-  top-level keyword (`is_top_level_start`), and a reserved word of another
-  profile is not one. `profile_boundary.ridl` declares `view`, `model` and
-  `component`; only `view` is reported, and the other two are absorbed into the
-  same error node. That is why TYPL-303 needs its own file rather than a second
-  line in `profile_boundary.typl`.
+- **Only the first profile violation in a file is reported — a defect to fix.**
+  Recovery from RIDL-403 / TYPL-303 / TYPL-304 resynchronizes at the next typl
+  or ridl top-level keyword (`is_top_level_start`), and a reserved word of
+  another profile is not one. `profile_boundary.ridl` declares `view`, `model`
+  and `component`; only `view` is reported, and the other two are absorbed into
+  the same error node. That is why TYPL-303 needs its own file rather than a
+  second line in `profile_boundary.typl`. The repair is small — add the family
+  reserved words to the recovery sync set — and belongs to the parser.
 - **MANI-009's span is a source file, not the manifest.** The manifest parser
   stores `[defaults].timing` unparsed, so the checker is what parses it, and a
   checker diagnostic must point somewhere in the package's own files. It lands

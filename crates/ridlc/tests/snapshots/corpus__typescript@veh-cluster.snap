@@ -504,6 +504,127 @@ export const vehicleStatusContracts = [
 ] as const;
 
 /**
+ * A package-private contract shape: realized inside this package, never part
+ * of the cross-package surface.
+ *
+ * The consumer face of this interface (ridl §14): what code holding a
+ * binding to it sees. Signals are read and subscribed, events are
+ * subscribed, commands and queries are called, finals are read.
+ */
+export interface WheelDiagnosticsConsumer {
+  /**
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  wheelTicks: SignalHandle<FanLevel>;
+  slipDetected: EventHandle<FilterState>;
+  /**
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readTicks(): Promise<FanLevel>;
+}
+
+/**
+ * A package-private contract shape: realized inside this package, never part
+ * of the cross-package surface.
+ *
+ * The provider face of this interface (ridl §14): what code realizing it
+ * implements. Signals and events are published, commands and queries are
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
+ */
+export interface WheelDiagnosticsProvider {
+  /**
+   * @init 0
+   */
+  wheelTicks: { publish(value: FanLevel): void };
+  slipDetected: { publish(occurrence: FilterState): void };
+  /**
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readTicks(): Promise<FanLevel>;
+}
+
+/**
+ * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
+ * staleness bound, both in microseconds. `defaultApplied` marks a bound the
+ * compiler resolved from the configured default rather than from source —
+ * "untimed" does not exist beyond the parser (ridl §9.1).
+ */
+export const wheelDiagnosticsTiming = {
+  wheelTicks: { mode: 'range', minUs: 100000n, maxUs: 1000000n, defaultApplied: false },
+  slipDetected: { mode: 'range', minUs: 50000n, maxUs: 500000n, defaultApplied: false },
+} as const;
+
+/**
+ * The require/ensure clauses of this interface, as data (ridl §13). `id` is
+ * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
+ * is the canonical expression text; `signals` and `params` name what the
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
+ */
+export const wheelDiagnosticsContracts = [] as const;
+
+/**
+ * A public shape beside it, so the generated output shows the two side by
+ * side and the difference is readable in one snapshot.
+ *
+ * The consumer face of this interface (ridl §14): what code holding a
+ * binding to it sees. Signals are read and subscribed, events are
+ * subscribed, commands and queries are called, finals are read.
+ */
+export interface WheelSummaryConsumer {
+  /**
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  wheelHealth: SignalHandle<FanLevel>;
+}
+
+/**
+ * A public shape beside it, so the generated output shows the two side by
+ * side and the difference is readable in one snapshot.
+ *
+ * The provider face of this interface (ridl §14): what code realizing it
+ * implements. Signals and events are published, commands and queries are
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
+ */
+export interface WheelSummaryProvider {
+  /**
+   * @init 0
+   */
+  wheelHealth: { publish(value: FanLevel): void };
+}
+
+/**
+ * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
+ * staleness bound, both in microseconds. `defaultApplied` marks a bound the
+ * compiler resolved from the configured default rather than from source —
+ * "untimed" does not exist beyond the parser (ridl §9.1).
+ */
+export const wheelSummaryTiming = {
+  wheelHealth: { mode: 'range', minUs: 1000000n, maxUs: 10000000n, defaultApplied: false },
+} as const;
+
+/**
+ * The require/ensure clauses of this interface, as data (ridl §13). `id` is
+ * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
+ * is the canonical expression text; `signals` and `params` name what the
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
+ */
+export const wheelSummaryContracts = [] as const;
+
+/**
  * This is the inline shape of service `veh.hvac.cabin` (ridl §14.5). The
  * shape is anonymous in source, so its generated name is
  * `Service_veh_hvac_cabin` — a TypeScript identifier derived from the

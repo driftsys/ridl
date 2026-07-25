@@ -176,6 +176,30 @@ error[RIDL-110]: init value 99 is outside the declared range [0..7]
 12 │   signal level : Level = 99 @[1s..10s]
    │                          ^^
 
+error[RIDL-201]: stream `<T>` not valid on a signal payload
+   ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:16:17
+   │
+16 │   signal live : <Sample> @1s
+   │                 ^^^^^^^^
+
+error[RIDL-301]: `require` not valid on signal — contracts belong to `command` and `query`
+   ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:20:5
+   │
+20 │     require speed >= 0.0
+   │     ^^^^^^^^^^^^^^^^^^^^
+
+error[RIDL-302]: `ensure` not valid on command — a command has no result to observe
+   ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:25:5
+   │
+25 │     ensure true
+   │     ^^^^^^^^^^^
+
+warning[RIDL-308]: query returns the named result union `NamedResult` — in return position the inline spelling is canonical: write `Sample | DiagError` (general form §6.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:30:30
+   │
+30 │   query paged(limit: Level): NamedResult
+   │                              ^^^^^^^^^^^
+
 error[RIDL-141]: service names `Sample`, which is not an interface
    ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:14:34
    │

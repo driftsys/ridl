@@ -296,9 +296,19 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
 enum Provoked {
     /// Emitted by the `ridl-diag-showcase` corpus entry.
     Showcase,
-    /// Emitted elsewhere in the repository's corpora, with the reason it
-    /// cannot be part of a single compile of the showcase.
-    Elsewhere(&'static str),
+    /// Emitted elsewhere, by a fixture this crate does not compile. The first
+    /// field is that fixture's path **from the repository root**, checked to
+    /// exist by [`every_ridl_profile_code_has_a_living_example`]; the second is
+    /// the reason the code cannot be part of a single compile of the showcase.
+    ///
+    /// The path is not decoration. Asserting only that the reason string is
+    /// non-empty would be unfalsifiable — a `&'static str` literal is never
+    /// empty — so the test that presents itself as the coverage index would
+    /// pass with the fixture deleted.
+    Elsewhere {
+        fixture: &'static str,
+        reason: &'static str,
+    },
 }
 
 use Provoked::{Elsewhere, Showcase};
@@ -335,13 +345,16 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-406", Showcase),
     (
         "RIDL-407",
-        Elsewhere(
-            "the baseline-aware desk check reads a workspace-local baseline, which is \
-             outside `ridlc`'s source-to-IR function, so it is never a compile diagnostic \
-             (ADR-0008 decisions 9 and 13). Provoked by the committed baseline corpus \
-             member: `crates/ridl/tests/baseline-corpus/`, driven by \
-             `check_reports_ordinal_drift_against_the_committed_baseline`",
-        ),
+        Elsewhere {
+            fixture: "crates/ridl/tests/baseline-corpus/.ridl/baseline/corpus.baseline.ir.json",
+            reason: "the baseline-aware desk check reads a workspace-local baseline, which is \
+                     outside `ridlc`'s source-to-IR function, so it is never a compile \
+                     diagnostic (ADR-0008 decisions 9 and 13). Provoked by the committed \
+                     baseline corpus member, driven by \
+                     `check_reports_ordinal_drift_against_the_committed_baseline` and \
+                     `inline_shape_removal_renders_without_a_span` in \
+                     `crates/ridl/tests/baseline_desk.rs`",
+        },
     ),
     // The shared codes E2 added or folded into the ridl profile.
     ("FORM-106", Showcase),
@@ -351,11 +364,12 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("TYPL-301", Showcase),
     (
         "TYPL-302",
-        Elsewhere(
-            "a duration literal or timing annotation in a typl context — already the \
-             artifact of record in the E1 `diag-showcase` entry, and repeating it here \
-             would duplicate the index entry rather than add one",
-        ),
+        Elsewhere {
+            fixture: "crates/ridlc/tests/corpus/diag-showcase/profile_boundary.typl",
+            reason: "a duration literal or timing annotation in a typl context — already \
+                     the artifact of record in the E1 `diag-showcase` entry, and repeating \
+                     it here would duplicate the index entry rather than add one",
+        },
     ),
     ("TYPL-303", Showcase),
     ("TYPL-304", Showcase),
@@ -405,9 +419,32 @@ fn showcase_provokes_exactly_the_expected_codes() {
     );
 }
 
-/// Every ridl-profile diagnostic has a living example. A code recorded as
-/// [`Elsewhere`] must carry a reason, so "this code has no example" can never
-/// be recorded silently — the reason is the finding.
+/// The repository root, reached from this crate's directory (the working
+/// directory `cargo test` sets). An [`Elsewhere`] fixture lives in a sibling
+/// crate, so its recorded path is root-relative.
+fn repository_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .find(|dir| dir.join("Cargo.lock").is_file() && dir.join("justfile").is_file())
+        .expect("the repository root is an ancestor of this crate")
+        .to_path_buf()
+}
+
+/// Every ridl-profile diagnostic has a living example.
+///
+/// A code recorded as [`Showcase`] must be emitted by the showcase. A code
+/// recorded as [`Elsewhere`] must name a fixture that **exists on disk** — not
+/// merely carry a reason string. The reason-only version of this assertion was
+/// unfalsifiable (`!reason.is_empty()` on a string literal), so the one test
+/// whose entire job is to be the coverage index passed with the referenced
+/// fixture deleted. Checking the path restores the property the name claims.
+///
+/// The fixture check is deliberately a file-existence check rather than a
+/// re-run of the sibling crate's test: this crate cannot drive `ridl`'s binary,
+/// and the named test in `crates/ridl/tests/baseline_desk.rs` is where the
+/// diagnostic itself is pinned. What this assertion buys is that the two
+/// cannot drift apart silently — deleting the fixture fails here, and the
+/// reason string names exactly which test to look at.
 #[test]
 fn every_ridl_profile_code_has_a_living_example() {
     let showcase: std::collections::BTreeSet<String> =
@@ -416,6 +453,7 @@ fn every_ridl_profile_code_has_a_living_example() {
             .into_iter()
             .map(|(code, _)| code)
             .collect();
+    let root = repository_root();
 
     for (code, provoked) in RIDL_PROFILE_CODES {
         match provoked {
@@ -423,10 +461,18 @@ fn every_ridl_profile_code_has_a_living_example() {
                 showcase.contains(*code),
                 "{code} is recorded as provoked by the showcase but the showcase does not emit it",
             ),
-            Elsewhere(reason) => assert!(
-                !reason.is_empty(),
-                "{code} is not provoked by the showcase and records no reason",
-            ),
+            Elsewhere { fixture, reason } => {
+                assert!(
+                    root.join(fixture).exists(),
+                    "{code} is not provoked by the showcase, and the fixture recorded as its \
+                     living example is gone: {fixture}\n  recorded reason: {reason}",
+                );
+                assert!(
+                    !showcase.contains(*code),
+                    "{code} is recorded as provoked elsewhere, but the showcase emits it now — \
+                     move it to `Showcase`",
+                );
+            }
         }
     }
 }
@@ -688,5 +734,129 @@ pub mod ridl {
     assert!(
         succeeded,
         "the composed workspace-two-members Rust must compile, source:\n{source}"
+    );
+}
+
+/// Runs `rustc` over `source` as a library, returning whether it exited zero.
+/// The assertion is on the **exit status**, not on empty stderr: the generated
+/// code is valid but carries non-fatal lints (`non_camel_case_types` on a
+/// screaming-case enum variant, dead code on an unused internal type), which
+/// are warnings, not errors.
+fn rustc_accepts(label: &str, source: &str) -> bool {
+    let dir = std::env::temp_dir().join(format!(
+        "ridlc_corpus_{label}_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock reads a time after the unix epoch")
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).expect("the temp dir is created");
+    let source_path = dir.join(format!("{label}.rs"));
+    let meta_path = dir.join(format!("{label}.rmeta"));
+    std::fs::write(&source_path, source).expect("the generated source is written");
+
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+
+    let succeeded = status.success();
+    std::fs::remove_dir_all(&dir).ok();
+    succeeded
+}
+
+/// The generated packages of `entry`, nested under their dotted module paths
+/// and prefixed with a `ridl::std` stand-in, as one compilable crate root.
+fn composed_source(entry: &Path) -> String {
+    // The `ridl.std` types the interaction-layer entries reference. Newtypes
+    // rather than aliases, so a wrong path in the generated code cannot
+    // accidentally type-check against a primitive.
+    const PRELUDE: &str = "\
+pub mod ridl {
+    pub mod std {
+        #[derive(Default)] pub struct Name(pub String);
+        #[derive(Default)] pub struct Message(pub String);
+        #[derive(Default)] pub struct Label(pub String);
+        #[derive(Default)] pub struct Timestamp(pub i64);
+        #[derive(Default)] pub struct Version(pub String);
+        #[derive(Default)] pub struct Duration(pub f64);
+    }
+}
+";
+    let mut tree = ModuleTree::default();
+    for (name, body) in &generated_packages(entry) {
+        let segments: Vec<&str> = name.split('.').collect();
+        tree.insert(&segments, body.clone());
+    }
+    let mut composed = String::new();
+    tree.render(&mut composed);
+    format!("{PRELUDE}\n{composed}")
+}
+
+/// The generated Rust for `veh-cluster` compiles.
+///
+/// The two existing rustc proofs cover typl-only entries, so until this test
+/// the interaction layer's generated Rust was only ever compared against a text
+/// snapshot — a snapshot records what was emitted, not that it is valid Rust.
+/// `veh-cluster` is the entry that exercises the whole interaction surface,
+/// including the consumer and provider faces of a service's inline shape, the
+/// synthesized tuple-return struct, and the `#[deprecated]` attribute.
+#[test]
+fn veh_cluster_generated_rust_compiles_with_rustc() {
+    let source = composed_source(Path::new("tests/corpus/veh-cluster"));
+    // Anti-vacuity: rustc accepts an empty crate, so the proof is only worth
+    // something if the interaction layer is actually in the source it sees —
+    // both faces of a named interface and both faces of an inline shape.
+    for marker in [
+        "pub trait VehicleStatusConsumer",
+        "pub trait VehicleStatusProvider",
+        "pub trait ServiceVehHvacCabinConsumer",
+        "pub trait ServiceVehHvacCabinProvider",
+    ] {
+        assert!(
+            source.contains(marker),
+            "the composed source must contain `{marker}`, or this proof compiles nothing",
+        );
+    }
+    let succeeded = rustc_accepts("veh_cluster", &source);
+    assert!(
+        succeeded,
+        "the interaction layer's generated Rust for veh-cluster must compile, source:\n{source}"
+    );
+}
+
+/// The generated Rust for `services-workspace` compiles when its two members
+/// are composed as sibling modules. The interaction-layer counterpart of
+/// [`workspace_two_members_composed_compiles_with_rustc`]: here the
+/// cross-package references are made from inside interaction signatures and
+/// from inside a service's inline shape, not only from struct fields.
+#[test]
+fn services_workspace_composed_compiles_with_rustc() {
+    let source = composed_source(Path::new("tests/corpus/services-workspace"));
+    for marker in [
+        "pub trait DoorControlConsumer",
+        "pub trait ServiceFleetVehicleMirrorsProvider",
+        "crate::fleet::contracts::",
+    ] {
+        assert!(
+            source.contains(marker),
+            "the composed source must contain `{marker}`, or this proof compiles nothing",
+        );
+    }
+    let succeeded = rustc_accepts("services_workspace", &source);
+    assert!(
+        succeeded,
+        "the composed services-workspace Rust must compile, source:\n{source}"
     );
 }

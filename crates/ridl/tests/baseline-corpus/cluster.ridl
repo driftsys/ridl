@@ -3,15 +3,25 @@
 // The published shape — snapshotted into `.ridl/baseline/` beside this file and
 // committed — declared its interactions in this order:
 //
-//   1  currentSpeed
-//   2  doorOpened
-//   3  doorClosed
-//   4  setGear
+//   interface VehicleStatus        service corpus.baseline.hvac (inline shape)
+//     1  currentSpeed                1  cabinTemp
+//     2  doorOpened                  2  filterClogged
+//     3  doorClosed                  3  setEcoMode
+//     4  setGear
 //
-// This source tidies the two events into alphabetical order and retires
-// `setGear` without a tombstone. Both look harmless in a review diff and both
-// move wire identities, which is exactly what the desk check reports (RIDL-407)
-// before `ridl diff` ever runs in CI.
+// This source drifts from it in three ways, each of which looks like tidying in
+// a review diff and each of which moves a wire identity:
+//
+//   - the two events are alphabetised (a reorder);
+//   - `setGear` is retired with no tombstone (a removal);
+//   - `setEcoMode` is retired from the *inline shape* with no tombstone.
+//
+// The third one is the point of the inline shape being here at all. A named
+// interface and a service's inline shape are two separate stores of
+// interactions, and a consumer that reads only `Package.interfaces` misses the
+// second — see `crates/ridlc/tests/corpus/veh-cluster/NOTES`. The desk check
+// reports the change either way, but the span it attaches differs, and the
+// test beside this file pins that difference.
 
 package corpus.baseline
 
@@ -23,4 +33,9 @@ interface VehicleStatus {
   signal currentSpeed : Speed @10ms
   event doorClosed : DoorState @[100ms..1s]
   event doorOpened : DoorState @[100ms..1s]
+}
+
+service corpus.baseline.hvac {
+  signal cabinTemp : Speed @[500ms..5s]
+  event filterClogged : DoorState @[100ms..1s]
 }

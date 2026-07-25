@@ -121,9 +121,13 @@ fn sweep_one(path: &Path) -> Option<String> {
 fn compile_is_total_over_the_corpus() {
     let mut files = source_files(Path::new("tests/malformed"));
     files.extend(source_files(Path::new("tests/corpus")));
+    // A tripwire against the sweep silently finding nothing — a wrong path, a
+    // moved directory, a filter that stops matching. Kept just under the real
+    // count so adding one corpus file does not trip it, and close enough that
+    // losing a directory does.
     assert!(
-        files.len() > 25,
-        "the sweep must actually find the corpus; found {} files",
+        files.len() >= 50,
+        "the sweep must actually find the corpus; found {} files, expected at least 50",
         files.len()
     );
 

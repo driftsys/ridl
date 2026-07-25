@@ -208,5 +208,94 @@
       ]
     }
   ],
-  "services": []
+  "services": [
+    {
+      "name": "corpus.baseline.hvac",
+      "visibility": 1,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "shape": {
+        "Inline": {
+          "name": "",
+          "visibility": 0,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "interactions": [
+            {
+              "name": "cabinTemp",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 1,
+              "kind": {
+                "SignalDef": {
+                  "payload": "Speed",
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "timing": {
+                    "mode": 2,
+                    "min_us": "500000",
+                    "max_us": "5000000",
+                    "default_applied": false
+                  }
+                }
+              }
+            },
+            {
+              "name": "filterClogged",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 2,
+              "kind": {
+                "EventDef": {
+                  "payload": "DoorState",
+                  "timing": {
+                    "mode": 2,
+                    "min_us": "100000",
+                    "max_us": "1000000",
+                    "default_applied": false
+                  }
+                }
+              }
+            },
+            {
+              "name": "setEcoMode",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 3,
+              "kind": {
+                "CommandDef": {
+                  "params": [
+                    {
+                      "name": "level",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "GearIndex"
+                        }
+                      }
+                    }
+                  ],
+                  "contracts": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
 }
