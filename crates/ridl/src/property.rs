@@ -855,6 +855,12 @@ struct Summary {
     requires: usize,
     evaluated: usize,
     suspect: usize,
+    /// Clauses that read no parameter and evaluated false. Counted apart
+    /// because they are findings, not passes: an unsatisfiable constant
+    /// precondition is the same news as a `suspect`, reached by a different
+    /// route. Folding them into `evaluated` alone would let a package whose
+    /// every clause is unsatisfiable print a summary that reads like a pass.
+    constant_false: usize,
     skipped: usize,
     errors: usize,
     ensures: usize,
@@ -866,6 +872,7 @@ impl Summary {
             requires: 0,
             evaluated: 0,
             suspect: 0,
+            constant_false: 0,
             skipped: 0,
             errors: 0,
             ensures: 0,
@@ -879,8 +886,12 @@ impl Summary {
             match &contract.status {
                 // A constant clause is evaluated once rather than sampled, but
                 // it did produce a verdict, so it counts as tested.
-                ContractStatus::Ok { .. } | ContractStatus::Constant { .. } => {
+                ContractStatus::Ok { .. } | ContractStatus::Constant { holds: true } => {
                     summary.evaluated += 1;
+                }
+                ContractStatus::Constant { holds: false } => {
+                    summary.evaluated += 1;
+                    summary.constant_false += 1;
                 }
                 ContractStatus::Suspect { .. } => {
                     summary.evaluated += 1;
@@ -901,6 +912,9 @@ impl Summary {
         )];
         if self.suspect > 0 {
             parts.push(format!("{} suspect", self.suspect));
+        }
+        if self.constant_false > 0 {
+            parts.push(format!("{} constant-false", self.constant_false));
         }
         if self.skipped > 0 {
             parts.push(format!("{} skipped", self.skipped));
@@ -1092,6 +1106,7 @@ fn render_json(reports: &[PackageReport]) -> String {
                     "requires_total": summary.requires,
                     "requires_evaluated": summary.evaluated,
                     "requires_suspect": summary.suspect,
+                    "requires_constant_false": summary.constant_false,
                     "requires_skipped": summary.skipped,
                     "requires_errored": summary.errors,
                     "ensures_listed": summary.ensures,

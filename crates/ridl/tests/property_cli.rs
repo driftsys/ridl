@@ -248,11 +248,16 @@ fn zero_is_injected_only_when_the_range_actually_contains_it() {
     // wrong red, so the guard is pinned.
     let dir = TempDir::new("zero-guard");
     dir.write("ridl.toml", MANIFEST);
+    // `Spans` is deliberately WIDE. On a narrow range such as `[-3..3]` a
+    // uniform draw hits zero roughly 35 times in 256, so the second assertion
+    // would hold whether or not zero was injected and the test could not fail.
+    // Across two million values a random hit is vanishingly unlikely, so only
+    // the injected value can satisfy the clause.
     dir.write(
         "app.ridl",
         "package app\n\
 type Pos : integer [5..9]\n\
-type Spans : integer [-3..3]\n\
+type Spans : integer [-1000000..1000000]\n\
 interface I {\n\
   command outside(p: Pos) [ require p == 0 ]\n\
   command inside(s: Spans) [ require s == 0 ]\n\
@@ -324,6 +329,100 @@ fn a_compile_error_exits_two() {
     assert_eq!(
         code, 2,
         "a workspace that does not compile exits 2: {stderr}"
+    );
+}
+
+#[test]
+fn a_draw_outside_its_own_range_is_discarded_rather_than_evaluated() {
+    // The float sampler rounds both bounds to `f64` to build its strategy, so
+    // on a range whose bounds need more than about fifteen significant digits
+    // the reconstructed value can land outside the declared interval. Feeding
+    // such a value to the evaluator inverts verdicts: `require v < min`, which
+    // no legal value satisfies, was reported `ok` before the guard. The
+    // discarded count is asserted as well as the verdict, so removing the guard
+    // fails here rather than merely changing a number nobody checks.
+    let dir = TempDir::new("discard");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Fine : float [1.0000000000000001..1.0000000000000009 step 0.0000000000000001]\n\
+interface I {\n\
+  command below(v: Fine) [ require v < 1.0000000000000001 ]\n\
+}\n",
+    );
+    let (code, stdout, _) = ridl(&[
+        "test",
+        dir.path().to_str().expect("utf-8 path"),
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0, "{stdout}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+    let clause = report[0]["contracts"]
+        .as_array()
+        .expect("contracts is an array")
+        .iter()
+        .find(|contract| contract["id"] == "I.below.require[0]")
+        .expect("the clause is reported")
+        .clone();
+
+    assert_eq!(
+        clause["status"], "suspect",
+        "nothing in `Fine` is below its own minimum, so no input can satisfy \
+         this clause: {clause}"
+    );
+    assert!(
+        clause["discarded_samples"]
+            .as_u64()
+            .expect("a discarded count")
+            > 0,
+        "the out-of-range draws are discarded and counted, not evaluated: {clause}"
+    );
+    assert_eq!(
+        clause["satisfied"], 0,
+        "an out-of-range value must never be counted as satisfying: {clause}"
+    );
+}
+
+#[test]
+fn a_multi_parameter_suspect_carries_the_combination_caveat() {
+    // Boundary values are zipped, not combined, so the corpus is the diagonal
+    // and `a == 0 && b == 1000` is never tried even though both values are in
+    // their parameters' corpora. The finding must say so, or it reads as a
+    // claim about the model rather than a limit of the search.
+    let dir = TempDir::new("combination");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Count : integer [0..1000]\n\
+interface I {\n\
+  command corner(a: Count, b: Count) [ require a == 0 && b == 1000 ]\n\
+  command single(a: Count) [ require a > 2000 ]\n\
+}\n",
+    );
+    let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0, "{stdout}");
+
+    let corner = stdout
+        .lines()
+        .find(|line| line.contains("I.corner.require[0]"))
+        .unwrap_or_else(|| panic!("the clause is reported: {stdout}"));
+    assert!(
+        corner.contains("boundary combinations across parameters are not explored"),
+        "a multi-parameter finding explains what was not tried: {corner}"
+    );
+
+    // A single-parameter clause has no combinations to miss, so the caveat
+    // would be noise — its absence is what keeps the caveat meaningful.
+    let single = stdout
+        .lines()
+        .find(|line| line.contains("I.single.require[0]"))
+        .unwrap_or_else(|| panic!("the clause is reported: {stdout}"));
+    assert!(
+        single.contains("suspect") && !single.contains("boundary combinations"),
+        "a one-parameter finding carries no combination caveat: {single}"
     );
 }
 
@@ -450,6 +549,46 @@ interface I {\n\
     assert_eq!(summary["requires_skipped"], 1);
     assert_eq!(summary["ensures_listed"], 1);
     assert_eq!(summary["nothing_evaluated"], false);
+}
+
+#[test]
+fn the_summary_counts_constant_false_clauses_as_findings() {
+    // A `suspect` is counted in the summary; a constant-false clause is the
+    // same news reached by a different route — every input, all one of them,
+    // failed the precondition. Left uncounted, a package whose every clause is
+    // unsatisfiable printed "2 total, 2 evaluated" and read like a pass.
+    let dir = TempDir::new("constant-false");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+const MAX_SPEED : Speed = 200.0\n\
+interface I {\n\
+  command a(s: Speed) [ require MAX_SPEED < 0.0 ]\n\
+  command b(s: Speed) [ require MAX_SPEED > 300.0 ]\n\
+}\n",
+    );
+    let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0, "{stdout}");
+    let line = stdout
+        .lines()
+        .find(|line| line.contains("summary —"))
+        .unwrap_or_else(|| panic!("the run is summarized: {stdout}"));
+    assert!(
+        line.contains("2 constant-false"),
+        "both clauses are unsatisfiable and the summary must say so rather than \
+         reporting only that they were evaluated: {line}"
+    );
+
+    let (_, json, _) = ridl(&[
+        "test",
+        dir.path().to_str().expect("utf-8 path"),
+        "--format",
+        "json",
+    ]);
+    let report: serde_json::Value = serde_json::from_str(&json).expect("the report is JSON");
+    assert_eq!(report[0]["summary"]["requires_constant_false"], 2);
 }
 
 #[test]
