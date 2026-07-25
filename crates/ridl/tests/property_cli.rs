@@ -900,7 +900,10 @@ fn the_json_report_carries_the_documented_shape() {
 /// - `veh.common.Level` is `[0..7]`, `veh.legacy.Level` is `[1000..2000]`;
 /// - `veh.common.LIMIT` is 5, `veh.legacy.LIMIT` is 1500;
 /// - `veh.common.GearPosition` has no `REVERSE`, so naming one under the wrong
-///   binding is an unbound reference and not a wrong answer.
+///   binding is an unbound reference and not a wrong answer;
+/// - `WINDOW : Duration = 5` is five MILLISECONDS, so a clause bracketing it
+///   between `4ms` and `6ms` fails if the constant is bound as a number (an
+///   evaluation error) or at the wrong scale (five microseconds).
 fn cross_package(label: &str) -> TempDir {
     let dir = TempDir::new(label);
     dir.write(
@@ -920,6 +923,7 @@ type Level : integer [0..7]\n\
 type Gain : float [0.0..10.0 step 0.5]\n\
 const LIMIT : Level = 5\n\
 const TWO : Gain = 2.0\n\
+const WINDOW : Duration = 5\n\
 enum GearPosition {\n  PARK = 0\n  DRIVE = 1\n}\n",
     );
 
@@ -946,6 +950,7 @@ import veh.common.Speed\n\
 import veh.common.Level\n\
 import veh.common.LIMIT\n\
 import veh.common.TWO\n\
+import veh.common.WINDOW\n\
 import veh.common.GearPosition\n\
 import veh.legacy.Level as LegacyLevel\n\
 import veh.legacy.LIMIT as LEGACY_LIMIT\n\
@@ -959,6 +964,10 @@ interface Cruise {\n\
   command ratio(l: Level) [ require 5 / TWO > 2 ]\n\
   command gear(l: Level) [ require GearPosition.PARK != GearPosition.DRIVE ]\n\
   command legacyGear(l: Level) [ require LegacyGear.PARK != LegacyGear.REVERSE ]\n\
+  command windowed(l: Level) [\n\
+    require WINDOW > 4ms && WINDOW < 6ms\n\
+    require WINDOW != 5us\n\
+  ]\n\
   command stamp(t: Timestamp) [ require t > 0 ]\n\
   query avg(window: Duration): Speed [ require window == 1ms ]\n\
 }\n",
@@ -1163,6 +1172,49 @@ fn enum_members_bind_under_the_local_name_including_an_alias() {
 }
 
 #[test]
+fn a_duration_constant_is_bound_in_the_duration_domain() {
+    // The constant half of the duration rule, which the parameter tests do not
+    // reach: `generator_for` and `const_value` decide the domain separately.
+    // Without the constant branch, `WINDOW` binds as a number, the evaluator
+    // refuses to order it against `4ms`, and the run reports an evaluation
+    // error and exits 1 — the same I7 failure this PR exists to remove, on a
+    // workspace `ridl check` accepts. So the exit code is asserted first.
+    let dir = cross_package("duration-const");
+    let path = dir.path().to_str().expect("utf-8 path");
+    let (check, _, check_err) = ridl(&["check", path]);
+    assert_eq!(check, 0, "the workspace is legal: {check_err}");
+    let (code, text, _) = ridl(&["test", path]);
+    assert_eq!(
+        code, 0,
+        "a duration-typed constant must not fault the evaluator: {text}"
+    );
+    assert!(
+        !text.contains("ERROR"),
+        "no clause errors on this workspace: {text}"
+    );
+
+    let (_, stdout, statuses) = cross_package_statuses("duration-const-json");
+    assert_eq!(
+        statuses
+            .get("Cruise.windowed.require[0]")
+            .map(String::as_str),
+        Some("constant-true"),
+        "`WINDOW` is 5, declared in the millisecond domain, so it lies between \
+         `4ms` and `6ms`: {stdout}"
+    );
+    // The scale, from the other side: five milliseconds is five THOUSAND
+    // microseconds, so dropping the scale makes this clause false rather than
+    // merely imprecise.
+    assert_eq!(
+        statuses
+            .get("Cruise.windowed.require[1]")
+            .map(String::as_str),
+        Some("constant-true"),
+        "`WINDOW` is five milliseconds and not five microseconds: {stdout}"
+    );
+}
+
+#[test]
 fn a_ridl_std_parameter_type_is_sampled() {
     // `ridl.std` is deliberately absent from the workspace's package list and
     // threaded through the passes as a parameter, so it is not among the
@@ -1197,6 +1249,81 @@ fn a_duration_parameter_is_drawn_in_the_duration_domain() {
         Some("ok"),
         "the boundary value 1 is one millisecond, so `window == 1ms` is \
          satisfied: {stdout}"
+    );
+}
+
+#[test]
+fn two_members_declaring_one_package_name_keep_their_own_declarations() {
+    // A workspace name is NOT a key. Two members may declare the same
+    // `[package] name` and the toolchain accepts it with no diagnostic at all —
+    // asserted below, because that silence is why this has to be handled here
+    // rather than assumed away upstream.
+    //
+    // Resolving a package's own declarations through a name-keyed index gives
+    // the second member the first member's types. Both clauses are the same
+    // text over a same-named type with disjoint ranges, so the mix-up flips
+    // both verdicts — and the `ok`-where-truth-is-`suspect` direction is the one
+    // that hides, because it reports 260 satisfying samples that never existed.
+    let dir = TempDir::new("duplicate-package-name");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    for member in ["a", "b"] {
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            "[package]\nname = \"dup.pkg\"\nversion = \"1.0.0\"\n",
+        );
+    }
+    dir.write(
+        "a/a.ridl",
+        "package dup.pkg\n\
+type Level : integer [0..7]\n\
+interface First {\n  command narrow(l: Level) [ require l > 7 ]\n}\n",
+    );
+    dir.write(
+        "b/b.ridl",
+        "package dup.pkg\n\
+type Level : integer [1000..2000]\n\
+interface Second {\n  command wide(l: Level) [ require l > 7 ]\n}\n",
+    );
+
+    let path = dir.path().to_str().expect("utf-8 path");
+    let (check, _, check_err) = ridl(&["check", path]);
+    assert_eq!(
+        check, 0,
+        "two members may share a package name today, silently: {check_err}"
+    );
+
+    let (code, stdout, _) = ridl(&["test", path, "--format", "json"]);
+    assert_eq!(code, 0, "{stdout}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+    // Both packages report under one name, so the clauses are found by observer
+    // id across the whole report rather than by package.
+    let status_of = |id: &str| -> String {
+        report
+            .as_array()
+            .expect("the report is an array")
+            .iter()
+            .flat_map(|package| {
+                package["contracts"]
+                    .as_array()
+                    .expect("contracts is an array")
+            })
+            .find(|contract| contract["id"] == id)
+            .unwrap_or_else(|| panic!("`{id}` is reported: {stdout}"))["status"]
+            .as_str()
+            .expect("a status")
+            .to_string()
+    };
+    assert_eq!(
+        status_of("First.narrow.require[0]"),
+        "suspect",
+        "nothing in the first member's `Level [0..7]` exceeds 7: {stdout}"
+    );
+    assert_eq!(
+        status_of("Second.wide.require[0]"),
+        "ok",
+        "every value of the second member's `Level [1000..2000]` exceeds 7 — \
+         reporting `suspect` here means the member was resolved against its \
+         namesake's declarations: {stdout}"
     );
 }
 

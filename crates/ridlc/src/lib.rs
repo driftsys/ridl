@@ -197,21 +197,23 @@ pub fn module_name_from_path(path: &str) -> String {
 /// is mapped back onto the declaration it stands for.
 pub struct WorkspaceOutput {
     pub checked: Vec<CheckedPackage>,
-    /// Each checked package's resolved local name view, keyed by package name —
-    /// the same name [`CheckedPackage::ir`]'s `name` field carries.
+    /// Each checked package's resolved local name view, in `checked` order and
+    /// one per entry — the two are filled in the same loop, so index `i` of one
+    /// always describes index `i` of the other.
     ///
-    /// The map is what the resolver built (its own declarations, `ridl.std`, and
-    /// the alias-aware imports, ADR-0002 §5); the key is the **local** spelling,
-    /// so `import fleet.legacy.DoorFault as LegacyFault` is keyed `LegacyFault`
-    /// while the [`Symbol`](ridl_sem::Symbol) it maps to still names
-    /// `fleet.legacy.DoorFault`. Resolving a written name any other way — by
-    /// scanning packages for a matching declared name, say — mis-binds under an
-    /// alias and under a cross-package name collision.
+    /// Positional rather than keyed by package name **because a package name is
+    /// not a key**: two workspace members may declare the same `[package] name`,
+    /// which the toolchain currently accepts with no diagnostic at all, and a
+    /// name-keyed map would then silently hand one member the other's view.
     ///
-    /// Keyed by name rather than positioned alongside `checked` so the two
-    /// cannot drift out of step. Duplicate package names resolve first-wins,
-    /// matching [`package_of`](ridl_core::package::package_of).
-    pub resolutions: BTreeMap<String, Resolution>,
+    /// Each entry is what the resolver built (the package's own declarations,
+    /// `ridl.std`, and the alias-aware imports, ADR-0002 §5). Its keys are
+    /// **local** spellings, so `import fleet.legacy.DoorFault as LegacyFault` is
+    /// keyed `LegacyFault` while the [`Symbol`](ridl_sem::Symbol) it maps to
+    /// still names `fleet.legacy.DoorFault`. Resolving a written name any other
+    /// way — by scanning packages for a matching declared name, say — mis-binds
+    /// under an alias and under a cross-package name collision.
+    pub resolutions: Vec<Resolution>,
     /// The lowered IR of the built-in `ridl.std` package (typl Appendix A).
     ///
     /// `ridl.std` is deliberately absent from
@@ -393,7 +395,7 @@ struct Compiled {
     workspace: Workspace,
     std: Package,
     checked: Vec<CheckedPackage>,
-    resolutions: BTreeMap<String, Resolution>,
+    resolutions: Vec<Resolution>,
     diagnostics: Vec<Diagnostic>,
     sources: SourceMap,
 }
@@ -413,7 +415,7 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
 
     let packages = workspace.packages(db).clone();
     let mut checked = Vec::with_capacity(packages.len());
-    let mut resolutions: BTreeMap<String, Resolution> = BTreeMap::new();
+    let mut resolutions: Vec<Resolution> = Vec::with_capacity(packages.len());
     for pkg in &packages {
         // Intern this package's files into the render source map; their ids are
         // the render targets the package-relative pass diagnostics remap onto.
@@ -441,11 +443,7 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
             std::mem::take(&mut resolution.diagnostics),
             &render_ids,
         ));
-        // First-wins on a duplicate package name, matching `package_of`, which
-        // is what every reference in the lowered IR was resolved through.
-        resolutions
-            .entry(pkg.name(db).clone())
-            .or_insert(resolution);
+        resolutions.push(resolution);
 
         let checked_pkg = check_package(db, workspace, *pkg, std);
         diagnostics.extend(remap_diagnostics(

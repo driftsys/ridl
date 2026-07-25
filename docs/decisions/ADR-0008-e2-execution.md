@@ -193,10 +193,24 @@ remains the merge gate.
     imported constant raised an unbound reference and exited **1** on a
     workspace `ridl check` accepts. Both are one root cause — the runner had no
     access to what the checker resolved — and both are fixed by handing it that
-    resolution. Neither field can be reconstructed by the caller: `Resolution`
-    was computed inside `load_and_check` and discarded, and `ridl.std` is
-    deliberately absent from `Workspace::packages` so its IR never reached
-    `checked`. Reconstructing the first by indexing declarations by their bare
+    resolution. `Resolution` was computed inside `load_and_check` and discarded;
+    `ridl.std` is deliberately absent from `Workspace::packages`, so its IR
+    never reached `checked`.
+
+    A caller **can** rebuild both from API that was already public — running
+    `load_workspace`, then `resolve_package` and `check_package` per member, and
+    `std_package` for the built-in. That is the alternative this decision
+    rejects, and the reason is duplication rather than impossibility: it obliges
+    a workflow crate to restate `load_and_check`'s load-and-resolve loop — the
+    same members, in the same order, against the same `std` handle — where it
+    would drift silently from the compiler's own loop the first time that loop
+    changes. Returning what the pipeline already computed keeps the sequence in
+    one place.
+
+    What is genuinely not available by another route is the **alias mapping**. A
+    lowered `Contract` carries only canonical source text, which spells the
+    locally bound name, so an alias can be resolved only through the resolver's
+    own symbol map. Reconstructing it by indexing declarations by their bare
     name across packages is not equivalent and is rejected: it mis-binds under
     an import alias, where the local name is the alias while the declaration
     keeps its own, and under a cross-package name collision. For a correctness
@@ -211,6 +225,16 @@ remains the merge gate.
     before. `ridl test` stays in the `ridl` facade, consistent with decision 9:
     the compiler reports what it resolved, the facade decides what to do with
     it.
+
+    _One constraint the shape records._ `resolutions` is positional — one entry
+    per `checked` entry, filled in the same loop — and not keyed by package
+    name, because a package name is not a key: two workspace members may declare
+    the same `[package] name`, which the toolchain currently accepts with no
+    diagnostic at all. A name-keyed view would hand one member the other's
+    declarations, which is a silent wrong answer rather than a missing one.
+    Cross-package references still resolve first-wins by name, because that is
+    what `package_of` does and therefore what the checker did when it lowered
+    them.
 
 ## Consequences
 

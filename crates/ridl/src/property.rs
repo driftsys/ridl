@@ -217,10 +217,23 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
     }
 
     let names = Names::of(&output);
+    // `checked` and `resolutions` are filled in one loop and are the same
+    // length; `zip` therefore pairs each package with its own resolved name
+    // view, which a lookup by package name could not do (see `Home`).
     let reports: Vec<PackageReport> = output
         .checked
         .iter()
-        .map(|checked| run_package(&checked.ir, &names, samples))
+        .zip(&output.resolutions)
+        .map(|(checked, resolution)| {
+            run_package(
+                &Home {
+                    ir: &checked.ir,
+                    resolution,
+                },
+                &names,
+                samples,
+            )
+        })
         .collect();
 
     match format {
@@ -235,8 +248,9 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
     }
 }
 
-fn run_package(package: &v2::Package, names: &Names, samples: usize) -> PackageReport {
-    let vocabulary = names.vocabulary(&package.name);
+fn run_package(home: &Home, names: &Names, samples: usize) -> PackageReport {
+    let package = home.ir;
+    let vocabulary = names.vocabulary(home);
     let mut ranges = Vec::new();
     for decl in &package.decls {
         let Some(v2::decl::Kind::TypeDef(type_def)) = &decl.kind else {
@@ -276,7 +290,7 @@ fn run_package(package: &v2::Package, names: &Names, samples: usize) -> PackageR
             };
             for clause in clauses {
                 contracts.push(run_contract(
-                    &package.name,
+                    home,
                     names,
                     &vocabulary,
                     params,
@@ -388,7 +402,7 @@ fn integer(value: i64) -> ExactValue {
 // ==========================================================================
 
 fn run_contract(
-    home: &str,
+    home: &Home,
     names: &Names,
     vocabulary: &BTreeMap<String, Value>,
     params: &[v2::Param],
@@ -466,7 +480,7 @@ fn run_contract(
         Config::default(),
         TestRng::from_seed(
             RngAlgorithm::ChaCha,
-            &seed(home, &clause.observer_id, &clause.source),
+            &seed(&home.ir.name, &clause.observer_id, &clause.source),
         ),
     );
 
@@ -693,37 +707,66 @@ fn milliseconds_to_micros(value: ExactValue) -> ExactValue {
     ExactValue(value.0 * BigRational::from_integer(BigInt::from(1000)))
 }
 
+/// The package whose clauses are being run: its lowered IR and the resolved
+/// local name view the checker built for it, paired as `ridlc` returns them.
+///
+/// The IR is carried rather than looked up by name, because **a package name is
+/// not a key**. Two workspace members may declare the same `[package] name`,
+/// which the toolchain currently accepts with no diagnostic at all, and
+/// `resolve_package` binds a package's own declarations straight from its own
+/// files before it considers any import (`resolve.rs`, step 1) — a bare
+/// reference never goes through `package_of`. Resolving one by name would hand
+/// the second member the first member's declarations and report the second
+/// member's clauses against bounds it never declared.
+struct Home<'a> {
+    ir: &'a v2::Package,
+    resolution: &'a Resolution,
+}
+
 /// Every name a contract clause can reach, resolved the way the checker
 /// resolved it.
 ///
-/// Two maps, and both are load-bearing:
+/// `packages` indexes the lowered IR of every checked package **plus
+/// `ridl.std`** by package name, and serves **cross-package references only**:
+/// a lowered reference is canonical — bare within its own package,
+/// `package.Name` across packages (the checker's `canonical_ref`) — so
+/// splitting one at its last dot names the package to look in, with no search
+/// and no chance of matching a same-named declaration elsewhere. A reference
+/// naming the enclosing package is answered from [`Home::ir`] instead, never
+/// from this index. Duplicate names resolve first-wins here, which is exactly
+/// what [`package_of`](ridl_core::package::package_of) does and therefore what
+/// the checker itself did when it lowered the reference: the runner's job is to
+/// agree with the checker, not to improve on it.
 ///
-/// - `packages` holds the lowered IR of every checked package **plus
-///   `ridl.std`**, keyed by package name. A lowered reference is canonical —
-///   bare within its own package, `package.Name` across packages (the
-///   checker's `canonical_ref`) — so splitting one at its last dot names the
-///   package to look in exactly, with no search and no chance of matching a
-///   same-named declaration elsewhere. `ridl.std` is in the map because it is
-///   deliberately absent from the workspace's package list while every package
-///   implicitly imports all of it (typl §3.2), and `Duration` and `Timestamp`
-///   both carry generatable ranges.
-/// - `resolutions` holds each package's resolved local name view. It is the
-///   only place the **written** name of a value — which is what a clause's
-///   canonical source text spells, and what the evaluator asks the environment
-///   for — is mapped onto the declaration it stands for. Scanning packages for
-///   a matching declared name instead would bind the wrong declaration under an
-///   import alias (`import fleet.legacy.DoorFault as LegacyFault` is keyed
-///   `LegacyFault`, while the symbol still names `fleet.legacy.DoorFault`) and
-///   would have to guess between two packages exporting one name.
+/// `ridl.std` is in the index because it is deliberately absent from the
+/// workspace's package list while every package implicitly imports all of it
+/// (typl §3.2), and `Duration` and `Timestamp` both carry generatable ranges.
+///
+/// The **written** name of a value — what a clause's canonical source text
+/// spells, and what the evaluator asks the environment for — is resolved
+/// through [`Home::resolution`] and never through this index. Scanning packages
+/// for a matching declared name instead would bind the wrong declaration under
+/// an import alias (`import fleet.legacy.DoorFault as LegacyFault` is keyed
+/// `LegacyFault`, while the symbol still names `fleet.legacy.DoorFault`) and
+/// would have to guess between two packages exporting one name.
+///
+/// Reading the resolver's map is also what makes the runner agree with the
+/// checker on the cases the resolver decides quietly. Two *imports* competing
+/// for one local name are a hard error (TYPL-006), but an import colliding with
+/// a **local** declaration is not diagnosed at all — the local declaration wins
+/// and the import is silently shadowed. The runner inherits that outcome
+/// because it reads the same map, rather than reproducing a rule it would have
+/// to keep in step by hand.
 struct Names<'a> {
     packages: BTreeMap<&'a str, &'a v2::Package>,
-    resolutions: &'a BTreeMap<String, Resolution>,
 }
 
 impl<'a> Names<'a> {
     fn of(output: &'a ridlc::WorkspaceOutput) -> Names<'a> {
-        // First-wins on a duplicate package name, matching `package_of`, which
-        // is what every reference in the lowered IR was resolved through.
+        // First-wins on a duplicate package name — see the type's own note: a
+        // cross-package reference was lowered through `package_of`, which picks
+        // the first match by name, so this index reproduces the checker's
+        // choice. A package's OWN declarations never come through here.
         let mut packages: BTreeMap<&str, &v2::Package> = BTreeMap::new();
         for checked in &output.checked {
             packages.entry(&checked.ir.name).or_insert(&checked.ir);
@@ -731,14 +774,12 @@ impl<'a> Names<'a> {
         packages
             .entry(&output.std_ir.name)
             .or_insert(&output.std_ir);
-        Names {
-            packages,
-            resolutions: &output.resolutions,
-        }
+        Names { packages }
     }
 
     /// Splits a canonical IR reference into the package that declares it and
-    /// the declared name, reading a bare reference as `home`'s own.
+    /// the declared name, reading a bare reference as `home`'s own. A declared
+    /// name is a single identifier, so the last dot is always the separator.
     fn split<'r>(home: &'r str, reference: &'r str) -> (&'r str, &'r str) {
         match reference.rsplit_once('.') {
             Some((package, name)) => (package, name),
@@ -746,9 +787,15 @@ impl<'a> Names<'a> {
         }
     }
 
-    fn decl(&self, package: &str, name: &str) -> Option<&'a v2::decl::Kind> {
-        self.packages
-            .get(package)?
+    /// The declaration `name` in `package`, read from the enclosing package's
+    /// own IR when `package` names it and from the workspace index otherwise.
+    fn decl(&self, home: &Home<'a>, package: &str, name: &str) -> Option<&'a v2::decl::Kind> {
+        let target = if package == home.ir.name {
+            home.ir
+        } else {
+            *self.packages.get(package)?
+        };
+        target
             .decls
             .iter()
             .find(|decl| decl.name == name)?
@@ -765,27 +812,24 @@ impl<'a> Names<'a> {
     /// symbol's value is then read out of the IR of the package that **declares**
     /// it. A constant's own declared type is likewise resolved in its declaring
     /// package, since that is the view its lowered `type_ref` is canonical in.
-    fn vocabulary(&self, home: &str) -> BTreeMap<String, Value> {
+    fn vocabulary(&self, home: &Home<'a>) -> BTreeMap<String, Value> {
         let mut bound = BTreeMap::new();
-        let Some(resolution) = self.resolutions.get(home) else {
-            return bound;
-        };
-        for (local, symbol) in &resolution.symbols {
+        for (local, symbol) in &home.resolution.symbols {
             match symbol.kind {
                 SymbolKind::Const => {
                     let Some(v2::decl::Kind::ConstDef(const_def)) =
-                        self.decl(&symbol.package, &symbol.name)
+                        self.decl(home, &symbol.package, &symbol.name)
                     else {
                         continue;
                     };
-                    let Some(value) = self.const_value(&symbol.package, const_def) else {
+                    let Some(value) = self.const_value(home, &symbol.package, const_def) else {
                         continue;
                     };
                     bound.insert(local.clone(), value);
                 }
                 SymbolKind::Enum => {
                     let Some(v2::decl::Kind::EnumDef(enum_def)) =
-                        self.decl(&symbol.package, &symbol.name)
+                        self.decl(home, &symbol.package, &symbol.name)
                     else {
                         continue;
                     };
@@ -810,10 +854,15 @@ impl<'a> Names<'a> {
     /// `None` for a constant with no numeric value — a string, bytes, or regex
     /// constant, over which no operator of the guaranteed subset works.
     ///
-    /// `home` is the package that **declares** the constant: its lowered
+    /// `declaring` is the package that **declares** the constant: its lowered
     /// `type_ref` is canonical in that package's view, not in the view of the
     /// package whose clause names it.
-    fn const_value(&self, home: &str, const_def: &v2::ConstDef) -> Option<Value> {
+    fn const_value(
+        &self,
+        home: &Home<'a>,
+        declaring: &str,
+        const_def: &v2::ConstDef,
+    ) -> Option<Value> {
         let value = ExactValue::parse(&const_def.value)?;
         // A constant with no declared type, or one whose type resolves to
         // nothing, is typed by its written spelling — exactly as a bare literal
@@ -831,11 +880,15 @@ impl<'a> Names<'a> {
             "float" => return Some(Value::Num(value, NumericBacking::Float)),
             _ => {}
         }
-        let (package, name) = Names::split(home, type_ref);
+        let (package, name) = Names::split(declaring, type_ref);
+        // A `ridl.std.Duration` constant belongs to the duration domain exactly
+        // as a parameter of that type does — see `DURATION`. Without this a
+        // clause comparing one against a duration literal is an evaluation
+        // error and exit 1, on a workspace the checker accepts.
         if (package, name) == DURATION {
             return Some(Value::Dur(milliseconds_to_micros(value)));
         }
-        let backing = match self.decl(package, name) {
+        let backing = match self.decl(home, package, name) {
             Some(v2::decl::Kind::TypeDef(type_def)) => match type_def.width.as_ref() {
                 Some(v2::type_def::Width::IntWidth(_)) => NumericBacking::Integer,
                 Some(v2::type_def::Width::FloatWidth(_)) => NumericBacking::Float,
@@ -848,13 +901,13 @@ impl<'a> Names<'a> {
 
     /// How to draw values for one parameter, or `None` when its declared type
     /// carries no numeric range to draw from.
-    fn generator_for(&self, home: &str, param: &v2::Param) -> Option<Generator> {
+    fn generator_for(&self, home: &Home<'a>, param: &v2::Param) -> Option<Generator> {
         let Some(v2::field_type::Kind::Named(reference)) = param.r#type.as_ref()?.kind.as_ref()
         else {
             return None;
         };
-        let (package, name) = Names::split(home, reference);
-        let Some(v2::decl::Kind::TypeDef(type_def)) = self.decl(package, name) else {
+        let (package, name) = Names::split(&home.ir.name, reference);
+        let Some(v2::decl::Kind::TypeDef(type_def)) = self.decl(home, package, name) else {
             return None;
         };
         let constraint = type_def.constraint.as_ref()?;
