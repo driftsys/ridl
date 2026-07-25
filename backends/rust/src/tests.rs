@@ -1523,3 +1523,1621 @@ fn generate_reports_an_empty_named_decl_instead_of_panicking() {
         error.message,
     );
 }
+
+// ---------------------------------------------------------------------------
+// Interactions and services (E2 task 15) — fixture builders.
+// ---------------------------------------------------------------------------
+
+/// An interaction declaration: the same `Decl` envelope as a package
+/// declaration, with `ordinal` set and `visibility` left unspecified — an
+/// interaction is not separately visible (ridl §3).
+fn interaction(name: &str, ordinal: u32, doc: &str, kind: v2::decl::Kind) -> v2::Decl {
+    v2::Decl {
+        name: name.to_string(),
+        visibility: v2::Visibility::Unspecified as i32,
+        is_error: false,
+        doc: doc.to_string(),
+        labels: Vec::new(),
+        deprecated: None,
+        ordinal,
+        kind: Some(kind),
+    }
+}
+
+fn timing(mode: v2::TimingMode, min_us: Option<&str>, max_us: Option<&str>) -> v2::Timing {
+    v2::Timing {
+        mode: mode as i32,
+        min_us: min_us.map(str::to_string),
+        max_us: max_us.map(str::to_string),
+        default_applied: false,
+    }
+}
+
+fn named_type(reference: &str) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Named(reference.to_string())),
+    }
+}
+
+fn stream_of(element: &str) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+            element: Some(v2::stream_type::Element::Named(element.to_string())),
+        })),
+    }
+}
+
+fn param(name: &str, ty: v2::FieldType) -> v2::Param {
+    v2::Param {
+        name: name.to_string(),
+        r#type: Some(ty),
+    }
+}
+
+fn contract(
+    kind: v2::ContractKind,
+    source: &str,
+    signal_refs: &[&str],
+    param_refs: &[&str],
+    uses_result: bool,
+    observer_id: &str,
+) -> v2::Contract {
+    v2::Contract {
+        kind: kind as i32,
+        source: source.to_string(),
+        signal_refs: signal_refs.iter().map(|s| s.to_string()).collect(),
+        param_refs: param_refs.iter().map(|s| s.to_string()).collect(),
+        uses_result,
+        observer_id: observer_id.to_string(),
+    }
+}
+
+fn interface(name: &str, doc: &str, interactions: Vec<v2::Decl>) -> v2::Interface {
+    v2::Interface {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        doc: doc.to_string(),
+        labels: Vec::new(),
+        deprecated: None,
+        interactions,
+    }
+}
+
+fn service(name: &str, shape: v2::service::Shape) -> v2::Service {
+    v2::Service {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        doc: String::new(),
+        labels: Vec::new(),
+        deprecated: None,
+        shape: Some(shape),
+    }
+}
+
+fn interaction_package(
+    decls: Vec<v2::Decl>,
+    interfaces: Vec<v2::Interface>,
+    services: Vec<v2::Service>,
+) -> v2::Package {
+    v2::Package {
+        name: "veh.cluster".to_string(),
+        decls,
+        interfaces,
+        services,
+    }
+}
+
+/// The Rust source for one `VehicleStatus` interface holding `interactions`.
+fn rust_for_interaction(interactions: Vec<v2::Decl>) -> String {
+    generate(&interaction_package(
+        Vec::new(),
+        vec![interface("VehicleStatus", "", interactions)],
+        Vec::new(),
+    ))
+    .expect("generation succeeds")
+    .rust_source
+}
+
+// ---------------------------------------------------------------------------
+// Per-kind interaction snapshots.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn signal_carries_init_and_provenance() {
+    let source = rust_for_interaction(vec![interaction(
+        "currentSpeed",
+        1,
+        "Current vehicle speed",
+        v2::decl::Kind::SignalDef(v2::SignalDef {
+            payload: "veh.common.Speed".to_string(),
+            declared_init: Some("MAX_SPEED".to_string()),
+            init: Some(init_value(true, Some("250"))),
+            timing: Some(timing(
+                v2::TimingMode::StrictPeriodic,
+                Some("10000"),
+                Some("10000"),
+            )),
+        }),
+    )]);
+    assert!(
+        source.contains("SignalHandle<crate::veh::common::Speed>"),
+        "a signal is a SignalHandle over its payload, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn event_is_a_subscribe_only_handle() {
+    let source = rust_for_interaction(vec![interaction(
+        "doorOpened",
+        4,
+        "Raised on every door state change",
+        v2::decl::Kind::EventDef(v2::EventDef {
+            payload: "DoorPayload".to_string(),
+            timing: Some(timing(v2::TimingMode::Range, Some("50000"), Some("500000"))),
+        }),
+    )]);
+    assert!(
+        source.contains("EventHandle<DoorPayload>"),
+        "an event is an EventHandle over its payload, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn command_returns_unit_and_records_its_require() {
+    let source = rust_for_interaction(vec![interaction(
+        "setGear",
+        5,
+        "Request a gear change",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![param("position", named_type("veh.common.GearPosition"))],
+            contracts: vec![contract(
+                v2::ContractKind::Require,
+                "position != GearPosition.PARK || currentSpeed == 0.0",
+                &["VehicleStatus.currentSpeed"],
+                &["position"],
+                false,
+                "VehicleStatus.setGear.require[0]",
+            )],
+        }),
+    )]);
+    assert!(
+        source.contains("infrastructure failure — detected, undeclared"),
+        "the gf §6.4 transport wording is used verbatim, got:\n{source}"
+    );
+    assert!(
+        source.contains("VehicleStatus.setGear.require[0]"),
+        "the observer stub id is emitted as data, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn fallible_query_carries_the_transport_identity() {
+    let source = rust_for_interaction(vec![interaction(
+        "calibrate",
+        9,
+        "Run an axle calibration",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("target", named_type("Axle"))],
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Fallible(v2::FallibleType {
+                    ok: "CalReport".to_string(),
+                    err: "CalError".to_string(),
+                })),
+            }),
+            contracts: Vec::new(),
+        }),
+    )]);
+    assert!(
+        source.contains("transport identity: VehicleStatus#9:CalReport|CalError"),
+        "the identity comes from fallible_transport_identity, got:\n{source}"
+    );
+    assert!(
+        source.contains("Result<CalReport, CalError>"),
+        "a fallible return is a native Result, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn tuple_return_query_generates_a_named_struct() {
+    let source = rust_for_interaction(vec![interaction(
+        "getBounds",
+        3,
+        "Observed speed envelope",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: Vec::new(),
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![tuple_field("min", "Speed"), tuple_field("max", "Speed")],
+                    })),
+                })),
+            }),
+            contracts: Vec::new(),
+        }),
+    )]);
+    assert!(
+        source.contains("struct VehicleStatusGetBoundsResult"),
+        "a tuple return generates a named struct, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn bidirectional_stream_query_uses_ridl_stream_on_both_sides() {
+    let source = rust_for_interaction(vec![interaction(
+        "replayFaults",
+        8,
+        "Stream faults in, stream faults out",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("window", stream_of("FaultWindow"))],
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(stream_of("FaultEvent"))),
+            }),
+            contracts: Vec::new(),
+        }),
+    )]);
+    assert!(
+        source.contains("impl RidlStream<Item = FaultWindow>"),
+        "a stream parameter takes impl RidlStream, got:\n{source}"
+    );
+    assert!(
+        source.contains("impl RidlStream<Item = FaultEvent>"),
+        "a stream return is impl RidlStream, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn final_with_an_array_is_a_read_only_accessor() {
+    let source = rust_for_interaction(vec![interaction(
+        "capabilities",
+        11,
+        "",
+        v2::decl::Kind::FinalDef(v2::FinalDef {
+            payload: Some(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(named_type("ridl.std.Label"))),
+                    min: 0,
+                    max: 32,
+                }))),
+            }),
+        }),
+    )]);
+    let provider = source
+        .split("VehicleStatusProvider")
+        .nth(1)
+        .expect("a provider face is emitted");
+    assert!(
+        !provider.contains("capabilities"),
+        "a final has no provider entry — it is provisioned externally (ridl §8), got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn services_both_forms() {
+    let package = interaction_package(
+        Vec::new(),
+        vec![interface(
+            "CruiseControl",
+            "Adaptive cruise",
+            vec![interaction(
+                "engaged",
+                1,
+                "",
+                v2::decl::Kind::SignalDef(v2::SignalDef {
+                    payload: "Engagement".to_string(),
+                    declared_init: None,
+                    init: Some(init_value(true, Some("0"))),
+                    timing: Some(timing(
+                        v2::TimingMode::Range,
+                        Some("100000"),
+                        Some("1000000"),
+                    )),
+                }),
+            )],
+        )],
+        vec![
+            service(
+                "veh.adas.cruise",
+                v2::service::Shape::InterfaceRef("CruiseControl".to_string()),
+            ),
+            service(
+                "veh.hvac.cabin",
+                v2::service::Shape::Inline(interface(
+                    "",
+                    "Cabin climate",
+                    vec![interaction(
+                        "setTarget",
+                        1,
+                        "",
+                        v2::decl::Kind::CommandDef(v2::CommandDef {
+                            params: vec![param("target", named_type("Temperature"))],
+                            contracts: Vec::new(),
+                        }),
+                    )],
+                )),
+            ),
+        ],
+    );
+    let source = generate(&package).expect("generation succeeds").rust_source;
+    assert!(
+        source.contains("ServiceVehHvacCabin"),
+        "an inline shape names its generated anonymous interface, got:\n{source}"
+    );
+    assert!(
+        source.contains(r#"("veh.adas.cruise", "CruiseControl")"#),
+        "the service address maps to its interface, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+#[test]
+fn a_fractional_microsecond_bound_is_refused_rather_than_rounded() {
+    let error = generate(&interaction_package(
+        Vec::new(),
+        vec![interface(
+            "VehicleStatus",
+            "",
+            vec![interaction(
+                "tick",
+                1,
+                "",
+                v2::decl::Kind::SignalDef(v2::SignalDef {
+                    payload: "Speed".to_string(),
+                    declared_init: None,
+                    init: None,
+                    timing: Some(timing(v2::TimingMode::Range, Some("1.5"), Some("100"))),
+                }),
+            )],
+        )],
+        Vec::new(),
+    ))
+    .expect_err("a fractional microsecond bound cannot be represented exactly");
+    assert!(
+        error.message.contains("1.5"),
+        "the refusal names the bound it will not round, got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_unspecified_timing_mode_is_a_generate_error() {
+    let error = generate(&interaction_package(
+        Vec::new(),
+        vec![interface(
+            "VehicleStatus",
+            "",
+            vec![interaction(
+                "tick",
+                1,
+                "",
+                v2::decl::Kind::SignalDef(v2::SignalDef {
+                    payload: "Speed".to_string(),
+                    declared_init: None,
+                    init: None,
+                    timing: Some(timing(v2::TimingMode::Unspecified, Some("10"), Some("10"))),
+                }),
+            )],
+        )],
+        Vec::new(),
+    ))
+    .expect_err("an unresolved timing mode is refused");
+    assert!(
+        error.message.contains("timing mode"),
+        "the refusal names the unresolved mode, got: {}",
+        error.message
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Appendix A — the ridl reference corpus package `veh.cluster`.
+// ---------------------------------------------------------------------------
+
+/// The ridl reference Appendix A package `veh.cluster`, as **`ridl-sem`
+/// actually lowers it**.
+///
+/// The IR is not rebuilt here. It is deserialized from the golden that
+/// `ridl-sem` writes for its own `appendix_a_ir` test, so this backend and the
+/// lowering that feeds it cannot drift: there is one artifact, and a change in
+/// lowering reaches this test the moment that golden is regenerated. A
+/// hand-built copy could not do that — it would keep compiling happily while
+/// describing an IR the compiler no longer produces, which for the E2 exit
+/// criterion's compile proof would make the proof about the fixture rather
+/// than about the pipeline.
+///
+/// Cross-package references to `veh.common` and `ridl.std` stay fully
+/// qualified, as the resolver leaves them (typl §3.2).
+///
+/// One residual is worth recording. The coupling holds as long as the golden is
+/// a live artifact: if the `ridl-sem` test that writes it were deleted and the
+/// `.snap` file left behind, this loader would keep reading an orphan and keep
+/// passing. `cargo insta test --unreferenced` detects exactly that, and it is
+/// not in the local gate — adding it is a repo-wide call for the epic
+/// close-out, not this backend's to make. Deleting the file outright is caught
+/// here immediately, so the gap is narrow: an orphaned snapshot, not a missing
+/// one.
+fn appendix_a() -> v2::Package {
+    // `CARGO_MANIFEST_DIR` is `<workspace>/backends/rust`.
+    let golden = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../crates/ridl-sem/src/snapshots/ridl_sem__check__tests__appendix_a_ir.snap"
+    );
+    let text = std::fs::read_to_string(golden).unwrap_or_else(|err| {
+        panic!(
+            "the ridl-sem Appendix A golden must be readable at {golden}: {err}\n\
+             this test consumes that crate's lowering rather than a copy of it"
+        )
+    });
+
+    // An insta snapshot is a YAML header, a `---` line, then the payload.
+    let body = text
+        .split_once("\n---\n")
+        .map(|(_, body)| body)
+        .unwrap_or(&text);
+    let package: v2::Package = serde_json::from_str(body)
+        .expect("the ridl-sem Appendix A golden deserializes as an IR v2 package");
+
+    // The golden is the whole point, so its shape is asserted rather than
+    // assumed: a silently empty or renamed package would turn the compile proof
+    // below into a proof about nothing.
+    assert_eq!(package.name, "veh.cluster");
+    assert_eq!(
+        package.interfaces.len(),
+        1,
+        "Appendix A declares exactly one interface"
+    );
+    assert!(
+        package.services.is_empty(),
+        "Appendix A declares no service — services are covered by their own tests"
+    );
+    package
+}
+
+#[test]
+fn appendix_a_rust_snapshot() {
+    let Generated { rust_source, .. } = generate(&appendix_a()).expect("Appendix A generates");
+    insta::assert_snapshot!(rust_source);
+}
+
+#[test]
+fn appendix_a_c_header_snapshot() {
+    let Generated { c_header, .. } = generate(&appendix_a()).expect("Appendix A generates");
+    assert!(
+        c_header.contains("interface VehicleStatus"),
+        "the header records the interface as outside the C ABI, got:\n{c_header}"
+    );
+    insta::assert_snapshot!(c_header);
+}
+
+/// The generated Rust for the full Appendix A package compiles with `rustc` —
+/// the E2 exit criterion's proof for the Rust half. A minimal prelude stands in
+/// for the `veh.common` and `ridl.std` types the package imports, declared in
+/// the module path the cross-package references map to.
+#[test]
+fn appendix_a_compiles_with_rustc() {
+    let Generated { rust_source, .. } = generate(&appendix_a()).expect("Appendix A generates");
+
+    const PRELUDE: &str = "\
+pub mod ridl {
+    pub mod std {
+        pub struct Message(pub String);
+        pub struct Label(pub String);
+        pub struct Version(pub String);
+        pub struct Duration(pub i64);
+        #[derive(Default)]
+        pub struct Timestamp(pub i64);
+    }
+}
+pub mod veh {
+    pub mod common {
+        pub struct Speed(pub f64);
+        pub struct Temperature(pub f64);
+        pub struct WarningFlags(pub i64);
+        pub enum GearPosition {
+            PARK = 0,
+            DRIVE = 1,
+        }
+    }
+}
+";
+    let source = format!("{PRELUDE}\n{rust_source}");
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("appendix_a.rs");
+    let meta_path = dir.path().join("appendix_a.rmeta");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+
+    assert!(
+        status.success(),
+        "generated Rust for Appendix A must compile, source:\n{source}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Transport identity inside an inline service shape.
+// ---------------------------------------------------------------------------
+
+/// A fallible query inside a service's inline shape takes its transport
+/// identity from the service's DOTTED global name, not from the Rust type name
+/// this backend generates for it.
+///
+/// `ServiceVehAdasLogs` is a spelling invented here to satisfy Rust's
+/// identifier rules; it means nothing outside this module. Emitting it as a
+/// transport identity would disagree with two things that already exist: the
+/// observer stubs lowered into this very module are scoped to the dotted name
+/// (`ridl-sem`, E2.5), and `ridl diff` keys a service's interactions on the
+/// dotted name (`tools/diff/src/walk.rs`). One value, three consumers — a
+/// disagreement here is the E2 exit criterion failing, since the whole claim is
+/// that two backends emit one contract from one IR.
+#[test]
+fn inline_service_fallible_query_uses_the_dotted_service_name() {
+    let fetch = interaction(
+        "fetchPage",
+        3,
+        "",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("filter", named_type("DiagFilter"))],
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Fallible(v2::FallibleType {
+                    ok: "FaultPage".to_string(),
+                    err: "DiagError".to_string(),
+                })),
+            }),
+            contracts: Vec::new(),
+        }),
+    );
+    let source = generate(&interaction_package(
+        Vec::new(),
+        Vec::new(),
+        vec![service(
+            "veh.adas.logs",
+            v2::service::Shape::Inline(interface("", "", vec![fetch])),
+        )],
+    ))
+    .expect("generation succeeds")
+    .rust_source;
+
+    // The emitted string is exactly what the one IR derivation produces — the
+    // rule is not spelled a second time in this backend.
+    let expected = v2::fallible_transport_identity(
+        "veh.adas.logs",
+        3,
+        &v2::FallibleType {
+            ok: "FaultPage".to_string(),
+            err: "DiagError".to_string(),
+        },
+    );
+    assert!(
+        source.contains(&format!("transport identity: {expected}")),
+        "the identity must match the IR helper ({expected}), got:\n{source}"
+    );
+    // The regression named directly: the mangled type name is not an identity.
+    assert!(
+        !source.contains("transport identity: ServiceVehAdasLogs"),
+        "the generated type name must never be emitted as a transport identity, got:\n{source}"
+    );
+    // The generated type name is still what names the Rust items, and the two
+    // therefore appear side by side in one module without being confused.
+    assert!(
+        source.contains("pub trait ServiceVehAdasLogsConsumer"),
+        "the generated face keeps the mangled type name, got:\n{source}"
+    );
+    assert!(
+        source.contains(r#"("veh.adas.logs", "ServiceVehAdasLogs")"#),
+        "the service table maps the dotted address to the generated type, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+/// An observer stub inside an inline shape is scoped to the dotted name too, so
+/// the identity and the observer address agree inside one generated module.
+#[test]
+fn inline_service_observer_ids_and_identity_agree() {
+    let fetch = interaction(
+        "fetchPage",
+        3,
+        "",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: Vec::new(),
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Fallible(v2::FallibleType {
+                    ok: "FaultPage".to_string(),
+                    err: "DiagError".to_string(),
+                })),
+            }),
+            contracts: vec![contract(
+                v2::ContractKind::Ensure,
+                "result.ok",
+                &[],
+                &[],
+                true,
+                "veh.adas.logs.fetchPage.ensure[0]",
+            )],
+        }),
+    );
+    let source = generate(&interaction_package(
+        Vec::new(),
+        Vec::new(),
+        vec![service(
+            "veh.adas.logs",
+            v2::service::Shape::Inline(interface("", "", vec![fetch])),
+        )],
+    ))
+    .expect("generation succeeds")
+    .rust_source;
+
+    assert!(
+        source.contains("transport identity: veh.adas.logs#3:FaultPage|DiagError"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains(r#"id: "veh.adas.logs.fetchPage.ensure[0]""#),
+        "got:\n{source}"
+    );
+}
+
+/// A named interface keeps using its own name, so threading the identity apart
+/// from the generated type name did not disturb the common case.
+#[test]
+fn named_interface_identity_is_the_interface_name() {
+    let source = rust_for_interaction(vec![interaction(
+        "getFaultPage",
+        9,
+        "",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: Vec::new(),
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Fallible(v2::FallibleType {
+                    ok: "FaultPage".to_string(),
+                    err: "DiagError".to_string(),
+                })),
+            }),
+            contracts: Vec::new(),
+        }),
+    )]);
+    assert!(
+        source.contains("transport identity: VehicleStatus#9:FaultPage|DiagError"),
+        "got:\n{source}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Contract data.
+// ---------------------------------------------------------------------------
+
+/// `uses_result` is carried from the IR rather than inferred.
+///
+/// It cannot be recovered from `source`: a parameter named `resultCode`, a
+/// field access `.result`, or a string literal all contain the substring, and
+/// an `ensure` clause does not always read the result. An `ensure` observer
+/// that reads the result cannot be scheduled before the result exists, so the
+/// flag decides when the observer runs.
+#[test]
+fn contract_stubs_carry_uses_result() {
+    let source = rust_for_interaction(vec![interaction(
+        "getAverageSpeed",
+        7,
+        "",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: vec![param("resultCode", named_type("Code"))],
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(named_type("Speed"))),
+            }),
+            contracts: vec![
+                contract(
+                    v2::ContractKind::Require,
+                    "resultCode > 0",
+                    &[],
+                    &["resultCode"],
+                    false,
+                    "VehicleStatus.getAverageSpeed.require[0]",
+                ),
+                contract(
+                    v2::ContractKind::Ensure,
+                    "result >= 0.0",
+                    &[],
+                    &[],
+                    true,
+                    "VehicleStatus.getAverageSpeed.ensure[0]",
+                ),
+            ],
+        }),
+    )]);
+
+    // The require clause mentions `resultCode` but does not read the result:
+    // the flag and the text disagree on purpose, which is why the flag is
+    // carried rather than recovered from `source`.
+    assert!(
+        source.contains("uses_result: false"),
+        "a clause naming resultCode must still report uses_result: false, got:\n{source}"
+    );
+    assert!(
+        source.contains("uses_result: true"),
+        "a clause reading the result must report uses_result: true, got:\n{source}"
+    );
+    // Two stubs, one flag each. The vocabulary's own field declaration reads
+    // `pub uses_result:`, so it is excluded by matching the emitted values.
+    assert_eq!(
+        source.matches("uses_result: false").count() + source.matches("uses_result: true").count(),
+        2,
+        "every stub carries the flag, got:\n{source}"
+    );
+}
+
+/// A contract with no kind is refused rather than silently filed as `require`.
+/// A `require` is checked before the call and an `ensure` after, so guessing
+/// installs the observer at the wrong moment.
+#[test]
+fn a_contract_without_a_kind_is_a_generate_error() {
+    let error = generate(&interaction_package(
+        Vec::new(),
+        vec![interface(
+            "VehicleStatus",
+            "",
+            vec![interaction(
+                "setGear",
+                1,
+                "",
+                v2::decl::Kind::CommandDef(v2::CommandDef {
+                    params: Vec::new(),
+                    contracts: vec![contract(
+                        v2::ContractKind::Unspecified,
+                        "position != PARK",
+                        &[],
+                        &[],
+                        false,
+                        "VehicleStatus.setGear.require[0]",
+                    )],
+                }),
+            )],
+        )],
+        Vec::new(),
+    ))
+    .expect_err("a kindless contract is refused");
+    assert!(
+        error.message.contains("no kind"),
+        "the refusal names the missing kind, got: {}",
+        error.message
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Streams, services, and vocabulary collisions.
+// ---------------------------------------------------------------------------
+
+/// A stream carries `string` or `bytes` only (ridl §12.2, RIDL-202); any other
+/// primitive is an inconsistent IR, refused rather than emitted as a type the
+/// contract never admitted.
+#[test]
+fn a_stream_of_a_non_stream_primitive_is_a_generate_error() {
+    let error = generate(&interaction_package(
+        Vec::new(),
+        vec![interface(
+            "VehicleStatus",
+            "",
+            vec![interaction(
+                "streamTicks",
+                1,
+                "",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: Vec::new(),
+                    return_type: Some(v2::ReturnType {
+                        kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                                element: Some(v2::stream_type::Element::Primitive(
+                                    v2::PrimitiveType::Integer as i32,
+                                )),
+                            })),
+                        })),
+                    }),
+                    contracts: Vec::new(),
+                }),
+            )],
+        )],
+        Vec::new(),
+    ))
+    .expect_err("an integer stream element is refused");
+    assert!(
+        error.message.contains("RIDL-202"),
+        "the refusal cites the rule, got: {}",
+        error.message
+    );
+}
+
+/// A stream of `string` is admitted, so the check refuses the illegal element
+/// without also rejecting the legal ones.
+#[test]
+fn a_stream_of_string_is_admitted() {
+    let source = rust_for_interaction(vec![interaction(
+        "streamLines",
+        1,
+        "",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: Vec::new(),
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                        element: Some(v2::stream_type::Element::Primitive(
+                            v2::PrimitiveType::String as i32,
+                        )),
+                    })),
+                })),
+            }),
+            contracts: Vec::new(),
+        }),
+    )]);
+    assert!(
+        source.contains("impl RidlStream<Item = String>"),
+        "got:\n{source}"
+    );
+}
+
+/// A service with no shape names an address that nothing answers at, so it is
+/// refused rather than emitted with an empty interface column.
+#[test]
+fn a_service_without_a_shape_is_a_generate_error() {
+    let error = generate(&interaction_package(
+        Vec::new(),
+        Vec::new(),
+        vec![v2::Service {
+            shape: None,
+            ..service(
+                "veh.adas.cruise",
+                v2::service::Shape::InterfaceRef(String::new()),
+            )
+        }],
+    ))
+    .expect_err("a shapeless service is refused");
+    assert!(
+        error.message.contains("no shape"),
+        "the refusal names the missing shape, got: {}",
+        error.message
+    );
+}
+
+/// A typl declaration colliding with a generated vocabulary type is refused.
+///
+/// Without the check the module emits `pub struct Provenance` and
+/// `pub enum Provenance` and rustc rejects it with `error[E0428]` — a broken
+/// file handed downstream instead of a diagnostic naming the declaration.
+#[test]
+fn a_declaration_colliding_with_the_vocabulary_is_a_generate_error() {
+    for name in ["Provenance", "SignalHandle", "RidlStream", "ContractStub"] {
+        let error = generate(&interaction_package(
+            vec![public_decl(
+                name,
+                primitive_type(
+                    v2::PrimitiveType::Integer,
+                    init_value(true, Some("0")),
+                    None,
+                ),
+            )],
+            vec![interface("VehicleStatus", "", Vec::new())],
+            Vec::new(),
+        ))
+        .expect_err("a vocabulary collision is refused");
+        assert!(
+            error.message.contains(name) && error.message.contains("collides"),
+            "the refusal names the colliding declaration, got: {}",
+            error.message
+        );
+    }
+}
+
+/// A declaration colliding with a generated face name is refused for the same
+/// reason.
+#[test]
+fn a_declaration_colliding_with_a_face_name_is_a_generate_error() {
+    let error = generate(&interaction_package(
+        vec![public_decl(
+            "VehicleStatusConsumer",
+            primitive_type(
+                v2::PrimitiveType::Integer,
+                init_value(true, Some("0")),
+                None,
+            ),
+        )],
+        vec![interface("VehicleStatus", "", Vec::new())],
+        Vec::new(),
+    ))
+    .expect_err("a face-name collision is refused");
+    assert!(
+        error.message.contains("Consumer face"),
+        "the refusal names the face, got: {}",
+        error.message
+    );
+}
+
+/// A package with no interactions is unaffected by the collision check: the
+/// vocabulary is not emitted, so the name is free.
+#[test]
+fn a_typl_only_package_may_declare_a_vocabulary_name() {
+    let source = rust_for(vec![public_decl(
+        "Provenance",
+        primitive_type(
+            v2::PrimitiveType::Integer,
+            init_value(true, Some("0")),
+            None,
+        ),
+    )]);
+    assert!(source.contains("struct Provenance"), "got:\n{source}");
+    assert!(
+        !source.contains("enum Provenance"),
+        "the vocabulary is not emitted for a typl-only package, got:\n{source}"
+    );
+}
+
+/// `@deprecated` reaches every interaction kind and both faces (typl §14.2).
+/// Asserted here because deleting the attribute entirely left the per-kind
+/// snapshots green.
+#[test]
+fn deprecated_reaches_interactions_and_both_faces() {
+    fn deprecate(mut decl: v2::Decl, reason: &str) -> v2::Decl {
+        decl.deprecated = Some(reason.to_string());
+        decl
+    }
+
+    let source = rust_for_interaction(vec![
+        deprecate(
+            interaction(
+                "oldSpeed",
+                1,
+                "",
+                v2::decl::Kind::SignalDef(v2::SignalDef {
+                    payload: "Speed".to_string(),
+                    declared_init: None,
+                    init: Some(init_value(true, Some("0"))),
+                    timing: Some(timing(
+                        v2::TimingMode::StrictPeriodic,
+                        Some("10000"),
+                        Some("10000"),
+                    )),
+                }),
+            ),
+            "use currentSpeed",
+        ),
+        deprecate(
+            interaction(
+                "oldDoor",
+                2,
+                "",
+                v2::decl::Kind::EventDef(v2::EventDef {
+                    payload: "DoorPayload".to_string(),
+                    timing: Some(timing(v2::TimingMode::Range, Some("50000"), Some("500000"))),
+                }),
+            ),
+            "use doorOpened",
+        ),
+        deprecate(
+            interaction(
+                "oldSetGear",
+                3,
+                "",
+                v2::decl::Kind::CommandDef(v2::CommandDef {
+                    params: Vec::new(),
+                    contracts: Vec::new(),
+                }),
+            ),
+            "use setGear",
+        ),
+        deprecate(
+            interaction(
+                "oldAverage",
+                4,
+                "",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: Vec::new(),
+                    return_type: Some(v2::ReturnType {
+                        kind: Some(v2::return_type::Kind::Value(named_type("Speed"))),
+                    }),
+                    contracts: Vec::new(),
+                }),
+            ),
+            "use getAverageSpeed",
+        ),
+        deprecate(
+            interaction(
+                "oldVersion",
+                5,
+                "",
+                v2::decl::Kind::FinalDef(v2::FinalDef {
+                    payload: Some(named_type("Version")),
+                }),
+            ),
+            "use softwareVersion",
+        ),
+    ]);
+
+    for reason in [
+        "use currentSpeed",
+        "use doorOpened",
+        "use setGear",
+        "use getAverageSpeed",
+        "use softwareVersion",
+    ] {
+        assert!(
+            source.contains(&format!("note = \"{reason}\"")),
+            "the deprecation reason must reach the generated item, got:\n{source}"
+        );
+    }
+    // Four of the five have a provider-side counterpart (a `final` does not),
+    // so each of those reasons appears twice.
+    assert_eq!(
+        source.matches("note = \"use currentSpeed\"").count(),
+        2,
+        "the attribute reaches both faces, got:\n{source}"
+    );
+    assert_eq!(
+        source.matches("note = \"use softwareVersion\"").count(),
+        1,
+        "a final has no provider entry, got:\n{source}"
+    );
+}
+
+/// A tuple in either position inside a service's inline shape generates a
+/// named struct from the **generated type name**, not from the dotted identity.
+///
+/// The two names an interface carries are not interchangeable: the identity is
+/// a dotted address (`veh.adas.logs`) and is not a Rust identifier, so using it
+/// as a struct-name hint produces `Veh.adas.logsGetPairResult` — which is not a
+/// name at all. The transport identity in the same generated module must still
+/// be the dotted form, so this test pins both halves at once.
+///
+/// The two positions are not equally reachable from source, on purpose. A tuple
+/// **return** is legal ridl and compiles end to end through `ridlc build`. A
+/// tuple **parameter** is rejected upstream by FORM-102 ("command parameter
+/// must be a named type or a stream"), so it is exercised here at the IR level
+/// only. That is deliberate rather than an oversight: this backend's contract
+/// is with the IR, not with the surface grammar, and a hint built from the
+/// identity would panic on a parameter exactly as it did on a return. Keeping
+/// the case means a future grammar relaxation cannot reintroduce the crash
+/// silently — do not "simplify" it away because no `.ridl` file can express it
+/// today.
+#[test]
+fn tuples_inside_an_inline_service_use_the_generated_type_name() {
+    let get_pair = interaction(
+        "getPair",
+        1,
+        "",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: Vec::new(),
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![tuple_field("a", "Speed"), tuple_field("b", "Speed")],
+                    })),
+                })),
+            }),
+            contracts: Vec::new(),
+        }),
+    );
+    let send_pair = interaction(
+        "sendPair",
+        2,
+        "",
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: vec![param(
+                "bounds",
+                v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![tuple_field("lo", "Speed"), tuple_field("hi", "Speed")],
+                    })),
+                },
+            )],
+            contracts: Vec::new(),
+        }),
+    );
+    let fetch = interaction(
+        "fetchPage",
+        3,
+        "",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: Vec::new(),
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Fallible(v2::FallibleType {
+                    ok: "FaultPage".to_string(),
+                    err: "DiagError".to_string(),
+                })),
+            }),
+            contracts: Vec::new(),
+        }),
+    );
+
+    let source = generate(&interaction_package(
+        Vec::new(),
+        Vec::new(),
+        vec![service(
+            "veh.adas.logs",
+            v2::service::Shape::Inline(interface("", "", vec![get_pair, send_pair, fetch])),
+        )],
+    ))
+    .expect("an inline shape carrying tuples generates")
+    .rust_source;
+
+    assert!(
+        source.contains("pub struct ServiceVehAdasLogsGetPairResult"),
+        "a tuple return names its struct from the generated type name, got:\n{source}"
+    );
+    assert!(
+        source.contains("pub struct ServiceVehAdasLogsSendPairBounds"),
+        "a tuple parameter names its struct from the generated type name, got:\n{source}"
+    );
+    // The dotted address is not a Rust identifier; it must never reach a name.
+    assert!(
+        !source.contains("Veh.adas.logs"),
+        "the dotted address must never be used as a name, got:\n{source}"
+    );
+    // The other half of the split: the identity is still the dotted address.
+    assert!(
+        source.contains("transport identity: veh.adas.logs#3:FaultPage|DiagError"),
+        "the transport identity keeps the dotted address, got:\n{source}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The generated-name classes a package must not collide with.
+// ---------------------------------------------------------------------------
+
+/// A typl constant declaration, for the value-namespace collision cases.
+fn int_const(name: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::ConstDef(v2::ConstDef {
+            type_ref: Some("integer".to_string()),
+            value: "5".to_string(),
+            regex: None,
+        }),
+    )
+}
+
+/// A typl struct declaration, for the type-namespace collision cases.
+fn empty_struct(name: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: Vec::new(),
+            fixed_layout: false,
+        }),
+    )
+}
+
+fn vehicle_status(interactions: Vec<v2::Decl>) -> v2::Interface {
+    interface("VehicleStatus", "", interactions)
+}
+
+/// A constant colliding with a generated timing table is refused. Both are
+/// `const`, so rustc would reject the module with `error[E0428]`.
+#[test]
+fn a_const_colliding_with_the_timing_table_is_refused() {
+    let error = generate(&interaction_package(
+        vec![int_const("VEHICLE_STATUS_TIMING")],
+        vec![vehicle_status(Vec::new())],
+        Vec::new(),
+    ))
+    .expect_err("a timing-table collision is refused");
+    assert!(
+        error.message.contains("VEHICLE_STATUS_TIMING") && error.message.contains("timing table"),
+        "got: {}",
+        error.message
+    );
+}
+
+/// The same for the contract table.
+#[test]
+fn a_const_colliding_with_the_contract_table_is_refused() {
+    let error = generate(&interaction_package(
+        vec![int_const("VEHICLE_STATUS_CONTRACTS")],
+        vec![vehicle_status(Vec::new())],
+        Vec::new(),
+    ))
+    .expect_err("a contract-table collision is refused");
+    assert!(
+        error.message.contains("contract table"),
+        "got: {}",
+        error.message
+    );
+}
+
+/// The same for the service table, which is generated whenever the package
+/// declares any service at all.
+#[test]
+fn a_const_colliding_with_the_service_table_is_refused() {
+    let error = generate(&interaction_package(
+        vec![int_const("SERVICES")],
+        Vec::new(),
+        vec![service(
+            "veh.adas.cruise",
+            v2::service::Shape::InterfaceRef("CruiseControl".to_string()),
+        )],
+    ))
+    .expect_err("a service-table collision is refused");
+    assert!(
+        error.message.contains("service table"),
+        "got: {}",
+        error.message
+    );
+}
+
+/// A declaration colliding with the face of an interface generated for an
+/// **inline service shape** is refused.
+///
+/// This is the case the first version of the check missed: it iterated
+/// `package.interfaces`, which is not the complete set of interfaces — an
+/// inline shape's interface exists only as a service's payload.
+#[test]
+fn a_declaration_colliding_with_an_inline_shape_face_is_refused() {
+    for suffix in ["Consumer", "Provider"] {
+        let error = generate(&interaction_package(
+            vec![empty_struct(&format!("ServiceVehAdasLogs{suffix}"))],
+            Vec::new(),
+            vec![service(
+                "veh.adas.logs",
+                v2::service::Shape::Inline(interface(
+                    "",
+                    "",
+                    vec![interaction(
+                        "ping",
+                        1,
+                        "",
+                        v2::decl::Kind::CommandDef(v2::CommandDef {
+                            params: Vec::new(),
+                            contracts: Vec::new(),
+                        }),
+                    )],
+                )),
+            )],
+        ))
+        .expect_err("an inline-shape face collision is refused");
+        assert!(
+            error.message.contains(suffix) && error.message.contains("ServiceVehAdasLogs"),
+            "got: {}",
+            error.message
+        );
+    }
+}
+
+/// A declaration colliding with a struct generated for a tuple in an
+/// interaction position is refused.
+#[test]
+fn a_declaration_colliding_with_a_generated_tuple_struct_is_refused() {
+    let get_pair = interaction(
+        "getPair",
+        1,
+        "",
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: Vec::new(),
+            return_type: Some(v2::ReturnType {
+                kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![tuple_field("a", "Speed"), tuple_field("b", "Speed")],
+                    })),
+                })),
+            }),
+            contracts: Vec::new(),
+        }),
+    );
+    let error = generate(&interaction_package(
+        vec![empty_struct("VehicleStatusGetPairResult")],
+        vec![vehicle_status(vec![get_pair])],
+        Vec::new(),
+    ))
+    .expect_err("a generated-tuple collision is refused");
+    assert!(
+        error.message.contains("VehicleStatusGetPairResult") && error.message.contains("tuple"),
+        "got: {}",
+        error.message
+    );
+}
+
+// ---------------------------------------------------------------------------
+// What the check must NOT reject: Rust's namespaces genuinely separate these.
+// ---------------------------------------------------------------------------
+
+/// A *struct* named `VEHICLE_STATUS_TIMING` does not collide with the *const*
+/// of that name: Rust resolves types and values separately. Rejecting it would
+/// refuse a contract that compiles.
+#[test]
+fn a_struct_named_like_a_generated_const_is_admitted() {
+    let source = generate(&interaction_package(
+        vec![empty_struct("VEHICLE_STATUS_TIMING")],
+        vec![vehicle_status(Vec::new())],
+        Vec::new(),
+    ))
+    .expect("a type-namespace name does not collide with a const")
+    .rust_source;
+    assert!(
+        source.contains("struct VEHICLE_STATUS_TIMING"),
+        "got:\n{source}"
+    );
+    assert!(
+        source.contains("const VEHICLE_STATUS_TIMING"),
+        "got:\n{source}"
+    );
+}
+
+/// A constant named like a generated face does not collide with it either —
+/// the face is a trait, which lives in the type namespace.
+#[test]
+fn a_const_named_like_a_generated_face_is_admitted() {
+    generate(&interaction_package(
+        vec![int_const("VehicleStatusConsumer")],
+        vec![vehicle_status(Vec::new())],
+        Vec::new(),
+    ))
+    .expect("a value-namespace name does not collide with a trait");
+}
+
+/// An interface whose name differs from a declaration only by case is fine:
+/// the face name is built through `camel_case`, so `vehicleStatus` generates
+/// `VehicleStatusConsumer` and the lower-camel declaration is untouched.
+#[test]
+fn a_lower_camel_declaration_does_not_collide_with_a_face() {
+    generate(&interaction_package(
+        vec![empty_struct("vehicleStatusConsumer")],
+        vec![interface("vehicleStatus", "", Vec::new())],
+        Vec::new(),
+    ))
+    .expect("camel_case normalization keeps these apart");
+}
+
+// ---------------------------------------------------------------------------
+// Nested tuple names.
+// ---------------------------------------------------------------------------
+
+/// A tuple field whose own type is a tuple, for the nesting cases.
+fn nested_tuple_field(name: &str, fields: Vec<v2::TupleField>) -> v2::TupleField {
+    v2::TupleField {
+        name: name.to_string(),
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Tuple(v2::TupleType { fields })),
+        }),
+    }
+}
+
+/// `query getPair(): (a: (x: (m: Speed, n: Speed), y: Speed), b: Speed)` — a
+/// tuple inside a tuple inside a tuple, so there are two levels below the
+/// outermost generated struct. One level would not distinguish the fix from
+/// the bug: the first nested level is the one the old check missed, and the
+/// second proves the discovery walk recurses rather than peeking once.
+fn nested_tuple_interface() -> v2::Interface {
+    interface(
+        "VehicleStatus",
+        "",
+        vec![interaction(
+            "getPair",
+            1,
+            "",
+            v2::decl::Kind::QueryDef(v2::QueryDef {
+                params: Vec::new(),
+                return_type: Some(v2::ReturnType {
+                    kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                            fields: vec![
+                                nested_tuple_field(
+                                    "a",
+                                    vec![
+                                        nested_tuple_field(
+                                            "x",
+                                            vec![
+                                                tuple_field("m", "Speed"),
+                                                tuple_field("n", "Speed"),
+                                            ],
+                                        ),
+                                        tuple_field("y", "Speed"),
+                                    ],
+                                ),
+                                tuple_field("b", "Speed"),
+                            ],
+                        })),
+                    })),
+                }),
+                contracts: Vec::new(),
+            }),
+        )],
+    )
+}
+
+/// Every level of a nested tuple generates a struct, and every level is
+/// checked for collisions.
+///
+/// A tuple directly inside another tuple is not discovered while the
+/// interaction is walked: it is found by emitting the OUTER tuple's fields,
+/// which the caller does after this module returns. The check therefore runs
+/// that walk itself first — without it, only the outermost name is known and
+/// the nested ones reach rustc as `error[E0428]` with no ridl diagnostic at
+/// all.
+#[test]
+fn a_declaration_colliding_with_a_nested_tuple_struct_is_refused() {
+    for name in [
+        // One level down: the field `a` of the return tuple.
+        "VehicleStatusGetPairResultA",
+        // Two levels down: the field `x` of that field's own tuple.
+        "VehicleStatusGetPairResultAX",
+    ] {
+        let error = generate(&interaction_package(
+            vec![empty_struct(name)],
+            vec![nested_tuple_interface()],
+            Vec::new(),
+        ))
+        .unwrap_err();
+        assert!(
+            error.message.contains(name) && error.message.contains("tuple"),
+            "a nested tuple name must be refused, got: {}",
+            error.message
+        );
+    }
+}
+
+/// The same package without the colliding declarations still generates every
+/// level, so the check found those names rather than inventing them.
+#[test]
+fn nested_tuple_structs_are_all_generated() {
+    let source = generate(&interaction_package(
+        Vec::new(),
+        vec![nested_tuple_interface()],
+        Vec::new(),
+    ))
+    .expect("a nested tuple return generates")
+    .rust_source;
+    for name in [
+        "struct VehicleStatusGetPairResult ",
+        "struct VehicleStatusGetPairResultA ",
+        "struct VehicleStatusGetPairResultAX",
+    ] {
+        assert!(
+            source.contains(name.trim_end()),
+            "expected {name}, got:\n{source}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Generated names colliding with each other.
+// ---------------------------------------------------------------------------
+
+/// Two interfaces whose names differ only in the first letter's case generate
+/// one type name.
+///
+/// `camel_case` maps `vehicleStatus` and `VehicleStatus` to `VehicleStatus`,
+/// so both faces and both consts are declared twice — four `error[E0428]`s and
+/// not one ridl diagnostic. typl does not rule the pair out, so this backend
+/// has to.
+#[test]
+fn two_interfaces_normalizing_to_one_type_name_are_refused() {
+    let error = generate(&interaction_package(
+        Vec::new(),
+        vec![
+            interface("vehicleStatus", "", Vec::new()),
+            interface("VehicleStatus", "", Vec::new()),
+        ],
+        Vec::new(),
+    ))
+    .expect_err("two interfaces cannot claim one generated name");
+    assert!(
+        error.message.contains("claimed by both")
+            && error.message.contains("interface vehicleStatus")
+            && error.message.contains("interface VehicleStatus"),
+        "the refusal names both claimants, got: {}",
+        error.message
+    );
+}
+
+/// A declared interface and an inline service shape can arrive at the same
+/// generated name: `interface ServiceVehAdasLogs` and the interface generated
+/// for `service veh.adas.logs` are both `ServiceVehAdasLogs`.
+#[test]
+fn an_interface_colliding_with_an_inline_shape_name_is_refused() {
+    let error = generate(&interaction_package(
+        Vec::new(),
+        vec![interface("ServiceVehAdasLogs", "", Vec::new())],
+        vec![service(
+            "veh.adas.logs",
+            v2::service::Shape::Inline(interface(
+                "",
+                "",
+                vec![interaction(
+                    "ping",
+                    1,
+                    "",
+                    v2::decl::Kind::CommandDef(v2::CommandDef {
+                        params: Vec::new(),
+                        contracts: Vec::new(),
+                    }),
+                )],
+            )),
+        )],
+    ))
+    .expect_err("an interface and an inline shape cannot claim one name");
+    assert!(
+        error.message.contains("claimed by both")
+            && error.message.contains("interface ServiceVehAdasLogs")
+            && error
+                .message
+                .contains("inline shape of service veh.adas.logs"),
+        "the refusal names both claimants, got: {}",
+        error.message
+    );
+}
+
+/// Two services with distinct addresses that mangle to one type name are
+/// refused for the same reason.
+#[test]
+fn two_inline_shapes_normalizing_to_one_type_name_are_refused() {
+    let shape = |address: &str| {
+        service(
+            address,
+            v2::service::Shape::Inline(interface(
+                "",
+                "",
+                vec![interaction(
+                    "ping",
+                    1,
+                    "",
+                    v2::decl::Kind::CommandDef(v2::CommandDef {
+                        params: Vec::new(),
+                        contracts: Vec::new(),
+                    }),
+                )],
+            )),
+        )
+    };
+    let error = generate(&interaction_package(
+        Vec::new(),
+        Vec::new(),
+        // `veh.adas.logs` and `veh.adas.Logs` both mangle to
+        // `ServiceVehAdasLogs`.
+        vec![shape("veh.adas.logs"), shape("veh.adas.Logs")],
+    ))
+    .expect_err("two inline shapes cannot claim one name");
+    assert!(
+        error.message.contains("claimed by both"),
+        "got: {}",
+        error.message
+    );
+}
+
+/// Interfaces that merely share a prefix are untouched — the check refuses a
+/// genuine duplicate, not a resemblance.
+#[test]
+fn distinct_interface_names_are_admitted() {
+    generate(&interaction_package(
+        Vec::new(),
+        vec![
+            interface("VehicleStatus", "", Vec::new()),
+            interface("VehicleStatusExtended", "", Vec::new()),
+        ],
+        Vec::new(),
+    ))
+    .expect("distinct generated names do not collide");
+}

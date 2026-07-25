@@ -27,6 +27,7 @@ use std::collections::{HashMap, HashSet};
 
 mod c_header;
 mod defaults;
+mod interact;
 
 /// The two generated artifacts for one package: Rust source and the C header.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +64,12 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     for decl in &package.decls {
         items.push(emit_decl(&ctx, decl, &mut tuples));
     }
+
+    // Interfaces and services follow the vocabulary they are written over, so
+    // the generated module reads in the same order as the contract (E2 task
+    // 15). Interaction positions can introduce tuple types of their own, which
+    // join the same worklist.
+    items.push(interact::emit(package, &mut tuples)?);
 
     // Tuple types generate a named nested struct each (typl §11). Process the
     // worklist: emitting a tuple struct's fields can discover further nested
@@ -153,8 +160,8 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<(String, v2::TupleType
         Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd),
         Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud),
         // Interaction kinds ride `Interface.interactions`, never a package
-        // decl; the interaction codegen is E2 task 15. Interfaces and
-        // services are accepted and passed through untouched here.
+        // decl, so none of them reaches this match; interfaces and services are
+        // emitted by the `interact` module.
         Some(_) | None => return quote! {},
     };
 
@@ -487,7 +494,7 @@ fn inline_scalar_tokens(td: &v2::TypeDef) -> TokenStream {
     }
 }
 
-fn primitive_tokens(prim: i32) -> TokenStream {
+pub(crate) fn primitive_tokens(prim: i32) -> TokenStream {
     match v2::PrimitiveType::try_from(prim).unwrap_or(v2::PrimitiveType::Unspecified) {
         v2::PrimitiveType::Boolean => quote! { bool },
         v2::PrimitiveType::Integer => quote! { i64 },
@@ -594,7 +601,7 @@ fn field_attrs(field: &v2::Field) -> TokenStream {
 
 /// One `#[doc]` attribute per line; prettyplease renders these as `///`
 /// comments. A leading space makes the rendered comment read `/// text`.
-fn doc_attrs(doc: &str) -> TokenStream {
+pub(crate) fn doc_attrs(doc: &str) -> TokenStream {
     if doc.is_empty() {
         return quote! {};
     }
@@ -607,7 +614,7 @@ fn doc_attrs(doc: &str) -> TokenStream {
 
 /// `@deprecated` maps to `#[deprecated]`; a present-but-empty reason (the IR's
 /// `Some("")`) still emits the bare attribute (typl §14.2).
-fn deprecated_attr(reason: Option<&str>) -> TokenStream {
+pub(crate) fn deprecated_attr(reason: Option<&str>) -> TokenStream {
     match reason {
         Some("") => quote! { #[deprecated] },
         Some(reason) => quote! { #[deprecated(note = #reason)] },
