@@ -711,10 +711,15 @@ fn inline_shape_removal_spans_the_service_name() {
         "the span starts at the dotted name, column 9 — not column 1, where \
          the `service` keyword is:\n{inline}"
     );
+    // A caret run of at least 20, which with the column above pins the left
+    // edge exactly and the width as a floor. The exact right edge is
+    // `shape_identity_range_covers_the_declared_name`'s job — a two-character
+    // rightward widening still satisfies a `contains` on 20 carets, and that
+    // unit test does fail on it.
     assert!(
-        inline.contains("^^^^^^^^^^^^^^^^^^^^\n"),
+        inline.contains("^^^^^^^^^^^^^^^^^^^^"),
         "the underline covers `corpus.baseline.hvac`, the 20-character dotted \
-         name, and stops there:\n{inline}"
+         name:\n{inline}"
     );
 
     // The control: the same change to a named interface spans the interface

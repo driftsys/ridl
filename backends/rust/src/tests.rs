@@ -3294,6 +3294,83 @@ fn visibility_package() -> v2::Package {
     )
 }
 
+/// An **`internal` service's inline shape generates package-private items** —
+/// the authoritative visibility is the enclosing `Service`'s, never the shape's
+/// own `VISIBILITY_UNSPECIFIED` field (ridl §14.5,
+/// `crates/ridlc/tests/corpus/veh-cluster/NOTES`).
+///
+/// This is the one assertion that separates `InterfaceShape::visibility()` from
+/// the field it replaced. Every other visibility case agrees by accident:
+/// [`vis_tokens`](crate::vis_tokens) maps both `UNSPECIFIED` and `PUBLIC` to
+/// `pub`, so reading the inline shape's own field and reading the service's
+/// produce identical output for a public service — which is every service the
+/// checker can currently emit, since `internal service` is FORM-102 from
+/// source.
+///
+/// Unreachable through the checker is not unreachable in principle, and the
+/// gap is not hypothetical: the IR admits an internal service, `ridl diff`
+/// already reasons about one (`classify_tests::service_inline` builds exactly
+/// this package and `find_visibility` classifies internal-to-public on it as a
+/// widening), and any producer that is not the checker — a hand-written
+/// `.ir.json`, a registry, the rsdl lowering E3 adds — reaches it immediately.
+/// Under the old read the whole generated API of such a service is published.
+///
+/// It also guards a tidy-up. `vis_tokens`'s `_ => pub` catch-all silently
+/// equates the proto default with `PUBLIC`; making that match exhaustive, which
+/// is the discipline ADR-0008 decision 21 argues for elsewhere, would break
+/// every inline shape under the old read. This test is what turns that from a
+/// silent breakage into a red one.
+#[test]
+fn an_internal_services_inline_shape_is_package_private() {
+    let mut package = visibility_package();
+    let diag = package
+        .services
+        .iter_mut()
+        .find(|service| service.name == "veh.cluster.diag")
+        .expect("the shared fixture declares the inline-shape service");
+    assert!(
+        matches!(diag.shape, Some(v2::service::Shape::Inline(_))),
+        "this test is only meaningful on an INLINE shape",
+    );
+    diag.visibility = v2::Visibility::Internal as i32;
+
+    let Generated { rust_source, .. } = generate(&package).expect("the package generates");
+
+    for item in [
+        "pub(crate) trait ServiceVehClusterDiagConsumer",
+        "pub(crate) trait ServiceVehClusterDiagProvider",
+        "pub(crate) const SERVICE_VEH_CLUSTER_DIAG_TIMING",
+        "pub(crate) const SERVICE_VEH_CLUSTER_DIAG_CONTRACTS",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "an internal service's inline shape must emit `{item}`, got:\n{rust_source}"
+        );
+    }
+    // `pub(crate) trait X` does not contain `pub trait X`, so these are
+    // genuine negatives rather than restatements of the loop above.
+    for leaked in [
+        "pub trait ServiceVehClusterDiagConsumer",
+        "pub trait ServiceVehClusterDiagProvider",
+        "pub const SERVICE_VEH_CLUSTER_DIAG_TIMING",
+        "pub const SERVICE_VEH_CLUSTER_DIAG_CONTRACTS",
+    ] {
+        assert!(
+            !rust_source.contains(leaked),
+            "an internal service's inline shape must not emit `{leaked}`, got:\n{rust_source}"
+        );
+    }
+
+    // The regression direction, in the same module: the public interface and
+    // the package-level service table are untouched.
+    for item in ["pub trait ShownConsumer", "pub const SERVICES"] {
+        assert!(
+            rust_source.contains(item),
+            "`{item}` is unaffected by a service's visibility, got:\n{rust_source}"
+        );
+    }
+}
+
 /// Every name an `internal interface` generates is `pub(crate)`; every name a
 /// public interface generates stays `pub`; every name an **inline service
 /// shape** generates stays `pub`; and the package-level names — the
