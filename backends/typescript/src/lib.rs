@@ -1057,8 +1057,11 @@ fn deprecated_tags(reason: Option<&str>) -> Vec<String> {
 }
 
 /// `internal` maps to a module-local (non-exported) declaration — the
-/// TypeScript package-private mechanism (ADR-0002 §8, typl §3.3).
-fn export_kw(visibility: i32) -> &'static str {
+/// TypeScript package-private mechanism (ADR-0002 §8, ADR-0008 decision 7,
+/// typl §3.3). The rule is per declaration, not per module: a package holding
+/// one `internal` and one public declaration emits one module-local shape and
+/// one exported shape.
+pub(crate) fn export_kw(visibility: i32) -> &'static str {
     match v2::Visibility::try_from(visibility).unwrap_or(v2::Visibility::Unspecified) {
         v2::Visibility::Internal => "",
         _ => "export ",

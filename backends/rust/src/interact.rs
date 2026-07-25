@@ -33,10 +33,19 @@
 //!   backend emits `u64` microseconds and returns a [`GenerateError`] for any
 //!   bound that is not a whole number of microseconds, rather than truncating a
 //!   bound that was written into the contract.
+//!
+//! **Visibility.** An `internal interface` generates four `pub(crate)` items —
+//! both faces and both metadata constants — never a `pub` one, the same
+//! package-private mapping the typl surface gives an `internal` declaration
+//! (ADR-0002 §8, ADR-0008 decision 7). Publishing the API of a declaration the
+//! keyword hides would defeat the modifier. The vocabulary and the service
+//! table are package-level and stay `pub`; so do the tuple structs an
+//! interaction position induces, which follow the typl rule for a tuple under
+//! an `internal` declaration.
 
 use crate::{
     GenerateError, camel_case, deprecated_attr, doc_attrs, field_type_tokens, ident,
-    primitive_tokens, type_path,
+    primitive_tokens, type_path, vis_tokens,
 };
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
@@ -302,6 +311,13 @@ fn emit_interface(
 ) -> Result<TokenStream, GenerateError> {
     let mut out = Emitted::default();
     let name = names.r#type;
+    // Every item this interface generates carries the interface's own
+    // visibility: an `internal interface` is package-private in full, or the
+    // keyword would hide the declaration and publish its API (ADR-0008
+    // decision 7). An inline service shape's `Interface.visibility` is
+    // UNSPECIFIED — a service is a global published contract and takes no
+    // `internal` modifier (ridl §14.5) — which [`vis_tokens`] maps to `pub`.
+    let vis = vis_tokens(interface.visibility);
 
     for decl in &interface.interactions {
         emit_interaction(names, decl, tuples, &mut out)?;
@@ -339,7 +355,7 @@ fn emit_interface(
         #consumer_doc
         #deprecated
         #[allow(async_fn_in_trait)]
-        pub trait #consumer_name {
+        #vis trait #consumer_name {
             #(#consumer_methods)*
         }
 
@@ -347,7 +363,7 @@ fn emit_interface(
         #provider_doc
         #deprecated
         #[allow(async_fn_in_trait)]
-        pub trait #provider_name {
+        #vis trait #provider_name {
             #(#provider_methods)*
         }
     };
@@ -367,12 +383,12 @@ fn emit_interface(
 
     let metadata = quote! {
         #timing_doc
-        pub const #timing_name: &[(&str, TimingConst)] = &[
+        #vis const #timing_name: &[(&str, TimingConst)] = &[
             #(#timing_entries),*
         ];
 
         #contracts_doc
-        pub const #contracts_name: &[ContractStub] = &[
+        #vis const #contracts_name: &[ContractStub] = &[
             #(#contract_entries),*
         ];
     };

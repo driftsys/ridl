@@ -3141,3 +3141,273 @@ fn distinct_interface_names_are_admitted() {
     ))
     .expect("distinct generated names do not collide");
 }
+
+// ---------------------------------------------------------------------------
+// `internal` visibility on the interaction layer (ADR-0008 decision 7).
+// ---------------------------------------------------------------------------
+
+/// The package both visibility tests read: one `internal interface Hidden` and
+/// one public `interface Shown` side by side, plus a service naming `Hidden`,
+/// so the rule is exercised per declaration rather than per module.
+///
+/// `Hidden` carries a timed signal (so `HIDDEN_TIMING` is non-empty), a query
+/// with an `ensure` (so `HIDDEN_CONTRACTS` is non-empty), and a tuple return
+/// (so the induced tuple struct is in the output). Between them the four names
+/// an interface generates are all present and all non-trivial.
+fn visibility_package() -> v2::Package {
+    let hidden = v2::Interface {
+        visibility: v2::Visibility::Internal as i32,
+        ..interface(
+            "Hidden",
+            "",
+            vec![
+                interaction(
+                    "rawTicks",
+                    1,
+                    "",
+                    v2::decl::Kind::SignalDef(v2::SignalDef {
+                        payload: "Counter".to_string(),
+                        declared_init: None,
+                        init: Some(init_value(true, Some("0"))),
+                        timing: Some(timing(
+                            v2::TimingMode::StrictPeriodic,
+                            Some("10000"),
+                            Some("10000"),
+                        )),
+                    }),
+                ),
+                interaction(
+                    "getBounds",
+                    2,
+                    "",
+                    v2::decl::Kind::QueryDef(v2::QueryDef {
+                        params: Vec::new(),
+                        return_type: Some(v2::ReturnType {
+                            kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                                optional: false,
+                                kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                                    fields: vec![
+                                        tuple_field("min", "Counter"),
+                                        tuple_field("max", "Counter"),
+                                    ],
+                                })),
+                            })),
+                        }),
+                        contracts: vec![contract(
+                            v2::ContractKind::Ensure,
+                            "result.min <= result.max",
+                            &[],
+                            &[],
+                            true,
+                            "Hidden.getBounds.ensure[0]",
+                        )],
+                    }),
+                ),
+            ],
+        )
+    };
+    let shown = interface(
+        "Shown",
+        "",
+        vec![interaction(
+            "cabinTemp",
+            1,
+            "",
+            v2::decl::Kind::SignalDef(v2::SignalDef {
+                payload: "Counter".to_string(),
+                declared_init: None,
+                init: Some(init_value(true, Some("0"))),
+                timing: Some(timing(v2::TimingMode::Range, Some("50000"), Some("500000"))),
+            }),
+        )],
+    );
+    interaction_package(
+        vec![public_decl(
+            "Counter",
+            primitive_type(
+                v2::PrimitiveType::Integer,
+                init_value(true, Some("0")),
+                Some(v2::type_def::Width::IntWidth(v2::IntWidth::U32 as i32)),
+            ),
+        )],
+        vec![hidden, shown],
+        vec![service(
+            "veh.cluster.hidden",
+            v2::service::Shape::InterfaceRef("Hidden".to_string()),
+        )],
+    )
+}
+
+/// Every name an `internal interface` generates is `pub(crate)`; every name a
+/// public interface generates stays `pub`; and the package-level names — the
+/// interaction vocabulary, the service table, and the tuple struct an
+/// interaction position induces — stay `pub` regardless.
+///
+/// The two interfaces sit in one package on purpose: `internal` is a property
+/// of the declaration, so a module holding both must generate both spellings.
+#[test]
+fn internal_interface_generates_package_private_items() {
+    let Generated { rust_source, .. } =
+        generate(&visibility_package()).expect("the package generates");
+
+    // The four names `Hidden` generates, all package-private.
+    for item in [
+        "pub(crate) trait HiddenConsumer",
+        "pub(crate) trait HiddenProvider",
+        "pub(crate) const HIDDEN_TIMING",
+        "pub(crate) const HIDDEN_CONTRACTS",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "an internal interface must emit `{item}`, got:\n{rust_source}"
+        );
+    }
+    // ... and none of them under a `pub` spelling. `pub(crate) trait X` does
+    // not contain `pub trait X`, so these are genuine negatives.
+    for leaked in [
+        "pub trait HiddenConsumer",
+        "pub trait HiddenProvider",
+        "pub const HIDDEN_TIMING",
+        "pub const HIDDEN_CONTRACTS",
+    ] {
+        assert!(
+            !rust_source.contains(leaked),
+            "an internal interface must not emit `{leaked}`, got:\n{rust_source}"
+        );
+    }
+
+    // The regression direction: a public interface in the same module is
+    // untouched.
+    for item in [
+        "pub trait ShownConsumer",
+        "pub trait ShownProvider",
+        "pub const SHOWN_TIMING",
+        "pub const SHOWN_CONTRACTS",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "a public interface must still emit `{item}`, got:\n{rust_source}"
+        );
+    }
+
+    // The names that are deliberately NOT affected. The vocabulary is emitted
+    // once per module and is shared by every interface in it; the service
+    // table is the package's published deployment surface, and a service takes
+    // no `internal` modifier (ridl §14.5); the tuple struct follows the typl
+    // rule for a tuple under an `internal` declaration.
+    for item in [
+        "pub enum Provenance",
+        "pub trait SignalHandle<T>",
+        "pub struct TimingConst",
+        "pub struct ContractStub",
+        "pub const SERVICES",
+        "pub struct HiddenGetBoundsResult",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "`{item}` is package-level and stays public, got:\n{rust_source}"
+        );
+    }
+
+    insta::assert_snapshot!(rust_source);
+}
+
+/// `pub(crate)` is not cosmetic: the generated module compiles, and the items
+/// an `internal interface` produces are genuinely unreachable from another
+/// crate while the public interface's are reachable.
+///
+/// A snapshot alone cannot show this — it records the spelling, not what the
+/// spelling means to rustc. So the module is compiled as a real library crate
+/// and two dependent crates are compiled against it: one naming `ShownConsumer`,
+/// which must build, and one naming `HiddenConsumer`, which must fail with
+/// E0603 (`private`). Both directions are asserted, because a test that only
+/// checked the failure would also pass if the whole module failed to build.
+#[test]
+fn internal_interface_items_are_unreachable_from_another_crate() {
+    let Generated { rust_source, .. } =
+        generate(&visibility_package()).expect("the package generates");
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let lib_path = dir.path().join("veh_cluster.rs");
+    std::fs::write(&lib_path, &rust_source).expect("the generated source is written");
+
+    let rlib = dir.path().join("libveh_cluster.rlib");
+    let status = std::process::Command::new("rustc")
+        .args(["--edition", "2024", "--crate-type", "lib"])
+        .args(["--crate-name", "veh_cluster"])
+        // The generated module is a contract, not a consumer of itself:
+        // `pub(crate)` items nothing in the crate uses are dead code by
+        // construction, which is the point of the test rather than a defect.
+        .args(["-A", "dead_code"])
+        .arg("-o")
+        .arg(&rlib)
+        .arg(&lib_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the generated module must compile as a library crate, source:\n{rust_source}"
+    );
+
+    // Compiles a one-line crate that names `item` through `veh_cluster`, and
+    // returns rustc's stderr together with whether it built.
+    let probe = |name: &str, item: &str| -> (bool, String) {
+        let path = dir.path().join(format!("{name}.rs"));
+        std::fs::write(&path, item).expect("the probe is written");
+        let output = std::process::Command::new("rustc")
+            .args([
+                "--edition",
+                "2024",
+                "--crate-type",
+                "lib",
+                "--emit",
+                "metadata",
+            ])
+            .arg("--extern")
+            .arg(format!("veh_cluster={}", rlib.display()))
+            .arg("-o")
+            .arg(dir.path().join(format!("{name}.rmeta")))
+            .arg(&path)
+            .output()
+            .expect("rustc runs");
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+    };
+
+    let (public_ok, public_err) = probe(
+        "reaches_public",
+        "pub fn f<T: veh_cluster::ShownConsumer>(_: T) {}\n",
+    );
+    assert!(
+        public_ok,
+        "a public interface's face must stay reachable from another crate, rustc said:\n{public_err}"
+    );
+
+    let (internal_ok, internal_err) = probe(
+        "reaches_internal",
+        "pub fn f<T: veh_cluster::HiddenConsumer>(_: T) {}\n",
+    );
+    assert!(
+        !internal_ok,
+        "an internal interface's face must not be reachable from another crate"
+    );
+    assert!(
+        internal_err.contains("E0603"),
+        "the refusal must be a privacy error (E0603), rustc said:\n{internal_err}"
+    );
+
+    let (const_ok, const_err) = probe(
+        "reaches_internal_const",
+        "pub fn g() -> usize { veh_cluster::HIDDEN_TIMING.len() }\n",
+    );
+    assert!(
+        !const_ok,
+        "an internal interface's timing const must not be reachable from another crate"
+    );
+    assert!(
+        const_err.contains("E0603"),
+        "the refusal must be a privacy error (E0603), rustc said:\n{const_err}"
+    );
+}

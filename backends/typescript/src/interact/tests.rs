@@ -1478,3 +1478,250 @@ export type Duration = bigint & { readonly __ridl: 'ridl.std.Duration' };
         generated.source
     );
 }
+
+// ---------------------------------------------------------------------------
+// `internal` visibility on the interaction layer (ADR-0008 decision 7).
+// ---------------------------------------------------------------------------
+
+/// The package both visibility tests read: one `internal interface Hidden` and
+/// one public `interface Shown` side by side, plus a service naming `Hidden`,
+/// so the rule is exercised per declaration rather than per module.
+///
+/// `Hidden` carries a timed signal (so `hiddenTiming` is non-empty), a query
+/// with an `ensure` (so `hiddenContracts` is non-empty), and a tuple return —
+/// which this backend renders as an inline object type (typl §11), so it
+/// introduces no name of its own and has nothing to hide. That is the one
+/// place the two backends' name sets legitimately differ: the Rust backend
+/// generates a named struct there, TypeScript does not.
+fn visibility_package() -> v2::Package {
+    let hidden = v2::Interface {
+        visibility: v2::Visibility::Internal as i32,
+        ..interface(
+            "Hidden",
+            vec![
+                interaction(
+                    "rawTicks",
+                    1,
+                    signal(
+                        "veh.common.Speed",
+                        Some("0.0"),
+                        timing(
+                            v2::TimingMode::StrictPeriodic,
+                            Some("10000"),
+                            Some("10000"),
+                            false,
+                        ),
+                    ),
+                ),
+                interaction(
+                    "getBounds",
+                    2,
+                    query(
+                        Vec::new(),
+                        v2::return_type::Kind::Value(v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                                fields: vec![
+                                    v2::TupleField {
+                                        name: "min".to_string(),
+                                        r#type: Some(named("veh.common.Speed")),
+                                    },
+                                    v2::TupleField {
+                                        name: "max".to_string(),
+                                        r#type: Some(named("veh.common.Speed")),
+                                    },
+                                ],
+                            })),
+                        }),
+                        vec![contract(
+                            v2::ContractKind::Ensure,
+                            "result.min <= result.max",
+                            &[],
+                            &[],
+                            true,
+                            "Hidden.getBounds.ensure[0]",
+                        )],
+                    ),
+                ),
+            ],
+        )
+    };
+    let shown = interface(
+        "Shown",
+        vec![interaction(
+            "cabinTemp",
+            1,
+            signal(
+                "veh.common.Speed",
+                Some("0.0"),
+                timing(v2::TimingMode::Range, Some("50000"), Some("500000"), false),
+            ),
+        )],
+    );
+    interact_package(
+        vec![hidden, shown],
+        vec![service(
+            "veh.cluster.hidden",
+            v2::service::Shape::InterfaceRef("Hidden".to_string()),
+        )],
+    )
+}
+
+/// Every name an `internal interface` generates is module-local; every name a
+/// public interface generates stays exported; and the package-level names —
+/// the interaction vocabulary and the service map — stay exported regardless.
+///
+/// The two interfaces sit in one package on purpose: `internal` is a property
+/// of the declaration, so a module holding both must generate both spellings.
+#[test]
+fn internal_interface_generates_module_local_shapes() {
+    let source = render(&visibility_package());
+
+    // The four names `Hidden` generates, all module-local. Each is matched
+    // with the leading newline that begins its line, so `interface
+    // HiddenConsumer` cannot be satisfied by the `export interface
+    // HiddenConsumer` this test exists to forbid.
+    for item in [
+        "\ninterface HiddenConsumer {",
+        "\ninterface HiddenProvider {",
+        "\nconst hiddenTiming = {",
+        "\nconst hiddenContracts = [",
+    ] {
+        assert!(
+            source.contains(item),
+            "an internal interface must emit `{}` unexported, got:\n{source}",
+            item.trim_start()
+        );
+    }
+    for leaked in [
+        "export interface HiddenConsumer",
+        "export interface HiddenProvider",
+        "export const hiddenTiming",
+        "export const hiddenContracts",
+    ] {
+        assert!(
+            !source.contains(leaked),
+            "an internal interface must not emit `{leaked}`, got:\n{source}"
+        );
+    }
+
+    // The regression direction: a public interface in the same module is
+    // untouched.
+    for item in [
+        "export interface ShownConsumer",
+        "export interface ShownProvider",
+        "export const shownTiming",
+        "export const shownContracts",
+    ] {
+        assert!(
+            source.contains(item),
+            "a public interface must still emit `{item}`, got:\n{source}"
+        );
+    }
+
+    // The names that are deliberately NOT affected: the vocabulary is emitted
+    // once per module and shared by every interface in it, and the service map
+    // is the package's published deployment surface — a service takes no
+    // `internal` modifier (ridl §14.5).
+    for item in [
+        "export type Provenance",
+        "export interface SignalHandle<T>",
+        "export interface EventHandle<T>",
+        "export type Result<T, E>",
+        "export const services",
+    ] {
+        assert!(
+            source.contains(item),
+            "`{item}` is package-level and stays exported, got:\n{source}"
+        );
+    }
+
+    insta::assert_snapshot!(source);
+}
+
+/// Not exporting is not cosmetic: the generated module compiles strict, and
+/// the shapes an `internal interface` produces are genuinely unimportable
+/// while the public interface's are importable.
+///
+/// A snapshot alone cannot show this — it records the spelling, not what the
+/// spelling means to `tsc`. Both directions are asserted, because a test that
+/// only checked the failure would also pass if the whole module failed to
+/// compile. This is best-effort local evidence in the established shape:
+/// [`internal_interface_generates_module_local_shapes`] is the gate, and this
+/// check is skipped with a printed notice when no tsc binary is discoverable.
+#[test]
+fn internal_interface_shapes_are_not_importable() {
+    let Some(tsc) = crate::tests::discover_tsc() else {
+        println!(
+            "SKIPPED: no tsc binary discoverable (`tsc` on PATH or `npx --no-install tsc`); \
+             internal_interface_generates_module_local_shapes remains the gate"
+        );
+        return;
+    };
+
+    const VEH_COMMON: &str = "\
+export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
+";
+    let source = render(&visibility_package());
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    std::fs::write(dir.path().join("veh.common.ts"), VEH_COMMON).expect("the prelude is written");
+    std::fs::write(dir.path().join("veh.cluster.ts"), &source).expect("the module is written");
+
+    // Type-checks a one-line consumer module against the generated one, and
+    // returns tsc's own output together with whether it accepted the program.
+    let probe = |name: &str, body: &str| -> (bool, String) {
+        let path = dir.path().join(format!("{name}.ts"));
+        std::fs::write(&path, body).expect("the probe is written");
+        let output = std::process::Command::new(&tsc.0)
+            .args(&tsc.1)
+            .args([
+                "--noEmit", "--strict", "--target", "es2020", "--module", "commonjs",
+            ])
+            .arg(&path)
+            .output()
+            .expect("the discovered tsc must be runnable");
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).into_owned(),
+        )
+    };
+
+    let (public_ok, public_out) = probe(
+        "reaches_public",
+        "import { ShownConsumer, shownTiming } from './veh.cluster';\n\
+         export type A = ShownConsumer;\n\
+         export const t = shownTiming;\n",
+    );
+    assert!(
+        public_ok,
+        "a public interface's face and timing const must stay importable, tsc said:\n{public_out}"
+    );
+
+    let (face_ok, face_out) = probe(
+        "reaches_internal_face",
+        "import { HiddenConsumer } from './veh.cluster';\n\
+         export type B = HiddenConsumer;\n",
+    );
+    assert!(
+        !face_ok,
+        "an internal interface's face must not be importable, source:\n{source}"
+    );
+    assert!(
+        face_out.contains("HiddenConsumer") && face_out.contains("not exported"),
+        "the refusal must say the name is declared locally but not exported, tsc said:\n{face_out}"
+    );
+
+    let (const_ok, const_out) = probe(
+        "reaches_internal_const",
+        "import { hiddenTiming } from './veh.cluster';\nexport const t = hiddenTiming;\n",
+    );
+    assert!(
+        !const_ok,
+        "an internal interface's timing const must not be importable, source:\n{source}"
+    );
+    assert!(
+        const_out.contains("hiddenTiming") && const_out.contains("not exported"),
+        "the refusal must say the name is declared locally but not exported, tsc said:\n{const_out}"
+    );
+}
