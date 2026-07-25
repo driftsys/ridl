@@ -1062,32 +1062,32 @@ fn services_workspace_generated_typescript_type_checks() {
     );
 }
 
-/// **This test pins a defect, deliberately.**
+/// `internal` on an interface maps to the target's package-private mechanism
+/// in **both** backends — ADR-0002 §8, ADR-0008 decision 7.
 ///
-/// `internal` is honoured everywhere except the two backends' interaction
-/// layer. The checker records it (`Interface.visibility = 2`) and `ridl diff`
-/// models it, but the Rust backend emits `pub` and the TypeScript backend emits
-/// `export` for an `internal interface`, so a package-private contract shape
-/// leaks into both generated public surfaces. That is a live violation of
-/// **ADR-0008 decision 7**.
+/// **This test pinned a defect until PR #160.** Between PRs #155/#156 and #160
+/// the interaction layer dropped `internal` in both backends: the checker
+/// recorded it (`Interface.visibility = 2`) and `ridl diff` modelled it, but
+/// the Rust backend emitted `pub` and the TypeScript backend `export` for an
+/// `internal interface`, so a package-private contract shape leaked into both
+/// generated public surfaces. This entry is what made that visible — the
+/// defect shipped in two merged PRs and was found by adding an
+/// `internal interface` to the corpus, not by review of either backend. The
+/// assertions below are now the regression guard for the repair.
 ///
 /// `veh-cluster` carries both halves so this test can be exact: `internal
-/// interface WheelDiagnostics` (the defect) and `internal struct RawWheelFrame`
-/// in the typl layer (the control, handled correctly by both backends). The
-/// control is what makes this a statement about the interaction layer rather
-/// than about `internal` in general.
+/// interface WheelDiagnostics` (the interaction layer) and `internal struct
+/// RawWheelFrame` in the typl layer (the control, handled correctly
+/// throughout). The control is what makes this a statement about the
+/// interaction layer rather than about `internal` in general — and it is what
+/// bounded the original diagnosis, since it proved the vocabulary layer was
+/// already right.
 ///
-/// The snapshots record the wrong output too, but a snapshot alone would let
-/// the repair land as a quiet diff. This test names what to update, so the fix
-/// in `fix/internal-visibility-interactions` is told rather than left to
-/// discover:
-///
-/// - flip the two assertions below to the fixed spellings;
-/// - update `crates/ridlc/tests/corpus/veh-cluster/NOTES`, section "internal is
-///   dropped by both backends";
-/// - the `@veh-cluster` Rust and TypeScript snapshots change with it.
+/// All four generated names of an interface are asserted, per backend, because
+/// the contracts constant was the one originally overlooked: the first report
+/// named only the two faces and the timing constant.
 #[test]
-fn internal_on_the_interaction_layer_is_dropped_by_both_backends() {
+fn internal_on_an_interface_is_package_private_in_both_backends() {
     let compiled = compile_entry(Path::new("tests/corpus/veh-cluster"));
 
     // The control: the typl layer honours `internal` in both backends. If
@@ -1105,8 +1105,22 @@ fn internal_on_the_interaction_layer_is_dropped_by_both_backends() {
         "control: an `internal` typl declaration must stay unexported in TypeScript",
     );
 
-    // The defect, in Rust. `WheelDiagnostics` is declared `internal`; every one
-    // of these should be `pub(crate)`.
+    // Rust. `WheelDiagnostics` is declared `internal`, so all four of the names
+    // it generates are `pub(crate)`.
+    for item in [
+        "pub(crate) trait WheelDiagnosticsConsumer",
+        "pub(crate) trait WheelDiagnosticsProvider",
+        "pub(crate) const WHEEL_DIAGNOSTICS_TIMING",
+        "pub(crate) const WHEEL_DIAGNOSTICS_CONTRACTS",
+    ] {
+        assert!(
+            compiled.rust.contains(item),
+            "an `internal` interface must generate `{item}` (ADR-0008 decision 7)",
+        );
+    }
+    // ... and none of them under the `pub` spelling this test used to pin.
+    // `pub(crate) trait X` does not contain `pub trait X`, so these are genuine
+    // negatives rather than restatements of the assertions above.
     for leaked in [
         "pub trait WheelDiagnosticsConsumer",
         "pub trait WheelDiagnosticsProvider",
@@ -1114,14 +1128,25 @@ fn internal_on_the_interaction_layer_is_dropped_by_both_backends() {
         "pub const WHEEL_DIAGNOSTICS_CONTRACTS",
     ] {
         assert!(
-            compiled.rust.contains(leaked),
-            "the Rust backend has learned to honour `internal` on an interface — good. \
-             `{leaked}` is gone, so flip this assertion to the `pub(crate)` spelling and \
-             update `veh-cluster/NOTES`, section \"internal is dropped by both backends\".",
+            !compiled.rust.contains(leaked),
+            "an `internal` interface must not generate `{leaked}` — that is the \
+             pre-#160 defect this entry was added to catch",
         );
     }
 
-    // The defect, in TypeScript. None of these should be exported.
+    // TypeScript. The same four names, none of them exported.
+    for item in [
+        "\ninterface WheelDiagnosticsConsumer",
+        "\ninterface WheelDiagnosticsProvider",
+        "\nconst wheelDiagnosticsTiming",
+        "\nconst wheelDiagnosticsContracts",
+    ] {
+        assert!(
+            compiled.typescript.contains(item),
+            "an `internal` interface must generate `{}` unexported (ADR-0008 decision 7)",
+            item.trim_start(),
+        );
+    }
     for leaked in [
         "export interface WheelDiagnosticsConsumer",
         "export interface WheelDiagnosticsProvider",
@@ -1129,10 +1154,9 @@ fn internal_on_the_interaction_layer_is_dropped_by_both_backends() {
         "export const wheelDiagnosticsContracts",
     ] {
         assert!(
-            compiled.typescript.contains(leaked),
-            "the TypeScript backend has learned to honour `internal` on an interface — good. \
-             `{leaked}` is gone, so flip this assertion to the unexported spelling and \
-             update `veh-cluster/NOTES`, section \"internal is dropped by both backends\".",
+            !compiled.typescript.contains(leaked),
+            "an `internal` interface must not generate `{leaked}` — that is the \
+             pre-#160 defect this entry was added to catch",
         );
     }
 

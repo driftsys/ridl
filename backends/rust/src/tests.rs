@@ -3141,3 +3141,407 @@ fn distinct_interface_names_are_admitted() {
     ))
     .expect("distinct generated names do not collide");
 }
+
+// ---------------------------------------------------------------------------
+// `internal` visibility on the interaction layer (ADR-0008 decision 7).
+// ---------------------------------------------------------------------------
+
+/// An inline service shape as the CHECKER emits it: an anonymous interface
+/// (`name == ""`) whose visibility is `VISIBILITY_UNSPECIFIED`, not public.
+///
+/// This helper exists because [`interface`] hardcodes `Visibility::Public`,
+/// which no inline shape ever carries: `Checker::lower_service_inline` leaves
+/// the field unset, because an anonymous shape is not addressable as a type
+/// and has no visibility of its own — the enclosing `Service` carries the
+/// authoritative one, and a service takes no `internal` modifier (ridl §14.5).
+/// A fixture that says `Public` here would be testing a value the real
+/// producer never emits, and the UNSPECIFIED default arm of [`vis_tokens`]
+/// would go unexercised.
+fn inline_shape(interactions: Vec<v2::Decl>) -> v2::Interface {
+    v2::Interface {
+        visibility: v2::Visibility::Unspecified as i32,
+        ..interface("", "", interactions)
+    }
+}
+
+/// The package both visibility tests read. Three shapes side by side, so the
+/// rule is exercised per declaration rather than per module:
+///
+/// 1. `internal interface Hidden` — every generated name package-private;
+/// 2. public `interface Shown` — every generated name unchanged, the
+///    regression direction;
+/// 3. an **inline service shape** whose `Interface.visibility` is
+///    `VISIBILITY_UNSPECIFIED` ([`inline_shape`]) — every generated name
+///    public, which is what makes the "no special case for inline shapes"
+///    reasoning true rather than merely asserted.
+///
+/// Each of the three carries a timed signal and a contract-bearing query, so
+/// all four generated names of all three are present and non-empty. An empty
+/// constant is exactly how the contracts const was overlooked in the first
+/// place.
+fn visibility_package() -> v2::Package {
+    let hidden = v2::Interface {
+        visibility: v2::Visibility::Internal as i32,
+        ..interface(
+            "Hidden",
+            "",
+            vec![
+                interaction(
+                    "rawTicks",
+                    1,
+                    "",
+                    v2::decl::Kind::SignalDef(v2::SignalDef {
+                        payload: "Counter".to_string(),
+                        declared_init: None,
+                        init: Some(init_value(true, Some("0"))),
+                        timing: Some(timing(
+                            v2::TimingMode::StrictPeriodic,
+                            Some("10000"),
+                            Some("10000"),
+                        )),
+                    }),
+                ),
+                interaction(
+                    "getBounds",
+                    2,
+                    "",
+                    v2::decl::Kind::QueryDef(v2::QueryDef {
+                        params: Vec::new(),
+                        return_type: Some(v2::ReturnType {
+                            kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                                optional: false,
+                                kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                                    fields: vec![
+                                        tuple_field("min", "Counter"),
+                                        tuple_field("max", "Counter"),
+                                    ],
+                                })),
+                            })),
+                        }),
+                        contracts: vec![contract(
+                            v2::ContractKind::Ensure,
+                            "result.min <= result.max",
+                            &[],
+                            &[],
+                            true,
+                            "Hidden.getBounds.ensure[0]",
+                        )],
+                    }),
+                ),
+            ],
+        )
+    };
+    // A signal and a contract-bearing query, so both metadata constants of the
+    // interface built from them are non-empty.
+    let pair = |owner: &str, ensure_id: &str| {
+        vec![
+            interaction(
+                "cabinTemp",
+                1,
+                "",
+                v2::decl::Kind::SignalDef(v2::SignalDef {
+                    payload: "Counter".to_string(),
+                    declared_init: None,
+                    init: Some(init_value(true, Some("0"))),
+                    timing: Some(timing(v2::TimingMode::Range, Some("50000"), Some("500000"))),
+                }),
+            ),
+            interaction(
+                "readSummary",
+                2,
+                "",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: Vec::new(),
+                    return_type: Some(v2::ReturnType {
+                        kind: Some(v2::return_type::Kind::Value(named_type("Counter"))),
+                    }),
+                    contracts: vec![contract(
+                        v2::ContractKind::Ensure,
+                        &format!("result >= {owner}Floor"),
+                        &[],
+                        &[],
+                        true,
+                        ensure_id,
+                    )],
+                }),
+            ),
+        ]
+    };
+    let shown = interface("Shown", "", pair("Shown", "Shown.readSummary.ensure[0]"));
+    interaction_package(
+        vec![public_decl(
+            "Counter",
+            primitive_type(
+                v2::PrimitiveType::Integer,
+                init_value(true, Some("0")),
+                Some(v2::type_def::Width::IntWidth(v2::IntWidth::U32 as i32)),
+            ),
+        )],
+        vec![hidden, shown],
+        vec![
+            service(
+                "veh.cluster.hidden",
+                v2::service::Shape::InterfaceRef("Hidden".to_string()),
+            ),
+            service(
+                "veh.cluster.diag",
+                v2::service::Shape::Inline(inline_shape(pair(
+                    "Diag",
+                    "veh.cluster.diag.readSummary.ensure[0]",
+                ))),
+            ),
+        ],
+    )
+}
+
+/// Every name an `internal interface` generates is `pub(crate)`; every name a
+/// public interface generates stays `pub`; every name an **inline service
+/// shape** generates stays `pub`; and the package-level names — the
+/// interaction vocabulary, the service table, and the tuple struct an
+/// interaction position induces — stay `pub` regardless.
+///
+/// The three shapes sit in one package on purpose: `internal` is a property of
+/// the declaration, so a module holding all three must generate all three
+/// spellings.
+#[test]
+fn internal_interface_generates_package_private_items() {
+    let Generated { rust_source, .. } =
+        generate(&visibility_package()).expect("the package generates");
+
+    // The four names `Hidden` generates, all package-private.
+    for item in [
+        "pub(crate) trait HiddenConsumer",
+        "pub(crate) trait HiddenProvider",
+        "pub(crate) const HIDDEN_TIMING",
+        "pub(crate) const HIDDEN_CONTRACTS",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "an internal interface must emit `{item}`, got:\n{rust_source}"
+        );
+    }
+    // ... and none of them under a `pub` spelling. `pub(crate) trait X` does
+    // not contain `pub trait X`, so these are genuine negatives.
+    for leaked in [
+        "pub trait HiddenConsumer",
+        "pub trait HiddenProvider",
+        "pub const HIDDEN_TIMING",
+        "pub const HIDDEN_CONTRACTS",
+    ] {
+        assert!(
+            !rust_source.contains(leaked),
+            "an internal interface must not emit `{leaked}`, got:\n{rust_source}"
+        );
+    }
+
+    // The regression direction: a public interface in the same module is
+    // untouched.
+    for item in [
+        "pub trait ShownConsumer",
+        "pub trait ShownProvider",
+        "pub const SHOWN_TIMING",
+        "pub const SHOWN_CONTRACTS",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "a public interface must still emit `{item}`, got:\n{rust_source}"
+        );
+    }
+
+    // An inline service shape carries `VISIBILITY_UNSPECIFIED`, which is not a
+    // missing value to be guessed at: an anonymous shape has no visibility of
+    // its own and the enclosing service — which cannot be `internal` at all
+    // (ridl §14.5) — carries the authoritative one. So all four of its names
+    // are public. This is asserted rather than left implicit because it is the
+    // link that makes "no special case for inline shapes" true.
+    for item in [
+        "pub trait ServiceVehClusterDiagConsumer",
+        "pub trait ServiceVehClusterDiagProvider",
+        "pub const SERVICE_VEH_CLUSTER_DIAG_TIMING",
+        "pub const SERVICE_VEH_CLUSTER_DIAG_CONTRACTS",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "an inline service shape is public, so it must emit `{item}`, got:\n{rust_source}"
+        );
+    }
+
+    // The names that are deliberately NOT affected. The vocabulary is emitted
+    // once per module and is shared by every interface in it; the service
+    // table is the package's published deployment surface, and a service takes
+    // no `internal` modifier (ridl §14.5); the tuple struct follows the typl
+    // rule for a tuple under an `internal` declaration.
+    for item in [
+        "pub enum Provenance",
+        "pub trait SignalHandle<T>",
+        "pub struct TimingConst",
+        "pub struct ContractStub",
+        "pub const SERVICES",
+        "pub struct HiddenGetBoundsResult",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "`{item}` is package-level and stays public, got:\n{rust_source}"
+        );
+    }
+
+    insta::assert_snapshot!(rust_source);
+}
+
+/// `pub(crate)` is not cosmetic: the generated module compiles, and the items
+/// an `internal interface` produces are genuinely unreachable from another
+/// crate while the public interface's are reachable.
+///
+/// A snapshot alone cannot show this — it records the spelling, not what the
+/// spelling means to rustc. So the module is compiled as a real library crate
+/// and dependent crates are compiled against it, one per generated name:
+/// **all four** of `Hidden` must fail with E0603 (`private`), and all four of
+/// `Shown` plus all four of the inline shape must build. Every name is probed
+/// rather than a representative one, because a partial fix leaves exactly the
+/// unprobed name public. Both directions are asserted, because a test that
+/// only checked the failures would also pass if the whole module failed to
+/// build.
+#[test]
+fn internal_interface_items_are_unreachable_from_another_crate() {
+    let Generated { rust_source, .. } =
+        generate(&visibility_package()).expect("the package generates");
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let lib_path = dir.path().join("veh_cluster.rs");
+    std::fs::write(&lib_path, &rust_source).expect("the generated source is written");
+
+    let rlib = dir.path().join("libveh_cluster.rlib");
+    let status = std::process::Command::new("rustc")
+        .args(["--edition", "2024", "--crate-type", "lib"])
+        .args(["--crate-name", "veh_cluster"])
+        // The generated module is a contract, not a consumer of itself:
+        // `pub(crate)` items nothing in the crate uses are dead code by
+        // construction, which is the point of the test rather than a defect.
+        .args(["-A", "dead_code"])
+        .arg("-o")
+        .arg(&rlib)
+        .arg(&lib_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the generated module must compile as a library crate, source:\n{rust_source}"
+    );
+
+    // Compiles a one-line crate that names `item` through `veh_cluster`, and
+    // returns rustc's stderr together with whether it built.
+    let probe = |name: &str, item: &str| -> (bool, String) {
+        let path = dir.path().join(format!("{name}.rs"));
+        std::fs::write(&path, item).expect("the probe is written");
+        let output = std::process::Command::new("rustc")
+            .args([
+                "--edition",
+                "2024",
+                "--crate-type",
+                "lib",
+                "--emit",
+                "metadata",
+            ])
+            .arg("--extern")
+            .arg(format!("veh_cluster={}", rlib.display()))
+            .arg("-o")
+            .arg(dir.path().join(format!("{name}.rmeta")))
+            .arg(&path)
+            .output()
+            .expect("rustc runs");
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stderr).into_owned(),
+        )
+    };
+
+    // A trait is named in a bound and a const in an expression, so each name
+    // is used the only way its namespace admits.
+    let names_trait = |item: &str| format!("pub fn probe<T: veh_cluster::{item}>(_: T) {{}}\n");
+    let names_const =
+        |item: &str| format!("pub fn probe() -> usize {{ veh_cluster::{item}.len() }}\n");
+
+    // Reachable: the public interface, and the inline service shape — whose
+    // `Interface.visibility` is UNSPECIFIED, the value the checker actually
+    // emits for an anonymous shape.
+    for (probe_name, what, source) in [
+        (
+            "reaches_shown_consumer",
+            "a public interface's consumer face",
+            names_trait("ShownConsumer"),
+        ),
+        (
+            "reaches_shown_provider",
+            "a public interface's provider face",
+            names_trait("ShownProvider"),
+        ),
+        (
+            "reaches_shown_timing",
+            "a public interface's timing const",
+            names_const("SHOWN_TIMING"),
+        ),
+        (
+            "reaches_shown_contracts",
+            "a public interface's contract const",
+            names_const("SHOWN_CONTRACTS"),
+        ),
+        (
+            "reaches_inline_consumer",
+            "an inline service shape's consumer face",
+            names_trait("ServiceVehClusterDiagConsumer"),
+        ),
+        (
+            "reaches_inline_provider",
+            "an inline service shape's provider face",
+            names_trait("ServiceVehClusterDiagProvider"),
+        ),
+        (
+            "reaches_inline_timing",
+            "an inline service shape's timing const",
+            names_const("SERVICE_VEH_CLUSTER_DIAG_TIMING"),
+        ),
+        (
+            "reaches_inline_contracts",
+            "an inline service shape's contract const",
+            names_const("SERVICE_VEH_CLUSTER_DIAG_CONTRACTS"),
+        ),
+    ] {
+        let (ok, err) = probe(probe_name, &source);
+        assert!(
+            ok,
+            "{what} must stay reachable from another crate, rustc said:\n{err}"
+        );
+    }
+
+    // Unreachable: every one of the four names the internal interface
+    // generates, each refused specifically as a privacy error rather than as
+    // any error at all.
+    for (probe_name, what, source) in [
+        (
+            "hides_consumer",
+            "consumer face",
+            names_trait("HiddenConsumer"),
+        ),
+        (
+            "hides_provider",
+            "provider face",
+            names_trait("HiddenProvider"),
+        ),
+        ("hides_timing", "timing const", names_const("HIDDEN_TIMING")),
+        (
+            "hides_contracts",
+            "contract const",
+            names_const("HIDDEN_CONTRACTS"),
+        ),
+    ] {
+        let (ok, err) = probe(probe_name, &source);
+        assert!(
+            !ok,
+            "an internal interface's {what} must not be reachable from another crate"
+        );
+        assert!(
+            err.contains("E0603"),
+            "the refusal for the {what} must be a privacy error (E0603), rustc said:\n{err}"
+        );
+    }
+}

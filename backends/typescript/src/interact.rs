@@ -31,6 +31,15 @@
 //! - **Services as data** — `export const services` maps each dotted global
 //!   service name (ridl §14.5) to the interface behind it.
 //!
+//! **Visibility.** An `internal interface` emits four module-local shapes —
+//! both faces and both consts, each without `export` — never an exported one,
+//! the same package-private mapping the typl surface gives an `internal`
+//! declaration (ADR-0002 §8, ADR-0008 decision 7). Exporting the API of a
+//! declaration the keyword hides would defeat the modifier. The vocabulary and
+//! the service map are package-level and stay exported. There is no
+//! TypeScript counterpart to the Rust backend's generated tuple structs: a
+//! tuple is an inline object type here (typl §11), so it has no name to hide.
+//!
 //! Transport failures are not modeled in the emitted types. A rejected
 //! promise is Stratum 3 — an `infrastructure failure — detected, undeclared`
 //! (gf §6.4), never "undefined behavior": the runtime detects it, the
@@ -42,7 +51,9 @@
 //! output, and total — every failure is a [`GenerateError`], never a panic
 //! (ADR-0004 section 5).
 
-use crate::{Ctx, GenerateError, deprecated_tags, is_integer_form, jsdoc, kind_ts, ts_string};
+use crate::{
+    Ctx, GenerateError, deprecated_tags, export_kw, is_integer_form, jsdoc, kind_ts, ts_string,
+};
 use ridl_ir::v2;
 use std::collections::BTreeMap;
 
@@ -264,11 +275,12 @@ fn emit_face(
     }
 
     let face_name = format!("{type_name}{}", face.suffix(), type_name = names.r#type);
+    let export = export_kw(interface.visibility);
     if members.is_empty() {
-        Ok(format!("{doc}export interface {face_name} {{}}\n"))
+        Ok(format!("{doc}{export}interface {face_name} {{}}\n"))
     } else {
         Ok(format!(
-            "{doc}export interface {face_name} {{\n{members}}}\n"
+            "{doc}{export}interface {face_name} {{\n{members}}}\n"
         ))
     }
 }
@@ -542,6 +554,7 @@ fn emit_timing(names: Names, interface: &v2::Interface) -> Result<String, Genera
     }
 
     let const_name = format!("{}Timing", lower_camel(names.r#type));
+    let export = export_kw(interface.visibility);
     let doc = "\
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
@@ -551,10 +564,12 @@ fn emit_timing(names: Names, interface: &v2::Interface) -> Result<String, Genera
  */
 ";
     if entries.is_empty() {
-        Ok(format!("{doc}export const {const_name} = {{}} as const;\n"))
+        Ok(format!(
+            "{doc}{export}const {const_name} = {{}} as const;\n"
+        ))
     } else {
         Ok(format!(
-            "{doc}export const {const_name} = {{\n{entries}}} as const;\n"
+            "{doc}{export}const {const_name} = {{\n{entries}}} as const;\n"
         ))
     }
 }
@@ -622,6 +637,7 @@ fn emit_contracts(names: Names, interface: &v2::Interface) -> Result<String, Gen
     }
 
     let const_name = format!("{}Contracts", lower_camel(names.r#type));
+    let export = export_kw(interface.visibility);
     let doc = "\
 /**
  * The require/ensure clauses of this interface, as data (ridl §13). `id` is
@@ -635,10 +651,10 @@ fn emit_contracts(names: Names, interface: &v2::Interface) -> Result<String, Gen
  */
 ";
     if entries.is_empty() {
-        Ok(format!("{doc}export const {const_name} = [] as const;\n"))
+        Ok(format!("{doc}{export}const {const_name} = [] as const;\n"))
     } else {
         Ok(format!(
-            "{doc}export const {const_name} = [\n{entries}] as const;\n"
+            "{doc}{export}const {const_name} = [\n{entries}] as const;\n"
         ))
     }
 }

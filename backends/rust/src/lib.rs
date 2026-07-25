@@ -622,7 +622,25 @@ pub(crate) fn deprecated_attr(reason: Option<&str>) -> TokenStream {
     }
 }
 
-fn vis_tokens(visibility: i32) -> TokenStream {
+/// `internal` maps to `pub(crate)` — Rust's package-private mechanism
+/// (ADR-0002 §8, ADR-0008 decision 7, typl §3.3). The rule is per declaration,
+/// not per module: a package holding one `internal` and one public declaration
+/// generates one `pub(crate)` item and one `pub` item.
+///
+/// It governs the item a declaration is realized as, not the auxiliary types
+/// that item's shape induces. A tuple in a field or an interaction position
+/// generates a named struct of its own ([`emit_tuple_struct`]), which stays
+/// `pub` whether or not the declaration that induced it is `internal` — the
+/// same rule the typl surface has followed since E1.
+///
+/// Widening is the safe direction, and only that direction. A `pub` item
+/// exposing a `pub(crate)` type draws the `private_interfaces` lint — on rustc
+/// 1.95 it is warn-by-default rather than the hard E0446 it once was, so it
+/// compiles, but a consumer crate building with `-D warnings` (this repo's own
+/// gate does) turns it into a build failure. A `pub(crate)` item naming a `pub`
+/// type is unremarkable in every configuration. Narrowing an induced struct
+/// would therefore put the failure mode on the wrong side of the rule.
+pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
     match v2::Visibility::try_from(visibility).unwrap_or(v2::Visibility::Unspecified) {
         v2::Visibility::Internal => quote! { pub(crate) },
         _ => quote! { pub },

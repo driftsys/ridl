@@ -48,8 +48,9 @@ and §14.5 needs both service forms exercised.
 - **`internal` on the interaction layer.** `cluster/internal-shape.ridl`
   declares `internal interface WheelDiagnostics` beside a public
   `interface WheelSummary`, so the generated output shows both side by side.
-  See "internal is dropped by both backends" below — the snapshots pin the
-  current, wrong output.
+  This is the file that caught the visibility defect described under
+  "`internal` was dropped by both backends" below; the snapshots now pin the
+  repaired output.
 - **The generated code compiles, in both backends.**
   `veh_cluster_generated_rust_compiles_with_rustc` composes the two packages as
   sibling modules and runs `rustc` over the result;
@@ -88,35 +89,67 @@ warnings, all of them true statements about the source:
 ## Findings this entry pins
 
 Nothing here is worked around. Each is written the way the toolchain behaves, so
-the snapshots pin the behaviour and a repair shows up as a snapshot change.
+the snapshots pin the behaviour and a repair shows up as a snapshot change. One
+of them — `internal` on the interaction layer — has since been repaired that
+way; its history is kept below rather than deleted, because what the corpus
+found and why the coverage exists is part of what the corpus is for.
 
-### `internal` is dropped by both backends — a spec violation
+### `internal` was dropped by both backends — found here, fixed in #160
+
+**Status: fixed.** Recorded because this entry is what found it.
 
 `internal` is accepted on an `interface` (on an interaction or a service it is a
 parse error), the checker honours it, and the IR records it faithfully:
 `WheelDiagnostics` lowers with `visibility: 2` where `WheelSummary` and
-`VehicleStatus` carry `1`. `ridl diff` models it too. Both backends then throw
-it away:
+`VehicleStatus` carry `1`. `ridl diff` models it too. Between PRs #155/#156
+and #160, both backends then threw it away:
 
-- **Rust** emits `pub trait WheelDiagnosticsConsumer`,
+- **Rust** emitted `pub trait WheelDiagnosticsConsumer`,
   `pub trait WheelDiagnosticsProvider`, `pub const WHEEL_DIAGNOSTICS_TIMING` and
   `pub const WHEEL_DIAGNOSTICS_CONTRACTS` — byte-for-byte the same visibility as
-  the public `WheelSummary`. They should be `pub(crate)`.
-- **TypeScript** emits `export interface WheelDiagnosticsConsumer` and
-  `export const wheelDiagnosticsTiming`. They should not be exported.
+  the public `WheelSummary`.
+- **TypeScript** emitted `export interface WheelDiagnosticsConsumer`,
+  `export interface WheelDiagnosticsProvider`, `export const
+  wheelDiagnosticsTiming` and `export const wheelDiagnosticsContracts`.
 
-The control is in the same snapshots: `internal struct RawWheelFrame` (typl, in
-`common/`) correctly becomes `pub(crate) struct RawWheelFrame` in Rust and a
-non-exported `interface RawWheelFrame` in TypeScript. So the typl layer honours
-`internal` and the interaction layer does not — a live violation of **ADR-0008
-decision 7**, not a gap in the design.
+A package-private contract shape leaked into both generated public surfaces — a
+violation of **ADR-0002 §8** and **ADR-0008 decision 7**, not a gap in the
+design. The control was in the same snapshots and is what bounded the
+diagnosis: `internal struct RawWheelFrame` (typl, in `common/`) was already
+correct in both backends, so the fault was the interaction layer specifically
+and not `internal` in general.
 
-The snapshots alone would let the repair land as a quiet diff, so
-`internal_on_the_interaction_layer_is_dropped_by_both_backends` asserts the
-leaked `pub` and `export` spellings directly, with the correctly-handled
-`internal struct` beside them as the control. Each assertion carries the message
-the fixer needs — which spelling to flip, and that **this section** is the one
-to update. Fixing `internal` in either backend fails that test by design.
+**How it was found, and why that matters here.** The defect shipped in two
+merged PRs and survived review of both backends. Nothing caught it until an
+`internal interface` was added to this corpus — which is the argument for the
+corpus in one sentence: a construct that no unit test exercised, compiled
+through the real driver, beside its public counterpart, in output a human reads.
+
+**The repair (#160).** Both backends now derive the visibility once per
+interface from `Interface.visibility` and apply it to all four generated names,
+so the two backends agree name for name. Deliberately unaffected, and asserted
+as such: the interaction vocabulary (emitted once per module, shared by every
+interface in it); the service table, since a service takes no `internal`
+modifier (§14.5) and an inline shape's `VISIBILITY_UNSPECIFIED` maps to public;
+and the Rust tuple structs an interaction position induces, which follow the
+typl rule for a tuple under an `internal` declaration — TypeScript has no
+counterpart, since a tuple is an inline object type there.
+
+`internal_on_an_interface_is_package_private_in_both_backends` is now the
+regression guard. It asserts all four names per backend in their fixed
+spellings **and** the absence of all four leaked spellings, with the
+`internal struct` control beside them. The four-per-backend shape is
+deliberate: the first report of the defect named only the two faces and the
+timing constant, and the contracts constant was found by enumerating what each
+backend generates rather than by reading the report.
+
+Two residues #160 could not reach, since they are checker behaviour rather than
+codegen — tracked as **issue #161**. TYPL-005 is applied to typl declarations
+only, so a public `service` may publish an `internal` interface, and a public
+`interface` may carry an `internal` payload type, both undiagnosed. The second
+is the sharper one: it makes the Rust backend emit a `pub` trait over a
+`pub(crate)` type, which draws rustc's `private_interfaces` lint and becomes a
+hard build failure for any consumer building with `-D warnings`.
 
 ### An inline shape carries no `Interface.visibility`
 
