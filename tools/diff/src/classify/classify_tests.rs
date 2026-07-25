@@ -214,6 +214,18 @@ fn scalar(name: &str, constraint: v2::Constraint, width: v2::IntWidth) -> v2::De
     )
 }
 
+/// The same scalar with no constraint block at all. `None` and an
+/// all-facets-unset `Some` are different states to the classifier: only `None`
+/// says the value was never bounded.
+fn unconstrained(name: &str, width: v2::IntWidth) -> v2::Decl {
+    let mut decl = scalar(name, bounds(None, None), width);
+    let Some(v2::decl::Kind::TypeDef(def)) = &mut decl.kind else {
+        unreachable!("scalar builds a TypeDef")
+    };
+    def.constraint = None;
+    decl
+}
+
 /// An all-facets-unset constraint, so each test states only the facet it moves.
 fn bounds(min: Option<&str>, max: Option<&str>) -> v2::Constraint {
     v2::Constraint {
@@ -274,6 +286,23 @@ fn union_decl(name: &str, arms: Vec<v2::UnionArm>, is_result: bool) -> v2::Decl 
     )
 }
 
+/// A union whose body also holds `reserved` tombstones at the given ordinals.
+fn union_with_reserved(name: &str, arms: Vec<v2::UnionArm>, reserved: Vec<u32>) -> v2::Decl {
+    let mut decl = union_decl(name, arms, false);
+    let Some(v2::decl::Kind::UnionDef(def)) = &mut decl.kind else {
+        unreachable!("union_decl builds a UnionDef")
+    };
+    def.reserved = reserved
+        .into_iter()
+        .map(|ordinal| v2::Reserved {
+            ordinal,
+            name: None,
+            value: None,
+        })
+        .collect();
+    decl
+}
+
 fn field(name: &str, ordinal: u32, type_ref: &str) -> v2::StructMember {
     v2::StructMember {
         member: Some(v2::struct_member::Member::Field(v2::Field {
@@ -285,6 +314,17 @@ fn field(name: &str, ordinal: u32, type_ref: &str) -> v2::StructMember {
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
+        })),
+    }
+}
+
+/// A `reserved` tombstone in a struct body, holding its ordinal slot.
+fn reserved_field(ordinal: u32) -> v2::StructMember {
+    v2::StructMember {
+        member: Some(v2::struct_member::Member::Reserved(v2::Reserved {
+            ordinal,
+            name: None,
+            value: None,
         })),
     }
 }
@@ -583,6 +623,49 @@ fn decimal_bounds_order_exactly() {
     let (old, new) = constraint_case(
         bounds(Some("9.5"), Some("250.0")),
         bounds(Some("10.25"), Some("250.0")),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+}
+
+/// `type Speed: km/h` gaining `[0.0..300.0]` bounds a value that was unbounded,
+/// so every consumer that was sending 320 is now sending an illegal value. There
+/// is no facet to compare — the old side has no constraint at all — so this is
+/// decided by the fallback of `narrows`, not by its per-facet rules.
+#[test]
+fn a_constraint_added_where_there_was_none_is_breaking() {
+    let old = decl_pkg(vec![unconstrained("Speed", v2::IntWidth::U16)]);
+    let new = decl_pkg(vec![scalar(
+        "Speed",
+        bounds(Some("0.0"), Some("300.0")),
+        v2::IntWidth::U16,
+    )]);
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+}
+
+/// The other direction of the same fallback: dropping the constraint entirely
+/// leaves the value unbounded again, which only widens.
+#[test]
+fn a_constraint_dropped_entirely_is_compatible() {
+    let old = decl_pkg(vec![scalar(
+        "Speed",
+        bounds(Some("0.0"), Some("300.0")),
+        v2::IntWidth::U16,
+    )]);
+    let new = decl_pkg(vec![unconstrained("Speed", v2::IntWidth::U16)]);
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+}
+
+/// A bound the exact-decimal comparison cannot order — here an exponent form a
+/// foreign or hand-edited `.ir.json` can carry, which `load_ir_json` accepts as
+/// the plain string it is. `1e2` raises the floor from 10 to 100, a narrowing,
+/// but the classifier does not evaluate exponents. It cannot prove the bound
+/// relaxed, so it falls back to breaking rather than passing a bound it never
+/// read as compatible.
+#[test]
+fn a_bound_the_classifier_cannot_order_is_breaking() {
+    let (old, new) = constraint_case(
+        bounds(Some("10"), Some("250")),
+        bounds(Some("1e2"), Some("250")),
     );
     assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
 }
@@ -1122,6 +1205,98 @@ fn a_struct_field_appended_at_the_end_is_compatible() {
     assert_row(&old, &new, Category::DeclAdded, Verdict::Compatible);
 }
 
+/// The classifier is the **only** line of defence here, so this is the module's
+/// own documented worst case: "a false compatible ships a wire break".
+///
+/// `reserved 2` is written into the middle of the body, which pushes the
+/// surviving `b` from ordinal 2 to 3 while `c` is appended at 4. The walk's
+/// composite comparison is keyed on member names, so it reports one thing only —
+/// that `c` was added — and says nothing about `b` moving. Without
+/// `appended_slot`'s surviving-member check the addition reads as a clean
+/// append, the report comes out compatible, and `ridl diff` exits 0 over a
+/// struct whose field `b` now carries a different wire ordinal.
+///
+/// The verdict is asserted on the report as well as on the change: the report
+/// verdict is what the `ridl diff` facade turns into its exit code — breaking is
+/// exit 1, compatible or identical is exit 0 (`run_diff` in
+/// `crates/ridl/src/main.rs`, the contract of ADR-0008 decision 9).
+#[test]
+fn an_addition_that_moves_a_surviving_struct_field_is_breaking() {
+    let old = decl_pkg(vec![struct_decl(
+        "Frame",
+        vec![field("a", 1, "Speed"), field("b", 2, "Speed")],
+    )]);
+    let new = decl_pkg(vec![struct_decl(
+        "Frame",
+        vec![
+            field("a", 1, "Speed"),
+            reserved_field(2),
+            field("b", 3, "Speed"),
+            field("c", 4, "Speed"),
+        ],
+    )]);
+
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.changes.len(),
+        1,
+        "the name-keyed walk reports only the added field — nothing about b \
+         moving — so the classifier is the sole line of defence, got {:?}",
+        report.changes
+    );
+    let added = row(&report, Category::DeclAdded);
+    assert_eq!(added.path, "veh.cluster/Frame/c");
+    assert_eq!(
+        added.verdict,
+        Verdict::Breaking,
+        "b moved from ordinal 2 to 3, so the addition is not an append, got {:?}",
+        report.changes
+    );
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "the report verdict is the exit code: this must be exit 1, got {:?}",
+        report.changes
+    );
+}
+
+/// The same guard over the other half of `appended_slot`: a retired ordinal is
+/// never handed to a new member (typl §7.4). The tombstone lives in the *old*
+/// body — deleting it and reusing ordinal 3 is what an author does by hand, and
+/// the new body on its own looks perfectly legal.
+#[test]
+fn a_struct_field_taking_a_retired_ordinal_is_breaking() {
+    let old = decl_pkg(vec![struct_decl(
+        "Frame",
+        vec![field("a", 1, "A"), field("b", 2, "B"), reserved_field(3)],
+    )]);
+    let new = decl_pkg(vec![struct_decl(
+        "Frame",
+        vec![field("a", 1, "A"), field("b", 2, "B"), field("c", 3, "C")],
+    )]);
+    assert_row(&old, &new, Category::DeclAdded, Verdict::Breaking);
+}
+
+/// The union body carries the same rule over its own `reserved` list.
+#[test]
+fn a_union_arm_taking_a_retired_ordinal_is_breaking() {
+    let old = decl_pkg(vec![union_with_reserved(
+        "U",
+        vec![union_arm("a", 1, "A"), union_arm("b", 2, "B")],
+        vec![3],
+    )]);
+    let new = decl_pkg(vec![union_with_reserved(
+        "U",
+        vec![
+            union_arm("a", 1, "A"),
+            union_arm("b", 2, "B"),
+            union_arm("c", 3, "C"),
+        ],
+        vec![],
+    )]);
+    assert_row(&old, &new, Category::DeclAdded, Verdict::Breaking);
+}
+
 #[test]
 fn a_struct_field_inserted_before_the_end_is_breaking() {
     let old = decl_pkg(vec![struct_decl(
@@ -1145,6 +1320,54 @@ fn a_doc_only_change_is_compatible() {
     let mut new = old.clone();
     new.interfaces[0].interactions[0].doc = "the current road speed".to_string();
     assert_row(&old, &new, Category::DocOnly, Verdict::Compatible);
+}
+
+/// The interface-level twin of the case above. Each envelope field is exercised
+/// on its own, because dropping a single term from the comparison drops that one
+/// edit out of the report: an interface's `@deprecated` notice appearing or
+/// changing is a migration-planning signal, and a diff that never mentions it
+/// tells a reader the interface is unchanged.
+#[test]
+fn an_interface_envelope_change_is_doc_only_and_compatible() {
+    let base = pkg(vec![signal("a", 1, "T")]);
+
+    let mut documented = base.clone();
+    documented.interfaces[0].doc = "the vehicle status interface".to_string();
+    let report = diff_packages(&base, &documented);
+    let change = row(&report, Category::DocOnly);
+    assert_eq!(
+        change.path, "veh.cluster/I",
+        "the change is the interface's own, not an interaction's, got {:?}",
+        report.changes
+    );
+    assert_eq!(change.verdict, Verdict::Compatible);
+
+    let mut labelled = base.clone();
+    labelled.interfaces[0].labels = vec!["cluster".to_string()];
+    assert_row(&base, &labelled, Category::DocOnly, Verdict::Compatible);
+
+    let mut deprecated = base.clone();
+    deprecated.interfaces[0].deprecated = Some("use VehicleStatus2".to_string());
+    assert_row(&base, &deprecated, Category::DocOnly, Verdict::Compatible);
+}
+
+/// And the service-level twin, which carries a third copy of the same
+/// comparison.
+#[test]
+fn a_service_envelope_change_is_doc_only_and_compatible() {
+    let base = service_pkg(vec![service_ref("Cluster", "I")]);
+
+    let mut documented = base.clone();
+    documented.services[0].doc = "the cluster service".to_string();
+    assert_row(&base, &documented, Category::DocOnly, Verdict::Compatible);
+
+    let mut labelled = base.clone();
+    labelled.services[0].labels = vec!["cluster".to_string()];
+    assert_row(&base, &labelled, Category::DocOnly, Verdict::Compatible);
+
+    let mut deprecated = base.clone();
+    deprecated.services[0].deprecated = Some("use Cluster2".to_string());
+    assert_row(&base, &deprecated, Category::DocOnly, Verdict::Compatible);
 }
 
 // ==========================================================================

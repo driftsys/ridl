@@ -800,6 +800,11 @@ fn envelope_differs(old: &v2::Decl, new: &v2::Decl) -> bool {
     old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
 }
 
+/// The same comparison as [`envelope_differs`], over an interface. The body is
+/// identical but the parameter type is not, and `Decl`, `Interface`, and
+/// `Service` are three unrelated generated structs with no shared trait, so
+/// neither can call the other without a trait written only to join them. The
+/// third copy is inlined in [`diff_service`].
 fn interface_envelope_differs(old: &v2::Interface, new: &v2::Interface) -> bool {
     old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
 }
