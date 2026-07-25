@@ -35,7 +35,7 @@ use ridl_core::{
     Cache, Frozen, LoadedWorkspace, RidlDatabase, load_workspace, materialize_imports, parse_file,
     read_lockfile, std_package, write_lockfile,
 };
-use ridl_sem::{CheckedPackage, check_package, resolve_package};
+use ridl_sem::{CheckedPackage, Resolution, check_package, resolve_package};
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
 
@@ -187,8 +187,45 @@ pub fn module_name_from_path(path: &str) -> String {
 /// with [`render`](ridl_core::diag::render()) and keys the exit code on the
 /// presence of an [`Error`](Severity::Error). `checked` carries the per-package
 /// IR so the language server can serve it (E1.15).
+///
+/// `resolutions` and `std_ir` exist so a consumer can resolve a name the way the
+/// checker did rather than the way one package's `decls` happen to spell it
+/// (ADR-0008 decision 15). A lowered IR reference is canonical — bare for a
+/// same-package declaration, `package.Name` across packages — so `checked` plus
+/// `std_ir` is the complete set of packages a canonical reference can name, and
+/// `resolutions` is the only place the **written** name of an import (its alias)
+/// is mapped back onto the declaration it stands for.
 pub struct WorkspaceOutput {
     pub checked: Vec<CheckedPackage>,
+    /// Each checked package's resolved local name view, keyed by package name —
+    /// the same name [`CheckedPackage::ir`]'s `name` field carries.
+    ///
+    /// The map is what the resolver built (its own declarations, `ridl.std`, and
+    /// the alias-aware imports, ADR-0002 §5); the key is the **local** spelling,
+    /// so `import fleet.legacy.DoorFault as LegacyFault` is keyed `LegacyFault`
+    /// while the [`Symbol`](ridl_sem::Symbol) it maps to still names
+    /// `fleet.legacy.DoorFault`. Resolving a written name any other way — by
+    /// scanning packages for a matching declared name, say — mis-binds under an
+    /// alias and under a cross-package name collision.
+    ///
+    /// Keyed by name rather than positioned alongside `checked` so the two
+    /// cannot drift out of step. Duplicate package names resolve first-wins,
+    /// matching [`package_of`](ridl_core::package::package_of).
+    pub resolutions: BTreeMap<String, Resolution>,
+    /// The lowered IR of the built-in `ridl.std` package (typl Appendix A).
+    ///
+    /// `ridl.std` is deliberately absent from
+    /// [`Workspace::packages`](ridl_core::package::Workspace::packages) and is
+    /// threaded through the passes as a parameter, so it never appears in
+    /// `checked`. A canonical reference can still name it — every package
+    /// implicitly imports all of it (typl §3.2) — and without its IR a consumer
+    /// resolving `ridl.std.Duration` or `ridl.std.Timestamp` finds nothing.
+    ///
+    /// Its own diagnostics are not merged into `diagnostics`: the source is
+    /// compiled into the binary and version-locked to it, so a finding there is
+    /// a compiler defect and not a statement about the user's workspace. It is
+    /// covered by `ridl-core`'s own asset tests.
+    pub std_ir: ridl_ir::v2::Package,
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
 }
@@ -207,13 +244,20 @@ pub struct WorkspaceOutput {
 /// exist, or a file cannot be read); every content problem is a [`Diagnostic`].
 pub fn compile_workspace(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<WorkspaceOutput> {
     let Compiled {
+        workspace,
+        std,
         checked,
+        resolutions,
         diagnostics,
         sources,
-        ..
     } = load_and_check(db, entry)?;
+    // `ridl.std` is checked here rather than in `load_and_check` so the command
+    // drivers, which never look at its IR, do not pay for the pass.
+    let std_ir = check_package(&*db, workspace, std, std).ir;
     Ok(WorkspaceOutput {
         checked,
+        resolutions,
+        std_ir,
         diagnostics,
         sources,
     })
@@ -290,6 +334,7 @@ pub fn run_build(
         checked,
         mut diagnostics,
         sources,
+        ..
     } = load_and_check(&mut db, entry)?;
 
     // Materialize remote imports and round-trip the lockfile before the emit
@@ -341,11 +386,14 @@ pub fn syntax_error_diagnostic(error: &ridl_syntax::SyntaxError, file: FileId) -
 }
 
 /// The loaded-and-checked workspace shared by [`compile_workspace`] and the
-/// command drivers: the salsa [`Workspace`] handle, the per-package checked IR,
-/// the merged diagnostics remapped onto `sources`, and that source map.
+/// command drivers: the salsa [`Workspace`] and `ridl.std` handles, the
+/// per-package checked IR and resolved name views, the merged diagnostics
+/// remapped onto `sources`, and that source map.
 struct Compiled {
     workspace: Workspace,
+    std: Package,
     checked: Vec<CheckedPackage>,
+    resolutions: BTreeMap<String, Resolution>,
     diagnostics: Vec<Diagnostic>,
     sources: SourceMap,
 }
@@ -365,6 +413,7 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
 
     let packages = workspace.packages(db).clone();
     let mut checked = Vec::with_capacity(packages.len());
+    let mut resolutions: BTreeMap<String, Resolution> = BTreeMap::new();
     for pkg in &packages {
         // Intern this package's files into the render source map; their ids are
         // the render targets the package-relative pass diagnostics remap onto.
@@ -387,8 +436,16 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
             }
         }
 
-        let resolution = resolve_package(db, workspace, *pkg, std);
-        diagnostics.extend(remap_diagnostics(resolution.diagnostics, &render_ids));
+        let mut resolution = resolve_package(db, workspace, *pkg, std);
+        diagnostics.extend(remap_diagnostics(
+            std::mem::take(&mut resolution.diagnostics),
+            &render_ids,
+        ));
+        // First-wins on a duplicate package name, matching `package_of`, which
+        // is what every reference in the lowered IR was resolved through.
+        resolutions
+            .entry(pkg.name(db).clone())
+            .or_insert(resolution);
 
         let checked_pkg = check_package(db, workspace, *pkg, std);
         diagnostics.extend(remap_diagnostics(
@@ -416,7 +473,9 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
 
     Ok(Compiled {
         workspace,
+        std,
         checked,
+        resolutions,
         diagnostics,
         sources,
     })

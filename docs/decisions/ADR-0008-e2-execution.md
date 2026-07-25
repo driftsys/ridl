@@ -2,8 +2,9 @@
 
 ## Status
 
-Accepted (agent-taken, maintainer-reviewable). Each numbered decision below was
-taken to unblock the epic E2 execution plan
+Accepted (agent-taken, maintainer-reviewable); the last numbered decision is a
+later amendment, dated in its own text. Each numbered decision below was taken
+to unblock the epic E2 execution plan
 (`docs/wip/2026-07-19-e2-ridl-interface-layer-plan.md`) and is reversible at the
 cost of a small refactor before a later epic builds on it. This ADR follows the
 pattern of ADR-0006 (E0) and ADR-0007 (E1).
@@ -178,6 +179,39 @@ remains the merge gate.
     carried in IR v2 as their canonical source text; a full expression tree
     arrives when the E5.1 function layer restructures the representation.
 
+15. **Amendment (2026-07-25) — `ridlc`'s workspace output carries the checker's
+    resolution and the `ridl.std` IR.** `WorkspaceOutput` gains two fields:
+    `resolutions`, each checked package's `Resolution` keyed by package name,
+    and `std_ir`, the lowered IR of the built-in `ridl.std` package.
+
+    _What changed and why._ `ridl test` (E2.11a) resolved the names in a
+    contract clause against one package's `decls`. On the layout every shipped
+    corpus entry uses — a types member plus interface members that import from
+    it — that resolves nothing: a parameter typed from a sibling member or from
+    `ridl.std` was reported as having no generatable range, so essentially every
+    precondition was skipped while the command exited 0, and a clause naming an
+    imported constant raised an unbound reference and exited **1** on a
+    workspace `ridl check` accepts. Both are one root cause — the runner had no
+    access to what the checker resolved — and both are fixed by handing it that
+    resolution. Neither field can be reconstructed by the caller: `Resolution`
+    was computed inside `load_and_check` and discarded, and `ridl.std` is
+    deliberately absent from `Workspace::packages` so its IR never reached
+    `checked`. Reconstructing the first by indexing declarations by their bare
+    name across packages is not equivalent and is rejected: it mis-binds under
+    an import alias, where the local name is the alias while the declaration
+    keeps its own, and under a cross-package name collision. For a correctness
+    tool an approximation that silently binds the wrong declaration is worse
+    than a visible skip.
+
+    _What it preserves._ Decision 9's tool-qualification boundary is unchanged.
+    Both fields are outputs the pipeline already produced; nothing about
+    source-to-IR lowering moves, and no new pass, input, or configuration is
+    exposed. `compile_workspace` alone checks `ridl.std`, so `run_check` and
+    `run_build` — the qualified command drivers — do no work they did not do
+    before. `ridl test` stays in the `ridl` facade, consistent with decision 9:
+    the compiler reports what it resolved, the facade decides what to do with
+    it.
+
 ## Consequences
 
 - Positive: IR v2 reuses IR v1's pre-cut field reservations, so the interaction
@@ -191,7 +225,8 @@ remains the merge gate.
   service-code numbering anomaly is carried rather than fixed (decision 6); the
   `final` spelling ships under an open reconsideration (decision 5); the inline
   `T|E` transport-identity rule (decision 4) is an agent-taken derivation the
-  registry/backends inherit.
+  registry/backends inherit; `WorkspaceOutput` is two fields wider (decision
+  15), so a consumer now sees the resolver's output and not only the lowered IR.
 - Review hook: each numbered decision is reversible at the cost of a small
   refactor before a later epic builds on it; the maintainer can veto any of them
   by reopening this ADR.

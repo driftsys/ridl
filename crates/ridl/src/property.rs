@@ -60,7 +60,7 @@ use ridl_ir::v2;
 use ridl_sem::expr::NumericBacking;
 use ridl_sem::expr_eval::{EvalEnv, Value, eval_expr, parse_contract_expr};
 use ridl_sem::scalar::{ExactValue, FloatRange, IntRange};
-use ridl_sem::testgen;
+use ridl_sem::{Resolution, SymbolKind, testgen};
 
 /// The `ridl test` output format.
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -216,10 +216,11 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
         return ExitCode::from(2);
     }
 
+    let names = Names::of(&output);
     let reports: Vec<PackageReport> = output
         .checked
         .iter()
-        .map(|checked| run_package(&checked.ir, samples))
+        .map(|checked| run_package(&checked.ir, &names, samples))
         .collect();
 
     match format {
@@ -234,8 +235,8 @@ pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
     }
 }
 
-fn run_package(package: &v2::Package, samples: usize) -> PackageReport {
-    let vocabulary = vocabulary(package);
+fn run_package(package: &v2::Package, names: &Names, samples: usize) -> PackageReport {
+    let vocabulary = names.vocabulary(&package.name);
     let mut ranges = Vec::new();
     for decl in &package.decls {
         let Some(v2::decl::Kind::TypeDef(type_def)) = &decl.kind else {
@@ -274,7 +275,14 @@ fn run_package(package: &v2::Package, samples: usize) -> PackageReport {
                 _ => continue,
             };
             for clause in clauses {
-                contracts.push(run_contract(package, &vocabulary, params, clause, samples));
+                contracts.push(run_contract(
+                    &package.name,
+                    names,
+                    &vocabulary,
+                    params,
+                    clause,
+                    samples,
+                ));
             }
         }
     }
@@ -380,7 +388,8 @@ fn integer(value: i64) -> ExactValue {
 // ==========================================================================
 
 fn run_contract(
-    package: &v2::Package,
+    home: &str,
+    names: &Names,
     vocabulary: &BTreeMap<String, Value>,
     params: &[v2::Param],
     clause: &v2::Contract,
@@ -413,7 +422,7 @@ fn run_contract(
                 "skipped: `{name}` is not a parameter of this interaction"
             )));
         };
-        match generator_for(package, param) {
+        match names.generator_for(home, param) {
             Some(generator) => generators.push((name.clone(), generator)),
             None => {
                 return report(ContractStatus::Skipped(format!(
@@ -457,7 +466,7 @@ fn run_contract(
         Config::default(),
         TestRng::from_seed(
             RngAlgorithm::ChaCha,
-            &seed(&package.name, &clause.observer_id, &clause.source),
+            &seed(home, &clause.observer_id, &clause.source),
         ),
     );
 
@@ -570,6 +579,9 @@ fn run_contract(
 enum Generator {
     Int(IntRange),
     Float(FloatRange),
+    /// `ridl.std.Duration` — the range in its declared `ms` domain. See
+    /// [`DURATION`] for why this is not simply a float.
+    Duration(FloatRange),
 }
 
 impl Generator {
@@ -580,7 +592,7 @@ impl Generator {
     /// on — a guard against a zero divisor, a "must be positive" precondition —
     /// and a range like `[-10..10]` reaches it only by chance otherwise.
     fn boundary_corpus(&self) -> Vec<Value> {
-        let (mut corpus, min, max, backing) = match self {
+        let (mut corpus, min, max) = match self {
             Generator::Int(range) => (
                 testgen::boundary_values(range)
                     .into_iter()
@@ -588,13 +600,11 @@ impl Generator {
                     .collect::<Vec<_>>(),
                 &range.min,
                 &range.max,
-                NumericBacking::Integer,
             ),
-            Generator::Float(range) => (
+            Generator::Float(range) | Generator::Duration(range) => (
                 testgen::float_boundary_values(range),
                 &range.min,
                 &range.max,
-                NumericBacking::Float,
             ),
         };
         let zero = ExactValue(BigRational::from_integer(BigInt::from(0)));
@@ -603,28 +613,26 @@ impl Generator {
         {
             corpus.push(zero);
         }
-        corpus
-            .into_iter()
-            .map(|value| Value::Num(value, backing))
-            .collect()
+        corpus.into_iter().map(|value| self.bind(value)).collect()
     }
-}
 
-fn generator_for(package: &v2::Package, param: &v2::Param) -> Option<Generator> {
-    let Some(v2::field_type::Kind::Named(reference)) = param.r#type.as_ref()?.kind.as_ref() else {
-        return None;
-    };
-    let type_def = named_type(package, reference)?;
-    let constraint = type_def.constraint.as_ref()?;
-    let min = ExactValue::parse(constraint.min.as_deref()?)?;
-    let max = ExactValue::parse(constraint.max.as_deref()?)?;
-    match type_def.width.as_ref()? {
-        v2::type_def::Width::IntWidth(_) => Some(Generator::Int(IntRange { min, max })),
-        v2::type_def::Width::FloatWidth(_) => Some(Generator::Float(FloatRange {
-            min,
-            max,
-            step: constraint.step.as_deref().and_then(ExactValue::parse),
-        })),
+    /// One value of this generator's own domain as the [`Value`] the evaluator
+    /// binds. The domain is a property of the declared type, not of the number:
+    /// a `ridl.std.Duration` becomes a [`Value::Dur`], everything else a
+    /// [`Value::Num`] carrying its backing.
+    fn bind(&self, drawn: ExactValue) -> Value {
+        match self {
+            Generator::Int(_) => Value::Num(drawn, NumericBacking::Integer),
+            Generator::Float(_) => Value::Num(drawn, NumericBacking::Float),
+            Generator::Duration(_) => Value::Dur(milliseconds_to_micros(drawn)),
+        }
+    }
+
+    fn range(&self) -> (&ExactValue, &ExactValue) {
+        match self {
+            Generator::Int(range) => (&range.min, &range.max),
+            Generator::Float(range) | Generator::Duration(range) => (&range.min, &range.max),
+        }
     }
 }
 
@@ -633,22 +641,22 @@ fn generator_for(package: &v2::Package, param: &v2::Param) -> Option<Generator> 
 /// domain through its shortest round-tripping decimal, which is a finite
 /// decimal and therefore an exact rational.
 ///
-/// **Every drawn value is checked against the range it was drawn from.** The
-/// float path is not range-preserving: it rounds both bounds to `f64` to build
-/// the strategy, and reconstructing the drawn value can land just outside the
-/// declared interval when the bounds need more than about fifteen significant
-/// digits. Presenting such a value as an ordinary sample inverts verdicts — a
-/// `require v < min`, which no legal value satisfies, is reported satisfied —
-/// so an out-of-range draw is discarded here instead. The guard costs one
-/// comparison and turns a silently wrong answer into a missing sample.
+/// **Every drawn value is checked against the range it was drawn from**, with
+/// the same `range_accepts` the checker and the range self-corpora use, so "in
+/// range" means one thing across the toolchain. The float path is not
+/// range-preserving: it rounds both bounds to `f64` to build the strategy, and
+/// reconstructing the drawn value can land just outside the declared interval
+/// when the bounds need more than about fifteen significant digits. Presenting
+/// such a value as an ordinary sample inverts verdicts — a `require v < min`,
+/// which no legal value satisfies, is reported satisfied — so an out-of-range
+/// draw is discarded here instead. The guard costs one comparison and turns a
+/// silently wrong answer into a missing sample.
 fn draw(generator: &Generator, runner: &mut TestRunner) -> Option<Value> {
-    match generator {
+    let drawn = match generator {
         Generator::Int(range) => {
-            let value = testgen::int_values(range).new_tree(runner).ok()?.current();
-            let value = integer(value);
-            in_range(value, &range.min, &range.max, NumericBacking::Integer)
+            integer(testgen::int_values(range).new_tree(runner).ok()?.current())
         }
-        Generator::Float(range) => {
+        Generator::Float(range) | Generator::Duration(range) => {
             let value = testgen::float_values(range)
                 .new_tree(runner)
                 .ok()?
@@ -656,107 +664,213 @@ fn draw(generator: &Generator, runner: &mut TestRunner) -> Option<Value> {
             if !value.is_finite() {
                 return None;
             }
-            let value = ExactValue::parse(&format!("{value}"))?;
-            in_range(value, &range.min, &range.max, NumericBacking::Float)
+            ExactValue::parse(&format!("{value}"))?
+        }
+    };
+    let (min, max) = generator.range();
+    ridl_sem::scalar::range_accepts(&drawn, Some(min), Some(max)).then(|| generator.bind(drawn))
+}
+
+// ==========================================================================
+// Name resolution — the checker's view, not one package's `decls`
+// ==========================================================================
+
+/// The one inhabitant of the duration domain (expr-core §5.1).
+///
+/// The checker hard-codes this same reference
+/// (`Checker::expr_type_of_path_in`): a parameter or constant of this type is
+/// an `ExprType::Duration` and not an ordinary numeric, however its `ms`
+/// backing reads. The runner has to agree, because the evaluator refuses to
+/// order a [`Value::Dur`] against a [`Value::Num`] — binding a `Duration`
+/// parameter as a number would turn `require window > 0ms`, a clause the
+/// checker accepts, into an evaluation error and exit 1.
+const DURATION: (&str, &str) = ("ridl.std", "Duration");
+
+/// A `ridl.std.Duration` value, declared in milliseconds, as the exact
+/// microsecond count [`Value::Dur`] holds (expr-core §7). Scaling exactly in
+/// rationals, so no sampled value is rounded on the way in.
+fn milliseconds_to_micros(value: ExactValue) -> ExactValue {
+    ExactValue(value.0 * BigRational::from_integer(BigInt::from(1000)))
+}
+
+/// Every name a contract clause can reach, resolved the way the checker
+/// resolved it.
+///
+/// Two maps, and both are load-bearing:
+///
+/// - `packages` holds the lowered IR of every checked package **plus
+///   `ridl.std`**, keyed by package name. A lowered reference is canonical —
+///   bare within its own package, `package.Name` across packages (the
+///   checker's `canonical_ref`) — so splitting one at its last dot names the
+///   package to look in exactly, with no search and no chance of matching a
+///   same-named declaration elsewhere. `ridl.std` is in the map because it is
+///   deliberately absent from the workspace's package list while every package
+///   implicitly imports all of it (typl §3.2), and `Duration` and `Timestamp`
+///   both carry generatable ranges.
+/// - `resolutions` holds each package's resolved local name view. It is the
+///   only place the **written** name of a value — which is what a clause's
+///   canonical source text spells, and what the evaluator asks the environment
+///   for — is mapped onto the declaration it stands for. Scanning packages for
+///   a matching declared name instead would bind the wrong declaration under an
+///   import alias (`import fleet.legacy.DoorFault as LegacyFault` is keyed
+///   `LegacyFault`, while the symbol still names `fleet.legacy.DoorFault`) and
+///   would have to guess between two packages exporting one name.
+struct Names<'a> {
+    packages: BTreeMap<&'a str, &'a v2::Package>,
+    resolutions: &'a BTreeMap<String, Resolution>,
+}
+
+impl<'a> Names<'a> {
+    fn of(output: &'a ridlc::WorkspaceOutput) -> Names<'a> {
+        // First-wins on a duplicate package name, matching `package_of`, which
+        // is what every reference in the lowered IR was resolved through.
+        let mut packages: BTreeMap<&str, &v2::Package> = BTreeMap::new();
+        for checked in &output.checked {
+            packages.entry(&checked.ir.name).or_insert(&checked.ir);
+        }
+        packages
+            .entry(&output.std_ir.name)
+            .or_insert(&output.std_ir);
+        Names {
+            packages,
+            resolutions: &output.resolutions,
         }
     }
-}
 
-/// The drawn value as a [`Value`], or `None` when it fell outside the range it
-/// was drawn from. Uses the same `range_accepts` the checker and the range
-/// self-corpora use, so "in range" means one thing across the toolchain.
-fn in_range(
-    value: ExactValue,
-    min: &ExactValue,
-    max: &ExactValue,
-    backing: NumericBacking,
-) -> Option<Value> {
-    if ridl_sem::scalar::range_accepts(&value, Some(min), Some(max)) {
-        Some(Value::Num(value, backing))
-    } else {
-        None
+    /// Splits a canonical IR reference into the package that declares it and
+    /// the declared name, reading a bare reference as `home`'s own.
+    fn split<'r>(home: &'r str, reference: &'r str) -> (&'r str, &'r str) {
+        match reference.rsplit_once('.') {
+            Some((package, name)) => (package, name),
+            None => (home, reference),
+        }
     }
-}
 
-/// The named types, constants, and enum members a clause may reference.
-///
-/// Constants are bound under their bare name and enum members under the dotted
-/// `Enum.MEMBER` spelling the evaluator asks for.
-///
-/// **Known limitation — single package only.** This walks one package's own
-/// `decls`, while the checker builds the same vocabulary from
-/// `resolution.symbols`, which includes imports. A clause naming a constant
-/// imported from another package therefore finds no binding here, evaluation
-/// fails with an unbound reference, and the run exits 1 — on a workspace
-/// `ridl check` accepts. Exit 1 means "the toolchain disagrees with itself", so
-/// this reports a toolchain fault for a legal model. It fails loudly rather
-/// than silently, which is the safe direction, but it is still wrong. The fix
-/// is to hand this runner the checker's resolution rather than a single
-/// package, which also closes the cross-package gap in [`named_type`]; both are
-/// one debt item.
-fn vocabulary(package: &v2::Package) -> BTreeMap<String, Value> {
-    let mut bound = BTreeMap::new();
-    for decl in &package.decls {
-        match &decl.kind {
-            Some(v2::decl::Kind::ConstDef(const_def)) => {
-                let Some(value) = ExactValue::parse(&const_def.value) else {
-                    continue;
-                };
-                let backing = const_def
-                    .type_ref
-                    .as_deref()
-                    .and_then(|reference| const_backing(package, reference))
-                    // A constant with no resolvable named type is typed by its
-                    // spelling, exactly as a bare literal is.
-                    .unwrap_or(if const_def.value.contains('.') {
-                        NumericBacking::Float
-                    } else {
-                        NumericBacking::Integer
-                    });
-                bound.insert(decl.name.clone(), Value::Num(value, backing));
-            }
-            Some(v2::decl::Kind::EnumDef(enum_def)) => {
-                let reference = format!("{}.{}", package.name, decl.name);
-                for member in &enum_def.values {
-                    bound.insert(
-                        format!("{}.{}", decl.name, member.name),
-                        Value::EnumVal(reference.clone(), member.value),
-                    );
+    fn decl(&self, package: &str, name: &str) -> Option<&'a v2::decl::Kind> {
+        self.packages
+            .get(package)?
+            .decls
+            .iter()
+            .find(|decl| decl.name == name)?
+            .kind
+            .as_ref()
+    }
+
+    /// The constants and enum members a clause in `home` may name, keyed by the
+    /// spelling the clause writes: a constant under its local name, an enum
+    /// member under the dotted `Enum.MEMBER` form the evaluator asks for.
+    ///
+    /// Built from `home`'s resolved symbols — its own declarations, `ridl.std`,
+    /// and its imports under whatever local name they were bound to — and each
+    /// symbol's value is then read out of the IR of the package that **declares**
+    /// it. A constant's own declared type is likewise resolved in its declaring
+    /// package, since that is the view its lowered `type_ref` is canonical in.
+    fn vocabulary(&self, home: &str) -> BTreeMap<String, Value> {
+        let mut bound = BTreeMap::new();
+        let Some(resolution) = self.resolutions.get(home) else {
+            return bound;
+        };
+        for (local, symbol) in &resolution.symbols {
+            match symbol.kind {
+                SymbolKind::Const => {
+                    let Some(v2::decl::Kind::ConstDef(const_def)) =
+                        self.decl(&symbol.package, &symbol.name)
+                    else {
+                        continue;
+                    };
+                    let Some(value) = self.const_value(&symbol.package, const_def) else {
+                        continue;
+                    };
+                    bound.insert(local.clone(), value);
                 }
+                SymbolKind::Enum => {
+                    let Some(v2::decl::Kind::EnumDef(enum_def)) =
+                        self.decl(&symbol.package, &symbol.name)
+                    else {
+                        continue;
+                    };
+                    // The enum's identity is its fully qualified reference, not
+                    // the local spelling: the evaluator compares two members by
+                    // it, so an aliased import must still be the same enum.
+                    let reference = ridl_sem::expr::qualified_ref(symbol);
+                    for member in &enum_def.values {
+                        bound.insert(
+                            format!("{local}.{}", member.name),
+                            Value::EnumVal(reference.clone(), member.value),
+                        );
+                    }
+                }
+                _ => {}
             }
+        }
+        bound
+    }
+
+    /// One constant's value in the domain its declared type puts it in, or
+    /// `None` for a constant with no numeric value — a string, bytes, or regex
+    /// constant, over which no operator of the guaranteed subset works.
+    ///
+    /// `home` is the package that **declares** the constant: its lowered
+    /// `type_ref` is canonical in that package's view, not in the view of the
+    /// package whose clause names it.
+    fn const_value(&self, home: &str, const_def: &v2::ConstDef) -> Option<Value> {
+        let value = ExactValue::parse(&const_def.value)?;
+        // A constant with no declared type, or one whose type resolves to
+        // nothing, is typed by its written spelling — exactly as a bare literal
+        // is (expr-core §5.2).
+        let spelled = if const_def.value.contains('.') {
+            NumericBacking::Float
+        } else {
+            NumericBacking::Integer
+        };
+        let Some(type_ref) = const_def.type_ref.as_deref() else {
+            return Some(Value::Num(value, spelled));
+        };
+        match type_ref {
+            "integer" => return Some(Value::Num(value, NumericBacking::Integer)),
+            "float" => return Some(Value::Num(value, NumericBacking::Float)),
             _ => {}
         }
+        let (package, name) = Names::split(home, type_ref);
+        if (package, name) == DURATION {
+            return Some(Value::Dur(milliseconds_to_micros(value)));
+        }
+        let backing = match self.decl(package, name) {
+            Some(v2::decl::Kind::TypeDef(type_def)) => match type_def.width.as_ref() {
+                Some(v2::type_def::Width::IntWidth(_)) => NumericBacking::Integer,
+                Some(v2::type_def::Width::FloatWidth(_)) => NumericBacking::Float,
+                None => spelled,
+            },
+            _ => spelled,
+        };
+        Some(Value::Num(value, backing))
     }
-    bound
-}
 
-fn const_backing(package: &v2::Package, reference: &str) -> Option<NumericBacking> {
-    match reference {
-        "integer" => return Some(NumericBacking::Integer),
-        "float" => return Some(NumericBacking::Float),
-        _ => {}
+    /// How to draw values for one parameter, or `None` when its declared type
+    /// carries no numeric range to draw from.
+    fn generator_for(&self, home: &str, param: &v2::Param) -> Option<Generator> {
+        let Some(v2::field_type::Kind::Named(reference)) = param.r#type.as_ref()?.kind.as_ref()
+        else {
+            return None;
+        };
+        let (package, name) = Names::split(home, reference);
+        let Some(v2::decl::Kind::TypeDef(type_def)) = self.decl(package, name) else {
+            return None;
+        };
+        let constraint = type_def.constraint.as_ref()?;
+        let min = ExactValue::parse(constraint.min.as_deref()?)?;
+        let max = ExactValue::parse(constraint.max.as_deref()?)?;
+        let step = constraint.step.as_deref().and_then(ExactValue::parse);
+        if (package, name) == DURATION {
+            return Some(Generator::Duration(FloatRange { min, max, step }));
+        }
+        match type_def.width.as_ref()? {
+            v2::type_def::Width::IntWidth(_) => Some(Generator::Int(IntRange { min, max })),
+            v2::type_def::Width::FloatWidth(_) => {
+                Some(Generator::Float(FloatRange { min, max, step }))
+            }
+        }
     }
-    match named_type(package, reference)?.width.as_ref()? {
-        v2::type_def::Width::IntWidth(_) => Some(NumericBacking::Integer),
-        v2::type_def::Width::FloatWidth(_) => Some(NumericBacking::Float),
-    }
-}
-
-/// The named type `reference` resolves to within `package`.
-///
-/// A canonical reference may be qualified (`veh.common.Speed`) or bare
-/// (`Speed`); only the declared name is matched, and a type declared in another
-/// package is simply not found here — its parameters are then reported as not
-/// generatable rather than sampled against the wrong bounds.
-fn named_type<'a>(package: &'a v2::Package, reference: &str) -> Option<&'a v2::TypeDef> {
-    let name = reference.rsplit('.').next().unwrap_or(reference);
-    if reference.contains('.') && !reference.starts_with(&format!("{}.", package.name)) {
-        return None;
-    }
-    package.decls.iter().find_map(|decl| match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(type_def)) if decl.name == name => Some(type_def),
-        _ => None,
-    })
 }
 
 // ==========================================================================
@@ -842,12 +956,11 @@ fn render_text(reports: &[PackageReport]) -> String {
 /// What the run actually did, counted from the per-clause reports.
 ///
 /// A per-clause `skipped` line is easy to miss, and a reader who sees an exit
-/// code of 0 and no summary reasonably concludes the contracts were tested.
-/// On the workspace layout most models use — a shared types package plus
-/// interface packages that import from it — every `require` can be skipped for
-/// want of a resolvable parameter type while the command still exits 0. That
-/// must not read as success, so the count is stated once per package and, when
-/// nothing ran, said plainly.
+/// code of 0 and no summary reasonably concludes the contracts were tested. A
+/// package whose every `require` reads a signal, or whose every parameter is a
+/// string or a composite, skips all of them and still exits 0. That must not
+/// read as success, so the count is stated once per package and, when nothing
+/// ran, said plainly.
 ///
 /// This is derived from the existing reports; it adds no state and changes no
 /// clause's status.
