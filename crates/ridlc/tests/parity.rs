@@ -1084,22 +1084,40 @@ struct Counts {
 /// shape — several of which have exactly one carrier today, so one edit retires
 /// them.
 ///
-/// Each of these therefore gets a floor of its own, and **every floor here was
+/// That is measured, not argued. With the loop below neutralised and every other
+/// assertion in this file left intact — the face, timing and contract
+/// comparisons, the collision check, [`MUST_COVER`] and all six quantity floors —
+/// **eight of the ten constructs below can be removed from the corpus and this
+/// test still passes**. Only losing every inline service shape or every fallible
+/// query is visible to anything else, and each of those is visible only because
+/// it drags a quantity to zero.
+///
+/// Each construct therefore gets a floor of its own, and **every floor here was
 /// verified by removing the construct from the corpus and watching this test go
 /// red**. That constraint is why the list is not longer. Three counters that
 /// belong to the same family were considered and left out, because a floor that
 /// cannot fail is the thing this epic has spent its time deleting:
 ///
-/// - *a public interface* — an inline service shape takes no `internal`
-///   modifier (ridl §14.5), so it is always public. The counter cannot reach
-///   zero while `inline_service_shapes` is non-zero, which is itself a floor
+/// All three arguments rest on the lowering rather than on the specification.
+/// That is deliberate: `ridl-sem`'s `check_internal_exposure` carries recorded
+/// debt (issue #161) that a public `service` publishing an `internal` interface
+/// draws no diagnostic today, so a rule the checker does not yet enforce is the
+/// wrong thing to hang an unfalsifiability claim on.
+///
+/// - *a public interface* — `ridl-sem`'s `lower_service_inline` hardcodes an
+///   inline shape's `Interface.visibility` to `VISIBILITY_UNSPECIFIED`, which
+///   [`Visibility::of`] reads as public. The counter therefore cannot reach zero
+///   while `inline_service_shapes` is non-zero, and that is itself a floor
 ///   below.
-/// - *a named `interface`* — every corpus service either references one or
-///   lives in an entry that stops compiling without one, and an entry that stops
-///   compiling clean is caught earlier by [`MUST_COVER`]. There is no corpus
-///   edit that zeroes this counter and still reaches the assertion.
-/// - *a range timing* — implied by `half_open_timings`, since only a range mode
-///   can leave a bound absent.
+/// - *a named `interface`* — implied by `package_private_interfaces`, since only
+///   a named `interface` can carry `internal`: the same hardcoded
+///   `VISIBILITY_UNSPECIFIED` means an inline shape never contributes to the
+///   package-private counter. Zeroing this counter therefore zeroes that one,
+///   whose floor is first in the list and fires first.
+/// - *a range timing* — implied by `half_open_timings`. `ridl-sem` fills both
+///   bounds for a strict period, so an absent bound implies a non-strict mode,
+///   and the only other resolved mode is `range` — `TIMING_MODE_UNSPECIFIED` is
+///   refused by both backends before this floor is reached.
 #[derive(Default)]
 struct Kinds {
     package_private_interfaces: usize,
