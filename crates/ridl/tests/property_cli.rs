@@ -6,6 +6,7 @@
 //! error, 2 a compile or I/O error), the JSON rendering, and the determinism
 //! that seeding per contract buys.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -458,9 +459,7 @@ fn a_run_that_evaluated_nothing_says_so_and_cannot_read_as_success() {
     // THE case this summary exists for. Every `require` here reads the
     // interface's own signals, so all of them are skipped and the command still
     // exits 0. Without the summary the output is a list of skips that a reader
-    // — or a CI job checking only the exit code — takes for a clean pass. On
-    // the workspace layout most models use, imported parameter types produce
-    // exactly this shape.
+    // — or a CI job checking only the exit code — takes for a clean pass.
     let dir = TempDir::new("all-skipped");
     dir.write("ridl.toml", MANIFEST);
     dir.write(
@@ -877,6 +876,468 @@ fn the_json_report_carries_the_documented_shape() {
 }
 
 // ==========================================================================
+// Name resolution across a workspace
+//
+// Every fixture above this line is ONE package: no member list, no import, no
+// alias, no `ridl.std` type in a sampled position, and every constant and enum
+// a clause reads declared in the same file. The runner resolved names against
+// that shape — one package's `decls` — and the whole suite stayed green on a
+// layout no shipped corpus entry uses. The fixtures below are the layout the
+// corpus does use (`crates/ridlc/tests/corpus/services-workspace` and
+// `veh-cluster`): several members, one direction of dependency, and a real
+// name collision that makes an alias required rather than needless.
+// ==========================================================================
+
+/// A three-member workspace: a types member, a retired-generation member that
+/// collides with it on every exported name, and an interface member that
+/// imports from both — the second under an alias, because the collision makes
+/// the alias necessary (the `services-workspace` corpus entry's shape).
+///
+/// Every colliding pair is deliberately given values that put a clause on
+/// OPPOSITE sides of its verdict, so binding the wrong one of the two flips a
+/// reported status rather than changing a number nobody reads:
+///
+/// - `veh.common.Level` is `[0..7]`, `veh.legacy.Level` is `[1000..2000]`;
+/// - `veh.common.LIMIT` is 5, `veh.legacy.LIMIT` is 1500;
+/// - `veh.common.GearPosition` has no `REVERSE`, so naming one under the wrong
+///   binding is an unbound reference and not a wrong answer;
+/// - `WINDOW : Duration = 5` is five MILLISECONDS, so a clause bracketing it
+///   between `4ms` and `6ms` fails if the constant is bound as a number (an
+///   evaluation error) or at the wrong scale (five microseconds).
+fn cross_package(label: &str) -> TempDir {
+    let dir = TempDir::new(label);
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"common\", \"legacy\", \"cluster\"]\n",
+    );
+
+    dir.write(
+        "common/ridl.toml",
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "common/common.typl",
+        "package veh.common\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+type Level : integer [0..7]\n\
+type Gain : float [0.0..10.0 step 0.5]\n\
+const LIMIT : Level = 5\n\
+const TWO : Gain = 2.0\n\
+const WINDOW : Duration = 5\n\
+enum GearPosition {\n  PARK = 0\n  DRIVE = 1\n}\n",
+    );
+
+    dir.write(
+        "legacy/ridl.toml",
+        "[package]\nname = \"veh.legacy\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "legacy/legacy.typl",
+        "package veh.legacy\n\
+type Level : integer [1000..2000]\n\
+const LIMIT : Level = 1500\n\
+enum GearPosition {\n  PARK = 0\n  REVERSE = 1\n}\n",
+    );
+
+    dir.write(
+        "cluster/ridl.toml",
+        "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "cluster/cluster.ridl",
+        "package veh.cluster\n\
+import veh.common.Speed\n\
+import veh.common.Level\n\
+import veh.common.LIMIT\n\
+import veh.common.TWO\n\
+import veh.common.WINDOW\n\
+import veh.common.GearPosition\n\
+import veh.legacy.Level as LegacyLevel\n\
+import veh.legacy.LIMIT as LEGACY_LIMIT\n\
+import veh.legacy.GearPosition as LegacyGear\n\
+interface Cruise {\n\
+  command setSpeed(s: Speed) [ require s > 0.0 ]\n\
+  command own(l: Level) [ require l > LIMIT ]\n\
+  command aliased(l: LegacyLevel) [ require l < LEGACY_LIMIT ]\n\
+  command ownBounds(l: Level) [ require l > 7 ]\n\
+  command legacyBounds(l: LegacyLevel) [ require l > 7 ]\n\
+  command ratio(l: Level) [ require 5 / TWO > 2 ]\n\
+  command gear(l: Level) [ require GearPosition.PARK != GearPosition.DRIVE ]\n\
+  command legacyGear(l: Level) [ require LegacyGear.PARK != LegacyGear.REVERSE ]\n\
+  command windowed(l: Level) [\n\
+    require WINDOW > 4ms && WINDOW < 6ms\n\
+    require WINDOW != 5us\n\
+  ]\n\
+  command stamp(t: Timestamp) [ require t > 0 ]\n\
+  query avg(window: Duration): Speed [ require window == 1ms ]\n\
+}\n",
+    );
+    dir
+}
+
+/// The `veh.cluster` clause statuses of [`cross_package`], keyed by observer id.
+fn cross_package_statuses(label: &str) -> (i32, String, BTreeMap<String, String>) {
+    let dir = cross_package(label);
+    let (code, stdout, stderr) = ridl(&[
+        "test",
+        dir.path().to_str().expect("utf-8 path"),
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0, "the workspace runs clean; stderr: {stderr}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+    let cluster = report
+        .as_array()
+        .expect("the report is an array")
+        .iter()
+        .find(|package| package["package"] == "veh.cluster")
+        .unwrap_or_else(|| panic!("the interface member is reported: {stdout}"))
+        .clone();
+    let statuses = cluster["contracts"]
+        .as_array()
+        .expect("contracts is an array")
+        .iter()
+        .map(|contract| {
+            (
+                contract["id"].as_str().expect("an id").to_string(),
+                contract["status"].as_str().expect("a status").to_string(),
+            )
+        })
+        .collect();
+    (code, stdout, statuses)
+}
+
+#[test]
+fn a_parameter_typed_from_another_package_is_sampled_rather_than_skipped() {
+    // The headline defect. `Speed` is declared in the sibling member, so the
+    // runner resolved nothing for it and reported "has no generatable range" —
+    // on the layout every shipped corpus entry uses, which meant essentially
+    // every clause was skipped while the command exited 0.
+    let (_, stdout, statuses) = cross_package_statuses("cross-param");
+    assert_eq!(
+        statuses
+            .get("Cruise.setSpeed.require[0]")
+            .map(String::as_str),
+        Some("ok"),
+        "a parameter typed from another package is drawn: {stdout}"
+    );
+    assert!(
+        !stdout.contains("has no generatable range"),
+        "no clause of this workspace is skipped for an unresolvable type: {stdout}"
+    );
+
+    // And the same in the report a human reads, not only in the JSON field.
+    let dir = cross_package("cross-param-text");
+    let (code, text, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0, "{text}");
+    let line = text
+        .lines()
+        .find(|line| line.contains("Cruise.setSpeed.require[0]"))
+        .unwrap_or_else(|| panic!("the clause is reported: {text}"));
+    assert!(
+        line.contains("boundary +") && line.contains("random of"),
+        "the rendered line reports a real sample count: {line}"
+    );
+    assert!(
+        !text.contains("WARNING"),
+        "this run tested its preconditions, so the alarm stays silent: {text}"
+    );
+}
+
+#[test]
+fn a_clause_reading_an_imported_constant_evaluates_instead_of_failing_the_run() {
+    // The second defect, and the sharper one: an imported constant was unbound,
+    // so evaluation raised `\`LIMIT\` is not bound in this environment` and the
+    // command exited 1 — on a workspace `ridl check` accepts. Exit 1 means the
+    // toolchain disagrees with itself, so the exit code is asserted first.
+    let dir = cross_package("cross-const");
+    let path = dir.path().to_str().expect("utf-8 path");
+    let (check, _, check_err) = ridl(&["check", path]);
+    assert_eq!(check, 0, "the workspace is legal: {check_err}");
+
+    let (code, stdout, _) = ridl(&["test", path]);
+    assert_eq!(
+        code, 0,
+        "a legal workspace must not make the property runner fail: {stdout}"
+    );
+    assert!(
+        !stdout.contains("is not bound in this environment"),
+        "every name the checker resolved is bound here too: {stdout}"
+    );
+    let line = stdout
+        .lines()
+        .find(|line| line.contains("Cruise.own.require[0]"))
+        .unwrap_or_else(|| panic!("the clause is reported: {stdout}"));
+    assert!(
+        line.contains("ok —"),
+        "`l > LIMIT` is satisfiable over `[0..7]` with `LIMIT` = 5: {line}"
+    );
+}
+
+#[test]
+fn an_import_alias_binds_the_declaration_it_names_not_the_colliding_one() {
+    // `LIMIT` is exported by both members. The importing package binds
+    // `veh.common.LIMIT` as `LIMIT` and `veh.legacy.LIMIT` as `LEGACY_LIMIT`,
+    // and the two hold 5 and 1500. Indexing constants by their declared name
+    // across packages — the shortcut this fix deliberately does not take —
+    // cannot tell them apart, and each clause is written so that binding the
+    // other one flips its verdict rather than changing a count.
+    let (_, stdout, statuses) = cross_package_statuses("alias-const");
+
+    assert_eq!(
+        statuses.get("Cruise.own.require[0]").map(String::as_str),
+        Some("ok"),
+        "`l > LIMIT` over `[0..7]` is satisfiable at 5 and unsatisfiable at \
+         1500, so `ok` is evidence the local name bound `veh.common.LIMIT`: \
+         {stdout}"
+    );
+    assert_eq!(
+        statuses
+            .get("Cruise.aliased.require[0]")
+            .map(String::as_str),
+        Some("ok"),
+        "`l < LEGACY_LIMIT` over `[1000..2000]` is satisfiable at 1500 and \
+         unsatisfiable at 5, so `ok` is evidence the alias bound \
+         `veh.legacy.LIMIT`: {stdout}"
+    );
+}
+
+#[test]
+fn a_parameter_is_sampled_against_the_bounds_of_its_own_packages_type() {
+    // The same collision one layer down: both members export `Level`, with
+    // disjoint ranges. `require l > 7` is unsatisfiable over `veh.common`'s
+    // `[0..7]` and satisfied by every value of `veh.legacy`'s `[1000..2000]`,
+    // so resolving the wrong `Level` inverts both verdicts at once.
+    let (_, stdout, statuses) = cross_package_statuses("alias-type");
+    assert_eq!(
+        statuses
+            .get("Cruise.ownBounds.require[0]")
+            .map(String::as_str),
+        Some("suspect"),
+        "nothing in `veh.common.Level [0..7]` exceeds 7: {stdout}"
+    );
+    assert_eq!(
+        statuses
+            .get("Cruise.legacyBounds.require[0]")
+            .map(String::as_str),
+        Some("ok"),
+        "every value of `veh.legacy.Level [1000..2000]` exceeds 7: {stdout}"
+    );
+}
+
+#[test]
+fn an_imported_constants_type_is_read_in_the_package_that_declares_it() {
+    // A constant's lowered `type_ref` is canonical in ITS OWN package's view:
+    // `TWO` lowers with `type_ref = "Gain"`, and `veh.cluster` imports `TWO`
+    // without importing `Gain`. Resolving that reference in the importing
+    // package finds nothing and falls back to the value's spelling — and the
+    // IR normalizes `2.0` to `"2"`, so the fallback reads integer.
+    //
+    // `5 / TWO > 2` is exactly where that matters: float-backed operands divide
+    // exactly (2.5 > 2, true), integer-backed operands truncate (2 > 2, false).
+    // The clause reads no parameter, so the two verdicts are `constant-true`
+    // and `constant-false` — a status flip, not a count.
+    let (_, stdout, statuses) = cross_package_statuses("const-backing");
+    assert_eq!(
+        statuses.get("Cruise.ratio.require[0]").map(String::as_str),
+        Some("constant-true"),
+        "`TWO` is float-backed through `veh.common.Gain`, so `5 / TWO` is 2.5 \
+         and not 2: {stdout}"
+    );
+}
+
+#[test]
+fn enum_members_bind_under_the_local_name_including_an_alias() {
+    // The evaluator asks the environment for the dotted spelling the clause
+    // WRITES, so members must be keyed by the local name — `LegacyGear.PARK`,
+    // not `GearPosition.PARK`. Keying by the declared name leaves the aliased
+    // clause naming an unbound reference, which is an evaluation error and
+    // exit 1.
+    //
+    // `REVERSE` exists only in `veh.legacy.GearPosition`, so the aliased clause
+    // also fails if the alias resolves to the colliding `veh.common` enum.
+    let (_, stdout, statuses) = cross_package_statuses("alias-enum");
+    assert_eq!(
+        statuses.get("Cruise.gear.require[0]").map(String::as_str),
+        Some("constant-true"),
+        "a plainly imported enum's members bind: {stdout}"
+    );
+    assert_eq!(
+        statuses
+            .get("Cruise.legacyGear.require[0]")
+            .map(String::as_str),
+        Some("constant-true"),
+        "an aliased enum's members bind under the alias: {stdout}"
+    );
+}
+
+#[test]
+fn a_duration_constant_is_bound_in_the_duration_domain() {
+    // The constant half of the duration rule, which the parameter tests do not
+    // reach: `generator_for` and `const_value` decide the domain separately.
+    // Without the constant branch, `WINDOW` binds as a number, the evaluator
+    // refuses to order it against `4ms`, and the run reports an evaluation
+    // error and exits 1 — the same I7 failure this PR exists to remove, on a
+    // workspace `ridl check` accepts. So the exit code is asserted first.
+    let dir = cross_package("duration-const");
+    let path = dir.path().to_str().expect("utf-8 path");
+    let (check, _, check_err) = ridl(&["check", path]);
+    assert_eq!(check, 0, "the workspace is legal: {check_err}");
+    let (code, text, _) = ridl(&["test", path]);
+    assert_eq!(
+        code, 0,
+        "a duration-typed constant must not fault the evaluator: {text}"
+    );
+    assert!(
+        !text.contains("ERROR"),
+        "no clause errors on this workspace: {text}"
+    );
+
+    let (_, stdout, statuses) = cross_package_statuses("duration-const-json");
+    assert_eq!(
+        statuses
+            .get("Cruise.windowed.require[0]")
+            .map(String::as_str),
+        Some("constant-true"),
+        "`WINDOW` is 5, declared in the millisecond domain, so it lies between \
+         `4ms` and `6ms`: {stdout}"
+    );
+    // The scale, from the other side: five milliseconds is five THOUSAND
+    // microseconds, so dropping the scale makes this clause false rather than
+    // merely imprecise.
+    assert_eq!(
+        statuses
+            .get("Cruise.windowed.require[1]")
+            .map(String::as_str),
+        Some("constant-true"),
+        "`WINDOW` is five milliseconds and not five microseconds: {stdout}"
+    );
+}
+
+#[test]
+fn a_ridl_std_parameter_type_is_sampled() {
+    // `ridl.std` is deliberately absent from the workspace's package list and
+    // threaded through the passes as a parameter, so it is not among the
+    // checked packages a consumer receives — while every package implicitly
+    // imports all of it. `Timestamp` is `integer [0..9223372036854775807]`:
+    // an ordinary generatable range that resolved to nothing.
+    let (_, stdout, statuses) = cross_package_statuses("std-type");
+    assert_eq!(
+        statuses.get("Cruise.stamp.require[0]").map(String::as_str),
+        Some("ok"),
+        "a `ridl.std.Timestamp` parameter is drawn: {stdout}"
+    );
+}
+
+#[test]
+fn a_duration_parameter_is_drawn_in_the_duration_domain() {
+    // `ridl.std.Duration` is the one inhabitant of the duration domain
+    // (expr-core §5.1) and the evaluator refuses to order a duration against a
+    // number, so making `ridl.std` reachable without honouring that would turn
+    // `require window > 0ms` — a clause the checker accepts — into an
+    // evaluation error and exit 1.
+    //
+    // The clause is `window == 1ms` rather than `> 0ms` because it also pins
+    // the SCALE: `Duration` is declared in milliseconds and `Value::Dur` is an
+    // exact microsecond count. The boundary corpus of `[0..i64::MAX]` contains
+    // 1, which is 1ms only after the thousandfold scale; unscaled it is one
+    // microsecond, and a random draw hitting exactly 1000 out of 9.2e18 values
+    // never happens, so the clause reports `suspect` instead.
+    let (_, stdout, statuses) = cross_package_statuses("std-duration");
+    assert_eq!(
+        statuses.get("Cruise.avg.require[0]").map(String::as_str),
+        Some("ok"),
+        "the boundary value 1 is one millisecond, so `window == 1ms` is \
+         satisfied: {stdout}"
+    );
+}
+
+#[test]
+fn two_members_declaring_one_package_name_keep_their_own_declarations() {
+    // A workspace name is NOT a key. Two members may declare the same
+    // `[package] name` and the toolchain accepts it with no diagnostic at all —
+    // asserted below, because that silence is why this has to be handled here
+    // rather than assumed away upstream.
+    //
+    // Resolving a package's own declarations through a name-keyed index gives
+    // every member the FIRST member's types, so only the LATER member's verdict
+    // moves — the earlier member comes out right by accident. Which range is
+    // declared first therefore decides which direction of error this fixture
+    // can observe at all.
+    //
+    // The wide range goes first deliberately. Under the bug the later member's
+    // `[0..7]` clause is sampled against `[1000..2000]` and reports `ok` with
+    // 260 satisfying draws for a precondition nothing can satisfy: the
+    // direction that HIDES. Ordered the other way the same mix-up calls a
+    // satisfiable clause `suspect`, which is loud and would be noticed anyway.
+    let dir = TempDir::new("duplicate-package-name");
+    dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
+    for member in ["a", "b"] {
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            "[package]\nname = \"dup.pkg\"\nversion = \"1.0.0\"\n",
+        );
+    }
+    dir.write(
+        "a/a.ridl",
+        "package dup.pkg\n\
+type Level : integer [1000..2000]\n\
+interface First {\n  command wide(l: Level) [ require l > 7 ]\n}\n",
+    );
+    dir.write(
+        "b/b.ridl",
+        "package dup.pkg\n\
+type Level : integer [0..7]\n\
+interface Second {\n  command narrow(l: Level) [ require l > 7 ]\n}\n",
+    );
+
+    let path = dir.path().to_str().expect("utf-8 path");
+    let (check, _, check_err) = ridl(&["check", path]);
+    assert_eq!(
+        check, 0,
+        "two members may share a package name today, silently: {check_err}"
+    );
+
+    let (code, stdout, _) = ridl(&["test", path, "--format", "json"]);
+    assert_eq!(code, 0, "{stdout}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+    // Both packages report under one name, so the clauses are found by observer
+    // id across the whole report rather than by package.
+    let status_of = |id: &str| -> String {
+        report
+            .as_array()
+            .expect("the report is an array")
+            .iter()
+            .flat_map(|package| {
+                package["contracts"]
+                    .as_array()
+                    .expect("contracts is an array")
+            })
+            .find(|contract| contract["id"] == id)
+            .unwrap_or_else(|| panic!("`{id}` is reported: {stdout}"))["status"]
+            .as_str()
+            .expect("a status")
+            .to_string()
+    };
+    assert_eq!(
+        status_of("First.wide.require[0]"),
+        "ok",
+        "every value of the first member's `Level [1000..2000]` exceeds 7: \
+         {stdout}"
+    );
+    // The load-bearing one. `suspect` is the truth here; `ok` means the member
+    // was sampled against its namesake's `[1000..2000]` and is claiming 260
+    // satisfying inputs that its own type admits none of.
+    assert_eq!(
+        status_of("Second.narrow.require[0]"),
+        "suspect",
+        "nothing in the second member's `Level [0..7]` exceeds 7 — reporting \
+         `ok` here means the member was resolved against its namesake's \
+         declarations, and a run that tested nothing real would pass: {stdout}"
+    );
+}
+
+// ==========================================================================
 // The local gate (plan decision 11): the shipped corpus runs green
 // ==========================================================================
 
@@ -895,4 +1356,81 @@ fn the_shipped_corpus_workspace_runs_green() {
         stdout.contains("ranges"),
         "the corpus exercises the range self-corpora: {stdout}"
     );
+}
+
+#[test]
+fn the_shipped_multi_member_corpus_evaluates_its_cross_package_clauses() {
+    // `veh-common` is one package with no interface, so the entry above cannot
+    // see a resolution defect at all. These two entries are the reviewed
+    // multi-member workspaces — `veh-cluster` is the ridl reference Appendix A
+    // over a `veh.common` types member, `services-workspace` is three members
+    // with an inline shape that owns none of its vocabulary — and every clause
+    // named here was reported `skipped: … has no generatable range` before the
+    // runner resolved names the way the checker does.
+    //
+    // Naming the clauses rather than counting them is deliberate: a count moves
+    // whenever the corpus grows, while a clause that stops being evaluated is
+    // the regression this guards.
+    for (entry, evaluated) in [
+        (
+            "veh-cluster",
+            vec![
+                // A `ridl.std.Duration` parameter, from Appendix A verbatim.
+                "VehicleStatus.getAverageSpeed.require[0]",
+                // A `veh.common.Temperature` parameter inside an inline shape.
+                "veh.hvac.cabin.setTarget.require[0]",
+            ],
+        ),
+        (
+            "services-workspace",
+            // A `fleet.contracts.DoorId` parameter inside an inline shape in a
+            // package that owns none of its vocabulary.
+            vec!["fleet.vehicle.mirrors.readFold.require[0]"],
+        ),
+    ] {
+        let corpus = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../ridlc/tests/corpus")
+            .join(entry)
+            .canonicalize()
+            .unwrap_or_else(|err| panic!("the `{entry}` corpus workspace exists: {err}"));
+        let (code, stdout, stderr) = ridl(&[
+            "test",
+            corpus.to_str().expect("utf-8 path"),
+            "--format",
+            "json",
+        ]);
+        assert_eq!(code, 0, "`{entry}` runs green\nstdout: {stdout}\n{stderr}");
+
+        let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+        let contracts: Vec<&serde_json::Value> = report
+            .as_array()
+            .expect("the report is an array")
+            .iter()
+            .flat_map(|package| {
+                package["contracts"]
+                    .as_array()
+                    .expect("contracts is an array")
+            })
+            .collect();
+        for id in evaluated {
+            let clause = contracts
+                .iter()
+                .find(|contract| contract["id"] == id)
+                .unwrap_or_else(|| panic!("`{id}` is reported in `{entry}`: {stdout}"));
+            assert_eq!(
+                clause["status"], "ok",
+                "`{id}` reads a parameter this runner can draw, so it is \
+                 evaluated rather than skipped: {clause}"
+            );
+        }
+
+        // Nothing anywhere in either entry may report an evaluation error: an
+        // error is exit 1, which claims the toolchain disagrees with itself.
+        for contract in &contracts {
+            assert_ne!(
+                contract["status"], "error",
+                "a reviewed corpus entry must not fault the evaluator: {contract}"
+            );
+        }
+    }
 }
