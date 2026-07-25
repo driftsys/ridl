@@ -407,13 +407,22 @@ mod tests {
 
     /// Checks a single-file `.ridl` package and returns its diagnostics.
     fn check_ridl(text: &str) -> CheckedPackage {
+        check_ridl_files(&[("app.ridl", text)])
+    }
+
+    /// Checks one package assembled from several named `.ridl` files, in the
+    /// order given.
+    fn check_ridl_files(files: &[(&str, &str)]) -> CheckedPackage {
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
-        let file = InputFile::new(&db, "app.ridl".to_string(), text.to_string());
+        let inputs: Vec<InputFile> = files
+            .iter()
+            .map(|(name, text)| InputFile::new(&db, (*name).to_string(), (*text).to_string()))
+            .collect();
         let pkg = Package::new(
             &db,
             "app".to_string(),
-            vec![file],
+            inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
@@ -870,6 +879,37 @@ service veh.drive {{
             vec!["RIDL-404"],
             "{:?}",
             checked.diagnostics
+        );
+    }
+
+    /// A duplicate `interface` name in one package is linted once, not twice:
+    /// the scope walk runs each `interface` declaration through the resolver's
+    /// first-wins rule (ADR-0007 decision 6), so the loser — already reported
+    /// as TYPL-009 and excluded from the lowering — does not draw a second copy
+    /// of every advisory its body would earn.
+    #[test]
+    fn a_losing_duplicate_interface_is_not_linted_twice() {
+        let winner = format!(
+            "{PRELUDE}
+interface Drive {{
+  query setGear(position: GearPosition): Speed
+}}
+"
+        );
+        let loser = "package app
+interface Drive {
+  query setGear(position: GearPosition): Speed
+}
+";
+        let checked = check_ridl_files(&[("a.ridl", &winner), ("b.ridl", loser)]);
+        assert_eq!(
+            codes(&checked)
+                .iter()
+                .filter(|code| **code == "RIDL-404")
+                .count(),
+            1,
+            "the losing re-declaration must not draw its own RIDL-404: {:?}",
+            checked.diagnostics,
         );
     }
 }

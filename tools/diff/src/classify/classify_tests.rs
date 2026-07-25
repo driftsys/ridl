@@ -1200,11 +1200,99 @@ fn service_ref(name: &str, interface_ref: &str) -> v2::Service {
     }
 }
 
+/// A service with an inline shape (ridl §14.5). Its `Interface.name` is `""`
+/// and its `Interface.visibility` is `VISIBILITY_UNSPECIFIED`, both by
+/// construction — the service carries the identity and the authoritative
+/// visibility.
+fn service_inline(
+    name: &str,
+    visibility: v2::Visibility,
+    interactions: Vec<v2::Decl>,
+) -> v2::Service {
+    v2::Service {
+        name: name.to_string(),
+        visibility: visibility as i32,
+        doc: String::new(),
+        labels: Vec::new(),
+        deprecated: None,
+        shape: Some(v2::service::Shape::Inline(v2::Interface {
+            name: String::new(),
+            visibility: v2::Visibility::Unspecified as i32,
+            doc: String::new(),
+            labels: Vec::new(),
+            deprecated: None,
+            interactions,
+        })),
+    }
+}
+
 #[test]
 fn a_service_removed_is_breaking() {
     let old = service_pkg(vec![service_ref("Cluster", "I")]);
     let new = service_pkg(vec![]);
     assert_row(&old, &new, Category::DeclRemoved, Verdict::Breaking);
+}
+
+/// The classifier resolves a member path under a service's dotted name into
+/// the service's inline shape. That shape is not in `Package.interfaces`, so
+/// `find_interface` walks `Package::shapes()`; without it the append guard
+/// cannot see which slot the new interaction took, and every append inside an
+/// inline shape would classify breaking on a missing container.
+#[test]
+fn an_interaction_appended_inside_an_inline_shape_is_compatible() {
+    let old = service_pkg(vec![service_inline(
+        "veh.hvac.cabin",
+        v2::Visibility::Public,
+        vec![signal("a", 1, "T")],
+    )]);
+    let new = service_pkg(vec![service_inline(
+        "veh.hvac.cabin",
+        v2::Visibility::Public,
+        vec![signal("a", 1, "T"), event("b", 2, "U")],
+    )]);
+    assert_row(
+        &old,
+        &new,
+        Category::InteractionAppended,
+        Verdict::Compatible,
+    );
+}
+
+/// The same path with the ordinal reused rather than appended: the guard has
+/// to read the OLD inline shape's slots to see that ordinal 2 was occupied.
+#[test]
+fn an_ordinal_reused_inside_an_inline_shape_is_breaking() {
+    let old = service_pkg(vec![service_inline(
+        "veh.hvac.cabin",
+        v2::Visibility::Public,
+        vec![signal("a", 1, "T"), signal("b", 2, "T")],
+    )]);
+    let new = service_pkg(vec![service_inline(
+        "veh.hvac.cabin",
+        v2::Visibility::Public,
+        vec![signal("a", 1, "T"), event("c", 2, "U")],
+    )]);
+    assert_row(&old, &new, Category::InteractionAppended, Verdict::Breaking);
+}
+
+/// A service's visibility is read from the `Service`, never from its inline
+/// shape's own field, which is `VISIBILITY_UNSPECIFIED` by construction. If it
+/// were read from the shape, both sides would be unspecified and the widening
+/// below would classify breaking under the unlisted-is-breaking rule.
+#[test]
+fn widening_an_inline_shape_service_reads_the_services_own_visibility() {
+    let interactions = vec![signal("a", 1, "T")];
+    let old = service_pkg(vec![service_inline(
+        "veh.hvac.cabin",
+        v2::Visibility::Internal,
+        interactions.clone(),
+    )]);
+    let new = service_pkg(vec![service_inline(
+        "veh.hvac.cabin",
+        v2::Visibility::Public,
+        interactions,
+    )]);
+    assert_row(&old, &new, Category::VisibilityChanged, Verdict::Compatible);
 }
 
 #[test]
