@@ -111,6 +111,7 @@ pub(crate) fn emit_package(ctx: &Ctx, package: &v2::Package) -> Result<Vec<Strin
         let names = Names {
             r#type: &type_name,
             identity: shape.name,
+            visibility: shape.visibility(),
         };
         emit_interface(ctx, names, shape.interface, note.as_deref(), &mut blocks)?;
     }
@@ -210,10 +211,20 @@ fn emit_interface(
 /// stubs lowered into this very module are scoped to the dotted name
 /// (`ridl-sem`, `lower_service_inline`, E2.5). One value, three consumers —
 /// they have to agree.
+///
+/// `visibility` is the third value, and it is here for the same reason: it is
+/// the AUTHORITATIVE visibility, taken from [`v2::InterfaceShape::visibility`]
+/// rather than off the `Interface` this module is handed. An inline shape's
+/// own `Interface.visibility` is `VISIBILITY_UNSPECIFIED` by construction and
+/// the owning `Service` carries the real one, so reading it here rather than
+/// at the leaf keeps the emitted `export` correct by derivation instead of by
+/// the coincidence that [`export_kw`] maps `UNSPECIFIED` and `PUBLIC` to the
+/// same keyword.
 #[derive(Debug, Clone, Copy)]
 struct Names<'a> {
     r#type: &'a str,
     identity: &'a str,
+    visibility: i32,
 }
 
 /// Which side of a binding a face is generated for (ridl §14).
@@ -282,7 +293,7 @@ fn emit_face(
     }
 
     let face_name = format!("{type_name}{}", face.suffix(), type_name = names.r#type);
-    let export = export_kw(interface.visibility);
+    let export = export_kw(names.visibility);
     if members.is_empty() {
         Ok(format!("{doc}{export}interface {face_name} {{}}\n"))
     } else {
@@ -637,7 +648,7 @@ fn emit_timing(names: Names, interface: &v2::Interface) -> Result<String, Genera
     }
 
     let const_name = format!("{}Timing", lower_camel(names.r#type));
-    let export = export_kw(interface.visibility);
+    let export = export_kw(names.visibility);
     let doc = "\
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
@@ -720,7 +731,7 @@ fn emit_contracts(names: Names, interface: &v2::Interface) -> Result<String, Gen
     }
 
     let const_name = format!("{}Contracts", lower_camel(names.r#type));
-    let export = export_kw(interface.visibility);
+    let export = export_kw(names.visibility);
     let doc = "\
 /**
  * The require/ensure clauses of this interface, as data (ridl §13). `id` is

@@ -701,12 +701,20 @@ fn inline_shape_removal_spans_the_service_name() {
         inline.contains("service corpus.baseline.hvac {"),
         "the fallback span points at the service's own declaration:\n{inline}"
     );
-    // The underline sits on the dotted name, not on the `service` keyword or
-    // the whole declaration: the name is the identity the diff path carries.
+    // The span starts on the dotted name, not on the `service` keyword and not
+    // at the head of the declaration: the name is the identity the diff path
+    // carries. The COLUMN is what pins that — a caret-run assertion would
+    // still pass on a span widened leftwards to the keyword, because the
+    // widened run is longer and `contains` matches any prefix of it.
     assert!(
-        inline.contains("^^^^^^^^^^^^^^^^^^^^"),
+        inline.contains("cluster.ridl:38:9"),
+        "the span starts at the dotted name, column 9 — not column 1, where \
+         the `service` keyword is:\n{inline}"
+    );
+    assert!(
+        inline.contains("^^^^^^^^^^^^^^^^^^^^\n"),
         "the underline covers `corpus.baseline.hvac`, the 20-character dotted \
-         name:\n{inline}"
+         name, and stops there:\n{inline}"
     );
 
     // The control: the same change to a named interface spans the interface

@@ -439,7 +439,7 @@ fn service_hover(
     if service_node.kind() != SyntaxKind::ServiceDef {
         return None;
     }
-    let name = nav::dotted_text(&ServiceDef::cast(service_node)?.name()?)?;
+    let name = non_empty(ServiceDef::cast(service_node)?.name()?.text())?;
 
     let ir = &check_package(db, ws, pkg, std).ir;
     let service = ir.services.iter().find(|service| service.name == name)?;
@@ -447,6 +447,13 @@ fn service_hover(
         markdown: render_service(service),
         range: dotted.text_range(),
     })
+}
+
+/// A dotted name's text, or `None` when the parser recovered the declaration
+/// with no tokens at all. The text itself is [`DottedName::text`] — the key
+/// `v2::Service.name` carries, so it is what the IR lookup matches on.
+fn non_empty(text: String) -> Option<String> {
+    (!text.is_empty()).then_some(text)
 }
 
 /// The interface shape a node sits inside, with the name to display for it: an
@@ -464,7 +471,7 @@ fn enclosing_shape<'a>(
                 .ident_token()?
                 .text()
                 .to_string(),
-            SyntaxKind::ServiceDef => nav::dotted_text(&ServiceDef::cast(ancestor)?.name()?)?,
+            SyntaxKind::ServiceDef => non_empty(ServiceDef::cast(ancestor)?.name()?.text())?,
             _ => continue,
         };
         // One lookup for both: `Package::shapes` keys a named interface on its

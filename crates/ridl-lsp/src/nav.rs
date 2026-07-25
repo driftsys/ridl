@@ -14,7 +14,7 @@
 use ridl_core::db::{InputFile, parse_file};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_sem::{Resolution, Symbol, resolve_package};
-use ridl_syntax::ast::{AstNode, DottedName, Import, QualifiedName, SourceFile};
+use ridl_syntax::ast::{AstNode, Import, QualifiedName, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode, SyntaxToken};
 use rowan::{TextRange, TextSize, TokenAtOffset};
 
@@ -359,20 +359,6 @@ fn is_definition(kind: SyntaxKind) -> bool {
             | SyntaxKind::UnionDef
             | SyntaxKind::InterfaceDef
     )
-}
-
-/// The dotted text of a `DottedName` node — a service's global name
-/// (ridl §14.5) — read token by token so trivia never leaks in. This is the
-/// key `v2::Service.name` carries, so it is what the IR lookup matches on.
-pub(crate) fn dotted_text(name: &DottedName) -> Option<String> {
-    let text: String = name
-        .syntax()
-        .children_with_tokens()
-        .filter_map(|element| element.into_token())
-        .filter(|token| !token.kind().is_trivia())
-        .map(|token| token.text().to_string())
-        .collect();
-    (!text.is_empty()).then_some(text)
 }
 
 /// The parsed [`SourceFile`] of one input, through the memoized parse query.

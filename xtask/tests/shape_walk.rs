@@ -8,26 +8,44 @@
 //! report, the Rust backend's collision check, and the desk check's span index.
 //! `Package::shapes()` and `SourceFile::shapes()` are the walks that see both.
 //!
-//! This test scans every `.rs` file in the workspace for a direct
-//! `.interfaces` access and compares the result against [`ALLOWED`], a table of
-//! the sites that are legitimately not `shapes()` walks, each with the reason
-//! it is one.
+//! Two scans run here, over every `.rs` file in the workspace:
 //!
-//! **What this guard catches, and what it does not.** It catches a file that
-//! becomes a direct reader without being justified, and a change to how many
-//! times an already-listed file reads the field. It does **not** understand
-//! what the code does with what it read: a listed file could grow a genuinely
-//! defective walk, and the count would simply be bumped. And, like any
-//! allowlist, it is defeatable by the plausible edit of adding your own file to
-//! the table — a reviewer proved exactly that during this epic. It narrows the
-//! bug class; it does not close it. The structural close is `shapes()` being
-//! the obvious thing to reach for, which is what the doc comments on both
-//! helpers exist to make true.
+//! 1. [`every_direct_interfaces_read_is_justified`] — a direct `.interfaces`
+//!    access, compared against [`ALLOWED`].
+//! 2. [`every_read_of_an_inline_shapes_empty_fields_is_justified`] — a read of
+//!    `.interface.name` or `.interface.visibility` **through**
+//!    `InterfaceShape`, compared against [`ALLOWED_EMPTY_FIELD_READS`]. Taking
+//!    the sanctioned walk and then reading the raw body's `name` or
+//!    `visibility` is the one bypass that looks completely ordinary, because
+//!    `shape.interface.interactions` is the idiomatic access at almost every
+//!    converted site — so `shape.interface.name` is a slip, not a scheme.
+//!
+//! **What these guards catch, and what they do not.** They catch a file that
+//! becomes a direct reader without being justified, and a change to the number
+//! of matching *lines* in an already-listed file. Three limits are worth
+//! stating plainly, because a guard whose reach is overstated is how the next
+//! person stops checking:
+//!
+//! - The unit is a **line**, not an occurrence. Appending a second read to a
+//!   line that already matches changes no count.
+//! - They do not follow a value. A `&v2::Interface` handed down to a leaf
+//!   function can be read there under any local name, which no textual scan
+//!   sees. That is why the two backends take the authoritative visibility from
+//!   `InterfaceShape::visibility` at the top of the walk and carry it in
+//!   `Names`, instead of leaving the leaf to read the field it was handed.
+//! - Like any allowlist, they are defeated by the plausible edit of adding
+//!   your own file to the table — a reviewer proved exactly that during this
+//!   epic.
+//!
+//! They narrow the bug class; they do not close it. The structural close is
+//! `shapes()` being the obvious thing to reach for, which is what the doc
+//! comments on both helpers exist to make true.
 
 use std::path::{Path, PathBuf};
 
-/// A site allowed to touch `.interfaces` directly: the relative path, how many
-/// non-comment lines in it do so, and why that is not a `shapes()` walk.
+/// A site allowed to touch a guarded spelling directly: the relative path, how
+/// many non-comment **lines** in it do so, and why that is not a `shapes()`
+/// walk.
 struct Allowed {
     path: &'static str,
     lines: usize,
@@ -173,41 +191,83 @@ fn rust_sources(root: &Path) -> Vec<String> {
     files
 }
 
-/// How many non-comment lines of `text` touch `.interfaces`.
+/// Reads of an inline shape's empty-by-construction **name**, taken through
+/// [`InterfaceShape`] rather than around it. There is no legitimate one:
+/// `shape.name` is the identity every consumer wants.
+const ALLOWED_NAME_READS: &[Allowed] = &[];
+
+/// Reads of an inline shape's unspecified-by-construction **visibility**,
+/// taken through [`InterfaceShape`].
 ///
-/// Comment lines are excluded because the trap is documented in prose all over
-/// the workspace, and prose is not a reader. A line of code is never inside a
-/// `//` comment in Rust, so nothing that could be a reader is skipped.
-fn direct_reads(text: &str) -> usize {
+/// `InterfaceShape.interface` is a public field — it has to be, because every
+/// leaf in the workspace (`emit_interface`, `member_hints`, `slots`,
+/// `live_interactions`) is typed on `&v2::Interface` — so these two spellings
+/// are what make the sanctioned walk yield the wrong answer.
+const ALLOWED_VISIBILITY_READS: &[Allowed] = &[Allowed {
+    path: "crates/ridl-ir/src/lib.rs",
+    lines: 3,
+    why: "`InterfaceShape::visibility` itself, which falls back to the \
+          interface's own field for a NAMED interface, where it IS the \
+          authoritative one; plus the two assertions that pin the trap — one \
+          that an inline shape's field really is unspecified, one that the \
+          accessor does not return it",
+}];
+
+/// What a failure of either empty-field scan should tell an author.
+const EMPTY_FIELD_ADVICE: &str = "\
+An inline shape's `Interface.name` is \"\" and its `Interface.visibility` is \
+VISIBILITY_UNSPECIFIED, both by construction (ridl §14.5). Reading either \
+through `InterfaceShape` defeats the walk that exists to avoid them: use \
+`shape.name` for the identity — the interface's own name, or the owning \
+service's dotted one — and `shape.visibility()` for the authoritative \
+visibility, which is the owning `Service`'s for an inline shape.";
+
+/// The guarded spellings: the needle, the table justifying it, and what the
+/// failure should tell an author.
+struct Scan {
+    needle: &'static str,
+    allowed: &'static [Allowed],
+    advice: &'static str,
+}
+
+/// How many non-comment lines of `text` contain `needle`.
+///
+/// Comment lines are excluded because the traps are documented in prose all
+/// over the workspace, and prose is not a reader. A line of code is never
+/// inside a `//` comment in Rust, so nothing that could be a reader is skipped.
+/// The unit is the line, not the occurrence: two reads on one line count once.
+fn matching_lines(text: &str, needle: &str) -> usize {
     text.lines()
         .filter(|line| {
             let trimmed = line.trim_start();
-            !trimmed.starts_with("//") && trimmed.contains(".interfaces")
+            !trimmed.starts_with("//") && trimmed.contains(needle)
         })
         .count()
 }
 
-#[test]
-fn every_direct_interfaces_read_is_justified() {
+/// Runs one scan over the workspace and compares it against its table.
+#[track_caller]
+fn assert_scan(scan: &Scan) {
     let root = workspace_root();
     let guard_file = "xtask/tests/shape_walk.rs";
 
     let mut found: Vec<(String, usize)> = Vec::new();
     for relative in rust_sources(&root) {
-        // This file names the field in its own table and prose.
+        // This file names every guarded spelling in its own tables and prose.
         if relative == guard_file {
             continue;
         }
         let Ok(text) = std::fs::read_to_string(root.join(&relative)) else {
             continue;
         };
-        let count = direct_reads(&text);
+        let count = matching_lines(&text, scan.needle);
         if count > 0 {
             found.push((relative, count));
         }
     }
 
-    let mut expected: Vec<(String, usize)> = ALLOWED
+    let mut expected: Vec<(String, usize)> = scan
+        .allowed
         .iter()
         .map(|allowed| (allowed.path.to_string(), allowed.lines))
         .collect();
@@ -215,21 +275,55 @@ fn every_direct_interfaces_read_is_justified() {
     found.sort();
 
     assert_eq!(
-        found, expected,
+        found,
+        expected,
         "\n\
-         The set of files reading `.interfaces` directly has changed.\n\
+         The set of non-comment lines containing `{needle}` has changed.\n\
          \n\
-         `Package.interfaces` and `SourceFile::interfaces()` are not the \
-         complete set of interface bodies: a service's inline shape lives \
-         outside both. Walk `ridl_ir::v2::Package::shapes()` or \
-         `ridl_syntax::ast::SourceFile::shapes()` instead — they yield a named \
-         interface and an inline shape alike, each with the identity name and \
-         the owning service, so neither the empty `Interface.name` nor the \
-         unspecified `Interface.visibility` of an inline shape can be read by \
-         accident.\n\
+         {advice}\n\
          \n\
-         If the new site genuinely cannot be a `shapes()` walk — it produces \
-         the store, it diffs two of them pairwise, or it is a test fixture — \
-         add it to `ALLOWED` in {guard_file} with the reason.\n",
+         If the new site is genuinely justified, add it to the matching table \
+         in {guard_file} with the reason. The count is a number of LINES, not \
+         of occurrences.\n",
+        needle = scan.needle,
+        advice = scan.advice,
     );
+}
+
+#[test]
+fn every_direct_interfaces_read_is_justified() {
+    assert_scan(&Scan {
+        needle: ".interfaces",
+        allowed: ALLOWED,
+        advice: "`Package.interfaces` and `SourceFile::interfaces()` are not \
+                 the complete set of interface bodies: a service's inline \
+                 shape lives outside both. Walk \
+                 `ridl_ir::v2::Package::shapes()` or \
+                 `ridl_syntax::ast::SourceFile::shapes()` instead — they yield \
+                 a named interface and an inline shape alike, each carrying \
+                 the identity name and the owning service. A site that cannot \
+                 be a `shapes()` walk produces the store, diffs two of them \
+                 pairwise, or is a test fixture.",
+    });
+}
+
+/// The companion scan: having taken `shapes()`, reading the raw body's `name`
+/// or `visibility` back out of it.
+///
+/// This is not a hypothetical bypass. `shape.interface.interactions` is the
+/// idiomatic access at almost every converted site, so `shape.interface.name`
+/// reads as ordinary code — and it is exactly the value that is `""` for an
+/// inline shape, which is what produced two of the six E2 defects.
+#[test]
+fn every_read_of_an_inline_shapes_empty_fields_is_justified() {
+    assert_scan(&Scan {
+        needle: ".interface.name",
+        allowed: ALLOWED_NAME_READS,
+        advice: EMPTY_FIELD_ADVICE,
+    });
+    assert_scan(&Scan {
+        needle: ".interface.visibility",
+        allowed: ALLOWED_VISIBILITY_READS,
+        advice: EMPTY_FIELD_ADVICE,
+    });
 }

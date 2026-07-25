@@ -2695,7 +2695,7 @@ impl Checker<'_> {
     /// E2.1b–c): the structural diagnostics accumulate exactly as in the
     /// E2.1b pass, and every surviving member lowers to an interaction
     /// `Decl` with its §11 ordinal — the same assignment
-    /// [`checked_interface`] computes.
+    /// [`Checker::lower_service_inline`] makes over a service's inline body.
     fn lower_interface(&mut self, def: &ast::InterfaceDef) -> v2::Interface {
         // TYPL-212: `error` is failure vocabulary for composites only
         // (typl §10.1) — an interface is not one.
@@ -2788,7 +2788,7 @@ impl Checker<'_> {
                 if !seen.insert(name.clone()) {
                     // RIDL-402: first wins; the loser is excluded from the
                     // lowering, is not re-checked, and holds no ordinal slot
-                    // — the same rule [`checked_interface`] applies.
+                    // — the same rule `lower_service_inline` applies below.
                     self.error(
                         DiagCode::RIDL_402,
                         range,
