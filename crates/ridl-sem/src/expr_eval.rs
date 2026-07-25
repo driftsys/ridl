@@ -20,7 +20,7 @@
 //!   (§7); it surfaces as [`EvalError::DivisionByZero`], never as a panic and
 //!   never as a silently substituted value.
 
-use num_bigint::Sign;
+use num_bigint::{BigInt, Sign};
 use num_rational::BigRational;
 use ridl_syntax::SyntaxKind;
 use ridl_syntax::ast::{self, AstNode};
@@ -102,10 +102,18 @@ impl std::fmt::Display for EvalError {
 /// The deepest expression nesting [`eval_expr`] will walk before giving up.
 ///
 /// Evaluation recurses over the tree, so an adversarially nested expression
-/// would otherwise exhaust the stack — a panic by another name. The limit is
-/// far above anything a contract is written with, and exceeding it is a
-/// [`EvalError::TypeMismatch`] like any other refusal.
-const MAX_DEPTH: u32 = 256;
+/// would otherwise exhaust the stack — a panic by another name. Exceeding the
+/// limit is an [`EvalError::TypeMismatch`] like any other refusal.
+///
+/// The value matches the parser's own `MAX_TYPE_DEPTH`, which bounds the
+/// expression grammar too: nothing the parser accepts nests deeper than this,
+/// so the guard never refuses a tree that could legitimately arrive, and a
+/// binary chain — which the parser builds iteratively and does not cap — is
+/// stopped well inside the stack. It must stay **below** the frame budget, not
+/// merely above what contracts are written with: an earlier 256 exhausted a
+/// 2 MB stack before the guard could fire, because a debug-build
+/// `eval`/`eval_binary` pair is several kilobytes of frame.
+const MAX_DEPTH: u32 = 128;
 
 // ==========================================================================
 // Evaluation
@@ -115,8 +123,17 @@ const MAX_DEPTH: u32 = 256;
 ///
 /// Total: every input either yields a [`Value`] or an [`EvalError`]. The
 /// expression is normally one [`crate::expr::check_contract_expr`] already
-/// accepted, but nothing here relies on that — an ill-typed or half-parsed tree
-/// is refused, not assumed away.
+/// accepted, but nothing here relies on that: a half-parsed tree, an operand
+/// outside an operator's domain, and an unbound name are all refused rather
+/// than assumed away.
+///
+/// It does **not** re-check nominal typing. [`Value::Num`] carries a numeric
+/// backing but not the named type it came from, so `speed + torque` over two
+/// distinct float-backed types evaluates happily here — the checker rejects it
+/// upstream as RIDL-306 (expr-core §5.2), which is where that rule lives. When
+/// E5.1 lifts rmdl §3.3 scalar multiplication and its unit discipline,
+/// [`Value::Num`] will need the type reference too; this shape is a way-station,
+/// not the terminal one.
 pub fn eval_expr(expr: &ast::Expr, env: &EvalEnv) -> Result<Value, EvalError> {
     eval(expr, env, 0)
 }
@@ -327,7 +344,13 @@ fn eval_binary(binary: &ast::BinaryExpr, env: &EvalEnv, depth: u32) -> Result<Va
             // float-backed division of two integral values and yields exactly
             // one third.
             if backing == NumericBacking::Integer {
-                let quotient = left.to_integer() / right.to_integer();
+                // Truncating to integers first would turn a divisor such as 0.5
+                // into a zero divisor and panic inside `BigInt`, and would
+                // silently discard the dividend's fractional part. An
+                // integer-backed value carrying a fraction is an inconsistent
+                // value, so it is refused rather than rounded away.
+                let (left, right) = integral_pair(left, right, &op)?;
+                let quotient = left / right;
                 return Ok(Value::Num(
                     ExactValue(BigRational::from_integer(quotient)),
                     backing,
@@ -349,8 +372,11 @@ fn eval_binary(binary: &ast::BinaryExpr, env: &EvalEnv, depth: u32) -> Result<Va
                 ));
             }
             // C17 remainder: the result takes the dividend's sign, which is
-            // exactly `BigInt`'s `%`.
-            let remainder = left.to_integer() % right.to_integer();
+            // exactly `BigInt`'s `%`. Both operands must genuinely be integers
+            // first — see the division above for why truncating here would both
+            // panic and lie.
+            let (left, right) = integral_pair(left, right, &op)?;
+            let remainder = left % right;
             Ok(Value::Num(
                 ExactValue(BigRational::from_integer(remainder)),
                 backing,
@@ -423,6 +449,27 @@ fn numeric_pair(
         }
         _ => Err(domain_mismatch(op, "numeric operands", left, right)),
     }
+}
+
+/// The two operands of an integer-backed `/` or `%` as exact integers.
+///
+/// An integer-backed [`Value::Num`] should always hold an integral rational —
+/// the sampler and the literal reader both guarantee it — but `Value` is public
+/// and its two fields are independent, so a caller can construct an
+/// integer-backed half. Truncating that away would panic on a divisor between
+/// zero and one and would silently change the dividend, so it is refused as the
+/// inconsistent value it is.
+fn integral_pair(
+    left: BigRational,
+    right: BigRational,
+    op: &str,
+) -> Result<(BigInt, BigInt), EvalError> {
+    if !left.is_integer() || !right.is_integer() {
+        return Err(EvalError::TypeMismatch(format!(
+            "`{op}` has an integer-backed operand holding a non-integral value"
+        )));
+    }
+    Ok((left.to_integer(), right.to_integer()))
 }
 
 fn expect_bool(value: Value, op: &str) -> Result<bool, EvalError> {
@@ -870,17 +917,60 @@ mod tests {
 
     #[test]
     fn deep_nesting_is_refused_rather_than_exhausting_the_stack() {
-        // Far past MAX_DEPTH: the guard turns what would be a stack overflow
-        // into an ordinary refusal.
-        let deep = format!("{}1 == 1{}", "(".repeat(2000), ")".repeat(2000));
-        let Some(expr) = parse_contract_expr(&deep) else {
-            // A parser that refuses the nesting first is equally total.
-            return;
-        };
-        assert!(matches!(
-            eval_expr(&expr, &env(&[])),
-            Err(EvalError::TypeMismatch(_))
-        ));
+        // A LEFT-NESTED BINARY CHAIN, not parenthesis nesting: the parser caps
+        // type/paren depth at 128, below this guard's 256, so a paren tower can
+        // never reach the guard and a test built on one would pass whatever
+        // MAX_DEPTH said. `1 + 1 + 1 + …` nests one level per operator and does
+        // reach it.
+        // The ceiling is rowan's, not this module's: dropping a syntax tree
+        // thousands of levels deep recurses inside the library and overflows
+        // before anything here runs. These sizes are all far past MAX_DEPTH,
+        // which is what the test is about.
+        for terms in [300, 1000, 2000] {
+            let chain = vec!["1"; terms].join(" + ");
+            let text = format!("{chain} == 1");
+            let Some(expr) = parse_contract_expr(&text) else {
+                panic!("a {terms}-term chain must parse");
+            };
+            match eval_expr(&expr, &env(&[])) {
+                Err(EvalError::TypeMismatch(message)) => assert!(
+                    message.contains(&format!("nests deeper than {MAX_DEPTH}")),
+                    "the depth guard is what refused it, not something else: {message}"
+                ),
+                other => panic!("a {terms}-term chain must hit the depth guard, got {other:?}"),
+            }
+        }
+        // And just under the guard the same shape still evaluates, so the guard
+        // is not simply refusing everything.
+        let shallow = ["1"; 8].join(" + ");
+        let expr = parse(&format!("{shallow} == 8"));
+        assert_eq!(eval_expr(&expr, &env(&[])), Ok(Value::Bool(true)));
+    }
+
+    #[test]
+    fn an_integer_backed_operand_holding_a_fraction_is_refused_not_panicked_on() {
+        // `Value` is public and its value and backing are independent, so a
+        // caller can build an integer-backed half. Truncating it to an integer
+        // would make `a / half` a division by zero inside `BigInt` — a panic —
+        // and would silently change the dividend. Both operators refuse it.
+        let params = [
+            ("a".to_string(), int("7")),
+            (
+                "half".to_string(),
+                Value::Num(
+                    ExactValue::parse("0.5").expect("0.5 parses"),
+                    NumericBacking::Integer,
+                ),
+            ),
+        ];
+        let env = env(&params);
+        for text in ["a / half > 1", "a % half == 0", "half / a > 1"] {
+            assert!(
+                matches!(eval_in(text, &env), Err(EvalError::TypeMismatch(_))),
+                "`{text}` must be refused, got {:?}",
+                eval_in(text, &env)
+            );
+        }
     }
 
     #[test]

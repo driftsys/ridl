@@ -114,6 +114,51 @@ pub fn violations(r: &IntRange) -> Vec<i64> {
     out
 }
 
+/// The boundary samples of a float range, in table order — `min`, `min+step`,
+/// `max-step`, `max` — filtered to the values inside `[min..max]` and
+/// deduplicated while preserving order.
+///
+/// The float analogue of [`boundary_values`], in the exact domain rather than
+/// through `f64`: these are the values a range must accept, and the endpoints
+/// are where a bound that is off by one step shows up. A range with no declared
+/// step steps by one, which keeps the corpus non-empty for an unquantized
+/// range.
+pub fn float_boundary_values(r: &FloatRange) -> Vec<ExactValue> {
+    let step = effective_step(r);
+    let inside = |value: &BigRational| value >= &r.min.0 && value <= &r.max.0;
+    let mut out: Vec<ExactValue> = Vec::new();
+    for candidate in [
+        r.min.0.clone(),
+        &r.min.0 + &step,
+        &r.max.0 - &step,
+        r.max.0.clone(),
+    ] {
+        if inside(&candidate) && !out.iter().any(|held| held.0 == candidate) {
+            out.push(ExactValue(candidate));
+        }
+    }
+    out
+}
+
+/// The two just-outside samples of a float range — `min-step` and `max+step` —
+/// the values it must reject. The float analogue of [`violations`]; an absent
+/// step is one, as in [`float_boundary_values`].
+pub fn float_violations(r: &FloatRange) -> Vec<ExactValue> {
+    let step = effective_step(r);
+    vec![ExactValue(&r.min.0 - &step), ExactValue(&r.max.0 + &step)]
+}
+
+/// The range's declared step, or one when it declares none. A positive step is
+/// guaranteed by the checker (TYPL-105); a non-positive one here falls back to
+/// one so the corpora stay outside the range rather than collapsing onto it.
+fn effective_step(r: &FloatRange) -> BigRational {
+    let one = BigRational::from_integer(BigInt::from(1));
+    match &r.step {
+        Some(step) if step.0.numer().sign() == Sign::Plus => step.0.clone(),
+        _ => one,
+    }
+}
+
 /// `floor((max - min) / step)` as a saturating `u64` — the highest grid index
 /// `n` whose value `min + n·step` stays at or below `max`. `step` is positive
 /// (the checker rejects a non-positive step as TYPL-105 before a value is

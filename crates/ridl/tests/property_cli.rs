@@ -192,9 +192,50 @@ fn a_satisfiable_require_reports_a_satisfied_count() {
         .find(|line| line.contains("Cruise.average.require[0]"))
         .unwrap_or_else(|| panic!("the average clause is reported: {stdout}"));
     assert!(
-        line.contains("/256"),
-        "the default sample count is 256: {line}"
+        line.contains("boundary +") && line.contains("random of"),
+        "the split is reported so a reader can tell an endpoint hit from an \
+         interior one: {line}"
     );
+}
+
+#[test]
+fn the_boundary_corpus_is_sampled_so_endpoint_clauses_are_not_called_suspect() {
+    // A uniform draw reaches an endpoint far too rarely to be relied on: 256
+    // draws over `[0..1000]` hit either end only about a fifth of the time, so
+    // these perfectly satisfiable clauses were reported as unsatisfiable before
+    // the boundary corpus was injected. Each one turns on a declared endpoint.
+    let dir = TempDir::new("boundary");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+type Count : integer [0..1000]\n\
+interface I {\n\
+  command atMax(c: Count) [ require c == 1000 ]\n\
+  command atMin(s: Speed) [ require s == 0.0 ]\n\
+  command atTop(s: Speed) [ require s == 250.0 ]\n\
+  command nearTop(s: Speed) [ require s > 249.0 ]\n\
+}\n",
+    );
+    let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0, "{stdout}");
+    for id in [
+        "I.atMax.require[0]",
+        "I.atMin.require[0]",
+        "I.atTop.require[0]",
+        "I.nearTop.require[0]",
+    ] {
+        let line = stdout
+            .lines()
+            .find(|line| line.contains(id))
+            .unwrap_or_else(|| panic!("`{id}` is reported: {stdout}"));
+        assert!(
+            !line.contains("suspect"),
+            "`{id}` is satisfiable at its own declared endpoint and must not be \
+             called suspect: {line}"
+        );
+    }
 }
 
 // ==========================================================================
@@ -241,6 +282,46 @@ fn a_compile_error_exits_two() {
 }
 
 #[test]
+fn a_zero_sample_count_is_a_usage_error() {
+    // Refused rather than silently clamped: a run that drew nothing would call
+    // every sampled clause unsatisfiable.
+    let dir = fixture("zero-samples");
+    let (code, _, stderr) = ridl(&[
+        "test",
+        dir.path().to_str().expect("utf-8 path"),
+        "--samples",
+        "0",
+    ]);
+    assert_eq!(code, 2, "stderr: {stderr}");
+    assert!(stderr.contains("--samples"), "the flag is named: {stderr}");
+}
+
+#[test]
+fn a_clause_reading_no_parameter_is_evaluated_once() {
+    // Reporting `256/256` for a clause with nothing to vary implies a search
+    // that never happened.
+    let dir = TempDir::new("constant");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+const MAX_SPEED : Speed = 200.0\n\
+interface I {\n  command c(s: Speed) [ require MAX_SPEED > 0.0 ]\n}\n",
+    );
+    let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0, "{stdout}");
+    let line = stdout
+        .lines()
+        .find(|line| line.contains("I.c.require[0]"))
+        .unwrap_or_else(|| panic!("the clause is reported: {stdout}"));
+    assert!(
+        line.contains("evaluated once") && !line.contains("/256"),
+        "a constant clause does not claim a sample count: {line}"
+    );
+}
+
+#[test]
 fn a_missing_path_exits_two() {
     let (code, _, _) = ridl(&["test", "/nonexistent/ridl/workspace/for/testing"]);
     assert_eq!(code, 2, "an unreadable input exits 2");
@@ -282,7 +363,142 @@ fn the_sample_count_is_configurable() {
         .find(|contract| contract["id"] == "Cruise.average.require[0]")
         .expect("the average clause is reported")
         .clone();
-    assert_eq!(sampled["samples"], 16);
+    // `--samples` governs the RANDOM draws; the boundary corpus is injected on
+    // top of them, so the total is larger.
+    assert_eq!(sampled["random_samples"], 16);
+    assert!(
+        sampled["samples"].as_u64().expect("a sample total") > 16,
+        "the boundary corpus is drawn as well: {sampled}"
+    );
+}
+
+#[test]
+fn contracts_inside_a_service_with_an_inline_shape_are_reported() {
+    // A `service` declared with an inline shape carries a full interface body
+    // that does NOT appear in `package.interfaces`, and the checker lowers its
+    // clauses into real contracts with observer ids. Walking only
+    // `package.interfaces` reported a clean run over contracts that were never
+    // tested — a green report over untested contracts is the one outcome this
+    // command must not produce.
+    let dir = TempDir::new("inline-service");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+service app.cruise {\n\
+  command overshoot(desired: Speed) [ require desired > 300.0 ]\n\
+  query peek(): Speed [ ensure result >= 0.0 ]\n\
+}\n",
+    );
+    let (code, stdout, stderr) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
+
+    let require = stdout
+        .lines()
+        .find(|line| line.contains("overshoot") && line.contains("require"))
+        .unwrap_or_else(|| {
+            panic!("the inline service's require is reported, not silently dropped: {stdout}")
+        });
+    assert!(
+        require.contains("suspect"),
+        "an unsatisfiable clause inside an inline service is still flagged: {require}"
+    );
+    assert!(
+        stdout.contains("peek") && stdout.contains("observer stub"),
+        "the inline service's ensure is listed as an observer stub: {stdout}"
+    );
+}
+
+#[test]
+fn a_service_naming_an_interface_reports_its_clauses_once() {
+    // The other arm of the shape oneof: the target already lives in
+    // `package.interfaces`, so it must not be walked a second time.
+    let dir = TempDir::new("service-ref");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+interface Cruise {\n\
+  command overshoot(desired: Speed) [ require desired > 300.0 ]\n\
+}\n\
+service app.cruise : Cruise\n",
+    );
+    let (code, stdout, stderr) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0, "stdout: {stdout}\nstderr: {stderr}");
+    let reported = stdout
+        .lines()
+        .filter(|line| line.contains("Cruise.overshoot.require[0]"))
+        .count();
+    assert_eq!(reported, 1, "the clause is reported exactly once: {stdout}");
+}
+
+#[test]
+fn the_range_section_actually_runs_its_corpora() {
+    // Teeth for section 1. Asserting only `status == "ok"` cannot tell a
+    // section that ran and passed from one that ran nothing at all — replacing
+    // the whole check with `Ok { boundary: 0, violations: 0 }` used to leave the
+    // suite green. The corpus sizes are asserted, so an empty run fails here.
+    let dir = fixture("range-teeth");
+    let (code, stdout, _) = ridl(&[
+        "test",
+        dir.path().to_str().expect("utf-8 path"),
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+    let ranges = report[0]["ranges"].as_array().expect("ranges is an array");
+    let range = |name: &str| -> serde_json::Value {
+        ranges
+            .iter()
+            .find(|range| range["type"] == name)
+            .unwrap_or_else(|| panic!("`{name}` is reported: {stdout}"))
+            .clone()
+    };
+
+    // `Count : integer [0..1000]` — min, min+1, max-1, max accepted; min-1 and
+    // max+1 rejected.
+    let count = range("Count");
+    assert_eq!(count["boundary"], 4, "the integer boundary corpus ran");
+    assert_eq!(count["violations"], 2, "the integer violation corpus ran");
+
+    // `Speed : km/h [0.0..250.0 step 0.5]` — the float corpora are the same
+    // shape, one step in and one step out on each side.
+    let speed = range("Speed");
+    assert_eq!(speed["boundary"], 4, "the float boundary corpus ran");
+    assert_eq!(speed["violations"], 2, "the float violation corpus ran");
+}
+
+#[test]
+fn a_range_whose_violations_are_accepted_fails_the_run() {
+    // The failure path of section 1, driven through the one range shape that
+    // can exhibit it: a single-value range `[0..0]`, whose boundary corpus is
+    // `{0}` and whose violations are `{-1, 1}`. If the validator ever accepted
+    // a violation, this is the run that would go red — which is what makes the
+    // section a check rather than a formality.
+    let dir = TempDir::new("range-failure");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write("app.ridl", "package app\ntype Fixed : integer [0..0]\n");
+    let (code, stdout, _) = ridl(&[
+        "test",
+        dir.path().to_str().expect("utf-8 path"),
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0, "a correct validator passes: {stdout}");
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+    let fixed = report[0]["ranges"]
+        .as_array()
+        .expect("ranges is an array")
+        .iter()
+        .find(|range| range["type"] == "Fixed")
+        .expect("Fixed is reported")
+        .clone();
+    assert_eq!(fixed["status"], "ok");
+    assert_eq!(fixed["boundary"], 1, "the single in-range value");
+    assert_eq!(fixed["violations"], 2, "one step out on each side");
 }
 
 #[test]

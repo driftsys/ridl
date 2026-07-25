@@ -93,14 +93,24 @@ struct ContractReport {
 }
 
 enum ContractStatus {
-    /// At least one drawn input satisfied the clause.
+    /// At least one input satisfied the clause. The boundary and random counts
+    /// are reported apart so a reader can tell an endpoint hit from an interior
+    /// one.
     Ok {
-        satisfied: usize,
-        samples: usize,
+        satisfied_boundary: usize,
+        satisfied_random: usize,
+        boundary: usize,
+        random: usize,
     },
-    /// No drawn input satisfied it — the test-plane finding.
+    /// No input satisfied it — neither the injected boundary corpus nor any
+    /// random draw. The test-plane finding.
     Suspect {
-        samples: usize,
+        boundary: usize,
+        random: usize,
+    },
+    /// A clause reading no parameter: one value, not a sample count.
+    Constant {
+        holds: bool,
     },
     Skipped(String),
     /// Evaluation did not produce a verdict; the run fails.
@@ -113,6 +123,8 @@ impl ContractStatus {
     fn word(&self) -> &'static str {
         match self {
             ContractStatus::Ok { .. } => "ok",
+            ContractStatus::Constant { holds: true } => "constant-true",
+            ContractStatus::Constant { holds: false } => "constant-false",
             ContractStatus::Suspect { .. } => "suspect",
             ContractStatus::Skipped(_) => "skipped",
             ContractStatus::Error(_) => "error",
@@ -142,9 +154,13 @@ impl PackageReport {
 /// Compiles the workspace at `path` and runs the property sections over every
 /// package it declares.
 pub fn run(path: &Path, samples: usize, format: TestFormat) -> ExitCode {
-    // At least one draw: a run that samples nothing would report every clause
-    // as unsatisfied and call it a finding.
-    let samples = samples.max(1);
+    // Sampling nothing is a usage error rather than a silent clamp: a run that
+    // drew no values would report every sampled clause as unsatisfied and call
+    // that a finding, which is worse than refusing the flag.
+    if samples == 0 {
+        eprintln!("error: `--samples` must be at least 1");
+        return ExitCode::from(2);
+    }
 
     let mut db = ridl_core::RidlDatabase::default();
     let output = match ridlc::compile_workspace(&mut db, path) {
@@ -199,8 +215,24 @@ fn run_package(package: &v2::Package, samples: usize) -> PackageReport {
         }
     }
 
+    // Every interface body in the package, which is NOT the same set as
+    // `package.interfaces`: a `service` declared with an inline shape carries a
+    // full `Interface` inside its own `shape` oneof, and the checker lowers its
+    // `require`/`ensure` clauses into real contracts with observer ids. Walking
+    // only `package.interfaces` would report a green run over untested
+    // contracts — the one failure this command must not have. A service that
+    // names an interface instead needs nothing here: the target is already in
+    // `package.interfaces`, and running it twice would report it twice.
     let mut contracts = Vec::new();
-    for interface in &package.interfaces {
+    let inline_shapes =
+        package
+            .services
+            .iter()
+            .filter_map(|service| match service.shape.as_ref()? {
+                v2::service::Shape::Inline(interface) => Some(interface),
+                v2::service::Shape::InterfaceRef(_) => None,
+            });
+    for interface in package.interfaces.iter().chain(inline_shapes) {
         for interaction in &interface.interactions {
             let (params, clauses) = match &interaction.kind {
                 Some(v2::decl::Kind::CommandDef(command)) => (&command.params, &command.contracts),
@@ -236,10 +268,12 @@ fn check_range(type_def: &v2::TypeDef) -> Option<RangeStatus> {
     let min = ExactValue::parse(constraint.min.as_deref()?)?;
     let max = ExactValue::parse(constraint.max.as_deref()?)?;
 
+    // Both corpora come from the E1.18 generators rather than being built here:
+    // the point of the section is that the generators and the checker agree, so
+    // a corpus this file computed for itself would only ever confirm its own
+    // arithmetic.
     let (boundary, violations) = match type_def.width.as_ref()? {
         v2::type_def::Width::IntWidth(_) => {
-            // The shipped E1.18 corpora: `min`, `min+1`, `max-1`, `max` must be
-            // accepted, `min-1` and `max+1` rejected.
             let range = IntRange {
                 min: min.clone(),
                 max: max.clone(),
@@ -256,20 +290,14 @@ fn check_range(type_def: &v2::TypeDef) -> Option<RangeStatus> {
             )
         }
         v2::type_def::Width::FloatWidth(_) => {
-            // `testgen` ships boundary and violation corpora for integer ranges
-            // only, so the float analogue is built here in the same shape and
-            // in the same exact domain: the two bounds must be accepted, and
-            // one step outside either must be rejected. A range with no step
-            // steps by one.
-            let step = constraint
-                .step
-                .as_deref()
-                .and_then(ExactValue::parse)
-                .map(|step| step.0)
-                .unwrap_or_else(|| BigRational::from_integer(BigInt::from(1)));
+            let range = FloatRange {
+                min: min.clone(),
+                max: max.clone(),
+                step: constraint.step.as_deref().and_then(ExactValue::parse),
+            };
             (
-                vec![min.clone(), max.clone()],
-                vec![ExactValue(&min.0 - &step), ExactValue(&max.0 + &step)],
+                testgen::float_boundary_values(&range),
+                testgen::float_violations(&range),
             )
         }
     };
@@ -300,10 +328,13 @@ fn check_range(type_def: &v2::TypeDef) -> Option<RangeStatus> {
     })
 }
 
-/// The constraint validator: a closed range over exact values, which is the
-/// same membership rule the checker applies to a declared init.
+/// The constraint validator — **the checker's own**
+/// ([`ridl_sem::scalar::range_accepts`]), not a reimplementation of it. The
+/// checker validates every declared init and constant against a range through
+/// this same function, which is what lets a bug in it surface here as a failed
+/// corpus run instead of being duplicated on both sides and cancelling out.
 fn accepts(value: &ExactValue, min: &ExactValue, max: &ExactValue) -> bool {
-    value.0 >= min.0 && value.0 <= max.0
+    ridl_sem::scalar::range_accepts(value, Some(min), Some(max))
 }
 
 fn integer(value: i64) -> ExactValue {
@@ -365,6 +396,29 @@ fn run_contract(
         )));
     };
 
+    // A clause that reads no parameter has nothing to vary: evaluating it N
+    // times would repeat one answer N times and report `256/256`, which implies
+    // a search that never happened. It is evaluated once and reported as the
+    // constant it is.
+    if generators.is_empty() {
+        let env = EvalEnv {
+            params: &[],
+            result: None,
+            consts: &|name: &str| vocabulary.get(name).cloned(),
+        };
+        return match eval_expr(&expr, &env) {
+            Ok(Value::Bool(true)) => report(ContractStatus::Constant { holds: true }),
+            Ok(Value::Bool(false)) => report(ContractStatus::Constant { holds: false }),
+            Ok(_) => report(ContractStatus::Error(
+                "the clause did not evaluate to a boolean".to_string(),
+            )),
+            Err(err) => report(ContractStatus::Error(format!(
+                "{err} while evaluating `{}`",
+                clause.source
+            ))),
+        };
+    }
+
     let mut runner = TestRunner::new_with_rng(
         Config::default(),
         TestRng::from_seed(
@@ -374,11 +428,37 @@ fn run_contract(
     );
 
     let consts = |name: &str| vocabulary.get(name).cloned();
-    let mut satisfied = 0usize;
-    for _ in 0..samples {
+
+    // The boundary tuples come first, deterministically, before any random
+    // draw. A uniform draw explores endpoints far too rarely to be relied on —
+    // 256 draws over `[0..1000]` hit either endpoint only about a fifth of the
+    // time — so a perfectly satisfiable `c == 1000` would otherwise be reported
+    // as unsatisfiable. No sample count fixes that; injecting the corpus does.
+    //
+    // Parameters are zipped with wrapping rather than combined exhaustively:
+    // every parameter reaches each of its own endpoints, and the tuple count
+    // stays linear instead of exponential in the parameter count.
+    let corpora: Vec<Vec<Value>> = generators
+        .iter()
+        .map(|(_, generator)| generator.boundary_corpus())
+        .collect();
+    let boundary_tuples = corpora.iter().map(Vec::len).max().unwrap_or(0);
+
+    let mut satisfied_boundary = 0usize;
+    let mut satisfied_random = 0usize;
+    for index in 0..(boundary_tuples + samples) {
+        let is_boundary = index < boundary_tuples;
         let mut bindings = Vec::with_capacity(generators.len());
-        for (name, generator) in &generators {
-            match draw(generator, &mut runner) {
+        for (position, (name, generator)) in generators.iter().enumerate() {
+            let value = if is_boundary {
+                corpora
+                    .get(position)
+                    .filter(|corpus| !corpus.is_empty())
+                    .map(|corpus| corpus[index % corpus.len()].clone())
+            } else {
+                draw(generator, &mut runner)
+            };
+            match value {
                 Some(value) => bindings.push((name.clone(), value)),
                 None => {
                     return report(ContractStatus::Error(format!(
@@ -393,7 +473,13 @@ fn run_contract(
             consts: &consts,
         };
         match eval_expr(&expr, &env) {
-            Ok(Value::Bool(true)) => satisfied += 1,
+            Ok(Value::Bool(true)) => {
+                if is_boundary {
+                    satisfied_boundary += 1;
+                } else {
+                    satisfied_random += 1;
+                }
+            }
             Ok(Value::Bool(false)) => {}
             Ok(_) => {
                 return report(ContractStatus::Error(
@@ -409,10 +495,18 @@ fn run_contract(
         }
     }
 
-    if satisfied == 0 {
-        report(ContractStatus::Suspect { samples })
+    if satisfied_boundary + satisfied_random == 0 {
+        report(ContractStatus::Suspect {
+            boundary: boundary_tuples,
+            random: samples,
+        })
     } else {
-        report(ContractStatus::Ok { satisfied, samples })
+        report(ContractStatus::Ok {
+            satisfied_boundary,
+            satisfied_random,
+            boundary: boundary_tuples,
+            random: samples,
+        })
     }
 }
 
@@ -421,6 +515,44 @@ fn run_contract(
 enum Generator {
     Int(IntRange),
     Float(FloatRange),
+}
+
+impl Generator {
+    /// The values this parameter is always tried at, before any random draw:
+    /// its range's boundary corpus, plus zero when the range spans it.
+    ///
+    /// Zero earns its place because it is the value contracts most often turn
+    /// on — a guard against a zero divisor, a "must be positive" precondition —
+    /// and a range like `[-10..10]` reaches it only by chance otherwise.
+    fn boundary_corpus(&self) -> Vec<Value> {
+        let (mut corpus, min, max, backing) = match self {
+            Generator::Int(range) => (
+                testgen::boundary_values(range)
+                    .into_iter()
+                    .map(integer)
+                    .collect::<Vec<_>>(),
+                &range.min,
+                &range.max,
+                NumericBacking::Integer,
+            ),
+            Generator::Float(range) => (
+                testgen::float_boundary_values(range),
+                &range.min,
+                &range.max,
+                NumericBacking::Float,
+            ),
+        };
+        let zero = ExactValue(BigRational::from_integer(BigInt::from(0)));
+        if ridl_sem::scalar::range_accepts(&zero, Some(min), Some(max))
+            && !corpus.iter().any(|held| held.0 == zero.0)
+        {
+            corpus.push(zero);
+        }
+        corpus
+            .into_iter()
+            .map(|value| Value::Num(value, backing))
+            .collect()
+    }
 }
 
 fn generator_for(package: &v2::Package, param: &v2::Param) -> Option<Generator> {
@@ -612,15 +744,34 @@ fn render_text(reports: &[PackageReport]) -> String {
 
 fn describe(contract: &ContractReport) -> String {
     match &contract.status {
-        ContractStatus::Ok { satisfied, samples } => {
+        ContractStatus::Ok {
+            satisfied_boundary,
+            satisfied_random,
+            boundary,
+            random,
+        } => {
             format!(
-                "ok — {satisfied}/{samples} satisfied  ({})",
+                "ok — {satisfied_boundary} boundary + {satisfied_random} random of {} satisfied  ({})",
+                boundary + random,
                 contract.source
             )
         }
-        ContractStatus::Suspect { samples } => {
-            format!("{SUSPECT} — 0/{samples}  ({})", contract.source)
+        ContractStatus::Suspect { boundary, random } => {
+            format!(
+                "{SUSPECT} — 0/{} ({boundary} boundary + {random} random)  ({})",
+                boundary + random,
+                contract.source
+            )
         }
+        ContractStatus::Constant { holds } => format!(
+            "{} — reads no parameter, evaluated once  ({})",
+            if *holds {
+                "ok, constant"
+            } else {
+                "constant FALSE"
+            },
+            contract.source
+        ),
         ContractStatus::Skipped(why) => format!("{why}  ({})", contract.source),
         ContractStatus::Error(why) => format!("ERROR — {why}"),
         ContractStatus::ObserverStub => {
@@ -637,9 +788,17 @@ fn render_json(reports: &[PackageReport]) -> String {
                 .ranges
                 .iter()
                 .map(|range| match &range.status {
-                    RangeStatus::Ok { .. } => serde_json::json!({
+                    // The corpus sizes are reported, not just the verdict: a
+                    // section that ran no corpus at all would otherwise be
+                    // indistinguishable from one that ran and passed.
+                    RangeStatus::Ok {
+                        boundary,
+                        violations,
+                    } => serde_json::json!({
                         "type": range.type_name,
                         "status": "ok",
+                        "boundary": boundary,
+                        "violations": violations,
                     }),
                     RangeStatus::Failed(why) => serde_json::json!({
                         "type": range.type_name,
@@ -652,12 +811,25 @@ fn render_json(reports: &[PackageReport]) -> String {
                 .contracts
                 .iter()
                 .map(|contract| {
-                    let (satisfied, samples) = match &contract.status {
-                        ContractStatus::Ok { satisfied, samples } => {
-                            (Some(*satisfied), Some(*samples))
-                        }
-                        ContractStatus::Suspect { samples } => (Some(0), Some(*samples)),
-                        _ => (None, None),
+                    let (satisfied, samples, boundary, random) = match &contract.status {
+                        ContractStatus::Ok {
+                            satisfied_boundary,
+                            satisfied_random,
+                            boundary,
+                            random,
+                        } => (
+                            Some(satisfied_boundary + satisfied_random),
+                            Some(boundary + random),
+                            Some(*boundary),
+                            Some(*random),
+                        ),
+                        ContractStatus::Suspect { boundary, random } => (
+                            Some(0),
+                            Some(boundary + random),
+                            Some(*boundary),
+                            Some(*random),
+                        ),
+                        _ => (None, None, None, None),
                     };
                     let detail = match &contract.status {
                         ContractStatus::Skipped(why) => Some(why.clone()),
@@ -670,6 +842,8 @@ fn render_json(reports: &[PackageReport]) -> String {
                         "status": contract.status.word(),
                         "satisfied": satisfied,
                         "samples": samples,
+                        "boundary_samples": boundary,
+                        "random_samples": random,
                         "source": contract.source,
                         "detail": detail,
                     })

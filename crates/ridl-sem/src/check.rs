@@ -4344,8 +4344,12 @@ fn kind_article(kind: SymbolKind) -> &'static str {
     }
 }
 
+/// The negation of the shared range-membership rule ([`scalar::range_accepts`]),
+/// which the E2.11a property runner drives its corpora against. The rule lives
+/// in one place so that a bug in it surfaces there rather than being
+/// reimplemented identically on both sides.
 fn out_of_bounds(value: &ExactValue, min: Option<&ExactValue>, max: Option<&ExactValue>) -> bool {
-    min.is_some_and(|min| value.0 < min.0) || max.is_some_and(|max| value.0 > max.0)
+    !crate::scalar::range_accepts(value, min, max)
 }
 
 fn render_bound(bound: Option<&ExactValue>) -> String {
