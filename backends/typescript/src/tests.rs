@@ -1324,7 +1324,7 @@ export function initTimestamp(): Timestamp {
 /// Finds a runnable tsc: the `tsc` binary on PATH first, then
 /// `npx --no-install tsc` (network-free). Returns the program and its
 /// leading arguments, or `None` when neither responds to `--version`.
-fn discover_tsc() -> Option<(String, Vec<String>)> {
+pub(crate) fn discover_tsc() -> Option<(String, Vec<String>)> {
     let candidates: [(&str, &[&str]); 2] = [("tsc", &[]), ("npx", &["--no-install", "tsc"])];
     for (program, prefix) in candidates {
         let probe = std::process::Command::new(program)

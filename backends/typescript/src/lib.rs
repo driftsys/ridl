@@ -49,6 +49,11 @@
 //! declaration names are CamelCase or SCREAMING_SNAKE (typl §15.1), which no
 //! all-lowercase TypeScript reserved word collides with, and property names
 //! admit any identifier, reserved words included.
+//!
+//! The ridl interaction layer — interfaces, interactions, and services — is
+//! emitted into the same module by [`interact`].
+
+mod interact;
 
 use ridl_ir::v2;
 use std::cell::RefCell;
@@ -73,11 +78,12 @@ pub enum GenerateError {
 /// (`Number.MAX_SAFE_INTEGER`, 2^53 - 1).
 const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
 
-/// Generates the TypeScript module for `package`.
+/// Generates the TypeScript module for `package`: the typl surface first, in
+/// declaration order, then the ridl interaction layer ([`interact`]) — the
+/// interaction faces reference the typl types above them, so the reading
+/// order matches the dependency order.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking.
-/// Interfaces and services (the ridl interaction layer) are not consumed
-/// here — the typl surface only (task 14 adds the interaction mapping).
 pub fn generate(package: &v2::Package) -> Result<GeneratedTs, GenerateError> {
     let ctx = Ctx::new(package);
 
@@ -85,6 +91,7 @@ pub fn generate(package: &v2::Package) -> Result<GeneratedTs, GenerateError> {
     for decl in &package.decls {
         emit_decl(&ctx, decl, &mut blocks)?;
     }
+    blocks.extend(interact::emit_package(&ctx, package)?);
 
     let mut source = String::new();
     let imports = ctx.imports.borrow();
