@@ -2,12 +2,22 @@
 
 ## Status
 
-Accepted (agent-taken, maintainer-reviewable); the last numbered decision is a
-later amendment, dated in its own text. Each numbered decision below was taken
+Accepted (agent-taken, maintainer-reviewable); decisions 15 to 21 are later
+amendments, each dated in its own text. Each numbered decision below was taken
 to unblock the epic E2 execution plan
 (`docs/wip/2026-07-19-e2-ridl-interface-layer-plan.md`) and is reversible at the
 cost of a small refactor before a later epic builds on it. This ADR follows the
 pattern of ADR-0006 (E0) and ADR-0007 (E1).
+
+**Editing note.** Revisions to this document have repeatedly left behind a
+sentence describing the state they replaced — six found and corrected so far,
+the sixth during review of the note that said five. They were scattered rather
+than clustered: a decision's lead contradicting its own body, the Status line
+above, a scoping claim in `## Consequences`, and a closed enumeration in an
+earlier decision that a later one silently extended. Several sat in sections the
+revision that falsified them never opened, so reading the diff does not find
+them. **Sweeping the whole document for sentences the edit has falsified is a
+precondition for editing it here, not optional diligence.**
 
 ## Context
 
@@ -35,6 +45,14 @@ Three tensions force decisions the plan cannot leave open:
 
 CI is still stuck (ADR-0006 decision 8 / ADR-0007 decision 16); the local gate
 remains the merge gate.
+
+Decisions 16 to 21 are close-out amendments. The whole-epic review surfaced six
+points where the shipped implementation and the specification text disagree, and
+none of them was settled by the per-task work that produced decisions 1 to 14.
+They arrive as amendments rather than as original decisions because the
+close-out documentation sync cannot resolve them on its own: the sync can
+restate a rule that has been decided, but it cannot decide which of two
+disagreeing sources is the correct one.
 
 ## Decision
 
@@ -149,7 +167,9 @@ remains the merge gate.
     timing-default code is MANI-009. The `labels`/`deprecated` promotion to
     attributes (general form §4.7) is not among the roadmap-cited supersessions,
     so `deprecated`-without-reason keeps the E1 doc-tag code TYPL-405 and no
-    attribute code is minted for it.
+    attribute code is minted for it. **Extended (2026-07-25):** decision 21 adds
+    RIDL-111 and RIDL-142 for two errors E2 shipped uncoded, so E2 allocates
+    eight codes, not the six listed above.
 
 14. **`ridl diff` classifies changes directionally, comparing the resolved IR,
     and reads a workspace-local baseline.** Direction is judged from the
@@ -181,8 +201,8 @@ remains the merge gate.
 
 15. **Amendment (2026-07-25) — `ridlc`'s workspace output carries the checker's
     resolution and the `ridl.std` IR.** `WorkspaceOutput` gains two fields:
-    `resolutions`, each checked package's `Resolution` keyed by package name,
-    and `std_ir`, the lowered IR of the built-in `ridl.std` package.
+    `resolutions`, each checked package's `Resolution` in `checked` order, and
+    `std_ir`, the lowered IR of the built-in `ridl.std` package.
 
     _What changed and why._ `ridl test` (E2.11a) resolved the names in a
     contract clause against one package's `decls`. On the layout every shipped
@@ -236,6 +256,324 @@ remains the merge gate.
     what `package_of` does and therefore what the checker did when it lowered
     them.
 
+    _Corrected (2026-07-25)._ This decision's opening sentence described
+    `resolutions` as keyed by package name, contradicting the paragraph above it
+    and the merged source, where the field is a `Vec<Resolution>` in `checked`
+    order. The phrase survived from the first revision, where the field
+    genuinely was name-keyed — the shape that silently handed one member another
+    member's declarations, and the regression this decision's own review caught
+    — so it described the defect rather than the fix.
+
+16. **Amendment (2026-07-25) — a duration literal carries five UCUM time atoms,
+    and the specification is corrected to the lexer.**
+
+    _What the sources say._ ridl §2.1 presents a three-row suffix table — `us`,
+    `ms`, `s` — and typl §2.8 names the same three in its examples. The lexer
+    accepts five: `is_time_atom` matches `us`, `ms`, `s`, `min`, and `h`, and
+    `durations_lex_as_one_token` pins all five. `timing.rs` scales `min` by
+    60_000_000 and `h` by 3_600_000_000, with its own tests. `@[1min..1h]`
+    compiles clean today and lowers to a 60000000us rate floor and a
+    3600000000us staleness bound.
+
+    _What was decided, and what kind of decision it is._ The specification
+    extends to five; the lexer is not narrowed to three. The material fact is
+    that **no ADR, no roadmap item, and no specification authorised the two
+    extra atoms** — the language surface was widened in the implementation
+    without a recorded decision, and this amendment ratifies that widening
+    retroactively. It is ratified rather than reverted because narrowing the
+    lexer would reject programs that compile today, which is the worse of the
+    two outcomes — not because the implementation outranks the reference. It
+    does not: decision 1 and ADR-0007 decision 11 govern which text is
+    normative, and neither is disturbed here. What the tests and the module
+    comment naming `min` and `h` establish is that the widening was not a slip —
+    enough to make ratifying it reasonable, not enough to make it authorised.
+
+    _What it binds._ The close-out documentation sync writes all five rows into
+    ridl §2.1 and extends typl §2.8's parenthetical, after which §2.1's table is
+    the complete list rather than a partial one. Two diagnostic messages go with
+    it, so this amendment is **not** documentation-only: the FORM-102 message
+    for a fractional duration and the MANI-009 reason for a malformed
+    `[defaults].timing` bound both read "must be a whole number of us/ms/s", and
+    the FORM-102 one cites ridl §2.1 — so widening §2.1 without them leaves a
+    diagnostic contradicting the section it names. The text already misleads:
+    `@[10ms..90min]` compiles clean while the message tells a user only three
+    units exist. The whole-number rule §2.1 also states is unaffected — the
+    lexer merges a fractional number into one `Duration` token and the checker
+    rejects it with FORM-102, so admitting `min` and `h` does not admit `1.5h`.
+    The duration atoms are a **proper subset** of the curated UCUM atom table
+    ADR-0007 decision 8 adopted, not the same vocabulary: `d` is a unit atom
+    there and is not a duration atom here, so `@[1min..1d]` is a hard FORM-101.
+    (`timing.rs`'s module comment cites "ridl §2.8" for the atom set, where
+    ridl's table is §2.1 and typl's is §2.8; corrected with the rest.)
+
+17. **Amendment (2026-07-25) — `@[X..X]` is a degenerate range that warns on
+    both signals and events; ridl §9.2 drops the "invalid on events" clause and
+    the "equivalent to `@Xms`" characterisation together.**
+
+    _What the sources say._ ridl §9.2 states that `@[X..X]` "draws a warning
+    (equivalent to `@Xms`, and invalid on events)". ridl §16.1 classifies
+    RIDL-108 as a warning with no restriction by interaction kind, and
+    `resolve_timing` emits it at warning severity from its kind-neutral range
+    branch; a signal and an event both annotated `@[50ms..50ms]` each draw one
+    warning and the compile exits 0. On one event carrying both forms the
+    compiler errors on `@Xms` with RIDL-103 and warns on `@[X..X]` with RIDL-108
+    — while RIDL-108's own message calls the two equivalent.
+
+    The two clauses in §9.2 are not independent. "Invalid on events" is a
+    corollary of the equivalence asserted two words earlier, combined with
+    RIDL-103. Striking the events clause alone would leave a section that still
+    calls the forms equivalent while the compiler rejects one and accepts the
+    other.
+
+    _The equivalence is the stale part, not the events clause._ "Equivalent to a
+    strict period" is pre-supersession vocabulary from the four-cell
+    debounce/refresh/throttle/TTL model general form §6.2 replaced — the
+    supersession decision 1 already records. Under §6.2, `min` is a rate floor
+    and `max` a staleness bound, one generic meaning, with the per-kind
+    behaviour derived from the state-versus-occurrence semantics of the
+    declaring keyword rather than from the annotation. Nothing in that reading
+    turns `min == max` into a strict period: `@[X..X]` is a degenerate range — a
+    rate floor equal to its staleness bound — warned because it is almost always
+    a mistake.
+
+    The toolchain agrees, and on this point the evidence is checkable rather
+    than interpretive. A strict period carries a mode meaning its bounds do not:
+    ridl §9 admits it on signals only, and §9.1 never defaults it because "an
+    isochronous rate is always an explicit engineering decision (it drives rmdl
+    base clocks)". The IR records that mode separately from the bounds
+    (decision 12) — `@10ms` and `@[10ms..10ms]` lower to identical bounds and
+    different modes, `TIMING_MODE_STRICT_PERIODIC` against `TIMING_MODE_RANGE` —
+    and the `ridl diff` classifier calls a mode flip breaking in both directions
+    whatever the bounds do, because rmdl clocks key on strict (decision 14). Two
+    forms the toolchain classifies as a breaking change between cannot be
+    equivalent. On an event the strict-period reading is not available at all:
+    an event is occurrence-driven, so there is no publication schedule for a
+    rate floor and a staleness bound to make periodic. That is why RIDL-103 does
+    not fire on `@[X..X]`, and why the current behaviour is correct rather than
+    inconsistent.
+
+    _What was decided._ `@[X..X]` warns on both kinds. §9.2 drops the "invalid
+    on events" clause **and** the "equivalent to `@Xms`" characterisation, and
+    describes the construct in §6.2's terms. Escalating RIDL-108 to an error on
+    events was the alternative and is the wrong one: it would reject programs
+    that compile today in order to preserve the very characterisation that is
+    stale.
+
+    _What it binds._ The retired characterisation lives in three places, and all
+    three are edited together. §9.2's prose is one. **ridl §16.1's RIDL-108 row
+    is the second** — it reads "`@[X..X]` — equivalent to `@Xms`", so the table
+    this decision cites above as evidence of kind-neutrality is itself carrying
+    the wording being retired; leaving it would let a reader take the row as
+    support and stop there. The third is RIDL-108's own message ("equivalent to
+    the strict period `@50000us`"), rewritten to name a degenerate range, which
+    regenerates the showcase diagnostics snapshot that pins it. Those are the
+    only sites: every other RIDL-108 reference in the repository carries the
+    code and its severity without the message text. The code's severity, span,
+    and kind-neutrality do not change.
+
+18. **Amendment (2026-07-25) — the FORM and MANI diagnostic code tables are
+    written in the family overview, and each language reference cites them.**
+
+    _What the sources say._ Decision 13 allocated FORM-106, FORM-107, FORM-108,
+    and MANI-009. All four are declared in `ridl-core`, listed in `FORM_CATALOG`
+    and `MANI_CATALOG`, emitted by the checker, and provoked by the ridl
+    diagnostic showcase. All four are the checker's: `ridl-core` cannot depend
+    on `ridl-sem`, so the manifest layer records `[defaults].timing` as an
+    unparsed string and the checker is what validates it and raises MANI-009. No
+    document under `docs/specification/` carries a FORM or MANI code table, or
+    names a FORM or MANI code at all. The two namespaces appear in five
+    documents, none of them a specification: ADR-0007, this ADR, the E1 and E2
+    epic plans, and `docs/technotes/walking-skeleton-architecture.md`, which
+    describes `ridl-core` as the single source of truth for
+    `TYPL-`/`FORM-`/`MANI-`.
+
+    _What was decided._ Both tables are written in
+    `docs/specification/ridl-family-overview.md`, and each language reference
+    cites them rather than restating them. The FORM namespace is surface syntax
+    — lexical and parse errors, plus the general form §4.3 attribute rules — and
+    the MANI namespace is the manifest. Neither belongs to one profile, so a
+    per-language table would be five copies of one list, drifting apart as codes
+    are added. This is the house rule the overview already applies to doctrines:
+    index once, cite from each reference.
+
+    _What it binds._ The tables themselves are the close-out documentation
+    sync's work, not this ADR's. The per-language `RIDL-` tables in ridl §16
+    stay where they are — those are profile codes, and §16 is where a ridl
+    reader looks for them. The technote named above is reconciled with the
+    overview rather than left to drift — it describes where the namespaces live
+    in the code, which stays true, but a reader sent there for the codes
+    themselves now has a table to be sent to instead.
+
+19. **Amendment (2026-07-25) — Appendix A's `union FaultPageResult` is deleted
+    when the appendix adopts the inline `T | E` return.**
+
+    _What the sources say._ Appendix A declares `union FaultPageResult` and
+    writes `query getFaultPage(filter: DiagFilter): FaultPageResult`. That draws
+    RIDL-308, which steers a named result union in return position to the inline
+    spelling general form §6.1 made canonical — the first of the four
+    supersessions decision 1 adopts, already listed as documentation-sync work.
+    Once the return is written `FaultPage | DiagError`, nothing references the
+    union.
+
+    An unreferenced union draws no diagnostic at all. RIDL-308 is a
+    return-position lint: it fires only when a query's return type names a
+    result union, so adopting the inline spelling silences it and leaves the
+    declaration behind with nothing to flag it. The toolchain has no
+    unused-declaration lint — TYPL-007 covers unused imports only. A worked
+    example is teaching material, and dead vocabulary that no pass will ever
+    report is what a reader copies without noticing.
+
+    _What was decided._ The union declaration is deleted in the same edit that
+    adopts the inline return.
+
+    _What it binds._
+    `crates/ridlc/tests/corpus/veh-cluster/cluster/appendix-a.ridl` is the
+    appendix text compiled — identical to the appendix's code block apart from a
+    four-line provenance header — so the corpus copy tracks the edit and four
+    snapshots regenerate with it. The diagnostics snapshot loses its RIDL-308
+    warning; the IR snapshot loses the `FaultPageResult` declaration and
+    rewrites the query's return from a named value to a fallible pair; the Rust
+    and TypeScript snapshots lose the generated union type and change the
+    query's signature. The entry's NOTES records the RIDL-308 warning as a true
+    statement about the appendix, and is edited with it. RIDL-308 keeps a living
+    example either way: the diagnostic showcase provokes it independently,
+    inside a service's inline shape.
+
+20. **Amendment (2026-07-25) — ridl §16.1's RIDL-110 row is narrowed to what the
+    checker validates, and the difference is recorded as a known gap.**
+
+    _What the sources say._ §16.1 reads "signal `= value` init override violates
+    the payload type's constraints", classified as an error. The checker
+    validates three things, and only when the payload names a scalar `type`
+    declaration: a numeric literal, or a constant reference resolving to a
+    numeric value, outside the type's declared range; a string literal shorter
+    or longer than the declared length bound; and a string literal that does not
+    match the type's `match` pattern.
+
+    Three cases the row's wording covers are accepted in silence. A literal of
+    the wrong kind — `= true` on an integer-backed payload — is stringified and
+    lowered. A value off the declared `step` grid — `= 15.0` on
+    `float [0.0..100.0 step 10.0]` — is never compared against the quantization.
+    An override on a `struct`, `enum`, or `union` payload has no scalar bounds
+    to violate, so `= 5` on a struct and `= 42` on an enum with no such member
+    both compile clean. The checker already records this at the emission site,
+    where the leniency is named as recorded debt and the §16.1 wording is called
+    out as reading broader than the check.
+
+    _What was decided._ The row is narrowed to the three checks that exist, and
+    the three gaps are written down as a known gap rather than closed silently
+    in either direction. Widening the checker is a separate change with its own
+    justification; this decision neither pre-commits to it nor removes the
+    reason to make it.
+
+    _What it binds._ A documentation-sync edit to §16.1, and a gap entry with a
+    named home: the consolidated **`debt(E2)` issue** opened at close-out on the
+    E1 pattern — ADR-0007 decision 10's "the E1 debt issue", which exists as
+    #135. No `debt(E2)` issue exists yet, and this gap must not be recorded only
+    in prose: `check.rs` already cites an "E2 ledger" in three places (M1, M2,
+    M3, the second of them this row's own emission site) and that pointer
+    resolves to nothing. The same work that opens the issue repoints those three
+    citations at it. The leniency is E1's rather than new in E2 — a struct
+    field's declared init is treated the same way — so a later widening is one
+    change across both, not a ridl-only fix.
+
+21. **Amendment (2026-07-25) — RIDL-142 and RIDL-111 are allocated for the two
+    uncoded E2 errors, and `ridl-core` gains a `RIDL_CATALOG` and a
+    `TYPL_CATALOG`, generated rather than hand-maintained.**
+
+    _What the sources say._ Two E2 commits shipped hard errors carrying
+    `DiagCode::NONE`, which render as a bare `error:` with no code.
+    `check_service_name` rejects a service-name segment that is not lowercase
+    (E2.13). `resolve_type_path` rejects a name used as a type when it refers to
+    an interface — ridl §14.0's rule that an interface has no values and cannot
+    sit in payload, field, or parameter position (E2.1b). Ten further uncoded
+    errors predate E2 and are out of scope here — four elsewhere in `check.rs`
+    and six across `ridlc`, `ridl-core`, and the resolver, every one of them E1
+    by blame.
+
+    Being uncoded puts both outside the coverage this epic otherwise guarantees.
+    `every_ridl_profile_code_has_a_living_example` walks a list keyed by
+    diagnostic code, so a diagnostic with no code cannot be listed and cannot be
+    shown to have a living example; and the E4.2 error index, which gives every
+    code an explanation and a fix, has nothing to key them on. Separately,
+    `ridl-core`'s `diag` module defines `FORM_CATALOG` and `MANI_CATALOG`, each
+    guarded by a completeness-and-ordering test, and defines no `RIDL_CATALOG`.
+
+    _What was decided._ The service-name-segment error is **RIDL-142**, beside
+    the service codes RIDL-140 and RIDL-141 that decision 6 kept as written. The
+    interface-used-as-a-type error is **RIDL-111**, in the 1xx interaction and
+    envelope band, beside the interface-body rule RIDL-107. Both numbers are
+    free: the `RIDL-` codes allocated anywhere in the repository are 100 to 110,
+    140, 141, 201, 202, 301 to 308, and 401 to 407. A `RIDL_CATALOG` is added,
+    listing every RIDL code with its severity and summary — **and a
+    `TYPL_CATALOG` with it.** typl is the other namespace with no catalog, and
+    the larger one: 38 declared codes to RIDL's 30. The E4.2 error index draws
+    on both, so adding only `RIDL_CATALOG` would close the smaller gap and leave
+    the larger one looking closed. The fix-wave item covers both namespaces, not
+    one. Allocating RIDL-142 also enlarges the cleanup decision 6 deferred: the
+    1xx-band numbering of the service codes was a documented anomaly at two
+    codes, and is now one at three. And both codes **extend decision 13's
+    allocation ledger**, which enumerates what E2 mints as a closed list of six;
+    with RIDL-111 and RIDL-142 the figure is eight. That list is what E4.2's
+    error index and any later epic asking what E2 allocated will read, so it is
+    annotated there rather than left to be reconstructed from here.
+
+    _What the guard has to be, which the existing two are not._ `FORM_CATALOG`
+    and `MANI_CATALOG` are hand-maintained arrays, and
+    `form_catalog_is_complete_and_ordered` and its MANI twin compare each array
+    against a second hand-written list inside the test. That pair checks that
+    the two lists agree on content and order; it does not check either list
+    against the codes actually declared, because nothing connects them. A new
+    `DiagCode` constant added to neither list compiles and turns no test red, so
+    "complete" in the test name claims more than the test delivers — the same
+    way a hand-maintained array shadowing an enum let a new `Category` variant
+    reach `--explain` unguarded. The remedy available there — make the guard an
+    exhaustive `match` and let the compiler enforce totality — is **not**
+    available here: `DiagCode` is a newtype over `&'static str`, not an enum, so
+    there is no variant set to match on. What works in this shape is to declare
+    each code once, in a form that expands to both the constant and its catalog
+    entry, so a code with no entry cannot be written at all. The two new
+    catalogs are built that way, and FORM and MANI move onto it in the same
+    change — leaving two namespaces on a guard that cannot fail while two others
+    have one that can is worse than either state on its own.
+
+    The same hole sits behind this decision's own argument for coding the two
+    diagnostics. `RIDL_PROFILE_CODES` in `crates/ridlc/tests/corpus.rs` is a
+    hand-maintained list of code **strings**, with no link to the declared
+    constants at all, so a code missing from it is never checked for a living
+    example and nothing turns red. An implementer could mint RIDL-111 and
+    RIDL-142, add their catalog entries through the new mechanism, omit the
+    showcase entries, and see a green suite — which is the guarantee this
+    decision invokes as its reason for acting. The declare-once mechanism
+    therefore covers the showcase list as well as the catalogs. If that proves
+    impractical — the list carries a `Provoked` discriminator the catalogs have
+    no equivalent of — the fix wave states so explicitly and records the
+    showcase gap as separate work, rather than leaving this decision implying a
+    guarantee that does not hold.
+
+    Two subsystems reached the same idea independently, which is the argument
+    for making it the house pattern — and the sibling case marks how far it has
+    to go to be worth anything. The `tools/diff` fix wave hit this defect in
+    `CATEGORIES` and established that an exhaustive `match`, the obvious remedy,
+    does not close it on its own: rustc forces _an_ arm, not the right one, so a
+    new variant that silently classifies compatible still compiles. What it
+    shipped is a macro **inside the test**, expanding one list of names into
+    both an exhaustive match and the array its assertions iterate, so a new
+    variant stops the file compiling. Its own documentation records what that
+    leaves open — the macro shadows `CATEGORIES` where it should produce it, and
+    generating the array from a single declaration is named there as the
+    structural close it did not reach, since an assertion comparing two lists
+    can still be defeated by editing what feeds it. The catalogs take that step
+    rather than stopping at the shadow: the declaration produces the catalog,
+    not a second list to compare it against.
+
+    _What it binds._ The implementation — minting the two codes, adding the two
+    catalogs and their guard, moving FORM and MANI onto the same mechanism,
+    adding a showcase entry for each new code, and adding the two rows to ridl
+    §16.1 and §16.4 — belongs to a fix-wave PR, not to this ADR. RIDL-111 and
+    RIDL-142 are reserved from the moment this decision is recorded and are not
+    reused if that work is resequenced.
+
 ## Consequences
 
 - Positive: IR v2 reuses IR v1's pre-cut field reservations, so the interaction
@@ -244,13 +582,21 @@ remains the merge gate.
   a different language proves the IR is language-neutral before three more
   profiles depend on it; keeping diff out of `ridlc` preserves the compiler's
   tool-qualification boundary.
-- Negative / accepted: the ridl reference text carries four stale sections until
-  close-out reconciles it (decision 1); `persist` is deferred (decision 3); the
-  service-code numbering anomaly is carried rather than fixed (decision 6); the
-  `final` spelling ships under an open reconsideration (decision 5); the inline
-  `T|E` transport-identity rule (decision 4) is an agent-taken derivation the
+- Negative / accepted: the ridl reference text carries four stale sections from
+  decision 1's supersessions, and three more that the close-out amendments
+  retire — §2.1's suffix table (decision 16), §9.2's equivalence wording
+  (decision 17), and §16.1's RIDL-108 and RIDL-110 rows (decisions 17 and 20) —
+  until close-out reconciles them; `persist` is deferred (decision 3); the
+  service-code numbering anomaly is carried rather than fixed (decision 6), and
+  RIDL-142 grows it from two codes to three (decision 21); the `final` spelling
+  ships under an open reconsideration (decision 5); the inline `T|E`
+  transport-identity rule (decision 4) is an agent-taken derivation the
   registry/backends inherit; `WorkspaceOutput` is two fields wider (decision
-  15), so a consumer now sees the resolver's output and not only the lowered IR.
+  15), so a consumer now sees the resolver's output and not only the lowered IR;
+  and five of the six close-out amendments bind changes under `crates/` —
+  diagnostic messages, a corpus fixture and its snapshots, comment citations,
+  and the new codes and catalogs — so only decision 18 is documentation-only and
+  the close-out is not a documentation-only pass.
 - Review hook: each numbered decision is reversible at the cost of a small
   refactor before a later epic builds on it; the maintainer can veto any of them
   by reopening this ADR.
@@ -263,7 +609,11 @@ remains the merge gate.
 - ADR-0007 — E1 execution decisions (the pattern this follows; decision 11 the
   authority rule inverts for the four supersessions).
 - docs/ROADMAP.md — epic E2 stories and exit criteria.
+- docs/specification/ridl-family-overview.md — the home decision 18 gives the
+  FORM and MANI code tables.
 - docs/specification/ridl-language-reference.md — the language E2 builds.
+- docs/specification/typl-language-reference.md — §2.8, the duration-atom list
+  decision 16 extends.
 - docs/wip/family-general-form.md — §4 (attributes) and §6 (the four
   supersessions decision 1 adopts).
 - docs/wip/ridl-family-concept.md — §9.1 (the `ridl diff` exit-code contract,
