@@ -6,6 +6,9 @@
 pub mod check;
 pub mod docs;
 pub mod expr;
+/// Total evaluation of the guaranteed subset over the exact domains
+/// (expr-core §7) — the engine behind `ridl test`'s property runs (E2.11a).
+pub mod expr_eval;
 pub mod init;
 /// The ridl lint pass (E2.10a) — advisory codes over the interaction layer.
 pub mod lint;

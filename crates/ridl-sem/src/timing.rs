@@ -326,6 +326,17 @@ fn duration_us(text: &str) -> Option<Duration> {
     })
 }
 
+/// The exact microsecond value of a duration literal, for a caller that needs
+/// the number and not the timing-annotation rules around it — the contract
+/// evaluator (expr-core §7: durations are exact microsecond counts).
+///
+/// The unit table stays in one place rather than being duplicated: `1s`,
+/// `1000ms`, and `1000000us` must be one value in the evaluator exactly as they
+/// are in a timing annotation.
+pub(crate) fn duration_literal_us(text: &str) -> Option<ExactValue> {
+    duration_us(text).map(|duration| duration.us)
+}
+
 /// Resolves one written bound token to its exact microsecond value, reporting
 /// an illegal duration against the token's own span.
 ///
