@@ -1,0 +1,52 @@
+// Visibility exposure across the interaction layer (typl §3.3, ridl §14.5,
+// §16.1, §16.4): TYPL-005 from a public `interface`, RIDL-143 from a public
+// `service`.
+//
+// Both escaped the checker entirely until issue #161. TYPL-005 was a step of
+// the typl definition lowering, so the two declaration kinds E2 added —
+// `interface` and `service` — were never checked at all, and a program that
+// crosses the visibility boundary compiled with zero diagnostics. The payload
+// half is the sharper one: the Rust backend then emits a `pub` trait over a
+// `pub(crate)` type, which rustc's `private_interfaces` lint turns into a hard
+// build failure for any consumer building with `-D warnings`.
+//
+// `internal interface Backdoor` below is the control. It names `internal`
+// declarations in every position `Exposed` does and draws nothing, because the
+// rule is about a *public* item naming a package-private one — rejecting it
+// would be the over-rejection failure, not the fix.
+
+package diag.ridl
+
+internal type Handle : integer [0..255]
+internal const HANDLE_MAX = 255
+
+/// The control: package-private in full. An `internal` declaration may name
+/// `internal` declarations freely — both sides generate package-private code
+/// (ADR-0008 decision 7), so nothing leaks.
+internal interface Backdoor {
+  signal handle : Handle @10ms
+  command bind(h: Handle) [
+    require h < HANDLE_MAX
+  ]
+}
+
+/// A public interface over a package-private payload, parameter, return type
+/// and contract constant — four TYPL-005 positions, one per exposure family.
+/// The contract one is included because IR v2 carries a clause as its canonical
+/// source text (ADR-0008 decision 14) and both backends emit that text as data,
+/// so a name in it that an importer cannot resolve leaks exactly as a payload
+/// type does.
+interface Exposed {
+  signal handle : Handle @10ms
+  command bind(h: Handle)
+  query readHandle(): Handle
+  command trim(level: Level) [
+    require level < HANDLE_MAX
+  ]
+}
+
+/// A public service publishing a package-private shape (RIDL-143). This is the
+/// one exposure TYPL-005's remedy cannot reach: a service takes no `internal`
+/// modifier (ridl §14.5), so "mark the exposing declaration internal too" is
+/// not an available fix, which is why it carries its own code.
+service diag.showcase.backdoor : Backdoor

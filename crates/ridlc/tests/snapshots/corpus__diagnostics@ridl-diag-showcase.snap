@@ -182,6 +182,36 @@ error[RIDL-402]: duplicate interaction name `speed`
 16 │   signal speed : Speed @10ms
    │          ^^^^^
 
+error[TYPL-005]: public `Exposed` exposes internal type `Handle` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
+   ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:40:19
+   │
+40 │   signal handle : Handle @10ms
+   │                   ^^^^^^
+
+error[TYPL-005]: public `Exposed` exposes internal type `Handle` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
+   ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:41:19
+   │
+41 │   command bind(h: Handle)
+   │                   ^^^^^^
+
+error[TYPL-005]: public `Exposed` exposes internal type `Handle` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
+   ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:42:23
+   │
+42 │   query readHandle(): Handle
+   │                       ^^^^^^
+
+error[TYPL-005]: public `Exposed` exposes internal constant `HANDLE_MAX` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
+   ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:44:21
+   │
+44 │     require level < HANDLE_MAX
+   │                     ^^^^^^^^^^
+
+error[RIDL-143]: service `diag.showcase.backdoor` publishes internal interface `Backdoor` — a service is a global published contract and takes no `internal` modifier, so its shape must be public: drop `internal` from `Backdoor`, or give the service an inline shape (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:52:34
+   │
+52 │ service diag.showcase.backdoor : Backdoor
+   │                                  ^^^^^^^^
+
 error[RIDL-109]: signal payload type `Serial` has no derivable init value and no `= value` override
   ┌─ tests/corpus/ridl-diag-showcase/main/init.ridl:9:19
   │

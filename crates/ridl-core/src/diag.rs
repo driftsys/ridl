@@ -109,7 +109,10 @@ impl DiagCode {
     pub const TYPL_004: DiagCode = DiagCode("TYPL-004");
     /// A public declaration exposes an `internal` type in its fields, arms,
     /// backing, or a range-bound constant (typl §3.3, §16.1). Emitted by the
-    /// checker (E1.7b).
+    /// checker (E1.7b) over every top-level declaration, the ridl `interface`
+    /// and `service` included: an interaction payload, parameter, return arm,
+    /// or stream element is an exposure position exactly as a struct field is.
+    /// A `service` naming an `internal` interface is RIDL-143 instead.
     pub const TYPL_005: DiagCode = DiagCode("TYPL-005");
     /// Conflicting imports without an alias (typl §16.1, ADR-0002 §2).
     /// Emitted by the resolver (E1.4).
@@ -321,6 +324,13 @@ impl DiagCode {
     /// shape (ridl §14.5, §16.4). Emitted per-package by the checker (E2 task
     /// 8). Kept in the 1xx band per ADR-0008 decision 6 (see RIDL-140).
     pub const RIDL_141: DiagCode = DiagCode("RIDL-141");
+    /// A `service` publishes an `internal` interface (ridl §14.5, §16.4).
+    /// Emitted per-package by the checker's exposure pass. Distinct from
+    /// TYPL-005: what leaks is an interface rather than a type, and a service
+    /// takes no `internal` modifier, so the TYPL-005 remedy — make the
+    /// exposing declaration internal too — does not exist here. Kept in the
+    /// 1xx band beside RIDL-140/-141 per ADR-0008 decision 6.
+    pub const RIDL_143: DiagCode = DiagCode("RIDL-143");
 
     // --- MANI manifest (0xx) — ADR-0007 decision 2, ADR-0002 §4 ---
     /// The `ridl.toml` text is not valid TOML.

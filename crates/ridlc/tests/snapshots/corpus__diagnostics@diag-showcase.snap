@@ -243,7 +243,7 @@ error[TYPL-106]: invalid regular expression syntax
 42 │ const BAD_REGEX = /[/
    │                   ^^^
 
-error[TYPL-005]: public `Level` exposes internal constant `SECRET_MAX`
+error[TYPL-005]: public `Level` exposes internal constant `SECRET_MAX` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
    ┌─ tests/corpus/diag-showcase/scalars.typl:46:26
    │
 46 │ type Level : integer [0..SECRET_MAX]

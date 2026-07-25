@@ -5,15 +5,32 @@
 // (`Interface.visibility = 2`). What the backends do with it is the point of
 // this file: it is what caught them dropping `internal` entirely. See
 // `veh-cluster/NOTES`, "`internal` was dropped by both backends".
+//
+// It is also the corpus's **legal** case for the visibility rule TYPL-005 states
+// (issue #161): `WheelDiagnostics` is package-private and names a
+// package-private payload in every position, which must keep compiling. The
+// checker leaves it alone and the generated Rust is `pub(crate)` on both sides,
+// so `veh_cluster_generated_rust_compiles_with_rustc` — which denies
+// `private_interfaces` — is the proof rather than a snapshot comparison.
 
 package veh.cluster
+
+/// A package-private payload type, so the interaction layer's legal
+/// `internal`-over-`internal` case is exercised inside one package. The
+/// cross-package counterpart is impossible by construction: a foreign
+/// `internal` name never resolves (typl §3.3).
+internal type RawTickCount : integer [0..65535]
 
 /// A package-private contract shape: realized inside this package, never part
 /// of the cross-package surface.
 internal interface WheelDiagnostics {
-  signal wheelTicks : FanLevel @[100ms..1s]
+  signal wheelTicks : RawTickCount @[100ms..1s]
   event slipDetected : FilterState @[50ms..500ms]
-  query readTicks(): FanLevel
+  query readTicks(): RawTickCount
+  // Appended, so the ordinals above do not move (ridl §11). A parameter is its
+  // own exposure position: it is one of the positions rustc reported when a
+  // public interface carried an `internal` payload.
+  command resetTicks(seed: RawTickCount)
 }
 
 /// A public shape beside it, so the generated output shows the two side by

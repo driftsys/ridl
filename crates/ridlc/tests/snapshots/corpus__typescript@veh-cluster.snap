@@ -258,6 +258,20 @@ export function initFaultPageResult(): FaultPageResult {
 }
 
 /**
+ * A package-private payload type, so the interaction layer's legal
+ * `internal`-over-`internal` case is exercised inside one package. The
+ * cross-package counterpart is impossible by construction: a foreign
+ * `internal` name never resolves (typl §3.3).
+ *
+ * @range [0..65535]
+ */
+type RawTickCount = number & { readonly __ridl: 'veh.cluster.RawTickCount' };
+
+function initRawTickCount(): RawTickCount {
+  return 0 as RawTickCount;
+}
+
+/**
  * @range [0..7]
  */
 export type FanLevel = number & { readonly __ridl: 'veh.cluster.FanLevel' };
@@ -632,7 +646,7 @@ interface WheelDiagnosticsConsumer {
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
-  wheelTicks: SignalHandle<FanLevel>;
+  wheelTicks: SignalHandle<RawTickCount>;
   /**
    * @ordinal 2
    */
@@ -641,7 +655,18 @@ interface WheelDiagnosticsConsumer {
    * @ordinal 3
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
-  readTicks(): Promise<FanLevel>;
+  readTicks(): Promise<RawTickCount>;
+  /**
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @ordinal 4
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  resetTicks(seed: RawTickCount): Promise<void>;
 }
 
 /**
@@ -659,7 +684,7 @@ interface WheelDiagnosticsProvider {
    * @ordinal 1
    * @init 0
    */
-  wheelTicks: { publish(value: FanLevel): void };
+  wheelTicks: { publish(value: RawTickCount): void };
   /**
    * @ordinal 2
    */
@@ -668,7 +693,18 @@ interface WheelDiagnosticsProvider {
    * @ordinal 3
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
-  readTicks(): Promise<FanLevel>;
+  readTicks(): Promise<RawTickCount>;
+  /**
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @ordinal 4
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  resetTicks(seed: RawTickCount): Promise<void>;
 }
 
 /**

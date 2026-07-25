@@ -862,6 +862,10 @@ service veh.powertrain.motor : MotorControl
   flat global namespace, the SSOT every component agrees on. This is what makes
   `veh.adas.cruise.engaged` an unambiguous system-wide address (the
   VSS/uProtocol model).
+- A service is **always public**: it takes no `internal` modifier, and its shape
+  must be public too. Publishing an `internal` interface at a global address is
+  RIDL-143 — the address would name a contract no importer can implement. Drop
+  `internal` from the interface, or give the service an inline shape.
 - A service may also declare an **inline shape** instead of naming an interface,
   for a one-off global contract not worth a reusable interface:
 
@@ -969,9 +973,19 @@ never renumbered or reused).
 | RIDL-406 | payload field duplicating envelope metadata — publication time or frame counter (§3.1); domain time distinct from transport time is legitimate | info     |
 | RIDL-140 | duplicate `service` name across the system — the service catalog is a flat global namespace                                                    | error    |
 | RIDL-141 | `service` names a type that is not an `interface`, and has no inline shape                                                                     | error    |
+| RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                      | error    |
 
 (Reorder/insert/delete detection is `ridl-diff`'s jurisdiction, not the
 compiler's — typl §7.4 discussion applies.)
+
+A public `interface` exposing an `internal` typl declaration is **TYPL-005**
+(typl §3.3), not a RIDL code: it is the same rule the vocabulary layer states,
+applied to the interaction positions — a signal, event or `final` payload, a
+command or query parameter, a query return, a tuple-return field, an array or
+stream element, either arm of an inline `T | E`, and a constant or enum type
+named by a `require`/`ensure` clause. A `service` is RIDL-143 instead, because
+what leaks there is an interface rather than a type and a service takes no
+`internal` modifier.
 
 ---
 

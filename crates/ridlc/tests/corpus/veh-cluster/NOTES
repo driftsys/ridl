@@ -50,7 +50,14 @@ and §14.5 needs both service forms exercised.
   `interface WheelSummary`, so the generated output shows both side by side.
   This is the file that caught the visibility defect described under
   "`internal` was dropped by both backends" below; the snapshots now pin the
-  repaired output.
+  repaired output. `WheelDiagnostics` also names `internal type RawTickCount`
+  as a payload, a parameter and a return, which makes it the **legal** case of
+  the exposure rule issue #161 closed: an `internal` interface over an
+  `internal` payload must keep compiling, and both sides must generate
+  `pub(crate)`. `rustc_accepts` denies `private_interfaces` by name, so that is
+  a compile proof rather than a snapshot comparison — with the payload public,
+  as it was before, the same proof passes even with the #160 defect back in
+  place.
 - **The generated code compiles, in both backends.**
   `veh_cluster_generated_rust_compiles_with_rustc` composes the two packages as
   sibling modules and runs `rustc` over the result;
@@ -143,13 +150,20 @@ deliberate: the first report of the defect named only the two faces and the
 timing constant, and the contracts constant was found by enumerating what each
 backend generates rather than by reading the report.
 
-Two residues #160 could not reach, since they are checker behaviour rather than
-codegen — tracked as **issue #161**. TYPL-005 is applied to typl declarations
-only, so a public `service` may publish an `internal` interface, and a public
-`interface` may carry an `internal` payload type, both undiagnosed. The second
-is the sharper one: it makes the Rust backend emit a `pub` trait over a
+Two residues #160 could not reach, since they were checker behaviour rather than
+codegen — issue **#161, now closed**. TYPL-005 ran over typl declarations only,
+so a public `service` could publish an `internal` interface and a public
+`interface` could carry an `internal` payload type, both undiagnosed. The second
+was the sharper one: it made the Rust backend emit a `pub` trait over a
 `pub(crate)` type, which draws rustc's `private_interfaces` lint and becomes a
 hard build failure for any consumer building with `-D warnings`.
+
+The repair moved the rule out of the typl definition lowering and into a
+whole-file pass over the top-level items, so no declaration kind can escape it
+by being added later; the service half took its own code, RIDL-143, because a
+service cannot be made `internal` and so TYPL-005's second remedy does not
+exist for it. The refusals are provoked in `ridl-diag-showcase`; the legal case
+is here, in `cluster/internal-shape.ridl`.
 
 ### An inline shape carries no `Interface.visibility`
 
