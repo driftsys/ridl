@@ -1155,10 +1155,14 @@ name = "ridl"
 version = "0.0.0"
 dependencies = [
  "clap",
+ "num-bigint",
+ "num-rational",
+ "proptest",
  "ridl-core",
  "ridl-diff",
  "ridl-fmt",
  "ridl-ir",
+ "ridl-sem",
  "ridl-syntax",
  "ridlc",
  "rowan",

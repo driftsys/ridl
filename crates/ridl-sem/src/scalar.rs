@@ -235,6 +235,23 @@ pub fn enumset_width(highest_bit: u32) -> IntWidth {
     }
 }
 
+/// Whether `value` lies within the closed range `[min..max]`, treating an
+/// absent bound as unbounded on that side.
+///
+/// This is **the** range-membership rule of the toolchain: the checker validates
+/// every declared init and constant against a range through it (TYPL-109,
+/// RIDL-110), and the E2.11a property runner drives the boundary and violation
+/// corpora against the same function. Sharing one definition is what makes the
+/// self-corpora meaningful — a bug in this rule surfaces as a failed corpus run
+/// rather than being reimplemented identically on both sides and cancelling out.
+pub fn range_accepts(
+    value: &ExactValue,
+    min: Option<&ExactValue>,
+    max: Option<&ExactValue>,
+) -> bool {
+    min.is_none_or(|min| value.0 >= min.0) && max.is_none_or(|max| value.0 <= max.0)
+}
+
 /// Validates a range's ordering: `Some(MinGreaterThanMax)` (TYPL-104) when
 /// `min > max`, `None` otherwise.
 pub fn validate_range(min: &ExactValue, max: &ExactValue) -> Option<DiagKind> {

@@ -114,6 +114,51 @@ pub fn violations(r: &IntRange) -> Vec<i64> {
     out
 }
 
+/// The boundary samples of a float range, in table order — `min`, `min+step`,
+/// `max-step`, `max` — filtered to the values inside `[min..max]` and
+/// deduplicated while preserving order.
+///
+/// The float analogue of [`boundary_values`], in the exact domain rather than
+/// through `f64`: these are the values a range must accept, and the endpoints
+/// are where a bound that is off by one step shows up. A range with no declared
+/// step steps by one, which keeps the corpus non-empty for an unquantized
+/// range.
+pub fn float_boundary_values(r: &FloatRange) -> Vec<ExactValue> {
+    let step = effective_step(r);
+    let inside = |value: &BigRational| value >= &r.min.0 && value <= &r.max.0;
+    let mut out: Vec<ExactValue> = Vec::new();
+    for candidate in [
+        r.min.0.clone(),
+        &r.min.0 + &step,
+        &r.max.0 - &step,
+        r.max.0.clone(),
+    ] {
+        if inside(&candidate) && !out.iter().any(|held| held.0 == candidate) {
+            out.push(ExactValue(candidate));
+        }
+    }
+    out
+}
+
+/// The two just-outside samples of a float range — `min-step` and `max+step` —
+/// the values it must reject. The float analogue of [`violations`]; an absent
+/// step is one, as in [`float_boundary_values`].
+pub fn float_violations(r: &FloatRange) -> Vec<ExactValue> {
+    let step = effective_step(r);
+    vec![ExactValue(&r.min.0 - &step), ExactValue(&r.max.0 + &step)]
+}
+
+/// The range's declared step, or one when it declares none. A positive step is
+/// guaranteed by the checker (TYPL-105); a non-positive one here falls back to
+/// one so the corpora stay outside the range rather than collapsing onto it.
+fn effective_step(r: &FloatRange) -> BigRational {
+    let one = BigRational::from_integer(BigInt::from(1));
+    match &r.step {
+        Some(step) if step.0.numer().sign() == Sign::Plus => step.0.clone(),
+        _ => one,
+    }
+}
+
 /// `floor((max - min) / step)` as a saturating `u64` — the highest grid index
 /// `n` whose value `min + n·step` stays at or below `max`. `step` is positive
 /// (the checker rejects a non-positive step as TYPL-105 before a value is
@@ -185,6 +230,123 @@ mod tests {
         IntRange {
             min: exact(min),
             max: exact(max),
+        }
+    }
+
+    /// A float range with an optional step, from decimal text.
+    fn float_range(min: &str, max: &str, step: Option<&str>) -> FloatRange {
+        FloatRange {
+            min: exact(min),
+            max: exact(max),
+            step: step.map(exact),
+        }
+    }
+
+    /// The corpus as decimal strings, which is how the values are compared:
+    /// asserting the VALUES is the point — the sizes alone are insensitive to
+    /// the step on any range wider than one.
+    fn decimals(values: Vec<ExactValue>) -> Vec<String> {
+        values.iter().map(ExactValue::to_decimal_string).collect()
+    }
+
+    #[test]
+    fn float_boundary_values_step_by_the_declared_step() {
+        // [0.0..0.5 step 0.1] → min, min+step, max-step, max.
+        assert_eq!(
+            decimals(float_boundary_values(&float_range(
+                "0.0",
+                "0.5",
+                Some("0.1")
+            ))),
+            vec!["0", "0.1", "0.4", "0.5"]
+        );
+        // A different step moves the two inner values, which is what a
+        // size-only assertion cannot see. Here min+step and max-step coincide
+        // at 0.25 and the dedup collapses them, so the corpus is three values.
+        assert_eq!(
+            decimals(float_boundary_values(&float_range(
+                "0.0",
+                "0.5",
+                Some("0.25")
+            ))),
+            vec!["0", "0.25", "0.5"]
+        );
+    }
+
+    #[test]
+    fn float_boundary_values_fall_back_to_one_without_a_step() {
+        assert_eq!(
+            decimals(float_boundary_values(&float_range("0.0", "10.0", None))),
+            vec!["0", "1", "9", "10"]
+        );
+    }
+
+    #[test]
+    fn float_boundary_values_dedup_and_stay_inside_a_narrow_range() {
+        // A step wider than the span leaves only the two bounds: min+step and
+        // max-step both fall outside and are filtered.
+        assert_eq!(
+            decimals(float_boundary_values(&float_range(
+                "0.0",
+                "1.0",
+                Some("5.0")
+            ))),
+            vec!["0", "1"]
+        );
+        // A single-value range collapses to that value.
+        assert_eq!(
+            decimals(float_boundary_values(&float_range(
+                "2.5",
+                "2.5",
+                Some("0.5")
+            ))),
+            vec!["2.5"]
+        );
+    }
+
+    #[test]
+    fn float_violations_are_one_declared_step_outside_each_bound() {
+        assert_eq!(
+            decimals(float_violations(&float_range("0.0", "0.5", Some("0.1")))),
+            vec!["-0.1", "0.6"]
+        );
+        // The step is read, not assumed: a tenth-step range and a half-step
+        // range over the same bounds have different violations.
+        assert_eq!(
+            decimals(float_violations(&float_range("0.0", "0.5", Some("0.5")))),
+            vec!["-0.5", "1"]
+        );
+        // Without a declared step the fallback is one.
+        assert_eq!(
+            decimals(float_violations(&float_range("0.0", "10.0", None))),
+            vec!["-1", "11"]
+        );
+    }
+
+    #[test]
+    fn float_violations_lie_outside_the_range_they_came_from() {
+        // The property that makes the corpus a test rather than a formality.
+        for (min, max, step) in [
+            ("0.0", "0.5", Some("0.1")),
+            ("-40.0", "125.0", Some("0.1")),
+            ("0.0", "250.0", Some("0.5")),
+            ("0.0", "1.0", None),
+        ] {
+            let range = float_range(min, max, step);
+            for value in float_violations(&range) {
+                assert!(
+                    value.0 < range.min.0 || value.0 > range.max.0,
+                    "violation {} is inside [{min}..{max}]",
+                    value.to_decimal_string()
+                );
+            }
+            for value in float_boundary_values(&range) {
+                assert!(
+                    value.0 >= range.min.0 && value.0 <= range.max.0,
+                    "boundary {} is outside [{min}..{max}]",
+                    value.to_decimal_string()
+                );
+            }
         }
     }
 

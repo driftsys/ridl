@@ -37,6 +37,12 @@ compile:
     fi
 
 # Run the Rust workspace test suite (same defensive guard as `compile`).
+#
+# This carries the `ridl test` property runs (E2.11a): a `ridl` integration test
+# drives `ridl test` over the reviewed corpus workspace and asserts exit 0, so
+# the range self-corpora and the contract sampling run in the local gate rather
+# than in a separate recipe. Run `ridl test <path>` directly to see the report
+# for a workspace of your own.
 test:
     #!/usr/bin/env bash
     set -euo pipefail

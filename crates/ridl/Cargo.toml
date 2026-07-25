@@ -8,13 +8,18 @@ publish = false
 
 [dependencies]
 clap.workspace = true
+num-bigint.workspace = true
+num-rational.workspace = true
+# `ridl test` (E2.11a) draws its samples from the E1.18 range strategies, so the
+# property runner needs proptest's seeded `TestRunner`. This is the CLI binary,
+# which the E1.19 wasm check does not build, so nothing here reaches that gate.
+proptest = { workspace = true, features = ["std"] }
 ridl-core = { path = "../ridl-core" }
 ridl-diff = { path = "../../tools/diff" }
 ridl-fmt = { path = "../../tools/fmt" }
 ridl-ir = { path = "../ridl-ir" }
+ridl-sem = { path = "../ridl-sem" }
 ridl-syntax = { path = "../ridl-syntax" }
 ridlc = { path = "../ridlc" }
 rowan.workspace = true
-
-[dev-dependencies]
 serde_json.workspace = true
