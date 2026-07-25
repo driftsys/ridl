@@ -329,7 +329,10 @@ impl DiagCode {
     /// TYPL-005: what leaks is an interface rather than a type, and a service
     /// takes no `internal` modifier, so the TYPL-005 remedy — make the
     /// exposing declaration internal too — does not exist here. Kept in the
-    /// 1xx band beside RIDL-140/-141 per ADR-0008 decision 6.
+    /// 1xx band beside RIDL-140/-141 per ADR-0008 decision 6. RIDL-111 and
+    /// RIDL-142 are reserved by decision 21 and not yet implemented, so 143 is
+    /// the next free code; decision 13's allocation ledger needs the ninth
+    /// entry (issue #169).
     pub const RIDL_143: DiagCode = DiagCode("RIDL-143");
 
     // --- MANI manifest (0xx) — ADR-0007 decision 2, ADR-0002 §4 ---

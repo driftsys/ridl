@@ -204,6 +204,13 @@ pub struct ExprRefs {
     pub signals: Vec<String>,
     pub uses_result: bool,
     pub consts: Vec<String>,
+    /// The enum types named as the head of an `Enum.MEMBER` access. Not a
+    /// *read* — an enum type has no value, so it is absent from the observer
+    /// stub's read set — but it is a package declaration the clause names, and
+    /// the clause is published verbatim, so the visibility check
+    /// ([`crate::check`], TYPL-005) needs it. Kept here rather than recomputed
+    /// by the caller so that one walk decides what a clause binds.
+    pub enum_types: Vec<String>,
 }
 
 /// The canonical reference of a resolved symbol: always the fully qualified
@@ -948,7 +955,16 @@ fn walk_refs(expr: &ast::Expr, scope: &ContractScope, refs: &mut ExprRefs) {
                 .member_token()
                 .is_some_and(|token| is_screaming_snake(token.text()))
                 && enum_type_head(&base, scope).is_some();
-            if !is_enum_access {
+            if is_enum_access {
+                // The head names an enum type. It is not a read, but it is a
+                // package declaration this clause names — recorded for the
+                // visibility check.
+                if let ast::Expr::Path(path) = &base
+                    && let Some(token) = path.name_token()
+                {
+                    push_once(&mut refs.enum_types, token.text());
+                }
+            } else {
                 walk_refs(&base, scope, refs);
             }
         }

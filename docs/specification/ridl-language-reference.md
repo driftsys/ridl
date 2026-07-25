@@ -982,10 +982,15 @@ A public `interface` exposing an `internal` typl declaration is **TYPL-005**
 (typl §3.3), not a RIDL code: it is the same rule the vocabulary layer states,
 applied to the interaction positions — a signal, event or `final` payload, a
 command or query parameter, a query return, a tuple-return field, an array or
-stream element, either arm of an inline `T | E`, and a constant or enum type
-named by a `require`/`ensure` clause. A `service` is RIDL-143 instead, because
-what leaks there is an interface rather than a type and a service takes no
-`internal` modifier.
+stream element, either arm of an inline `T | E`, a collection length bound, and
+a constant or enum type named by a `require`/`ensure` clause. A `service` is
+RIDL-143 instead, because what leaks there is an interface rather than a type
+and a service takes no `internal` modifier.
+
+The two clause kinds do not expose the same names, because they do not bind the
+same names: a `require` reads the interface's own signals (§13), so a signal
+spelled like a package constant shadows it, while an `ensure` reads no signal
+and the same spelling is the constant.
 
 ---
 

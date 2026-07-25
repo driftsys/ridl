@@ -18,30 +18,52 @@
 package diag.ridl
 
 internal type Handle : integer [0..255]
-internal const HANDLE_MAX = 255
+internal const HANDLE_MAX = 7
+internal const HANDLE_SLOTS = 4
 
 /// The control: package-private in full. An `internal` declaration may name
 /// `internal` declarations freely — both sides generate package-private code
-/// (ADR-0008 decision 7), so nothing leaks.
+/// (ADR-0008 decision 7), so nothing leaks. It names an `internal` constant
+/// from a clause and an `internal` bound from an array, so the two positions
+/// found late are controlled here as well as provoked below.
 internal interface Backdoor {
   signal handle : Handle @10ms
-  command bind(h: Handle) [
-    require h < HANDLE_MAX
+  signal HANDLE_MAX : Level @10ms
+  final slots : [Level; 1..HANDLE_SLOTS]
+  command trim(level: Level) [
+    require level < HANDLE_MAX
+  ]
+  query drain(): Level [
+    ensure result < HANDLE_MAX
   ]
 }
 
-/// A public interface over a package-private payload, parameter, return type
-/// and contract constant — four TYPL-005 positions, one per exposure family.
-/// The contract one is included because IR v2 carries a clause as its canonical
-/// source text (ADR-0008 decision 14) and both backends emit that text as data,
-/// so a name in it that an importer cannot resolve leaks exactly as a payload
-/// type does.
+/// A public interface over a package-private payload, parameter, return type,
+/// collection length bound and contract constant — one TYPL-005 per exposure
+/// family. The contract ones are included because IR v2 carries a clause as its
+/// canonical source text (ADR-0008 decision 14) and both backends emit that text
+/// as data, so a name in it that an importer cannot resolve leaks exactly as a
+/// payload type does.
+///
+/// The signal `HANDLE_MAX` deliberately collides with the constant of the same
+/// name, because the two clause kinds do not bind the same names: a `require`
+/// sees the interface's own signals (ridl §13) and an `ensure` does not.
+/// `trim`'s `require` reads the *signal* and exposes nothing; `drain`'s
+/// `ensure` reads the *constant*, and does. A checker that treats the two
+/// scopes alike is silently wrong in one direction or the other, and only a
+/// pair like this tells them apart — the first version of this fix re-derived
+/// the binding order from the syntax and accepted the `ensure` half in silence.
 interface Exposed {
   signal handle : Handle @10ms
+  signal HANDLE_MAX : Level @10ms
+  final slots : [Level; 1..HANDLE_SLOTS]
   command bind(h: Handle)
   query readHandle(): Handle
   command trim(level: Level) [
     require level < HANDLE_MAX
+  ]
+  query drain(): Level [
+    ensure result < HANDLE_MAX
   ]
 }
 

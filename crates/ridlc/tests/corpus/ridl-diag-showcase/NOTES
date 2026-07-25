@@ -34,15 +34,24 @@ never at risk — but "never at risk" is a claim about today's implementation, a
 the file is what keeps it true.
 
 `main/exposure.ridl` covers the visibility boundary (issue #161): TYPL-005 from
-a public `interface` over an `internal` payload, parameter, return type and
-contract constant, and RIDL-143 from a public `service` publishing an `internal`
-interface. It carries `internal interface Backdoor` as the control — the same
-`internal` names in the same positions, drawing nothing — because the rule is
-about a *public* item naming a package-private one, and the failure worth
-guarding against in the other direction is rejecting a correct file. The legal
-case is compiled rather than only checked: `veh-cluster` holds an `internal`
-interface over an `internal` payload, and its rustc proof denies
-`private_interfaces` by name.
+a public `interface` over an `internal` payload, parameter, return type,
+collection length bound and contract constant, and RIDL-143 from a public
+`service` publishing an `internal` interface. It carries `internal interface
+Backdoor` as the control — the same `internal` names in the same positions,
+drawing nothing — because the rule is about a *public* item naming a
+package-private one, and the failure worth guarding against in the other
+direction is rejecting a correct file. The legal case is compiled rather than
+only checked: `veh-cluster` holds an `internal` interface over an `internal`
+payload, and its rustc proof denies `private_interfaces` by name.
+
+The file also holds the pair that separates the two clause kinds. A `require`
+sees the interface's own signals (ridl §13) and an `ensure` does not, so the
+signal `HANDLE_MAX` deliberately collides with the constant of that name:
+`trim`'s `require` reads the signal and exposes nothing, `drain`'s `ensure`
+reads the constant and does. The first version of the #161 fix re-derived the
+binding order from the syntax instead of asking the resolver, matched a signal
+whatever the clause kind, and accepted the `ensure` half in silence — a defect
+review caught and no single-clause fixture could have. Keep both clauses.
 
 ## Codes exercised here
 
