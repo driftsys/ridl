@@ -48,6 +48,7 @@ export type Result<T, E> =
  */
 export interface CruiseControlConsumer {
   /**
+   * @ordinal 1
    * @init false
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -63,6 +64,7 @@ export interface CruiseControlConsumer {
  */
 export interface CruiseControlProvider {
   /**
+   * @ordinal 1
    * @init false
    */
   engaged: { publish(value: Engaged): void };
@@ -106,6 +108,7 @@ export const cruiseControlContracts = [] as const;
  */
 export interface Service_veh_adas_logsConsumer {
   /**
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   tailLogs(pattern: AsyncIterable<string>): AsyncIterable<LogLine>;
@@ -129,6 +132,7 @@ export interface Service_veh_adas_logsConsumer {
  */
 export interface Service_veh_adas_logsProvider {
   /**
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   tailLogs(pattern: AsyncIterable<string>): AsyncIterable<LogLine>;

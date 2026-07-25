@@ -50,11 +50,13 @@ export type Result<T, E> =
  */
 interface HiddenConsumer {
   /**
+   * @ordinal 1
    * @init 0.0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   rawTicks: SignalHandle<veh_common.Speed>;
   /**
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getBounds(): Promise<{ min: veh_common.Speed; max: veh_common.Speed }>;
@@ -69,10 +71,12 @@ interface HiddenConsumer {
  */
 interface HiddenProvider {
   /**
+   * @ordinal 1
    * @init 0.0
    */
   rawTicks: { publish(value: veh_common.Speed): void };
   /**
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getBounds(): Promise<{ min: veh_common.Speed; max: veh_common.Speed }>;
@@ -109,11 +113,13 @@ const hiddenContracts = [
  */
 export interface ShownConsumer {
   /**
+   * @ordinal 1
    * @init 0.0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   cabinTemp: SignalHandle<veh_common.Speed>;
   /**
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readSummary(): Promise<veh_common.Speed>;
@@ -128,10 +134,12 @@ export interface ShownConsumer {
  */
 export interface ShownProvider {
   /**
+   * @ordinal 1
    * @init 0.0
    */
   cabinTemp: { publish(value: veh_common.Speed): void };
   /**
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readSummary(): Promise<veh_common.Speed>;
@@ -178,11 +186,13 @@ export const shownContracts = [
  */
 export interface Service_veh_cluster_diagConsumer {
   /**
+   * @ordinal 1
    * @init 0.0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   cabinTemp: SignalHandle<veh_common.Speed>;
   /**
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readSummary(): Promise<veh_common.Speed>;
@@ -207,10 +217,12 @@ export interface Service_veh_cluster_diagConsumer {
  */
 export interface Service_veh_cluster_diagProvider {
   /**
+   * @ordinal 1
    * @init 0.0
    */
   cabinTemp: { publish(value: veh_common.Speed): void };
   /**
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readSummary(): Promise<veh_common.Speed>;

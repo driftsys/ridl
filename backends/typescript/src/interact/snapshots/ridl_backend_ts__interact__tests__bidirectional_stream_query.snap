@@ -50,6 +50,7 @@ export interface VehicleStatusConsumer {
   /**
    * Full-duplex processing pipeline
    *
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   pipe(input: AsyncIterable<SensorSample>, tag: AsyncIterable<string>): AsyncIterable<ProcessedSample>;
@@ -66,6 +67,7 @@ export interface VehicleStatusProvider {
   /**
    * Full-duplex processing pipeline
    *
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   pipe(input: AsyncIterable<SensorSample>, tag: AsyncIterable<string>): AsyncIterable<ProcessedSample>;

@@ -51,6 +51,7 @@ export type Result<T, E> =
  */
 export interface VehicleStatusConsumer {
   /**
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getMinMax(window: ridl_std.Duration): Promise<{ min: veh_common.Speed; max: veh_common.Speed }>;
@@ -65,6 +66,7 @@ export interface VehicleStatusConsumer {
  */
 export interface VehicleStatusProvider {
   /**
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getMinMax(window: ridl_std.Duration): Promise<{ min: veh_common.Speed; max: veh_common.Speed }>;

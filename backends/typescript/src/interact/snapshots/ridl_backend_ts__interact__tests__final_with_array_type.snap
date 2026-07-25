@@ -49,6 +49,9 @@ export type Result<T, E> =
  * subscribed, commands and queries are called, finals are read.
  */
 export interface VehicleStatusConsumer {
+  /**
+   * @ordinal 1
+   */
   readonly capabilities: readonly ridl_std.Label[];
 }
 

@@ -356,11 +356,14 @@ export type Result<T, E> =
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
  * subscribed, commands and queries are called, finals are read.
+ *
+ * @reserved ordinal 6 (`resetCounters`) — retired, never reused.
  */
 export interface VehicleStatusConsumer {
   /**
    * Current vehicle speed — isochronous, drives rmdl clocks downstream
    *
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -368,6 +371,7 @@ export interface VehicleStatusConsumer {
   /**
    * Engine temperature — change-driven, 100ms freshness SLO
    *
+   * @ordinal 2
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -375,12 +379,14 @@ export interface VehicleStatusConsumer {
   /**
    * Active warnings — last-value delivered on subscribe (§4.4)
    *
-   * @init 
+   * @ordinal 3
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   warnings: SignalHandle<veh_common.WarningFlags>;
   /**
    * Raised on every door state change; stale after 500ms
+   *
+   * @ordinal 4
    */
   doorOpened: EventHandle<DoorPayload>;
   /**
@@ -392,28 +398,38 @@ export interface VehicleStatusConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 5
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setGear(position: veh_common.GearPosition): Promise<void>;
   /**
    * Sliding-window average
    *
+   * @ordinal 7
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getAverageSpeed(window: ridl_std.Duration): Promise<veh_common.Speed>;
   /**
    * Fault history as a finite stream
    *
+   * @ordinal 8
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   streamFaults(filter: DiagFilter): AsyncIterable<FaultEvent>;
   /**
    * Paged fault snapshot — fallible query via result union (§10.1)
    *
+   * @ordinal 9
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getFaultPage(filter: DiagFilter): Promise<FaultPageResult>;
+  /**
+   * @ordinal 10
+   */
   readonly softwareVersion: ridl_std.Version;
+  /**
+   * @ordinal 11
+   */
   readonly capabilities: readonly ridl_std.Label[];
 }
 
@@ -430,23 +446,27 @@ export interface VehicleStatusProvider {
   /**
    * Current vehicle speed — isochronous, drives rmdl clocks downstream
    *
+   * @ordinal 1
    * @init 0
    */
   currentSpeed: { publish(value: veh_common.Speed): void };
   /**
    * Engine temperature — change-driven, 100ms freshness SLO
    *
+   * @ordinal 2
    * @init 0
    */
   engineTemp: { publish(value: veh_common.Temperature): void };
   /**
    * Active warnings — last-value delivered on subscribe (§4.4)
    *
-   * @init 
+   * @ordinal 3
    */
   warnings: { publish(value: veh_common.WarningFlags): void };
   /**
    * Raised on every door state change; stale after 500ms
+   *
+   * @ordinal 4
    */
   doorOpened: { publish(occurrence: DoorPayload): void };
   /**
@@ -458,24 +478,28 @@ export interface VehicleStatusProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 5
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setGear(position: veh_common.GearPosition): Promise<void>;
   /**
    * Sliding-window average
    *
+   * @ordinal 7
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getAverageSpeed(window: ridl_std.Duration): Promise<veh_common.Speed>;
   /**
    * Fault history as a finite stream
    *
+   * @ordinal 8
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   streamFaults(filter: DiagFilter): AsyncIterable<FaultEvent>;
   /**
    * Paged fault snapshot — fallible query via result union (§10.1)
    *
+   * @ordinal 9
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getFaultPage(filter: DiagFilter): Promise<FaultPageResult>;
@@ -517,19 +541,25 @@ export const vehicleStatusContracts = [
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
  * subscribed, commands and queries are called, finals are read.
+ *
+ * @reserved ordinal 2 (`legacyWheelPhase`) — retired, never reused.
+ * @reserved ordinal 4 — retired, never reused.
  */
 export interface WheelHistoryConsumer {
   /**
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   wheelTicks: SignalHandle<FanLevel>;
   /**
+   * @ordinal 3
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   wheelTemp: SignalHandle<veh_common.Temperature>;
   /**
+   * @ordinal 5
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -548,14 +578,17 @@ export interface WheelHistoryConsumer {
  */
 export interface WheelHistoryProvider {
   /**
+   * @ordinal 1
    * @init 0
    */
   wheelTicks: { publish(value: FanLevel): void };
   /**
+   * @ordinal 3
    * @init 0
    */
   wheelTemp: { publish(value: veh_common.Temperature): void };
   /**
+   * @ordinal 5
    * @init 0
    */
   wheelSlipRate: { publish(value: veh_common.Ratio): void };
@@ -595,12 +628,17 @@ export const wheelHistoryContracts = [] as const;
  */
 interface WheelDiagnosticsConsumer {
   /**
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   wheelTicks: SignalHandle<FanLevel>;
+  /**
+   * @ordinal 2
+   */
   slipDetected: EventHandle<FilterState>;
   /**
+   * @ordinal 3
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readTicks(): Promise<FanLevel>;
@@ -618,11 +656,16 @@ interface WheelDiagnosticsConsumer {
  */
 interface WheelDiagnosticsProvider {
   /**
+   * @ordinal 1
    * @init 0
    */
   wheelTicks: { publish(value: FanLevel): void };
+  /**
+   * @ordinal 2
+   */
   slipDetected: { publish(occurrence: FilterState): void };
   /**
+   * @ordinal 3
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readTicks(): Promise<FanLevel>;
@@ -661,6 +704,7 @@ const wheelDiagnosticsContracts = [] as const;
  */
 export interface WheelSummaryConsumer {
   /**
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -679,6 +723,7 @@ export interface WheelSummaryConsumer {
  */
 export interface WheelSummaryProvider {
   /**
+   * @ordinal 1
    * @init 0
    */
   wheelHealth: { publish(value: FanLevel): void };
@@ -720,13 +765,20 @@ export const wheelSummaryContracts = [] as const;
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
  * subscribed, commands and queries are called, finals are read.
+ *
+ * @reserved ordinal 2 (`legacyTicks`) — retired, never reused.
+ * @reserved ordinal 3 — retired, never reused.
  */
 export interface Service_veh_cluster_wheelsConsumer {
   /**
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   ticks: SignalHandle<FanLevel>;
+  /**
+   * @ordinal 4
+   */
   slipped: EventHandle<FilterState>;
 }
 
@@ -749,9 +801,13 @@ export interface Service_veh_cluster_wheelsConsumer {
  */
 export interface Service_veh_cluster_wheelsProvider {
   /**
+   * @ordinal 1
    * @init 0
    */
   ticks: { publish(value: FanLevel): void };
+  /**
+   * @ordinal 4
+   */
   slipped: { publish(occurrence: FilterState): void };
 }
 
@@ -792,11 +848,14 @@ export const service_veh_cluster_wheelsContracts = [] as const;
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
  * subscribed, commands and queries are called, finals are read.
+ *
+ * @reserved ordinal 8 (`setEcoMode`) — retired, never reused.
  */
 export interface Service_veh_hvac_cabinConsumer {
   /**
    * Strict periodic — signal only (ridl §9).
    *
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -804,6 +863,7 @@ export interface Service_veh_hvac_cabinConsumer {
   /**
    * Range with both bounds.
    *
+   * @ordinal 2
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -811,6 +871,7 @@ export interface Service_veh_hvac_cabinConsumer {
   /**
    * Range, lower bound only — no staleness bound declared.
    *
+   * @ordinal 3
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -818,6 +879,7 @@ export interface Service_veh_hvac_cabinConsumer {
   /**
    * Range, upper bound only — no rate floor declared.
    *
+   * @ordinal 4
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -825,6 +887,7 @@ export interface Service_veh_hvac_cabinConsumer {
   /**
    * Microsecond resolution, and an init override for the channel (ridl §4.4).
    *
+   * @ordinal 5
    * @init 12.5
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -832,6 +895,8 @@ export interface Service_veh_hvac_cabinConsumer {
   /**
    * Untimed: the package `[defaults].timing` is resolved at compile time and
    * lands in the IR as concrete bounds with `default_applied` set (ridl §9.1).
+   *
+   * @ordinal 6
    */
   filterClogged: EventHandle<FilterState>;
   /**
@@ -844,6 +909,7 @@ export interface Service_veh_hvac_cabinConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 7
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setTarget(t: veh_common.Temperature): Promise<void>;
@@ -856,18 +922,21 @@ export interface Service_veh_hvac_cabinConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 9
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   replayTrace(samples: AsyncIterable<FilterState>): Promise<void>;
   /**
    * Provider-produced stream in return position.
    *
+   * @ordinal 10
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   streamFilterHistory(limit: FanLevel): AsyncIterable<FilterState>;
   /**
    * Bidirectional — a stream in both positions at once.
    *
+   * @ordinal 11
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   rebalance(samples: AsyncIterable<FilterState>): AsyncIterable<ClimateReport>;
@@ -875,6 +944,7 @@ export interface Service_veh_hvac_cabinConsumer {
    * A postcondition that reads `result` — tuple-field access is the widest
    * `result` shape the guaranteed expression subset admits (ridl §13).
    *
+   * @ordinal 12
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getBounds(): Promise<{ min: veh_common.Temperature; max: veh_common.Temperature }>;
@@ -884,6 +954,7 @@ export interface Service_veh_hvac_cabinConsumer {
    * the enclosing shape and the ordinal, which is exactly what an inline
    * shape has to get right without an interface name to borrow.
    *
+   * @ordinal 13
    * @transportIdentity veh.hvac.cabin#13:ClimateReport|HvacError
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
@@ -891,22 +962,28 @@ export interface Service_veh_hvac_cabinConsumer {
   /**
    * A plain named-type return.
    *
+   * @ordinal 14
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getClimate(): Promise<ClimateReport>;
   /**
    * Superseded by `getClimate`.
    *
+   * @ordinal 15
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    * @deprecated use getClimate — this returns only the cabin reading
    */
   getCabinTemp(): Promise<veh_common.Temperature>;
   /**
    * Provisioned, immutable for the software-instance lifetime (ridl §8).
+   *
+   * @ordinal 16
    */
   readonly unitSerial: ridl_std.Label;
   /**
    * A collection-typed final.
+   *
+   * @ordinal 17
    */
   readonly supportedModes: readonly ridl_std.Label[];
   /**
@@ -918,6 +995,7 @@ export interface Service_veh_hvac_cabinConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 18
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setFan(level: FanLevel): Promise<void>;
@@ -930,12 +1008,14 @@ export interface Service_veh_hvac_cabinConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 19
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   trimFan(level: FanLevel): Promise<void>;
   /**
    * Arithmetic over `result`.
    *
+   * @ordinal 20
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   scaledFan(): Promise<FanLevel>;
@@ -962,36 +1042,43 @@ export interface Service_veh_hvac_cabinProvider {
   /**
    * Strict periodic — signal only (ridl §9).
    *
+   * @ordinal 1
    * @init 0
    */
   cabinTemp: { publish(value: veh_common.Temperature): void };
   /**
    * Range with both bounds.
    *
+   * @ordinal 2
    * @init 0
    */
   targetTemp: { publish(value: veh_common.Temperature): void };
   /**
    * Range, lower bound only — no staleness bound declared.
    *
+   * @ordinal 3
    * @init 0
    */
   blowerDuty: { publish(value: veh_common.Ratio): void };
   /**
    * Range, upper bound only — no rate floor declared.
    *
+   * @ordinal 4
    * @init 0
    */
   fanLevel: { publish(value: FanLevel): void };
   /**
    * Microsecond resolution, and an init override for the channel (ridl §4.4).
    *
+   * @ordinal 5
    * @init 12.5
    */
   compressorLoad: { publish(value: veh_common.Ratio): void };
   /**
    * Untimed: the package `[defaults].timing` is resolved at compile time and
    * lands in the IR as concrete bounds with `default_applied` set (ridl §9.1).
+   *
+   * @ordinal 6
    */
   filterClogged: { publish(occurrence: FilterState): void };
   /**
@@ -1004,6 +1091,7 @@ export interface Service_veh_hvac_cabinProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 7
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setTarget(t: veh_common.Temperature): Promise<void>;
@@ -1016,18 +1104,21 @@ export interface Service_veh_hvac_cabinProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 9
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   replayTrace(samples: AsyncIterable<FilterState>): Promise<void>;
   /**
    * Provider-produced stream in return position.
    *
+   * @ordinal 10
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   streamFilterHistory(limit: FanLevel): AsyncIterable<FilterState>;
   /**
    * Bidirectional — a stream in both positions at once.
    *
+   * @ordinal 11
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   rebalance(samples: AsyncIterable<FilterState>): AsyncIterable<ClimateReport>;
@@ -1035,6 +1126,7 @@ export interface Service_veh_hvac_cabinProvider {
    * A postcondition that reads `result` — tuple-field access is the widest
    * `result` shape the guaranteed expression subset admits (ridl §13).
    *
+   * @ordinal 12
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getBounds(): Promise<{ min: veh_common.Temperature; max: veh_common.Temperature }>;
@@ -1044,6 +1136,7 @@ export interface Service_veh_hvac_cabinProvider {
    * the enclosing shape and the ordinal, which is exactly what an inline
    * shape has to get right without an interface name to borrow.
    *
+   * @ordinal 13
    * @transportIdentity veh.hvac.cabin#13:ClimateReport|HvacError
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
@@ -1051,12 +1144,14 @@ export interface Service_veh_hvac_cabinProvider {
   /**
    * A plain named-type return.
    *
+   * @ordinal 14
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getClimate(): Promise<ClimateReport>;
   /**
    * Superseded by `getClimate`.
    *
+   * @ordinal 15
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    * @deprecated use getClimate — this returns only the cabin reading
    */
@@ -1070,6 +1165,7 @@ export interface Service_veh_hvac_cabinProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 18
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setFan(level: FanLevel): Promise<void>;
@@ -1082,12 +1178,14 @@ export interface Service_veh_hvac_cabinProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 19
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   trimFan(level: FanLevel): Promise<void>;
   /**
    * Arithmetic over `result`.
    *
+   * @ordinal 20
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   scaledFan(): Promise<FanLevel>;

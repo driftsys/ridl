@@ -48,16 +48,24 @@ export type Result<T, E> =
  */
 export interface TimingsConsumer {
   /**
+   * @ordinal 1
    * @init 0.0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   strict: SignalHandle<Speed>;
+  /**
+   * @ordinal 2
+   */
   defaulted: EventHandle<Ping>;
   /**
+   * @ordinal 3
    * @init 0.0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   halfOpen: SignalHandle<Speed>;
+  /**
+   * @ordinal 4
+   */
   enormous: EventHandle<Ping>;
 }
 
@@ -70,14 +78,22 @@ export interface TimingsConsumer {
  */
 export interface TimingsProvider {
   /**
+   * @ordinal 1
    * @init 0.0
    */
   strict: { publish(value: Speed): void };
+  /**
+   * @ordinal 2
+   */
   defaulted: { publish(occurrence: Ping): void };
   /**
+   * @ordinal 3
    * @init 0.0
    */
   halfOpen: { publish(value: Speed): void };
+  /**
+   * @ordinal 4
+   */
   enormous: { publish(occurrence: Ping): void };
 }
 
