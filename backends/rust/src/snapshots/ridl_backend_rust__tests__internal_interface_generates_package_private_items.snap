@@ -140,12 +140,18 @@ pub trait ShownConsumer {
     /// signal `cabinTemp` — ordinal 1 (ridl §4).
     /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
     fn cabin_temp(&mut self) -> &mut dyn SignalHandle<Counter>;
+    /// query `readSummary` — ordinal 2 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// ensure: result >= ShownFloor
+    async fn read_summary(&self) -> Counter;
 }
 /// The provider face of `Shown` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait ShownProvider {
     /// Publishes `cabinTemp` — signal ordinal 1 (ridl §4).
     fn publish_cabin_temp(&mut self, value: Counter);
+    /// Handles `readSummary` — query ordinal 2 (ridl §7).
+    async fn on_read_summary(&mut self) -> Counter;
 }
 /// Resolved timing for every signal and event of `Shown`, keyed by the source name, in exact microseconds (ridl §9).
 pub const SHOWN_TIMING: &[(&str, TimingConst)] = &[
@@ -160,7 +166,58 @@ pub const SHOWN_TIMING: &[(&str, TimingConst)] = &[
     ),
 ];
 /// Every `require` and `ensure` clause of `Shown` as data, in source order, for an observer to install (ridl §13).
-pub const SHOWN_CONTRACTS: &[ContractStub] = &[];
+pub const SHOWN_CONTRACTS: &[ContractStub] = &[
+    ContractStub {
+        id: "Shown.readSummary.ensure[0]",
+        kind: ContractKind::Ensure,
+        source: "result >= ShownFloor",
+        signals: &[],
+        params: &[],
+        uses_result: true,
+    },
+];
+/// The consumer face of `ServiceVehClusterDiag` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait ServiceVehClusterDiagConsumer {
+    /// signal `cabinTemp` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn cabin_temp(&mut self) -> &mut dyn SignalHandle<Counter>;
+    /// query `readSummary` — ordinal 2 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// ensure: result >= DiagFloor
+    async fn read_summary(&self) -> Counter;
+}
+/// The provider face of `ServiceVehClusterDiag` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait ServiceVehClusterDiagProvider {
+    /// Publishes `cabinTemp` — signal ordinal 1 (ridl §4).
+    fn publish_cabin_temp(&mut self, value: Counter);
+    /// Handles `readSummary` — query ordinal 2 (ridl §7).
+    async fn on_read_summary(&mut self) -> Counter;
+}
+/// Resolved timing for every signal and event of `ServiceVehClusterDiag`, keyed by the source name, in exact microseconds (ridl §9).
+pub const SERVICE_VEH_CLUSTER_DIAG_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "cabinTemp",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(50000),
+            max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `ServiceVehClusterDiag` as data, in source order, for an observer to install (ridl §13).
+pub const SERVICE_VEH_CLUSTER_DIAG_CONTRACTS: &[ContractStub] = &[
+    ContractStub {
+        id: "veh.cluster.diag.readSummary.ensure[0]",
+        kind: ContractKind::Ensure,
+        source: "result >= DiagFloor",
+        signals: &[],
+        params: &[],
+        uses_result: true,
+    },
+];
 /// Every service this package declares: the deployment address and the
 /// interface that answers at it (ridl §11).
 ///
@@ -168,7 +225,10 @@ pub const SHOWN_CONTRACTS: &[ContractStub] = &[];
 /// the interface name is the generated Rust type prefix. For an inline
 /// shape they differ by construction, and the address — not the type
 /// name — is the identity the wire and the observers use.
-pub const SERVICES: &[(&str, &str)] = &[("veh.cluster.hidden", "Hidden")];
+pub const SERVICES: &[(&str, &str)] = &[
+    ("veh.cluster.hidden", "Hidden"),
+    ("veh.cluster.diag", "ServiceVehClusterDiag"),
+];
 pub struct HiddenGetBoundsResult {
     pub min: Counter,
     pub max: Counter,

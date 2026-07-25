@@ -113,6 +113,10 @@ export interface ShownConsumer {
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   cabinTemp: SignalHandle<veh_common.Speed>;
+  /**
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readSummary(): Promise<veh_common.Speed>;
 }
 
 /**
@@ -127,6 +131,10 @@ export interface ShownProvider {
    * @init 0.0
    */
   cabinTemp: { publish(value: veh_common.Speed): void };
+  /**
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readSummary(): Promise<veh_common.Speed>;
 }
 
 /**
@@ -149,7 +157,88 @@ export const shownTiming = {
  * inferred: `source` is text, so matching on it would misread a parameter
  * named `resultCode` or a field access `.result`.
  */
-export const shownContracts = [] as const;
+export const shownContracts = [
+  { id: 'Shown.readSummary.ensure[0]', kind: 'ensure', source: 'result >= 0.0', signals: [], params: [], usesResult: true },
+] as const;
+
+/**
+ * This is the inline shape of service `veh.cluster.diag` (ridl §14.5). The
+ * shape is anonymous in source, so its generated name is
+ * `Service_veh_cluster_diag` — a TypeScript identifier derived from the
+ * service name, because a TypeScript identifier cannot contain dots. The
+ * service's own identity stays the dotted `veh.cluster.diag`: that is what
+ * the `services` map is keyed by, what a runtime resolves, and what
+ * observer-stub ids are prefixed with. The generated name and the dotted
+ * address are deliberately different things; neither substitutes for the
+ * other.
+ *
+ * The consumer face of this interface (ridl §14): what code holding a
+ * binding to it sees. Signals are read and subscribed, events are
+ * subscribed, commands and queries are called, finals are read.
+ */
+export interface Service_veh_cluster_diagConsumer {
+  /**
+   * @init 0.0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  cabinTemp: SignalHandle<veh_common.Speed>;
+  /**
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readSummary(): Promise<veh_common.Speed>;
+}
+
+/**
+ * This is the inline shape of service `veh.cluster.diag` (ridl §14.5). The
+ * shape is anonymous in source, so its generated name is
+ * `Service_veh_cluster_diag` — a TypeScript identifier derived from the
+ * service name, because a TypeScript identifier cannot contain dots. The
+ * service's own identity stays the dotted `veh.cluster.diag`: that is what
+ * the `services` map is keyed by, what a runtime resolves, and what
+ * observer-stub ids are prefixed with. The generated name and the dotted
+ * address are deliberately different things; neither substitutes for the
+ * other.
+ *
+ * The provider face of this interface (ridl §14): what code realizing it
+ * implements. Signals and events are published, commands and queries are
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
+ */
+export interface Service_veh_cluster_diagProvider {
+  /**
+   * @init 0.0
+   */
+  cabinTemp: { publish(value: veh_common.Speed): void };
+  /**
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readSummary(): Promise<veh_common.Speed>;
+}
+
+/**
+ * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
+ * staleness bound, both in microseconds. `defaultApplied` marks a bound the
+ * compiler resolved from the configured default rather than from source —
+ * "untimed" does not exist beyond the parser (ridl §9.1).
+ */
+export const service_veh_cluster_diagTiming = {
+  cabinTemp: { mode: 'range', minUs: 50000n, maxUs: 500000n, defaultApplied: false },
+} as const;
+
+/**
+ * The require/ensure clauses of this interface, as data (ridl §13). `id` is
+ * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
+ * is the canonical expression text; `signals` and `params` name what the
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
+ */
+export const service_veh_cluster_diagContracts = [
+  { id: 'veh.cluster.diag.readSummary.ensure[0]', kind: 'ensure', source: 'result >= 0.0', signals: [], params: [], usesResult: true },
+] as const;
 
 /**
  * The services this package publishes (ridl §14.5). Each key is the dotted
@@ -162,4 +251,5 @@ export const shownContracts = [] as const;
  */
 export const services = {
   'veh.cluster.hidden': { interface: 'Hidden' },
+  'veh.cluster.diag': { interface: 'Service_veh_cluster_diag' },
 } as const;

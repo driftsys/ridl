@@ -1483,16 +1483,45 @@ export type Duration = bigint & { readonly __ridl: 'ridl.std.Duration' };
 // `internal` visibility on the interaction layer (ADR-0008 decision 7).
 // ---------------------------------------------------------------------------
 
-/// The package both visibility tests read: one `internal interface Hidden` and
-/// one public `interface Shown` side by side, plus a service naming `Hidden`,
-/// so the rule is exercised per declaration rather than per module.
+/// An inline service shape as the CHECKER emits it: an anonymous interface
+/// (`name == ""`) whose visibility is `VISIBILITY_UNSPECIFIED`, not public.
 ///
-/// `Hidden` carries a timed signal (so `hiddenTiming` is non-empty), a query
-/// with an `ensure` (so `hiddenContracts` is non-empty), and a tuple return —
-/// which this backend renders as an inline object type (typl §11), so it
-/// introduces no name of its own and has nothing to hide. That is the one
-/// place the two backends' name sets legitimately differ: the Rust backend
-/// generates a named struct there, TypeScript does not.
+/// This helper exists because [`interface`] hardcodes `Visibility::Public`,
+/// which no inline shape ever carries: `Checker::lower_service_inline` leaves
+/// the field unset, because an anonymous shape is not addressable as a type
+/// and has no visibility of its own — the enclosing `Service` carries the
+/// authoritative one, and a service takes no `internal` modifier (ridl §14.5).
+/// A fixture that says `Public` here would be testing a value the real
+/// producer never emits, and the UNSPECIFIED default arm of [`export_kw`]
+/// would go unexercised.
+fn inline_shape(interactions: Vec<v2::Decl>) -> v2::Interface {
+    v2::Interface {
+        visibility: v2::Visibility::Unspecified as i32,
+        ..interface("", interactions)
+    }
+}
+
+/// The package both visibility tests read. Three shapes side by side, so the
+/// rule is exercised per declaration rather than per module:
+///
+/// 1. `internal interface Hidden` — every generated name module-local;
+/// 2. public `interface Shown` — every generated name exported, the
+///    regression direction;
+/// 3. an **inline service shape** whose `Interface.visibility` is
+///    `VISIBILITY_UNSPECIFIED` ([`inline_shape`]) — every generated name
+///    exported, which is what makes the "no special case for inline shapes"
+///    reasoning true rather than merely asserted.
+///
+/// Each of the three carries a timed signal and a contract-bearing query, so
+/// all four generated names of all three are present and non-empty. An empty
+/// constant is exactly how the contracts const was overlooked in the first
+/// place.
+///
+/// `Hidden`'s query returns a tuple, which this backend renders as an inline
+/// object type (typl §11): it introduces no name of its own and so has nothing
+/// to hide. That is the one place the two backends' name sets legitimately
+/// differ — the Rust backend generates a named struct there, TypeScript does
+/// not.
 fn visibility_package() -> v2::Package {
     let hidden = v2::Interface {
         visibility: v2::Visibility::Internal as i32,
@@ -1546,33 +1575,63 @@ fn visibility_package() -> v2::Package {
             ],
         )
     };
-    let shown = interface(
-        "Shown",
-        vec![interaction(
-            "cabinTemp",
-            1,
-            signal(
-                "veh.common.Speed",
-                Some("0.0"),
-                timing(v2::TimingMode::Range, Some("50000"), Some("500000"), false),
+    // A signal and a contract-bearing query, so both metadata constants of the
+    // interface built from them are non-empty.
+    let pair = |ensure_id: &str| {
+        vec![
+            interaction(
+                "cabinTemp",
+                1,
+                signal(
+                    "veh.common.Speed",
+                    Some("0.0"),
+                    timing(v2::TimingMode::Range, Some("50000"), Some("500000"), false),
+                ),
             ),
-        )],
-    );
+            interaction(
+                "readSummary",
+                2,
+                query(
+                    Vec::new(),
+                    v2::return_type::Kind::Value(named("veh.common.Speed")),
+                    vec![contract(
+                        v2::ContractKind::Ensure,
+                        "result >= 0.0",
+                        &[],
+                        &[],
+                        true,
+                        ensure_id,
+                    )],
+                ),
+            ),
+        ]
+    };
+    let shown = interface("Shown", pair("Shown.readSummary.ensure[0]"));
     interact_package(
         vec![hidden, shown],
-        vec![service(
-            "veh.cluster.hidden",
-            v2::service::Shape::InterfaceRef("Hidden".to_string()),
-        )],
+        vec![
+            service(
+                "veh.cluster.hidden",
+                v2::service::Shape::InterfaceRef("Hidden".to_string()),
+            ),
+            service(
+                "veh.cluster.diag",
+                v2::service::Shape::Inline(inline_shape(pair(
+                    "veh.cluster.diag.readSummary.ensure[0]",
+                ))),
+            ),
+        ],
     )
 }
 
 /// Every name an `internal interface` generates is module-local; every name a
-/// public interface generates stays exported; and the package-level names —
-/// the interaction vocabulary and the service map — stay exported regardless.
+/// public interface generates stays exported; every name an **inline service
+/// shape** generates stays exported; and the package-level names — the
+/// interaction vocabulary and the service map — stay exported regardless.
 ///
-/// The two interfaces sit in one package on purpose: `internal` is a property
-/// of the declaration, so a module holding both must generate both spellings.
+/// The three shapes sit in one package on purpose: `internal` is a property of
+/// the declaration, so a module holding all three must generate all three
+/// spellings.
 #[test]
 fn internal_interface_generates_module_local_shapes() {
     let source = render(&visibility_package());
@@ -1616,6 +1675,24 @@ fn internal_interface_generates_module_local_shapes() {
         assert!(
             source.contains(item),
             "a public interface must still emit `{item}`, got:\n{source}"
+        );
+    }
+
+    // An inline service shape carries `VISIBILITY_UNSPECIFIED`, which is not a
+    // missing value to be guessed at: an anonymous shape has no visibility of
+    // its own and the enclosing service — which cannot be `internal` at all
+    // (ridl §14.5) — carries the authoritative one. So all four of its names
+    // are exported. This is asserted rather than left implicit because it is
+    // the link that makes "no special case for inline shapes" true.
+    for item in [
+        "export interface Service_veh_cluster_diagConsumer",
+        "export interface Service_veh_cluster_diagProvider",
+        "export const service_veh_cluster_diagTiming",
+        "export const service_veh_cluster_diagContracts",
+    ] {
+        assert!(
+            source.contains(item),
+            "an inline service shape is public, so it must emit `{item}`, got:\n{source}"
         );
     }
 
@@ -1687,41 +1764,103 @@ export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
         )
     };
 
-    let (public_ok, public_out) = probe(
-        "reaches_public",
-        "import { ShownConsumer, shownTiming } from './veh.cluster';\n\
-         export type A = ShownConsumer;\n\
-         export const t = shownTiming;\n",
-    );
-    assert!(
-        public_ok,
-        "a public interface's face and timing const must stay importable, tsc said:\n{public_out}"
-    );
+    // A face is an interface, so it is imported into a type alias; a const is
+    // imported into a value binding. Each name is used the only way its
+    // namespace admits.
+    let names_type = |item: &str| {
+        format!("import {{ {item} }} from './veh.cluster';\nexport type A = {item};\n")
+    };
+    let names_value = |item: &str| {
+        format!("import {{ {item} }} from './veh.cluster';\nexport const v = {item};\n")
+    };
 
-    let (face_ok, face_out) = probe(
-        "reaches_internal_face",
-        "import { HiddenConsumer } from './veh.cluster';\n\
-         export type B = HiddenConsumer;\n",
-    );
-    assert!(
-        !face_ok,
-        "an internal interface's face must not be importable, source:\n{source}"
-    );
-    assert!(
-        face_out.contains("HiddenConsumer") && face_out.contains("not exported"),
-        "the refusal must say the name is declared locally but not exported, tsc said:\n{face_out}"
-    );
+    // Importable: the public interface, and the inline service shape — whose
+    // `Interface.visibility` is UNSPECIFIED, the value the checker actually
+    // emits for an anonymous shape.
+    for (probe_name, what, body) in [
+        (
+            "reaches_shown_consumer",
+            "a public interface's consumer face",
+            names_type("ShownConsumer"),
+        ),
+        (
+            "reaches_shown_provider",
+            "a public interface's provider face",
+            names_type("ShownProvider"),
+        ),
+        (
+            "reaches_shown_timing",
+            "a public interface's timing const",
+            names_value("shownTiming"),
+        ),
+        (
+            "reaches_shown_contracts",
+            "a public interface's contract const",
+            names_value("shownContracts"),
+        ),
+        (
+            "reaches_inline_consumer",
+            "an inline service shape's consumer face",
+            names_type("Service_veh_cluster_diagConsumer"),
+        ),
+        (
+            "reaches_inline_provider",
+            "an inline service shape's provider face",
+            names_type("Service_veh_cluster_diagProvider"),
+        ),
+        (
+            "reaches_inline_timing",
+            "an inline service shape's timing const",
+            names_value("service_veh_cluster_diagTiming"),
+        ),
+        (
+            "reaches_inline_contracts",
+            "an inline service shape's contract const",
+            names_value("service_veh_cluster_diagContracts"),
+        ),
+    ] {
+        let (ok, out) = probe(probe_name, &body);
+        assert!(ok, "{what} must stay importable, tsc said:\n{out}");
+    }
 
-    let (const_ok, const_out) = probe(
-        "reaches_internal_const",
-        "import { hiddenTiming } from './veh.cluster';\nexport const t = hiddenTiming;\n",
-    );
-    assert!(
-        !const_ok,
-        "an internal interface's timing const must not be importable, source:\n{source}"
-    );
-    assert!(
-        const_out.contains("hiddenTiming") && const_out.contains("not exported"),
-        "the refusal must say the name is declared locally but not exported, tsc said:\n{const_out}"
-    );
+    // Unimportable: every one of the four names the internal interface
+    // generates, each refused specifically as declared-locally-but-not-exported
+    // rather than as any error at all.
+    for (probe_name, what, item, body) in [
+        (
+            "hides_consumer",
+            "consumer face",
+            "HiddenConsumer",
+            names_type("HiddenConsumer"),
+        ),
+        (
+            "hides_provider",
+            "provider face",
+            "HiddenProvider",
+            names_type("HiddenProvider"),
+        ),
+        (
+            "hides_timing",
+            "timing const",
+            "hiddenTiming",
+            names_value("hiddenTiming"),
+        ),
+        (
+            "hides_contracts",
+            "contract const",
+            "hiddenContracts",
+            names_value("hiddenContracts"),
+        ),
+    ] {
+        let (ok, out) = probe(probe_name, &body);
+        assert!(
+            !ok,
+            "an internal interface's {what} must not be importable, source:\n{source}"
+        );
+        assert!(
+            out.contains(item) && out.contains("not exported"),
+            "the refusal for the {what} must say the name is declared locally but not \
+             exported, tsc said:\n{out}"
+        );
+    }
 }

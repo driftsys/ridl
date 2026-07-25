@@ -798,6 +798,15 @@ impl Checker<'_> {
     /// same-package internal declarations are reachable — a foreign `internal`
     /// name never resolves (typl §3.3), so it cannot leak here. Internal
     /// declarations are exempt: they may reference each other freely.
+    ///
+    /// **Recorded debt (issue #161): this runs over typl declarations only.**
+    /// [`Checker::checked_interface`] and [`Checker::lower_service`] do not call
+    /// it, so a public `interface` may carry an `internal` payload type and a
+    /// public `service` may publish an `internal` interface, both without a
+    /// diagnostic. The payload case is the sharper one: the Rust backend then
+    /// emits a `pub` trait over a `pub(crate)` type, which draws rustc's
+    /// `private_interfaces` lint and becomes a hard build failure for any
+    /// consumer building with `-D warnings`.
     fn check_internal_exposure(&mut self, definition: &Definition, decl_name: &str) {
         if definition.is_internal() {
             return;
