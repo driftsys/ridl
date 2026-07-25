@@ -113,34 +113,19 @@ fn collect_scopes(checker: &Checker<'_>, files: &[InputFile]) -> Vec<Scope> {
     let mut scopes = Vec::new();
     for (index, file) in files.iter().enumerate() {
         let source = source_file(checker.db, *file);
-        for interface in source.interfaces() {
-            if !checker.is_winner(*file, &interface) {
+        for shape in source.shapes() {
+            // The first-wins filter applies to `interface` declarations only:
+            // a service's dotted name lives in the catalog namespace, not the
+            // type namespace the resolver arbitrates.
+            if let ast::InterfaceShape::Interface(def) = &shape
+                && !checker.is_winner(*file, def)
+            {
                 continue;
             }
-            let name = interface
-                .name()
-                .and_then(|name| name.ident_token())
-                .map(|token| token.text().to_string())
-                .unwrap_or_default();
             scopes.push(Scope {
                 file: index,
-                name,
-                members: interface.members().collect(),
-            });
-        }
-        for service in source.services() {
-            let members: Vec<ast::InterfaceMember> = service.inline_members().collect();
-            if members.is_empty() {
-                continue;
-            }
-            let name = service
-                .name()
-                .map(|dotted| significant_text(dotted.syntax()))
-                .unwrap_or_default();
-            scopes.push(Scope {
-                file: index,
-                name,
-                members,
+                name: shape.identity().unwrap_or_default(),
+                members: shape.members().collect(),
             });
         }
     }

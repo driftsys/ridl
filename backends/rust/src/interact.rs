@@ -78,39 +78,31 @@ pub(crate) fn emit(
 
     let mut items = vec![vocabulary()];
 
-    for interface in &package.interfaces {
-        // A named interface is its own identity: the generated type name and
-        // the identity name are the same string.
-        let names = Names {
-            r#type: &interface.name,
-            identity: &interface.name,
-        };
-        owners.push((
-            interface.name.clone(),
-            format!("interface {}", interface.name),
-        ));
-        items.push(emit_interface(names, interface, tuples)?);
-    }
-
-    // A service with an inline shape declares an anonymous interface; it is
-    // generated under a name derived from the service address so the two forms
-    // produce the same shape of API.
-    for service in &package.services {
-        if let Some(v2::service::Shape::Inline(interface)) = &service.shape {
-            let type_name = inline_interface_name(&service.name);
-            // The identity is the service's DOTTED name — never the mangled
-            // type name, and never `Interface.name`, which is empty by
-            // construction for an inline shape.
-            let names = Names {
-                r#type: &type_name,
-                identity: &service.name,
-            };
-            items.push(emit_interface(names, interface, tuples)?);
-            owners.push((
-                type_name,
+    // Every interface shape, named and inline alike — `Package::shapes`, not
+    // `package.interfaces`, which is not the complete set. A named interface is
+    // its own identity: the generated type name and the identity name are the
+    // same string. A service with an inline shape declares an anonymous
+    // interface, generated under a name derived from the service address so the
+    // two forms produce the same shape of API; its identity stays the service's
+    // DOTTED name — never the mangled type name, and never `Interface.name`,
+    // which is empty by construction for an inline shape.
+    for shape in package.shapes() {
+        let (type_name, origin) = match shape.service {
+            Some(service) => (
+                inline_interface_name(&service.name),
                 format!("the inline shape of service {}", service.name),
-            ));
-        }
+            ),
+            None => (
+                shape.name.to_string(),
+                format!("interface {name}", name = shape.name),
+            ),
+        };
+        let names = Names {
+            r#type: &type_name,
+            identity: shape.name,
+        };
+        items.push(emit_interface(names, shape.interface, tuples)?);
+        owners.push((type_name, origin));
     }
 
     items.push(emit_services(package)?);

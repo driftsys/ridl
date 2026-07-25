@@ -52,19 +52,13 @@ fn source_files(dir: &Path) -> Vec<PathBuf> {
 
 /// The interaction declarations of a compiled package: those inside named
 /// interfaces and those inside a service's inline shape. The second half is
-/// the one a consumer that walks `package.interfaces` alone silently misses.
+/// the one a consumer that walks `package.interfaces` alone silently misses,
+/// which is why the walk is `Package::shapes`.
 fn interactions(package: &ridl_ir::v2::Package) -> Vec<&ridl_ir::v2::Decl> {
-    let mut all: Vec<&ridl_ir::v2::Decl> = package
-        .interfaces
-        .iter()
-        .flat_map(|interface| interface.interactions.iter())
-        .collect();
-    for service in &package.services {
-        if let Some(ridl_ir::v2::service::Shape::Inline(inline)) = &service.shape {
-            all.extend(inline.interactions.iter());
-        }
-    }
-    all
+    package
+        .shapes()
+        .flat_map(|shape| shape.interface.interactions.iter())
+        .collect()
 }
 
 /// Compiles `path` and checks the two invariants, returning a failure

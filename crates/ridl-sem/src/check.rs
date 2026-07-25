@@ -62,44 +62,6 @@ pub struct CheckedPackage {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// A structurally checked interface: its definition plus the ordinal
-/// assignment of ridl §11 — 1-based, declaration order, one sequence across
-/// all interaction kinds, `reserved` tombstones counted. Shared with the IR
-/// lowering (E2 task 6) and the inlay-hint renderer (task 20).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CheckedInterface {
-    pub def: ast::InterfaceDef,
-    /// Each surviving member with its 1-based ordinal. A RIDL-402 duplicate
-    /// lowers first-wins only: the losing re-declaration is excluded and
-    /// holds no ordinal slot, so the surviving contract stays contiguous.
-    pub members: Vec<(ast::InterfaceMember, u32)>,
-}
-
-/// Assigns the ridl §11 ordinals of one interface (see [`CheckedInterface`]).
-/// Pure over the AST — the structural diagnostics (RIDL-401/-402 and the
-/// per-kind rules) are the package checker's, not this function's.
-pub fn checked_interface(def: &ast::InterfaceDef) -> CheckedInterface {
-    let mut members = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut ordinal = 0u32;
-    for member in def.members() {
-        // A RIDL-402 loser is excluded and holds no ordinal slot; `reserved`
-        // tombstones always hold theirs (ridl §11).
-        if !matches!(member, ast::InterfaceMember::Reserved(_))
-            && let Some(name) = member_name(member.name())
-            && !seen.insert(name)
-        {
-            continue;
-        }
-        ordinal += 1;
-        members.push((member, ordinal));
-    }
-    CheckedInterface {
-        def: def.clone(),
-        members,
-    }
-}
-
 /// Checks `pkg` and lowers it to IR v2 (typl reference §4–§12, §16.2–§16.3).
 ///
 /// `std` is the embedded `ridl.std` package, threaded in exactly as
@@ -6308,31 +6270,6 @@ mod tests {
     /// A clean vocabulary prefix for interaction tests.
     const PRELUDE: &str = "package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n";
 
-    /// Parses `text` as one `.ridl` file and returns its first interface.
-    fn first_interface(db: &RidlDatabase, text: &str) -> ast::InterfaceDef {
-        let file = InputFile::new(db, "app.ridl".to_string(), text.to_string());
-        source_file(db, file)
-            .interfaces()
-            .next()
-            .expect("an interface parses")
-    }
-
-    /// The `(name, ordinal)` walk of a checked interface.
-    fn ordinal_walk(checked: &CheckedInterface) -> Vec<(String, u32)> {
-        checked
-            .members
-            .iter()
-            .map(|(member, ordinal)| {
-                let name = member
-                    .name()
-                    .and_then(|name| name.ident_token())
-                    .map(|token| token.text().to_string())
-                    .unwrap_or_default();
-                (name, *ordinal)
-            })
-            .collect()
-    }
-
     #[test]
     fn ridl_104_return_type_on_command() {
         let bad = check_ridl(
@@ -6419,10 +6356,7 @@ mod tests {
         // E2 task 9); the two in-body composites are RIDL-107.
         assert_eq!(codes(&checked), vec!["RIDL-107", "RIDL-107", "RIDL-100"]);
 
-        let db = RidlDatabase::default();
-        let interface = first_interface(&db, &text);
-        let walk = ordinal_walk(&checked_interface(&interface));
-        assert_eq!(walk, vec![("s".to_string(), 1), ("e".to_string(), 2)]);
+        assert_eq!(interface_walk(&checked), [("s", 1), ("e", 2)]);
     }
 
     #[test]
@@ -7130,15 +7064,10 @@ interface I {\n\
         );
         assert_eq!(codes(&checked), vec!["RIDL-402"]);
 
-        // The loser is excluded from the checked members and holds no
-        // ordinal slot — lowering keeps exactly the first declaration.
-        let db = RidlDatabase::default();
-        let interface = first_interface(
-            &db,
-            "package app\ninterface I {\n  signal a : Speed @10ms\n  event a : Speed\n  query b(): Speed\n}\n",
-        );
-        let walk = ordinal_walk(&checked_interface(&interface));
-        assert_eq!(walk, vec![("a".to_string(), 1), ("b".to_string(), 2)]);
+        // The loser is excluded and holds no ordinal slot — lowering keeps
+        // exactly the first declaration. What the ordinals then are, and which
+        // kind survives, is `ridl_402_duplicate_lowers_first_wins_into_the_ir`.
+        assert_eq!(interface_walk(&checked), [("a", 1), ("b", 2)]);
     }
 
     #[test]
@@ -7360,79 +7289,11 @@ interface I {\n\
         assert_eq!(messages(&broken), vec!["unknown type name `NoSuchType`"]);
     }
 
-    /// The ridl reference Appendix A interface, member for member.
-    const APPENDIX_A_INTERFACE: &str = "\
-package veh.cluster
-
-interface VehicleStatus {
-
-  /// Current vehicle speed
-  signal currentSpeed : Speed @10ms
-
-  /// Engine temperature
-  signal engineTemp : Temperature @[20ms..100ms]
-
-  /// Active warnings
-  signal warnings : WarningFlags @[50ms..1s]
-
-  /// Raised on every door state change
-  event doorOpened : DoorPayload @[50ms..500ms]
-
-  /// Request a gear change
-  command setGear(position: GearPosition) [
-    require position != GearPosition.PARK || currentSpeed == 0.0
-  ]
-
-  reserved resetCounters
-
-  /// Sliding-window average
-  query getAverageSpeed(window: Duration): Speed [
-    require window > 0ms
-    ensure  result >= 0.0
-  ]
-
-  /// Fault history as a finite stream
-  query streamFaults(filter: DiagFilter): <FaultEvent>
-
-  /// Paged fault snapshot
-  query getFaultPage(filter: DiagFilter): FaultPageResult
-
-  final softwareVersion : Version
-  final capabilities    : [Label; 0..32]
-}
-";
-
-    #[test]
-    fn ordinals_match_the_appendix_a_worked_example() {
-        // ridl §11: 1-based, declaration order, one sequence across all
-        // kinds, the reserved tombstone counted at #6.
-        let db = RidlDatabase::default();
-        let interface = first_interface(&db, APPENDIX_A_INTERFACE);
-        let checked = checked_interface(&interface);
-        assert_eq!(checked.def, interface);
-        let walk = ordinal_walk(&checked);
-        let expected: Vec<(String, u32)> = [
-            ("currentSpeed", 1),
-            ("engineTemp", 2),
-            ("warnings", 3),
-            ("doorOpened", 4),
-            ("setGear", 5),
-            ("resetCounters", 6),
-            ("getAverageSpeed", 7),
-            ("streamFaults", 8),
-            ("getFaultPage", 9),
-            ("softwareVersion", 10),
-            ("capabilities", 11),
-        ]
-        .iter()
-        .map(|(name, ordinal)| (name.to_string(), *ordinal))
-        .collect();
-        assert_eq!(walk, expected);
-        assert!(
-            matches!(checked.members[5].0, ast::InterfaceMember::Reserved(_)),
-            "#6 is the reserved tombstone",
-        );
-    }
+    // The ridl §11 ordinal assignment over the Appendix A interface — 1-based,
+    // declaration order, one sequence across all kinds, the reserved tombstone
+    // counted at #6 — is asserted on the lowered IR by
+    // `appendix_a_interactions_carry_the_worked_ordinals` and
+    // `appendix_a_tombstone_stores_its_ordinal_twice_and_they_agree` below.
 
     // --- the E2.1c lowering to IR v2 --------------------------------------
 
@@ -8596,29 +8457,6 @@ interface VehicleStatus {
             .map(|service| service.name.as_str())
             .collect();
         assert_eq!(names, ["veh.a.b"]);
-    }
-
-    /// `checked_interface` assigns the same ordinals the lowering does: a
-    /// nameless member consumes its slot in both. The two walks differ only in
-    /// membership — `checked_interface` is an AST view that keeps the nameless
-    /// member so the editor can still hint its slot, while the lowering drops
-    /// it because the IR has no name to carry.
-    #[test]
-    fn checked_interface_agrees_with_the_lowering_on_the_nameless_ordinal() {
-        let source = format!(
-            "{PRELUDE}interface I {{\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
-        );
-        let db = RidlDatabase::default();
-        let interface = first_interface(&db, &source);
-        assert_eq!(
-            ordinal_walk(&checked_interface(&interface)),
-            [(String::new(), 1), ("after".to_string(), 2)],
-        );
-        // The surviving member holds the same ordinal on both sides.
-        assert_eq!(
-            check_ridl("app", &source).ir.interfaces[0].interactions[0].ordinal,
-            2,
-        );
     }
 
     // --- services (E2.13, ridl reference §14.5) --------------------------

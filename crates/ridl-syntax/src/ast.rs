@@ -24,6 +24,8 @@ pub use generated::*;
 
 use std::marker::PhantomData;
 
+use rowan::TextRange;
+
 use crate::syntax_kind::{RidlLanguage, SyntaxKind, SyntaxNode, SyntaxToken};
 
 /// A typed view over a [`SyntaxNode`] of a known kind.
@@ -404,12 +406,106 @@ impl DottedName {
     /// The `lowercase_id` segments of the dotted name, in source order — the
     /// three `ident` tokens of `veh.adas.cruise` (ridl reference §14.5). The
     /// dots between them are excluded; a consumer that needs the full dotted
-    /// text concatenates the significant tokens of the node instead.
+    /// text calls [`DottedName::text`].
     pub fn segments(&self) -> impl Iterator<Item = SyntaxToken> + '_ {
         self.syntax()
             .children_with_tokens()
             .filter_map(|element| element.into_token())
             .filter(|token| token.kind() == SyntaxKind::Ident)
+    }
+
+    /// The dotted name as written — every non-trivia token of the node
+    /// concatenated, so `veh . adas . cruise` reads as `veh.adas.cruise`.
+    /// Empty only on a tree the parser recovered with no tokens at all.
+    pub fn text(&self) -> String {
+        self.syntax()
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .filter(|token| !token.kind().is_trivia())
+            .map(|token| token.text().to_string())
+            .collect()
+    }
+}
+
+// --- interface shapes (ridl reference §14.0, §14.5) -----------------------
+
+/// One interface shape declared in a file (ridl §14.0): an `interface`
+/// declaration, or the inline shape of a `service` (§14.5).
+///
+/// **[`SourceFile::interfaces`] is not the complete set.** A `service` with an
+/// inline body declares an interface body that is not an `InterfaceDef` and so
+/// never appears in `interfaces()`; a pass that walks `interfaces()` alone
+/// silently skips it. This enum, and [`SourceFile::shapes`] that yields it,
+/// are the AST half of the same guarantee `ridl_ir::v2::Package::shapes` gives
+/// on the IR side — the two halves exist because the blind spot has been found
+/// on both.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum InterfaceShape {
+    /// A declared `interface` (ridl §14.0).
+    Interface(InterfaceDef),
+    /// The inline shape of a `service` (ridl §14.5).
+    ServiceInline(ServiceDef),
+}
+
+impl InterfaceShape {
+    /// The name this shape is known by: an `interface` declaration's own
+    /// name, or the owning service's **dotted** global name — the identity
+    /// the IR, the diff paths, and the observer-stub scoping all use. `None`
+    /// when the parser recovered the declaration without a name.
+    pub fn identity(&self) -> Option<String> {
+        match self {
+            Self::Interface(def) => Some(def.name()?.ident_token()?.text().to_string()),
+            Self::ServiceInline(def) => {
+                let text = def.name()?.text();
+                (!text.is_empty()).then_some(text)
+            }
+        }
+    }
+
+    /// The source range of the declared name, for a diagnostic that points at
+    /// the shape itself rather than at one of its members. `None` when the
+    /// declaration carries no name node.
+    pub fn identity_range(&self) -> Option<TextRange> {
+        match self {
+            Self::Interface(def) => Some(def.name()?.syntax().text_range()),
+            Self::ServiceInline(def) => Some(def.name()?.syntax().text_range()),
+        }
+    }
+
+    /// The interactions and `reserved` tombstones of the body, in source
+    /// order — [`InterfaceDef::members`] or [`ServiceDef::inline_members`].
+    pub fn members(&self) -> AstChildren<InterfaceMember> {
+        match self {
+            Self::Interface(def) => def.members(),
+            Self::ServiceInline(def) => def.inline_members(),
+        }
+    }
+
+    /// The underlying declaration node.
+    pub fn syntax(&self) -> &SyntaxNode {
+        match self {
+            Self::Interface(def) => def.syntax(),
+            Self::ServiceInline(def) => def.syntax(),
+        }
+    }
+}
+
+impl SourceFile {
+    /// Every interface shape the file declares — its `interface` declarations
+    /// in source order, then the inline shapes of its `service` declarations
+    /// in source order. See [`InterfaceShape`] for why walking
+    /// [`SourceFile::interfaces`] alone is a defect.
+    ///
+    /// A service that names an interface after `:` yields nothing: its target
+    /// is a declared interface and is already in the sequence. The test is the
+    /// checker's own — a service with no `interface_ref` lowers to an inline
+    /// shape, whether or not that body turned out to hold any member.
+    pub fn shapes(&self) -> impl Iterator<Item = InterfaceShape> + '_ {
+        self.interfaces().map(InterfaceShape::Interface).chain(
+            self.services()
+                .filter(|service| service.interface_ref().is_none())
+                .map(InterfaceShape::ServiceInline),
+        )
     }
 }
 
@@ -1101,6 +1197,119 @@ mod tests {
         );
         let value = assignment.value().expect("the assignment has a value");
         assert_eq!(value.literal().unwrap().syntax().text().to_string(), "3");
+    }
+
+    /// A ridl file holding all three shape-bearing declarations: an
+    /// `interface`, a `service` naming it, and a `service` with an inline body.
+    const THREE_SHAPES: &str = "\
+package app
+
+interface VehicleStatus {
+  signal speed : Speed @10ms
+  event doorOpened : DoorState
+}
+
+service veh.adas.status : VehicleStatus
+
+service veh.adas.logs {
+  signal level : Level @1s
+  reserved oldTail
+  query tailLogs(filter: Filter): Line
+}
+";
+
+    /// `SourceFile::shapes` yields the `interface` declarations first, then the
+    /// services carrying an inline body — each under the name it is known by
+    /// outside the file. A service naming an interface after `:` contributes
+    /// nothing: its target is already in the walk.
+    #[test]
+    fn shapes_walks_interfaces_and_inline_service_bodies() {
+        use crate::{Profile, parse};
+
+        let parsed = parse(THREE_SHAPES, Profile::Ridl);
+        assert!(parsed.errors().is_empty(), "got: {:?}", parsed.errors());
+        let file = SourceFile::cast(parsed.syntax()).expect("the root is a SourceFile");
+
+        let walk: Vec<(String, usize)> = file
+            .shapes()
+            .map(|shape| {
+                (
+                    shape.identity().expect("every shape here is named"),
+                    shape.members().count(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            walk,
+            [
+                ("VehicleStatus".to_string(), 2),
+                ("veh.adas.logs".to_string(), 3),
+            ],
+            "the interface, then the inline shape under the service's dotted \
+             name; the reference-form service contributes nothing",
+        );
+
+        // The reference-form service is in the file and is not in the walk.
+        assert_eq!(file.services().count(), 2);
+        assert!(
+            !file
+                .shapes()
+                .any(|shape| shape.identity().as_deref() == Some("veh.adas.status")),
+        );
+    }
+
+    /// The identity range is the declared name, not the whole declaration and
+    /// not the keyword: it is what a diagnostic about the shape underlines.
+    #[test]
+    fn shape_identity_range_covers_the_declared_name() {
+        use crate::{Profile, parse};
+
+        let parsed = parse(THREE_SHAPES, Profile::Ridl);
+        let file = SourceFile::cast(parsed.syntax()).expect("the root is a SourceFile");
+
+        for shape in file.shapes() {
+            let name = shape.identity().expect("named");
+            let range = shape.identity_range().expect("named");
+            let start = usize::from(range.start());
+            let end = usize::from(range.end());
+            assert_eq!(
+                &THREE_SHAPES[start..end],
+                name,
+                "the range must cover exactly the declared name",
+            );
+        }
+    }
+
+    /// A `service` the parser recovered without a body and without a `:`
+    /// reference is an inline shape with no member — the same reading the
+    /// checker's `lower_service` takes, so a downstream walk sees the same set
+    /// of shapes the IR carries.
+    #[test]
+    fn a_service_with_neither_form_is_an_empty_inline_shape() {
+        use crate::{Profile, parse};
+
+        let parsed = parse("package app\nservice veh.adas.broken\n", Profile::Ridl);
+        let file = SourceFile::cast(parsed.syntax()).expect("the root is a SourceFile");
+
+        let shapes: Vec<InterfaceShape> = file.shapes().collect();
+        assert_eq!(shapes.len(), 1);
+        assert_eq!(shapes[0].identity().as_deref(), Some("veh.adas.broken"));
+        assert_eq!(shapes[0].members().count(), 0);
+    }
+
+    /// `DottedName::text` joins the significant tokens, so the written name is
+    /// read back whatever whitespace surrounds the dots.
+    #[test]
+    fn dotted_name_text_joins_the_segments() {
+        use crate::{Profile, parse};
+
+        let parsed = parse(
+            "package app\nservice veh . adas . logs {\n}\n",
+            Profile::Ridl,
+        );
+        let file = SourceFile::cast(parsed.syntax()).expect("the root is a SourceFile");
+        let service = file.services().next().expect("a service parses");
+        assert_eq!(service.name().expect("named").text(), "veh.adas.logs");
     }
 
     #[test]

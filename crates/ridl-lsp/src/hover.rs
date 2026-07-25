@@ -458,26 +458,20 @@ fn enclosing_shape<'a>(
     node: &SyntaxNode,
 ) -> Option<(String, &'a v2::Interface)> {
     for ancestor in node.ancestors() {
-        match ancestor.kind() {
-            SyntaxKind::InterfaceDef => {
-                let name = InterfaceDef::cast(ancestor)?
-                    .name()?
-                    .ident_token()?
-                    .text()
-                    .to_string();
-                let shape = ir.interfaces.iter().find(|shape| shape.name == name)?;
-                return Some((name, shape));
-            }
-            SyntaxKind::ServiceDef => {
-                let name = nav::dotted_text(&ServiceDef::cast(ancestor)?.name()?)?;
-                let service = ir.services.iter().find(|service| service.name == name)?;
-                let Some(v2::service::Shape::Inline(shape)) = &service.shape else {
-                    return None;
-                };
-                return Some((name, shape));
-            }
-            _ => {}
-        }
+        let name = match ancestor.kind() {
+            SyntaxKind::InterfaceDef => InterfaceDef::cast(ancestor)?
+                .name()?
+                .ident_token()?
+                .text()
+                .to_string(),
+            SyntaxKind::ServiceDef => nav::dotted_text(&ServiceDef::cast(ancestor)?.name()?)?,
+            _ => continue,
+        };
+        // One lookup for both: `Package::shapes` keys a named interface on its
+        // own name and a service's inline shape on the dotted service name, so
+        // a shape stored outside `Package.interfaces` is still found.
+        let shape = ir.shapes().find(|shape| shape.name == name)?;
+        return Some((name, shape.interface));
     }
     None
 }

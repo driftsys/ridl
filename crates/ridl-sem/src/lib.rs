@@ -22,7 +22,5 @@ pub mod timing;
 pub mod testgen;
 pub mod ucum;
 
-pub use check::{
-    CheckedInterface, CheckedPackage, ConstValue, check_package, checked_interface, const_value,
-};
+pub use check::{CheckedPackage, ConstValue, check_package, const_value};
 pub use resolve::{Resolution, Symbol, SymbolKind, resolve_package};

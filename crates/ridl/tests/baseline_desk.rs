@@ -603,9 +603,9 @@ fn ridl_407_block<'a>(stderr: &'a str, path: &str) -> &'a str {
 /// the inline shape without a tombstone. Every one is reported and the exit
 /// code stays 0 — the desk check informs, `ridl diff` gates.
 ///
-/// The inline-shape case is pinned separately because it renders differently,
-/// and today it renders *wrongly*: see
-/// [`inline_shape_removal_renders_without_a_span`].
+/// The inline-shape case is pinned separately because its span falls on a
+/// different construct — the service's dotted name rather than an interface
+/// name: see [`inline_shape_removal_spans_the_service_name`].
 #[test]
 fn check_reports_ordinal_drift_against_the_committed_baseline() {
     let entry = Path::new("tests/baseline-corpus");
@@ -662,27 +662,26 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
     );
 }
 
-/// **This test pins a defect, deliberately.**
+/// **This test pinned a defect until the `shapes()` refactor closed it.**
 ///
-/// An interaction removed from a service's *inline* shape is reported by the
-/// desk check, but the warning renders with no span at all — no file, no line,
-/// no source snippet — where the same removal from a named interface falls back
-/// to the interface's own name span.
+/// An interaction removed from a service's *inline* shape used to be reported
+/// by the desk check with no span at all — no file, no line, no source snippet
+/// — where the same removal from a named interface fell back to the
+/// interface's own name span. `DeclIndex` recorded inline-shape *members*
+/// (walking `service.inline_members()`) but populated the shape-level fallback
+/// map — the one used when the named interaction no longer exists in source —
+/// from `source.interfaces()` only. An inline shape is an `Interface` stored
+/// under `Service.shape`, outside `Package.interfaces`, so the fallback found
+/// nothing and the diagnostic was emitted detached. That was the sixth
+/// instance of the inline-shape blind spot the E2 corpus set out to look for
+/// (`crates/ridlc/tests/corpus/veh-cluster/NOTES`).
 ///
-/// The cause is in `ridl`'s own `DeclIndex`: it records inline-shape *members*
-/// (walking `service.inline_members()`), but populates the interface-level
-/// fallback map — the one used when the named interaction no longer exists in
-/// source — from `source.interfaces()` only. An inline shape is an `Interface`
-/// stored under `Service.shape`, outside `Package.interfaces`, so the fallback
-/// finds nothing and the diagnostic is emitted detached.
-///
-/// This is the sixth instance of the inline-shape blind spot the E2 corpus set
-/// out to look for (`crates/ridlc/tests/corpus/veh-cluster/NOTES`). The fix
-/// belongs to `DeclIndex`, not here; until it lands, this test records what the
-/// tool actually does, so the repair is visible as a change to this assertion
-/// rather than as a silent improvement.
+/// `DeclIndex::build` now walks `SourceFile::shapes()`, which yields an
+/// `interface` declaration and a service's inline shape alike, so the fallback
+/// covers both. The span for an inline shape lands on the service's dotted
+/// name, which is the identity its diff paths carry.
 #[test]
-fn inline_shape_removal_renders_without_a_span() {
+fn inline_shape_removal_spans_the_service_name() {
     let (_, _, stderr) = ridl(&["check".as_ref(), "tests/baseline-corpus".as_ref()]);
 
     let inline = ridl_407_block(&stderr, "corpus.baseline/corpus.baseline.hvac/setEcoMode");
@@ -694,14 +693,25 @@ fn inline_shape_removal_renders_without_a_span() {
         "the inline-shape removal is reported:\n{stderr}"
     );
     assert!(
-        !inline.contains("┌─"),
-        "DeclIndex has learned to span an inline shape — good. Update this test and \
-         `veh-cluster/NOTES`, which record it as unfixed:\n{inline}"
+        inline.contains("┌─"),
+        "the inline-shape removal carries a span — this is the sixth-instance \
+         regression, back:\n{inline}"
+    );
+    assert!(
+        inline.contains("service corpus.baseline.hvac {"),
+        "the fallback span points at the service's own declaration:\n{inline}"
+    );
+    // The underline sits on the dotted name, not on the `service` keyword or
+    // the whole declaration: the name is the identity the diff path carries.
+    assert!(
+        inline.contains("^^^^^^^^^^^^^^^^^^^^"),
+        "the underline covers `corpus.baseline.hvac`, the 20-character dotted \
+         name:\n{inline}"
     );
 
-    // The control: the same change to a named interface does carry a span, so
-    // the missing one above is specific to the inline shape rather than to
-    // removals in general.
+    // The control: the same change to a named interface spans the interface
+    // name, so the two forms differ in which construct is underlined and in
+    // nothing else.
     let named = ridl_407_block(&stderr, "corpus.baseline/VehicleStatus/setGear");
     assert!(
         named.contains("┌─") && named.contains("interface VehicleStatus {"),

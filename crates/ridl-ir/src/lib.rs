@@ -39,6 +39,98 @@ pub mod v2 {
         serde_json::to_string_pretty(package)
             .expect("IR serialization to JSON cannot fail: the generated types hold only JSON-representable values")
     }
+
+    /// One interface shape of a package (ridl §14.0): a declared `interface`,
+    /// or the inline shape of a `service` (§14.5).
+    ///
+    /// **[`Package::interfaces`] is not the complete set.** A `service`
+    /// declared with an inline body carries a full [`Interface`] inside its
+    /// own `shape` oneof, which lives outside `interfaces`; a consumer that
+    /// walks `interfaces` alone silently misses it. Six defects of exactly
+    /// that shape were found independently across E2 — observer-stub
+    /// lowering, both backends' transport identity, `ridl test`'s report, the
+    /// Rust backend's collision check, and the desk check's span index.
+    /// [`Package::shapes`] is the one walk that sees both, the way
+    /// [`fallible_transport_identity`] is the one transport-identity
+    /// derivation.
+    ///
+    /// This view is deliberately not a bare `&Interface`, because two of an
+    /// inline shape's own fields are empty by construction and reading them
+    /// is what produced two of those six defects:
+    ///
+    /// - [`Interface::name`] is `""` for an inline shape, so [`Self::name`]
+    ///   carries the **identity** name instead — the interface's own name, or
+    ///   the owning service's dotted global name. That is the name the diff
+    ///   paths, the observer-stub scoping, and both backends' identity fields
+    ///   already use.
+    /// - [`Interface::visibility`] is `VISIBILITY_UNSPECIFIED` for an inline
+    ///   shape; the owning [`Service`] carries the authoritative one, which
+    ///   [`Self::visibility`] reads.
+    ///
+    /// The generated *type* name is not derived here on purpose: mangling is
+    /// language-specific and stays with each backend.
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub struct InterfaceShape<'a> {
+        /// The name this shape is known by outside the package: an
+        /// `interface` declaration's own name, or the owning service's dotted
+        /// global name. Never `Interface::name` for an inline shape.
+        pub name: &'a str,
+        /// The interface body — its interactions and its doc envelope.
+        pub interface: &'a Interface,
+        /// The owning service, for an inline shape; `None` for a declared
+        /// `interface`.
+        pub service: Option<&'a Service>,
+    }
+
+    impl InterfaceShape<'_> {
+        /// The authoritative visibility of this shape: the owning service's
+        /// for an inline shape (an inline shape's own field is
+        /// `VISIBILITY_UNSPECIFIED` by construction), the interface's own
+        /// otherwise.
+        pub fn visibility(&self) -> i32 {
+            match self.service {
+                Some(service) => service.visibility,
+                None => self.interface.visibility,
+            }
+        }
+
+        /// `true` when this shape is the inline body of a `service`.
+        pub fn is_inline(&self) -> bool {
+            self.service.is_some()
+        }
+    }
+
+    impl Package {
+        /// Every interface shape the package carries — the declared
+        /// interfaces and the inline shapes of its services. See
+        /// [`InterfaceShape`] for why walking [`Package::interfaces`] alone is
+        /// a defect.
+        ///
+        /// The order is the one every consumer already walked: the declared
+        /// interfaces in source order, then the services in source order. A
+        /// service that names an interface after `:` yields nothing — its
+        /// target is a declared interface and is already in the sequence, so
+        /// yielding it again would visit one shape twice.
+        pub fn shapes(&self) -> impl Iterator<Item = InterfaceShape<'_>> {
+            let named = self.interfaces.iter().map(|interface| InterfaceShape {
+                name: &interface.name,
+                interface,
+                service: None,
+            });
+            let inline =
+                self.services
+                    .iter()
+                    .filter_map(|service| match service.shape.as_ref()? {
+                        service::Shape::Inline(interface) => Some(InterfaceShape {
+                            name: &service.name,
+                            interface,
+                            service: Some(service),
+                        }),
+                        service::Shape::InterfaceRef(_) => None,
+                    });
+            named.chain(inline)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -349,5 +441,87 @@ mod v2_round_trip {
             v2::fallible_transport_identity(&interface.name, query_decl.ordinal, arms),
             "VehicleStatus#5:FaultPage|DiagError"
         );
+    }
+
+    /// `Package::shapes` yields the named interfaces first, then the inline
+    /// shapes of the services — and each shape carries the name it is known by
+    /// OUTSIDE the package. The fixture's inline shape has `Interface.name ==
+    /// ""` by construction, so a walk that yielded the interface bare would
+    /// hand every consumer the empty string; two of the six E2 defects were
+    /// exactly that.
+    #[test]
+    fn shapes_walks_named_interfaces_and_inline_service_shapes() {
+        let package = fixture();
+        let walk: Vec<(&str, bool, usize)> = package
+            .shapes()
+            .map(|shape| {
+                (
+                    shape.name,
+                    shape.is_inline(),
+                    shape.interface.interactions.len(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            walk,
+            [("VehicleStatus", false, 6), ("veh.adas.logs", true, 1)],
+            "the named interface, then the inline shape under the service's \
+             dotted name",
+        );
+
+        // The fixture's third shape-bearing declaration is `service
+        // veh.adas.status : VehicleStatus`, which names an interface already in
+        // the walk. Yielding it too would visit `VehicleStatus` twice.
+        assert_eq!(package.services.len(), 2, "one reference form, one inline");
+        assert!(
+            !package
+                .shapes()
+                .any(|shape| shape.name == "veh.adas.status"),
+            "a service naming an interface contributes no shape of its own",
+        );
+    }
+
+    /// The owning service is carried because `Service.visibility` is the
+    /// authoritative one: an inline shape's own field is
+    /// `VISIBILITY_UNSPECIFIED` by construction, which is not "internal" and
+    /// not "public".
+    #[test]
+    fn shape_visibility_reads_the_owning_service_for_an_inline_shape() {
+        let package = fixture();
+        let shapes: Vec<v2::InterfaceShape<'_>> = package.shapes().collect();
+
+        let named = shapes[0];
+        assert!(named.service.is_none());
+        assert_eq!(named.visibility(), v2::Visibility::Public as i32);
+        assert_eq!(named.visibility(), named.interface.visibility);
+
+        let inline = shapes[1];
+        assert_eq!(
+            inline.interface.visibility,
+            v2::Visibility::Unspecified as i32,
+            "the trap: an inline shape's own visibility field is unset",
+        );
+        assert_eq!(
+            inline.service.expect("an inline shape has an owner").name,
+            "veh.adas.logs",
+        );
+        assert_eq!(
+            inline.visibility(),
+            v2::Visibility::Public as i32,
+            "the accessor reads the owning service's, never the unset field",
+        );
+    }
+
+    /// A package with no service at all still walks its interfaces, and a
+    /// package with neither yields nothing — the emptiness both backends test
+    /// for before emitting any interaction vocabulary.
+    #[test]
+    fn shapes_is_empty_only_when_the_package_declares_no_shape() {
+        let mut package = fixture();
+        package.services.clear();
+        assert_eq!(package.shapes().count(), 1);
+
+        package.interfaces.clear();
+        assert_eq!(package.shapes().count(), 0);
     }
 }

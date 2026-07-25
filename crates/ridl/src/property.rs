@@ -269,20 +269,11 @@ fn run_package(home: &Home, names: &Names, samples: usize) -> PackageReport {
     // full `Interface` inside its own `shape` oneof, and the checker lowers its
     // `require`/`ensure` clauses into real contracts with observer ids. Walking
     // only `package.interfaces` would report a green run over untested
-    // contracts — the one failure this command must not have. A service that
-    // names an interface instead needs nothing here: the target is already in
-    // `package.interfaces`, and running it twice would report it twice.
+    // contracts — the one failure this command must not have, so the walk is
+    // `Package::shapes`, which sees both.
     let mut contracts = Vec::new();
-    let inline_shapes =
-        package
-            .services
-            .iter()
-            .filter_map(|service| match service.shape.as_ref()? {
-                v2::service::Shape::Inline(interface) => Some(interface),
-                v2::service::Shape::InterfaceRef(_) => None,
-            });
-    for interface in package.interfaces.iter().chain(inline_shapes) {
-        for interaction in &interface.interactions {
+    for shape in package.shapes() {
+        for interaction in &shape.interface.interactions {
             let (params, clauses) = match &interaction.kind {
                 Some(v2::decl::Kind::CommandDef(command)) => (&command.params, &command.contracts),
                 Some(v2::decl::Kind::QueryDef(query)) => (&query.params, &query.contracts),

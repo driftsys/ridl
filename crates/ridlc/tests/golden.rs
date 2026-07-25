@@ -106,17 +106,12 @@ fn no_nameless_interaction_reaches_the_ir_through_compile() {
         // return for every one of these.
         let output = ridlc::compile("app.ridl", &source);
 
-        let mut interactions: Vec<&ridl_ir::v2::Decl> = output
+        // `Package::shapes` — an `interface` body and a service's inline shape
+        // alike, since the recovery paths below reach both.
+        let interactions = output
             .package
-            .interfaces
-            .iter()
-            .flat_map(|interface| interface.interactions.iter())
-            .collect();
-        for service in &output.package.services {
-            if let Some(ridl_ir::v2::service::Shape::Inline(inline)) = &service.shape {
-                interactions.extend(inline.interactions.iter());
-            }
-        }
+            .shapes()
+            .flat_map(|shape| shape.interface.interactions.iter());
         for decl in interactions {
             // A `reserved` tombstone's `Decl` name is empty by design — the
             // retired name lives in `Reserved.name`.

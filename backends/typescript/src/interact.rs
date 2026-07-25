@@ -92,31 +92,27 @@ pub(crate) fn emit_package(ctx: &Ctx, package: &v2::Package) -> Result<Vec<Strin
 
     let mut blocks = vec![vocabulary()];
 
-    for interface in &package.interfaces {
-        // A named interface is its own identity: the type name and the
-        // identity name are the same string.
-        let names = Names {
-            r#type: &interface.name,
-            identity: &interface.name,
+    // Every interface shape, named and inline alike — `Package::shapes`, not
+    // `package.interfaces`, which is not the complete set. A named interface is
+    // its own identity: the type name and the identity name are the same
+    // string. An inline service shape carries no name of its own (ridl §14.5);
+    // its generated interface is named after the service, the note saying so
+    // rides in the faces' own docs rather than as a detached comment, and its
+    // identity is the service's DOTTED name — never the mangled type name and
+    // never `Interface.name`, which is "" by construction for an inline shape.
+    for shape in package.shapes() {
+        let type_name = match shape.service {
+            Some(service) => inline_interface_name(&service.name),
+            None => shape.name.to_string(),
         };
-        emit_interface(ctx, names, interface, None, &mut blocks)?;
-    }
-    // An inline service shape carries no name of its own (ridl §14.5); its
-    // generated interface is named after the service, and the note saying so
-    // rides in the faces' own docs rather than as a detached comment.
-    for service in &package.services {
-        if let Some(v2::service::Shape::Inline(inline)) = &service.shape {
-            let type_name = inline_interface_name(&service.name);
-            let note = inline_shape_note(&service.name, &type_name);
-            // The identity is the service's DOTTED name, never the mangled
-            // type name and never `Interface.name` — which is "" by
-            // construction for an inline shape (ridl §14.5).
-            let names = Names {
-                r#type: &type_name,
-                identity: &service.name,
-            };
-            emit_interface(ctx, names, inline, Some(&note), &mut blocks)?;
-        }
+        let note = shape
+            .service
+            .map(|service| inline_shape_note(&service.name, &type_name));
+        let names = Names {
+            r#type: &type_name,
+            identity: shape.name,
+        };
+        emit_interface(ctx, names, shape.interface, note.as_deref(), &mut blocks)?;
     }
     if !package.services.is_empty() {
         blocks.push(emit_services(package)?);
@@ -911,29 +907,18 @@ fn generated_names(package: &v2::Package) -> Result<BTreeMap<String, String>, Ge
         )?;
     }
 
-    // Every interface, then every inline service shape — the same order and
-    // the same type names emission uses.
-    let owners = package
-        .interfaces
-        .iter()
-        .map(|interface| {
-            (
-                interface.name.clone(),
-                format!("interface {}", interface.name),
-            )
-        })
-        .chain(
-            package
-                .services
-                .iter()
-                .filter(|service| matches!(service.shape, Some(v2::service::Shape::Inline(_))))
-                .map(|service| {
-                    (
-                        inline_interface_name(&service.name),
-                        format!("the inline shape of service {}", service.name),
-                    )
-                }),
-        );
+    // Every interface, then every inline service shape — the same walk, the
+    // same order and the same type names emission uses.
+    let owners = package.shapes().map(|shape| match shape.service {
+        Some(service) => (
+            inline_interface_name(&service.name),
+            format!("the inline shape of service {}", service.name),
+        ),
+        None => (
+            shape.name.to_string(),
+            format!("interface {name}", name = shape.name),
+        ),
+    });
 
     for (type_name, origin) in owners {
         let stem = lower_camel(&type_name);

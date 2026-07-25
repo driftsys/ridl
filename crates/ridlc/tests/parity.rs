@@ -437,23 +437,20 @@ fn expected_package(ir: &v2::Package, kinds: &mut Kinds) -> BTreeMap<String, Exp
         );
     };
 
-    for interface in &ir.interfaces {
-        insert(
-            canonical_key(&interface.name),
-            expected_interface(&interface.name, interface, kinds),
-        );
-    }
-    for service in &ir.services {
-        if let Some(v2::service::Shape::Inline(inline)) = &service.shape {
-            kinds.inline_service_shapes += 1;
+    // `Package::shapes` — a named interface and a service's inline shape alike,
+    // named first, in the order both backends emit them.
+    for shape in ir.shapes() {
+        let key = match shape.service {
             // Both backends prefix an inline shape's generated name with
             // `Service` and follow it with the dotted segments; the canonical
             // key is that same construction, reduced.
-            insert(
-                canonical_key(&format!("Service{}", service.name)),
-                expected_interface(&service.name, inline, kinds),
-            );
-        }
+            Some(_) => {
+                kinds.inline_service_shapes += 1;
+                canonical_key(&format!("Service{name}", name = shape.name))
+            }
+            None => canonical_key(shape.name),
+        };
+        insert(key, expected_interface(shape.name, shape.interface, kinds));
     }
     out
 }

@@ -587,10 +587,11 @@ struct DeclIndex {
     texts: BTreeMap<String, String>,
     /// `(package, interface, interaction)` to the interaction's declaration.
     members: BTreeMap<(String, String, String), (String, TextRange)>,
-    /// `(package, interface)` to the interface's name. This is the fallback for
-    /// a removed interaction, whose own declaration no longer exists in the
-    /// source being checked.
-    interfaces: BTreeMap<(String, String), (String, TextRange)>,
+    /// `(package, shape)` to the shape's declared name. This is the fallback
+    /// for a removed interaction, whose own declaration no longer exists in the
+    /// source being checked. A service's inline shape is keyed by the service's
+    /// dotted name, exactly as its diff paths are.
+    shapes: BTreeMap<(String, String), (String, TextRange)>,
 }
 
 impl DeclIndex {
@@ -613,32 +614,23 @@ impl DeclIndex {
                 continue;
             };
 
-            for def in source.interfaces() {
-                let Some(name) = def.name() else { continue };
-                let Some(interface) = name_text(&name) else {
+            // Every interface shape, `interface` declarations and services'
+            // inline shapes alike (`SourceFile::shapes`). A service's inline
+            // shape is an interface body in every way that matters to wire
+            // identity, and the diff paths it produces are keyed by the service
+            // name — so it earns a fallback entry exactly as a named interface
+            // does, or a removal from it renders with no span at all.
+            for shape in source.shapes() {
+                let Some(name) = shape.identity() else {
                     continue;
                 };
-                index.interfaces.insert(
-                    (package.clone(), interface.clone()),
-                    (path.clone(), name.syntax().text_range()),
-                );
-                index.record_members(&package, &interface, &path, &text, def.members());
-            }
-            // A service's inline shape is an interface body in every way that
-            // matters to wire identity, and the diff paths it produces are keyed
-            // by the service name.
-            for service in source.services() {
-                let Some(name) = service.name() else { continue };
-                let Some(service_name) = dotted_text(name.syntax()) else {
+                let Some(range) = shape.identity_range() else {
                     continue;
                 };
-                index.record_members(
-                    &package,
-                    &service_name,
-                    &path,
-                    &text,
-                    service.inline_members(),
-                );
+                index
+                    .shapes
+                    .insert((package.clone(), name.clone()), (path.clone(), range));
+                index.record_members(&package, &name, &path, &text, shape.members());
             }
 
             index.texts.insert(path, text);
@@ -650,7 +642,7 @@ impl DeclIndex {
     fn record_members(
         &mut self,
         package: &str,
-        interface: &str,
+        shape: &str,
         path: &str,
         text: &str,
         members: impl Iterator<Item = InterfaceMember>,
@@ -661,33 +653,28 @@ impl DeclIndex {
                 continue;
             };
             self.members.insert(
-                (package.to_string(), interface.to_string(), member_name),
+                (package.to_string(), shape.to_string(), member_name),
                 (path.to_string(), declaration_range(&member, text)),
             );
         }
     }
 
-    /// The span a `<package>/<interface>/<interaction>` diff path points at:
-    /// the interaction's declaration, the interface's name when the interaction
-    /// itself is gone (a removal), and a detached span when neither is in the
-    /// source — a detached diagnostic renders as the coded message alone.
+    /// The span a `<package>/<shape>/<interaction>` diff path points at: the
+    /// interaction's declaration, the shape's name when the interaction itself
+    /// is gone (a removal), and a detached span when neither is in the source —
+    /// a detached diagnostic renders as the coded message alone.
     fn span_of(&self, diff_path: &str, sources: &mut SourceMap) -> Span {
         let mut parts = diff_path.split('/');
-        let (Some(package), Some(interface), Some(member)) =
-            (parts.next(), parts.next(), parts.next())
+        let (Some(package), Some(shape), Some(member)) = (parts.next(), parts.next(), parts.next())
         else {
             return detached_span();
         };
 
-        let key = (
-            package.to_string(),
-            interface.to_string(),
-            member.to_string(),
-        );
+        let key = (package.to_string(), shape.to_string(), member.to_string());
         let found = self
             .members
             .get(&key)
-            .or_else(|| self.interfaces.get(&(key.0, key.1)));
+            .or_else(|| self.shapes.get(&(key.0, key.1)));
         let Some((path, range)) = found else {
             return detached_span();
         };
