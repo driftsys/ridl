@@ -38,11 +38,17 @@ and §14.5 needs both service forms exercised.
   `interface WheelSummary`, so the generated output shows both side by side.
   See "internal is dropped by both backends" below — the snapshots pin the
   current, wrong output.
-- **The generated code compiles.** `veh_cluster_generated_rust_compiles_with_rustc`
-  composes the two packages as sibling modules and runs `rustc` over the result,
-  so the Rust snapshot is a proof rather than a transcript. The generated
-  TypeScript type-checks under `tsc --strict` (verified by hand; not wired into
-  `cargo test`, which would make Node a test-suite dependency).
+- **The generated code compiles, in both backends.**
+  `veh_cluster_generated_rust_compiles_with_rustc` composes the two packages as
+  sibling modules and runs `rustc` over the result;
+  `veh_cluster_generated_typescript_type_checks` runs the emitted modules
+  through `tsc --noEmit --strict` against the `tests/tsc/ridl.std.ts` stand-in.
+  Both snapshots are therefore proofs rather than transcripts, which is what the
+  E2 exit criterion — IR neutrality demonstrated by two backends — actually
+  asks for. The tsc proof skips with a printed notice when no tsc is
+  discoverable (the convention `backends/typescript` set), so Node stays
+  optional for `cargo test`; the generated-source markers are asserted either
+  way, so it never passes by type-checking nothing.
 
 ## Diagnostics the entry draws, and why they are kept
 
@@ -85,6 +91,13 @@ The control is in the same snapshots: `internal struct RawWheelFrame` (typl, in
 non-exported `interface RawWheelFrame` in TypeScript. So the typl layer honours
 `internal` and the interaction layer does not — a live violation of **ADR-0008
 decision 7**, not a gap in the design.
+
+The snapshots alone would let the repair land as a quiet diff, so
+`internal_on_the_interaction_layer_is_dropped_by_both_backends` asserts the
+leaked `pub` and `export` spellings directly, with the correctly-handled
+`internal struct` beside them as the control. Each assertion carries the message
+the fixer needs — which spelling to flip, and that **this section** is the one
+to update. Fixing `internal` in either backend fails that test by design.
 
 ### An inline shape carries no `Interface.visibility`
 

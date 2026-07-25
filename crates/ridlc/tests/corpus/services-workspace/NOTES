@@ -25,4 +25,11 @@ What the entry exercises that `veh-cluster` does not:
   `Package.interfaces`.
 - **Contracts inside an inline shape**, including an `ensure` over `result`.
 
-The entry compiles clean, so its IR, Rust and TypeScript snapshots are golden.
+The entry compiles clean, so its IR, Rust and TypeScript snapshots are golden —
+and both generated languages are compiled, not merely compared:
+`services_workspace_composed_compiles_with_rustc` nests the two packages as
+sibling modules and runs `rustc`, and
+`services_workspace_generated_typescript_type_checks` runs the emitted modules
+through `tsc --noEmit --strict`, which is where the cross-package module import
+(`import * as fleet_contracts from './fleet.contracts'`) is actually resolved
+rather than just observed in a snapshot.
