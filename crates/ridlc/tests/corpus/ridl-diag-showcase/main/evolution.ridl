@@ -1,0 +1,17 @@
+// Evolution diagnostics (ridl §11, §14.1, §16.4): RIDL-401, RIDL-402.
+
+package diag.ridl
+
+interface Evolution {
+
+  signal speed : Speed @10ms
+
+  /// A retired name is retired for ever — the ordinal it held is never reused.
+  reserved legacyTemp
+
+  /// Re-declaring a tombstoned name resurrects a wire identity.
+  signal legacyTemp : Speed @10ms
+
+  /// The same name twice in one interface: the second holds no ordinal slot.
+  signal speed : Speed @10ms
+}

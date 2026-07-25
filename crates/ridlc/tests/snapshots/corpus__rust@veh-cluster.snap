@@ -1,0 +1,1004 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.rust
+input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
+---
+// ===== package veh.common =====
+/// Vehicle speed over ground
+#[repr(transparent)]
+pub struct Speed(pub f64);
+impl Default for Speed {
+    fn default() -> Self {
+        Speed(0.0)
+    }
+}
+/// Coolant / ambient temperature
+#[repr(transparent)]
+pub struct Temperature(pub f64);
+impl Default for Temperature {
+    fn default() -> Self {
+        Temperature(0.0)
+    }
+}
+/// Engine crankshaft speed
+#[repr(transparent)]
+pub struct RPM(pub f64);
+impl Default for RPM {
+    fn default() -> Self {
+        RPM(0.0)
+    }
+}
+/// Normalised ratio
+#[repr(transparent)]
+pub struct Ratio(pub f64);
+impl Default for Ratio {
+    fn default() -> Self {
+        Ratio(0.0)
+    }
+}
+#[repr(transparent)]
+pub struct Counter(pub i64);
+impl Default for Counter {
+    fn default() -> Self {
+        Counter(0)
+    }
+}
+#[repr(transparent)]
+pub struct Gain(pub f64);
+impl Default for Gain {
+    fn default() -> Self {
+        Gain(0.0)
+    }
+}
+pub const MAX_SPEED: Speed = Speed(250.0);
+pub const SPEED_LIMIT_EU: Speed = Speed(130.0);
+pub const MAX_GEAR: i64 = 6;
+pub const IDLE_RPM: RPM = RPM(800.0);
+#[repr(i64)]
+pub enum GearPosition {
+    PARK = 0,
+    DRIVE = 1,
+    REVERSE = 2,
+    NEUTRAL = 3,
+}
+impl Default for GearPosition {
+    fn default() -> Self {
+        GearPosition::PARK
+    }
+}
+#[repr(i64)]
+pub enum Warning {
+    LOW_FUEL = 0,
+    CHECK_ENGINE = 1,
+    DOOR_OPEN = 2,
+    SEATBELT = 3,
+}
+impl Default for Warning {
+    fn default() -> Self {
+        Warning::LOW_FUEL
+    }
+}
+#[repr(transparent)]
+pub struct WarningFlags(pub i64);
+impl WarningFlags {
+    pub const LOW_FUEL: WarningFlags = WarningFlags(1 << 0);
+    pub const CHECK_ENGINE: WarningFlags = WarningFlags(1 << 1);
+    pub const DOOR_OPEN: WarningFlags = WarningFlags(1 << 2);
+    pub const SEATBELT: WarningFlags = WarningFlags(1 << 3);
+}
+impl Default for WarningFlags {
+    fn default() -> Self {
+        WarningFlags(0)
+    }
+}
+#[repr(C)]
+pub struct SpeedLimitPayload {
+    pub limit: Speed,
+    pub actual: Speed,
+}
+impl Default for SpeedLimitPayload {
+    fn default() -> Self {
+        SpeedLimitPayload {
+            limit: Speed::default(),
+            actual: Speed::default(),
+        }
+    }
+}
+pub struct DriverProfile {
+    pub name: crate::ridl::std::Name,
+    pub speed: Speed,
+    pub r#override: Option<Speed>,
+    pub gears: i64,
+}
+pub struct SensorBounds {
+    pub range: SensorBoundsRange,
+    pub readings: [Speed; 8],
+    pub labels: Vec<crate::ridl::std::Label>,
+    pub meta: Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
+}
+pub enum SensorResult {
+    Ok(SensorReading),
+    Err(SensorFault),
+}
+impl Default for SensorResult {
+    fn default() -> Self {
+        SensorResult::Ok(SensorReading::default())
+    }
+}
+#[repr(C)]
+pub struct SensorReading {
+    pub value: Speed,
+    pub timestamp: crate::ridl::std::Timestamp,
+}
+impl Default for SensorReading {
+    fn default() -> Self {
+        SensorReading {
+            value: Speed::default(),
+            timestamp: crate::ridl::std::Timestamp::default(),
+        }
+    }
+}
+pub struct SensorFault {
+    pub code: Counter,
+    pub message: crate::ridl::std::Message,
+}
+pub(crate) struct RawWheelFrame {
+    pub ticks: Counter,
+    pub frame: Vec<u8>,
+}
+pub struct SensorBoundsRange {
+    pub min: Speed,
+    pub max: Speed,
+}
+impl Default for SensorBoundsRange {
+    fn default() -> Self {
+        SensorBoundsRange {
+            min: Speed::default(),
+            max: Speed::default(),
+        }
+    }
+}
+
+
+// ===== package veh.cluster =====
+#[repr(C)]
+pub struct DoorPayload {
+    pub sensorId: i64,
+    pub isOpen: bool,
+}
+impl Default for DoorPayload {
+    fn default() -> Self {
+        DoorPayload {
+            sensorId: 0,
+            isOpen: false,
+        }
+    }
+}
+pub struct DiagFilter {
+    pub severity: i64,
+    pub category: Option<crate::ridl::std::Label>,
+}
+impl Default for DiagFilter {
+    fn default() -> Self {
+        DiagFilter {
+            severity: 0,
+            category: None,
+        }
+    }
+}
+pub struct FaultEvent {
+    pub code: i64,
+    pub message: crate::ridl::std::Message,
+    pub timestamp: crate::ridl::std::Timestamp,
+}
+#[repr(i64)]
+pub enum DiagError {
+    FILTER_INVALID = 0,
+    STORAGE_BUSY = 1,
+    ACCESS_DENIED = 2,
+}
+impl Default for DiagError {
+    fn default() -> Self {
+        DiagError::FILTER_INVALID
+    }
+}
+pub struct FaultPage {
+    pub faults: Vec<FaultEvent>,
+}
+impl Default for FaultPage {
+    fn default() -> Self {
+        FaultPage { faults: Vec::new() }
+    }
+}
+pub enum FaultPageResult {
+    Page(FaultPage),
+    Err(DiagError),
+}
+impl Default for FaultPageResult {
+    fn default() -> Self {
+        FaultPageResult::Page(FaultPage::default())
+    }
+}
+#[repr(transparent)]
+pub struct FanLevel(pub i64);
+impl Default for FanLevel {
+    fn default() -> Self {
+        FanLevel(0)
+    }
+}
+#[repr(C)]
+pub struct FilterState {
+    pub hoursRun: i64,
+    pub clogged: bool,
+}
+impl Default for FilterState {
+    fn default() -> Self {
+        FilterState {
+            hoursRun: 0,
+            clogged: false,
+        }
+    }
+}
+#[repr(C)]
+pub struct ClimateReport {
+    pub cabin: crate::veh::common::Temperature,
+    pub setpoint: crate::veh::common::Temperature,
+    pub fan: FanLevel,
+}
+impl Default for ClimateReport {
+    fn default() -> Self {
+        ClimateReport {
+            cabin: crate::veh::common::Temperature::default(),
+            setpoint: crate::veh::common::Temperature::default(),
+            fan: FanLevel::default(),
+        }
+    }
+}
+#[repr(i64)]
+pub enum HvacError {
+    COMPRESSOR_OFF = 0,
+    SENSOR_FAULT = 1,
+}
+impl Default for HvacError {
+    fn default() -> Self {
+        HvacError::COMPRESSOR_OFF
+    }
+}
+/// A declared constant, so a contract clause can reference one. The guaranteed
+/// expression subset admits constants (ridl §13) and nothing in the corpus
+/// exercised that until these members were added.
+pub const MAX_FAN: FanLevel = FanLevel(7);
+/// Where a signal's current value came from (ridl §4.4, §4.5).
+///
+/// `Init` is the channel's seeded value, before the provider's first
+/// publication; `Live` is a published value; `Invalid` marks a value
+/// that violated the payload constraints — the malformed value is not
+/// delivered, but its invalidity is, so no subscriber silently holds
+/// stale last-good data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    Init,
+    Live,
+    Invalid,
+}
+/// A signal channel: state that always holds a value (ridl §4.4).
+pub trait SignalHandle<T> {
+    /// The current value and where it came from. Never fails: the
+    /// channel is seeded with the init value at creation.
+    fn read(&self) -> (T, Provenance);
+    /// Registers a subscriber. It is called immediately with the
+    /// current value, then on every change.
+    fn subscribe(&mut self, f: Box<dyn FnMut(&T, Provenance)>);
+}
+/// An event channel: occurrences, which are not state (ridl §5). There
+/// is no `read` — an occurrence that has not happened has no value.
+pub trait EventHandle<T> {
+    fn subscribe(&mut self, f: Box<dyn FnMut(&T)>);
+}
+/// A finite or unbounded sequence of payloads (ridl §12).
+///
+/// Declared here rather than taken from a runtime crate so the
+/// generated module stays dependency-free; it is shaped so an adapter
+/// to `futures::Stream` is a blanket impl.
+pub trait RidlStream {
+    type Item;
+    fn poll_next(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Option<Self::Item>>;
+}
+/// How a timing annotation constrains an interaction (ridl §9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimingMode {
+    StrictPeriodic,
+    Range,
+}
+/// One interaction's resolved timing, in exact microseconds.
+///
+/// `min_us` is the rate floor and `max_us` the staleness bound; a strict
+/// period carries the same value in both. `default_applied` records that
+/// the contract was written without a `@` annotation and the configured
+/// default was resolved in (ridl §9.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimingConst {
+    pub mode: TimingMode,
+    pub min_us: Option<u64>,
+    pub max_us: Option<u64>,
+    pub default_applied: bool,
+}
+/// Which side of an interaction a contract clause constrains (ridl §13).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContractKind {
+    Require,
+    Ensure,
+}
+/// One contract clause as data, for an observer to install.
+///
+/// `id` is the observer address the IR assigns; it is a stable identity
+/// carried verbatim, not a Rust name. `uses_result` says whether the
+/// clause reads the query's result, which an `ensure` observer must
+/// know before it can be scheduled — it cannot run until the result
+/// exists. The flag is carried rather than inferred: `source` is text,
+/// so matching on it would misread a parameter named `resultCode` or a
+/// field access `.result`, and an `ensure` clause does not always read
+/// the result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContractStub {
+    pub id: &'static str,
+    pub kind: ContractKind,
+    pub source: &'static str,
+    pub signals: &'static [&'static str],
+    pub params: &'static [&'static str],
+    pub uses_result: bool,
+}
+/// Main vehicle status interface.
+/// labels: SIL_B, CAL_2, PRIVATE
+/// reserved ordinal 6 (`resetCounters`) — retired, never reused.
+/// The consumer face of `VehicleStatus` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait VehicleStatusConsumer {
+    /// Current vehicle speed — isochronous, drives rmdl clocks downstream
+    ///
+    /// signal `currentSpeed` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn current_speed(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Speed>;
+    /// Engine temperature — change-driven, 100ms freshness SLO
+    ///
+    /// signal `engineTemp` — ordinal 2 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn engine_temp(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Temperature>;
+    /// Active warnings — last-value delivered on subscribe (§4.4)
+    ///
+    /// signal `warnings` — ordinal 3 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields the payload type's init value, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn warnings(&mut self) -> &mut dyn SignalHandle<crate::veh::common::WarningFlags>;
+    /// Raised on every door state change; stale after 500ms
+    ///
+    /// event `doorOpened` — ordinal 4 (ridl §5).
+    /// An occurrence is not state: there is no last-value cache and no provenance.
+    fn door_opened(&mut self) -> &mut dyn EventHandle<DoorPayload>;
+    /// Request a gear change — outcome observed via currentGear, not returned
+    ///
+    /// command `setGear` — ordinal 5 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: position != GearPosition.PARK || currentSpeed == 0.0
+    async fn set_gear(&self, position: crate::veh::common::GearPosition);
+    /// Sliding-window average
+    ///
+    /// query `getAverageSpeed` — ordinal 7 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: window > 0ms
+    /// ensure: result >= 0.0
+    async fn get_average_speed(
+        &self,
+        window: crate::ridl::std::Duration,
+    ) -> crate::veh::common::Speed;
+    /// Fault history as a finite stream
+    ///
+    /// query `streamFaults` — ordinal 8 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    fn stream_faults(&self, filter: DiagFilter) -> impl RidlStream<Item = FaultEvent>;
+    /// Paged fault snapshot — fallible query via result union (§10.1)
+    ///
+    /// query `getFaultPage` — ordinal 9 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn get_fault_page(&self, filter: DiagFilter) -> FaultPageResult;
+    /// final `softwareVersion` — ordinal 10 (ridl §8).
+    /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
+    fn software_version(&self) -> &crate::ridl::std::Version;
+    /// final `capabilities` — ordinal 11 (ridl §8).
+    /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
+    fn capabilities(&self) -> &Vec<crate::ridl::std::Label>;
+}
+/// Main vehicle status interface.
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait VehicleStatusProvider {
+    /// Publishes `currentSpeed` — signal ordinal 1 (ridl §4).
+    fn publish_current_speed(&mut self, value: crate::veh::common::Speed);
+    /// Publishes `engineTemp` — signal ordinal 2 (ridl §4).
+    fn publish_engine_temp(&mut self, value: crate::veh::common::Temperature);
+    /// Publishes `warnings` — signal ordinal 3 (ridl §4).
+    fn publish_warnings(&mut self, value: crate::veh::common::WarningFlags);
+    /// Raises `doorOpened` — event ordinal 4 (ridl §5).
+    fn raise_door_opened(&mut self, occurrence: DoorPayload);
+    /// Handles `setGear` — command ordinal 5 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_set_gear(&mut self, position: crate::veh::common::GearPosition);
+    /// Handles `getAverageSpeed` — query ordinal 7 (ridl §7).
+    async fn on_get_average_speed(
+        &mut self,
+        window: crate::ridl::std::Duration,
+    ) -> crate::veh::common::Speed;
+    /// Handles `streamFaults` — query ordinal 8 (ridl §7).
+    fn on_stream_faults(
+        &mut self,
+        filter: DiagFilter,
+    ) -> impl RidlStream<Item = FaultEvent>;
+    /// Handles `getFaultPage` — query ordinal 9 (ridl §7).
+    async fn on_get_fault_page(&mut self, filter: DiagFilter) -> FaultPageResult;
+}
+/// Resolved timing for every signal and event of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9).
+pub const VEHICLE_STATUS_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "currentSpeed",
+        TimingConst {
+            mode: TimingMode::StrictPeriodic,
+            min_us: Some(10000),
+            max_us: Some(10000),
+            default_applied: false,
+        },
+    ),
+    (
+        "engineTemp",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(20000),
+            max_us: Some(100000),
+            default_applied: false,
+        },
+    ),
+    (
+        "warnings",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(50000),
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "doorOpened",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(50000),
+            max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `VehicleStatus` as data, in source order, for an observer to install (ridl §13).
+pub const VEHICLE_STATUS_CONTRACTS: &[ContractStub] = &[
+    ContractStub {
+        id: "VehicleStatus.setGear.require[0]",
+        kind: ContractKind::Require,
+        source: "position != GearPosition.PARK || currentSpeed == 0.0",
+        signals: &["VehicleStatus.currentSpeed"],
+        params: &["position"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "VehicleStatus.getAverageSpeed.require[0]",
+        kind: ContractKind::Require,
+        source: "window > 0ms",
+        signals: &[],
+        params: &["window"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "VehicleStatus.getAverageSpeed.ensure[0]",
+        kind: ContractKind::Ensure,
+        source: "result >= 0.0",
+        signals: &[],
+        params: &[],
+        uses_result: true,
+    },
+];
+/// Retired members in a named interface. Ordinals 2 and 4 can never be
+/// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+/// reserved ordinal 2 (`legacyWheelPhase`) — retired, never reused.
+/// reserved ordinal 4 — retired, never reused.
+/// The consumer face of `WheelHistory` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait WheelHistoryConsumer {
+    /// signal `wheelTicks` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn wheel_ticks(&mut self) -> &mut dyn SignalHandle<FanLevel>;
+    /// signal `wheelTemp` — ordinal 3 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn wheel_temp(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Temperature>;
+    /// signal `wheelSlipRate` — ordinal 5 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn wheel_slip_rate(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Ratio>;
+}
+/// Retired members in a named interface. Ordinals 2 and 4 can never be
+/// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+/// The provider face of `WheelHistory` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait WheelHistoryProvider {
+    /// Publishes `wheelTicks` — signal ordinal 1 (ridl §4).
+    fn publish_wheel_ticks(&mut self, value: FanLevel);
+    /// Publishes `wheelTemp` — signal ordinal 3 (ridl §4).
+    fn publish_wheel_temp(&mut self, value: crate::veh::common::Temperature);
+    /// Publishes `wheelSlipRate` — signal ordinal 5 (ridl §4).
+    fn publish_wheel_slip_rate(&mut self, value: crate::veh::common::Ratio);
+}
+/// Resolved timing for every signal and event of `WheelHistory`, keyed by the source name, in exact microseconds (ridl §9).
+pub const WHEEL_HISTORY_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "wheelTicks",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(100000),
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "wheelTemp",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(1000000),
+            max_us: Some(10000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "wheelSlipRate",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(500000),
+            max_us: Some(5000000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `WheelHistory` as data, in source order, for an observer to install (ridl §13).
+pub const WHEEL_HISTORY_CONTRACTS: &[ContractStub] = &[];
+/// A package-private contract shape: realized inside this package, never part
+/// of the cross-package surface.
+/// The consumer face of `WheelDiagnostics` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait WheelDiagnosticsConsumer {
+    /// signal `wheelTicks` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn wheel_ticks(&mut self) -> &mut dyn SignalHandle<FanLevel>;
+    /// event `slipDetected` — ordinal 2 (ridl §5).
+    /// An occurrence is not state: there is no last-value cache and no provenance.
+    fn slip_detected(&mut self) -> &mut dyn EventHandle<FilterState>;
+    /// query `readTicks` — ordinal 3 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn read_ticks(&self) -> FanLevel;
+}
+/// A package-private contract shape: realized inside this package, never part
+/// of the cross-package surface.
+/// The provider face of `WheelDiagnostics` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait WheelDiagnosticsProvider {
+    /// Publishes `wheelTicks` — signal ordinal 1 (ridl §4).
+    fn publish_wheel_ticks(&mut self, value: FanLevel);
+    /// Raises `slipDetected` — event ordinal 2 (ridl §5).
+    fn raise_slip_detected(&mut self, occurrence: FilterState);
+    /// Handles `readTicks` — query ordinal 3 (ridl §7).
+    async fn on_read_ticks(&mut self) -> FanLevel;
+}
+/// Resolved timing for every signal and event of `WheelDiagnostics`, keyed by the source name, in exact microseconds (ridl §9).
+pub const WHEEL_DIAGNOSTICS_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "wheelTicks",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(100000),
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "slipDetected",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(50000),
+            max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `WheelDiagnostics` as data, in source order, for an observer to install (ridl §13).
+pub const WHEEL_DIAGNOSTICS_CONTRACTS: &[ContractStub] = &[];
+/// A public shape beside it, so the generated output shows the two side by
+/// side and the difference is readable in one snapshot.
+/// The consumer face of `WheelSummary` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait WheelSummaryConsumer {
+    /// signal `wheelHealth` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn wheel_health(&mut self) -> &mut dyn SignalHandle<FanLevel>;
+}
+/// A public shape beside it, so the generated output shows the two side by
+/// side and the difference is readable in one snapshot.
+/// The provider face of `WheelSummary` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait WheelSummaryProvider {
+    /// Publishes `wheelHealth` — signal ordinal 1 (ridl §4).
+    fn publish_wheel_health(&mut self, value: FanLevel);
+}
+/// Resolved timing for every signal and event of `WheelSummary`, keyed by the source name, in exact microseconds (ridl §9).
+pub const WHEEL_SUMMARY_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "wheelHealth",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(1000000),
+            max_us: Some(10000000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `WheelSummary` as data, in source order, for an observer to install (ridl §13).
+pub const WHEEL_SUMMARY_CONTRACTS: &[ContractStub] = &[];
+/// reserved ordinal 2 (`legacyTicks`) — retired, never reused.
+/// reserved ordinal 3 — retired, never reused.
+/// The consumer face of `ServiceVehClusterWheels` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait ServiceVehClusterWheelsConsumer {
+    /// signal `ticks` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn ticks(&mut self) -> &mut dyn SignalHandle<FanLevel>;
+    /// event `slipped` — ordinal 4 (ridl §5).
+    /// An occurrence is not state: there is no last-value cache and no provenance.
+    fn slipped(&mut self) -> &mut dyn EventHandle<FilterState>;
+}
+/// The provider face of `ServiceVehClusterWheels` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait ServiceVehClusterWheelsProvider {
+    /// Publishes `ticks` — signal ordinal 1 (ridl §4).
+    fn publish_ticks(&mut self, value: FanLevel);
+    /// Raises `slipped` — event ordinal 4 (ridl §5).
+    fn raise_slipped(&mut self, occurrence: FilterState);
+}
+/// Resolved timing for every signal and event of `ServiceVehClusterWheels`, keyed by the source name, in exact microseconds (ridl §9).
+pub const SERVICE_VEH_CLUSTER_WHEELS_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "ticks",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(100000),
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "slipped",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(50000),
+            max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `ServiceVehClusterWheels` as data, in source order, for an observer to install (ridl §13).
+pub const SERVICE_VEH_CLUSTER_WHEELS_CONTRACTS: &[ContractStub] = &[];
+/// reserved ordinal 8 (`setEcoMode`) — retired, never reused.
+/// The consumer face of `ServiceVehHvacCabin` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait ServiceVehHvacCabinConsumer {
+    /// Strict periodic — signal only (ridl §9).
+    ///
+    /// signal `cabinTemp` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn cabin_temp(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Temperature>;
+    /// Range with both bounds.
+    ///
+    /// signal `targetTemp` — ordinal 2 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn target_temp(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Temperature>;
+    /// Range, lower bound only — no staleness bound declared.
+    ///
+    /// signal `blowerDuty` — ordinal 3 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn blower_duty(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Ratio>;
+    /// Range, upper bound only — no rate floor declared.
+    ///
+    /// signal `fanLevel` — ordinal 4 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn fan_level(&mut self) -> &mut dyn SignalHandle<FanLevel>;
+    /// Microsecond resolution, and an init override for the channel (ridl §4.4).
+    ///
+    /// signal `compressorLoad` — ordinal 5 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `12.5`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    /// The channel overrides the type's init with `12.5`.
+    fn compressor_load(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Ratio>;
+    /// Untimed: the package `[defaults].timing` is resolved at compile time and
+    /// lands in the IR as concrete bounds with `default_applied` set (ridl §9.1).
+    ///
+    /// event `filterClogged` — ordinal 6 (ridl §5).
+    /// An occurrence is not state: there is no last-value cache and no provenance.
+    fn filter_clogged(&mut self) -> &mut dyn EventHandle<FilterState>;
+    /// Fire-and-forget, with a precondition over its own parameter and over
+    /// this shape's own signal (ridl §13).
+    ///
+    /// command `setTarget` — ordinal 7 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: t >= -10.0
+    /// require: cabinTemp >= -40.0
+    async fn set_target(&self, t: crate::veh::common::Temperature);
+    /// Client-produced stream on a parameter (ridl §12.1).
+    ///
+    /// command `replayTrace` — ordinal 9 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn replay_trace(&self, samples: impl RidlStream<Item = FilterState>);
+    /// Provider-produced stream in return position.
+    ///
+    /// query `streamFilterHistory` — ordinal 10 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    fn stream_filter_history(
+        &self,
+        limit: FanLevel,
+    ) -> impl RidlStream<Item = FilterState>;
+    /// Bidirectional — a stream in both positions at once.
+    ///
+    /// query `rebalance` — ordinal 11 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    fn rebalance(
+        &self,
+        samples: impl RidlStream<Item = FilterState>,
+    ) -> impl RidlStream<Item = ClimateReport>;
+    /// A postcondition that reads `result` — tuple-field access is the widest
+    /// `result` shape the guaranteed expression subset admits (ridl §13).
+    ///
+    /// query `getBounds` — ordinal 12 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: true
+    /// ensure: result.min <= result.max
+    async fn get_bounds(&self) -> ServiceVehHvacCabinGetBoundsResult;
+    /// Inline fallible return `T | E` — the canonical spelling in return
+    /// position (general form §6.1). Its transport identity is synthesized from
+    /// the enclosing shape and the ordinal, which is exactly what an inline
+    /// shape has to get right without an interface name to borrow.
+    ///
+    /// query `calibrate` — ordinal 13 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// transport identity: veh.hvac.cabin#13:ClimateReport|HvacError
+    async fn calibrate(&self, axle: FanLevel) -> Result<ClimateReport, HvacError>;
+    /// A plain named-type return.
+    ///
+    /// query `getClimate` — ordinal 14 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn get_climate(&self) -> ClimateReport;
+    /// Superseded by `getClimate`.
+    ///
+    /// query `getCabinTemp` — ordinal 15 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    #[deprecated(note = "use getClimate — this returns only the cabin reading")]
+    async fn get_cabin_temp(&self) -> crate::veh::common::Temperature;
+    /// Provisioned, immutable for the software-instance lifetime (ridl §8).
+    ///
+    /// final `unitSerial` — ordinal 16 (ridl §8).
+    /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
+    fn unit_serial(&self) -> &crate::ridl::std::Label;
+    /// A collection-typed final.
+    ///
+    /// final `supportedModes` — ordinal 17 (ridl §8).
+    /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
+    fn supported_modes(&self) -> &Vec<crate::ridl::std::Label>;
+    /// Boolean conjunction.
+    ///
+    /// command `setFan` — ordinal 18 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: level >= 0 && level <= 7
+    async fn set_fan(&self, level: FanLevel);
+    /// Arithmetic over a parameter, and a reference to a declared `const`.
+    ///
+    /// command `trimFan` — ordinal 19 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: level + 1 <= 7
+    /// require: level <= MAX_FAN
+    async fn trim_fan(&self, level: FanLevel);
+    /// Arithmetic over `result`.
+    ///
+    /// query `scaledFan` — ordinal 20 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// ensure: result * 2 >= 0
+    async fn scaled_fan(&self) -> FanLevel;
+}
+/// The provider face of `ServiceVehHvacCabin` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait ServiceVehHvacCabinProvider {
+    /// Publishes `cabinTemp` — signal ordinal 1 (ridl §4).
+    fn publish_cabin_temp(&mut self, value: crate::veh::common::Temperature);
+    /// Publishes `targetTemp` — signal ordinal 2 (ridl §4).
+    fn publish_target_temp(&mut self, value: crate::veh::common::Temperature);
+    /// Publishes `blowerDuty` — signal ordinal 3 (ridl §4).
+    fn publish_blower_duty(&mut self, value: crate::veh::common::Ratio);
+    /// Publishes `fanLevel` — signal ordinal 4 (ridl §4).
+    fn publish_fan_level(&mut self, value: FanLevel);
+    /// Publishes `compressorLoad` — signal ordinal 5 (ridl §4).
+    fn publish_compressor_load(&mut self, value: crate::veh::common::Ratio);
+    /// Raises `filterClogged` — event ordinal 6 (ridl §5).
+    fn raise_filter_clogged(&mut self, occurrence: FilterState);
+    /// Handles `setTarget` — command ordinal 7 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_set_target(&mut self, t: crate::veh::common::Temperature);
+    /// Handles `replayTrace` — command ordinal 9 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_replay_trace(&mut self, samples: impl RidlStream<Item = FilterState>);
+    /// Handles `streamFilterHistory` — query ordinal 10 (ridl §7).
+    fn on_stream_filter_history(
+        &mut self,
+        limit: FanLevel,
+    ) -> impl RidlStream<Item = FilterState>;
+    /// Handles `rebalance` — query ordinal 11 (ridl §7).
+    fn on_rebalance(
+        &mut self,
+        samples: impl RidlStream<Item = FilterState>,
+    ) -> impl RidlStream<Item = ClimateReport>;
+    /// Handles `getBounds` — query ordinal 12 (ridl §7).
+    async fn on_get_bounds(&mut self) -> ServiceVehHvacCabinGetBoundsResult;
+    /// Handles `calibrate` — query ordinal 13 (ridl §7).
+    async fn on_calibrate(&mut self, axle: FanLevel) -> Result<ClimateReport, HvacError>;
+    /// Handles `getClimate` — query ordinal 14 (ridl §7).
+    async fn on_get_climate(&mut self) -> ClimateReport;
+    /// Handles `getCabinTemp` — query ordinal 15 (ridl §7).
+    #[deprecated(note = "use getClimate — this returns only the cabin reading")]
+    async fn on_get_cabin_temp(&mut self) -> crate::veh::common::Temperature;
+    /// Handles `setFan` — command ordinal 18 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_set_fan(&mut self, level: FanLevel);
+    /// Handles `trimFan` — command ordinal 19 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_trim_fan(&mut self, level: FanLevel);
+    /// Handles `scaledFan` — query ordinal 20 (ridl §7).
+    async fn on_scaled_fan(&mut self) -> FanLevel;
+}
+/// Resolved timing for every signal and event of `ServiceVehHvacCabin`, keyed by the source name, in exact microseconds (ridl §9).
+pub const SERVICE_VEH_HVAC_CABIN_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "cabinTemp",
+        TimingConst {
+            mode: TimingMode::StrictPeriodic,
+            min_us: Some(1000000),
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "targetTemp",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(500000),
+            max_us: Some(5000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "blowerDuty",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(200000),
+            max_us: None,
+            default_applied: false,
+        },
+    ),
+    (
+        "fanLevel",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(2000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "compressorLoad",
+        TimingConst {
+            mode: TimingMode::StrictPeriodic,
+            min_us: Some(500),
+            max_us: Some(500),
+            default_applied: false,
+        },
+    ),
+    (
+        "filterClogged",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(200000),
+            max_us: Some(2000000),
+            default_applied: true,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `ServiceVehHvacCabin` as data, in source order, for an observer to install (ridl §13).
+pub const SERVICE_VEH_HVAC_CABIN_CONTRACTS: &[ContractStub] = &[
+    ContractStub {
+        id: "veh.hvac.cabin.setTarget.require[0]",
+        kind: ContractKind::Require,
+        source: "t >= -10.0",
+        signals: &[],
+        params: &["t"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.setTarget.require[1]",
+        kind: ContractKind::Require,
+        source: "cabinTemp >= -40.0",
+        signals: &["veh.hvac.cabin.cabinTemp"],
+        params: &[],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.getBounds.require[0]",
+        kind: ContractKind::Require,
+        source: "true",
+        signals: &[],
+        params: &[],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.getBounds.ensure[0]",
+        kind: ContractKind::Ensure,
+        source: "result.min <= result.max",
+        signals: &[],
+        params: &[],
+        uses_result: true,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.setFan.require[0]",
+        kind: ContractKind::Require,
+        source: "level >= 0 && level <= 7",
+        signals: &[],
+        params: &["level"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.trimFan.require[0]",
+        kind: ContractKind::Require,
+        source: "level + 1 <= 7",
+        signals: &[],
+        params: &["level"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.trimFan.require[1]",
+        kind: ContractKind::Require,
+        source: "level <= MAX_FAN",
+        signals: &[],
+        params: &["level"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.scaledFan.ensure[0]",
+        kind: ContractKind::Ensure,
+        source: "result * 2 >= 0",
+        signals: &[],
+        params: &[],
+        uses_result: true,
+    },
+];
+/// Every service this package declares: the deployment address and the
+/// interface that answers at it (ridl §11).
+///
+/// The address is the contract's own dotted identity, carried verbatim;
+/// the interface name is the generated Rust type prefix. For an inline
+/// shape they differ by construction, and the address — not the type
+/// name — is the identity the wire and the observers use.
+pub const SERVICES: &[(&str, &str)] = &[
+    ("veh.cluster.wheels", "ServiceVehClusterWheels"),
+    ("veh.cluster.status", "VehicleStatus"),
+    ("veh.cluster.standby", "VehicleStatus"),
+    ("veh.hvac.cabin", "ServiceVehHvacCabin"),
+];
+pub struct ServiceVehHvacCabinGetBoundsResult {
+    pub min: crate::veh::common::Temperature,
+    pub max: crate::veh::common::Temperature,
+}

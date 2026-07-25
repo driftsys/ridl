@@ -1,0 +1,11 @@
+// Truncated at end of file inside every ridl bracket: the parameter list, the
+// attribute block, the interface body.
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+interface Truncated {
+  command act(g: Speed
+  query read(): Speed [
+    require g > 0.0

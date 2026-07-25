@@ -1,0 +1,17 @@
+// The typl half: declarations announced and left nameless, plus the profile
+// boundary reached from a nameless position.
+
+package app
+
+type : integer [0..7]
+struct {
+  x : integer [0..7]
+}
+enum {
+  A = 0
+}
+enumset :
+union {
+  ok : integer [0..7]
+}
+const = 3

@@ -1,0 +1,6 @@
+package app
+
+struct Truncated {
+  a : integer [0..7
+  b : [integer [0..7];
+  c : {

@@ -1,0 +1,356 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.diagnostics
+input_file: crates/ridlc/tests/corpus/ridl-diag-showcase/ridl.toml
+---
+error[RIDL-104]: return type on command — a command always returns `()`; use `query` for a result
+  ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:9:37
+  │
+9 │   command withReturn(level: Level): Speed
+  │                                     ^^^^^
+
+error[RIDL-105]: query returning `()` — a query must return a value; use `command`
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:12:24
+   │
+12 │   query nothingBack(): ()
+   │                        ^^
+
+error[RIDL-106]: timing annotation not valid on final
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:15:28
+   │
+15 │   final timedFinal : Level @1s
+   │                            ^^^
+
+error[RIDL-106]: attribute block not valid on final
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:18:34
+   │  
+18 │     final constrainedFinal : Level [
+   │ ╭──────────────────────────────────^
+19 │ │     require true
+20 │ │   ]
+   │ ╰───^
+
+error[RIDL-301]: `require` not valid on final — contracts belong to `command` and `query`
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:19:5
+   │
+19 │     require true
+   │     ^^^^^^^^^^^^
+
+error[FORM-102]: unexpected token in an interface body
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:23:3
+   │
+23 │   struct Nested {
+   │   ^^^^^^
+
+error[RIDL-107]: type declaration inside an interface body — typl declarations live at package level
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:23:3
+   │  
+23 │ ╭   struct Nested {
+24 │ │     x : Level
+25 │ │   }
+   │ ╰───^
+
+error[FORM-101]: expected a return type
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:23
+   │
+16 │   query listLevels(): [Level; 0..8]
+   │                       ^
+
+error[FORM-106]: unknown attribute key `Level`
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:24
+   │
+16 │   query listLevels(): [Level; 0..8]
+   │                        ^^^^^
+
+error[FORM-102]: unexpected token in an attribute block
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:29
+   │
+16 │   query listLevels(): [Level; 0..8]
+   │                             ^
+
+error[RIDL-403]: behaviour, user-interaction, or architecture declaration in ridl context: `view`
+  ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary.ridl:7:1
+  │
+7 │ view MediaHome {
+  │ ^^^^
+
+error[TYPL-304]: interaction declaration in typl context: `signal`
+   ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary.typl:10:1
+   │
+10 │ signal currentSpeed : Speed
+   │ ^^^^^^
+
+error[TYPL-303]: require/ensure attribute in typl context
+   ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary_attr.typl:12:1
+   │
+12 │ require currentSpeed >= 0
+   │ ^^^^^^^
+
+error[MANI-009]: invalid `[defaults].timing` in the package manifest: expected a bracketed range like `[100ms..1000ms]`, found `every so often`
+  ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:1:1
+  │
+1 │ // Attribute allow-list diagnostics (general form §4.3): FORM-106, FORM-107,
+  │ ^
+
+error[FORM-107]: attribute `persist` not valid on command
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:13:5
+   │
+13 │     persist
+   │     ^^^^^^^
+
+error[FORM-107]: attribute `persist` not valid on command
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:14:5
+   │
+14 │     persist
+   │     ^^^^^^^
+
+error[FORM-108]: duplicate attribute key `persist`
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:14:5
+   │
+14 │     persist
+   │     ^^^^^^^
+
+error[FORM-106]: unknown attribute key `frobnicate`
+   ┌─ tests/corpus/ridl-diag-showcase/main/attrs.ridl:19:5
+   │
+19 │     frobnicate = 3
+   │     ^^^^^^^^^^^^^^
+
+error[RIDL-301]: `require` not valid on signal — contracts belong to `command` and `query`
+   ┌─ tests/corpus/ridl-diag-showcase/main/contracts.ridl:10:5
+   │
+10 │     require speed >= 0.0
+   │     ^^^^^^^^^^^^^^^^^^^^
+
+error[RIDL-301]: `ensure` not valid on event — contracts belong to `query`
+   ┌─ tests/corpus/ridl-diag-showcase/main/contracts.ridl:15:5
+   │
+15 │     ensure true
+   │     ^^^^^^^^^^^
+
+error[RIDL-302]: `ensure` not valid on command — a command has no result to observe
+   ┌─ tests/corpus/ridl-diag-showcase/main/contracts.ridl:20:5
+   │
+20 │     ensure true
+   │     ^^^^^^^^^^^
+
+warning[RIDL-305]: `ensure` references no `result` — a postcondition that observes nothing of the result (ridl §13)
+   ┌─ tests/corpus/ridl-diag-showcase/main/contracts.ridl:25:12
+   │
+25 │     ensure limit >= 0
+   │            ^^^^^^^^^^
+
+error[RIDL-306]: `result` is a query result of type `diag.ridl.Sample`, which is outside the guaranteed subset — a contract expression types boolean, numeric, duration, enum, and tuple values (expr-core §5.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/contracts.ridl:31:12
+   │
+31 │     ensure result.value >= 0.0
+   │            ^^^^^^
+
+warning[RIDL-307]: `error` enum value `INVALID_VALUE` is a reserved Stratum-2 contract-error category — choose a different name
+   ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:11:3
+   │
+11 │   INVALID_VALUE = 0
+   │   ^^^^^^^^^^^^^
+
+error[RIDL-303]: query returns a bare error type `DiagError` — a query with no success path is not a query
+   ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:18:34
+   │
+18 │   query onlyFails(limit: Level): DiagError
+   │                                  ^^^^^^^^^
+
+warning[RIDL-304]: command parameter `fault` has error type `DiagError` — failure flowing toward a provider
+   ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:21:25
+   │
+21 │   command absorb(fault: DiagError)
+   │                         ^^^^^^^^^
+
+warning[RIDL-308]: query returns the named result union `NamedResult` — in return position the inline spelling is canonical: write `Sample | DiagError` (general form §6.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:24:30
+   │
+24 │   query paged(limit: Level): NamedResult
+   │                              ^^^^^^^^^^^
+
+error[RIDL-401]: interaction `legacyTemp` re-declares a `reserved` name
+   ┌─ tests/corpus/ridl-diag-showcase/main/evolution.ridl:13:10
+   │
+13 │   signal legacyTemp : Speed @10ms
+   │          ^^^^^^^^^^
+
+error[RIDL-402]: duplicate interaction name `speed`
+   ┌─ tests/corpus/ridl-diag-showcase/main/evolution.ridl:16:10
+   │
+16 │   signal speed : Speed @10ms
+   │          ^^^^^
+
+error[RIDL-109]: signal payload type `Serial` has no derivable init value and no `= value` override
+  ┌─ tests/corpus/ridl-diag-showcase/main/init.ridl:9:19
+  │
+9 │   signal serial : Serial @[1s..10s]
+  │                   ^^^^^^
+
+error[RIDL-110]: init value 99 is outside the declared range [0..7]
+   ┌─ tests/corpus/ridl-diag-showcase/main/init.ridl:12:26
+   │
+12 │   signal level : Level = 99 @[1s..10s]
+   │                          ^^
+
+error[RIDL-201]: stream `<T>` not valid on a signal payload
+   ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:16:17
+   │
+16 │   signal live : <Sample> @1s
+   │                 ^^^^^^^^
+
+error[RIDL-301]: `require` not valid on signal — contracts belong to `command` and `query`
+   ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:20:5
+   │
+20 │     require speed >= 0.0
+   │     ^^^^^^^^^^^^^^^^^^^^
+
+error[RIDL-302]: `ensure` not valid on command — a command has no result to observe
+   ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:25:5
+   │
+25 │     ensure true
+   │     ^^^^^^^^^^^
+
+warning[RIDL-308]: query returns the named result union `NamedResult` — in return position the inline spelling is canonical: write `Sample | DiagError` (general form §6.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:30:30
+   │
+30 │   query paged(limit: Level): NamedResult
+   │                              ^^^^^^^^^^^
+
+error[FORM-102]: signal payload must be a named type
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:20:23
+   │
+20 │   signal maybeSpeed : Speed? @10ms
+   │                       ^^^^^^
+
+error[FORM-102]: event payload must be a named type
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:23:23
+   │
+23 │   event maybeRaised : Sample? @[1s..2s]
+   │                       ^^^^^^^
+
+error[FORM-102]: command parameter must be a named type or a stream
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:26:28
+   │
+26 │   command takeMaybe(level: Level?)
+   │                            ^^^^^^
+
+error[FORM-102]: final payload must be a named type or an array
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:29:23
+   │
+29 │   final maybeSerial : Serial?
+   │                       ^^^^^^^
+
+error[FORM-102]: command parameter must be a named type or a stream
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:32:26
+   │
+32 │   command takeMap(table: [Level : Sample; 0..8])
+   │                          ^^^^^^^^^^^^^^^^^^^^^^
+
+error[RIDL-141]: service names `Sample`, which is not an interface
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:14:34
+   │
+14 │ service diag.showcase.mistyped : Sample
+   │                                  ^^^^^^
+
+error[TYPL-301]: stream type `<T>` not valid on a struct field or collection — interaction parameters and query returns only
+  ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:8:12
+  │
+8 │   chunks : <Sample>
+  │            ^^^^^^^^
+
+error[RIDL-201]: stream `<T>` not valid on a signal payload
+   ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:14:17
+   │
+14 │   signal live : <Sample> @1s
+   │                 ^^^^^^^^
+
+error[RIDL-201]: stream `<T>` not valid on an event payload
+   ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:17:17
+   │
+17 │   event burst : <Sample> @[1s..10s]
+   │                 ^^^^^^^^
+
+error[RIDL-202]: stream element type must be a named type, `string`, or `bytes`
+   ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:20:33
+   │
+20 │   query numbers(limit: Level): <integer>
+   │                                 ^^^^^^^
+
+warning[RIDL-100]: signal without a timing annotation — the default [100000us..1000000us] is applied
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:10:10
+   │
+10 │   signal untimed : Speed
+   │          ^^^^^^^
+
+error[RIDL-101]: timing lower bound 500000us exceeds the upper bound 100000us
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:13:29
+   │
+13 │   signal inverted : Speed @[500ms..100ms]
+   │                             ^^^^^^^^^^^^
+
+error[RIDL-102]: a timing duration must be greater than zero
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:16:23
+   │
+16 │   signal zero : Speed @0ms
+   │                       ^^^^
+
+warning[RIDL-108]: timing range with equal bounds 250000us — equivalent to the strict period `@250000us`
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:19:31
+   │
+19 │   signal degenerate : Speed @[250ms..250ms]
+   │                               ^^^^^^^^^^^^
+
+error[RIDL-103]: strict-periodic `@Xms` is not valid on an event — use a range `@[min..max]`
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:23:23
+   │
+23 │   event tick : Sample @100ms
+   │                       ^^^^^^
+
+note[TYPL-115]: type `Serial` has no derivable init value and no declared `= value`
+   ┌─ tests/corpus/ridl-diag-showcase/main/vocabulary.typl:14:6
+   │
+14 │ type Serial : string [4..8 match /^[A-Z]+$/]
+   │      ^^^^^^
+
+warning[RIDL-404]: query `setLevel` is named like a mutation (`set…`) — queries should be read-only or idempotent, so if it mutates state it belongs to `command` (ridl §7.2). If the name is a domain noun rather than a verb (`setPoint`, `resetReason`), ignore this.
+   ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:11:9
+   │
+11 │   query setLevel(level: Level): Level
+   │         ^^^^^^^^
+
+note[RIDL-406]: signal payload `EnvelopeEcho` declares `frameCounter`, which the envelope already carries — every publication is delivered with a timestamp and a sequence number, so the payload need not re-declare them (ridl §3.1). Domain metadata distinct from transport metadata is legitimate: keep the field if it records when the fact occurred rather than when it was published, or if it counts the fact itself rather than the publication carrying it.
+   ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:15:17
+   │
+15 │   signal echo : EnvelopeEcho @[1s..10s]
+   │                 ^^^^^^^^^^^^
+
+note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:18:32
+   │
+18 │   query readOne(limit: Level): Sample | SharedFault
+   │                                ^^^^^^^^^^^^^^^^^^^^
+
+note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:23:32
+   │
+23 │   query readTwo(limit: Level): Sample | SharedFault
+   │                                ^^^^^^^^^^^^^^^^^^^^
+
+note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:28:34
+   │
+28 │   query readThree(limit: Level): Sample | SharedFault
+   │                                  ^^^^^^^^^^^^^^^^^^^^
+
+error[RIDL-140]: duplicate service name `diag.showcase.duplicate` — the service catalog is a flat global namespace
+   ┌─ tests/corpus/ridl-diag-showcase/twin/twin.ridl:14:9
+   │
+14 │ service diag.showcase.duplicate : Twin
+   │         ^^^^^^^^^^^^^^^^^^^^^^^
+   │
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:11:9
+   │
+11 │ service diag.showcase.duplicate : Published
+   │         ----------------------- `diag.showcase.duplicate` is first declared here

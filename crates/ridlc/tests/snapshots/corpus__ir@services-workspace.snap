@@ -1,0 +1,711 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.ir_json
+input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
+---
+// ===== package fleet.contracts =====
+{
+  "name": "fleet.contracts",
+  "decls": [
+    {
+      "name": "DoorId",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Primitive": 2
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "7",
+            "step": null,
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
+          "width": {
+            "IntWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "Percent",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Unit": "%"
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "100",
+            "step": "0.5",
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
+          "width": {
+            "FloatWidth": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "Odometer",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Primitive": 2
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "4294967295",
+            "step": null,
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
+          "width": {
+            "IntWidth": 5
+          }
+        }
+      }
+    },
+    {
+      "name": "LockState",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "EnumDef": {
+          "values": [
+            {
+              "name": "UNLOCKED",
+              "value": 0,
+              "doc": ""
+            },
+            {
+              "name": "LOCKED",
+              "value": 1,
+              "doc": ""
+            }
+          ],
+          "reserved": []
+        }
+      }
+    },
+    {
+      "name": "DoorReport",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "door",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "DoorId"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "locked",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "LockState"
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": true
+        }
+      }
+    },
+    {
+      "name": "DoorFault",
+      "visibility": 1,
+      "is_error": true,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "EnumDef": {
+          "values": [
+            {
+              "name": "JAMMED",
+              "value": 0,
+              "doc": ""
+            },
+            {
+              "name": "UNPOWERED",
+              "value": 1,
+              "doc": ""
+            }
+          ],
+          "reserved": []
+        }
+      }
+    }
+  ],
+  "interfaces": [
+    {
+      "name": "DoorControl",
+      "visibility": 1,
+      "doc": "Door control — realized by one service per vehicle variant.",
+      "labels": [],
+      "deprecated": null,
+      "interactions": [
+        {
+          "name": "lockState",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 1,
+          "kind": {
+            "SignalDef": {
+              "payload": "LockState",
+              "declared_init": null,
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": 2,
+                "min_us": "100000",
+                "max_us": "1000000",
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "doorMoved",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 2,
+          "kind": {
+            "EventDef": {
+              "payload": "DoorReport",
+              "timing": {
+                "mode": 2,
+                "min_us": "50000",
+                "max_us": "500000",
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "lock",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 3,
+          "kind": {
+            "CommandDef": {
+              "params": [
+                {
+                  "name": "door",
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "DoorId"
+                    }
+                  }
+                }
+              ],
+              "contracts": []
+            }
+          }
+        },
+        {
+          "name": "readDoor",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 4,
+          "kind": {
+            "QueryDef": {
+              "params": [
+                {
+                  "name": "door",
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "DoorId"
+                    }
+                  }
+                }
+              ],
+              "return_type": {
+                "kind": {
+                  "Fallible": {
+                    "ok": "DoorReport",
+                    "err": "DoorFault"
+                  }
+                }
+              },
+              "contracts": []
+            }
+          }
+        },
+        {
+          "name": "doorCount",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 5,
+          "kind": {
+            "FinalDef": {
+              "payload": {
+                "optional": false,
+                "kind": {
+                  "Named": "DoorId"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Telemetry",
+      "visibility": 1,
+      "doc": "Odometer readout — a second shape, so the cross-package member has more\nthan one interface to reference.",
+      "labels": [],
+      "deprecated": null,
+      "interactions": [
+        {
+          "name": "distance",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 1,
+          "kind": {
+            "SignalDef": {
+              "payload": "Odometer",
+              "declared_init": null,
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": 2,
+                "min_us": "1000000",
+                "max_us": "10000000",
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "fuelLevel",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 2,
+          "kind": {
+            "QueryDef": {
+              "params": [],
+              "return_type": {
+                "kind": {
+                  "Value": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "Percent"
+                    }
+                  }
+                }
+              },
+              "contracts": [
+                {
+                  "kind": 2,
+                  "source": "result >= 0.0",
+                  "signal_refs": [],
+                  "param_refs": [],
+                  "uses_result": true,
+                  "observer_id": "Telemetry.fuelLevel.ensure[0]"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "services": []
+}
+
+// ===== package fleet.legacy =====
+{
+  "name": "fleet.legacy",
+  "decls": [
+    {
+      "name": "DoorFault",
+      "visibility": 1,
+      "is_error": true,
+      "doc": "The M1 fleet's door failure set, kept for contracts still on the old wire.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "EnumDef": {
+          "values": [
+            {
+              "name": "STUCK",
+              "value": 0,
+              "doc": ""
+            },
+            {
+              "name": "NO_POWER",
+              "value": 1,
+              "doc": ""
+            }
+          ],
+          "reserved": []
+        }
+      }
+    }
+  ],
+  "interfaces": [],
+  "services": []
+}
+
+// ===== package fleet.vehicle =====
+{
+  "name": "fleet.vehicle",
+  "decls": [],
+  "interfaces": [],
+  "services": [
+    {
+      "name": "fleet.vehicle.doors.front",
+      "visibility": 1,
+      "doc": "Two services over one imported shape: the front and rear door controllers\nare separate system-wide addresses realizing the same contract.",
+      "labels": [],
+      "deprecated": null,
+      "shape": {
+        "InterfaceRef": "fleet.contracts.DoorControl"
+      }
+    },
+    {
+      "name": "fleet.vehicle.doors.rear",
+      "visibility": 1,
+      "doc": "",
+      "labels": [],
+      "deprecated": null,
+      "shape": {
+        "InterfaceRef": "fleet.contracts.DoorControl"
+      }
+    },
+    {
+      "name": "fleet.vehicle.telemetry",
+      "visibility": 1,
+      "doc": "A second imported shape.",
+      "labels": [],
+      "deprecated": null,
+      "shape": {
+        "InterfaceRef": "fleet.contracts.Telemetry"
+      }
+    },
+    {
+      "name": "fleet.vehicle.mirrors",
+      "visibility": 1,
+      "doc": "An inline shape in a package that owns none of its vocabulary: every\npayload, parameter and return type here is a cross-package reference\nresolved through the workspace members above.",
+      "labels": [],
+      "deprecated": null,
+      "shape": {
+        "Inline": {
+          "name": "",
+          "visibility": 0,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "interactions": [
+            {
+              "name": "foldAngle",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 1,
+              "kind": {
+                "SignalDef": {
+                  "payload": "fleet.contracts.Percent",
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "timing": {
+                    "mode": 2,
+                    "min_us": "200000",
+                    "max_us": "2000000",
+                    "default_applied": false
+                  }
+                }
+              }
+            },
+            {
+              "name": "fold",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 2,
+              "kind": {
+                "CommandDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "fleet.contracts.DoorId"
+                        }
+                      }
+                    }
+                  ],
+                  "contracts": []
+                }
+              }
+            },
+            {
+              "name": "readFold",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 3,
+              "kind": {
+                "QueryDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "fleet.contracts.DoorId"
+                        }
+                      }
+                    }
+                  ],
+                  "return_type": {
+                    "kind": {
+                      "Value": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "fleet.contracts.Percent"
+                        }
+                      }
+                    }
+                  },
+                  "contracts": [
+                    {
+                      "kind": 1,
+                      "source": "door <= 7",
+                      "signal_refs": [],
+                      "param_refs": [
+                        "door"
+                      ],
+                      "uses_result": false,
+                      "observer_id": "fleet.vehicle.mirrors.readFold.require[0]"
+                    },
+                    {
+                      "kind": 2,
+                      "source": "result >= 0.0",
+                      "signal_refs": [],
+                      "param_refs": [],
+                      "uses_result": true,
+                      "observer_id": "fleet.vehicle.mirrors.readFold.ensure[0]"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "mirrorCount",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 4,
+              "kind": {
+                "FinalDef": {
+                  "payload": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "fleet.contracts.DoorId"
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "readDoor",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "Cross-package `T | E`: both arms live in `fleet.contracts`, so the\nsynthesized transport identity carries their fully qualified names.",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 5,
+              "kind": {
+                "QueryDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "fleet.contracts.DoorId"
+                        }
+                      }
+                    }
+                  ],
+                  "return_type": {
+                    "kind": {
+                      "Fallible": {
+                        "ok": "fleet.contracts.DoorReport",
+                        "err": "fleet.contracts.DoorFault"
+                      }
+                    }
+                  },
+                  "contracts": []
+                }
+              }
+            },
+            {
+              "name": "readLegacyDoor",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "The same, with the error arm reached through an import alias. The alias\nis a source-level convenience; the transport identity must show the\ncanonical `fleet.legacy.DoorFault`, because a registry keying on it has\nto be stable against how a consumer chose to spell its imports.",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 6,
+              "kind": {
+                "QueryDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "fleet.contracts.DoorId"
+                        }
+                      }
+                    }
+                  ],
+                  "return_type": {
+                    "kind": {
+                      "Fallible": {
+                        "ok": "fleet.contracts.DoorReport",
+                        "err": "fleet.legacy.DoorFault"
+                      }
+                    }
+                  },
+                  "contracts": []
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

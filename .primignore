@@ -7,3 +7,8 @@ CHANGELOG.md
 
 # mdBook build output.
 book/
+
+# The committed baseline snapshot for the E2.11b desk-check corpus member. It
+# is written by `ridl baseline` and read back by `ridl check`, so it must stay
+# byte-for-byte as the toolchain wrote it.
+crates/ridl/tests/baseline-corpus/.ridl/baseline/*.ir.json

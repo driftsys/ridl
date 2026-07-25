@@ -1,0 +1,36 @@
+// Tombstone forms (ridl §11, typl §7.4 grammar `reserved = "reserved"
+// ( camelCase_id | int_lit )`).
+//
+// A `reserved` entry retires an interaction and holds its ordinal for ever.
+// `tools/diff/src/classify.rs::slots` is the consumer that matters: it folds
+// tombstones into the ordinal sequence so a freed slot never looks free, which
+// is what stops a new interaction reusing a retired wire identity from
+// classifying as a clean append. That guarantee is what a registry gate rests
+// on, so both spellings belong in the golden record — and in both interaction
+// stores, since a named interface and a service's inline shape lower through
+// separate loops.
+//
+// The named form appears in `appendix-a.ridl` and `services.ridl` already.
+// What is here is the *nameless* form, `reserved <ordinal>`, which lowers to
+// `Reserved { name: None, value: Some(n) }` — a slot that records the ordinal
+// it protects and nothing else.
+
+package veh.cluster
+
+/// Retired members in a named interface. Ordinals 2 and 4 can never be
+/// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+interface WheelHistory {
+  signal wheelTicks : FanLevel @[100ms..1s]
+  reserved legacyWheelPhase
+  signal wheelTemp : Temperature @[1s..10s]
+  reserved 4
+  signal wheelSlipRate : Ratio @[500ms..5s]
+}
+
+/// The same two forms inside a service's inline shape.
+service veh.cluster.wheels {
+  signal ticks : FanLevel @[100ms..1s]
+  reserved legacyTicks
+  reserved 3
+  event slipped : FilterState @[50ms..500ms]
+}

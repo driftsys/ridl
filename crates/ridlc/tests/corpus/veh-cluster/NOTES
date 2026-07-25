@@ -1,0 +1,172 @@
+# veh-cluster corpus notes
+
+The ridl reference **Appendix A**, compiled. `cluster/appendix-a.ridl` is the
+appendix text verbatim — no line is adapted for the corpus — so every
+diagnostic it draws is a fact about the reference, recorded below rather than
+edited away. `common/` supplies the `veh.common` vocabulary Appendix A imports;
+it is the typl reference Appendix B example, the same text the `veh-common`
+entry compiles standalone.
+
+`cluster/services.ridl` is authored on top: Appendix A declares no `service`,
+and §14.5 needs both service forms exercised.
+
+## What the entry covers
+
+- **Both service forms.** Two named-reference services over one interface shape
+  (`veh.cluster.status` and `veh.cluster.standby` both realize `VehicleStatus`)
+  and one inline shape (`veh.hvac.cabin`).
+- **The inline shape carries the whole surface.** A service's inline shape is
+  an `Interface` stored under `Service.shape`, outside `Package.interfaces`, so
+  a consumer that walks `package.interfaces` alone skips it silently — the
+  shape of five separate E2 defects. `veh.hvac.cabin` therefore holds all five
+  interaction kinds, every timing mode, contracts including one that reads
+  `result`, an inline `T | E` fallible return, streams in both positions, a
+  `reserved` tombstone, a deprecated member, and both `final` forms. The IR,
+  Rust and TypeScript snapshots record what each consumer made of them.
+- **Every timing mode.** Strict periodic (`@1s`, `@500us`), a range with both
+  bounds, lower-bound-only, upper-bound-only, and one untimed interaction whose
+  bounds come from the package `[defaults].timing`. The IR carries resolved
+  microsecond bounds in every case, with `default_applied` set only on the last.
+- **Ordinals with a gap, in both tombstone forms.** `reserved setEcoMode` holds
+  ordinal 8 in the inline shape and `reserved resetCounters` holds ordinal 6 in
+  `VehicleStatus`. `cluster/evolution.ridl` adds the *nameless* form,
+  `reserved <ordinal>`, in a named interface and in an inline shape — the two
+  stores lower through separate loops. The load-bearing consumer is
+  `tools/diff/src/classify.rs::slots`, which folds tombstones into the ordinal
+  sequence so a freed slot never looks free; without that a new interaction
+  reusing a retired wire identity classifies as a clean append.
+- **The whole guaranteed expression subset.** Comparison, boolean connectives,
+  enum access, tuple-field access and duration comparison come from Appendix A
+  and the inline shape; conjunction, arithmetic over a parameter, arithmetic
+  over `result`, and a reference to a declared `const` (`MAX_FAN`) are the three
+  members appended at the end of `veh.hvac.cabin`. They are appended rather than
+  inserted so the ordinals above — and the synthesized transport identity
+  `veh.hvac.cabin#13` — do not move.
+- **Cross-package references.** Appendix A's five imports resolve through the
+  workspace member, and `ridl.std` types (`Label`, `Message`, `Timestamp`,
+  `Version`) resolve without an import.
+- **`internal` on the interaction layer.** `cluster/internal-shape.ridl`
+  declares `internal interface WheelDiagnostics` beside a public
+  `interface WheelSummary`, so the generated output shows both side by side.
+  See "internal is dropped by both backends" below — the snapshots pin the
+  current, wrong output.
+- **The generated code compiles, in both backends.**
+  `veh_cluster_generated_rust_compiles_with_rustc` composes the two packages as
+  sibling modules and runs `rustc` over the result;
+  `veh_cluster_generated_typescript_type_checks` runs the emitted modules
+  through `tsc --noEmit --strict` against the `tests/tsc/ridl.std.ts` stand-in.
+  Both snapshots are therefore proofs rather than transcripts, which is what the
+  E2 exit criterion — IR neutrality demonstrated by two backends — actually
+  asks for. The tsc proof skips with a printed notice when no tsc is
+  discoverable (the convention `backends/typescript` set), so Node stays
+  optional for `cargo test`; the generated-source markers are asserted either
+  way, so it never passes by type-checking nothing.
+
+  _Known limitation._ Under a plain `cargo test` libtest captures the skip
+  notice, so a skipped run reports a bare `ok` and is indistinguishable from a
+  checked one without `--nocapture`. This matches the `backends/typescript`
+  precedent and the markers keep the test non-vacuous either way. If it is
+  closed later, the shape is an opt-in `RIDL_REQUIRE_TSC=1` that turns the skip
+  into a failure.
+
+## Diagnostics the entry draws, and why they are kept
+
+The entry has no errors, so it is a full-pipeline golden. It carries three
+warnings, all of them true statements about the source:
+
+- **TYPL-007, unused import `MAX_SPEED`** — Appendix A imports
+  `veh.common.MAX_SPEED` and never uses it. A fact about the appendix text.
+- **RIDL-308, named result union in query-return position** — Appendix A writes
+  `query getFaultPage(filter: DiagFilter): FaultPageResult`. General form §6.1
+  made the inline `FaultPage | DiagError` spelling canonical in return position
+  after the appendix was written; the E2 close-out already lists §7/§10.1
+  adopting the inline form as doc-sync work. The lint firing here is the
+  appendix and the general form disagreeing, correctly reported.
+- **RIDL-100, untimed event** — deliberate, in `services.ridl`: it is the only
+  way to exercise the default-applied path end to end.
+
+## Findings this entry pins
+
+Nothing here is worked around. Each is written the way the toolchain behaves, so
+the snapshots pin the behaviour and a repair shows up as a snapshot change.
+
+### `internal` is dropped by both backends — a spec violation
+
+`internal` is accepted on an `interface` (on an interaction or a service it is a
+parse error), the checker honours it, and the IR records it faithfully:
+`WheelDiagnostics` lowers with `visibility: 2` where `WheelSummary` and
+`VehicleStatus` carry `1`. `ridl diff` models it too. Both backends then throw
+it away:
+
+- **Rust** emits `pub trait WheelDiagnosticsConsumer`,
+  `pub trait WheelDiagnosticsProvider`, `pub const WHEEL_DIAGNOSTICS_TIMING` and
+  `pub const WHEEL_DIAGNOSTICS_CONTRACTS` — byte-for-byte the same visibility as
+  the public `WheelSummary`. They should be `pub(crate)`.
+- **TypeScript** emits `export interface WheelDiagnosticsConsumer` and
+  `export const wheelDiagnosticsTiming`. They should not be exported.
+
+The control is in the same snapshots: `internal struct RawWheelFrame` (typl, in
+`common/`) correctly becomes `pub(crate) struct RawWheelFrame` in Rust and a
+non-exported `interface RawWheelFrame` in TypeScript. So the typl layer honours
+`internal` and the interaction layer does not — a live violation of **ADR-0008
+decision 7**, not a gap in the design.
+
+The snapshots alone would let the repair land as a quiet diff, so
+`internal_on_the_interaction_layer_is_dropped_by_both_backends` asserts the
+leaked `pub` and `export` spellings directly, with the correctly-handled
+`internal struct` beside them as the control. Each assertion carries the message
+the fixer needs — which spelling to flip, and that **this section** is the one
+to update. Fixing `internal` in either backend fails that test by design.
+
+### An inline shape carries no `Interface.visibility`
+
+`Service.shape.Inline` lowers with `visibility: 0` (`VISIBILITY_UNSPECIFIED`)
+where every named interface carries `1` (public). The reading recorded here, now
+that the IR snapshot is golden: an inline shape has no name and is not
+addressable as a type, so it has no visibility of its own — the enclosing
+`Service` carries the authoritative one (`1` here), and a service cannot be
+`internal` at all. A consumer must therefore read `Service.visibility`, never
+`Service.shape.Inline.visibility`. If a consumer ever needs the field, the
+inline shape should mirror its service rather than stay unspecified.
+
+### The sixth inline-shape instance: RIDL-407 renders without a span
+
+Found by this corpus and pinned in `crates/ridl/tests/baseline_desk.rs`
+(`inline_shape_removal_renders_without_a_span`): `DeclIndex::build` in
+`crates/ridl/src/main.rs` records inline-shape *members*, but builds the
+interface-level fallback — used when the named interaction no longer exists in
+source — from `source.interfaces()` only. An interaction removed from an inline
+shape therefore produces a RIDL-407 warning with no file, no line and no
+snippet, where the same removal from a named interface falls back to the
+interface name. The fix belongs to `DeclIndex`.
+
+### A non-integer `reserved` literal is accepted and discarded
+
+typl Appendix E defines `reserved = "reserved" ( camelCase_id | int_lit )`, but
+the parser accepts **any** literal in that position (`Parser::reserved_entry`
+falls through to `self.literal()`) and the lowering keeps only integers. So
+`reserved "oldName"`, `reserved true` and `reserved 1.5` compile with **no
+diagnostic at all** and lower to `Reserved { name: None, value: None }`.
+
+The ordinal slot is still held, so the identity-reuse guarantee survives — but
+nothing records *what* was retired, which is what `ridl diff` needs in order to
+report a dangling tombstone (TYPL-211). Input outside the grammar accepted in
+silence is the failure family this corpus exists to find. Pinned by
+`reserved_accepts_ungrammatical_literals_and_discards_them`, which drives
+`compile` directly so the corpus files themselves stay grammatical, and which
+fails with instructions when the parser learns to reject them.
+
+### Imports bind at package scope, and a repeated import is a hard error
+
+`services.ridl` imports only `Ratio`, not `Speed` or `Temperature`, because
+`appendix-a.ridl` already imports those and imports bind per package, not per
+file (ADR-0002 §1: "files within a package are purely organisational").
+
+Repeating an import is not merely redundant — it is a hard **error**: TYPL-006,
+"conflicting import … alias one of the colliding imports". The message is
+written for two *different* symbols competing for one local name, which is not
+the situation, and the only way to satisfy the checker is to give one file a
+different local name for the same type. `resolve.rs` counts local-name
+collisions without comparing the imported package path, so it fires for two
+identical imports in the same file as well as across files of one package.
+A defect to fix, not a curiosity.

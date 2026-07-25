@@ -1,0 +1,13 @@
+// Signal init diagnostics (ridl §4.4, §16.1): RIDL-109, RIDL-110.
+
+package diag.ridl
+
+interface Init {
+
+  /// The payload type has no derivable init and the signal declares none:
+  /// the channel would have nothing to hold before the first publication.
+  signal serial : Serial @[1s..10s]
+
+  /// The override is outside the payload type's range `[0..7]`.
+  signal level : Level = 99 @[1s..10s]
+}

@@ -1,0 +1,18 @@
+// The inline `T | E` return with one or both arms missing, and an init
+// override with no value.
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+error enum Fault {
+  BUSY = 0
+}
+
+interface Fallible {
+  query a(): Speed |
+  query b(): | Fault
+  query c(): |
+  signal d : Speed =
+  signal e : Speed = @10ms
+}

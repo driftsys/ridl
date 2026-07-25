@@ -1,0 +1,458 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.rust
+input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
+---
+// ===== package fleet.contracts =====
+#[repr(transparent)]
+pub struct DoorId(pub i64);
+impl Default for DoorId {
+    fn default() -> Self {
+        DoorId(0)
+    }
+}
+#[repr(transparent)]
+pub struct Percent(pub f64);
+impl Default for Percent {
+    fn default() -> Self {
+        Percent(0.0)
+    }
+}
+#[repr(transparent)]
+pub struct Odometer(pub i64);
+impl Default for Odometer {
+    fn default() -> Self {
+        Odometer(0)
+    }
+}
+#[repr(i64)]
+pub enum LockState {
+    UNLOCKED = 0,
+    LOCKED = 1,
+}
+impl Default for LockState {
+    fn default() -> Self {
+        LockState::UNLOCKED
+    }
+}
+#[repr(C)]
+pub struct DoorReport {
+    pub door: DoorId,
+    pub locked: LockState,
+}
+impl Default for DoorReport {
+    fn default() -> Self {
+        DoorReport {
+            door: DoorId::default(),
+            locked: LockState::default(),
+        }
+    }
+}
+#[repr(i64)]
+pub enum DoorFault {
+    JAMMED = 0,
+    UNPOWERED = 1,
+}
+impl Default for DoorFault {
+    fn default() -> Self {
+        DoorFault::JAMMED
+    }
+}
+/// Where a signal's current value came from (ridl §4.4, §4.5).
+///
+/// `Init` is the channel's seeded value, before the provider's first
+/// publication; `Live` is a published value; `Invalid` marks a value
+/// that violated the payload constraints — the malformed value is not
+/// delivered, but its invalidity is, so no subscriber silently holds
+/// stale last-good data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    Init,
+    Live,
+    Invalid,
+}
+/// A signal channel: state that always holds a value (ridl §4.4).
+pub trait SignalHandle<T> {
+    /// The current value and where it came from. Never fails: the
+    /// channel is seeded with the init value at creation.
+    fn read(&self) -> (T, Provenance);
+    /// Registers a subscriber. It is called immediately with the
+    /// current value, then on every change.
+    fn subscribe(&mut self, f: Box<dyn FnMut(&T, Provenance)>);
+}
+/// An event channel: occurrences, which are not state (ridl §5). There
+/// is no `read` — an occurrence that has not happened has no value.
+pub trait EventHandle<T> {
+    fn subscribe(&mut self, f: Box<dyn FnMut(&T)>);
+}
+/// A finite or unbounded sequence of payloads (ridl §12).
+///
+/// Declared here rather than taken from a runtime crate so the
+/// generated module stays dependency-free; it is shaped so an adapter
+/// to `futures::Stream` is a blanket impl.
+pub trait RidlStream {
+    type Item;
+    fn poll_next(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Option<Self::Item>>;
+}
+/// How a timing annotation constrains an interaction (ridl §9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimingMode {
+    StrictPeriodic,
+    Range,
+}
+/// One interaction's resolved timing, in exact microseconds.
+///
+/// `min_us` is the rate floor and `max_us` the staleness bound; a strict
+/// period carries the same value in both. `default_applied` records that
+/// the contract was written without a `@` annotation and the configured
+/// default was resolved in (ridl §9.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimingConst {
+    pub mode: TimingMode,
+    pub min_us: Option<u64>,
+    pub max_us: Option<u64>,
+    pub default_applied: bool,
+}
+/// Which side of an interaction a contract clause constrains (ridl §13).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContractKind {
+    Require,
+    Ensure,
+}
+/// One contract clause as data, for an observer to install.
+///
+/// `id` is the observer address the IR assigns; it is a stable identity
+/// carried verbatim, not a Rust name. `uses_result` says whether the
+/// clause reads the query's result, which an `ensure` observer must
+/// know before it can be scheduled — it cannot run until the result
+/// exists. The flag is carried rather than inferred: `source` is text,
+/// so matching on it would misread a parameter named `resultCode` or a
+/// field access `.result`, and an `ensure` clause does not always read
+/// the result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContractStub {
+    pub id: &'static str,
+    pub kind: ContractKind,
+    pub source: &'static str,
+    pub signals: &'static [&'static str],
+    pub params: &'static [&'static str],
+    pub uses_result: bool,
+}
+/// Door control — realized by one service per vehicle variant.
+/// The consumer face of `DoorControl` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait DoorControlConsumer {
+    /// signal `lockState` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn lock_state(&mut self) -> &mut dyn SignalHandle<LockState>;
+    /// event `doorMoved` — ordinal 2 (ridl §5).
+    /// An occurrence is not state: there is no last-value cache and no provenance.
+    fn door_moved(&mut self) -> &mut dyn EventHandle<DoorReport>;
+    /// command `lock` — ordinal 3 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn lock(&self, door: DoorId);
+    /// query `readDoor` — ordinal 4 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// transport identity: DoorControl#4:DoorReport|DoorFault
+    async fn read_door(&self, door: DoorId) -> Result<DoorReport, DoorFault>;
+    /// final `doorCount` — ordinal 5 (ridl §8).
+    /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
+    fn door_count(&self) -> &DoorId;
+}
+/// Door control — realized by one service per vehicle variant.
+/// The provider face of `DoorControl` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait DoorControlProvider {
+    /// Publishes `lockState` — signal ordinal 1 (ridl §4).
+    fn publish_lock_state(&mut self, value: LockState);
+    /// Raises `doorMoved` — event ordinal 2 (ridl §5).
+    fn raise_door_moved(&mut self, occurrence: DoorReport);
+    /// Handles `lock` — command ordinal 3 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_lock(&mut self, door: DoorId);
+    /// Handles `readDoor` — query ordinal 4 (ridl §7).
+    async fn on_read_door(&mut self, door: DoorId) -> Result<DoorReport, DoorFault>;
+}
+/// Resolved timing for every signal and event of `DoorControl`, keyed by the source name, in exact microseconds (ridl §9).
+pub const DOOR_CONTROL_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "lockState",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(100000),
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "doorMoved",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(50000),
+            max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `DoorControl` as data, in source order, for an observer to install (ridl §13).
+pub const DOOR_CONTROL_CONTRACTS: &[ContractStub] = &[];
+/// Odometer readout — a second shape, so the cross-package member has more
+/// than one interface to reference.
+/// The consumer face of `Telemetry` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait TelemetryConsumer {
+    /// signal `distance` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn distance(&mut self) -> &mut dyn SignalHandle<Odometer>;
+    /// query `fuelLevel` — ordinal 2 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// ensure: result >= 0.0
+    async fn fuel_level(&self) -> Percent;
+}
+/// Odometer readout — a second shape, so the cross-package member has more
+/// than one interface to reference.
+/// The provider face of `Telemetry` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait TelemetryProvider {
+    /// Publishes `distance` — signal ordinal 1 (ridl §4).
+    fn publish_distance(&mut self, value: Odometer);
+    /// Handles `fuelLevel` — query ordinal 2 (ridl §7).
+    async fn on_fuel_level(&mut self) -> Percent;
+}
+/// Resolved timing for every signal and event of `Telemetry`, keyed by the source name, in exact microseconds (ridl §9).
+pub const TELEMETRY_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "distance",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(1000000),
+            max_us: Some(10000000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `Telemetry` as data, in source order, for an observer to install (ridl §13).
+pub const TELEMETRY_CONTRACTS: &[ContractStub] = &[
+    ContractStub {
+        id: "Telemetry.fuelLevel.ensure[0]",
+        kind: ContractKind::Ensure,
+        source: "result >= 0.0",
+        signals: &[],
+        params: &[],
+        uses_result: true,
+    },
+];
+
+
+// ===== package fleet.legacy =====
+/// The M1 fleet's door failure set, kept for contracts still on the old wire.
+#[repr(i64)]
+pub enum DoorFault {
+    STUCK = 0,
+    NO_POWER = 1,
+}
+impl Default for DoorFault {
+    fn default() -> Self {
+        DoorFault::STUCK
+    }
+}
+
+
+// ===== package fleet.vehicle =====
+/// Where a signal's current value came from (ridl §4.4, §4.5).
+///
+/// `Init` is the channel's seeded value, before the provider's first
+/// publication; `Live` is a published value; `Invalid` marks a value
+/// that violated the payload constraints — the malformed value is not
+/// delivered, but its invalidity is, so no subscriber silently holds
+/// stale last-good data.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Provenance {
+    Init,
+    Live,
+    Invalid,
+}
+/// A signal channel: state that always holds a value (ridl §4.4).
+pub trait SignalHandle<T> {
+    /// The current value and where it came from. Never fails: the
+    /// channel is seeded with the init value at creation.
+    fn read(&self) -> (T, Provenance);
+    /// Registers a subscriber. It is called immediately with the
+    /// current value, then on every change.
+    fn subscribe(&mut self, f: Box<dyn FnMut(&T, Provenance)>);
+}
+/// An event channel: occurrences, which are not state (ridl §5). There
+/// is no `read` — an occurrence that has not happened has no value.
+pub trait EventHandle<T> {
+    fn subscribe(&mut self, f: Box<dyn FnMut(&T)>);
+}
+/// A finite or unbounded sequence of payloads (ridl §12).
+///
+/// Declared here rather than taken from a runtime crate so the
+/// generated module stays dependency-free; it is shaped so an adapter
+/// to `futures::Stream` is a blanket impl.
+pub trait RidlStream {
+    type Item;
+    fn poll_next(
+        self: core::pin::Pin<&mut Self>,
+        cx: &mut core::task::Context<'_>,
+    ) -> core::task::Poll<Option<Self::Item>>;
+}
+/// How a timing annotation constrains an interaction (ridl §9).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TimingMode {
+    StrictPeriodic,
+    Range,
+}
+/// One interaction's resolved timing, in exact microseconds.
+///
+/// `min_us` is the rate floor and `max_us` the staleness bound; a strict
+/// period carries the same value in both. `default_applied` records that
+/// the contract was written without a `@` annotation and the configured
+/// default was resolved in (ridl §9.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TimingConst {
+    pub mode: TimingMode,
+    pub min_us: Option<u64>,
+    pub max_us: Option<u64>,
+    pub default_applied: bool,
+}
+/// Which side of an interaction a contract clause constrains (ridl §13).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ContractKind {
+    Require,
+    Ensure,
+}
+/// One contract clause as data, for an observer to install.
+///
+/// `id` is the observer address the IR assigns; it is a stable identity
+/// carried verbatim, not a Rust name. `uses_result` says whether the
+/// clause reads the query's result, which an `ensure` observer must
+/// know before it can be scheduled — it cannot run until the result
+/// exists. The flag is carried rather than inferred: `source` is text,
+/// so matching on it would misread a parameter named `resultCode` or a
+/// field access `.result`, and an `ensure` clause does not always read
+/// the result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ContractStub {
+    pub id: &'static str,
+    pub kind: ContractKind,
+    pub source: &'static str,
+    pub signals: &'static [&'static str],
+    pub params: &'static [&'static str],
+    pub uses_result: bool,
+}
+/// The consumer face of `ServiceFleetVehicleMirrors` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait ServiceFleetVehicleMirrorsConsumer {
+    /// signal `foldAngle` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn fold_angle(&mut self) -> &mut dyn SignalHandle<crate::fleet::contracts::Percent>;
+    /// command `fold` — ordinal 2 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn fold(&self, door: crate::fleet::contracts::DoorId);
+    /// query `readFold` — ordinal 3 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: door <= 7
+    /// ensure: result >= 0.0
+    async fn read_fold(
+        &self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> crate::fleet::contracts::Percent;
+    /// final `mirrorCount` — ordinal 4 (ridl §8).
+    /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
+    fn mirror_count(&self) -> &crate::fleet::contracts::DoorId;
+    /// Cross-package `T | E`: both arms live in `fleet.contracts`, so the
+    /// synthesized transport identity carries their fully qualified names.
+    ///
+    /// query `readDoor` — ordinal 5 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// transport identity: fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
+    async fn read_door(
+        &self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::contracts::DoorFault>;
+    /// The same, with the error arm reached through an import alias. The alias
+    /// is a source-level convenience; the transport identity must show the
+    /// canonical `fleet.legacy.DoorFault`, because a registry keying on it has
+    /// to be stable against how a consumer chose to spell its imports.
+    ///
+    /// query `readLegacyDoor` — ordinal 6 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// transport identity: fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault
+    async fn read_legacy_door(
+        &self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::legacy::DoorFault>;
+}
+/// The provider face of `ServiceFleetVehicleMirrors` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait ServiceFleetVehicleMirrorsProvider {
+    /// Publishes `foldAngle` — signal ordinal 1 (ridl §4).
+    fn publish_fold_angle(&mut self, value: crate::fleet::contracts::Percent);
+    /// Handles `fold` — command ordinal 2 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_fold(&mut self, door: crate::fleet::contracts::DoorId);
+    /// Handles `readFold` — query ordinal 3 (ridl §7).
+    async fn on_read_fold(
+        &mut self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> crate::fleet::contracts::Percent;
+    /// Handles `readDoor` — query ordinal 5 (ridl §7).
+    async fn on_read_door(
+        &mut self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::contracts::DoorFault>;
+    /// Handles `readLegacyDoor` — query ordinal 6 (ridl §7).
+    async fn on_read_legacy_door(
+        &mut self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::legacy::DoorFault>;
+}
+/// Resolved timing for every signal and event of `ServiceFleetVehicleMirrors`, keyed by the source name, in exact microseconds (ridl §9).
+pub const SERVICE_FLEET_VEHICLE_MIRRORS_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "foldAngle",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(200000),
+            max_us: Some(2000000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `ServiceFleetVehicleMirrors` as data, in source order, for an observer to install (ridl §13).
+pub const SERVICE_FLEET_VEHICLE_MIRRORS_CONTRACTS: &[ContractStub] = &[
+    ContractStub {
+        id: "fleet.vehicle.mirrors.readFold.require[0]",
+        kind: ContractKind::Require,
+        source: "door <= 7",
+        signals: &[],
+        params: &["door"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "fleet.vehicle.mirrors.readFold.ensure[0]",
+        kind: ContractKind::Ensure,
+        source: "result >= 0.0",
+        signals: &[],
+        params: &[],
+        uses_result: true,
+    },
+];
+/// Every service this package declares: the deployment address and the
+/// interface that answers at it (ridl §11).
+///
+/// The address is the contract's own dotted identity, carried verbatim;
+/// the interface name is the generated Rust type prefix. For an inline
+/// shape they differ by construction, and the address — not the type
+/// name — is the identity the wire and the observers use.
+pub const SERVICES: &[(&str, &str)] = &[
+    ("fleet.vehicle.doors.front", "Fleet.contracts.DoorControl"),
+    ("fleet.vehicle.doors.rear", "Fleet.contracts.DoorControl"),
+    ("fleet.vehicle.telemetry", "Fleet.contracts.Telemetry"),
+    ("fleet.vehicle.mirrors", "ServiceFleetVehicleMirrors"),
+];

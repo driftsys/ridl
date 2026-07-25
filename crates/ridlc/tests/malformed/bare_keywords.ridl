@@ -1,0 +1,20 @@
+// Each ridl keyword alone, with nothing after it, at both the top level and
+// inside an interface body. Nothing here can be completed into a declaration.
+
+package app
+
+interface
+service
+signal
+event
+
+interface Bare {
+  signal
+  event
+  command
+  query
+  final
+  reserved
+  interface
+  service
+}

@@ -1,0 +1,21 @@
+// Containers left without a name: an interface, a service in each of its two
+// forms. A service is published at its dotted global name, so the empty
+// address must not reach the catalog.
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+interface {
+  signal a : Speed @10ms
+}
+
+service {
+  signal b : Speed @10ms
+}
+
+interface Shape {
+  signal c : Speed @10ms
+}
+
+service : Shape

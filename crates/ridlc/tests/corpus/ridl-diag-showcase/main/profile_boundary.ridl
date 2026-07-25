@@ -1,0 +1,14 @@
+// The ridl side of the profile boundary (ridl §16.4): RIDL-403. A reserved
+// word belonging to uxdl, rmdl, or rsdl at declaration-start position in a
+// `.ridl` file is a profile error, not a generic parse error.
+
+package diag.ridl
+
+view MediaHome {
+}
+
+model Cruise {
+}
+
+component Cluster {
+}

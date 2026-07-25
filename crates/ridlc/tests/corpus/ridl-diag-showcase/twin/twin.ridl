@@ -1,0 +1,14 @@
+// The second workspace member. Its only job is the cross-package half of the
+// service catalog: a service name is unique across the whole system, so
+// republishing `diag.showcase.duplicate` here collides with the `diag.ridl`
+// member (RIDL-140). A single package cannot provoke it.
+
+package diag.twin
+
+type Heartbeat : integer [0..255]
+
+interface Twin {
+  signal alive : Heartbeat @[1s..10s]
+}
+
+service diag.showcase.duplicate : Twin

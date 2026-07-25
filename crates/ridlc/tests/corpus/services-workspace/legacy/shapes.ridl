@@ -1,0 +1,14 @@
+// The retired-generation failure vocabulary. It exists to give the publishing
+// member a *real* import collision: `fleet.contracts` and `fleet.legacy` both
+// export `DoorFault`, so the alias in `vehicle/publish.ridl` is required rather
+// than needless — an alias without a collision is TYPL-008.
+//
+// One error type is enough; this member declares nothing else.
+
+package fleet.legacy
+
+/// The M1 fleet's door failure set, kept for contracts still on the old wire.
+error enum DoorFault {
+  STUCK    = 0
+  NO_POWER = 1
+}

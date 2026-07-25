@@ -1,0 +1,17 @@
+// The return-position half of the interaction-boundary narrowing, kept in its
+// own file because it recovers badly (see `ridl-diag-showcase/NOTES`, "a
+// rejected return type reports the wrong thing and cascades"): the parser
+// reports `expected a return type`, which says nothing about what is allowed,
+// and then reads the rest of the member as an attribute block.
+//
+// One member per file section would be cleaner still, but the cascade is part
+// of what is being recorded — a reader of the diagnostics snapshot should see
+// what this actually looks like at a desk.
+
+package diag.ridl
+
+interface NarrowingReturns {
+
+  /// Collection in return position.
+  query listLevels(): [Level; 0..8]
+}

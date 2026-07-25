@@ -569,3 +569,142 @@ interface VehicleStatus {
         "the published baseline is exactly as it was",
     );
 }
+
+/// The rendered block of the RIDL-407 diagnostic whose message names `path`:
+/// its first line plus every following line up to the next diagnostic. The
+/// renderer draws a source snippet under a diagnostic that carries a span and
+/// nothing under one that does not, so "does this diagnostic have a span?" is
+/// answered by looking for the snippet gutter inside the block.
+fn ridl_407_block<'a>(stderr: &'a str, path: &str) -> &'a str {
+    let needle = format!("interaction ordinal changed against the baseline: {path} (");
+    let start = stderr
+        .find(&needle)
+        .unwrap_or_else(|| panic!("no RIDL-407 for {path} in:\n{stderr}"));
+    let line_start = stderr[..start].rfind('\n').map_or(0, |index| index + 1);
+    let rest = &stderr[start..];
+    match rest.find("warning[RIDL-407]") {
+        Some(next) => &stderr[line_start..start + next],
+        None => &stderr[line_start..],
+    }
+}
+
+/// The committed baseline corpus member (E2 task 22). Every other test in this
+/// file builds its baseline in a temp directory from a source string, so none
+/// of them exercises a baseline that was written by an earlier run and read
+/// back later — which is the only way a real baseline is ever used.
+/// `tests/baseline-corpus/` is that case: a package plus a committed
+/// `.ridl/baseline/corpus.baseline.ir.json`, read from disk exactly as a
+/// published baseline is.
+///
+/// The package holds both stores of interactions — a named `interface` and a
+/// service's inline shape — and the source has drifted from the snapshot in
+/// three ways that all look like tidying: the two events are alphabetised,
+/// `setGear` is retired without a tombstone, and `setEcoMode` is retired from
+/// the inline shape without a tombstone. Every one is reported and the exit
+/// code stays 0 — the desk check informs, `ridl diff` gates.
+///
+/// The inline-shape case is pinned separately because it renders differently,
+/// and today it renders *wrongly*: see
+/// [`inline_shape_removal_renders_without_a_span`].
+#[test]
+fn check_reports_ordinal_drift_against_the_committed_baseline() {
+    let entry = Path::new("tests/baseline-corpus");
+    assert!(
+        entry
+            .join(".ridl/baseline/corpus.baseline.ir.json")
+            .is_file(),
+        "the committed baseline snapshot is the point of this fixture",
+    );
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), entry.as_os_str()]);
+
+    assert_eq!(code, 0, "a desk-check warning never moves the exit code");
+
+    // Pinned per diagnostic: the code, the severity word, the diff path in the
+    // message, the change category, and the source line the span points at.
+    for (path, category, line) in [
+        (
+            "corpus.baseline/VehicleStatus/setGear",
+            "interaction_removed",
+            "interface VehicleStatus {",
+        ),
+        (
+            "corpus.baseline/VehicleStatus/doorOpened",
+            "interaction_reordered",
+            "event doorOpened : DoorState @[100ms..1s]",
+        ),
+        (
+            "corpus.baseline/VehicleStatus/doorClosed",
+            "interaction_reordered",
+            "event doorClosed : DoorState @[100ms..1s]",
+        ),
+    ] {
+        let block = ridl_407_block(&stderr, path);
+        let expected = format!(
+            "warning[RIDL-407]: interaction ordinal changed against the baseline: {path} ({category})"
+        );
+        assert!(
+            block.starts_with(&expected),
+            "expected `{expected}` in:\n{stderr}"
+        );
+        assert!(
+            block.contains(line),
+            "the span for {path} must point at `{line}` in:\n{stderr}"
+        );
+    }
+
+    // The four above are the whole report: a fifth RIDL-407 would mean the desk
+    // check flagged an interaction whose ordinal did not move.
+    assert_eq!(
+        stderr.matches("RIDL-407").count(),
+        4,
+        "exactly four ordinal-affecting changes, no more:\n{stderr}"
+    );
+}
+
+/// **This test pins a defect, deliberately.**
+///
+/// An interaction removed from a service's *inline* shape is reported by the
+/// desk check, but the warning renders with no span at all — no file, no line,
+/// no source snippet — where the same removal from a named interface falls back
+/// to the interface's own name span.
+///
+/// The cause is in `ridl`'s own `DeclIndex`: it records inline-shape *members*
+/// (walking `service.inline_members()`), but populates the interface-level
+/// fallback map — the one used when the named interaction no longer exists in
+/// source — from `source.interfaces()` only. An inline shape is an `Interface`
+/// stored under `Service.shape`, outside `Package.interfaces`, so the fallback
+/// finds nothing and the diagnostic is emitted detached.
+///
+/// This is the sixth instance of the inline-shape blind spot the E2 corpus set
+/// out to look for (`crates/ridlc/tests/corpus/veh-cluster/NOTES`). The fix
+/// belongs to `DeclIndex`, not here; until it lands, this test records what the
+/// tool actually does, so the repair is visible as a change to this assertion
+/// rather than as a silent improvement.
+#[test]
+fn inline_shape_removal_renders_without_a_span() {
+    let (_, _, stderr) = ridl(&["check".as_ref(), "tests/baseline-corpus".as_ref()]);
+
+    let inline = ridl_407_block(&stderr, "corpus.baseline/corpus.baseline.hvac/setEcoMode");
+    assert!(
+        inline.starts_with(
+            "warning[RIDL-407]: interaction ordinal changed against the baseline: \
+             corpus.baseline/corpus.baseline.hvac/setEcoMode (interaction_removed)"
+        ),
+        "the inline-shape removal is reported:\n{stderr}"
+    );
+    assert!(
+        !inline.contains("┌─"),
+        "DeclIndex has learned to span an inline shape — good. Update this test and \
+         `veh-cluster/NOTES`, which record it as unfixed:\n{inline}"
+    );
+
+    // The control: the same change to a named interface does carry a span, so
+    // the missing one above is specific to the inline shape rather than to
+    // removals in general.
+    let named = ridl_407_block(&stderr, "corpus.baseline/VehicleStatus/setGear");
+    assert!(
+        named.contains("┌─") && named.contains("interface VehicleStatus {"),
+        "a removal from a named interface still spans its interface name:\n{named}"
+    );
+}

@@ -1,0 +1,12 @@
+// TYPL-303: `require`/`ensure` are expr-core attribute words. At declaration
+// start in a `.typl` file they are a profile violation, distinct from the
+// interaction words TYPL-304 reports.
+//
+// This lives in its own file because recovery from a profile violation
+// resynchronizes at the next typl or ridl top-level keyword, and a reserved
+// word of another profile is not one — so a second violation in the same file
+// is absorbed into the first one's error node.
+
+package diag.ridl
+
+require currentSpeed >= 0

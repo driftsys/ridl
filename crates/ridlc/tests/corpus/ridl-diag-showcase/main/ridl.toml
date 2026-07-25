@@ -1,0 +1,8 @@
+[package]
+name = "diag.ridl"
+version = "1.0.0"
+
+# The `[defaults].timing` value is not a range: MANI-009. The built-in
+# `[100ms..1000ms]` is the fallback, so RIDL-100 still reports concrete bounds.
+[defaults]
+timing = "every so often"

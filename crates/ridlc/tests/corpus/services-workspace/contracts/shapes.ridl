@@ -1,0 +1,43 @@
+// The shared contract shapes. This package declares interfaces and the
+// vocabulary they stand on, and publishes no service of its own: a shape is
+// identity-less and location-less (ridl §14.0), so who publishes it is a
+// separate decision, taken in the member below.
+
+package fleet.contracts
+
+type DoorId    : integer [0..7]
+type Percent   : %       [0.0..100.0 step 0.5]
+type Odometer  : integer [0..4294967295]
+
+enum LockState {
+  UNLOCKED = 0
+  LOCKED   = 1
+}
+
+struct DoorReport {
+  door   : DoorId
+  locked : LockState
+}
+
+error enum DoorFault {
+  JAMMED      = 0
+  UNPOWERED   = 1
+}
+
+/// Door control — realized by one service per vehicle variant.
+interface DoorControl {
+  signal lockState : LockState @[100ms..1s]
+  event doorMoved : DoorReport @[50ms..500ms]
+  command lock(door: DoorId)
+  query readDoor(door: DoorId): DoorReport | DoorFault
+  final doorCount : DoorId
+}
+
+/// Odometer readout — a second shape, so the cross-package member has more
+/// than one interface to reference.
+interface Telemetry {
+  signal distance : Odometer @[1s..10s]
+  query fuelLevel(): Percent [
+    ensure result >= 0.0
+  ]
+}

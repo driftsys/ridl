@@ -1,0 +1,26 @@
+// Family reserved words in every naming position, with the containers named
+// legally so the members actually reach lowering. `view`, `model`,
+// `component`, `during` and `transport` belong to uxdl/rmdl/rsdl: reserved
+// family-wide, not active keywords in a `.ridl` parse, so they reach the name
+// slot and are rejected there (FORM-105) rather than at declaration start.
+// A member rejected this way is nameless exactly as a member with no name
+// token at all is.
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+interface Shape {
+  signal view : Speed @10ms
+  event model : Speed @[1s..2s]
+  command act(component: Speed)
+  query fetch(): Speed
+  final during : Speed
+  reserved transport
+  signal survivor : Speed @10ms
+}
+
+service veh.a.b {
+  signal view : Speed @10ms
+  signal survivor : Speed @10ms
+}

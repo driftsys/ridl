@@ -1,0 +1,52 @@
+// The vocabulary the showcase's `.ridl` files reference. This file is clean on
+// purpose: every diagnostic in this package must come from the interaction
+// layer under test, not from noise in the types it stands on.
+
+package diag.ridl
+
+type Speed : km/h    [0.0..250.0 step 0.5]
+type Level : integer [0..7]
+type Ratio : %       [0.0..100.0 step 0.1]
+
+/// A named type with no derivable init (typl §5.8): the `match` pattern and the
+/// non-zero minimum length rule one out. A signal payloaded with it therefore
+/// needs an explicit `= value` override (ridl §4.4, RIDL-109).
+type Serial : string [4..8 match /^[A-Z]+$/]
+
+enum Gear {
+  PARK  = 0
+  DRIVE = 1
+}
+
+struct Sample {
+  value : Speed
+  level : Level
+}
+
+/// A payload struct that re-declares the envelope (ridl §3.1): `publishedAt`
+/// is publication time and `frameCounter` is a frame counter, both already
+/// supplied by the runtime on every interaction instance.
+struct EnvelopeEcho {
+  publishedAt  : Timestamp
+  frameCounter : integer [0..65535]
+  value        : Speed
+}
+
+error enum DiagError {
+  FILTER_INVALID = 0
+  STORAGE_BUSY   = 1
+}
+
+/// The error type the RIDL-405 heuristic is meant to notice: it is the failure
+/// arm of a query in three distinct interaction scopes.
+error enum SharedFault {
+  BUSY      = 0
+  NOT_READY = 1
+}
+
+/// A named result union. Legal typl data everywhere; a lint steers it to the
+/// inline `T | E` spelling in query-return position (RIDL-308).
+union NamedResult {
+  ok  : Sample
+  err : DiagError
+}

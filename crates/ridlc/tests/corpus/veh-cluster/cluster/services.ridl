@@ -1,0 +1,153 @@
+// Authored service declarations for the Appendix A package (ridl §14.5).
+// Appendix A itself declares no service, so this file supplies both service
+// forms and — deliberately — puts the whole interaction surface inside an
+// *inline* shape as well as behind a named interface reference.
+//
+// Why the inline shape is written out in full: a service's inline shape is an
+// `Interface` that lives under `Service.shape`, outside `Package.interfaces`.
+// Any consumer that walks `package.interfaces` alone silently skips it. Every
+// interaction kind, every timing mode, contracts, streams, fallible returns,
+// tombstones and deprecation therefore appear here inside an inline shape, so
+// a consumer that misses them is caught by a snapshot rather than by a reader.
+//
+// `Speed` and `Temperature` are not imported here: imports bind at package
+// scope (ADR-0002 §1 — "files within a package are purely organisational"), so
+// `appendix-a.ridl`'s imports already carry them. Repeating an import in a
+// second file of the same package is reported as a collision (TYPL-006); the
+// diagnostic showcase pins that behaviour.
+
+package veh.cluster
+
+import veh.common.Ratio
+
+// --- vocabulary for the inline shape ---
+
+type FanLevel : integer [0..7]
+
+struct FilterState {
+  hoursRun : integer [0..65535]
+  clogged  : boolean
+}
+
+struct ClimateReport {
+  cabin    : Temperature
+  setpoint : Temperature
+  fan      : FanLevel
+}
+
+error enum HvacError {
+  COMPRESSOR_OFF = 0
+  SENSOR_FAULT   = 1
+}
+
+/// A declared constant, so a contract clause can reference one. The guaranteed
+/// expression subset admits constants (ridl §13) and nothing in the corpus
+/// exercised that until these members were added.
+const MAX_FAN : FanLevel = 7
+
+// --- the named-reference form (ridl §14.5) ---
+
+/// The cluster's published vehicle-status contract.
+service veh.cluster.status : VehicleStatus
+
+/// A redundant twin over the same interface shape — one interface, many
+/// services (ridl §14.0). Both services carry the identical member set; only
+/// the global address differs.
+service veh.cluster.standby : VehicleStatus
+
+// --- the inline-shape form (ridl §14.5) ---
+
+/**
+ * Cabin climate — a one-off global contract, declared inline.
+ * @labels QM, PRIVATE
+ */
+service veh.hvac.cabin {
+
+  /// Strict periodic — signal only (ridl §9).
+  signal cabinTemp : Temperature @1s
+
+  /// Range with both bounds.
+  signal targetTemp : Temperature @[500ms..5s]
+
+  /// Range, lower bound only — no staleness bound declared.
+  signal blowerDuty : Ratio @[200ms..]
+
+  /// Range, upper bound only — no rate floor declared.
+  signal fanLevel : FanLevel @[..2s]
+
+  /// Microsecond resolution, and an init override for the channel (ridl §4.4).
+  signal compressorLoad : Ratio = 12.5 @500us
+
+  /// Untimed: the package `[defaults].timing` is resolved at compile time and
+  /// lands in the IR as concrete bounds with `default_applied` set (ridl §9.1).
+  event filterClogged : FilterState
+
+  /// Fire-and-forget, with a precondition over its own parameter and over
+  /// this shape's own signal (ridl §13).
+  command setTarget(t: Temperature) [
+    require t >= -10.0
+    require cabinTemp >= -40.0
+  ]
+
+  /// A retired member. The tombstone holds its ordinal for ever, so every
+  /// ordinal after it carries the gap (ridl §11).
+  reserved setEcoMode
+
+  /// Client-produced stream on a parameter (ridl §12.1).
+  command replayTrace(samples: <FilterState>)
+
+  /// Provider-produced stream in return position.
+  query streamFilterHistory(limit: FanLevel): <FilterState>
+
+  /// Bidirectional — a stream in both positions at once.
+  query rebalance(samples: <FilterState>): <ClimateReport>
+
+  /// A postcondition that reads `result` — tuple-field access is the widest
+  /// `result` shape the guaranteed expression subset admits (ridl §13).
+  query getBounds(): (min: Temperature, max: Temperature) [
+    require true
+    ensure result.min <= result.max
+  ]
+
+  /// Inline fallible return `T | E` — the canonical spelling in return
+  /// position (general form §6.1). Its transport identity is synthesized from
+  /// the enclosing shape and the ordinal, which is exactly what an inline
+  /// shape has to get right without an interface name to borrow.
+  query calibrate(axle: FanLevel): ClimateReport | HvacError
+
+  /// A plain named-type return.
+  query getClimate(): ClimateReport
+
+  /**
+   * Superseded by `getClimate`.
+   * @deprecated use getClimate — this returns only the cabin reading
+   */
+  query getCabinTemp(): Temperature
+
+  /// Provisioned, immutable for the software-instance lifetime (ridl §8).
+  final unitSerial : Label
+
+  /// A collection-typed final.
+  final supportedModes : [Label; 0..8]
+
+  // The rest of the guaranteed expression subset (ridl §13). One property per
+  // clause, so a regression names itself. Appended at the end so the ordinals
+  // above — and the synthesized transport identity `veh.hvac.cabin#13` — do
+  // not move.
+
+  /// Boolean conjunction.
+  command setFan(level: FanLevel) [
+    require level >= 0 && level <= 7
+  ]
+
+  /// Arithmetic over a parameter, and a reference to a declared `const`.
+  command trimFan(level: FanLevel) [
+    require level + 1 <= 7
+    require level <= MAX_FAN
+  ]
+
+  /// Arithmetic over `result`.
+  query scaledFan(): FanLevel [
+    ensure result * 2 >= 0
+  ]
+}

@@ -1,0 +1,55 @@
+# services-workspace corpus notes
+
+Three members, one direction of dependency: `contracts/` declares shapes and
+publishes nothing, `legacy/` declares one retired-generation error type, and
+`vehicle/` publishes and declares no shape of its own. The first split is the
+point — an `interface` is identity-less and location-less (ridl
+§14.0), so deciding *who* publishes it is a separate act, and here it is taken
+in a separate package.
+
+What the entry exercises that `veh-cluster` does not:
+
+- **A cross-package service.** `service fleet.vehicle.doors.front : DoorControl`
+  names an interface that lives in the sibling member. The checker must resolve
+  the imported name before it can tell the service names an interface at all;
+  an unresolved name would surface as RIDL-141 ("names a type that is not an
+  interface"), so a clean compile here is the evidence that the cross-package
+  path works.
+- **One shape, several services.** `doors.front` and `doors.rear` are two
+  system-wide addresses realizing the identical contract — the redundancy /
+  variant case §14.5 calls out.
+- **An inline shape that owns none of its vocabulary.** Every payload,
+  parameter and return type in `fleet.vehicle.mirrors` is a cross-package
+  reference. This is the inline-shape blind spot crossed with the cross-package
+  reference path: both the IR and the generated TypeScript must canonicalize
+  the references from inside `Service.shape`, not only from inside
+  `Package.interfaces`.
+- **Contracts inside an inline shape**, including an `ensure` over `result`.
+- **Both shapes of a synthesized transport identity.** An inline `T | E` return
+  derives its union's wire identity from the enclosing shape, the ordinal, and
+  the two arm references (ADR-0008 decision 4), and the arm references are
+  spelled differently depending on where the arms live:
+
+      same-package   DoorControl#4:DoorReport|DoorFault
+      cross-package  fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
+
+  A registry keys a wire contract on that string, so both belong in the golden
+  record. `fleet.contracts` holds the bare one; `fleet.vehicle.mirrors` holds
+  the qualified one.
+- **An import alias is canonicalized away.** `readLegacyDoor` writes
+  `DoorReport | LegacyFault`, and the identity reads
+  `fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault`.
+  A consumer must not be able to change a wire identity by renaming its own
+  import, and nothing recorded that guarantee before. This is why `legacy/`
+  exists at all: two packages exporting `DoorFault` make the alias *required*
+  rather than needless, so the entry stays free of TYPL-008 and the corpus gains
+  its only legitimate-alias case.
+
+The entry compiles clean, so its IR, Rust and TypeScript snapshots are golden —
+and both generated languages are compiled, not merely compared:
+`services_workspace_composed_compiles_with_rustc` nests the two packages as
+sibling modules and runs `rustc`, and
+`services_workspace_generated_typescript_type_checks` runs the emitted modules
+through `tsc --noEmit --strict`, which is where the cross-package module import
+(`import * as fleet_contracts from './fleet.contracts'`) is actually resolved
+rather than just observed in a snapshot.

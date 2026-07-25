@@ -1,0 +1,24 @@
+// Timing diagnostics (ridl §9.2, §16.1): RIDL-100, 101, 102, 103, 108.
+
+package diag.ridl
+
+interface Timing {
+
+  /// No `@` annotation — the configured default is applied and reported.
+  /// The manifest's `[defaults].timing` is invalid (MANI-009), so the bounds
+  /// reported here are the built-in `[100ms..1000ms]`.
+  signal untimed : Speed
+
+  /// Lower bound above upper bound.
+  signal inverted : Speed @[500ms..100ms]
+
+  /// Zero duration.
+  signal zero : Speed @0ms
+
+  /// Equal bounds — the same thing as `@250ms`.
+  signal degenerate : Speed @[250ms..250ms]
+
+  /// Strict periodic on an event: an isochronous rate is meaningless for
+  /// occurrences.
+  event tick : Sample @100ms
+}

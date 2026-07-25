@@ -1,0 +1,21 @@
+// Stream diagnostics (ridl §12.3, §16.2): RIDL-201, RIDL-202, and the typl
+// hand-off TYPL-301 for a stream outside interaction position.
+
+package diag.ridl
+
+/// A stream is valid only in interaction position; a struct field is not one.
+struct StreamHolder {
+  chunks : <Sample>
+}
+
+interface Streams {
+
+  /// A signal is state — the better stream for state is the signal itself.
+  signal live : <Sample> @1s
+
+  /// An unbounded push of occurrences is an `event`, not a stream on one.
+  event burst : <Sample> @[1s..10s]
+
+  /// The element must be a named type, `string`, or `bytes`.
+  query numbers(limit: Level): <integer>
+}

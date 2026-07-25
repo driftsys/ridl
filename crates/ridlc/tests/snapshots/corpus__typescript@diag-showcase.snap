@@ -1,6 +1,6 @@
 ---
 source: crates/ridlc/tests/corpus.rs
-expression: compiled.rust
+expression: compiled.typescript
 input_file: crates/ridlc/tests/corpus/diag-showcase/ridl.toml
 ---
 (entry has error diagnostics; IR and generated code are omitted — see the diagnostics snapshot)

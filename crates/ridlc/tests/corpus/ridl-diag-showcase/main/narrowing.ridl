@@ -1,0 +1,33 @@
+// What typl shapes may cross an interaction boundary (ridl §3, §7.1, §8, §12).
+//
+// The interaction layer narrows the typl type surface: a payload, a parameter
+// and a return are named types (plus the stream and tuple and array forms each
+// position allows), and the shapes below are rejected everywhere they appear.
+// The rule is inherited by the layers above — E5's function signatures and
+// E7's registry both read it — and it had no corpus instance, so nothing would
+// have noticed a position that quietly started accepting one.
+//
+// These paths report FORM-101 and FORM-102, which the showcase's set-equality
+// guard cannot distinguish from the same codes raised elsewhere. The messages
+// are what identify them, so `showcase_pins_the_interaction_boundary_narrowings`
+// asserts each message individually.
+
+package diag.ridl
+
+interface Narrowing {
+
+  /// Optional payload on a signal.
+  signal maybeSpeed : Speed? @10ms
+
+  /// Optional payload on an event.
+  event maybeRaised : Sample? @[1s..2s]
+
+  /// Optional parameter on a command.
+  command takeMaybe(level: Level?)
+
+  /// Optional payload on a final.
+  final maybeSerial : Serial?
+
+  /// Map parameter on a command — a map is not a named type.
+  command takeMap(table: [Level : Sample; 0..8])
+}
