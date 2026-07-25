@@ -33,13 +33,35 @@ rather than incidental. The per-member checks are descendant-based, so they were
 never at risk — but "never at risk" is a claim about today's implementation, and
 the file is what keeps it true.
 
+`main/exposure.ridl` covers the visibility boundary (issue #161): TYPL-005 from
+a public `interface` over an `internal` payload, parameter, return type,
+collection length bound and contract constant, and RIDL-143 from a public
+`service` publishing an `internal` interface. It carries `internal interface
+Backdoor` as the control — the same `internal` names in the same positions,
+drawing nothing — because the rule is about a *public* item naming a
+package-private one, and the failure worth guarding against in the other
+direction is rejecting a correct file. The legal case is compiled rather than
+only checked: `veh-cluster` holds an `internal` interface over an `internal`
+payload, and its rustc proof denies `private_interfaces` by name.
+
+The file also holds the pair that separates the two clause kinds. A `require`
+sees the interface's own signals (ridl §13) and an `ensure` does not, so the
+signal `HANDLE_MAX` deliberately collides with the constant of that name:
+`trim`'s `require` reads the signal and exposes nothing, `drain`'s `ensure`
+reads the constant and does. The first version of the #161 fix re-derived the
+binding order from the syntax instead of asking the resolver, matched a signal
+whatever the clause kind, and accepted the `ensure` half in silence — a defect
+review caught and no single-clause fixture could have. Keep both clauses.
+
 ## Codes exercised here
 
-- RIDL: 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 140, 141, 201,
-  202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405, 406.
+- RIDL: 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 140, 141, 143,
+  201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
+  406.
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).
 - MANI: 009.
-- TYPL: 301, 303, 304 (the profile boundary, folded in from the E1 debt list).
+- TYPL: 005 (the visibility rule, reaching the interaction layer), 301, 303, 304
+  (the profile boundary, folded in from the E1 debt list).
 
 The list above is not prose: `crates/ridlc/tests/corpus.rs` holds it as
 `RIDL_PROFILE_CODES` and asserts the showcase emits **exactly** that set —

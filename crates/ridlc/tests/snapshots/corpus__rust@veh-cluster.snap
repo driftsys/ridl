@@ -219,6 +219,17 @@ impl Default for FaultPageResult {
         FaultPageResult::Page(FaultPage::default())
     }
 }
+/// A package-private payload type, so the interaction layer's legal
+/// `internal`-over-`internal` case is exercised inside one package. The
+/// cross-package counterpart is impossible by construction: a foreign
+/// `internal` name never resolves (typl §3.3).
+#[repr(transparent)]
+pub(crate) struct RawTickCount(pub(crate) i64);
+impl Default for RawTickCount {
+    fn default() -> Self {
+        RawTickCount(0)
+    }
+}
 #[repr(transparent)]
 pub struct FanLevel(pub i64);
 impl Default for FanLevel {
@@ -572,13 +583,17 @@ pub const WHEEL_HISTORY_CONTRACTS: &[ContractStub] = &[];
 pub(crate) trait WheelDiagnosticsConsumer {
     /// signal `wheelTicks` — ordinal 1 (ridl §4).
     /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
-    fn wheel_ticks(&mut self) -> &mut dyn SignalHandle<FanLevel>;
+    fn wheel_ticks(&mut self) -> &mut dyn SignalHandle<RawTickCount>;
     /// event `slipDetected` — ordinal 2 (ridl §5).
     /// An occurrence is not state: there is no last-value cache and no provenance.
     fn slip_detected(&mut self) -> &mut dyn EventHandle<FilterState>;
     /// query `readTicks` — ordinal 3 (ridl §7).
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
-    async fn read_ticks(&self) -> FanLevel;
+    async fn read_ticks(&self) -> RawTickCount;
+    /// command `resetTicks` — ordinal 4 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn reset_ticks(&self, seed: RawTickCount);
 }
 /// A package-private contract shape: realized inside this package, never part
 /// of the cross-package surface.
@@ -586,11 +601,13 @@ pub(crate) trait WheelDiagnosticsConsumer {
 #[allow(async_fn_in_trait)]
 pub(crate) trait WheelDiagnosticsProvider {
     /// Publishes `wheelTicks` — signal ordinal 1 (ridl §4).
-    fn publish_wheel_ticks(&mut self, value: FanLevel);
+    fn publish_wheel_ticks(&mut self, value: RawTickCount);
     /// Raises `slipDetected` — event ordinal 2 (ridl §5).
     fn raise_slip_detected(&mut self, occurrence: FilterState);
     /// Handles `readTicks` — query ordinal 3 (ridl §7).
-    async fn on_read_ticks(&mut self) -> FanLevel;
+    async fn on_read_ticks(&mut self) -> RawTickCount;
+    /// Handles `resetTicks` — command ordinal 4 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_reset_ticks(&mut self, seed: RawTickCount);
 }
 /// Resolved timing for every signal and event of `WheelDiagnostics`, keyed by the source name, in exact microseconds (ridl §9).
 pub(crate) const WHEEL_DIAGNOSTICS_TIMING: &[(&str, TimingConst)] = &[

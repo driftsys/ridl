@@ -327,6 +327,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-110", Showcase),
     ("RIDL-140", Showcase),
     ("RIDL-141", Showcase),
+    ("RIDL-143", Showcase),
     ("RIDL-201", Showcase),
     ("RIDL-202", Showcase),
     ("RIDL-301", Showcase),
@@ -357,6 +358,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
         },
     ),
     // The shared codes E2 added or folded into the ridl profile.
+    ("TYPL-005", Showcase),
     ("FORM-106", Showcase),
     ("FORM-107", Showcase),
     ("FORM-108", Showcase),
@@ -510,6 +512,7 @@ fn showcase_pins_every_severity() {
         ("RIDL-110", Severity::Error),
         ("RIDL-140", Severity::Error),
         ("RIDL-141", Severity::Error),
+        ("RIDL-143", Severity::Error),
         ("RIDL-201", Severity::Error),
         ("RIDL-202", Severity::Error),
         ("RIDL-301", Severity::Error),
@@ -526,6 +529,7 @@ fn showcase_pins_every_severity() {
         ("RIDL-404", Severity::Warning),
         ("RIDL-405", Severity::Info),
         ("RIDL-406", Severity::Info),
+        ("TYPL-005", Severity::Error),
         ("TYPL-115", Severity::Info),
         ("TYPL-301", Severity::Error),
         ("TYPL-303", Severity::Error),
@@ -771,6 +775,19 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             "lib",
             "--emit",
             "metadata",
+            // The one lint denied by name (issue #161). A generated `pub` item
+            // over a `pub(crate)` type is warn-by-default on current rustc, so
+            // a plain exit-status check accepts it — which is why the corpus's
+            // own compile proof did not notice a public interface carrying an
+            // `internal` payload. A blanket `-D warnings` is not usable here:
+            // the generated code carries unrelated non-fatal lints by design
+            // (`non_camel_case_types` on a screaming-case enum variant, dead
+            // code in a crate with no consumers), so denying everything would
+            // fail for reasons that say nothing about visibility.
+            "-D",
+            "private-interfaces",
+            "-D",
+            "private-bounds",
         ])
         .arg("-o")
         .arg(&meta_path)

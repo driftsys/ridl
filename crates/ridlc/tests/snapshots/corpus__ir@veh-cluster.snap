@@ -1338,6 +1338,41 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
+      "name": "RawTickCount",
+      "visibility": 2,
+      "is_error": false,
+      "doc": "A package-private payload type, so the interaction layer's legal\n`internal`-over-`internal` case is exercised inside one package. The\ncross-package counterpart is impossible by construction: a foreign\n`internal` name never resolves (typl §3.3).",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Primitive": 2
+            }
+          },
+          "constraint": {
+            "min": "0",
+            "max": "65535",
+            "step": null,
+            "len_min": null,
+            "len_max": null,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": null,
+          "init": {
+            "derivable": true,
+            "value": "0"
+          },
+          "width": {
+            "IntWidth": 3
+          }
+        }
+      }
+    },
+    {
       "name": "FanLevel",
       "visibility": 1,
       "is_error": false,
@@ -2048,7 +2083,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "ordinal": 1,
           "kind": {
             "SignalDef": {
-              "payload": "FanLevel",
+              "payload": "RawTickCount",
               "declared_init": null,
               "init": {
                 "derivable": true,
@@ -2099,11 +2134,36 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "Value": {
                     "optional": false,
                     "kind": {
-                      "Named": "FanLevel"
+                      "Named": "RawTickCount"
                     }
                   }
                 }
               },
+              "contracts": []
+            }
+          }
+        },
+        {
+          "name": "resetTicks",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 4,
+          "kind": {
+            "CommandDef": {
+              "params": [
+                {
+                  "name": "seed",
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Named": "RawTickCount"
+                    }
+                  }
+                }
+              ],
               "contracts": []
             }
           }

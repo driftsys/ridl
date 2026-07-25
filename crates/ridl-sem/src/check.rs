@@ -172,6 +172,7 @@ pub fn check_package(
         default_timing,
         interface_signals: Vec::new(),
         interface_name: String::new(),
+        interface_internal: false,
         contract_vocabulary: None,
     };
 
@@ -229,6 +230,10 @@ pub fn check_package(
             }
             services.push(checker.lower_service(&service));
         }
+        // Visibility exposure (TYPL-005, RIDL-143) is a whole-file pass over
+        // the top-level items rather than a step of each lowering, so no
+        // declaration kind can escape it (issue #161).
+        checker.check_exposure(&source);
         // Stream-position narrowing runs on ridl-profile files only: in a
         // `.typl` parse the parser itself reports every stream as TYPL-301.
         if profile_of_path(file.path(db)) == Profile::Ridl {
@@ -381,6 +386,11 @@ pub(crate) struct Checker<'db> {
     /// name for an inline shape, which has no name of its own. Set and cleared
     /// alongside [`Checker::interface_signals`].
     interface_name: String,
+    /// Whether the interface being lowered is `internal`, read by
+    /// [`Checker::check_clause_exposure`]. Set and cleared alongside
+    /// [`Checker::interface_signals`]; `false` for a service's inline shape,
+    /// which is always public (ridl §14.5).
+    interface_internal: bool,
     /// The package's resolved constants and enums (expr-core §6), built on the
     /// first contract clause of the package and reused for the rest.
     contract_vocabulary: Option<expr::ContractVocabulary>,
@@ -776,9 +786,6 @@ impl Checker<'_> {
             );
         }
 
-        // TYPL-005: a public declaration must not expose an `internal` type.
-        self.check_internal_exposure(definition, &name);
-
         Some(v2::Decl {
             name,
             visibility: visibility as i32,
@@ -793,64 +800,176 @@ impl Checker<'_> {
         })
     }
 
-    /// TYPL-005: a public declaration must not expose an `internal` type in its
-    /// fields, arms, backing, or range-bound constants (typl §3.3). Only
-    /// same-package internal declarations are reachable — a foreign `internal`
-    /// name never resolves (typl §3.3), so it cannot leak here. Internal
-    /// declarations are exempt: they may reference each other freely.
+    /// TYPL-005 and RIDL-143: a public declaration must not expose an
+    /// `internal` one (typl §3.3, ridl §14.5). One pass over the file's
+    /// top-level items, whatever their kind — which is the fix for issue #161.
+    /// The rule used to be a step of the typl definition lowering, so the two
+    /// declaration kinds E2 added, `interface` and `service`, were never
+    /// checked at all: a public interface could carry an `internal` payload
+    /// (the Rust backend then emits a `pub` trait over a `pub(crate)` type,
+    /// which fails any consumer build under `-D warnings`) and a public service
+    /// could publish an `internal` interface. Driving the pass off the syntax
+    /// tree's own top-level children rather than off a list of lowering calls
+    /// is what makes the omission unrepresentable: a declaration kind added
+    /// later inherits the check without being wired to it.
     ///
-    /// **Recorded debt (issue #161): this runs over typl declarations only.**
-    /// [`Checker::checked_interface`] and [`Checker::lower_service`] do not call
-    /// it, so a public `interface` may carry an `internal` payload type and a
-    /// public `service` may publish an `internal` interface, both without a
-    /// diagnostic. The payload case is the sharper one: the Rust backend then
-    /// emits a `pub` trait over a `pub(crate)` type, which draws rustc's
-    /// `private_interfaces` lint and becomes a hard build failure for any
-    /// consumer building with `-D warnings`.
-    fn check_internal_exposure(&mut self, definition: &Definition, decl_name: &str) {
-        if definition.is_internal() {
-            return;
+    /// `package` and `import` headers name no type and carry no constraint, so
+    /// they contribute no exposure position and need no exclusion of their own.
+    ///
+    /// Only same-package `internal` declarations are reachable — a foreign
+    /// `internal` name never resolves (typl §3.3), so it cannot leak here. An
+    /// `internal` item is exempt in full: package-private declarations may
+    /// reference each other freely, and both sides then generate
+    /// package-private code (ADR-0008 decision 7).
+    ///
+    /// Two known limits, both deliberate:
+    ///
+    /// - **Duplicate declarations report once each.** The lowering loop
+    ///   consults `is_winner` and lowers only the resolver's winner (ADR-0007
+    ///   decision 6); this pass has no typed node to ask, so a losing duplicate
+    ///   that also crosses the boundary reports too. Every such diagnostic is a
+    ///   true statement about the source, and the file already carries TYPL-009,
+    ///   so the cost is one extra line on input that is rejected anyway —
+    ///   cheaper than reintroducing a per-kind test to suppress it.
+    /// - **An attribute value is not scanned.** `attr_value` parses a constant
+    ///   reference, but every attribute key on an interaction currently draws
+    ///   FORM-106/-107, so no such value survives to be published. ADR-0008
+    ///   decision 13 anticipates a consumable key; the position becomes real
+    ///   with the first one, and belongs in the [`ast::Literal`] arm below.
+    fn check_exposure(&mut self, source: &ast::SourceFile) {
+        for item in source.syntax().children() {
+            if item
+                .children_with_tokens()
+                .any(|element| element.kind() == SyntaxKind::InternalKw)
+            {
+                continue;
+            }
+            // A declaration the parser recovered without a name does not lower
+            // (FORM-101 is already reported), so it is not checked either.
+            let Some(name) = item_declared_name(&item) else {
+                continue;
+            };
+            self.report_exposures(&item, &name);
         }
+    }
+
+    /// Every `internal` name the public top-level item `item` reads, reported
+    /// at the position that reads it. Three position families reach here:
+    ///
+    /// - a named-type reference ([`ast::PathType`]) — a typl field, arm, map
+    ///   key or value, or enumset backing, and every ridl type position: a
+    ///   signal, event or final payload, a command or query parameter, a query
+    ///   return, a tuple-return field, an array element, a stream element, and
+    ///   either arm of an inline `T | E`;
+    /// - the same node in a service's shape position, where the resolved symbol
+    ///   is an interface rather than a type — RIDL-143;
+    /// - a bounds constant, an `Ident` inside a `Literal` under a scalar
+    ///   `Constraint` or a collection length `Bound`.
+    ///
+    /// The fourth family — a constant or enum type named by a `require`/`ensure`
+    /// clause — is **not** here. Deciding whether such a name resolves to the
+    /// package vocabulary at all needs the clause's own scope, which binds
+    /// parameters, `result` and (in a `require` only) the interface's signals
+    /// ahead of it; that scope is built in [`Checker::lower_contracts`], so the
+    /// check lives there and calls [`Checker::report_exposure`]. Re-deriving
+    /// the binding order from the syntax here was tried and was wrong: it
+    /// missed that an `ensure` scope carries no signals, so a signal named like
+    /// an `internal` constant silently suppressed the diagnostic.
+    fn report_exposures(&mut self, item: &ridl_syntax::SyntaxNode, decl_name: &str) {
         // Collect exposures first (immutable resolver reads), then report.
-        let mut exposures: Vec<(TextRange, &'static str, String)> = Vec::new();
-        for descendant in definition.syntax().descendants() {
-            // A named-type reference: field, arm, map key/value, or an enumset
-            // backing enum.
+        let mut exposures: Vec<(DiagCode, TextRange, &'static str, String)> = Vec::new();
+        for descendant in item.descendants() {
             if let Some(path) = ast::PathType::cast(descendant.clone()) {
                 if let Some(symbol) = self.lookup_path(&path)
                     && symbol.internal
                     && symbol.package == self.package_name
                 {
-                    exposures.push((path.syntax().text_range(), "type", symbol.name.clone()));
+                    let range = path.syntax().text_range();
+                    if symbol.kind == SymbolKind::Interface {
+                        // A service's shape is the one position where an
+                        // interface legally sits (ridl §14.5). Anywhere else
+                        // `resolve_type_path` has already said that an
+                        // interface is not a type, which is the defect to fix
+                        // first, so exposure is not piled on top of it.
+                        //
+                        // This is the one kind-specific test in the pass, and
+                        // it is a known limit: a later profile that introduces
+                        // another interface-naming position — rsdl's
+                        // `component … provides Iface` is the expected one —
+                        // inherits the TYPL-005 arm of this walk but not
+                        // RIDL-143, and will need its parent kind listed here.
+                        // That is the forgotten-wiring shape this pass exists
+                        // to remove, surviving in exactly one place because the
+                        // grammar gives no way to ask "may an interface sit
+                        // here?".
+                        if path
+                            .syntax()
+                            .parent()
+                            .is_some_and(|parent| parent.kind() == SyntaxKind::ServiceDef)
+                        {
+                            exposures.push((
+                                DiagCode::RIDL_143,
+                                range,
+                                "interface",
+                                symbol.name.clone(),
+                            ));
+                        }
+                    } else {
+                        exposures.push((DiagCode::TYPL_005, range, "type", symbol.name.clone()));
+                    }
                 }
                 continue;
             }
-            // A range-bound or `match` constant: an `Ident` inside a `Literal`
-            // sitting in a `Constraint` (never an init value).
+            // A bounds constant (typl §3.3): an `Ident` inside a `Literal`
+            // sitting in a scalar `Constraint` or a collection length `Bound`.
+            // The two are structurally distinct nodes for one rule — a
+            // constraint nests under the type, a length bound is a direct child
+            // of the `ArrayType`/`MapType` — so both are named here. An init
+            // value is deliberately neither: §3.3 lists bounds constants and
+            // stops there.
             if let Some(literal) = ast::Literal::cast(descendant)
-                && literal
-                    .syntax()
-                    .ancestors()
-                    .any(|ancestor| ancestor.kind() == SyntaxKind::Constraint)
+                && literal.syntax().ancestors().any(|ancestor| {
+                    matches!(ancestor.kind(), SyntaxKind::Constraint | SyntaxKind::Bound)
+                })
                 && let LitKind::ConstRef(const_name) = literal_kind(&literal)
                 && let Some(symbol) = self.resolution.symbols.get(&const_name)
                 && symbol.internal
                 && symbol.package == self.package_name
             {
                 exposures.push((
+                    DiagCode::TYPL_005,
                     literal.syntax().text_range(),
                     "constant",
                     symbol.name.clone(),
                 ));
             }
         }
-        for (range, noun, exposed) in exposures {
-            self.error(
-                DiagCode::TYPL_005,
-                range,
-                format!("public `{decl_name}` exposes internal {noun} `{exposed}`"),
-            );
+        for (code, range, noun, exposed) in exposures {
+            self.report_exposure(code, range, noun, &exposed, decl_name);
         }
+    }
+
+    /// One exposure diagnostic. Shared by the syntax pass above and by
+    /// [`Checker::lower_contracts`], so the two positions that can report an
+    /// exposure cannot drift in wording or in code.
+    fn report_exposure(
+        &mut self,
+        code: DiagCode,
+        range: TextRange,
+        noun: &str,
+        exposed: &str,
+        decl_name: &str,
+    ) {
+        let message = if code == DiagCode::RIDL_143 {
+            format!(
+                "service `{decl_name}` publishes internal {noun} `{exposed}` — a service is a global published contract and takes no `internal` modifier, so its shape must be public: drop `internal` from `{exposed}`, or give the service an inline shape (ridl §14.5)"
+            )
+        } else {
+            format!(
+                "public `{decl_name}` exposes internal {noun} `{exposed}` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)"
+            )
+        };
+        self.error(code, range, message);
     }
 
     fn lower_type(&mut self, name: &str, decl: &ast::TypeDef) -> v2::TypeDef {
@@ -2666,6 +2785,7 @@ impl Checker<'_> {
         // including one declared later in the body, so they are gathered before
         // the members are lowered.
         self.interface_name = declared_name(def).unwrap_or_default();
+        self.interface_internal = def.is_internal();
         self.interface_signals = def
             .members()
             .filter_map(|member| match member {
@@ -2721,6 +2841,7 @@ impl Checker<'_> {
 
         self.interface_signals.clear();
         self.interface_name.clear();
+        self.interface_internal = false;
 
         let doc_info = docs::scan(&def.doc_comments());
         let visibility = if def.is_internal() {
@@ -2905,7 +3026,9 @@ impl Checker<'_> {
         }
 
         // An inline shape has no name of its own, so its observer stubs are
-        // scoped to the service's dotted global name (E2.5).
+        // scoped to the service's dotted global name (E2.5). A service takes no
+        // `internal` modifier (ridl §14.5), so its shape is always public.
+        self.interface_internal = false;
         self.interface_name = service
             .name()
             .map(|dotted| significant_text(dotted.syntax()))
@@ -3409,6 +3532,7 @@ impl Checker<'_> {
                     diagnostic.primary.file = file;
                     diagnostic
                 }));
+            self.check_clause_exposure(&clause, &refs);
             // `kind` is one of the two predicates matched above, never
             // `Unspecified`.
             let (kind_text, index) = match kind {
@@ -3432,6 +3556,57 @@ impl Checker<'_> {
         }
         self.contract_vocabulary = Some(vocabulary);
         contracts
+    }
+
+    /// TYPL-005 over one contract clause: the fourth exposure family, split off
+    /// from [`Checker::report_exposures`] because it is the one that cannot be
+    /// decided from the syntax alone.
+    ///
+    /// A clause is published verbatim — IR v2 carries its canonical source text
+    /// (ADR-0008 decision 14) and both backends emit that text as data — so a
+    /// package declaration it names that an importer cannot resolve leaks
+    /// exactly as a payload type does. Which names reach the package vocabulary
+    /// at all is a scope question: parameters, `result` and the interface's own
+    /// signals bind ahead of it, and the two clause kinds do not bind the same
+    /// set (an `ensure` sees no signals, ridl §13). `refs` is therefore taken
+    /// from [`expr::collect_refs`] against the very scope
+    /// [`expr::check_contract_expr`] was just run with, rather than
+    /// re-derived: the binding order has exactly one implementation, and this
+    /// reads its answer.
+    fn check_clause_exposure(&mut self, clause: &ast::Expr, refs: &expr::ExprRefs) {
+        // An `internal` interface's clauses expose nothing; an inline service
+        // shape is always public (ridl §14.5), which is what
+        // `interface_internal` records for it.
+        if self.interface_internal {
+            return;
+        }
+        let decl_name = self.interface_name.clone();
+        // A constant is a read; an enum type is named as the head of an
+        // `Enum.MEMBER` access. Nothing else in the guaranteed subset names a
+        // package declaration (expr-core §6).
+        let named: Vec<(&str, &String)> = refs
+            .consts
+            .iter()
+            .map(|name| ("constant", name))
+            .chain(refs.enum_types.iter().map(|name| ("type", name)))
+            .collect();
+        let exposed: Vec<(&'static str, String, TextRange)> = named
+            .into_iter()
+            .filter_map(|(noun, name)| {
+                let symbol = self.resolution.symbols.get(name)?;
+                if !symbol.internal || symbol.package != self.package_name {
+                    return None;
+                }
+                let noun = match symbol.kind {
+                    SymbolKind::Const => "constant",
+                    _ => noun,
+                };
+                Some((noun, symbol.name.clone(), clause_ref_range(clause, name)?))
+            })
+            .collect();
+        for (noun, name, range) in exposed {
+            self.report_exposure(DiagCode::TYPL_005, range, noun, &name, &decl_name);
+        }
     }
 
     /// `command Name '(' params ')' attr_block?` (ridl §6.1, Appendix C).
@@ -4172,6 +4347,35 @@ fn is_lowercase_name_segment(segment: &str) -> bool {
 
 fn member_name(name: Option<ast::Name>) -> Option<String> {
     Some(name?.ident_token()?.text().to_string())
+}
+
+/// The declared name of a top-level item as written, read off the tree rather
+/// than off a typed node so that [`Checker::check_exposure`] stays independent
+/// of the declaration kinds: a typl definition and an `interface` carry a
+/// `Name`, a `service` carries its dotted `DottedName` (ridl §14.5). `None` for
+/// an item that declares no name of its own — a `package` header, a bare
+/// `import`, or a declaration the parser recovered without one.
+fn item_declared_name(item: &ridl_syntax::SyntaxNode) -> Option<String> {
+    item.children()
+        .find(|child| matches!(child.kind(), SyntaxKind::Name | SyntaxKind::DottedName))
+        .map(|child| significant_text(&child))
+}
+
+/// The source range of the first `PathExpr` in `clause` spelled `name`.
+///
+/// Presentation only: which names a clause binds to the package vocabulary is
+/// decided by [`expr::collect_refs`] against the clause's own scope, and a
+/// given name resolves the same way everywhere inside one clause, so the first
+/// occurrence is the right place to point at.
+fn clause_ref_range(clause: &ast::Expr, name: &str) -> Option<TextRange> {
+    clause
+        .syntax()
+        .descendants()
+        .filter_map(ast::PathExpr::cast)
+        .find_map(|path| {
+            let token = path.name_token()?;
+            (token.text() == name).then(|| token.text_range())
+        })
 }
 
 /// The source range of a member's name, or the whole node on a malformed
@@ -5328,6 +5532,345 @@ mod tests {
         );
         assert_eq!(codes(&checked), vec!["TYPL-005"]);
         assert!(checked.diagnostics[0].message.contains("SECRET_MAX"));
+    }
+
+    // --- TYPL-005 and RIDL-143 on the interaction layer (issue #161) -------
+    //
+    // The exposure rule used to be a step of the typl definition lowering, so
+    // the two declaration kinds E2 added — `interface` and `service` — were
+    // never checked: a public interface over an `internal` payload compiled
+    // with zero diagnostics and then failed a consumer's `-D warnings` build,
+    // and a public service could publish an `internal` interface. Each test
+    // below pairs the refusal with the legal case it must leave alone; the
+    // rule is about a *public* item naming a package-private one, and
+    // rejecting `internal` over `internal` would be the worse failure.
+
+    /// Every ridl type position is an exposure position. The fixture names one
+    /// `internal` type from each of them at once — a signal, event and final
+    /// payload, an array element, a command and query parameter, a stream
+    /// element in both positions, a query return, a tuple-return field, and
+    /// both arms of an inline `T | E` — so that a position quietly dropping out
+    /// of the walk changes the count.
+    #[test]
+    fn typl_005_covers_every_interaction_type_position() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             error struct Bang { code : Tick }\n\
+             internal type Hidden : integer [0..10]\n\
+             internal error struct Boom { code : Tick }\n\
+             interface Panel {\n\
+             \x20 signal a : Hidden @1s\n\
+             \x20 event b : Hidden @[1s..2s]\n\
+             \x20 final c : Hidden\n\
+             \x20 final d : [Hidden; 1..4]\n\
+             \x20 command e(p : Hidden)\n\
+             \x20 command f(p : <Hidden>)\n\
+             \x20 query g() : Hidden\n\
+             \x20 query h() : (x : Hidden, y : Tick)\n\
+             \x20 query i() : <Hidden>\n\
+             \x20 query j() : Tick | Boom\n\
+             \x20 query k() : Hidden | Bang\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-005"; 11],
+            "one per exposure position; got: {:?}",
+            messages(&checked),
+        );
+        assert!(
+            checked.diagnostics[0].message.contains("public `Panel`")
+                && checked.diagnostics[0].message.contains("`Hidden`"),
+            "the message names both the exposing declaration and the exposed one: {}",
+            checked.diagnostics[0].message,
+        );
+    }
+
+    /// The legal direction, over the same eleven positions: an `internal`
+    /// interface may name `internal` types freely. Both sides generate
+    /// package-private code (ADR-0008 decision 7), so nothing is exposed —
+    /// reporting here would be the over-rejection failure.
+    #[test]
+    fn internal_interface_may_name_internal_types_in_every_position() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             error struct Bang { code : Tick }\n\
+             internal type Hidden : integer [0..10]\n\
+             internal error struct Boom { code : Tick }\n\
+             internal const MAXLEN = 4\n\
+             internal enum Mode { OFF = 0, ON = 1 }\n\
+             internal interface Panel {\n\
+             \x20 signal a : Hidden @1s\n\
+             \x20 event b : Hidden @[1s..2s]\n\
+             \x20 final c : Hidden\n\
+             \x20 final d : [Hidden; 1..MAXLEN]\n\
+             \x20 command e(p : Hidden)\n\
+             \x20 command f(p : <Hidden>)\n\
+             \x20 query g() : Hidden\n\
+             \x20 query h() : (x : Hidden, y : Tick)\n\
+             \x20 query i() : <Hidden>\n\
+             \x20 query j() : Tick | Boom\n\
+             \x20 query k() : Hidden | Bang\n\
+             \x20 command l(p : Tick) [ require p < MAXLEN ]\n\
+             \x20 query m(p : Tick) : Mode [ ensure result == Mode.ON ]\n\
+             }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
+    }
+
+    /// A public interface over public types is clean even when the package
+    /// holds `internal` declarations: the rule reads the referenced symbol's
+    /// visibility, not the package's.
+    #[test]
+    fn public_interface_over_public_types_is_clean() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal type Hidden : integer [0..10]\n\
+             interface Panel {\n\
+             \x20 signal a : Tick @1s\n\
+             \x20 query g() : Tick\n\
+             }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
+    }
+
+    /// A service's inline shape is an interface shape (ridl §14.5), and the
+    /// service that holds it is always public — so its interaction types are
+    /// exposure positions too. The named-interface half is covered by the
+    /// interface tests above; this is the store a consumer walking
+    /// `Package.interfaces` alone never sees.
+    #[test]
+    fn typl_005_reaches_a_service_inline_shape() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             internal type Hidden : integer [0..10]\n\
+             service app.panel {\n\
+             \x20 signal a : Hidden @1s\n\
+             \x20 command e(p : Hidden)\n\
+             }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-005", "TYPL-005"]);
+        assert!(
+            checked.diagnostics[0].message.contains("`app.panel`"),
+            "the message names the service: {}",
+            checked.diagnostics[0].message,
+        );
+    }
+
+    /// RIDL-143: a public service publishing an `internal` interface. It is not
+    /// TYPL-005 because what leaks is an interface rather than a type, and
+    /// because a service takes no `internal` modifier — so TYPL-005's other
+    /// remedy, marking the exposing declaration internal too, does not exist.
+    #[test]
+    fn ridl_143_service_publishes_an_internal_interface() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal interface Hidden {\n\
+             \x20 signal a : Tick @1s\n\
+             }\n\
+             service app.panel : Hidden\n",
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-143"]);
+        let message = &checked.diagnostics[0].message;
+        assert!(
+            message.contains("`app.panel`") && message.contains("`Hidden`"),
+            "the message names the service and the shape: {message}",
+        );
+        assert!(
+            message.contains("inline shape"),
+            "the message says what is allowed, not only what is refused: {message}",
+        );
+    }
+
+    /// The legal counterpart: a service publishing a public interface. The
+    /// shape's own payload types are public too, so nothing is exposed.
+    #[test]
+    fn service_publishing_a_public_interface_is_clean() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             interface Shown {\n\
+             \x20 signal a : Tick @1s\n\
+             }\n\
+             service app.panel : Shown\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
+    }
+
+    /// A `require`/`ensure` clause is published verbatim: IR v2 carries its
+    /// canonical source text (ADR-0008 decision 14) and both backends emit that
+    /// text as data, so an `internal` constant or enum type named by one is an
+    /// exposure exactly as a payload type is.
+    #[test]
+    fn typl_005_covers_a_contract_reference() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal const SECRET_MAX = 7\n\
+             internal enum Mode { OFF = 0, ON = 1 }\n\
+             interface Panel {\n\
+             \x20 command e(p : Tick) [ require p < SECRET_MAX ]\n\
+             \x20 query g(p : Tick) : Tick [ ensure result > SECRET_MAX ]\n\
+             \x20 command h(p : Mode) [ require p == Mode.ON ]\n\
+             }\n",
+        );
+        // Two constant reads, then the parameter type and the enum head of
+        // `Mode.ON` — the enum type is named twice, in two positions.
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-005"; 4],
+            "got: {:?}",
+            messages(&checked)
+        );
+        assert!(
+            checked.diagnostics[0]
+                .message
+                .contains("internal constant `SECRET_MAX`"),
+            "got: {}",
+            checked.diagnostics[0].message,
+        );
+    }
+
+    /// A parameter shadows a package constant of the same name — the contract
+    /// environment binds parameters before the package vocabulary (expr-core
+    /// §6), so the clause does not reference the constant and there is nothing
+    /// to expose. Reporting here would reject a correct file.
+    #[test]
+    fn a_parameter_shadowing_an_internal_constant_is_not_an_exposure() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal const level = 5\n\
+             interface Panel {\n\
+             \x20 command e(level : Tick) [ require level < 10 ]\n\
+             }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
+    }
+
+    /// The two clause kinds do not bind the same names, and the exposure check
+    /// has to follow that rather than assume it. A `require` sees the
+    /// interface's own signals (ridl §13), so a signal spelled like an
+    /// `internal` constant shadows it and the clause exposes nothing.
+    ///
+    /// An `ensure` does **not**: [`Checker::lower_contracts`] builds its scope
+    /// with `signals: &[]`, so the same spelling resolves to the package
+    /// constant and the published clause text names a declaration no importer
+    /// can resolve. An earlier version of this check re-derived the binding
+    /// order from the enclosing syntax, matched a `SignalDef` under the
+    /// interface whatever the clause kind, and accepted the `ensure` case in
+    /// silence. Both halves are asserted here so the pair cannot drift again.
+    #[test]
+    fn an_ensure_binds_no_signals_so_a_shadowing_signal_still_exposes() {
+        let require = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal const MAX_LEVEL = 5\n\
+             interface Panel {\n\
+             \x20 signal MAX_LEVEL : Tick @1s\n\
+             \x20 command c(p : Tick) [ require p < MAX_LEVEL ]\n\
+             }\n",
+        );
+        assert!(
+            codes(&require).is_empty(),
+            "a `require` binds the signal, so nothing is exposed; got: {:?}",
+            messages(&require),
+        );
+
+        let ensure = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal const MAX_LEVEL = 5\n\
+             interface Panel {\n\
+             \x20 signal MAX_LEVEL : Tick @1s\n\
+             \x20 query g(p : Tick) : Tick [ ensure result > MAX_LEVEL ]\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&ensure),
+            vec!["TYPL-005"],
+            "an `ensure` binds no signal, so the name is the constant; got: {:?}",
+            messages(&ensure),
+        );
+        assert!(
+            ensure.diagnostics[0]
+                .message
+                .contains("internal constant `MAX_LEVEL`"),
+            "got: {}",
+            ensure.diagnostics[0].message,
+        );
+    }
+
+    /// A collection length `Bound` is a bounds constant too (typl §3.3). It is
+    /// a structurally distinct node from a scalar `Constraint` — a length bound
+    /// is a direct child of the `ArrayType`/`MapType` — so the two had to be
+    /// named separately, and only the constraint was, leaving two identical
+    /// positions with one flagged and one silent. Both forms are asserted, and
+    /// the `internal` counterpart must stay legal.
+    #[test]
+    fn typl_005_covers_a_collection_length_bound() {
+        let typl = check_source(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal const MAXLEN = 4\n\
+             struct Holder { f : [Tick; 1..MAXLEN] }\n",
+        );
+        assert_eq!(codes(&typl), vec!["TYPL-005"], "got: {:?}", messages(&typl));
+
+        let ridl = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal const MAXLEN = 4\n\
+             interface Panel {\n\
+             \x20 final d : [Tick; 1..MAXLEN]\n\
+             }\n",
+        );
+        assert_eq!(codes(&ridl), vec!["TYPL-005"], "got: {:?}", messages(&ridl));
+
+        let legal = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal const MAXLEN = 4\n\
+             internal interface Panel {\n\
+             \x20 final d : [Tick; 1..MAXLEN]\n\
+             }\n",
+        );
+        assert!(codes(&legal).is_empty(), "got: {:?}", messages(&legal));
+    }
+
+    /// A signal's `= value` override is not an exposure position, matching the
+    /// typl rule the layer below applies: §3.3 names fields, arms, bounds
+    /// constants and backing, and deliberately not init values, which resolve
+    /// to a literal rather than carrying the constant's name.
+    #[test]
+    fn a_signal_init_override_is_not_an_exposure_position() {
+        let checked = check_ridl(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             internal const SEED = 5\n\
+             interface Panel {\n\
+             \x20 signal a : Tick = SEED @1s\n\
+             }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
     }
 
     // --- TYPL-404/405 and doc metadata (§14) ------------------------------
