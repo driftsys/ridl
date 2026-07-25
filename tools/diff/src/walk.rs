@@ -697,7 +697,7 @@ fn diff_service(
     changes: &mut Vec<Change>,
 ) {
     let path = format!("{pkg}/{name}");
-    if old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated {
+    if service_envelope_differs(old, new) {
         emit(changes, path.clone(), Category::DocOnly, None, None);
     }
     emit_visibility(changes, path.clone(), old.visibility, new.visibility);
@@ -800,7 +800,18 @@ fn envelope_differs(old: &v2::Decl, new: &v2::Decl) -> bool {
     old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
 }
 
+/// The same comparison as [`envelope_differs`], over an interface. The body is
+/// identical but the parameter type is not, and `Decl`, `Interface`, and
+/// `Service` are three unrelated generated structs with no shared trait, so none
+/// can call another without a trait written only to join them. The third copy is
+/// [`service_envelope_differs`].
 fn interface_envelope_differs(old: &v2::Interface, new: &v2::Interface) -> bool {
+    old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
+}
+
+/// The third copy, over a service — named rather than inlined so all three are
+/// greppable together.
+fn service_envelope_differs(old: &v2::Service, new: &v2::Service) -> bool {
     old.doc != new.doc || old.labels != new.labels || old.deprecated != new.deprecated
 }
 

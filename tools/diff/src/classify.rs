@@ -382,6 +382,11 @@ fn lowered_u64(old: Option<u64>, new: Option<u64>) -> bool {
 /// (the IR carries exact decimals for precisely this reason, ADR-0007 decision
 /// 9). Returns `None` when either side is not a plain decimal, which callers
 /// read as "cannot prove this relaxes".
+///
+/// The `None` case is not dead. `ridlc` only ever writes canonical decimals, but
+/// [`load_ir_json`](crate::load_ir_json) deserializes a snapshot off disk and a
+/// bound is a plain string there, so a hand-edited or foreign `.ir.json` can
+/// carry an exponent form or any other spelling this function does not read.
 fn cmp_decimal(left: &str, right: &str) -> Option<std::cmp::Ordering> {
     use std::cmp::Ordering;
 
@@ -470,6 +475,15 @@ fn timing(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     let (Some(old_timing), Some(new_timing)) =
         (interaction_timing(old_decl), interaction_timing(new_decl))
     else {
+        // An interaction kind that carries no timing at all. The walk cannot
+        // produce this: it emits `TimingChanged` only inside its signal and
+        // event arms, so both sides are already a timed kind by the time a
+        // change reaches here. It is still reachable, because [`classify`] is
+        // public and takes any hand-built `Change` — so the arm stays, follows
+        // the module's unlisted-is-breaking rule, and carries a test of its own.
+        // It is deliberately not a `debug_assert!`: a caller passing a category
+        // the walk would not have emitted is asking a question, not committing
+        // a bug, and aborting a debug build over it would be wrong.
         return Verdict::Breaking;
     };
 
