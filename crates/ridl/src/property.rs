@@ -829,8 +829,111 @@ fn render_text(reports: &[PackageReport]) -> String {
                 out.push_str("    (none)\n");
             }
         }
+
+        let summary = Summary::of(report);
+        out.push_str(&format!("  {}\n", summary.line()));
+        if let Some(warning) = summary.warning() {
+            out.push_str(&format!("  {warning}\n"));
+        }
     }
     out
+}
+
+/// What the run actually did, counted from the per-clause reports.
+///
+/// A per-clause `skipped` line is easy to miss, and a reader who sees an exit
+/// code of 0 and no summary reasonably concludes the contracts were tested.
+/// On the workspace layout most models use — a shared types package plus
+/// interface packages that import from it — every `require` can be skipped for
+/// want of a resolvable parameter type while the command still exits 0. That
+/// must not read as success, so the count is stated once per package and, when
+/// nothing ran, said plainly.
+///
+/// This is derived from the existing reports; it adds no state and changes no
+/// clause's status.
+struct Summary {
+    requires: usize,
+    evaluated: usize,
+    suspect: usize,
+    skipped: usize,
+    errors: usize,
+    ensures: usize,
+}
+
+impl Summary {
+    fn of(report: &PackageReport) -> Summary {
+        let mut summary = Summary {
+            requires: 0,
+            evaluated: 0,
+            suspect: 0,
+            skipped: 0,
+            errors: 0,
+            ensures: 0,
+        };
+        for contract in &report.contracts {
+            if contract.is_ensure {
+                summary.ensures += 1;
+                continue;
+            }
+            summary.requires += 1;
+            match &contract.status {
+                // A constant clause is evaluated once rather than sampled, but
+                // it did produce a verdict, so it counts as tested.
+                ContractStatus::Ok { .. } | ContractStatus::Constant { .. } => {
+                    summary.evaluated += 1;
+                }
+                ContractStatus::Suspect { .. } => {
+                    summary.evaluated += 1;
+                    summary.suspect += 1;
+                }
+                ContractStatus::Skipped(_) => summary.skipped += 1,
+                ContractStatus::Error(_) => summary.errors += 1,
+                ContractStatus::ObserverStub => {}
+            }
+        }
+        summary
+    }
+
+    fn line(&self) -> String {
+        let mut parts = vec![format!(
+            "requires: {} total, {} evaluated",
+            self.requires, self.evaluated
+        )];
+        if self.suspect > 0 {
+            parts.push(format!("{} suspect", self.suspect));
+        }
+        if self.skipped > 0 {
+            parts.push(format!("{} skipped", self.skipped));
+        }
+        if self.errors > 0 {
+            parts.push(format!("{} errored", self.errors));
+        }
+        format!(
+            "summary — {}; ensures: {} listed",
+            parts.join(", "),
+            self.ensures
+        )
+    }
+
+    /// The line that fires when a package declares preconditions and none of
+    /// them were evaluated. A package with no `require` at all is silent: there
+    /// is nothing it failed to test.
+    fn warning(&self) -> Option<String> {
+        (self.requires > 0 && self.evaluated == 0).then(|| {
+            format!(
+                "WARNING: no require clause was evaluated — this run tested no \
+                 precondition ({} skipped of {})",
+                self.skipped, self.requires
+            )
+        })
+    }
+
+    /// The machine-readable flag a CI consumer keys on. Same condition as
+    /// [`Summary::warning`]: a reader of the JSON has exactly the problem a
+    /// reader of the text does.
+    fn nothing_evaluated(&self) -> bool {
+        self.requires > 0 && self.evaluated == 0
+    }
 }
 
 fn describe(contract: &ContractReport) -> String {
@@ -975,10 +1078,25 @@ fn render_json(reports: &[PackageReport]) -> String {
                     })
                 })
                 .collect();
+            // The same statement the text summary makes. A machine reading the
+            // report cannot see the per-clause `skipped` lines any more easily
+            // than a human can, so `nothing_evaluated` is the single field a CI
+            // consumer can key on to tell "all preconditions hold" apart from
+            // "no precondition was tested".
+            let summary = Summary::of(report);
             serde_json::json!({
                 "package": report.package,
                 "contracts": contracts,
                 "ranges": ranges,
+                "summary": {
+                    "requires_total": summary.requires,
+                    "requires_evaluated": summary.evaluated,
+                    "requires_suspect": summary.suspect,
+                    "requires_skipped": summary.skipped,
+                    "requires_errored": summary.errors,
+                    "ensures_listed": summary.ensures,
+                    "nothing_evaluated": summary.nothing_evaluated(),
+                },
             })
         })
         .collect();

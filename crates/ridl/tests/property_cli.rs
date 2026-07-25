@@ -327,6 +327,155 @@ fn a_compile_error_exits_two() {
     );
 }
 
+// ==========================================================================
+// The run summary — "tested nothing" must not look like "all good"
+// ==========================================================================
+
+#[test]
+fn the_summary_counts_what_the_run_actually_did() {
+    // The fixture has four requires (one satisfiable, one suspect, one skipped
+    // for reading a signal, one satisfiable) and one ensure.
+    let dir = fixture("summary");
+    let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0);
+    let line = stdout
+        .lines()
+        .find(|line| line.contains("summary —"))
+        .unwrap_or_else(|| panic!("the run is summarized: {stdout}"));
+    assert!(line.contains("requires: 4 total"), "{line}");
+    assert!(line.contains("3 evaluated"), "{line}");
+    assert!(line.contains("1 suspect"), "{line}");
+    assert!(line.contains("1 skipped"), "{line}");
+    assert!(line.contains("ensures: 1 listed"), "{line}");
+    // Something ran, so the alarm stays silent.
+    assert!(
+        !stdout.contains("WARNING"),
+        "three of four requires were evaluated: {stdout}"
+    );
+}
+
+#[test]
+fn a_run_that_evaluated_nothing_says_so_and_cannot_read_as_success() {
+    // THE case this summary exists for. Every `require` here reads the
+    // interface's own signals, so all of them are skipped and the command still
+    // exits 0. Without the summary the output is a list of skips that a reader
+    // — or a CI job checking only the exit code — takes for a clean pass. On
+    // the workspace layout most models use, imported parameter types produce
+    // exactly this shape.
+    let dir = TempDir::new("all-skipped");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+interface I {\n\
+  signal speedNow : Speed @10ms\n\
+  command a(s: Speed) [ require speedNow == 0.0 ]\n\
+  command b(s: Speed) [ require speedNow > 1.0 ]\n\
+}\n",
+    );
+    let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(
+        code, 0,
+        "the exit code alone still reads as success: {stdout}"
+    );
+
+    let line = stdout
+        .lines()
+        .find(|line| line.contains("summary —"))
+        .unwrap_or_else(|| panic!("the run is summarized: {stdout}"));
+    assert!(line.contains("requires: 2 total, 0 evaluated"), "{line}");
+    assert!(line.contains("2 skipped"), "{line}");
+
+    let warning = stdout
+        .lines()
+        .find(|line| line.contains("WARNING"))
+        .unwrap_or_else(|| {
+            panic!("a run that evaluated nothing must say so unmistakably: {stdout}")
+        });
+    assert!(
+        warning.contains("no require clause was evaluated")
+            && warning.contains("tested no precondition"),
+        "the warning is unambiguous about what did not happen: {warning}"
+    );
+}
+
+#[test]
+fn the_json_summary_lets_ci_tell_tested_nothing_from_all_good() {
+    // A machine reading the report has the same problem a human does, so the
+    // flag is in the JSON too.
+    let dir = TempDir::new("all-skipped-json");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Speed : km/h [0.0..250.0 step 0.5]\n\
+interface I {\n\
+  signal speedNow : Speed @10ms\n\
+  command a(s: Speed) [ require speedNow == 0.0 ]\n\
+}\n",
+    );
+    let (code, stdout, _) = ridl(&[
+        "test",
+        dir.path().to_str().expect("utf-8 path"),
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+    let summary = &report[0]["summary"];
+    assert_eq!(summary["requires_total"], 1);
+    assert_eq!(summary["requires_evaluated"], 0);
+    assert_eq!(summary["requires_skipped"], 1);
+    assert_eq!(
+        summary["nothing_evaluated"], true,
+        "the single field CI keys on: {summary}"
+    );
+
+    // And the contrasting case: a run that did evaluate its preconditions must
+    // report the flag false, or the flag would be useless.
+    let ok = fixture("json-summary-ok");
+    let (code, stdout, _) = ridl(&[
+        "test",
+        ok.path().to_str().expect("utf-8 path"),
+        "--format",
+        "json",
+    ]);
+    assert_eq!(code, 0);
+    let report: serde_json::Value = serde_json::from_str(&stdout).expect("the report is JSON");
+    let summary = &report[0]["summary"];
+    assert_eq!(summary["requires_total"], 4);
+    assert_eq!(summary["requires_evaluated"], 3);
+    assert_eq!(summary["requires_suspect"], 1);
+    assert_eq!(summary["requires_skipped"], 1);
+    assert_eq!(summary["ensures_listed"], 1);
+    assert_eq!(summary["nothing_evaluated"], false);
+}
+
+#[test]
+fn a_package_with_no_preconditions_is_not_warned_about() {
+    // The warning means "you asked for preconditions to be tested and none
+    // were", not "this package has no preconditions". A types-only package has
+    // nothing it failed to test, so warning there would train readers to ignore
+    // the line.
+    let dir = TempDir::new("no-requires");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+    );
+    let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0);
+    assert!(
+        stdout.contains("requires: 0 total, 0 evaluated"),
+        "the summary is still printed: {stdout}"
+    );
+    assert!(
+        !stdout.contains("WARNING"),
+        "a package declaring no precondition failed to test nothing: {stdout}"
+    );
+}
+
 #[test]
 fn a_zero_sample_count_is_a_usage_error() {
     // Refused rather than silently clamped: a run that drew nothing would call
