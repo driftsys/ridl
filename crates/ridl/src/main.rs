@@ -573,19 +573,21 @@ fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, ExitCo
     Ok(packages)
 }
 
-/// Where every interaction and interface of the current source tree is
-/// declared, so a diff path can be pointed back at the code on the desk.
+/// Where every interaction and every interface shape of the current source tree
+/// is declared, so a diff path can be pointed back at the code on the desk.
 ///
 /// The diff engine reads only the IR, which carries no source locations, so the
 /// span comes from a separate parse of the same tree. Matching is by name —
-/// package, interface (or service), interaction — which is exactly the identity
-/// the diff path carries.
+/// package, shape, interaction — which is exactly the identity the diff path
+/// carries. "Shape" is an `interface` declaration or a service's inline body
+/// (ridl §14.0, §14.5); the two are indexed together through
+/// `SourceFile::shapes`, because a diff path names either one the same way.
 #[derive(Default)]
 struct DeclIndex {
     /// The text of each indexed file, by path: the renderer needs the text as
     /// well as the path to draw a snippet.
     texts: BTreeMap<String, String>,
-    /// `(package, interface, interaction)` to the interaction's declaration.
+    /// `(package, shape, interaction)` to the interaction's declaration.
     members: BTreeMap<(String, String, String), (String, TextRange)>,
     /// `(package, shape)` to the shape's declared name. This is the fallback
     /// for a removed interaction, whose own declaration no longer exists in the
