@@ -1260,10 +1260,16 @@ fn two_members_declaring_one_package_name_keep_their_own_declarations() {
     // rather than assumed away upstream.
     //
     // Resolving a package's own declarations through a name-keyed index gives
-    // the second member the first member's types. Both clauses are the same
-    // text over a same-named type with disjoint ranges, so the mix-up flips
-    // both verdicts — and the `ok`-where-truth-is-`suspect` direction is the one
-    // that hides, because it reports 260 satisfying samples that never existed.
+    // every member the FIRST member's types, so only the LATER member's verdict
+    // moves — the earlier member comes out right by accident. Which range is
+    // declared first therefore decides which direction of error this fixture
+    // can observe at all.
+    //
+    // The wide range goes first deliberately. Under the bug the later member's
+    // `[0..7]` clause is sampled against `[1000..2000]` and reports `ok` with
+    // 260 satisfying draws for a precondition nothing can satisfy: the
+    // direction that HIDES. Ordered the other way the same mix-up calls a
+    // satisfiable clause `suspect`, which is loud and would be noticed anyway.
     let dir = TempDir::new("duplicate-package-name");
     dir.write("ridl.toml", "[workspace]\nmembers = [\"a\", \"b\"]\n");
     for member in ["a", "b"] {
@@ -1275,14 +1281,14 @@ fn two_members_declaring_one_package_name_keep_their_own_declarations() {
     dir.write(
         "a/a.ridl",
         "package dup.pkg\n\
-type Level : integer [0..7]\n\
-interface First {\n  command narrow(l: Level) [ require l > 7 ]\n}\n",
+type Level : integer [1000..2000]\n\
+interface First {\n  command wide(l: Level) [ require l > 7 ]\n}\n",
     );
     dir.write(
         "b/b.ridl",
         "package dup.pkg\n\
-type Level : integer [1000..2000]\n\
-interface Second {\n  command wide(l: Level) [ require l > 7 ]\n}\n",
+type Level : integer [0..7]\n\
+interface Second {\n  command narrow(l: Level) [ require l > 7 ]\n}\n",
     );
 
     let path = dir.path().to_str().expect("utf-8 path");
@@ -1314,16 +1320,20 @@ interface Second {\n  command wide(l: Level) [ require l > 7 ]\n}\n",
             .to_string()
     };
     assert_eq!(
-        status_of("First.narrow.require[0]"),
-        "suspect",
-        "nothing in the first member's `Level [0..7]` exceeds 7: {stdout}"
-    );
-    assert_eq!(
-        status_of("Second.wide.require[0]"),
+        status_of("First.wide.require[0]"),
         "ok",
-        "every value of the second member's `Level [1000..2000]` exceeds 7 — \
-         reporting `suspect` here means the member was resolved against its \
-         namesake's declarations: {stdout}"
+        "every value of the first member's `Level [1000..2000]` exceeds 7: \
+         {stdout}"
+    );
+    // The load-bearing one. `suspect` is the truth here; `ok` means the member
+    // was sampled against its namesake's `[1000..2000]` and is claiming 260
+    // satisfying inputs that its own type admits none of.
+    assert_eq!(
+        status_of("Second.narrow.require[0]"),
+        "suspect",
+        "nothing in the second member's `Level [0..7]` exceeds 7 — reporting \
+         `ok` here means the member was resolved against its namesake's \
+         declarations, and a run that tested nothing real would pass: {stdout}"
     );
 }
 
