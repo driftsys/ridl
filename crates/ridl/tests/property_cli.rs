@@ -238,6 +238,52 @@ interface I {\n\
     }
 }
 
+#[test]
+fn zero_is_injected_only_when_the_range_actually_contains_it() {
+    // The boundary corpus adds zero because contracts so often turn on it, but
+    // only when the range spans it. Injecting it unconditionally would feed a
+    // parameter a value its own type forbids, and the verdict it produces is a
+    // FALSE `ok`: `require p == 0` over `Pos [5..9]` — which no legal value
+    // satisfies — would be reported satisfied. A wrong green is worse than a
+    // wrong red, so the guard is pinned.
+    let dir = TempDir::new("zero-guard");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write(
+        "app.ridl",
+        "package app\n\
+type Pos : integer [5..9]\n\
+type Spans : integer [-3..3]\n\
+interface I {\n\
+  command outside(p: Pos) [ require p == 0 ]\n\
+  command inside(s: Spans) [ require s == 0 ]\n\
+}\n",
+    );
+    let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
+    assert_eq!(code, 0, "{stdout}");
+
+    let outside = stdout
+        .lines()
+        .find(|line| line.contains("I.outside.require[0]"))
+        .unwrap_or_else(|| panic!("the clause is reported: {stdout}"));
+    assert!(
+        outside.contains("suspect"),
+        "zero is outside `Pos [5..9]`, so nothing can satisfy `p == 0` and the \
+         run must not claim otherwise: {outside}"
+    );
+
+    // The other side of the guard: a range that does span zero still gets it,
+    // so the test fails if zero injection is dropped altogether rather than
+    // merely made unconditional.
+    let inside = stdout
+        .lines()
+        .find(|line| line.contains("I.inside.require[0]"))
+        .unwrap_or_else(|| panic!("the clause is reported: {stdout}"));
+    assert!(
+        inside.contains("ok") && !inside.contains("suspect"),
+        "zero is inside `Spans [-3..3]`, so `s == 0` is satisfiable: {inside}"
+    );
+}
+
 // ==========================================================================
 // Exit codes
 // ==========================================================================

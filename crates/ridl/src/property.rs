@@ -15,13 +15,29 @@
 //!    generators and the bounds come from the lowered IR, so a disagreement is a
 //!    checker or generator bug and fails the run.
 //! 2. **`require` satisfiability sampling.** Every precondition whose reads are
-//!    all generatable is evaluated over N drawn parameter tuples, and the
-//!    satisfied count is reported. Zero satisfied out of N is reported as
+//!    all generatable is evaluated over two sets of inputs: each parameter's
+//!    **boundary corpus** — its range endpoints, plus zero when the range spans
+//!    it — drawn first and deterministically, then `--samples` random draws.
+//!    The two counts are reported apart, so an endpoint hit is distinguishable
+//!    from an interior one. Nothing satisfied by either is reported as
 //!    `suspect` — a **test-plane finding**, not a compile diagnostic: it is
 //!    evidence worth a human's attention and not a rule the language enforces,
-//!    so no diagnostic code is burned on it and the run still passes.
+//!    so no diagnostic code is burned on it and the run still passes. A clause
+//!    reading no parameter has nothing to vary and is evaluated once, reported
+//!    as constant rather than as a sample count it did not earn.
 //! 3. **`ensure` clauses.** Listed as observer stubs only. A postcondition needs
 //!    a `result`, which needs a provider; executing one is the E5 oracle's job.
+//!
+//! **What section 2 does not try.** Boundary values are zipped across
+//! parameters with wrapping, not combined exhaustively: every parameter reaches
+//! each of its own endpoints, but no tuple pairs one parameter's endpoint with
+//! another's. The corpus is therefore the diagonal, and the tuple count stays
+//! linear rather than exponential in the parameter count. A clause satisfied
+//! only at an off-diagonal corner — `a == 0 && b == 1000` over two
+//! `[0..1000]` parameters — is reachable only if a random draw happens to land
+//! there, so it can report `suspect` even though it is satisfiable. The report
+//! is honest about what ran; this note is what it does not say. Exhaustive
+//! combination is the obvious next lever if that shape turns out to matter.
 //!
 //! Exit codes: 0 when every run passes, 1 on a range self-corpus failure or an
 //! evaluation error, 2 on a compile or I/O error.
@@ -60,6 +76,15 @@ const LIVE_STATE_SKIP: &str = "skipped: reads live state — observer territory 
 
 /// The finding raised when no drawn input satisfies a precondition.
 const SUSPECT: &str = "suspect: no sampled input satisfies this precondition";
+
+/// Appended to the finding for a clause reading more than one parameter.
+///
+/// Boundary values are zipped, not combined, so the corpus never pairs one
+/// parameter's endpoint with another's. Without this note a `suspect` on such a
+/// clause reads as a claim about the model when it may only be a limit of the
+/// search.
+const COMBINATION_CAVEAT: &str = "boundary combinations across parameters are not explored, so this may be a \
+     limit of the sampling rather than of the model";
 
 // ==========================================================================
 // The report
@@ -101,12 +126,21 @@ enum ContractStatus {
         satisfied_random: usize,
         boundary: usize,
         random: usize,
+        /// Draws thrown away for landing outside their own range — see
+        /// [`draw`]. Non-zero only on a range whose bounds exceed `f64`
+        /// precision.
+        discarded: usize,
     },
     /// No input satisfied it — neither the injected boundary corpus nor any
     /// random draw. The test-plane finding.
     Suspect {
         boundary: usize,
         random: usize,
+        discarded: usize,
+        /// How many parameters the clause reads. Above one, the finding carries
+        /// the combination caveat: the boundary corpus is the diagonal, so a
+        /// clause satisfied only at an off-diagonal corner can land here.
+        params: usize,
     },
     /// A clause reading no parameter: one value, not a sample count.
     Constant {
@@ -446,6 +480,8 @@ fn run_contract(
 
     let mut satisfied_boundary = 0usize;
     let mut satisfied_random = 0usize;
+    let mut drawn_random = 0usize;
+    let mut discarded = 0usize;
     for index in 0..(boundary_tuples + samples) {
         let is_boundary = index < boundary_tuples;
         let mut bindings = Vec::with_capacity(generators.len());
@@ -460,12 +496,26 @@ fn run_contract(
             };
             match value {
                 Some(value) => bindings.push((name.clone(), value)),
-                None => {
+                None if is_boundary => {
+                    // A boundary corpus is computed exactly and is always in
+                    // range, so an absent value here is a real defect.
                     return report(ContractStatus::Error(format!(
-                        "cannot draw a value for `{name}`"
+                        "cannot bind the boundary value for `{name}`"
                     )));
                 }
+                None => break,
             }
+        }
+        // `draw` discards a value that landed outside its own range (the f64
+        // round-trip on a very tight range). The tuple is incomplete, so it is
+        // skipped rather than evaluated against a missing binding — and rather
+        // than reported as an error, since nothing is wrong with the model.
+        if bindings.len() != generators.len() {
+            discarded += 1;
+            continue;
+        }
+        if !is_boundary {
+            drawn_random += 1;
         }
         let env = EvalEnv {
             params: &bindings,
@@ -495,17 +545,22 @@ fn run_contract(
         }
     }
 
+    // The reported counts are what actually RAN, so a run that discarded draws
+    // does not claim to have tried them.
     if satisfied_boundary + satisfied_random == 0 {
         report(ContractStatus::Suspect {
             boundary: boundary_tuples,
-            random: samples,
+            random: drawn_random,
+            discarded,
+            params: generators.len(),
         })
     } else {
         report(ContractStatus::Ok {
             satisfied_boundary,
             satisfied_random,
             boundary: boundary_tuples,
-            random: samples,
+            random: drawn_random,
+            discarded,
         })
     }
 }
@@ -577,11 +632,21 @@ fn generator_for(package: &v2::Package, param: &v2::Param) -> Option<Generator> 
 /// comes back as `f64` from the E1.18 strategy and is carried into the exact
 /// domain through its shortest round-tripping decimal, which is a finite
 /// decimal and therefore an exact rational.
+///
+/// **Every drawn value is checked against the range it was drawn from.** The
+/// float path is not range-preserving: it rounds both bounds to `f64` to build
+/// the strategy, and reconstructing the drawn value can land just outside the
+/// declared interval when the bounds need more than about fifteen significant
+/// digits. Presenting such a value as an ordinary sample inverts verdicts — a
+/// `require v < min`, which no legal value satisfies, is reported satisfied —
+/// so an out-of-range draw is discarded here instead. The guard costs one
+/// comparison and turns a silently wrong answer into a missing sample.
 fn draw(generator: &Generator, runner: &mut TestRunner) -> Option<Value> {
     match generator {
         Generator::Int(range) => {
             let value = testgen::int_values(range).new_tree(runner).ok()?.current();
-            Some(Value::Num(integer(value), NumericBacking::Integer))
+            let value = integer(value);
+            in_range(value, &range.min, &range.max, NumericBacking::Integer)
         }
         Generator::Float(range) => {
             let value = testgen::float_values(range)
@@ -591,11 +656,25 @@ fn draw(generator: &Generator, runner: &mut TestRunner) -> Option<Value> {
             if !value.is_finite() {
                 return None;
             }
-            Some(Value::Num(
-                ExactValue::parse(&format!("{value}"))?,
-                NumericBacking::Float,
-            ))
+            let value = ExactValue::parse(&format!("{value}"))?;
+            in_range(value, &range.min, &range.max, NumericBacking::Float)
         }
+    }
+}
+
+/// The drawn value as a [`Value`], or `None` when it fell outside the range it
+/// was drawn from. Uses the same `range_accepts` the checker and the range
+/// self-corpora use, so "in range" means one thing across the toolchain.
+fn in_range(
+    value: ExactValue,
+    min: &ExactValue,
+    max: &ExactValue,
+    backing: NumericBacking,
+) -> Option<Value> {
+    if ridl_sem::scalar::range_accepts(&value, Some(min), Some(max)) {
+        Some(Value::Num(value, backing))
+    } else {
+        None
     }
 }
 
@@ -603,6 +682,18 @@ fn draw(generator: &Generator, runner: &mut TestRunner) -> Option<Value> {
 ///
 /// Constants are bound under their bare name and enum members under the dotted
 /// `Enum.MEMBER` spelling the evaluator asks for.
+///
+/// **Known limitation — single package only.** This walks one package's own
+/// `decls`, while the checker builds the same vocabulary from
+/// `resolution.symbols`, which includes imports. A clause naming a constant
+/// imported from another package therefore finds no binding here, evaluation
+/// fails with an unbound reference, and the run exits 1 — on a workspace
+/// `ridl check` accepts. Exit 1 means "the toolchain disagrees with itself", so
+/// this reports a toolchain fault for a legal model. It fails loudly rather
+/// than silently, which is the safe direction, but it is still wrong. The fix
+/// is to hand this runner the checker's resolution rather than a single
+/// package, which also closes the cross-package gap in [`named_type`]; both are
+/// one debt item.
 fn vocabulary(package: &v2::Package) -> BTreeMap<String, Value> {
     let mut bound = BTreeMap::new();
     for decl in &package.decls {
@@ -749,17 +840,30 @@ fn describe(contract: &ContractReport) -> String {
             satisfied_random,
             boundary,
             random,
+            discarded,
         } => {
             format!(
-                "ok — {satisfied_boundary} boundary + {satisfied_random} random of {} satisfied  ({})",
+                "ok — {satisfied_boundary} boundary + {satisfied_random} random of {} satisfied{}  ({})",
                 boundary + random,
+                discarded_note(*discarded),
                 contract.source
             )
         }
-        ContractStatus::Suspect { boundary, random } => {
+        ContractStatus::Suspect {
+            boundary,
+            random,
+            discarded,
+            params,
+        } => {
             format!(
-                "{SUSPECT} — 0/{} ({boundary} boundary + {random} random)  ({})",
+                "{SUSPECT} — 0/{} ({boundary} boundary + {random} random){}{}  ({})",
                 boundary + random,
+                discarded_note(*discarded),
+                if *params > 1 {
+                    format!("; {COMBINATION_CAVEAT}")
+                } else {
+                    String::new()
+                },
                 contract.source
             )
         }
@@ -777,6 +881,16 @@ fn describe(contract: &ContractReport) -> String {
         ContractStatus::ObserverStub => {
             format!("observer stub — not evaluated  ({})", contract.source)
         }
+    }
+}
+
+/// The trailing note for draws thrown away as out of range, or nothing at all
+/// when none were — the common case by far.
+fn discarded_note(discarded: usize) -> String {
+    if discarded == 0 {
+        String::new()
+    } else {
+        format!(", {discarded} discarded as out of range")
     }
 }
 
@@ -811,29 +925,40 @@ fn render_json(reports: &[PackageReport]) -> String {
                 .contracts
                 .iter()
                 .map(|contract| {
-                    let (satisfied, samples, boundary, random) = match &contract.status {
+                    let (satisfied, samples, boundary, random, discarded) = match &contract.status {
                         ContractStatus::Ok {
                             satisfied_boundary,
                             satisfied_random,
                             boundary,
                             random,
+                            discarded,
                         } => (
                             Some(satisfied_boundary + satisfied_random),
                             Some(boundary + random),
                             Some(*boundary),
                             Some(*random),
+                            Some(*discarded),
                         ),
-                        ContractStatus::Suspect { boundary, random } => (
+                        ContractStatus::Suspect {
+                            boundary,
+                            random,
+                            discarded,
+                            ..
+                        } => (
                             Some(0),
                             Some(boundary + random),
                             Some(*boundary),
                             Some(*random),
+                            Some(*discarded),
                         ),
-                        _ => (None, None, None, None),
+                        _ => (None, None, None, None, None),
                     };
                     let detail = match &contract.status {
                         ContractStatus::Skipped(why) => Some(why.clone()),
                         ContractStatus::Error(why) => Some(why.clone()),
+                        ContractStatus::Suspect { params, .. } if *params > 1 => {
+                            Some(format!("{SUSPECT}; {COMBINATION_CAVEAT}"))
+                        }
                         ContractStatus::Suspect { .. } => Some(SUSPECT.to_string()),
                         _ => None,
                     };
@@ -844,6 +969,7 @@ fn render_json(reports: &[PackageReport]) -> String {
                         "samples": samples,
                         "boundary_samples": boundary,
                         "random_samples": random,
+                        "discarded_samples": discarded,
                         "source": contract.source,
                         "detail": detail,
                     })

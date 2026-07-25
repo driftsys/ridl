@@ -89,7 +89,9 @@ enum Command {
     Test {
         #[arg(default_value = ".")]
         path: PathBuf,
-        /// Parameter tuples drawn per `require` clause.
+        /// Random parameter tuples drawn per `require` clause (minimum 1). Each
+        /// clause also runs its parameters' boundary corpus, which is drawn
+        /// first and is not counted here, so the total per clause is larger.
         #[arg(long, default_value_t = 256)]
         samples: usize,
         /// Output format for the report.

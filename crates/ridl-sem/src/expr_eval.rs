@@ -105,14 +105,21 @@ impl std::fmt::Display for EvalError {
 /// would otherwise exhaust the stack — a panic by another name. Exceeding the
 /// limit is an [`EvalError::TypeMismatch`] like any other refusal.
 ///
-/// The value matches the parser's own `MAX_TYPE_DEPTH`, which bounds the
-/// expression grammar too: nothing the parser accepts nests deeper than this,
-/// so the guard never refuses a tree that could legitimately arrive, and a
-/// binary chain — which the parser builds iteratively and does not cap — is
-/// stopped well inside the stack. It must stay **below** the frame budget, not
-/// merely above what contracts are written with: an earlier 256 exhausted a
-/// 2 MB stack before the guard could fire, because a debug-build
-/// `eval`/`eval_binary` pair is several kilobytes of frame.
+/// The value matches the parser's own `MAX_TYPE_DEPTH`, and **that agreement is
+/// load-bearing rather than decorative**. The parser's guard cuts one level
+/// earlier than this one on the shared paren path: 127 nested parentheses parse
+/// and evaluate, 128 are refused by the parser before evaluation is reached. So
+/// no tree the parser accepts can ever trip this guard through nesting, and the
+/// guard exists for the shape the parser does *not* cap — a binary chain, which
+/// it builds iteratively. Lowering the parser's limit without lowering this one
+/// would be harmless; raising this one above the parser's would make the paren
+/// path reachable again and must be done only against a measured frame budget.
+///
+/// The limit must stay **below** the stack budget, not merely above what
+/// contracts are written with. An earlier value of 256 could never fire at all:
+/// 257 debug-build `eval`/`eval_binary` frames exhaust a 2 MB stack first
+/// (measured — 250 levels evaluate, 256 overflows), so the guard was decorative.
+/// 128 is safe in both debug and release.
 const MAX_DEPTH: u32 = 128;
 
 // ==========================================================================
@@ -915,6 +922,11 @@ mod tests {
 
     // --- totality ----------------------------------------------------------
 
+    /// Note for anyone who sees this test die: with the depth guard removed or
+    /// raised, it does **not** fail with a clean assertion — it aborts the whole
+    /// test binary with `fatal runtime error: stack overflow` and SIGABRT, which
+    /// is the failure it exists to prevent. That is the correct signal, not a
+    /// broken test. Do not "fix" it by shrinking the chain below the guard.
     #[test]
     fn deep_nesting_is_refused_rather_than_exhausting_the_stack() {
         // A LEFT-NESTED BINARY CHAIN, not parenthesis nesting: the parser caps
