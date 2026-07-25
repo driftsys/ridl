@@ -172,7 +172,9 @@ export interface VehicleStatusConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled, finals are supplied at binding initialization.
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
  */
 export interface VehicleStatusProvider {
   /**
@@ -228,8 +230,6 @@ export interface VehicleStatusProvider {
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getFaultPage(filter: DiagFilter): Promise<Result<FaultPage, DiagError>>;
-  readonly softwareVersion: ridl_std.Version;
-  readonly capabilities: readonly ridl_std.Label[];
 }
 
 /**
@@ -296,7 +296,9 @@ export interface Service_veh_cluster_logsConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled, finals are supplied at binding initialization.
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
  */
 export interface Service_veh_cluster_logsProvider {
   /**

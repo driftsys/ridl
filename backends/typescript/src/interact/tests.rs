@@ -1052,21 +1052,29 @@ fn deprecated_reaches_interactions_and_both_faces() {
     let package = interact_package(vec![iface], Vec::new());
     let source = render(&package);
 
+    // Twice each — once per face — for the four kinds both faces carry, and
+    // for the interface's own deprecation.
     for reason in [
         "@deprecated use currentSpeed",
         "@deprecated no replacement",
         "@deprecated use setGear",
         "@deprecated use getAverageSpeed",
-        "@deprecated use vin",
         "@deprecated superseded by VehicleStatus",
     ] {
-        // Twice each: once per face.
         assert_eq!(
             source.matches(reason).count(),
             2,
             "{reason:?} must appear on both faces, got:\n{source}"
         );
     }
+    // A final is consumer-only (ridl §3, §8), so its deprecation is emitted
+    // once — and on the consumer face specifically.
+    assert_eq!(
+        source.matches("@deprecated use vin").count(),
+        1,
+        "a final's deprecation belongs to the one face that carries it, got:\n{source}"
+    );
+    assert!(face_body(&source, "LegacyConsumer").contains("@deprecated use vin"));
 }
 
 /// A reserved tombstone occupies an ordinal but emits no member (ridl §11):
@@ -1115,6 +1123,203 @@ fn reserved_tombstone_emits_no_member() {
         !source.contains("undefined, maxUs: undefined"),
         "a tombstone must not reach the timing table, got:\n{source}"
     );
+}
+
+// ---------------------------------------------------------------------------
+// The consumer/provider split of `final`.
+// ---------------------------------------------------------------------------
+
+/// A `final` appears on the consumer face only.
+///
+/// The ridl §3 interaction-model table gives every kind an initiator and
+/// gives `final` "neither (provisioned)" — the one kind naming no side. §8
+/// has it provisioned externally (build, factory, FOTA) and read through a
+/// plain accessor "free of the query machinery", and §14.6 defines providing
+/// as producing signals/events and accepting commands/queries, four kinds
+/// with `final` absent. A provider can neither publish, answer, nor write
+/// one, so `readonly vin: Vin` on the provider face would assert an
+/// obligation the language places on the provisioning plane.
+#[test]
+fn final_appears_on_the_consumer_face_only() {
+    let package = interact_package(
+        vec![interface(
+            "VehicleStatus",
+            vec![
+                interaction("vin", 1, final_def(named("Vin"))),
+                interaction(
+                    "speed",
+                    2,
+                    signal(
+                        "Speed",
+                        Some("0.0"),
+                        timing(
+                            v2::TimingMode::StrictPeriodic,
+                            Some("10000"),
+                            Some("10000"),
+                            false,
+                        ),
+                    ),
+                ),
+            ],
+        )],
+        Vec::new(),
+    );
+    let source = render(&package);
+
+    let consumer = face_body(&source, "VehicleStatusConsumer");
+    let provider = face_body(&source, "VehicleStatusProvider");
+
+    assert!(
+        consumer.contains("readonly vin: Vin;"),
+        "the consumer face must carry the final, got:\n{consumer}"
+    );
+    assert!(
+        !provider.contains("vin"),
+        "the provider face must not mention the final, got:\n{provider}"
+    );
+    // The signal still splits across both faces, so the provider face is not
+    // simply empty.
+    assert!(provider.contains("speed: { publish(value: Speed): void };"));
+}
+
+/// An interface holding nothing but finals still emits a provider face — an
+/// empty one, which is the honest shape: there is nothing for a provider to
+/// do.
+#[test]
+fn finals_only_interface_emits_an_empty_provider_face() {
+    let package = one(interaction("vin", 1, final_def(named("Vin"))));
+    let source = render(&package);
+    assert!(
+        source.contains("export interface VehicleStatusProvider {}"),
+        "got:\n{source}"
+    );
+}
+
+/// The body of a generated face, for assertions that must not be satisfied by
+/// a match in the sibling face.
+fn face_body<'a>(source: &'a str, face: &str) -> &'a str {
+    let start = source
+        .find(&format!("export interface {face} {{"))
+        .unwrap_or_else(|| panic!("{face} must be generated, got:\n{source}"));
+    let rest = &source[start..];
+    let end = rest.find("\n}").map(|i| i + 2).unwrap_or(rest.len());
+    &rest[..end]
+}
+
+// ---------------------------------------------------------------------------
+// Generated-name collisions — one case per name family.
+// ---------------------------------------------------------------------------
+
+/// The package behind a collision case: one interface, one inline service,
+/// and a single typl declaration under test.
+fn collision_package(decl_name: &str) -> v2::Package {
+    let mut package = interact_package(
+        vec![interface(
+            "VehicleStatus",
+            vec![interaction("vin", 1, final_def(named("Vin")))],
+        )],
+        vec![service(
+            "veh.adas.logs",
+            v2::service::Shape::Inline(interface(
+                "",
+                vec![interaction("tailLogs", 1, final_def(named("Vin")))],
+            )),
+        )],
+    );
+    package.decls.push(struct_decl(
+        decl_name,
+        vec![scalar_field("count", 1, v2::PrimitiveType::Integer)],
+    ));
+    package
+}
+
+fn collision_message(decl_name: &str) -> String {
+    match generate(&collision_package(decl_name)) {
+        Err(GenerateError::Unrepresentable(message)) => message,
+        other => panic!("{decl_name} must collide, got: {other:?}"),
+    }
+}
+
+/// A declaration named after a generated face is refused (the pre-existing
+/// family, kept covered).
+#[test]
+fn declaration_colliding_with_a_face_is_refused() {
+    assert!(collision_message("VehicleStatusConsumer").contains("consumer face"));
+    assert!(collision_message("VehicleStatusProvider").contains("provider face"));
+}
+
+/// A declaration named after a generated const is refused.
+///
+/// Nothing upstream prevents this: typl §15.1 is a conventions table with no
+/// enforcing diagnostic, so `struct vehicleStatusTiming` draws no ridl
+/// diagnostic at all. Reaching `tsc`, the enum form collides outright and the
+/// const form is TS2451 (cannot redeclare block-scoped variable).
+#[test]
+fn declaration_colliding_with_a_generated_const_is_refused() {
+    assert!(collision_message("vehicleStatusTiming").contains("timing table"));
+    assert!(collision_message("vehicleStatusContracts").contains("contract table"));
+}
+
+/// A declaration named after an inline service shape's face is refused.
+///
+/// The service name is constrained (`check_service_name` in `ridl-sem`), but
+/// the *typl* name is not, so `struct Service_veh_adas_logsConsumer` compiles
+/// clean and then reaches `tsc` as TS2741: the module emits
+/// `export interface Service_veh_adas_logsConsumer` twice and TypeScript
+/// merges them.
+#[test]
+fn declaration_colliding_with_an_inline_shape_face_is_refused() {
+    let message = collision_message("Service_veh_adas_logsConsumer");
+    assert!(
+        message.contains("inline shape of service veh.adas.logs"),
+        "the message must name the service, got: {message}"
+    );
+}
+
+/// A declaration named after an inline shape's generated const is refused
+/// too — the fourth family, reached through the mangled stem.
+#[test]
+fn declaration_colliding_with_an_inline_shape_const_is_refused() {
+    assert!(collision_message("service_veh_adas_logsTiming").contains("timing table"));
+}
+
+/// The generated service map is a module-level name like any other.
+#[test]
+fn declaration_colliding_with_the_service_map_is_refused() {
+    assert!(collision_message("services").contains("service map"));
+}
+
+/// Two generated names claiming one identifier is refused before anything is
+/// emitted: an interface can be named so that its faces coincide with an
+/// inline service shape's.
+#[test]
+fn two_generated_names_claiming_one_identifier_are_refused() {
+    let package = interact_package(
+        vec![interface(
+            "Service_veh_adas_logs",
+            vec![interaction("vin", 1, final_def(named("Vin")))],
+        )],
+        vec![service(
+            "veh.adas.logs",
+            v2::service::Shape::Inline(interface(
+                "",
+                vec![interaction("tailLogs", 1, final_def(named("Vin")))],
+            )),
+        )],
+    );
+    assert!(matches!(
+        generate(&package),
+        Err(GenerateError::Unrepresentable(message))
+            if message.contains("claimed by both")
+    ));
+}
+
+/// A name that merely resembles a generated one still generates — the check
+/// rejects collisions, not a naming style.
+#[test]
+fn a_near_miss_name_still_generates() {
+    assert!(generate(&collision_package("VehicleStatusConsumerExtra")).is_ok());
+    assert!(generate(&collision_package("VehicleStatusTiming")).is_ok());
 }
 
 // ---------------------------------------------------------------------------

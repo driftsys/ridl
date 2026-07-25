@@ -13,8 +13,9 @@
 //!   is one abstract shape, but the two sides of a binding do not see the
 //!   same operations — a consumer reads and subscribes to a signal while a
 //!   provider publishes it — so the shape is realized as two types rather
-//!   than one type nobody can implement. Commands, queries, and finals keep
-//!   one shape on both sides.
+//!   than one type nobody can implement. Commands and queries keep one shape
+//!   on both sides. A `final` appears on the consumer face only: it is
+//!   provisioned externally and initiated by neither side (ridl §3, §8).
 //! - **Fallible queries split mechanically** (ridl §10.1): the success arm is
 //!   the reply payload and the error arm is declared vocabulary, so an inline
 //!   `T | E` return becomes `Promise<Result<Ok, Err>>` — errors are data, and
@@ -43,6 +44,7 @@
 
 use crate::{Ctx, GenerateError, deprecated_tags, is_integer_form, jsdoc, kind_ts, ts_string};
 use ridl_ir::v2;
+use std::collections::BTreeMap;
 
 /// The Stratum-3 wording, verbatim from gf §6.4. The em dash is U+2014 and
 /// the phrase is normative: Stratum 3 is never described as undefined
@@ -222,8 +224,10 @@ impl Face {
             Face::Provider => {
                 "The provider face of this interface (ridl §14): what code \
                  realizing it implements. Signals and events are published, \
-                 commands and queries are handled, finals are supplied at \
-                 binding initialization."
+                 commands and queries are handled. Finals are absent here — \
+                 they are provisioned externally (ridl §8) and initiated by \
+                 neither side (ridl §3), so they appear on the consumer face \
+                 only."
             }
         }
     }
@@ -269,6 +273,20 @@ fn emit_face(
     }
 }
 
+/// Emits one member of a face.
+///
+/// Two kinds of malformed IR are treated differently here, deliberately.
+/// Something the checker cannot produce and that has no honest rendering is a
+/// [`GenerateError`] — an unresolved timing mode, a stream element that is
+/// neither string nor bytes, a typl declaration inside an interface. But an
+/// absent optional sub-message (`StreamType.element`, `FinalDef.payload`,
+/// `Param.type`, `QueryDef.return_type`) falls back to `unknown` or
+/// `Promise<void>` instead. Every one of those is rejected upstream — a void
+/// query is RIDL-105, a payload-less final is RIDL-106 — so neither branch is
+/// reachable from a compiled package. The split is about what a hand-built or
+/// truncated IR deserves: `unknown` is honest about missing information and
+/// keeps the emitter total, while a guessed *type* would be a silent lie that
+/// compiles. Nothing downstream depends on these fallbacks.
 fn emit_member(
     ctx: &Ctx,
     interface: &str,
@@ -335,10 +353,28 @@ fn emit_member(
             let doc = jsdoc("  ", &decl.doc, &tags);
             Ok(format!("{doc}  {name}({params}): {ret};\n"))
         }
-        Some(v2::decl::Kind::FinalDef(final_def)) => {
-            // A final is provisioned per software instance and immutable
-            // within it (ridl §8), so it is a plain readonly property on both
-            // faces — there is nothing to subscribe to and nothing to publish.
+        // A final is provisioned externally — build, factory, FOTA — and is
+        // immutable for the software-instance lifetime (ridl §8). It appears
+        // on the CONSUMER face only, as a plain readonly accessor.
+        //
+        // The provider face omits it because a provider has no role in it.
+        // The §3 interaction-model table gives every kind an initiator —
+        // "provider publishes" for signal and event, "consumer calls" for
+        // command and query — and gives `final` "neither (provisioned)", the
+        // one kind that names no side. §14.6 says what providing a service
+        // means ("produces its signals/events, accepts its commands/queries")
+        // and lists four kinds, not five. A provider cannot publish a final
+        // (there is no channel), cannot answer a call for one (§8: reading it
+        // is "free of the query machinery"), and cannot write one (it is
+        // written once, elsewhere). Emitting `readonly vin: Vin` on the
+        // provider face could only mean "the implementer furnishes this",
+        // which is an obligation §8 places on the provisioning plane instead.
+        //
+        // The wire mapping does not contradict this: Appendix B realizes a
+        // final as a SOME/IP getter, but a binding serves that from the
+        // provisioning source, the same way it serves a signal getter from
+        // its last-value cache — a transport detail, not an application API.
+        Some(v2::decl::Kind::FinalDef(final_def)) if face == Face::Consumer => {
             let payload = match final_def.payload.as_ref() {
                 Some(ft) => kind_ts(ctx, ft.kind.as_ref())?,
                 None => "unknown".to_string(),
@@ -350,6 +386,7 @@ fn emit_member(
             );
             Ok(format!("{doc}  readonly {name}: {payload};\n"))
         }
+        Some(v2::decl::Kind::FinalDef(_)) => Ok(String::new()),
         // A reserved tombstone occupies an ordinal but emits no member
         // (ridl §11).
         Some(v2::decl::Kind::ReservedSlot(_)) | None => Ok(String::new()),
@@ -734,46 +771,113 @@ fn lower_camel(name: &str) -> String {
     }
 }
 
+/// Every name this module generates, mapped to a description of where it came
+/// from. The description is what an error message quotes, so it names the
+/// construct an author would recognize.
+///
+/// The set is derived from the same [`Names`] values emission uses, so a name
+/// cannot be reserved here and spelled differently there.
+fn generated_names(package: &v2::Package) -> Result<BTreeMap<String, String>, GenerateError> {
+    let mut names: BTreeMap<String, String> = BTreeMap::new();
+
+    // Claims `name` for `origin`, or reports the owner that holds it already.
+    // Two generated names colliding would emit a module with a duplicated
+    // declaration, so it is caught here rather than left to `tsc`.
+    let claim = |names: &mut BTreeMap<String, String>, name: String, origin: String| {
+        if let Some(previous) = names.get(&name) {
+            return Err(GenerateError::Unrepresentable(format!(
+                "the generated name {name} is claimed by both {previous} and {origin}"
+            )));
+        }
+        names.insert(name, origin);
+        Ok(())
+    };
+
+    for vocabulary in VOCABULARY_NAMES {
+        claim(
+            &mut names,
+            vocabulary.to_string(),
+            "the generated interaction vocabulary".to_string(),
+        )?;
+    }
+    if !package.services.is_empty() {
+        claim(
+            &mut names,
+            "services".to_string(),
+            "the generated service map".to_string(),
+        )?;
+    }
+
+    // Every interface, then every inline service shape — the same order and
+    // the same type names emission uses.
+    let owners = package
+        .interfaces
+        .iter()
+        .map(|interface| {
+            (
+                interface.name.clone(),
+                format!("interface {}", interface.name),
+            )
+        })
+        .chain(
+            package
+                .services
+                .iter()
+                .filter(|service| matches!(service.shape, Some(v2::service::Shape::Inline(_))))
+                .map(|service| {
+                    (
+                        inline_interface_name(&service.name),
+                        format!("the inline shape of service {}", service.name),
+                    )
+                }),
+        );
+
+    for (type_name, origin) in owners {
+        let stem = lower_camel(&type_name);
+        for (name, what) in [
+            (format!("{type_name}Consumer"), "the consumer face"),
+            (format!("{type_name}Provider"), "the provider face"),
+            (format!("{stem}Timing"), "the timing table"),
+            (format!("{stem}Contracts"), "the contract table"),
+        ] {
+            claim(&mut names, name, format!("{what} of {origin}"))?;
+        }
+    }
+    Ok(names)
+}
+
 /// Rejects a package whose typl declarations would collide with a generated
 /// interaction-layer name. TypeScript has one module namespace, so a
 /// collision emits a module that does not compile; naming it here keeps the
 /// backend honest rather than deferring the failure to `tsc`.
 ///
-/// The check covers the vocabulary names and the faces of named interfaces.
-/// It deliberately does not cover the generated const names or an inline
-/// shape's face names, because neither can collide today:
+/// The check covers **every** generated name — the vocabulary, the service
+/// map, and, per interface and per inline service shape, both faces and both
+/// const stems. Covering only some of them would be unsound, because nothing
+/// upstream keeps a typl name clear of the generated shapes: typl §15.1 is a
+/// conventions table with no enforcing diagnostic, so `struct
+/// vehicleStatusTiming` and `struct Service_veh_adas_logsConsumer` both
+/// compile without a single ridl diagnostic. Left unchecked they reach `tsc`
+/// as TS2451 (redeclared block-scoped variable) and TS2741 (two merged
+/// `export interface` declarations), which is exactly the deferral this
+/// function exists to prevent.
 ///
-/// - The consts are `lower_camel`-stemmed (`vehicleStatusTiming`), while typl
-///   declaration names are CamelCase or SCREAMING_SNAKE (typl §15.1) — the
-///   first character alone separates them.
-/// - An inline shape's faces are prefixed `Service_` and a service name's
-///   segments are lowercase with no underscores (`check_service_name` in
-///   `ridl-sem`), so the dots-to-underscores mangling is injective and lands
-///   in a shape no typl name takes.
-///
-/// Both arguments rest on naming rules enforced elsewhere. If either rule
-/// relaxes, this check has to grow to match.
+/// A collision between two generated names is caught as well — an interface
+/// and an inline service shape can arrive at the same generated name — since
+/// nothing rules that out either.
 fn check_name_collisions(package: &v2::Package) -> Result<(), GenerateError> {
+    // Building the set detects generated-vs-generated collisions on its own.
+    let generated = generated_names(package)?;
+
+    // Declaration-vs-generated, in declaration order so the first collision
+    // in the source is the one reported.
     for decl in &package.decls {
-        if VOCABULARY_NAMES.contains(&decl.name.as_str()) {
+        if let Some(origin) = generated.get(&decl.name) {
             return Err(GenerateError::Unrepresentable(format!(
-                "declaration {name} collides with the generated interaction vocabulary; \
-                 a module carrying interactions reserves {names:?}",
-                name = decl.name,
-                names = VOCABULARY_NAMES
+                "declaration {name} collides with {origin}; a module carrying \
+                 interactions reserves that name",
+                name = decl.name
             )));
-        }
-        for interface in &package.interfaces {
-            for suffix in ["Consumer", "Provider"] {
-                if decl.name == format!("{}{suffix}", interface.name) {
-                    return Err(GenerateError::Unrepresentable(format!(
-                        "declaration {name} collides with the generated {suffix} face of \
-                         interface {interface}",
-                        name = decl.name,
-                        interface = interface.name
-                    )));
-                }
-            }
         }
     }
     Ok(())

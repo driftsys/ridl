@@ -57,7 +57,9 @@ export interface CruiseControlConsumer {
 /**
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled, finals are supplied at binding initialization.
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
  */
 export interface CruiseControlProvider {
   /**
@@ -121,7 +123,9 @@ export interface Service_veh_adas_logsConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled, finals are supplied at binding initialization.
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
  */
 export interface Service_veh_adas_logsProvider {
   /**
