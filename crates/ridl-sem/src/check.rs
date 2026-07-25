@@ -219,7 +219,12 @@ pub fn check_package(
                 .name()
                 .map(|dotted| significant_text(dotted.syntax()))
                 .unwrap_or_default();
-            if !name.is_empty() && !lowered_services.insert(name) {
+            // A service the parser recovered without a name does not lower,
+            // for the reason a nameless interaction does not: a service is
+            // published at its dotted global name, and the empty address is
+            // not one. The parser has already reported FORM-101, so no second
+            // diagnostic is raised here.
+            if name.is_empty() || !lowered_services.insert(name) {
                 continue;
             }
             services.push(checker.lower_service(&service));
@@ -7994,6 +7999,47 @@ interface VehicleStatus {
                 );
             }
         }
+    }
+
+    /// A service the parser recovered without a name does not lower either.
+    /// A service is published at its dotted global name, so an empty
+    /// `Service.name` would publish at the empty address — the same defect
+    /// class as an empty `Decl.name`, and reachable from both service forms.
+    /// FORM-101 already reports it, so no second diagnostic is raised.
+    #[test]
+    fn form_101_nameless_service_does_not_lower() {
+        for body in [
+            "service {\n  signal a : Speed @10ms\n}\n",
+            "interface I {\n  signal a : Speed @10ms\n}\nservice : I\n",
+        ] {
+            let checked = check_ridl("app", &format!("{PRELUDE}{body}"));
+            assert!(
+                checked.ir.services.is_empty(),
+                "a nameless service reached the IR from: {body}",
+            );
+            // FORM-101 is the parser's, and it is merged in by
+            // `ridlc::compile`; the checker adds nothing of its own.
+            assert_eq!(codes(&checked), Vec::<&str>::new(), "from: {body}");
+        }
+    }
+
+    /// The guard is on the empty name only — a named service still lowers,
+    /// and a same-package duplicate still lowers once, first-wins.
+    #[test]
+    fn named_services_still_lower_first_wins() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}service veh.a.b {{\n  signal a : Speed @10ms\n}}\nservice veh.a.b {{\n  signal b : Speed @10ms\n}}\n"
+            ),
+        );
+        let names: Vec<&str> = checked
+            .ir
+            .services
+            .iter()
+            .map(|service| service.name.as_str())
+            .collect();
+        assert_eq!(names, ["veh.a.b"]);
     }
 
     /// `checked_interface` assigns the same ordinals the lowering does: a

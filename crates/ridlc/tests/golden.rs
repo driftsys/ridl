@@ -88,14 +88,18 @@ const NAMELESS_INTERACTIONS: &[&str] = &[
     "interface I {\n  command setGear(view: Speed)\n  signal after : Speed @10ms\n}\n",
 ];
 
-/// `compile` is total on a nameless interaction. Each source here is reported
-/// by the parser and still finishes its member node, so the member reaches the
-/// lowering; before the fix it lowered to a `Decl` with an empty name, which
-/// the Rust backend cannot turn into an identifier. `compile` runs the backend
-/// unconditionally — it does not gate on diagnostics — so an empty name there
-/// breaks the never-panics contract this module's crate documents.
+/// No nameless interaction reaches the IR through `compile`. Each source here
+/// is reported by the parser and still finishes its member node, so the member
+/// reaches the lowering; before the fix it lowered to a `Decl` with an empty
+/// name, which the Rust backend cannot turn into an identifier.
+///
+/// This also stands in for the totality of `compile`, which runs the backend
+/// unconditionally rather than gating on diagnostics: a panic in the loop
+/// below fails the test. That half is a proxy for now — the Rust backend does
+/// not yet emit interactions, so `ident` is never called on one — and becomes
+/// a direct test of the never-panics contract once it does.
 #[test]
-fn compile_is_total_on_a_nameless_interaction() {
+fn no_nameless_interaction_reaches_the_ir_through_compile() {
     for body in NAMELESS_INTERACTIONS {
         let source = format!("package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n{body}");
         // A panic here fails the test, which is the point: `compile` must
@@ -124,6 +128,33 @@ fn compile_is_total_on_a_nameless_interaction() {
                 "an empty-named interaction reached the IR from:\n{body}",
             );
         }
+    }
+}
+
+/// A service the parser recovered without a name does not lower. A service is
+/// published at its dotted global name, so an empty `Service.name` would
+/// publish at the empty address — the Rust backend emits the catalog as
+/// `("", "Service")`, from source the parser already rejected. Both service
+/// forms reach it, and FORM-101 is the only diagnostic either raises.
+#[test]
+fn a_nameless_service_does_not_lower() {
+    for body in [
+        "service {\n  signal a : Speed @10ms\n}\n",
+        "interface I {\n  signal a : Speed @10ms\n}\nservice : I\n",
+    ] {
+        let source = format!("package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n{body}");
+        let output = ridlc::compile("app.ridl", &source);
+
+        assert!(
+            output.package.services.is_empty(),
+            "a nameless service reached the IR from:\n{body}",
+        );
+        let codes: Vec<&str> = output
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect();
+        assert_eq!(codes, ["FORM-101"], "from:\n{body}");
     }
 }
 

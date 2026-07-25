@@ -636,12 +636,39 @@ fn vis_tokens(visibility: i32) -> TokenStream {
 /// never-panics guarantee `ridlc::compile` documents). A valid typl name is
 /// never empty, so an empty `name` only arrives from malformed IR — but the
 /// backend is also reachable from the language server over half-written
-/// source, so it must not panic. An empty name lowers to Rust's wildcard `_`,
-/// which is illegal in every declaration position the emitter uses: the
-/// `syn::parse2` gate in [`generate`] rejects it and returns a
-/// [`GenerateError`], so the condition is reported rather than emitted as
-/// plausible-looking output. `_` cannot collide with a real name either — a
-/// typl name of `_` is mangled to `__` on the branch above.
+/// source, so it must not panic. An empty name lowers to Rust's wildcard `_`.
+/// It cannot collide with a real name: a typl name of `_` is mangled to `__`
+/// on the branch above.
+///
+/// How far `_` is caught depends on the position, and the split is not
+/// uniform:
+///
+/// - **Declaration-name positions** — a struct, enum, trait or type-alias
+///   name, an enum variant, a `fn`, `static` or `mod` name, a trait or impl
+///   method. `_` is rejected by the `syn::parse2` gate in [`generate`], which
+///   returns a [`GenerateError`], so the malformed name is reported rather
+///   than emitted.
+/// - **Field and binding positions** — a struct field, a tuple-struct field, a
+///   `fn` parameter, a `const` name. syn *accepts* `_` here
+///   (`syn::Field::parse_named` calls `Ident::parse_any` once it peeks
+///   `Token![_]`), so [`emit_field`] would emit `pub _: T` and the gate would
+///   not catch it. `rustc` still rejects the field, so the output is never
+///   silently valid, but no [`GenerateError`] is raised. A derived `Default`
+///   usually catches it anyway, because the struct *expression* it builds has
+///   no valid `Member` — but `defaults::struct_default` returns `None` for a
+///   non-constructible field (a cross-package reference carrying a declared
+///   init, for one), and then nothing is left to catch it.
+///
+/// A field-position empty name is unreachable today, and for a structural
+/// reason rather than a lucky one: `ridl_syntax`'s `Parser::block_body` and
+/// `Parser::param_list` announce a member only on `SyntaxKind::Ident`, so
+/// `field_def`, `param`, `enum_value` and `union_arm` are never entered
+/// without a name. `Parser::interface_body` is the exception — it announces
+/// members by the *interaction keyword*, so the name can be missing — which is
+/// precisely and only why interactions were the vulnerable site.
+/// `generate_emits_an_empty_field_name_without_a_derivable_default` pins that
+/// gap, so a regression that makes a nameless field reachable is visible
+/// rather than silent.
 pub(crate) fn ident(name: &str) -> Ident {
     if let Ok(parsed) = syn::parse_str::<Ident>(name) {
         return parsed;
