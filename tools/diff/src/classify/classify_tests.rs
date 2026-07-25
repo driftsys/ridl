@@ -1776,9 +1776,22 @@ fn an_unknown_category_word_has_no_rule_row() {
 /// The guard is the macro, not a second hand-maintained list. One list of names
 /// expands to both the array the assertions iterate and a `match` over
 /// `Category`, so the two cannot drift: a 21st variant makes the generated match
-/// non-exhaustive and this file stops compiling, the only fix is to name the
-/// variant in the list, and naming it there is what puts it in front of the
-/// assertion below.
+/// non-exhaustive and this file stops compiling. The fix rustc's error steers
+/// you to is naming the variant in the list, and naming it there is what puts it
+/// in front of the assertion below.
+///
+/// What this is not is proof. It is still an assertion comparing two lists, and
+/// an assertion can be defeated by editing what feeds it: a wildcard arm, or an
+/// arm written after the repetition, compiles and passes. Both are edits to a
+/// `macro_rules!` directly beneath this paragraph — defeating the guard, not
+/// slipping past it. (The arm rustc's own `help:` suggests lands *inside* the
+/// repetition and is emitted once per name, so `clippy -D warnings` rejects it
+/// as an unreachable pattern. The most likely lazy path does die in CI, but only
+/// that one.)
+///
+/// The structural close is to generate `CATEGORIES` from a single declaration
+/// instead of comparing it against one. This list shadows `CATEGORIES` where it
+/// should produce it, and until it does, the class of mistake stays open.
 #[test]
 fn every_category_variant_reaches_the_explain_table() {
     /// Expands one list of variant names into an exhaustive `match` and the
