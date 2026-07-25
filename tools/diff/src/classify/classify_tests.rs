@@ -226,6 +226,17 @@ fn unconstrained(name: &str, width: v2::IntWidth) -> v2::Decl {
     decl
 }
 
+/// The same scalar carrying a declared init value. A named type's init is a
+/// separate emission site from a signal's, in `diff_type_def`.
+fn scalar_with_init(name: &str, width: v2::IntWidth, init: &str) -> v2::Decl {
+    let mut decl = scalar(name, bounds(Some("0.0"), Some("250.0")), width);
+    let Some(v2::decl::Kind::TypeDef(def)) = &mut decl.kind else {
+        unreachable!("scalar builds a TypeDef")
+    };
+    def.declared_init = Some(init.to_string());
+    decl
+}
+
 /// An all-facets-unset constraint, so each test states only the facet it moves.
 fn bounds(min: Option<&str>, max: Option<&str>) -> v2::Constraint {
     v2::Constraint {
@@ -617,6 +628,77 @@ fn a_raised_maximum_is_compatible() {
     assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
 }
 
+/// Negative bounds, which the whole suite otherwise never uses even though
+/// `Temperature: Cel [-40.0..125.0]` is the first type in the repo's own
+/// `appendix_b.typl`. Ordering below zero runs the other half of `cmp_decimal`:
+/// magnitudes compare the same way but the result is reversed, and a bound pair
+/// that straddles zero is decided by the sign alone.
+#[test]
+fn negative_bounds_order_by_sign_and_reversed_magnitude() {
+    // -40.0 -> -10.0 raises the floor: every value between them was legal.
+    let (old, new) = constraint_case(
+        bounds(Some("-40.0"), Some("125.0")),
+        bounds(Some("-10.0"), Some("125.0")),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+
+    // The same pair the other way round only widens.
+    let (old, new) = constraint_case(
+        bounds(Some("-10.0"), Some("125.0")),
+        bounds(Some("-40.0"), Some("125.0")),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Compatible);
+
+    // Across zero, where the two bounds carry different signs and the larger
+    // magnitude is the smaller number.
+    let (old, new) = constraint_case(
+        bounds(Some("-40.0"), Some("125.0")),
+        bounds(Some("10.0"), Some("125.0")),
+    );
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+}
+
+/// The length rule reads both ends. `a_tightened_length_is_breaking` holds
+/// `len_min` at 1 and moves only `len_max`, so the raised-floor half is decided
+/// by a term of its own.
+#[test]
+fn a_raised_minimum_length_is_breaking() {
+    let length = |min: u64| {
+        let mut constraint = bounds(None, None);
+        constraint.len_min = Some(min);
+        constraint.len_max = Some(20);
+        constraint
+    };
+    let (old, new) = constraint_case(length(5), length(10));
+    assert_row(&old, &new, Category::ConstraintChanged, Verdict::Breaking);
+}
+
+/// The row `--explain constraint_changed` documents verbatim: "a composite body
+/// changed in place is breaking: the walk cannot say what moved inside it".
+///
+/// A struct field retyped keeps every member name, so the walk reports no
+/// addition and no removal and falls through to a bodiless `ConstraintChanged`
+/// on the type itself. The classifier then finds a `StructDef` where its
+/// constraint rules expect a `TypeDef` and takes the unlisted-is-breaking path.
+/// Both halves have to hold: with the walk's emission gone the change vanishes
+/// from the report entirely, and with the classifier's fallback relaxed it
+/// reports as compatible.
+#[test]
+fn a_composite_body_changed_in_place_is_breaking() {
+    let old = decl_pkg(vec![struct_decl("Frame", vec![field("a", 1, "Speed")])]);
+    let new = decl_pkg(vec![struct_decl("Frame", vec![field("a", 1, "Distance")])]);
+
+    let report = diff_packages(&old, &new);
+    let change = row(&report, Category::ConstraintChanged);
+    assert_eq!(
+        change.path, "veh.cluster/Frame",
+        "the change is the body's, not a member's, got {:?}",
+        report.changes
+    );
+    assert_eq!(change.verdict, Verdict::Breaking);
+    assert_eq!(report.verdict, Verdict::Breaking);
+}
+
 /// Exact decimal ordering, not float ordering: `9.5` sits below `10.25`.
 #[test]
 fn decimal_bounds_order_exactly() {
@@ -757,6 +839,31 @@ fn timed(timing: v2::Timing) -> v2::Package {
     )])
 }
 
+/// The same signal with no `Timing` at all — a different state from a `Timing`
+/// whose bounds are unset.
+fn untimed() -> v2::Package {
+    let mut package = timed(range(None, None));
+    let Some(v2::decl::Kind::SignalDef(def)) = &mut package.interfaces[0].interactions[0].kind
+    else {
+        unreachable!("timed builds a SignalDef")
+    };
+    def.timing = None;
+    package
+}
+
+/// The event carrier of the same timing, so the rules can be read on both kinds
+/// that carry one.
+fn timed_event(timing: v2::Timing) -> v2::Package {
+    pkg(vec![decl(
+        "a",
+        1,
+        v2::decl::Kind::EventDef(v2::EventDef {
+            payload: "T".to_string(),
+            timing: Some(timing),
+        }),
+    )])
+}
+
 #[test]
 fn a_lowered_timing_minimum_is_breaking() {
     let old = timed(range(Some("10000"), Some("100000")));
@@ -797,6 +904,40 @@ fn a_timing_bound_removed_is_breaking() {
     let old = timed(range(Some("10000"), Some("100000")));
     let new = timed(range(Some("10000"), None));
     assert_row(&old, &new, Category::TimingChanged, Verdict::Breaking);
+}
+
+/// The floor removed, which is a separate term from the ceiling removed above.
+/// A consumer that could assume a publish rate can assume nothing now.
+#[test]
+fn a_timing_minimum_removed_is_breaking() {
+    let old = timed(range(Some("20000"), Some("100000")));
+    let new = timed(range(None, Some("100000")));
+    assert_row(&old, &new, Category::TimingChanged, Verdict::Breaking);
+}
+
+/// The whole `Timing` gone rather than one bound within it. `ridlc` resolves a
+/// timing onto every signal and event (ADR-0008 decision 12), so this state
+/// arrives the way an unorderable bound does: through
+/// [`load_ir_json`](crate::load_ir_json), which deserializes whatever the
+/// snapshot on disk holds.
+#[test]
+fn timing_present_on_one_side_only_is_breaking() {
+    let old = timed(range(Some("20000"), Some("100000")));
+    let new = untimed();
+    assert_row(&old, &new, Category::TimingChanged, Verdict::Breaking);
+
+    assert_row(&new, &old, Category::TimingChanged, Verdict::Breaking);
+}
+
+/// Timing rides two interaction kinds and every test above uses a signal. The
+/// compatible direction is the one that proves the event arm is read: a kind the
+/// classifier cannot recognise falls through to breaking, so only a case that
+/// must come out compatible can tell the difference.
+#[test]
+fn a_lowered_timing_maximum_on_an_event_is_compatible() {
+    let old = timed_event(range(Some("10000"), Some("200000")));
+    let new = timed_event(range(Some("10000"), Some("100000")));
+    assert_row(&old, &new, Category::TimingChanged, Verdict::Compatible);
 }
 
 #[test]
@@ -995,6 +1136,44 @@ fn an_ensure_text_change_is_breaking() {
     let old = with_contracts(vec![clause(v2::ContractKind::Ensure, "result > 0")]);
     let new = with_contracts(vec![clause(v2::ContractKind::Ensure, "result >= 0")]);
     assert_row(&old, &new, Category::ContractChanged, Verdict::Breaking);
+}
+
+/// Contracts ride two interaction kinds and every case above uses a command.
+/// As with the event timing row, the compatible direction is the one that
+/// proves the query arm is read: an unrecognised kind falls through to
+/// breaking, so a breaking case cannot tell the two apart.
+#[test]
+fn a_require_removed_from_a_query_is_compatible() {
+    let with_query_contracts = |contracts: Vec<v2::Contract>| {
+        pkg(vec![query("q", 1, vec![], value_return("T"), contracts)])
+    };
+    let old = with_query_contracts(vec![clause(v2::ContractKind::Require, "speed > 0")]);
+    let new = with_query_contracts(vec![]);
+    assert_row(&old, &new, Category::ContractChanged, Verdict::Compatible);
+}
+
+/// The category-mismatch fallback in `timing`. The walk cannot reach it — it
+/// emits `TimingChanged` only from its signal and event arms — but
+/// [`classify`](super::classify) is public and takes any `Change`, so the arm is
+/// reachable and is pinned by a test rather than asserted away. A
+/// `debug_assert!` here would abort a debug build on a legal call.
+///
+/// The input change carries `Compatible` so a verdict read back off the input
+/// rather than computed would fail this.
+#[test]
+fn a_timing_change_on_a_kind_that_carries_no_timing_is_breaking() {
+    let package = pkg(vec![command("c", 1, vec![], vec![])]);
+    let change = Change {
+        path: "veh.cluster/I/c".to_string(),
+        category: Category::TimingChanged,
+        verdict: Verdict::Compatible,
+        before: None,
+        after: None,
+    };
+    assert_eq!(
+        super::classify(&change, &package, &package),
+        Verdict::Breaking
+    );
 }
 
 // ==========================================================================
@@ -1544,6 +1723,16 @@ fn an_init_change_is_breaking() {
     assert_row(&old, &new, Category::InitChanged, Verdict::Breaking);
 }
 
+/// The init of a *named type*, which the walk emits from `diff_type_def` — a
+/// different site from the signal init above, and the one a consumer reads as
+/// the pre-publish value of every field of that type.
+#[test]
+fn a_type_init_change_is_breaking() {
+    let old = decl_pkg(vec![scalar_with_init("Speed", v2::IntWidth::U16, "10.0")]);
+    let new = decl_pkg(vec![scalar_with_init("Speed", v2::IntWidth::U16, "20.0")]);
+    assert_row(&old, &new, Category::InitChanged, Verdict::Breaking);
+}
+
 // ==========================================================================
 // `--explain` coverage.
 // ==========================================================================
@@ -1571,4 +1760,76 @@ fn every_category_has_a_rule_row_naming_its_verdicts() {
 #[test]
 fn an_unknown_category_word_has_no_rule_row() {
     assert_eq!(super::category_from_word("no_such_category"), None);
+}
+
+/// Every `Category` variant reaches `CATEGORIES`, which is what
+/// `ridl diff --explain` reads.
+///
+/// The test above iterates `CATEGORIES`, and so is blind to the one mistake
+/// worth catching here: `CATEGORIES` is a hand-maintained array, so a variant
+/// added with only the arms rustc demands — `classify`, `explain`,
+/// `category_word` — and never listed leaves the whole suite green while
+/// `ridl diff --explain <its word>` answers "unknown change category". Note also
+/// what exhaustiveness does not buy: rustc forces *an* arm in `classify`, not
+/// the right one, so a new variant silently classifying compatible compiles.
+///
+/// The guard is the macro, not a second hand-maintained list. One list of names
+/// expands to both the array the assertions iterate and a `match` over
+/// `Category`, so the two cannot drift: a 21st variant makes the generated match
+/// non-exhaustive and this file stops compiling, the only fix is to name the
+/// variant in the list, and naming it there is what puts it in front of the
+/// assertion below.
+#[test]
+fn every_category_variant_reaches_the_explain_table() {
+    /// Expands one list of variant names into an exhaustive `match` and the
+    /// array built through it. rustc rejects the match unless the list is
+    /// complete, so the array cannot go stale.
+    macro_rules! every_category {
+        ($($variant:ident),+ $(,)?) => {{
+            fn through_an_exhaustive_match(category: Category) -> Category {
+                match category {
+                    $(Category::$variant => Category::$variant),+
+                }
+            }
+            [$(through_an_exhaustive_match(Category::$variant)),+]
+        }};
+    }
+
+    let every = every_category![
+        DeclAdded,
+        DeclRemoved,
+        InteractionAppended,
+        InteractionInserted,
+        InteractionReordered,
+        InteractionRemoved,
+        InteractionRetired,
+        KindChanged,
+        PayloadChanged,
+        ReturnChanged,
+        ParamsChanged,
+        TimingChanged,
+        ContractChanged,
+        WidthChanged,
+        ConstraintChanged,
+        InitChanged,
+        ReservedNameRedeclared,
+        ServiceChanged,
+        DocOnly,
+        VisibilityChanged,
+    ];
+
+    for category in every {
+        let word = crate::category_word(category);
+        assert!(
+            super::CATEGORIES.contains(&category),
+            "{word} is a Category the report can print, but it never reached \
+             CATEGORIES, so `ridl diff --explain {word}` answers \"unknown \
+             change category\""
+        );
+    }
+    assert_eq!(
+        every.len(),
+        super::CATEGORIES.len(),
+        "CATEGORIES holds a category this test does not know about"
+    );
 }

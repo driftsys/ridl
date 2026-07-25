@@ -478,11 +478,12 @@ fn timing(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
         // An interaction kind that carries no timing at all. The walk cannot
         // produce this: it emits `TimingChanged` only inside its signal and
         // event arms, so both sides are already a timed kind by the time a
-        // change reaches here. It is reachable through [`classify`], which is
-        // public and takes any hand-built `Change`, so the arm stays — and it
-        // follows the module's unlisted-is-breaking rule. It is deliberately
-        // not a `debug_assert!`: a caller passing a category the walk would not
-        // have emitted is asking a question, not committing a bug.
+        // change reaches here. It is still reachable, because [`classify`] is
+        // public and takes any hand-built `Change` — so the arm stays, follows
+        // the module's unlisted-is-breaking rule, and carries a test of its own.
+        // It is deliberately not a `debug_assert!`: a caller passing a category
+        // the walk would not have emitted is asking a question, not committing
+        // a bug, and aborting a debug build over it would be wrong.
         return Verdict::Breaking;
     };
 
