@@ -860,3 +860,265 @@ fn services_workspace_composed_compiles_with_rustc() {
         "the composed services-workspace Rust must compile, source:\n{source}"
     );
 }
+
+// ==========================================================================
+// The TypeScript half of the compile proof.
+//
+// The E2 exit criterion is IR neutrality demonstrated by two backends, so a
+// corpus that compiles one backend's output and only text-compares the other
+// is weakest exactly where the criterion rests. These proofs close that gap.
+// ==========================================================================
+
+/// The generated TypeScript of every package in the entry rooted at `entry`, as
+/// `(package-name, typescript-source)` pairs, in workspace order — the
+/// TypeScript counterpart of [`generated_packages`]. One file per package,
+/// because the emitted cross-package imports are module specifiers
+/// (`import * as fleet_contracts from './fleet.contracts'`) that only resolve
+/// against a file of that name.
+fn generated_typescript_packages(entry: &Path) -> Vec<(String, String)> {
+    let mut db = RidlDatabase::default();
+    let std = std_package(&mut db);
+    let workspace = load_workspace(&mut db, entry)
+        .expect("a corpus entry loads")
+        .workspace;
+    let packages: Vec<Package> = workspace.packages(&db).clone();
+    packages
+        .iter()
+        .map(|pkg| {
+            let name = pkg.name(&db).clone();
+            let checked = check_package(&db, workspace, *pkg, std);
+            let generated = ridl_backend_ts::generate(&checked.ir)
+                .expect("a clean entry's IR generates TypeScript");
+            (name, generated.source)
+        })
+        .collect()
+}
+
+/// Finds a runnable tsc: the `tsc` binary on PATH first, then
+/// `npx --no-install tsc` (network-free). Returns the program and its leading
+/// arguments, or `None` when neither responds to `--version`.
+///
+/// Mirrors `discover_tsc` in `backends/typescript/src/tests.rs` exactly — that
+/// helper is `pub(crate)` inside a `#[cfg(test)]` module and so is not
+/// reachable from an integration test in another crate. Deliberately the same
+/// mechanism rather than a second one: skip-if-absent is the established
+/// convention for the TypeScript proofs in this workspace, which is why Node is
+/// not a hard dependency of `cargo test`.
+fn discover_tsc() -> Option<(String, Vec<String>)> {
+    let candidates: [(&str, &[&str]); 2] = [("tsc", &[]), ("npx", &["--no-install", "tsc"])];
+    for (program, prefix) in candidates {
+        let probe = std::process::Command::new(program)
+            .args(prefix)
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+        if matches!(probe, Ok(status) if status.success()) {
+            return Some((
+                program.to_string(),
+                prefix.iter().map(|s| s.to_string()).collect(),
+            ));
+        }
+    }
+    None
+}
+
+/// Type-checks the generated TypeScript of `entry` under `tsc --strict`.
+///
+/// Two properties, in this order, and the order matters:
+///
+/// 1. **`markers` are present in the generated source.** This runs whether or
+///    not tsc is discoverable, so the test still asserts something on a machine
+///    with no Node — an empty or truncated emission fails here rather than
+///    type-checking vacuously.
+/// 2. **tsc accepts it**, when tsc is discoverable. When it is not, the test
+///    prints a skip notice naming the entry and the reason, and returns. A
+///    silent skip is indistinguishable from a pass, which is the failure family
+///    this corpus exists to catch; run `cargo test -- --nocapture` to see the
+///    notice.
+fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
+    let packages = generated_typescript_packages(entry);
+    let all: String = packages
+        .iter()
+        .map(|(_, source)| source.as_str())
+        .collect::<Vec<_>>()
+        .join("\n");
+    for marker in markers {
+        assert!(
+            all.contains(marker),
+            "the generated TypeScript for {label} must contain `{marker}`, \
+             or this proof type-checks nothing",
+        );
+    }
+
+    let Some(tsc) = discover_tsc() else {
+        println!(
+            "SKIPPED tsc --strict for corpus entry `{label}`: no tsc binary discoverable \
+             (`tsc` on PATH or `npx --no-install tsc`). The generated-source markers were \
+             still checked; the TypeScript snapshot remains the gate."
+        );
+        return;
+    };
+
+    let dir = std::env::temp_dir().join(format!(
+        "ridlc_corpus_tsc_{label}_{}_{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("system clock reads a time after the unix epoch")
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).expect("the temp dir is created");
+
+    // The hand-written stand-in for the generated `ridl.std` module, committed
+    // beside this test rather than inlined, because it is shared by every entry
+    // and is long enough that a reader should be able to open it.
+    let prelude = std::fs::read_to_string("tests/tsc/ridl.std.ts")
+        .expect("the ridl.std test stand-in is readable");
+    std::fs::write(dir.join("ridl.std.ts"), prelude).expect("the stand-in is written");
+
+    let mut module_paths = Vec::new();
+    for (name, source) in &packages {
+        let path = dir.join(format!("{name}.ts"));
+        std::fs::write(&path, source).expect("the generated module is written");
+        module_paths.push(path);
+    }
+
+    let status = std::process::Command::new(&tsc.0)
+        .args(&tsc.1)
+        .args([
+            "--noEmit", "--strict", "--target", "es2020", "--module", "commonjs",
+        ])
+        .args(&module_paths)
+        .status()
+        .expect("the discovered tsc must be runnable");
+
+    let succeeded = status.success();
+    std::fs::remove_dir_all(&dir).ok();
+    assert!(
+        succeeded,
+        "the generated TypeScript for {label} must type-check under `tsc --strict`, source:\n{all}"
+    );
+}
+
+/// The generated TypeScript for `veh-cluster` type-checks under `tsc --strict`
+/// — the counterpart of [`veh_cluster_generated_rust_compiles_with_rustc`], so
+/// the entry that exercises the whole interaction surface is held to
+/// compilation by both backends rather than to compilation by one and text
+/// comparison by the other.
+#[test]
+fn veh_cluster_generated_typescript_type_checks() {
+    type_check_entry(
+        "veh-cluster",
+        Path::new("tests/corpus/veh-cluster"),
+        &[
+            "export interface VehicleStatusConsumer",
+            "export interface Service_veh_hvac_cabinProvider",
+            "export const service_veh_hvac_cabinTiming",
+            "export const service_veh_hvac_cabinContracts",
+            "export const services",
+        ],
+    );
+}
+
+/// The generated TypeScript for `services-workspace` type-checks under
+/// `tsc --strict`, including the cross-package module import the emitter writes
+/// for an inline shape whose whole vocabulary lives in a sibling member.
+#[test]
+fn services_workspace_generated_typescript_type_checks() {
+    type_check_entry(
+        "services-workspace",
+        Path::new("tests/corpus/services-workspace"),
+        &[
+            "import * as fleet_contracts from './fleet.contracts'",
+            "export interface DoorControlProvider",
+            "export interface Service_fleet_vehicle_mirrorsConsumer",
+            "export const service_fleet_vehicle_mirrorsContracts",
+        ],
+    );
+}
+
+/// **This test pins a defect, deliberately.**
+///
+/// `internal` is honoured everywhere except the two backends' interaction
+/// layer. The checker records it (`Interface.visibility = 2`) and `ridl diff`
+/// models it, but the Rust backend emits `pub` and the TypeScript backend emits
+/// `export` for an `internal interface`, so a package-private contract shape
+/// leaks into both generated public surfaces. That is a live violation of
+/// **ADR-0008 decision 7**.
+///
+/// `veh-cluster` carries both halves so this test can be exact: `internal
+/// interface WheelDiagnostics` (the defect) and `internal struct RawWheelFrame`
+/// in the typl layer (the control, handled correctly by both backends). The
+/// control is what makes this a statement about the interaction layer rather
+/// than about `internal` in general.
+///
+/// The snapshots record the wrong output too, but a snapshot alone would let
+/// the repair land as a quiet diff. This test names what to update, so the fix
+/// in `fix/internal-visibility-interactions` is told rather than left to
+/// discover:
+///
+/// - flip the two assertions below to the fixed spellings;
+/// - update `crates/ridlc/tests/corpus/veh-cluster/NOTES`, section "internal is
+///   dropped by both backends";
+/// - the `@veh-cluster` Rust and TypeScript snapshots change with it.
+#[test]
+fn internal_on_the_interaction_layer_is_dropped_by_both_backends() {
+    let compiled = compile_entry(Path::new("tests/corpus/veh-cluster"));
+
+    // The control: the typl layer honours `internal` in both backends. If
+    // either of these fails, the finding below is not about the interaction
+    // layer and this whole test needs rereading.
+    assert!(
+        compiled.rust.contains("pub(crate) struct RawWheelFrame"),
+        "control: an `internal` typl declaration must stay crate-private in Rust",
+    );
+    assert!(
+        compiled.typescript.contains("\ninterface RawWheelFrame")
+            && !compiled
+                .typescript
+                .contains("export interface RawWheelFrame"),
+        "control: an `internal` typl declaration must stay unexported in TypeScript",
+    );
+
+    // The defect, in Rust. `WheelDiagnostics` is declared `internal`; every one
+    // of these should be `pub(crate)`.
+    for leaked in [
+        "pub trait WheelDiagnosticsConsumer",
+        "pub trait WheelDiagnosticsProvider",
+        "pub const WHEEL_DIAGNOSTICS_TIMING",
+        "pub const WHEEL_DIAGNOSTICS_CONTRACTS",
+    ] {
+        assert!(
+            compiled.rust.contains(leaked),
+            "the Rust backend has learned to honour `internal` on an interface — good. \
+             `{leaked}` is gone, so flip this assertion to the `pub(crate)` spelling and \
+             update `veh-cluster/NOTES`, section \"internal is dropped by both backends\".",
+        );
+    }
+
+    // The defect, in TypeScript. None of these should be exported.
+    for leaked in [
+        "export interface WheelDiagnosticsConsumer",
+        "export interface WheelDiagnosticsProvider",
+        "export const wheelDiagnosticsTiming",
+    ] {
+        assert!(
+            compiled.typescript.contains(leaked),
+            "the TypeScript backend has learned to honour `internal` on an interface — good. \
+             `{leaked}` is gone, so flip this assertion to the unexported spelling and \
+             update `veh-cluster/NOTES`, section \"internal is dropped by both backends\".",
+        );
+    }
+
+    // The public shape beside it, so the two are known to differ in source and
+    // to be identical in output — which is the finding, stated as an assertion
+    // rather than left to a reader comparing two snapshot regions.
+    assert!(
+        compiled.rust.contains("pub trait WheelSummaryConsumer")
+            && compiled
+                .typescript
+                .contains("export interface WheelSummaryConsumer"),
+        "the public `WheelSummary` is the comparison point for `WheelDiagnostics`",
+    );
+}
