@@ -1,0 +1,6 @@
+package app
+
+signal x : Speed @10ms
+require x > 0
+<Stream>
+}}}}}}

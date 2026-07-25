@@ -1,0 +1,21 @@
+// Attribute allow-list diagnostics (general form §4.3): FORM-106, FORM-107,
+// FORM-108. In E2 the only consumable attributes are the `require`/`ensure`
+// predicates, so every flag and assignment key is rejected — a key the general
+// form knows draws FORM-107, an unknown key draws FORM-106.
+
+package diag.ridl
+
+interface Attrs {
+
+  /// `persist` is a general-form key, but not one E2 consumes on a command.
+  /// Writing it twice in one block adds the duplicate-key report.
+  command flagged(level: Level) [
+    persist
+    persist
+  ]
+
+  /// Not a key the general form defines at all.
+  command unknown(level: Level) [
+    frobnicate = 3
+  ]
+}

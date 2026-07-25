@@ -1,0 +1,63 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.rust
+input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
+---
+// ===== package fleet.contracts =====
+#[repr(transparent)]
+pub struct DoorId(pub i64);
+impl Default for DoorId {
+    fn default() -> Self {
+        DoorId(0)
+    }
+}
+#[repr(transparent)]
+pub struct Percent(pub f64);
+impl Default for Percent {
+    fn default() -> Self {
+        Percent(0.0)
+    }
+}
+#[repr(transparent)]
+pub struct Odometer(pub i64);
+impl Default for Odometer {
+    fn default() -> Self {
+        Odometer(0)
+    }
+}
+#[repr(i64)]
+pub enum LockState {
+    UNLOCKED = 0,
+    LOCKED = 1,
+}
+impl Default for LockState {
+    fn default() -> Self {
+        LockState::UNLOCKED
+    }
+}
+#[repr(C)]
+pub struct DoorReport {
+    pub door: DoorId,
+    pub locked: LockState,
+}
+impl Default for DoorReport {
+    fn default() -> Self {
+        DoorReport {
+            door: DoorId::default(),
+            locked: LockState::default(),
+        }
+    }
+}
+#[repr(i64)]
+pub enum DoorFault {
+    JAMMED = 0,
+    UNPOWERED = 1,
+}
+impl Default for DoorFault {
+    fn default() -> Self {
+        DoorFault::JAMMED
+    }
+}
+
+
+// ===== package fleet.vehicle =====

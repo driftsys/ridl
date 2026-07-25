@@ -1,0 +1,12 @@
+// The typl side of the profile boundary (typl §16.4): TYPL-303 and TYPL-304.
+// A `.typl` file is vocabulary only — interaction declarations and the
+// expr-core attribute words belong to the profiles above it.
+//
+// TYPL-302 (a duration literal or timing annotation in a typl context) is
+// exercised by the E1 `diag-showcase` entry and is not repeated here.
+
+package diag.ridl
+
+signal currentSpeed : Speed
+
+require currentSpeed >= 0

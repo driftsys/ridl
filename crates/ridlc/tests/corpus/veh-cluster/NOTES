@@ -1,0 +1,61 @@
+# veh-cluster corpus notes
+
+The ridl reference **Appendix A**, compiled. `cluster/appendix-a.ridl` is the
+appendix text verbatim — no line is adapted for the corpus — so every
+diagnostic it draws is a fact about the reference, recorded below rather than
+edited away. `common/` supplies the `veh.common` vocabulary Appendix A imports;
+it is the typl reference Appendix B example, the same text the `veh-common`
+entry compiles standalone.
+
+`cluster/services.ridl` is authored on top: Appendix A declares no `service`,
+and §14.5 needs both service forms exercised.
+
+## What the entry covers
+
+- **Both service forms.** Two named-reference services over one interface shape
+  (`veh.cluster.status` and `veh.cluster.standby` both realize `VehicleStatus`)
+  and one inline shape (`veh.hvac.cabin`).
+- **The inline shape carries the whole surface.** A service's inline shape is
+  an `Interface` stored under `Service.shape`, outside `Package.interfaces`, so
+  a consumer that walks `package.interfaces` alone skips it silently — the
+  shape of five separate E2 defects. `veh.hvac.cabin` therefore holds all five
+  interaction kinds, every timing mode, contracts including one that reads
+  `result`, an inline `T | E` fallible return, streams in both positions, a
+  `reserved` tombstone, a deprecated member, and both `final` forms. The IR,
+  Rust and TypeScript snapshots record what each consumer made of them.
+- **Every timing mode.** Strict periodic (`@1s`, `@500us`), a range with both
+  bounds, lower-bound-only, upper-bound-only, and one untimed interaction whose
+  bounds come from the package `[defaults].timing`. The IR carries resolved
+  microsecond bounds in every case, with `default_applied` set only on the last.
+- **Ordinals with a gap.** `reserved setEcoMode` holds ordinal 8 in the inline
+  shape and `reserved resetCounters` holds ordinal 6 in `VehicleStatus`; the
+  surviving interactions carry the gap.
+- **Cross-package references.** Appendix A's five imports resolve through the
+  workspace member, and `ridl.std` types (`Label`, `Message`, `Timestamp`,
+  `Version`) resolve without an import.
+
+## Diagnostics the entry draws, and why they are kept
+
+The entry has no errors, so it is a full-pipeline golden. It carries three
+warnings, all of them true statements about the source:
+
+- **TYPL-007, unused import `MAX_SPEED`** — Appendix A imports
+  `veh.common.MAX_SPEED` and never uses it. A fact about the appendix text.
+- **RIDL-308, named result union in query-return position** — Appendix A writes
+  `query getFaultPage(filter: DiagFilter): FaultPageResult`. General form §6.1
+  made the inline `FaultPage | DiagError` spelling canonical in return position
+  after the appendix was written; the E2 close-out already lists §7/§10.1
+  adopting the inline form as doc-sync work. The lint firing here is the
+  appendix and the general form disagreeing, correctly reported.
+- **RIDL-100, untimed event** — deliberate, in `services.ridl`: it is the only
+  way to exercise the default-applied path end to end.
+
+## Imports bind at package scope
+
+`services.ridl` imports only `Ratio`, not `Speed` or `Temperature`, because
+`appendix-a.ridl` already imports those and imports bind per package, not per
+file (ADR-0002 §1: "files within a package are purely organisational").
+Repeating an import in a second file of the same package is reported as
+TYPL-006, "conflicting import … alias one of the colliding imports" — a message
+written for two *different* symbols competing for one local name, which is not
+what a repeated identical import is. Recorded as a finding, not worked around.

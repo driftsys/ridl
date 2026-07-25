@@ -1,0 +1,17 @@
+// The same nameless members inside a service's inline shape. The inline shape
+// is a second, separate lowering loop: a fix applied to the `interface` loop
+// alone leaves this one broken.
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+service veh.a.b {
+  signal : Speed @10ms
+  event : Speed @[1s..2s]
+  command (g: Speed)
+  query (): Speed
+  final : Speed
+  reserved
+  signal survivor : Speed @10ms
+}

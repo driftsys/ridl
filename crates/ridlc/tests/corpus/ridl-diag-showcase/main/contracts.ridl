@@ -1,0 +1,33 @@
+// Contract diagnostics (ridl §13, §16.3): RIDL-301, RIDL-302, RIDL-305,
+// RIDL-306.
+
+package diag.ridl
+
+interface Contracts {
+
+  /// A signal has no call site, so there is no precondition to evaluate.
+  signal speed : Speed @10ms [
+    require speed >= 0.0
+  ]
+
+  /// Same for an occurrence.
+  event raised : Sample @[1s..10s] [
+    ensure true
+  ]
+
+  /// A command has no result to observe.
+  command act(level: Level) [
+    ensure true
+  ]
+
+  /// Well-typed, but the postcondition never mentions `result`.
+  query getLevel(limit: Level): Level [
+    ensure limit >= 0
+  ]
+
+  /// `result` is a struct here; the guaranteed expression subset covers
+  /// boolean, numeric, duration, enum and tuple values only.
+  query getSample(): Sample [
+    ensure result.value >= 0.0
+  ]
+}

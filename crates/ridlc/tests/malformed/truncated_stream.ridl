@@ -1,0 +1,14 @@
+// Stream brackets with no element, an unterminated element, and a stream in
+// the one position `final` never takes.
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+interface Streams {
+  query a(): <>
+  query b(): <
+  command c(x: <)
+  command d(x: <>)
+  final e : <Speed>
+}

@@ -1,0 +1,26 @@
+// Per-kind shape diagnostics (ridl §6.1, §7.1, §8, §14.1): RIDL-104, 105,
+// 106, 107.
+
+package diag.ridl
+
+interface Kinds {
+
+  /// A command always returns `()`; writing a return type is an error.
+  command withReturn(level: Level): Speed
+
+  /// A query must return something; an empty return belongs to `command`.
+  query nothingBack(): ()
+
+  /// `final` takes no timing annotation.
+  final timedFinal : Level @1s
+
+  /// `final` takes no attribute block either.
+  final constrainedFinal : Level [
+    require true
+  ]
+
+  /// Type declarations live at package level, never inside an interface.
+  struct Nested {
+    x : Level
+  }
+}

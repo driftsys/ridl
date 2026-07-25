@@ -1,0 +1,18 @@
+// Every interaction kind announced by its keyword and then left nameless. The
+// parser reports the missing name and still finishes the member node, so the
+// member reaches lowering — the recovery path that made interactions a panic
+// source when fields and parameters were not (issue #158).
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+interface Nameless {
+  signal : Speed @10ms
+  event : Speed @[1s..2s]
+  command (g: Speed)
+  query (): Speed
+  final : Speed
+  reserved
+  signal survivor : Speed @10ms
+}

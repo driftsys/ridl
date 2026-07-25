@@ -1,0 +1,16 @@
+// Timing annotations cut short in every position the grammar allows a
+// duration.
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+interface Timing {
+  signal a : Speed @
+  signal b : Speed @[
+  signal c : Speed @[..]
+  signal d : Speed @[10ms..
+  signal e : Speed @500
+  signal f : Speed @[..10ms
+  signal g : Speed @[10ms..20ms
+}

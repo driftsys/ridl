@@ -1,0 +1,12 @@
+// A reserved word in each container-name position: the interface name and a
+// segment of a service's dotted global name.
+
+package app
+
+type Speed : km/h [0.0..300.0 step 0.5]
+
+interface state {
+  signal a : Speed @10ms
+}
+
+service veh.a.component : state

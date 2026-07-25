@@ -1,0 +1,70 @@
+# ridl-diag-showcase coverage notes
+
+This workspace is crafted so its compile emits one instance of every diagnostic
+the ridl profile implements. The `@ridl-diag-showcase` diagnostics snapshot
+(`crates/ridlc/tests/snapshots/`) is the de-facto ridl diagnostic index until
+the error-index website (E4.2), the way `diag-showcase` is for the typl codes.
+
+Two members, because one package cannot provoke everything:
+
+- `main/` — package `diag.ridl`. One file per diagnostic family, so a parse
+  error in one family never suppresses the checker in another. Its manifest
+  carries an invalid `[defaults].timing`, which is MANI-009; the built-in
+  `[100ms..1000ms]` is the fallback, so RIDL-100 still reports concrete bounds.
+- `twin/` — package `diag.twin`. It exists only to republish the service name
+  `diag.showcase.duplicate`, because the service catalog is a workspace-wide
+  namespace and RIDL-140 cannot be provoked from a single package.
+
+## Codes exercised here
+
+- RIDL: 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 140, 141, 201,
+  202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405, 406.
+- FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).
+- MANI: 009.
+- TYPL: 301, 303, 304 (the profile boundary, folded in from the E1 debt list).
+
+The list above is not prose: `crates/ridlc/tests/corpus.rs` holds it as
+`RIDL_PROFILE_CODES` and asserts the showcase emits **exactly** that set —
+missing and extra codes both fail — plus a table pinning each code's severity
+against the reference §16 classification.
+
+## Codes NOT exercised here, and why
+
+- **RIDL-407** (interaction ordinal changed against a published baseline). The
+  desk check reads a workspace-local baseline directory, which is outside
+  `ridlc`'s source-to-IR function (ADR-0008 decisions 9 and 13), so it is never
+  a compile diagnostic. Its living example is the committed corpus member
+  `crates/ridl/tests/baseline-corpus/` — a package plus a committed
+  `.ridl/baseline/corpus.baseline.ir.json` — driven by
+  `check_reports_ordinal_drift_against_the_committed_baseline`.
+- **TYPL-302** (duration literal or timing annotation in a typl context). The
+  E1 `diag-showcase` entry is already its artifact of record; repeating it here
+  would duplicate an index entry rather than add one.
+- The typl, FORM parse, and MANI codes E1 covers keep their home in
+  `diag-showcase/NOTES`, including the ones that entry records as not
+  exercisable.
+
+## Observations recorded while building this entry
+
+None of these is worked around in the corpus. Each is written the way it
+behaves, so the snapshot pins the behaviour rather than hiding it.
+
+- **Only the first profile violation in a file is reported.** Recovery from
+  RIDL-403 / TYPL-303 / TYPL-304 resynchronizes at the next typl or ridl
+  top-level keyword (`is_top_level_start`), and a reserved word of another
+  profile is not one. `profile_boundary.ridl` declares `view`, `model` and
+  `component`; only `view` is reported, and the other two are absorbed into the
+  same error node. That is why TYPL-303 needs its own file rather than a second
+  line in `profile_boundary.typl`.
+- **MANI-009's span is a source file, not the manifest.** The manifest parser
+  stores `[defaults].timing` unparsed, so the checker is what parses it, and a
+  checker diagnostic must point somewhere in the package's own files. It lands
+  on the first byte of the package's first file in load order — here
+  `attrs.ridl`, which has nothing to do with timing. The behaviour is
+  deliberate and documented at the emission site (a dropped manifest error
+  would be worse than an unanchored one), but the rendered result reads oddly
+  and is worth revisiting when manifest spans exist.
+- **RIDL-405 is emitted once per participating query, not once per error
+  type.** Three queries share `SharedFault`, so the note appears three times
+  with the same message. The count is the lint's design, not a defect; it is
+  recorded because a reader of the index will notice the repetition.

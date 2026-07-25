@@ -1,0 +1,46 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.typescript
+input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
+---
+// ===== package veh.common =====
+/**
+ * Vehicle speed over ground
+ *
+ * @unit km/h
+ * @range [0..250 step 0.5]
+ */
+export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
+
+export function initSpeed(): Speed {
+  return 0.0 as Speed;
+}
+
+/**
+ * Coolant temperature
+ *
+ * @unit Cel
+ * @range [-40..125 step 0.1]
+ */
+export type Temperature = number & { readonly __ridl: 'veh.common.Temperature' };
+
+export function initTemperature(): Temperature {
+  return 0.0 as Temperature;
+}
+
+
+// ===== package veh.cluster =====
+import * as veh_common from './veh.common';
+
+/**
+ * Instrument-cluster reading, carrying a speed from the common package.
+ */
+export interface ClusterReading {
+  speed: veh_common.Speed;
+}
+
+export function initClusterReading(): ClusterReading {
+  return {
+    speed: veh_common.initSpeed(),
+  };
+}

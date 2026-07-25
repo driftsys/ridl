@@ -1,0 +1,34 @@
+// The publishing member: it declares no interface of its own and gives global
+// identity to shapes that live in the sibling member. This is the
+// cross-package service path — the checker has to resolve `DoorControl`
+// through the workspace-member import before it can tell a service names an
+// interface (RIDL-141 is what it would say otherwise).
+
+package fleet.vehicle
+
+import fleet.contracts.DoorControl
+import fleet.contracts.Telemetry
+import fleet.contracts.DoorId
+import fleet.contracts.Percent
+
+/// Two services over one imported shape: the front and rear door controllers
+/// are separate system-wide addresses realizing the same contract.
+service fleet.vehicle.doors.front : DoorControl
+
+service fleet.vehicle.doors.rear : DoorControl
+
+/// A second imported shape.
+service fleet.vehicle.telemetry : Telemetry
+
+/// An inline shape in a package that owns none of its vocabulary: every
+/// payload, parameter and return type here is a cross-package reference
+/// resolved through the workspace member above.
+service fleet.vehicle.mirrors {
+  signal foldAngle : Percent @[200ms..2s]
+  command fold(door: DoorId)
+  query readFold(door: DoorId): Percent [
+    require door <= 7
+    ensure result >= 0.0
+  ]
+  final mirrorCount : DoorId
+}

@@ -1,0 +1,26 @@
+// A corpus member for the baseline-aware desk check (general form §6.3).
+//
+// The published shape — snapshotted into `.ridl/baseline/` beside this file and
+// committed — declared its interactions in this order:
+//
+//   1  currentSpeed
+//   2  doorOpened
+//   3  doorClosed
+//   4  setGear
+//
+// This source tidies the two events into alphabetical order and retires
+// `setGear` without a tombstone. Both look harmless in a review diff and both
+// move wire identities, which is exactly what the desk check reports (RIDL-407)
+// before `ridl diff` ever runs in CI.
+
+package corpus.baseline
+
+type Speed     : km/h    [0.0..250.0 step 0.5]
+type DoorState : integer [0..1]
+type GearIndex : integer [0..6]
+
+interface VehicleStatus {
+  signal currentSpeed : Speed @10ms
+  event doorClosed : DoorState @[100ms..1s]
+  event doorOpened : DoorState @[100ms..1s]
+}

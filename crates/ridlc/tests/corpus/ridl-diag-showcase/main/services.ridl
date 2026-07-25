@@ -1,0 +1,14 @@
+// Service diagnostics (ridl §14.5, §16.4): RIDL-141 here, RIDL-140 across the
+// workspace — the twin member republishes `diag.showcase.duplicate`.
+
+package diag.ridl
+
+interface Published {
+  signal speed : Speed @10ms
+}
+
+/// The catalog entry the twin member collides with (RIDL-140).
+service diag.showcase.duplicate : Published
+
+/// `Sample` is a struct, not an interface, and no inline shape is given.
+service diag.showcase.mistyped : Sample

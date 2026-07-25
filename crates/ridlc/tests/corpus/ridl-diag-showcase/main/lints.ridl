@@ -1,0 +1,29 @@
+// Advisory lints (ridl §3.1, §7.2, §10.1, §16.4): RIDL-404, RIDL-405,
+// RIDL-406. RIDL-405 needs one error type across three distinct interaction
+// scopes, so the third scope is a service's inline shape — the lint pass has
+// to reach inside `Service.shape`, not only `Package.interfaces`.
+
+package diag.ridl
+
+interface LintsOne {
+
+  /// A `set…` name reads as a mutation; a state-mutating request is a command.
+  query setLevel(level: Level): Level
+
+  /// The payload struct re-declares publication time and a frame counter,
+  /// both already carried by the envelope.
+  signal echo : EnvelopeEcho @[1s..10s]
+
+  /// First of the three scopes `SharedFault` serves.
+  query readOne(limit: Level): Sample | SharedFault
+}
+
+interface LintsTwo {
+  /// Second scope.
+  query readTwo(limit: Level): Sample | SharedFault
+}
+
+/// Third scope — an inline service shape, not a named interface.
+service diag.lints.inline {
+  query readThree(limit: Level): Sample | SharedFault
+}

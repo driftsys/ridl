@@ -1,0 +1,806 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.typescript
+input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
+---
+// ===== package veh.common =====
+import * as ridl_std from './ridl.std';
+
+/**
+ * Vehicle speed over ground
+ *
+ * @unit km/h
+ * @range [0..250 step 0.5]
+ */
+export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
+
+export function initSpeed(): Speed {
+  return 0.0 as Speed;
+}
+
+/**
+ * Coolant / ambient temperature
+ *
+ * @unit Cel
+ * @range [-40..125 step 0.1]
+ */
+export type Temperature = number & { readonly __ridl: 'veh.common.Temperature' };
+
+export function initTemperature(): Temperature {
+  return 0.0 as Temperature;
+}
+
+/**
+ * Engine crankshaft speed
+ *
+ * @unit /min
+ * @range [0..8000 step 10]
+ */
+export type RPM = number & { readonly __ridl: 'veh.common.RPM' };
+
+export function initRPM(): RPM {
+  return 0.0 as RPM;
+}
+
+/**
+ * Normalised ratio
+ *
+ * @unit %
+ * @range [0..100 step 0.1]
+ */
+export type Ratio = number & { readonly __ridl: 'veh.common.Ratio' };
+
+export function initRatio(): Ratio {
+  return 0.0 as Ratio;
+}
+
+/**
+ * @range [0..65535]
+ */
+export type Counter = number & { readonly __ridl: 'veh.common.Counter' };
+
+export function initCounter(): Counter {
+  return 0 as Counter;
+}
+
+/**
+ * @range [0..1 step 0.01]
+ */
+export type Gain = number & { readonly __ridl: 'veh.common.Gain' };
+
+export function initGain(): Gain {
+  return 0.0 as Gain;
+}
+
+export const MAX_SPEED = 250.0;
+
+export const SPEED_LIMIT_EU = 130.0;
+
+export const MAX_GEAR = 6;
+
+export const IDLE_RPM = 800.0;
+
+export enum GearPosition {
+  PARK = 0,
+  DRIVE = 1,
+  REVERSE = 2,
+  NEUTRAL = 3,
+}
+
+export function initGearPosition(): GearPosition {
+  return GearPosition.PARK;
+}
+
+export enum Warning {
+  LOW_FUEL = 0,
+  CHECK_ENGINE = 1,
+  DOOR_OPEN = 2,
+  SEATBELT = 3,
+}
+
+export function initWarning(): Warning {
+  return Warning.LOW_FUEL;
+}
+
+export type WarningFlags = number & { readonly __ridl: 'veh.common.WarningFlags' };
+
+export const WarningFlagsBits = {
+  LOW_FUEL: 1,
+  CHECK_ENGINE: 2,
+  DOOR_OPEN: 4,
+  SEATBELT: 8,
+} as const;
+
+export function initWarningFlags(): WarningFlags {
+  return 0 as WarningFlags;
+}
+
+export interface SpeedLimitPayload {
+  limit: Speed;
+  actual: Speed;
+}
+
+export function initSpeedLimitPayload(): SpeedLimitPayload {
+  return {
+    limit: initSpeed(),
+    actual: initSpeed(),
+  };
+}
+
+export interface DriverProfile {
+  name: ridl_std.Name;
+  speed: Speed;
+  override?: Speed;
+  /**
+   * @range [0..6]
+   */
+  gears: number;
+}
+
+export interface SensorBounds {
+  range: { min: Speed; max: Speed };
+  /**
+   * @bounds 8
+   */
+  readings: readonly Speed[];
+  /**
+   * @bounds 1..16
+   */
+  labels: readonly ridl_std.Label[];
+  /**
+   * @bounds 0..32
+   */
+  meta: ReadonlyArray<readonly [ridl_std.Label, ridl_std.Name]>;
+}
+
+export type SensorResult =
+  | { kind: 'ok'; value: SensorReading }
+  | { kind: 'err'; value: SensorFault };
+
+export function initSensorResult(): SensorResult {
+  return { kind: 'ok', value: initSensorReading() };
+}
+
+export interface SensorReading {
+  value: Speed;
+  timestamp: ridl_std.Timestamp;
+}
+
+export function initSensorReading(): SensorReading {
+  return {
+    value: initSpeed(),
+    timestamp: ridl_std.initTimestamp(),
+  };
+}
+
+export interface SensorFault {
+  code: Counter;
+  message: ridl_std.Message;
+}
+
+interface RawWheelFrame {
+  ticks: Counter;
+  frame: Uint8Array;
+}
+
+
+// ===== package veh.cluster =====
+import * as ridl_std from './ridl.std';
+import * as veh_common from './veh.common';
+
+export interface DoorPayload {
+  /**
+   * @range [0..15]
+   */
+  sensorId: number;
+  isOpen: boolean;
+}
+
+export function initDoorPayload(): DoorPayload {
+  return {
+    sensorId: 0,
+    isOpen: false,
+  };
+}
+
+export interface DiagFilter {
+  /**
+   * @range [0..5]
+   */
+  severity: number;
+  category?: ridl_std.Label;
+}
+
+export function initDiagFilter(): DiagFilter {
+  return {
+    severity: 0,
+  };
+}
+
+export interface FaultEvent {
+  /**
+   * @range [0..65535]
+   */
+  code: number;
+  message: ridl_std.Message;
+  timestamp: ridl_std.Timestamp;
+}
+
+export enum DiagError {
+  FILTER_INVALID = 0,
+  STORAGE_BUSY = 1,
+  ACCESS_DENIED = 2,
+}
+
+export function initDiagError(): DiagError {
+  return DiagError.FILTER_INVALID;
+}
+
+export interface FaultPage {
+  /**
+   * @bounds 0..64
+   */
+  faults: readonly FaultEvent[];
+}
+
+export function initFaultPage(): FaultPage {
+  return {
+    faults: [],
+  };
+}
+
+export type FaultPageResult =
+  | { kind: 'page'; value: FaultPage }
+  | { kind: 'err'; value: DiagError };
+
+export function initFaultPageResult(): FaultPageResult {
+  return { kind: 'page', value: initFaultPage() };
+}
+
+/**
+ * @range [0..7]
+ */
+export type FanLevel = number & { readonly __ridl: 'veh.cluster.FanLevel' };
+
+export function initFanLevel(): FanLevel {
+  return 0 as FanLevel;
+}
+
+export interface FilterState {
+  /**
+   * @range [0..65535]
+   */
+  hoursRun: number;
+  clogged: boolean;
+}
+
+export function initFilterState(): FilterState {
+  return {
+    hoursRun: 0,
+    clogged: false,
+  };
+}
+
+export interface ClimateReport {
+  cabin: veh_common.Temperature;
+  setpoint: veh_common.Temperature;
+  fan: FanLevel;
+}
+
+export function initClimateReport(): ClimateReport {
+  return {
+    cabin: veh_common.initTemperature(),
+    setpoint: veh_common.initTemperature(),
+    fan: initFanLevel(),
+  };
+}
+
+export enum HvacError {
+  COMPRESSOR_OFF = 0,
+  SENSOR_FAULT = 1,
+}
+
+export function initHvacError(): HvacError {
+  return HvacError.COMPRESSOR_OFF;
+}
+
+/**
+ * What a signal read is standing on (ridl §4.5). `'init'` — the provider has
+ * not published yet and the value is the channel init (ridl §4.4); `'live'` —
+ * a published value; `'invalid'` — the channel is in the invalid state
+ * because a published payload violated its constraints, and the value is the
+ * last good one. A read always yields a value; provenance is what says
+ * whether to act on it. Invalidity is never hidden from a subscriber.
+ */
+export type Provenance = 'init' | 'live' | 'invalid';
+
+/**
+ * A consumer's handle on a signal (ridl §4): continuous state, never empty —
+ * the channel holds a value from the moment it exists, so a read always
+ * succeeds and a subscription delivers immediately (ridl §4.4).
+ * `subscribe` returns the function that cancels it.
+ */
+export interface SignalHandle<T> {
+  read(): { value: T; provenance: Provenance };
+  subscribe(fn: (value: T, provenance: Provenance) => void): () => void;
+}
+
+/**
+ * A consumer's handle on an event (ridl §5): discrete occurrences, with no
+ * readable current value — an event that has not occurred has nothing to
+ * read. `subscribe` returns the function that cancels it.
+ */
+export interface EventHandle<T> {
+  subscribe(fn: (occurrence: T) => void): () => void;
+}
+
+/**
+ * The result of a fallible query (ridl §7, gf §6.1): a declared Stratum-1
+ * outcome the provider owns. A transport failure is not an `error` here — it
+ * rejects the promise instead, an infrastructure failure — detected, undeclared (gf §6.4).
+ */
+export type Result<T, E> =
+  | { ok: true; value: T }
+  | { ok: false; error: E };
+
+/**
+ * Main vehicle status interface.
+ *
+ * The consumer face of this interface (ridl §14): what code holding a
+ * binding to it sees. Signals are read and subscribed, events are
+ * subscribed, commands and queries are called, finals are read.
+ */
+export interface VehicleStatusConsumer {
+  /**
+   * Current vehicle speed — isochronous, drives rmdl clocks downstream
+   *
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  currentSpeed: SignalHandle<veh_common.Speed>;
+  /**
+   * Engine temperature — change-driven, 100ms freshness SLO
+   *
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  engineTemp: SignalHandle<veh_common.Temperature>;
+  /**
+   * Active warnings — last-value delivered on subscribe (§4.4)
+   *
+   * @init 
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  warnings: SignalHandle<veh_common.WarningFlags>;
+  /**
+   * Raised on every door state change; stale after 500ms
+   */
+  doorOpened: EventHandle<DoorPayload>;
+  /**
+   * Request a gear change — outcome observed via currentGear, not returned
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  setGear(position: veh_common.GearPosition): Promise<void>;
+  /**
+   * Sliding-window average
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getAverageSpeed(window: ridl_std.Duration): Promise<veh_common.Speed>;
+  /**
+   * Fault history as a finite stream
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  streamFaults(filter: DiagFilter): AsyncIterable<FaultEvent>;
+  /**
+   * Paged fault snapshot — fallible query via result union (§10.1)
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getFaultPage(filter: DiagFilter): Promise<FaultPageResult>;
+  readonly softwareVersion: ridl_std.Version;
+  readonly capabilities: readonly ridl_std.Label[];
+}
+
+/**
+ * Main vehicle status interface.
+ *
+ * The provider face of this interface (ridl §14): what code realizing it
+ * implements. Signals and events are published, commands and queries are
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
+ */
+export interface VehicleStatusProvider {
+  /**
+   * Current vehicle speed — isochronous, drives rmdl clocks downstream
+   *
+   * @init 0
+   */
+  currentSpeed: { publish(value: veh_common.Speed): void };
+  /**
+   * Engine temperature — change-driven, 100ms freshness SLO
+   *
+   * @init 0
+   */
+  engineTemp: { publish(value: veh_common.Temperature): void };
+  /**
+   * Active warnings — last-value delivered on subscribe (§4.4)
+   *
+   * @init 
+   */
+  warnings: { publish(value: veh_common.WarningFlags): void };
+  /**
+   * Raised on every door state change; stale after 500ms
+   */
+  doorOpened: { publish(occurrence: DoorPayload): void };
+  /**
+   * Request a gear change — outcome observed via currentGear, not returned
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  setGear(position: veh_common.GearPosition): Promise<void>;
+  /**
+   * Sliding-window average
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getAverageSpeed(window: ridl_std.Duration): Promise<veh_common.Speed>;
+  /**
+   * Fault history as a finite stream
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  streamFaults(filter: DiagFilter): AsyncIterable<FaultEvent>;
+  /**
+   * Paged fault snapshot — fallible query via result union (§10.1)
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getFaultPage(filter: DiagFilter): Promise<FaultPageResult>;
+}
+
+/**
+ * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
+ * staleness bound, both in microseconds. `defaultApplied` marks a bound the
+ * compiler resolved from the configured default rather than from source —
+ * "untimed" does not exist beyond the parser (ridl §9.1).
+ */
+export const vehicleStatusTiming = {
+  currentSpeed: { mode: 'strict-periodic', minUs: 10000n, maxUs: 10000n, defaultApplied: false },
+  engineTemp: { mode: 'range', minUs: 20000n, maxUs: 100000n, defaultApplied: false },
+  warnings: { mode: 'range', minUs: 50000n, maxUs: 1000000n, defaultApplied: false },
+  doorOpened: { mode: 'range', minUs: 50000n, maxUs: 500000n, defaultApplied: false },
+} as const;
+
+/**
+ * The require/ensure clauses of this interface, as data (ridl §13). `id` is
+ * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
+ * is the canonical expression text; `signals` and `params` name what the
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
+ */
+export const vehicleStatusContracts = [
+  { id: 'VehicleStatus.setGear.require[0]', kind: 'require', source: 'position != GearPosition.PARK || currentSpeed == 0.0', signals: ['VehicleStatus.currentSpeed'], params: ['position'], usesResult: false },
+  { id: 'VehicleStatus.getAverageSpeed.require[0]', kind: 'require', source: 'window > 0ms', signals: [], params: ['window'], usesResult: false },
+  { id: 'VehicleStatus.getAverageSpeed.ensure[0]', kind: 'ensure', source: 'result >= 0.0', signals: [], params: [], usesResult: true },
+] as const;
+
+/**
+ * This is the inline shape of service `veh.hvac.cabin` (ridl §14.5). The
+ * shape is anonymous in source, so its generated name is
+ * `Service_veh_hvac_cabin` — a TypeScript identifier derived from the
+ * service name, because a TypeScript identifier cannot contain dots. The
+ * service's own identity stays the dotted `veh.hvac.cabin`: that is what the
+ * `services` map is keyed by, what a runtime resolves, and what
+ * observer-stub ids are prefixed with. The generated name and the dotted
+ * address are deliberately different things; neither substitutes for the
+ * other.
+ *
+ * The consumer face of this interface (ridl §14): what code holding a
+ * binding to it sees. Signals are read and subscribed, events are
+ * subscribed, commands and queries are called, finals are read.
+ */
+export interface Service_veh_hvac_cabinConsumer {
+  /**
+   * Strict periodic — signal only (ridl §9).
+   *
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  cabinTemp: SignalHandle<veh_common.Temperature>;
+  /**
+   * Range with both bounds.
+   *
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  targetTemp: SignalHandle<veh_common.Temperature>;
+  /**
+   * Range, lower bound only — no staleness bound declared.
+   *
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  blowerDuty: SignalHandle<veh_common.Ratio>;
+  /**
+   * Range, upper bound only — no rate floor declared.
+   *
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  fanLevel: SignalHandle<FanLevel>;
+  /**
+   * Microsecond resolution, and an init override for the channel (ridl §4.4).
+   *
+   * @init 12.5
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  compressorLoad: SignalHandle<veh_common.Ratio>;
+  /**
+   * Untimed: the package `[defaults].timing` is resolved at compile time and
+   * lands in the IR as concrete bounds with `default_applied` set (ridl §9.1).
+   */
+  filterClogged: EventHandle<FilterState>;
+  /**
+   * Fire-and-forget, with a precondition over its own parameter and over
+   * this shape's own signal (ridl §13).
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  setTarget(t: veh_common.Temperature): Promise<void>;
+  /**
+   * Client-produced stream on a parameter (ridl §12.1).
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  replayTrace(samples: AsyncIterable<FilterState>): Promise<void>;
+  /**
+   * Provider-produced stream in return position.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  streamFilterHistory(limit: FanLevel): AsyncIterable<FilterState>;
+  /**
+   * Bidirectional — a stream in both positions at once.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  rebalance(samples: AsyncIterable<FilterState>): AsyncIterable<ClimateReport>;
+  /**
+   * A postcondition that reads `result` — tuple-field access is the widest
+   * `result` shape the guaranteed expression subset admits (ridl §13).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getBounds(): Promise<{ min: veh_common.Temperature; max: veh_common.Temperature }>;
+  /**
+   * Inline fallible return `T | E` — the canonical spelling in return
+   * position (general form §6.1). Its transport identity is synthesized from
+   * the enclosing shape and the ordinal, which is exactly what an inline
+   * shape has to get right without an interface name to borrow.
+   *
+   * @transportIdentity veh.hvac.cabin#13:ClimateReport|HvacError
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  calibrate(axle: FanLevel): Promise<Result<ClimateReport, HvacError>>;
+  /**
+   * A plain named-type return.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getClimate(): Promise<ClimateReport>;
+  /**
+   * Superseded by `getClimate`.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   * @deprecated use getClimate — this returns only the cabin reading
+   */
+  getCabinTemp(): Promise<veh_common.Temperature>;
+  /**
+   * Provisioned, immutable for the software-instance lifetime (ridl §8).
+   */
+  readonly unitSerial: ridl_std.Label;
+  /**
+   * A collection-typed final.
+   */
+  readonly supportedModes: readonly ridl_std.Label[];
+}
+
+/**
+ * This is the inline shape of service `veh.hvac.cabin` (ridl §14.5). The
+ * shape is anonymous in source, so its generated name is
+ * `Service_veh_hvac_cabin` — a TypeScript identifier derived from the
+ * service name, because a TypeScript identifier cannot contain dots. The
+ * service's own identity stays the dotted `veh.hvac.cabin`: that is what the
+ * `services` map is keyed by, what a runtime resolves, and what
+ * observer-stub ids are prefixed with. The generated name and the dotted
+ * address are deliberately different things; neither substitutes for the
+ * other.
+ *
+ * The provider face of this interface (ridl §14): what code realizing it
+ * implements. Signals and events are published, commands and queries are
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
+ */
+export interface Service_veh_hvac_cabinProvider {
+  /**
+   * Strict periodic — signal only (ridl §9).
+   *
+   * @init 0
+   */
+  cabinTemp: { publish(value: veh_common.Temperature): void };
+  /**
+   * Range with both bounds.
+   *
+   * @init 0
+   */
+  targetTemp: { publish(value: veh_common.Temperature): void };
+  /**
+   * Range, lower bound only — no staleness bound declared.
+   *
+   * @init 0
+   */
+  blowerDuty: { publish(value: veh_common.Ratio): void };
+  /**
+   * Range, upper bound only — no rate floor declared.
+   *
+   * @init 0
+   */
+  fanLevel: { publish(value: FanLevel): void };
+  /**
+   * Microsecond resolution, and an init override for the channel (ridl §4.4).
+   *
+   * @init 12.5
+   */
+  compressorLoad: { publish(value: veh_common.Ratio): void };
+  /**
+   * Untimed: the package `[defaults].timing` is resolved at compile time and
+   * lands in the IR as concrete bounds with `default_applied` set (ridl §9.1).
+   */
+  filterClogged: { publish(occurrence: FilterState): void };
+  /**
+   * Fire-and-forget, with a precondition over its own parameter and over
+   * this shape's own signal (ridl §13).
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  setTarget(t: veh_common.Temperature): Promise<void>;
+  /**
+   * Client-produced stream on a parameter (ridl §12.1).
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  replayTrace(samples: AsyncIterable<FilterState>): Promise<void>;
+  /**
+   * Provider-produced stream in return position.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  streamFilterHistory(limit: FanLevel): AsyncIterable<FilterState>;
+  /**
+   * Bidirectional — a stream in both positions at once.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  rebalance(samples: AsyncIterable<FilterState>): AsyncIterable<ClimateReport>;
+  /**
+   * A postcondition that reads `result` — tuple-field access is the widest
+   * `result` shape the guaranteed expression subset admits (ridl §13).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getBounds(): Promise<{ min: veh_common.Temperature; max: veh_common.Temperature }>;
+  /**
+   * Inline fallible return `T | E` — the canonical spelling in return
+   * position (general form §6.1). Its transport identity is synthesized from
+   * the enclosing shape and the ordinal, which is exactly what an inline
+   * shape has to get right without an interface name to borrow.
+   *
+   * @transportIdentity veh.hvac.cabin#13:ClimateReport|HvacError
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  calibrate(axle: FanLevel): Promise<Result<ClimateReport, HvacError>>;
+  /**
+   * A plain named-type return.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getClimate(): Promise<ClimateReport>;
+  /**
+   * Superseded by `getClimate`.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   * @deprecated use getClimate — this returns only the cabin reading
+   */
+  getCabinTemp(): Promise<veh_common.Temperature>;
+}
+
+/**
+ * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
+ * staleness bound, both in microseconds. `defaultApplied` marks a bound the
+ * compiler resolved from the configured default rather than from source —
+ * "untimed" does not exist beyond the parser (ridl §9.1).
+ */
+export const service_veh_hvac_cabinTiming = {
+  cabinTemp: { mode: 'strict-periodic', minUs: 1000000n, maxUs: 1000000n, defaultApplied: false },
+  targetTemp: { mode: 'range', minUs: 500000n, maxUs: 5000000n, defaultApplied: false },
+  blowerDuty: { mode: 'range', minUs: 200000n, maxUs: undefined, defaultApplied: false },
+  fanLevel: { mode: 'range', minUs: undefined, maxUs: 2000000n, defaultApplied: false },
+  compressorLoad: { mode: 'strict-periodic', minUs: 500n, maxUs: 500n, defaultApplied: false },
+  filterClogged: { mode: 'range', minUs: 200000n, maxUs: 2000000n, defaultApplied: true },
+} as const;
+
+/**
+ * The require/ensure clauses of this interface, as data (ridl §13). `id` is
+ * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
+ * is the canonical expression text; `signals` and `params` name what the
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
+ */
+export const service_veh_hvac_cabinContracts = [
+  { id: 'veh.hvac.cabin.setTarget.require[0]', kind: 'require', source: 't >= -10.0', signals: [], params: ['t'], usesResult: false },
+  { id: 'veh.hvac.cabin.setTarget.require[1]', kind: 'require', source: 'cabinTemp >= -40.0', signals: ['veh.hvac.cabin.cabinTemp'], params: [], usesResult: false },
+  { id: 'veh.hvac.cabin.getBounds.require[0]', kind: 'require', source: 'true', signals: [], params: [], usesResult: false },
+  { id: 'veh.hvac.cabin.getBounds.ensure[0]', kind: 'ensure', source: 'result.min <= result.max', signals: [], params: [], usesResult: true },
+] as const;
+
+/**
+ * The services this package publishes (ridl §14.5). Each key is the dotted
+ * global service name — the address a runtime resolves and the prefix of the
+ * observer-stub ids — and `interface` names the generated TypeScript
+ * interface behind it. The two are deliberately different spellings of
+ * different things: the dotted name is the service's identity, while the
+ * generated name is a TypeScript identifier, which cannot contain dots. The
+ * faces of an entry named `Foo` are `FooConsumer` and `FooProvider`.
+ */
+export const services = {
+  'veh.cluster.status': { interface: 'VehicleStatus' },
+  'veh.cluster.standby': { interface: 'VehicleStatus' },
+  'veh.hvac.cabin': { interface: 'Service_veh_hvac_cabin' },
+} as const;

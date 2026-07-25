@@ -569,3 +569,70 @@ interface VehicleStatus {
         "the published baseline is exactly as it was",
     );
 }
+
+/// The committed baseline corpus member (E2 task 22). Every other test in this
+/// file builds its baseline in a temp directory from a source string, so none
+/// of them exercises a baseline that was written by an earlier version of the
+/// toolchain and read back later — which is the only way a real baseline is
+/// ever used. `tests/baseline-corpus/` is that case: a package plus a
+/// committed `.ridl/baseline/corpus.baseline.ir.json`, read from disk exactly
+/// as a published baseline is.
+///
+/// The source has drifted from the snapshot in two ways that look like
+/// tidying: the two events are alphabetised, and `setGear` is removed with no
+/// tombstone. All three surviving-or-lost identities are reported, and the
+/// exit code stays 0 — the desk check informs, `ridl diff` gates.
+#[test]
+fn check_reports_ordinal_drift_against_the_committed_baseline() {
+    let entry = Path::new("tests/baseline-corpus");
+    assert!(
+        entry
+            .join(".ridl/baseline/corpus.baseline.ir.json")
+            .is_file(),
+        "the committed baseline snapshot is the point of this fixture",
+    );
+
+    let (code, _, stderr) = ridl(&["check".as_ref(), entry.as_os_str()]);
+
+    assert_eq!(code, 0, "a desk-check warning never moves the exit code");
+
+    // Pinned per diagnostic: the code, the severity word, the diff path in the
+    // message, and the source line the span points at.
+    for (path, category, line) in [
+        (
+            "corpus.baseline/VehicleStatus/setGear",
+            "interaction_removed",
+            "interface VehicleStatus {",
+        ),
+        (
+            "corpus.baseline/VehicleStatus/doorOpened",
+            "interaction_reordered",
+            "event doorOpened : DoorState @[100ms..1s]",
+        ),
+        (
+            "corpus.baseline/VehicleStatus/doorClosed",
+            "interaction_reordered",
+            "event doorClosed : DoorState @[100ms..1s]",
+        ),
+    ] {
+        let expected = format!(
+            "warning[RIDL-407]: interaction ordinal changed against the baseline: {path} ({category})"
+        );
+        assert!(
+            stderr.contains(&expected),
+            "expected `{expected}` in:\n{stderr}"
+        );
+        assert!(
+            stderr.contains(line),
+            "the span for {path} must point at `{line}` in:\n{stderr}"
+        );
+    }
+
+    // The three above are the whole report: a fourth RIDL-407 would mean the
+    // desk check flagged an interaction whose ordinal did not move.
+    assert_eq!(
+        stderr.matches("RIDL-407").count(),
+        3,
+        "exactly three ordinal-affecting changes, no more:\n{stderr}"
+    );
+}
