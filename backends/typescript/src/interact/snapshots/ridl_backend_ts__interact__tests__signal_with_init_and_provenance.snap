@@ -52,6 +52,7 @@ export interface VehicleStatusConsumer {
   /**
    * Current vehicle speed — isochronous, drives rmdl clocks downstream
    *
+   * @ordinal 1
    * @init 0.0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -69,6 +70,7 @@ export interface VehicleStatusProvider {
   /**
    * Current vehicle speed — isochronous, drives rmdl clocks downstream
    *
+   * @ordinal 1
    * @init 0.0
    */
   currentSpeed: { publish(value: veh_common.Speed): void };

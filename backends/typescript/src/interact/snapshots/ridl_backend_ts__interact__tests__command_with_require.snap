@@ -58,6 +58,7 @@ export interface VehicleStatusConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setGear(position: veh_common.GearPosition): Promise<void>;
@@ -80,6 +81,7 @@ export interface VehicleStatusProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setGear(position: veh_common.GearPosition): Promise<void>;

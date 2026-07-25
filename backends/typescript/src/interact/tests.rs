@@ -46,6 +46,23 @@ fn reserved(ordinal: u32, name: &str) -> v2::Decl {
     )
 }
 
+/// The nameless tombstone form, `reserved <ordinal>` (typl §7.4 grammar): a
+/// slot that records the ordinal it protects and nothing else. `name` is the
+/// two spellings of "no retired name" a `Reserved` can carry — absent, which
+/// is what the checker lowers, and present-but-empty, which only a hand-built
+/// IR produces and which the Rust backend guards against too.
+fn reserved_ordinal(ordinal: u32, name: Option<&str>) -> v2::Decl {
+    interaction(
+        "",
+        ordinal,
+        v2::decl::Kind::ReservedSlot(v2::Reserved {
+            ordinal,
+            name: name.map(str::to_string),
+            value: Some(i64::from(ordinal)),
+        }),
+    )
+}
+
 fn named(name: &str) -> v2::FieldType {
     v2::FieldType {
         optional: false,
@@ -1077,11 +1094,18 @@ fn deprecated_reaches_interactions_and_both_faces() {
     assert!(face_body(&source, "LegacyConsumer").contains("@deprecated use vin"));
 }
 
-/// A reserved tombstone occupies an ordinal but emits no member (ridl §11):
-/// the interactions around it are unaffected, and nothing named after the
-/// retired interaction appears anywhere in the module.
+/// A reserved tombstone declares no member but is recorded with the ordinal
+/// it protects (ridl §11).
+///
+/// The two halves are separate claims and both matter. A tombstone must not
+/// become a member — nothing named after a retired interaction can be called,
+/// read, or subscribed — and it must not vanish either: it exists to hold an
+/// ordinal against reuse, so a TypeScript consumer that cannot see it cannot
+/// reconstruct the wire identity across the retired slot, which is the exact
+/// property `ridl diff` guards. The wording is the Rust backend's verbatim, so
+/// the two generated outputs read as one system.
 #[test]
-fn reserved_tombstone_emits_no_member() {
+fn reserved_tombstone_is_recorded_with_its_ordinal() {
     let package = interact_package(
         vec![interface(
             "VehicleStatus",
@@ -1109,10 +1133,34 @@ fn reserved_tombstone_emits_no_member() {
     let source = render(&package);
 
     assert!(
-        !source.contains("resetCounters"),
-        "a retired interaction must not appear in the generated module, got:\n{source}"
+        source.contains("@reserved ordinal 2 (`resetCounters`) — retired, never reused."),
+        "the retired ordinal must be recorded, got:\n{source}"
     );
-    // The tombstone sits between two live interactions; both survive it.
+    // Recorded once, on the consumer face — the placement the Rust backend
+    // gives interface-level metadata.
+    assert_eq!(
+        source.matches("@reserved ordinal 2").count(),
+        1,
+        "a tombstone is recorded once, got:\n{source}"
+    );
+    assert!(
+        source
+            .split("export interface VehicleStatusConsumer")
+            .next()
+            .expect("the split yields the text before the consumer face")
+            .contains("@reserved ordinal 2"),
+        "the record belongs to the consumer face's own doc, got:\n{source}"
+    );
+    // Recorded, but never a member: the retired name is not callable,
+    // readable, or subscribable on either face.
+    for face in ["VehicleStatusConsumer", "VehicleStatusProvider"] {
+        assert!(
+            !face_body(&source, face).contains("resetCounters"),
+            "a retired interaction must not become a member of {face}, got:\n{source}"
+        );
+    }
+    // The tombstone sits between two live interactions; both survive it, and
+    // each states the ordinal the tombstone displaced it to.
     assert!(
         source.contains("speed: SignalHandle<Speed>;"),
         "got:\n{source}"
@@ -1123,6 +1171,176 @@ fn reserved_tombstone_emits_no_member() {
         !source.contains("undefined, maxUs: undefined"),
         "a tombstone must not reach the timing table, got:\n{source}"
     );
+}
+
+/// The nameless form, `reserved 3`, states the ordinal alone (typl §7.4
+/// grammar). There is no retired name to quote, so the record must not carry
+/// an empty pair of backticks where a name would go.
+///
+/// Both spellings of "no name" are covered: `None`, which is what the checker
+/// lowers for `reserved <ordinal>`, and `Some("")`, which only a hand-built IR
+/// produces. The Rust backend guards the second as well, and a guard no test
+/// reaches is a guard nobody can trust.
+#[test]
+fn a_nameless_tombstone_states_its_ordinal_alone() {
+    let package = interact_package(
+        vec![interface(
+            "WheelHistory",
+            vec![
+                interaction(
+                    "wheelTicks",
+                    1,
+                    signal(
+                        "FanLevel",
+                        Some("0"),
+                        timing(
+                            v2::TimingMode::Range,
+                            Some("100000"),
+                            Some("1000000"),
+                            false,
+                        ),
+                    ),
+                ),
+                reserved_ordinal(2, None),
+                reserved_ordinal(3, Some("")),
+                interaction("vin", 4, final_def(named("Vin"))),
+            ],
+        )],
+        Vec::new(),
+    );
+    let source = render(&package);
+
+    for ordinal in [2, 3] {
+        assert!(
+            source.contains(&format!(
+                "@reserved ordinal {ordinal} — retired, never reused."
+            )),
+            "a nameless tombstone states its ordinal, got:\n{source}"
+        );
+    }
+    assert!(
+        !source.contains("``"),
+        "a nameless tombstone has no name to quote, got:\n{source}"
+    );
+}
+
+/// Every interaction states its ordinal — the wire identity (ridl §11) a
+/// tag-based transport derives its numeric ids from and `ridl diff` keys on.
+///
+/// The fixture is deliberately wide enough that position cannot stand in for
+/// the ordinal in either direction. A `final` at ordinal 1 is emitted on the
+/// consumer face only, so the provider face starts at ordinal 3; a tombstone
+/// at ordinal 2 displaces everything after it on both faces. An emitter that
+/// numbered members by position, or that dropped the tag from any one of the
+/// five kinds, disagrees with the expected pairs below.
+#[test]
+fn every_interaction_states_its_ordinal_on_every_face_that_carries_it() {
+    let package = interact_package(
+        vec![interface(
+            "VehicleStatus",
+            vec![
+                interaction("vin", 1, final_def(named("Vin"))),
+                reserved(2, "legacyPing"),
+                interaction(
+                    "speed",
+                    3,
+                    signal(
+                        "Speed",
+                        Some("0.0"),
+                        timing(
+                            v2::TimingMode::StrictPeriodic,
+                            Some("10000"),
+                            Some("10000"),
+                            false,
+                        ),
+                    ),
+                ),
+                interaction(
+                    "doorOpened",
+                    4,
+                    event(
+                        "DoorPayload",
+                        timing(v2::TimingMode::Range, Some("50000"), Some("500000"), false),
+                    ),
+                ),
+                interaction(
+                    "setGear",
+                    5,
+                    command(vec![param("position", named("GearPosition"))], Vec::new()),
+                ),
+                interaction(
+                    "getAverageSpeed",
+                    6,
+                    query(Vec::new(), fallible("Speed", "SpeedError"), Vec::new()),
+                ),
+            ],
+        )],
+        Vec::new(),
+    );
+    let source = render(&package);
+
+    assert_eq!(
+        face_ordinals(&source, "VehicleStatusConsumer"),
+        vec![
+            (1, "vin".to_string()),
+            (3, "speed".to_string()),
+            (4, "doorOpened".to_string()),
+            (5, "setGear".to_string()),
+            (6, "getAverageSpeed".to_string()),
+        ],
+        "got:\n{source}"
+    );
+    assert_eq!(
+        face_ordinals(&source, "VehicleStatusProvider"),
+        vec![
+            (3, "speed".to_string()),
+            (4, "doorOpened".to_string()),
+            (5, "setGear".to_string()),
+            (6, "getAverageSpeed".to_string()),
+        ],
+        "got:\n{source}"
+    );
+}
+
+/// An empty canonical init text emits no `@init` tag.
+///
+/// Two unrelated values lower to an empty text — the empty string of a
+/// string-backed payload and the empty set of an enum-set payload (typl §5.8)
+/// — and this emitter sees the text, not the payload's declaration, so it
+/// cannot render either without guessing which it holds. `@init` with nothing
+/// after it stated neither, and left trailing whitespace in generated source;
+/// the tag is now absent, the way an absent value is already treated. The Rust
+/// backend collapses the same case onto one sentence. `veh-cluster`'s
+/// `warnings: WarningFlags` is the live instance in the corpus.
+#[test]
+fn an_empty_init_value_emits_no_init_tag() {
+    let package = one(interaction(
+        "speed",
+        1,
+        signal(
+            "Speed",
+            Some(""),
+            timing(
+                v2::TimingMode::StrictPeriodic,
+                Some("10000"),
+                Some("10000"),
+                false,
+            ),
+        ),
+    ));
+    let source = render(&package);
+
+    assert!(
+        !source.contains("@init"),
+        "an empty init value states nothing, so it emits no tag, got:\n{source}"
+    );
+    // The member itself is unaffected — the tag is what is absent, not the
+    // signal.
+    assert!(
+        source.contains("speed: SignalHandle<Speed>;"),
+        "got:\n{source}"
+    );
+    assert!(source.contains("@ordinal 1"), "got:\n{source}");
 }
 
 // ---------------------------------------------------------------------------
@@ -1204,6 +1422,43 @@ fn face_body<'a>(source: &'a str, face: &str) -> &'a str {
     let rest = &source[start..];
     let end = rest.find("\n}").map(|i| i + 2).unwrap_or(rest.len());
     &rest[..end]
+}
+
+/// The `(ordinal, member name)` pairs of a face, in emission order: every
+/// member paired with the ordinal its own JSDoc block states.
+///
+/// A member with no `@ordinal` tag panics rather than being skipped — an
+/// interaction whose wire identity went missing is the failure this helper
+/// exists to surface, not a row to leave out of the comparison.
+fn face_ordinals(source: &str, face: &str) -> Vec<(u32, String)> {
+    let body = face_body(source, face);
+    let mut pairs = Vec::new();
+    let mut pending: Option<u32> = None;
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if let Some(value) = trimmed.strip_prefix("* @ordinal ") {
+            pending = Some(value.parse().expect("an @ordinal tag carries a number"));
+            continue;
+        }
+        // A member declaration is the only two-space-indented line outside a
+        // JSDoc block; every line of a JSDoc block starts with `/*` or `*`.
+        if trimmed.starts_with("/*") || trimmed.starts_with('*') {
+            continue;
+        }
+        let Some(rest) = line.strip_prefix("  ") else {
+            continue;
+        };
+        let declaration = rest.strip_prefix("readonly ").unwrap_or(rest);
+        let name: String = declaration
+            .chars()
+            .take_while(|c| c.is_ascii_alphanumeric() || *c == '_')
+            .collect();
+        let ordinal = pending
+            .take()
+            .unwrap_or_else(|| panic!("member {name} of {face} states no ordinal, got:\n{body}"));
+        pairs.push((ordinal, name));
+    }
+    pairs
 }
 
 // ---------------------------------------------------------------------------

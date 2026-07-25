@@ -49,6 +49,8 @@ export type Result<T, E> =
 export interface VehicleStatusConsumer {
   /**
    * Raised on every door state change; stale after 500ms
+   *
+   * @ordinal 1
    */
   doorOpened: EventHandle<DoorPayload>;
 }
@@ -63,6 +65,8 @@ export interface VehicleStatusConsumer {
 export interface VehicleStatusProvider {
   /**
    * Raised on every door state change; stale after 500ms
+   *
+   * @ordinal 1
    */
   doorOpened: { publish(occurrence: DoorPayload): void };
 }

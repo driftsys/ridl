@@ -30,6 +30,17 @@
 //!   generated source.
 //! - **Services as data** — `export const services` maps each dotted global
 //!   service name (ridl §14.5) to the interface behind it.
+//! - **Wire identity as JSDoc tags** — `@ordinal` on every interaction and
+//!   `@reserved` on the consumer face for every tombstone (ridl §11).
+//!   TypeScript has no native place for either, so they follow the same
+//!   custom-tag route as `@provenance`, `@transportIdentity`, and `@init`.
+//!   The interaction layer deliberately diverges here from the typl
+//!   struct-field rule, which drops a tombstone silently (typl §7.4): an
+//!   interaction ordinal is the identity a binding is keyed on — transport
+//!   ids derive from it and `ridl diff` rejects any change that shifts or
+//!   reuses one — so erasing it would leave a TypeScript consumer unable to
+//!   reconstruct the wire identity the Rust backend states. The Rust
+//!   interaction layer made the same divergence first; this follows it.
 //!
 //! **Visibility.** An `internal interface` emits four module-local shapes —
 //! both faces and both consts, each without `export` — never an exported one,
@@ -261,11 +272,11 @@ fn emit_face(
         paragraphs.push(wrap(note));
     }
     paragraphs.push(wrap(face.summary()));
-    let doc = jsdoc(
-        "",
-        &paragraphs.join("\n\n"),
-        &deprecated_tags(interface.deprecated.as_deref()),
-    );
+    // The retired ordinals, then the deprecation — the Rust backend's order
+    // for the same two pieces of interface-level metadata.
+    let mut tags = reserved_tags(interface, face);
+    tags.extend(deprecated_tags(interface.deprecated.as_deref()));
+    let doc = jsdoc("", &paragraphs.join("\n\n"), &tags);
 
     let mut members = String::new();
     for decl in &interface.interactions {
@@ -309,7 +320,8 @@ fn emit_member(
     match &decl.kind {
         Some(v2::decl::Kind::SignalDef(signal)) => {
             let payload = ctx.type_ref(&signal.payload);
-            let mut tags = signal_tags(signal, face);
+            let mut tags = vec![ordinal_tag(decl.ordinal)];
+            tags.extend(signal_tags(signal, face));
             tags.extend(deprecated_tags(decl.deprecated.as_deref()));
             let doc = jsdoc("  ", &decl.doc, &tags);
             let shape = match face {
@@ -320,11 +332,9 @@ fn emit_member(
         }
         Some(v2::decl::Kind::EventDef(event)) => {
             let payload = ctx.type_ref(&event.payload);
-            let doc = jsdoc(
-                "  ",
-                &decl.doc,
-                &deprecated_tags(decl.deprecated.as_deref()),
-            );
+            let mut tags = vec![ordinal_tag(decl.ordinal)];
+            tags.extend(deprecated_tags(decl.deprecated.as_deref()));
+            let doc = jsdoc("  ", &decl.doc, &tags);
             let shape = match face {
                 Face::Consumer => format!("EventHandle<{payload}>"),
                 Face::Provider => format!("{{ publish(occurrence: {payload}): void }}"),
@@ -348,7 +358,7 @@ fn emit_member(
             } else {
                 format!("{}\n\n{note}", decl.doc)
             };
-            let mut tags = vec![transport_tag()];
+            let mut tags = vec![ordinal_tag(decl.ordinal), transport_tag()];
             tags.extend(deprecated_tags(decl.deprecated.as_deref()));
             let doc = jsdoc("  ", &body, &tags);
             Ok(format!("{doc}  {name}({params}): Promise<void>;\n"))
@@ -356,7 +366,7 @@ fn emit_member(
         Some(v2::decl::Kind::QueryDef(query)) => {
             let params = params_ts(ctx, &query.params)?;
             let ret = return_ts(ctx, query.return_type.as_ref())?;
-            let mut tags = Vec::new();
+            let mut tags = vec![ordinal_tag(decl.ordinal)];
             if let Some(identity) = transport_identity(interface, decl.ordinal, query) {
                 tags.push(identity);
             }
@@ -391,16 +401,15 @@ fn emit_member(
                 Some(ft) => kind_ts(ctx, ft.kind.as_ref())?,
                 None => "unknown".to_string(),
             };
-            let doc = jsdoc(
-                "  ",
-                &decl.doc,
-                &deprecated_tags(decl.deprecated.as_deref()),
-            );
+            let mut tags = vec![ordinal_tag(decl.ordinal)];
+            tags.extend(deprecated_tags(decl.deprecated.as_deref()));
+            let doc = jsdoc("  ", &decl.doc, &tags);
             Ok(format!("{doc}  readonly {name}: {payload};\n"))
         }
         Some(v2::decl::Kind::FinalDef(_)) => Ok(String::new()),
-        // A reserved tombstone occupies an ordinal but emits no member
-        // (ridl §11).
+        // A reserved tombstone holds an ordinal and declares no member, so it
+        // has no member doc to carry it; it is recorded on the face instead,
+        // by [`reserved_tags`] (ridl §11).
         Some(v2::decl::Kind::ReservedSlot(_)) | None => Ok(String::new()),
         // A typl declaration kind inside an interface is an IR
         // inconsistency: interfaces hold interactions only (ridl §14).
@@ -418,13 +427,91 @@ fn transport_tag() -> String {
     format!("@remarks A rejected promise is an {STRATUM_3} (gf §6.4).")
 }
 
+/// The wire identity of one interaction (ridl §11): the 1-based declaration
+/// order across every interaction of the enclosing interface, one sequence
+/// regardless of kind, tombstones counted. A tag-based transport derives its
+/// numeric ids from it (SOME/IP method and event ids, Appendix B), and
+/// `ridl diff` rejects any change that shifts or reuses one, so it is the
+/// identity a consumer binds to rather than a presentation detail.
+///
+/// It is emitted on **every** interaction, on every face that carries the
+/// interaction, rather than only where a reader could not count it out. A
+/// member's position in a generated face is not its ordinal, in three
+/// independent ways: the provider face omits `final` members (ridl §3, §8), so
+/// the two faces of one interface number differently; a `reserved` tombstone
+/// declares no member at all, so every ordinal after one is displaced; and the
+/// consumer face is the only place the tombstones are recorded, so the
+/// provider face carries no local evidence of the gap. Emitting the tag only
+/// where counting fails would make its absence mean "count from one", a rule a
+/// reader can apply only after establishing the very fact the tag states. The
+/// Rust backend names the ordinal in every interaction's doc comment for the
+/// same reason.
+fn ordinal_tag(ordinal: u32) -> String {
+    format!("@ordinal {ordinal}")
+}
+
+/// The retired ordinals of an interface, in declaration order (ridl §11).
+///
+/// A tombstone is the one interaction that generates no member — it exists to
+/// hold an ordinal against reuse — so it has no member doc of its own and is
+/// recorded on the face instead. Without it a TypeScript consumer sees a gap
+/// in the `@ordinal` sequence with nothing saying the gap is deliberate, which
+/// is precisely the wire identity `ridl diff` guards.
+///
+/// The wording is the Rust backend's verbatim, and so is the placement: this
+/// is interface-level metadata, recorded once, on the consumer face — the face
+/// a binding consumer reads — rather than repeated on both.
+fn reserved_tags(interface: &v2::Interface, face: Face) -> Vec<String> {
+    if face != Face::Consumer {
+        return Vec::new();
+    }
+    interface
+        .interactions
+        .iter()
+        .filter_map(|decl| match &decl.kind {
+            Some(v2::decl::Kind::ReservedSlot(slot)) => Some(reserved_tag(slot)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// One tombstone. `reserved legacyTicks` retires a named interaction and
+/// `reserved 3` retires a bare ordinal (typl §7.4 grammar, ridl §11); the
+/// nameless form has nothing to quote, so it states the ordinal alone rather
+/// than an empty pair of backticks.
+fn reserved_tag(slot: &v2::Reserved) -> String {
+    let ordinal = slot.ordinal;
+    match slot.name.as_deref() {
+        Some(name) if !name.is_empty() => {
+            format!("@reserved ordinal {ordinal} (`{name}`) — retired, never reused.")
+        }
+        _ => format!("@reserved ordinal {ordinal} — retired, never reused."),
+    }
+}
+
 /// The tags of a signal. `@init` is the resolved channel init (ridl §4.4) and
 /// belongs to both faces — it is what the channel holds before the provider
 /// publishes. `@provenance` is a consumer's concern only: a provider
 /// publishes values, it does not read them back with a provenance.
 fn signal_tags(signal: &v2::SignalDef, face: Face) -> Vec<String> {
     let mut tags = Vec::new();
-    if let Some(value) = signal.init.as_ref().and_then(|i| i.value.as_deref()) {
+    // A canonical init text can be empty, and two unrelated values produce it:
+    // the empty string of a string- or bytes-backed payload, and the empty set
+    // of an enum-set payload (`ridl-sem`'s `string_init` and the `EnumSet` arm
+    // of its named-init resolver, both typl §5.8). This emitter sees the text,
+    // not the payload's declaration, so it cannot render either one without
+    // guessing which it holds — and a guessed literal that compiles is worse
+    // than none. It states nothing instead, the way an absent value is already
+    // treated, rather than emitting a tag with nothing after it. The Rust
+    // backend collapses the same case onto one sentence. Telling the two apart
+    // is a lowering question — a type-appropriate literal in the IR — not a
+    // rendering one.
+    if let Some(value) = signal
+        .init
+        .as_ref()
+        .and_then(|i| i.value.as_deref())
+        .filter(|value| !value.is_empty())
+    {
         tags.push(format!("@init {value}"));
     }
     if face == Face::Consumer {

@@ -50,6 +50,7 @@ export interface VehicleStatusConsumer {
   /**
    * Paged fault snapshot — fallible query (ridl §10.1)
    *
+   * @ordinal 9
    * @transportIdentity VehicleStatus#9:FaultPage|DiagError
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
@@ -67,6 +68,7 @@ export interface VehicleStatusProvider {
   /**
    * Paged fault snapshot — fallible query (ridl §10.1)
    *
+   * @ordinal 9
    * @transportIdentity VehicleStatus#9:FaultPage|DiagError
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */

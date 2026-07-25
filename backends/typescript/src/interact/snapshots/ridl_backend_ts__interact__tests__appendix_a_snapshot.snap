@@ -105,11 +105,14 @@ export type Result<T, E> =
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
  * subscribed, commands and queries are called, finals are read.
+ *
+ * @reserved ordinal 6 (`resetCounters`) — retired, never reused.
  */
 export interface VehicleStatusConsumer {
   /**
    * Current vehicle speed — isochronous, drives rmdl clocks downstream
    *
+   * @ordinal 1
    * @init 0.0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -117,6 +120,7 @@ export interface VehicleStatusConsumer {
   /**
    * Engine temperature — change-driven, 100ms freshness SLO
    *
+   * @ordinal 2
    * @init 0.0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -124,12 +128,15 @@ export interface VehicleStatusConsumer {
   /**
    * Active warnings — last-value delivered on subscribe (ridl §4.4)
    *
+   * @ordinal 3
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   warnings: SignalHandle<veh_common.WarningFlags>;
   /**
    * Raised on every door state change; stale after 500ms
+   *
+   * @ordinal 4
    */
   doorOpened: EventHandle<DoorPayload>;
   /**
@@ -141,29 +148,39 @@ export interface VehicleStatusConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 5
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setGear(position: veh_common.GearPosition): Promise<void>;
   /**
    * Sliding-window average
    *
+   * @ordinal 7
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getAverageSpeed(window: ridl_std.Duration): Promise<veh_common.Speed>;
   /**
    * Fault history as a finite stream
    *
+   * @ordinal 8
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   streamFaults(filter: DiagFilter): AsyncIterable<FaultEvent>;
   /**
    * Paged fault snapshot — fallible query via the inline `T | E` return (ridl §10.1, gf §6.1)
    *
+   * @ordinal 9
    * @transportIdentity VehicleStatus#9:FaultPage|DiagError
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getFaultPage(filter: DiagFilter): Promise<Result<FaultPage, DiagError>>;
+  /**
+   * @ordinal 10
+   */
   readonly softwareVersion: ridl_std.Version;
+  /**
+   * @ordinal 11
+   */
   readonly capabilities: readonly ridl_std.Label[];
 }
 
@@ -180,23 +197,28 @@ export interface VehicleStatusProvider {
   /**
    * Current vehicle speed — isochronous, drives rmdl clocks downstream
    *
+   * @ordinal 1
    * @init 0.0
    */
   currentSpeed: { publish(value: veh_common.Speed): void };
   /**
    * Engine temperature — change-driven, 100ms freshness SLO
    *
+   * @ordinal 2
    * @init 0.0
    */
   engineTemp: { publish(value: veh_common.Temperature): void };
   /**
    * Active warnings — last-value delivered on subscribe (ridl §4.4)
    *
+   * @ordinal 3
    * @init 0
    */
   warnings: { publish(value: veh_common.WarningFlags): void };
   /**
    * Raised on every door state change; stale after 500ms
+   *
+   * @ordinal 4
    */
   doorOpened: { publish(occurrence: DoorPayload): void };
   /**
@@ -208,24 +230,28 @@ export interface VehicleStatusProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 5
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   setGear(position: veh_common.GearPosition): Promise<void>;
   /**
    * Sliding-window average
    *
+   * @ordinal 7
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   getAverageSpeed(window: ridl_std.Duration): Promise<veh_common.Speed>;
   /**
    * Fault history as a finite stream
    *
+   * @ordinal 8
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   streamFaults(filter: DiagFilter): AsyncIterable<FaultEvent>;
   /**
    * Paged fault snapshot — fallible query via the inline `T | E` return (ridl §10.1, gf §6.1)
    *
+   * @ordinal 9
    * @transportIdentity VehicleStatus#9:FaultPage|DiagError
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
@@ -278,6 +304,7 @@ export const vehicleStatusContracts = [
  */
 export interface Service_veh_cluster_logsConsumer {
   /**
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   tailLogs(pattern: AsyncIterable<string>): AsyncIterable<Uint8Array>;
@@ -302,6 +329,7 @@ export interface Service_veh_cluster_logsConsumer {
  */
 export interface Service_veh_cluster_logsProvider {
   /**
+   * @ordinal 1
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   tailLogs(pattern: AsyncIterable<string>): AsyncIterable<Uint8Array>;

@@ -110,10 +110,14 @@ export type Result<T, E> =
  */
 export interface DoorControlConsumer {
   /**
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   lockState: SignalHandle<LockState>;
+  /**
+   * @ordinal 2
+   */
   doorMoved: EventHandle<DoorReport>;
   /**
    * A command is fire-and-forget (ridl §6): it declares no result, and an
@@ -122,14 +126,19 @@ export interface DoorControlConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 3
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   lock(door: DoorId): Promise<void>;
   /**
+   * @ordinal 4
    * @transportIdentity DoorControl#4:DoorReport|DoorFault
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readDoor(door: DoorId): Promise<Result<DoorReport, DoorFault>>;
+  /**
+   * @ordinal 5
+   */
   readonly doorCount: DoorId;
 }
 
@@ -144,9 +153,13 @@ export interface DoorControlConsumer {
  */
 export interface DoorControlProvider {
   /**
+   * @ordinal 1
    * @init 0
    */
   lockState: { publish(value: LockState): void };
+  /**
+   * @ordinal 2
+   */
   doorMoved: { publish(occurrence: DoorReport): void };
   /**
    * A command is fire-and-forget (ridl §6): it declares no result, and an
@@ -155,10 +168,12 @@ export interface DoorControlProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 3
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   lock(door: DoorId): Promise<void>;
   /**
+   * @ordinal 4
    * @transportIdentity DoorControl#4:DoorReport|DoorFault
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
@@ -198,11 +213,13 @@ export const doorControlContracts = [] as const;
  */
 export interface TelemetryConsumer {
   /**
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
   distance: SignalHandle<Odometer>;
   /**
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   fuelLevel(): Promise<Percent>;
@@ -220,10 +237,12 @@ export interface TelemetryConsumer {
  */
 export interface TelemetryProvider {
   /**
+   * @ordinal 1
    * @init 0
    */
   distance: { publish(value: Odometer): void };
   /**
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   fuelLevel(): Promise<Percent>;
@@ -328,6 +347,7 @@ export type Result<T, E> =
  */
 export interface Service_fleet_vehicle_mirrorsConsumer {
   /**
+   * @ordinal 1
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
    */
@@ -339,18 +359,24 @@ export interface Service_fleet_vehicle_mirrorsConsumer {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   fold(door: fleet_contracts.DoorId): Promise<void>;
   /**
+   * @ordinal 3
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readFold(door: fleet_contracts.DoorId): Promise<fleet_contracts.Percent>;
+  /**
+   * @ordinal 4
+   */
   readonly mirrorCount: fleet_contracts.DoorId;
   /**
    * Cross-package `T | E`: both arms live in `fleet.contracts`, so the
    * synthesized transport identity carries their fully qualified names.
    *
+   * @ordinal 5
    * @transportIdentity fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
@@ -361,6 +387,7 @@ export interface Service_fleet_vehicle_mirrorsConsumer {
    * canonical `fleet.legacy.DoorFault`, because a registry keying on it has
    * to be stable against how a consumer chose to spell its imports.
    *
+   * @ordinal 6
    * @transportIdentity fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
@@ -386,6 +413,7 @@ export interface Service_fleet_vehicle_mirrorsConsumer {
  */
 export interface Service_fleet_vehicle_mirrorsProvider {
   /**
+   * @ordinal 1
    * @init 0
    */
   foldAngle: { publish(value: fleet_contracts.Percent): void };
@@ -396,10 +424,12 @@ export interface Service_fleet_vehicle_mirrorsProvider {
    * no functional payload, never reaches the contract surface, and is not
    * application-visible as a return value" (ridl §6.1).
    *
+   * @ordinal 2
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   fold(door: fleet_contracts.DoorId): Promise<void>;
   /**
+   * @ordinal 3
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readFold(door: fleet_contracts.DoorId): Promise<fleet_contracts.Percent>;
@@ -407,6 +437,7 @@ export interface Service_fleet_vehicle_mirrorsProvider {
    * Cross-package `T | E`: both arms live in `fleet.contracts`, so the
    * synthesized transport identity carries their fully qualified names.
    *
+   * @ordinal 5
    * @transportIdentity fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
@@ -417,6 +448,7 @@ export interface Service_fleet_vehicle_mirrorsProvider {
    * canonical `fleet.legacy.DoorFault`, because a registry keying on it has
    * to be stable against how a consumer chose to spell its imports.
    *
+   * @ordinal 6
    * @transportIdentity fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
