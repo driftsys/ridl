@@ -3,7 +3,8 @@
 // `internal` is accepted on an `interface` — not on an interaction and not on a
 // service, which are parse errors — and the IR records it faithfully
 // (`Interface.visibility = 2`). What the backends do with it is the point of
-// this file: see `veh-cluster/NOTES`, "internal is dropped by both backends".
+// this file: it is what caught them dropping `internal` entirely. See
+// `veh-cluster/NOTES`, "`internal` was dropped by both backends".
 
 package veh.cluster
 

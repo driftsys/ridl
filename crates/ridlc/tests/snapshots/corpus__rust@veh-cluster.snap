@@ -569,7 +569,7 @@ pub const WHEEL_HISTORY_CONTRACTS: &[ContractStub] = &[];
 /// of the cross-package surface.
 /// The consumer face of `WheelDiagnostics` — what a component that uses this interface calls (ridl §10.1).
 #[allow(async_fn_in_trait)]
-pub trait WheelDiagnosticsConsumer {
+pub(crate) trait WheelDiagnosticsConsumer {
     /// signal `wheelTicks` — ordinal 1 (ridl §4).
     /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
     fn wheel_ticks(&mut self) -> &mut dyn SignalHandle<FanLevel>;
@@ -584,7 +584,7 @@ pub trait WheelDiagnosticsConsumer {
 /// of the cross-package surface.
 /// The provider face of `WheelDiagnostics` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
-pub trait WheelDiagnosticsProvider {
+pub(crate) trait WheelDiagnosticsProvider {
     /// Publishes `wheelTicks` — signal ordinal 1 (ridl §4).
     fn publish_wheel_ticks(&mut self, value: FanLevel);
     /// Raises `slipDetected` — event ordinal 2 (ridl §5).
@@ -593,7 +593,7 @@ pub trait WheelDiagnosticsProvider {
     async fn on_read_ticks(&mut self) -> FanLevel;
 }
 /// Resolved timing for every signal and event of `WheelDiagnostics`, keyed by the source name, in exact microseconds (ridl §9).
-pub const WHEEL_DIAGNOSTICS_TIMING: &[(&str, TimingConst)] = &[
+pub(crate) const WHEEL_DIAGNOSTICS_TIMING: &[(&str, TimingConst)] = &[
     (
         "wheelTicks",
         TimingConst {
@@ -614,7 +614,7 @@ pub const WHEEL_DIAGNOSTICS_TIMING: &[(&str, TimingConst)] = &[
     ),
 ];
 /// Every `require` and `ensure` clause of `WheelDiagnostics` as data, in source order, for an observer to install (ridl §13).
-pub const WHEEL_DIAGNOSTICS_CONTRACTS: &[ContractStub] = &[];
+pub(crate) const WHEEL_DIAGNOSTICS_CONTRACTS: &[ContractStub] = &[];
 /// A public shape beside it, so the generated output shows the two side by
 /// side and the difference is readable in one snapshot.
 /// The consumer face of `WheelSummary` — what a component that uses this interface calls (ridl §10.1).

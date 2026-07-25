@@ -593,7 +593,7 @@ export const wheelHistoryContracts = [] as const;
  * binding to it sees. Signals are read and subscribed, events are
  * subscribed, commands and queries are called, finals are read.
  */
-export interface WheelDiagnosticsConsumer {
+interface WheelDiagnosticsConsumer {
   /**
    * @init 0
    * @provenance `'init'` until the provider's first publication (ridl §4.4).
@@ -616,7 +616,7 @@ export interface WheelDiagnosticsConsumer {
  * §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
-export interface WheelDiagnosticsProvider {
+interface WheelDiagnosticsProvider {
   /**
    * @init 0
    */
@@ -634,7 +634,7 @@ export interface WheelDiagnosticsProvider {
  * compiler resolved from the configured default rather than from source —
  * "untimed" does not exist beyond the parser (ridl §9.1).
  */
-export const wheelDiagnosticsTiming = {
+const wheelDiagnosticsTiming = {
   wheelTicks: { mode: 'range', minUs: 100000n, maxUs: 1000000n, defaultApplied: false },
   slipDetected: { mode: 'range', minUs: 50000n, maxUs: 500000n, defaultApplied: false },
 } as const;
@@ -649,7 +649,7 @@ export const wheelDiagnosticsTiming = {
  * inferred: `source` is text, so matching on it would misread a parameter
  * named `resultCode` or a field access `.result`.
  */
-export const wheelDiagnosticsContracts = [] as const;
+const wheelDiagnosticsContracts = [] as const;
 
 /**
  * A public shape beside it, so the generated output shows the two side by
