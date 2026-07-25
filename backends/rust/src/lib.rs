@@ -631,12 +631,29 @@ fn vis_tokens(visibility: i32) -> TokenStream {
 /// escaped here as a raw identifier (`r#override`). The four keywords that
 /// cannot be raw identifiers (`crate`, `self`, `Self`, `super`) and the bare
 /// underscore are mangled with a trailing underscore.
+///
+/// The call is total, per the codegen contract (ADR-0004 §5, and the
+/// never-panics guarantee `ridlc::compile` documents). A valid typl name is
+/// never empty, so an empty `name` only arrives from malformed IR — but the
+/// backend is also reachable from the language server over half-written
+/// source, so it must not panic. An empty name lowers to Rust's wildcard `_`,
+/// which is illegal in every declaration position the emitter uses: the
+/// `syn::parse2` gate in [`generate`] rejects it and returns a
+/// [`GenerateError`], so the condition is reported rather than emitted as
+/// plausible-looking output. `_` cannot collide with a real name either — a
+/// typl name of `_` is mangled to `__` on the branch above.
 pub(crate) fn ident(name: &str) -> Ident {
     if let Ok(parsed) = syn::parse_str::<Ident>(name) {
         return parsed;
     }
     if matches!(name, "crate" | "self" | "Self" | "super" | "_") {
         return Ident::new(&format!("{name}_"), Span::call_site());
+    }
+    if name.is_empty() {
+        // `Ident::new_raw("")` and `Ident::new("")` both panic; `Ident::new`
+        // accepts `_` (`Ident::new_raw` does not — `r#_` is not a raw
+        // identifier).
+        return Ident::new("_", Span::call_site());
     }
     Ident::new_raw(name, Span::call_site())
 }

@@ -1429,3 +1429,47 @@ fn bytes_named_field_c_header_compiles_with_cc() {
         Err(_) => eprintln!("skipping cc syntax check: cc is not available"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Identifier totality.
+// ---------------------------------------------------------------------------
+
+/// `ident` is total. A valid typl name can never be empty (typl §2.3), so an
+/// empty string only reaches here from malformed IR — but the backend is fed
+/// by `ridlc::compile`, whose documented contract is that it never panics, and
+/// by the language server, which sees IR lowered from in-progress source. An
+/// empty name therefore lowers to `_` instead of reaching `Ident::new_raw`,
+/// which panics on the empty string.
+#[test]
+fn ident_is_total_on_the_empty_name() {
+    assert_eq!(super::ident("").to_string(), "_");
+}
+
+/// A typl name of `_` keeps its own mangling, so the empty-name placeholder
+/// can never be confused with a real declaration.
+#[test]
+fn ident_maps_the_underscore_name_away_from_the_placeholder() {
+    assert_eq!(super::ident("_").to_string(), "__");
+}
+
+/// An empty-named declaration is reported, not emitted. `_` is illegal in a
+/// Rust declaration position, so the `syn::parse2` gate in `generate` turns it
+/// into a `GenerateError` — the codegen totality contract (ADR-0004 §5) holds
+/// without the malformed name becoming plausible-looking output.
+#[test]
+fn generate_reports_an_empty_named_decl_instead_of_panicking() {
+    let decls = vec![public_decl(
+        "",
+        primitive_type(
+            v2::PrimitiveType::Boolean,
+            init_value(true, Some("false")),
+            None,
+        ),
+    )];
+    let error = generate(&package("app", decls)).expect_err("an empty name cannot generate");
+    assert!(
+        error.message.contains("does not parse"),
+        "expected the parse gate to reject `_`, got: {}",
+        error.message,
+    );
+}

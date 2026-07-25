@@ -71,6 +71,62 @@ fn duration_in_constraint_yields_two_coded_diagnostics() {
     );
 }
 
+/// The malformed interaction sources that reach the lowering with no name:
+/// FORM-101 (no name token) and FORM-105 (a family reserved word used as a
+/// name — `view` belongs to uxdl, so it is reserved family-wide but is not an
+/// active ridl keyword), at both interaction sites (an `interface` body and a
+/// service's inline shape).
+const NAMELESS_INTERACTIONS: &[&str] = &[
+    "interface I {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  event : Speed\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  command (g: Speed)\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  query (): Speed\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  final : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+    "service veh.a.b {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+    "service veh.a.b {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  command setGear(view: Speed)\n  signal after : Speed @10ms\n}\n",
+];
+
+/// `compile` is total on a nameless interaction. Each source here is reported
+/// by the parser and still finishes its member node, so the member reaches the
+/// lowering; before the fix it lowered to a `Decl` with an empty name, which
+/// the Rust backend cannot turn into an identifier. `compile` runs the backend
+/// unconditionally — it does not gate on diagnostics — so an empty name there
+/// breaks the never-panics contract this module's crate documents.
+#[test]
+fn compile_is_total_on_a_nameless_interaction() {
+    for body in NAMELESS_INTERACTIONS {
+        let source = format!("package app\ntype Speed: km/h [0.0..300.0 step 0.5]\n{body}");
+        // A panic here fails the test, which is the point: `compile` must
+        // return for every one of these.
+        let output = ridlc::compile("app.ridl", &source);
+
+        let mut interactions: Vec<&ridl_ir::v2::Decl> = output
+            .package
+            .interfaces
+            .iter()
+            .flat_map(|interface| interface.interactions.iter())
+            .collect();
+        for service in &output.package.services {
+            if let Some(ridl_ir::v2::service::Shape::Inline(inline)) = &service.shape {
+                interactions.extend(inline.interactions.iter());
+            }
+        }
+        for decl in interactions {
+            // A `reserved` tombstone's `Decl` name is empty by design — the
+            // retired name lives in `Reserved.name`.
+            if matches!(decl.kind, Some(ridl_ir::v2::decl::Kind::ReservedSlot(_))) {
+                continue;
+            }
+            assert!(
+                !decl.name.is_empty(),
+                "an empty-named interaction reached the IR from:\n{body}",
+            );
+        }
+    }
+}
+
 /// `ridlc build <fixture> --out-dir <tmp>` exits 0 and writes a Rust file that
 /// declares the generated `Speed` newtype.
 #[test]
