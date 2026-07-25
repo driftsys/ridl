@@ -78,39 +78,32 @@ pub(crate) fn emit(
 
     let mut items = vec![vocabulary()];
 
-    for interface in &package.interfaces {
-        // A named interface is its own identity: the generated type name and
-        // the identity name are the same string.
-        let names = Names {
-            r#type: &interface.name,
-            identity: &interface.name,
-        };
-        owners.push((
-            interface.name.clone(),
-            format!("interface {}", interface.name),
-        ));
-        items.push(emit_interface(names, interface, tuples)?);
-    }
-
-    // A service with an inline shape declares an anonymous interface; it is
-    // generated under a name derived from the service address so the two forms
-    // produce the same shape of API.
-    for service in &package.services {
-        if let Some(v2::service::Shape::Inline(interface)) = &service.shape {
-            let type_name = inline_interface_name(&service.name);
-            // The identity is the service's DOTTED name — never the mangled
-            // type name, and never `Interface.name`, which is empty by
-            // construction for an inline shape.
-            let names = Names {
-                r#type: &type_name,
-                identity: &service.name,
-            };
-            items.push(emit_interface(names, interface, tuples)?);
-            owners.push((
-                type_name,
+    // Every interface shape, named and inline alike — `Package::shapes`, not
+    // `package.interfaces`, which is not the complete set. A named interface is
+    // its own identity: the generated type name and the identity name are the
+    // same string. A service with an inline shape declares an anonymous
+    // interface, generated under a name derived from the service address so the
+    // two forms produce the same shape of API; its identity stays the service's
+    // DOTTED name — never the mangled type name, and never `Interface.name`,
+    // which is empty by construction for an inline shape.
+    for shape in package.shapes() {
+        let (type_name, origin) = match shape.service {
+            Some(service) => (
+                inline_interface_name(&service.name),
                 format!("the inline shape of service {}", service.name),
-            ));
-        }
+            ),
+            None => (
+                shape.name.to_string(),
+                format!("interface {name}", name = shape.name),
+            ),
+        };
+        let names = Names {
+            r#type: &type_name,
+            identity: shape.name,
+            visibility: shape.visibility(),
+        };
+        items.push(emit_interface(names, shape.interface, tuples)?);
+        owners.push((type_name, origin));
     }
 
     items.push(emit_services(package)?);
@@ -183,10 +176,18 @@ pub(crate) fn emit(
 /// very module, which are scoped to the dotted name (`ridl-sem`, E2.5). In the
 /// other direction the dotted name contains `.`, so using it as a name hint
 /// builds `Veh.adas.logsGetPairResult` — not an identifier at all.
+/// `visibility` — the AUTHORITATIVE visibility of the shape, taken from
+/// [`v2::InterfaceShape::visibility`] rather than off the `Interface` this
+/// module is handed. An inline shape's own `Interface.visibility` is
+/// `VISIBILITY_UNSPECIFIED` by construction (ridl §14.5); the owning `Service`
+/// carries the real one. Reading it here rather than at the leaf keeps the
+/// emitted visibility correct by derivation instead of by the coincidence that
+/// [`vis_tokens`] maps `UNSPECIFIED` and `PUBLIC` to the same `pub`.
 #[derive(Debug, Clone, Copy)]
 struct Names<'a> {
     r#type: &'a str,
     identity: &'a str,
+    visibility: i32,
 }
 
 // ---------------------------------------------------------------------------
@@ -311,13 +312,13 @@ fn emit_interface(
 ) -> Result<TokenStream, GenerateError> {
     let mut out = Emitted::default();
     let name = names.r#type;
-    // Every item this interface generates carries the interface's own
-    // visibility: an `internal interface` is package-private in full, or the
-    // keyword would hide the declaration and publish its API (ADR-0008
-    // decision 7). An inline service shape's `Interface.visibility` is
-    // UNSPECIFIED — a service is a global published contract and takes no
-    // `internal` modifier (ridl §14.5) — which [`vis_tokens`] maps to `pub`.
-    let vis = vis_tokens(interface.visibility);
+    // Every item this interface generates carries the shape's own visibility:
+    // an `internal interface` is package-private in full, or the keyword would
+    // hide the declaration and publish its API (ADR-0008 decision 7). The value
+    // comes from `Names`, which took it from `InterfaceShape::visibility` — an
+    // inline service shape's `Interface.visibility` is UNSPECIFIED and its
+    // owning `Service` carries the authoritative one (ridl §14.5).
+    let vis = vis_tokens(names.visibility);
 
     for decl in &interface.interactions {
         emit_interaction(names, decl, tuples, &mut out)?;

@@ -37,8 +37,8 @@ use ridl_ir::v2;
 use ridl_sem::check_package;
 use ridl_sem::ucum::UcumExpr;
 use ridl_syntax::ast::{
-    AstNode, Backing, Definition, EnumDef, EnumSetDef, HasName, InterfaceDef, InterfaceMember,
-    Name, ServiceDef, StructDef, StructMember, TypeDef, UnionDef,
+    AstNode, Backing, Definition, EnumDef, EnumSetDef, HasName, InterfaceMember, InterfaceShape,
+    Name, StructDef, StructMember, TypeDef, UnionDef,
 };
 use rowan::{TextRange, TextSize};
 
@@ -94,11 +94,8 @@ pub fn inlay_hints(
             Definition::Const(_) => {}
         }
     }
-    for interface in source.interfaces() {
-        interface_hints(ir, &interface, &mut hints);
-    }
-    for service in source.services() {
-        service_hints(ir, &service, &mut hints);
+    for shape in source.shapes() {
+        shape_hints(ir, &shape, &mut hints);
     }
     hints.retain(|hint| range.contains_inclusive(hint.offset));
     hints
@@ -290,35 +287,26 @@ fn unit_backing(type_def: &v2::TypeDef) -> Option<String> {
     }
 }
 
-/// Ordinal hints for an interface body's interactions (ridl §11): the number
+/// Ordinal hints for one interface body's interactions (ridl §11): the number
 /// beside every interaction and every `reserved` tombstone, read from the
-/// interface's IR by name so a tombstone's slot is counted exactly as codegen
-/// and `ridl diff` count it. This is the editor half of the general form §6.3
+/// shape's IR by name so a tombstone's slot is counted exactly as codegen and
+/// `ridl diff` count it. This is the editor half of the general form §6.3
 /// mitigation — reordering an interface visibly becomes renumbering.
-fn interface_hints(ir: &v2::Package, def: &InterfaceDef, out: &mut Vec<InlayHint>) {
-    let Some(name) = def.name().and_then(|name| name_text(&name)) else {
+///
+/// A service's inline shape (ridl §14.5) is an interface body in every way
+/// that matters to wire identity, so it carries its own ordinal sequence and
+/// gets the same hints. Both halves are one function because both the AST walk
+/// (`SourceFile::shapes`) and the IR lookup (`Package::shapes`) key the two
+/// forms on the same identity — an interface's own name, a service's dotted
+/// one.
+fn shape_hints(ir: &v2::Package, shape: &InterfaceShape, out: &mut Vec<InlayHint>) {
+    let Some(name) = shape.identity() else {
         return;
     };
-    let Some(shape) = ir.interfaces.iter().find(|shape| shape.name == name) else {
+    let Some(found) = ir.shapes().find(|found| found.name == name) else {
         return;
     };
-    member_hints(shape, def.members(), out);
-}
-
-/// Ordinal hints for a service's inline shape (ridl §14.5). An inline shape is
-/// an interface body in every way that matters to wire identity, so it carries
-/// its own ordinal sequence and gets the same hints.
-fn service_hints(ir: &v2::Package, service: &ServiceDef, out: &mut Vec<InlayHint>) {
-    let Some(name) = service.name().as_ref().and_then(nav::dotted_text) else {
-        return;
-    };
-    let Some(found) = ir.services.iter().find(|found| found.name == name) else {
-        return;
-    };
-    let Some(v2::service::Shape::Inline(shape)) = &found.shape else {
-        return;
-    };
-    member_hints(shape, service.inline_members(), out);
+    member_hints(found.interface, shape.members(), out);
 }
 
 /// The ordinal hints of one interface body, source member by source member.

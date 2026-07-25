@@ -1857,6 +1857,54 @@ fn hover_on_a_service_shows_its_interface_and_the_posture_note() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// Hover on an interaction inside a service's *inline* shape works, and names
+/// the interaction under the service's dotted global name.
+///
+/// The shape holding it is not in `Package.interfaces` — it lives inside
+/// `Service.shape` — so the lookup behind this hover walks `Package::shapes()`.
+/// Without that, hover over half the interaction surface of a contract would
+/// return nothing at all.
+#[test]
+fn hover_on_an_interaction_inside_an_inline_service_shape_names_the_service() {
+    let dir = TempDir::new("ridl-hover-inline-member");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let signal = hover_markdown(
+        &client,
+        10,
+        contract.clone(),
+        find_pos(RIDL_CONTRACT, "temperature", 0),
+    );
+    assert!(
+        signal.contains("signal veh.hvac.cabin.temperature"),
+        "the owner is the service's dotted name, not the empty inline shape \
+         name: {signal}",
+    );
+    assert!(
+        signal.contains("#1"),
+        "the inline shape's own ordinal: {signal}"
+    );
+
+    // The second member proves the ordinal sequence is the inline shape's, not
+    // a continuation of the named interface's.
+    let command = hover_markdown(
+        &client,
+        12,
+        contract,
+        find_pos(RIDL_CONTRACT, "setTarget", 0),
+    );
+    assert!(
+        command.contains("command veh.hvac.cabin.setTarget"),
+        "the owner: {command}",
+    );
+    assert!(command.contains("#2"), "ordinal: {command}");
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// Ordinal inlay hints number every interaction of an interface body and the
 /// `reserved` tombstone among them — the editor half of the general form §6.3
 /// mitigation.

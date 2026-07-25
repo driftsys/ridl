@@ -120,13 +120,15 @@ fn find_visibility(package: &v2::Package, path: &str) -> Option<i32> {
     if let Some(decl) = find_decl(package, name) {
         return Some(decl.visibility);
     }
-    if let Some(interface) = package
-        .interfaces
-        .iter()
-        .find(|interface| interface.name == name)
-    {
-        return Some(interface.visibility);
+    // `Package::shapes` answers for a named interface and for a service with an
+    // inline shape, and `InterfaceShape::visibility` reads the authoritative
+    // field in each case — the owning service's for an inline shape, whose own
+    // `Interface.visibility` is `VISIBILITY_UNSPECIFIED` by construction.
+    if let Some(shape) = package.shapes().find(|shape| shape.name == name) {
+        return Some(shape.visibility());
     }
+    // A service naming an interface after `:` carries no shape of its own, so
+    // it is not in `shapes()`; its visibility is still the service's.
     package
         .services
         .iter()
@@ -620,25 +622,15 @@ fn find_decl<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Decl> {
     package.decls.iter().find(|decl| decl.name == name)
 }
 
-/// The interface a container name refers to — a top-level interface, or the
-/// inline shape of a service, which the walk descends into under the service's
-/// own name.
+/// The interface a shape name refers to — a top-level interface, or the inline
+/// shape of a service, which the walk descends into under the service's own
+/// dotted name. `Package::shapes` keys both on exactly that identity, so one
+/// lookup covers them.
 fn find_interface<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Interface> {
-    if let Some(interface) = package
-        .interfaces
-        .iter()
-        .find(|interface| interface.name == name)
-    {
-        return Some(interface);
-    }
     package
-        .services
-        .iter()
-        .find(|service| service.name == name)
-        .and_then(|service| match &service.shape {
-            Some(v2::service::Shape::Inline(interface)) => Some(interface),
-            _ => None,
-        })
+        .shapes()
+        .find(|shape| shape.name == name)
+        .map(|shape| shape.interface)
 }
 
 fn find_interaction<'a>(

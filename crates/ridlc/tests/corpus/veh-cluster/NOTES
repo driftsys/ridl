@@ -175,17 +175,32 @@ addressable as a type, so it has no visibility of its own — the enclosing
 `internal` at all. A consumer must therefore read `Service.visibility`, never
 `Service.shape.Inline.visibility`. If a consumer ever needs the field, the
 inline shape should mirror its service rather than stay unspecified.
+`ridl_ir::v2::InterfaceShape::visibility` is where that rule now lives, so a
+consumer reading it through `Package::shapes` cannot get the unspecified value
+by accident.
 
-### The sixth inline-shape instance: RIDL-407 renders without a span
+### The sixth inline-shape instance: RIDL-407 rendered without a span — fixed
 
-Found by this corpus and pinned in `crates/ridl/tests/baseline_desk.rs`
-(`inline_shape_removal_renders_without_a_span`): `DeclIndex::build` in
-`crates/ridl/src/main.rs` records inline-shape *members*, but builds the
-interface-level fallback — used when the named interaction no longer exists in
-source — from `source.interfaces()` only. An interaction removed from an inline
-shape therefore produces a RIDL-407 warning with no file, no line and no
-snippet, where the same removal from a named interface falls back to the
-interface name. The fix belongs to `DeclIndex`.
+Found by this corpus and pinned in `crates/ridl/tests/baseline_desk.rs`:
+`DeclIndex::build` in `crates/ridl/src/main.rs` recorded inline-shape
+*members*, but built the shape-level fallback — used when the named interaction
+no longer exists in source — from `source.interfaces()` only. An interaction
+removed from an inline shape therefore produced a RIDL-407 warning with no
+file, no line and no snippet, where the same removal from a named interface
+fell back to the interface name.
+
+It was the sixth and last instance of one root cause: a consumer walking
+`package.interfaces` (or `source.interfaces()`) as if it were the complete set
+of interface bodies, when a service's inline shape lives outside it. All six
+are closed. The structural repair is a single walk on each side —
+`ridl_ir::v2::Package::shapes` and `ridl_syntax::ast::SourceFile::shapes` —
+which yields a named interface and a service's inline shape alike, carrying the
+identity name (the interface's own, or the service's dotted one) so no consumer
+reads the inline shape's empty `Interface.name`, and the owning `Service` so no
+consumer reads its unspecified `Interface.visibility` either (see the section
+above). `DeclIndex` now walks `SourceFile::shapes()` and the inline-shape
+warning spans the service's dotted name;
+`inline_shape_removal_spans_the_service_name` pins that.
 
 ### A non-integer `reserved` literal is accepted and discarded
 

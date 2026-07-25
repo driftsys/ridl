@@ -1276,20 +1276,18 @@ fn tombstones_hold_their_ordinals_in_both_interaction_stores() {
 
     let ir = checked_ir(Path::new("tests/corpus/veh-cluster"), "veh.cluster");
 
+    // `Package::shapes` keys a named interface on its own name and an inline
+    // shape on the owning service's dotted name, so one lookup finds both.
     let named = ir
-        .interfaces
-        .iter()
-        .find(|interface| interface.name == "WheelHistory")
-        .expect("the tombstone interface is in the corpus");
+        .shapes()
+        .find(|shape| shape.name == "WheelHistory")
+        .expect("the tombstone interface is in the corpus")
+        .interface;
     let inline = ir
-        .services
-        .iter()
-        .find(|service| service.name == "veh.cluster.wheels")
-        .and_then(|service| match &service.shape {
-            Some(ridl_ir::v2::service::Shape::Inline(shape)) => Some(shape),
-            _ => None,
-        })
-        .expect("the tombstone inline shape is in the corpus");
+        .shapes()
+        .find(|shape| shape.name == "veh.cluster.wheels")
+        .expect("the tombstone inline shape is in the corpus")
+        .interface;
 
     for (store, interface) in [("interface", named), ("inline shape", inline)] {
         let reserved: Vec<(u32, Option<String>, Option<i64>)> = interface
@@ -1389,14 +1387,8 @@ fn transport_identity_carries_both_arm_spellings() {
 fn contract_clauses_cover_the_guaranteed_expression_subset() {
     let ir = checked_ir(Path::new("tests/corpus/veh-cluster"), "veh.cluster");
     let sources: Vec<String> = ir
-        .services
-        .iter()
-        .filter_map(|service| match &service.shape {
-            Some(ridl_ir::v2::service::Shape::Inline(shape)) => Some(shape),
-            _ => None,
-        })
-        .chain(ir.interfaces.iter())
-        .flat_map(|interface| interface.interactions.iter())
+        .shapes()
+        .flat_map(|shape| shape.interface.interactions.iter())
         .flat_map(|decl| match &decl.kind {
             Some(ridl_ir::v2::decl::Kind::CommandDef(command)) => command.contracts.clone(),
             Some(ridl_ir::v2::decl::Kind::QueryDef(query)) => query.contracts.clone(),
