@@ -12,6 +12,11 @@
 //! or identical, 1 breaking, 2 error (concept note §9.1, ADR-0008 decision 9) —
 //! and never touches `ridlc`'s source→IR boundary beyond compiling each side.
 //!
+//! `ridl test` runs the property suite over a workspace (E2.11a): the range
+//! self-corpora derived from the E1.18 generators, and satisfiability sampling
+//! of every `require` clause. It carries the same 0/1/2 exit contract, with 1
+//! reserved for a self-corpus failure or an evaluation error.
+//!
 //! `ridl baseline` and `ridl check --baseline` are the desk-time half of that
 //! engine (E2.9, general form §6.3): `baseline` publishes one `.ir.json`
 //! snapshot per package, and `check` compares the workspace against those
@@ -23,6 +28,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+
+mod property;
 
 use clap::{Parser, Subcommand};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, render};
@@ -76,6 +83,19 @@ enum Command {
         #[arg(long)]
         frozen: bool,
     },
+    /// Run the property suite over a workspace: the range self-corpora and the
+    /// contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on
+    /// a self-corpus failure or an evaluation error, 2 on a compile error.
+    Test {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Parameter tuples drawn per `require` clause.
+        #[arg(long, default_value_t = 256)]
+        samples: usize,
+        /// Output format for the report.
+        #[arg(long, value_enum, default_value = "text")]
+        format: property::TestFormat,
+    },
     /// Reformat `.typl` and `.ridl` files in place (defaults to the current
     /// directory).
     Fmt {
@@ -127,6 +147,11 @@ fn main() -> ExitCode {
             emit,
             frozen,
         } => finish(ridlc::run_build(&path, &out_dir, &emit, frozen.into())),
+        Command::Test {
+            path,
+            samples,
+            format,
+        } => property::run(&path, samples, format),
         Command::Fmt { path, check } => run_fmt(&path, check),
         Command::Diff {
             old,
