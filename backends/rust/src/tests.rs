@@ -1429,3 +1429,97 @@ fn bytes_named_field_c_header_compiles_with_cc() {
         Err(_) => eprintln!("skipping cc syntax check: cc is not available"),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Identifier totality.
+// ---------------------------------------------------------------------------
+
+/// `ident` is total. A valid typl name can never be empty (typl §2.3), so an
+/// empty string only reaches here from malformed IR — but the backend is fed
+/// by `ridlc::compile`, whose documented contract is that it never panics, and
+/// by the language server, which sees IR lowered from in-progress source. An
+/// empty name therefore lowers to `_` instead of reaching `Ident::new_raw`,
+/// which panics on the empty string.
+#[test]
+fn ident_is_total_on_the_empty_name() {
+    assert_eq!(super::ident("").to_string(), "_");
+}
+
+/// A typl name of `_` keeps its own mangling, so the empty-name placeholder
+/// can never be confused with a real declaration.
+#[test]
+fn ident_maps_the_underscore_name_away_from_the_placeholder() {
+    assert_eq!(super::ident("_").to_string(), "__");
+}
+
+/// The limit of the `_` placeholder, pinned rather than assumed. syn accepts
+/// `_` in *field* position, so the `syn::parse2` gate does not catch an
+/// empty-named field. A derived `Default` usually catches it instead, because
+/// the struct expression it builds has no valid `Member` — but
+/// `defaults::struct_default` returns `None` for a non-constructible field (a
+/// cross-package reference carrying a declared init), and then nothing is left
+/// to catch it and `generate` returns `Ok`.
+///
+/// This is unreachable from source today: `Parser::block_body` announces a
+/// member only on `SyntaxKind::Ident`, so a nameless `FieldDef` is never
+/// built. The test exists so that a change making one reachable shows up here
+/// rather than as silently emitted Rust.
+#[test]
+fn generate_emits_an_empty_field_name_without_a_derivable_default() {
+    let field = v2::Field {
+        name: String::new(),
+        ordinal: 1,
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Named("other.pkg.Thing".to_string())),
+        }),
+        // A declared init on a cross-package reference makes the field
+        // non-constructible, so no `Default` is derived.
+        declared_init: Some("1".to_string()),
+        init: Some(init_value(false, None)),
+        doc: String::new(),
+        labels: Vec::new(),
+        deprecated: None,
+    };
+    let decls = vec![public_decl(
+        "S",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(field)],
+            fixed_layout: false,
+        }),
+    )];
+    let generated = generate(&package("app", decls)).expect("the parse gate does not catch `_`");
+    assert!(
+        generated.rust_source.contains("pub _:"),
+        "expected an emitted `_` field, got:\n{}",
+        generated.rust_source,
+    );
+    assert!(
+        !generated.rust_source.contains("impl Default for S"),
+        "the struct must not derive Default, got:\n{}",
+        generated.rust_source,
+    );
+}
+
+/// An empty-named *declaration* is reported, not emitted. `_` is illegal in a
+/// Rust declaration-name position, so the `syn::parse2` gate in `generate`
+/// turns it into a `GenerateError` — the codegen totality contract
+/// (ADR-0004 §5) holds without the malformed name becoming plausible-looking
+/// output.
+#[test]
+fn generate_reports_an_empty_named_decl_instead_of_panicking() {
+    let decls = vec![public_decl(
+        "",
+        primitive_type(
+            v2::PrimitiveType::Boolean,
+            init_value(true, Some("false")),
+            None,
+        ),
+    )];
+    let error = generate(&package("app", decls)).expect_err("an empty name cannot generate");
+    assert!(
+        error.message.contains("does not parse"),
+        "expected the parse gate to reject `_`, got: {}",
+        error.message,
+    );
+}

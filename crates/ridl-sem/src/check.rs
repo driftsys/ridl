@@ -219,7 +219,12 @@ pub fn check_package(
                 .name()
                 .map(|dotted| significant_text(dotted.syntax()))
                 .unwrap_or_default();
-            if !name.is_empty() && !lowered_services.insert(name) {
+            // A service the parser recovered without a name does not lower,
+            // for the reason a nameless interaction does not: a service is
+            // published at its dotted global name, and the empty address is
+            // not one. The parser has already reported FORM-101, so no second
+            // diagnostic is raised here.
+            if name.is_empty() || !lowered_services.insert(name) {
                 continue;
             }
             services.push(checker.lower_service(&service));
@@ -2668,9 +2673,19 @@ impl Checker<'_> {
         let mut interactions = Vec::new();
         let mut ordinal = 0u32;
         for member in def.members() {
-            if !matches!(member, ast::InterfaceMember::Reserved(_))
-                && let Some(name) = member_name(member.name())
-            {
+            if !matches!(member, ast::InterfaceMember::Reserved(_)) {
+                // A member the parser recovered without a name — FORM-101 (no
+                // name token) or FORM-105 (a family reserved word used as one)
+                // — keeps its ordinal slot but does not lower. An empty
+                // `Decl.name` is not a name any backend can emit, and the
+                // parser has already reported the source defect, so no second
+                // diagnostic is raised here. This is the rule
+                // [`Checker::lower_definition`] already applies to a nameless
+                // top-level declaration.
+                let Some(name) = member_name(member.name()) else {
+                    ordinal += 1;
+                    continue;
+                };
                 let range = member_name_range(member.name(), member.syntax());
                 if reserved.contains(&name) {
                     self.error(
@@ -2914,9 +2929,14 @@ impl Checker<'_> {
         let mut interactions = Vec::new();
         let mut ordinal = 0u32;
         for member in service.inline_members() {
-            if !matches!(member, ast::InterfaceMember::Reserved(_))
-                && let Some(name) = member_name(member.name())
-            {
+            if !matches!(member, ast::InterfaceMember::Reserved(_)) {
+                // The nameless-member rule of the `interface` loop above,
+                // kept behaviorally identical: the slot is consumed, the
+                // member does not lower, and the parser owns the diagnostic.
+                let Some(name) = member_name(member.name()) else {
+                    ordinal += 1;
+                    continue;
+                };
                 let range = member_name_range(member.name(), member.syntax());
                 if reserved.contains(&name) {
                     self.error(
@@ -7861,6 +7881,188 @@ interface VehicleStatus {
         // The losing `event a` re-declaration is excluded, holds no ordinal
         // slot, and the surviving contract stays contiguous.
         assert_eq!(walk, [("a", 1, true), ("b", 2, false)]);
+    }
+
+    // --- nameless members (parse recovery) -------------------------------
+
+    /// The interaction `(name, ordinal)` walk of the first interface.
+    fn interface_walk(checked: &CheckedPackage) -> Vec<(&str, u32)> {
+        checked.ir.interfaces[0]
+            .interactions
+            .iter()
+            .map(|decl| (decl.name.as_str(), decl.ordinal))
+            .collect()
+    }
+
+    /// The interaction `(name, ordinal)` walk of the first service's inline
+    /// shape.
+    fn inline_walk(checked: &CheckedPackage) -> Vec<(&str, u32)> {
+        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
+            panic!("the service must lower to an inline shape");
+        };
+        inline
+            .interactions
+            .iter()
+            .map(|decl| (decl.name.as_str(), decl.ordinal))
+            .collect()
+    }
+
+    /// A member the parser recovered with no name at all (FORM-101) does not
+    /// lower: an empty `Decl.name` is not a name a backend can emit. It still
+    /// consumes its ordinal slot, so every later interaction keeps the ordinal
+    /// its author wrote — the property that makes error recovery and the
+    /// inlay hints usable.
+    #[test]
+    fn form_101_nameless_interaction_does_not_lower_but_holds_its_ordinal() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+            ),
+        );
+        assert_eq!(interface_walk(&checked), [("after", 2)]);
+    }
+
+    /// FORM-105 — a family reserved word (`view` belongs to uxdl, so it is
+    /// reserved but not an active ridl keyword) used as an interaction name.
+    /// The parser holds it in an `ErrorNode` rather than a `Name`, so the
+    /// member reaches the lowering nameless, exactly as FORM-101 does.
+    #[test]
+    fn form_105_reserved_word_interaction_does_not_lower_but_holds_its_ordinal() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface I {{\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+            ),
+        );
+        assert_eq!(interface_walk(&checked), [("after", 2)]);
+    }
+
+    /// The nameless-member rule is the inline service shape's too — the two
+    /// lowering loops must stay behaviorally identical.
+    #[test]
+    fn form_101_nameless_inline_interaction_does_not_lower_but_holds_its_ordinal() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}service veh.a.b {{\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+            ),
+        );
+        assert_eq!(inline_walk(&checked), [("after", 2)]);
+    }
+
+    #[test]
+    fn form_105_reserved_word_inline_interaction_does_not_lower_but_holds_its_ordinal() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}service veh.a.b {{\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+            ),
+        );
+        assert_eq!(inline_walk(&checked), [("after", 2)]);
+    }
+
+    /// No interaction ever lowers with an empty name. A tombstone's `Decl`
+    /// name is empty by design (the retired name lives in `Reserved.name`),
+    /// so the sweep excludes reserved slots.
+    #[test]
+    fn no_nameless_interaction_reaches_the_ir() {
+        for body in [
+            "interface I {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+            "interface I {\n  event : Speed\n  signal after : Speed @10ms\n}\n",
+            "interface I {\n  command (g: Speed)\n  signal after : Speed @10ms\n}\n",
+            "interface I {\n  query (): Speed\n  signal after : Speed @10ms\n}\n",
+            "interface I {\n  final : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
+            "interface I {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+            "service veh.a.b {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+            "service veh.a.b {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
+        ] {
+            let checked = check_ridl("app", &format!("{PRELUDE}{body}"));
+            let mut interactions: Vec<&v2::Decl> = checked
+                .ir
+                .interfaces
+                .iter()
+                .flat_map(|interface| interface.interactions.iter())
+                .collect();
+            for service in &checked.ir.services {
+                if let Some(v2::service::Shape::Inline(inline)) = &service.shape {
+                    interactions.extend(inline.interactions.iter());
+                }
+            }
+            for decl in interactions {
+                if matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_))) {
+                    continue;
+                }
+                assert!(
+                    !decl.name.is_empty(),
+                    "an empty-named interaction reached the IR from: {body}",
+                );
+            }
+        }
+    }
+
+    /// A service the parser recovered without a name does not lower either.
+    /// A service is published at its dotted global name, so an empty
+    /// `Service.name` would publish at the empty address — the same defect
+    /// class as an empty `Decl.name`, and reachable from both service forms.
+    /// FORM-101 already reports it, so no second diagnostic is raised.
+    #[test]
+    fn form_101_nameless_service_does_not_lower() {
+        for body in [
+            "service {\n  signal a : Speed @10ms\n}\n",
+            "interface I {\n  signal a : Speed @10ms\n}\nservice : I\n",
+        ] {
+            let checked = check_ridl("app", &format!("{PRELUDE}{body}"));
+            assert!(
+                checked.ir.services.is_empty(),
+                "a nameless service reached the IR from: {body}",
+            );
+            // FORM-101 is the parser's, and it is merged in by
+            // `ridlc::compile`; the checker adds nothing of its own.
+            assert_eq!(codes(&checked), Vec::<&str>::new(), "from: {body}");
+        }
+    }
+
+    /// The guard is on the empty name only — a named service still lowers,
+    /// and a same-package duplicate still lowers once, first-wins.
+    #[test]
+    fn named_services_still_lower_first_wins() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}service veh.a.b {{\n  signal a : Speed @10ms\n}}\nservice veh.a.b {{\n  signal b : Speed @10ms\n}}\n"
+            ),
+        );
+        let names: Vec<&str> = checked
+            .ir
+            .services
+            .iter()
+            .map(|service| service.name.as_str())
+            .collect();
+        assert_eq!(names, ["veh.a.b"]);
+    }
+
+    /// `checked_interface` assigns the same ordinals the lowering does: a
+    /// nameless member consumes its slot in both. The two walks differ only in
+    /// membership — `checked_interface` is an AST view that keeps the nameless
+    /// member so the editor can still hint its slot, while the lowering drops
+    /// it because the IR has no name to carry.
+    #[test]
+    fn checked_interface_agrees_with_the_lowering_on_the_nameless_ordinal() {
+        let source = format!(
+            "{PRELUDE}interface I {{\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}}\n"
+        );
+        let db = RidlDatabase::default();
+        let interface = first_interface(&db, &source);
+        assert_eq!(
+            ordinal_walk(&checked_interface(&interface)),
+            [(String::new(), 1), ("after".to_string(), 2)],
+        );
+        // The surviving member holds the same ordinal on both sides.
+        assert_eq!(
+            check_ridl("app", &source).ir.interfaces[0].interactions[0].ordinal,
+            2,
+        );
     }
 
     // --- services (E2.13, ridl reference §14.5) --------------------------
