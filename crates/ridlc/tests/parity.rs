@@ -114,14 +114,23 @@
 //!   `current_speed` and TypeScript names its members `currentSpeed`, but both
 //!   backends record the *source* name — Rust inside its generated doc comment,
 //!   TypeScript as the member name itself — so no case folding is needed and
-//!   none is done. A backend that renamed an interaction would fail here.
+//!   none is done. What that buys is not the same on both sides, and the
+//!   difference is worth stating rather than glossing: in TypeScript the
+//!   compared name **is** the emitted identifier, so a renamed member fails
+//!   here; in Rust the compared name is read out of doc-comment prose, so
+//!   renaming a method while leaving its doc comment alone is **green** here.
+//!   That case is caught by the Rust backend's own snapshots, not by this file.
 //! - **Where the transport identity is repeated is not asserted.** Rust records
 //!   it once, in the consumer face's doc comment; TypeScript repeats it on both
-//!   faces. This guard asserts the consumer-face record exactly (both backends
-//!   carry it there) and asserts that any provider-face record is one of the
-//!   IR's identities. So a wrong identity fails on either face, and only the
-//!   *repetition* is unasserted. That asymmetry is a doc-comment placement
-//!   choice, not information one backend carries and the other drops.
+//!   faces. The consumer face is where the identity is pinned: it is compared
+//!   interaction by interaction against the IR, so a missing, extra, wrong or
+//!   misattributed identity fails there. The provider face is checked for
+//!   correctness but not for presence — every `(interaction, identity)` pair
+//!   recorded there must be one the IR derives, and a face that records none is
+//!   accepted. That is what makes Rust's single record and TypeScript's
+//!   duplicate record both pass: the repetition is a doc-comment placement
+//!   choice, not information one backend carries and the other drops, and
+//!   asserting it would freeze a cosmetic decision into a class-level guard.
 //!
 //! # Reading the generated source
 //!
@@ -270,10 +279,16 @@ fn timing_mode(mode: i32) -> String {
     .to_string()
 }
 
+/// The canonical spelling of a contract kind. Like [`timing_mode`], the
+/// unresolved case is named rather than folded into a real one: both backends
+/// refuse to generate a kindless clause (`GenerateError`) precisely because
+/// guessing installs the observer at the wrong moment, so silently reading it
+/// as `require` here would be this file making the guess they refuse to.
 fn contract_kind(kind: i32) -> String {
     match v2::ContractKind::try_from(kind).unwrap_or(v2::ContractKind::Unspecified) {
+        v2::ContractKind::Require => "require",
         v2::ContractKind::Ensure => "ensure",
-        _ => "require",
+        v2::ContractKind::Unspecified => "unspecified",
     }
     .to_string()
 }
@@ -285,7 +300,10 @@ fn contract_kind(kind: i32) -> String {
 /// component of a transport identity and the prefix of an observer-stub id, so
 /// it is passed in rather than read from `Interface.name` — which is `""` by
 /// construction for an inline shape (ridl §14.5).
-fn expected_interface(identity: &str, interface: &v2::Interface) -> Expected {
+fn expected_interface(identity: &str, interface: &v2::Interface, kinds: &mut Kinds) -> Expected {
+    if Visibility::of(interface.visibility) == Visibility::PackagePrivate {
+        kinds.package_private_interfaces += 1;
+    }
     let mut expected = Expected {
         identity: identity.to_string(),
         visibility: Visibility::of(interface.visibility),
@@ -340,6 +358,7 @@ fn expected_interface(identity: &str, interface: &v2::Interface) -> Expected {
             // defect on every interface that declares one.
             Some(v2::decl::Kind::FinalDef(_)) => {
                 expected.consumer.push((name, ordinal));
+                kinds.finals += 1;
             }
             // A tombstone generates no member, so it is recorded on the
             // interface's own doc — on the consumer face only, in both backends.
@@ -358,6 +377,30 @@ fn expected_interface(identity: &str, interface: &v2::Interface) -> Expected {
             // A typl declaration nested in an interface is vocabulary, emitted
             // at package level; it is not an interaction and carries no ordinal.
             Some(_) | None => {}
+        }
+    }
+
+    kinds.fallible_queries += expected.transport.len();
+    for (_, tombstone) in &expected.tombstones {
+        match tombstone {
+            Some(_) => kinds.named_tombstones += 1,
+            None => kinds.nameless_tombstones += 1,
+        }
+    }
+    for (_, timing) in &expected.timing {
+        if timing.mode == "strict-periodic" {
+            kinds.strict_periodic_timings += 1;
+        }
+        if timing.min_us.is_none() || timing.max_us.is_none() {
+            kinds.half_open_timings += 1;
+        }
+        if timing.default_applied {
+            kinds.defaulted_timings += 1;
+        }
+    }
+    for stub in &expected.contracts {
+        if stub.uses_result {
+            kinds.result_reading_clauses += 1;
         }
     }
 
@@ -384,7 +427,7 @@ fn expected_timing(spec: &v2::Timing) -> Timing {
 
 /// Every interface a package generates faces for: the named `interface`s, then
 /// the inline shape of every service that declares one (ridl §14.5).
-fn expected_package(ir: &v2::Package) -> BTreeMap<String, Expected> {
+fn expected_package(ir: &v2::Package, kinds: &mut Kinds) -> BTreeMap<String, Expected> {
     let mut out: BTreeMap<String, Expected> = BTreeMap::new();
     let mut insert = |key: String, expected: Expected| {
         assert!(
@@ -397,17 +440,18 @@ fn expected_package(ir: &v2::Package) -> BTreeMap<String, Expected> {
     for interface in &ir.interfaces {
         insert(
             canonical_key(&interface.name),
-            expected_interface(&interface.name, interface),
+            expected_interface(&interface.name, interface, kinds),
         );
     }
     for service in &ir.services {
         if let Some(v2::service::Shape::Inline(inline)) = &service.shape {
+            kinds.inline_service_shapes += 1;
             // Both backends prefix an inline shape's generated name with
             // `Service` and follow it with the dotted segments; the canonical
             // key is that same construction, reduced.
             insert(
                 canonical_key(&format!("Service{}", service.name)),
-                expected_interface(&service.name, inline),
+                expected_interface(&service.name, inline, kinds),
             );
         }
     }
@@ -1017,7 +1061,8 @@ fn corpus_entries() -> Vec<(String, PathBuf)> {
 // The comparison.
 // ==========================================================================
 
-/// How much this guard actually checked, so an empty corpus cannot pass.
+/// How much this guard actually checked, so an empty corpus cannot pass. Each
+/// figure is accumulated once per backend, so it is twice the number of IR facts.
 #[derive(Default)]
 struct Counts {
     interfaces: usize,
@@ -1026,6 +1071,47 @@ struct Counts {
     transport: usize,
     contracts: usize,
     timing: usize,
+}
+
+/// Which **constructs** the corpus still exercises, counted once per IR fact.
+///
+/// [`Counts`] alone is not enough, and the gap is the one this whole file exists
+/// to close. A quantity floor counts facts, not kinds: drop the `internal`
+/// keyword from `internal-shape.ridl` and every total is unchanged, so the guard
+/// stays green over a corpus that no longer contains the construct that
+/// motivated #160. The same holds for the nameless `reserved <n>` form, a
+/// `default_applied` bound, a half-open range, a `final`, and an inline service
+/// shape — several of which have exactly one carrier today, so one edit retires
+/// them.
+///
+/// Each of these therefore gets a floor of its own, and **every floor here was
+/// verified by removing the construct from the corpus and watching this test go
+/// red**. That constraint is why the list is not longer. Three counters that
+/// belong to the same family were considered and left out, because a floor that
+/// cannot fail is the thing this epic has spent its time deleting:
+///
+/// - *a public interface* — an inline service shape takes no `internal`
+///   modifier (ridl §14.5), so it is always public. The counter cannot reach
+///   zero while `inline_service_shapes` is non-zero, which is itself a floor
+///   below.
+/// - *a named `interface`* — every corpus service either references one or
+///   lives in an entry that stops compiling without one, and an entry that stops
+///   compiling clean is caught earlier by [`MUST_COVER`]. There is no corpus
+///   edit that zeroes this counter and still reaches the assertion.
+/// - *a range timing* — implied by `half_open_timings`, since only a range mode
+///   can leave a bound absent.
+#[derive(Default)]
+struct Kinds {
+    package_private_interfaces: usize,
+    inline_service_shapes: usize,
+    named_tombstones: usize,
+    nameless_tombstones: usize,
+    finals: usize,
+    fallible_queries: usize,
+    strict_periodic_timings: usize,
+    half_open_timings: usize,
+    defaulted_timings: usize,
+    result_reading_clauses: usize,
 }
 
 /// Asserts that one backend's generated output carries exactly the facts the IR
@@ -1043,11 +1129,24 @@ fn assert_backend(
     // No face without an interface behind it, and none missing. Set equality
     // rather than containment: a face the IR does not describe is as much a
     // finding as a face the IR describes and the backend did not emit.
-    let rendered_keys: BTreeSet<&String> = rendered.faces.keys().map(|(key, _)| key).collect();
     let expected_keys: BTreeSet<&String> = expected.keys().collect();
+    let rendered_faces: BTreeSet<&String> = rendered.faces.keys().map(|(key, _)| key).collect();
     assert_eq!(
-        rendered_keys, expected_keys,
+        rendered_faces, expected_keys,
         "{where_}: the generated faces and the IR's interfaces are different sets",
+    );
+    // The same equality for the two metadata constants. Looking these up by key
+    // would accept a constant with no interface behind it, where an unexplained
+    // face already fails — an inconsistency with nothing behind it.
+    assert_eq!(
+        rendered.timing.keys().collect::<BTreeSet<_>>(),
+        expected_keys,
+        "{where_}: the generated timing constants and the IR's interfaces are different sets",
+    );
+    assert_eq!(
+        rendered.contracts.keys().collect::<BTreeSet<_>>(),
+        expected_keys,
+        "{where_}: the generated contract constants and the IR's interfaces are different sets",
     );
 
     for (key, want) in expected {
@@ -1107,14 +1206,18 @@ fn assert_backend(
         counts.transport += consumer.transport.len();
 
         // The provider face may repeat it (TypeScript does, Rust does not).
-        // Repetition is not asserted, but anything recorded there must be one of
-        // the IR's identities.
-        let identities: BTreeSet<&String> = want.transport.iter().map(|(_, id)| id).collect();
-        for (interaction, recorded) in &rendered.faces[&(key.clone(), Face::Provider)].transport {
+        // Presence is not asserted — that would freeze a doc-comment placement
+        // choice — but every pair recorded there must be one the IR derives.
+        // Pairs, not values: an identity that is correct for some other
+        // interaction of the same interface is still the wrong identity here.
+        for recorded in &rendered.faces[&(key.clone(), Face::Provider)].transport {
             assert!(
-                identities.contains(recorded),
-                "{at}: the provider face records `{recorded}` as the transport identity of \
-                 `{interaction}`, which is not one of the IR's identities: {identities:?}",
+                want.transport.contains(recorded),
+                "{at}: the provider face records `{}` as the transport identity of `{}`, \
+                 which is not what the IR derives for it: {:?}",
+                recorded.1,
+                recorded.0,
+                want.transport,
             );
         }
 
@@ -1174,13 +1277,14 @@ const MUST_COVER: [&str; 2] = ["services-workspace", "veh-cluster"];
 fn both_backends_carry_every_ir_fact_the_corpus_fixes() {
     let mut covered: BTreeSet<String> = BTreeSet::new();
     let mut totals = Counts::default();
+    let mut kinds = Kinds::default();
 
     for (name, path) in corpus_entries() {
         let Some(packages) = generated_entry(&path) else {
             continue;
         };
         for generated in &packages {
-            let expected = expected_package(&generated.ir);
+            let expected = expected_package(&generated.ir, &mut kinds);
             if !expected.is_empty() {
                 covered.insert(name.clone());
             }
@@ -1212,6 +1316,83 @@ fn both_backends_carry_every_ir_fact_the_corpus_fixes() {
              Covered: {covered:?}",
         );
     }
+    // The kind floors. Counted once per IR fact, not once per backend, because
+    // the question they answer is about the corpus rather than about how much
+    // was compared: does the corpus still contain the construct at all? Each
+    // message names the construct and where it lives, so a corpus edit that
+    // retires the last carrier says what to restore rather than what number
+    // moved.
+    for (present, construct, why) in [
+        (
+            kinds.package_private_interfaces,
+            "an `internal` interface (`veh-cluster/cluster/internal-shape.ridl`)",
+            "the construct that motivated #160. Without one in the corpus, every visibility \
+             assertion in this file compares Public against Public and the pre-#160 defect \
+             replays green",
+        ),
+        (
+            kinds.inline_service_shapes,
+            "a service with an inline shape (ridl §14.5)",
+            "the other interaction store, and the only one whose identity and generated type \
+             name differ — which is exactly what the transport-identity defect turned on",
+        ),
+        (
+            kinds.named_tombstones,
+            "a named tombstone, `reserved someName`",
+            "the form that carries a retired name for `ridl diff` to report",
+        ),
+        (
+            kinds.nameless_tombstones,
+            "a nameless tombstone, `reserved <n>` (`veh-cluster/cluster/evolution.ridl`)",
+            "the other grammatical form (typl §7.4); it lowers with `name: None` and is the \
+             half a backend is likelier to drop",
+        ),
+        (
+            kinds.finals,
+            "a `final` interaction",
+            "the one kind the face rule treats asymmetrically. Without a `final` the consumer \
+             and provider ordinal lists are identical, and the face rule is asserted over two \
+             copies of the same list",
+        ),
+        (
+            kinds.fallible_queries,
+            "a query with an inline `T | E` return",
+            "the only carrier of a synthesized transport identity (ADR-0008 decision 4)",
+        ),
+        (
+            kinds.strict_periodic_timings,
+            "a strict-periodic timing, `@Xms`",
+            "one of the two timing modes (ridl §9)",
+        ),
+        (
+            kinds.half_open_timings,
+            "a half-open timing range",
+            "the only carrier of an absent bound — Rust's `None` against TypeScript's \
+             `undefined`, one of the six normalisations this file declares",
+        ),
+        (
+            kinds.defaulted_timings,
+            "a timing the compiler resolved from the configured default",
+            "the only carrier of `default_applied: true`. \"Untimed\" does not exist beyond \
+             the parser (ridl §9.1), so this flag is how a reader tells a written bound from \
+             a resolved one — and exactly one interaction in the corpus carries it",
+        ),
+        (
+            kinds.result_reading_clauses,
+            "a contract clause that reads `result`",
+            "the only carrier of `uses_result: true`. The flag cannot be recovered from \
+             `source`, so without one the field is asserted as false everywhere and a backend \
+             hardcoding false is green",
+        ),
+    ] {
+        assert!(
+            present > 0,
+            "the corpus no longer contains {construct}, so this guard no longer covers it. \
+             That is {why}. Restore the construct, or delete this floor deliberately and say \
+             in the commit message what stopped being guarded.",
+        );
+    }
+
     // Each figure counts both backends, so it is twice the number of IR facts.
     assert!(
         totals.interfaces >= 16,
