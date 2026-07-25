@@ -50,6 +50,24 @@ error[RIDL-107]: type declaration inside an interface body — typl declarations
 25 │ │   }
    │ ╰───^
 
+error[FORM-101]: expected a return type
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:23
+   │
+16 │   query listLevels(): [Level; 0..8]
+   │                       ^
+
+error[FORM-106]: unknown attribute key `Level`
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:24
+   │
+16 │   query listLevels(): [Level; 0..8]
+   │                        ^^^^^
+
+error[FORM-102]: unexpected token in an attribute block
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:29
+   │
+16 │   query listLevels(): [Level; 0..8]
+   │                             ^
+
 error[RIDL-403]: behaviour, user-interaction, or architecture declaration in ridl context: `view`
   ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary.ridl:7:1
   │
@@ -199,6 +217,36 @@ warning[RIDL-308]: query returns the named result union `NamedResult` — in ret
    │
 30 │   query paged(limit: Level): NamedResult
    │                              ^^^^^^^^^^^
+
+error[FORM-102]: signal payload must be a named type
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:20:23
+   │
+20 │   signal maybeSpeed : Speed? @10ms
+   │                       ^^^^^^
+
+error[FORM-102]: event payload must be a named type
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:23:23
+   │
+23 │   event maybeRaised : Sample? @[1s..2s]
+   │                       ^^^^^^^
+
+error[FORM-102]: command parameter must be a named type or a stream
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:26:28
+   │
+26 │   command takeMaybe(level: Level?)
+   │                            ^^^^^^
+
+error[FORM-102]: final payload must be a named type or an array
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:29:23
+   │
+29 │   final maybeSerial : Serial?
+   │                       ^^^^^^^
+
+error[FORM-102]: command parameter must be a named type or a stream
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:32:26
+   │
+32 │   command takeMap(table: [Level : Sample; 0..8])
+   │                          ^^^^^^^^^^^^^^^^^^^^^^
 
 error[RIDL-141]: service names `Sample`, which is not an interface
    ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:14:34

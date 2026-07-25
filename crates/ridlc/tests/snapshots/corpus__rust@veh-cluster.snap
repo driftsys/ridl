@@ -264,6 +264,10 @@ impl Default for HvacError {
         HvacError::COMPRESSOR_OFF
     }
 }
+/// A declared constant, so a contract clause can reference one. The guaranteed
+/// expression subset admits constants (ridl §13) and nothing in the corpus
+/// exercised that until these members were added.
+pub const MAX_FAN: FanLevel = FanLevel(7);
 /// Where a signal's current value came from (ridl §4.4, §4.5).
 ///
 /// `Init` is the channel's seeded value, before the provider's first
@@ -500,6 +504,67 @@ pub const VEHICLE_STATUS_CONTRACTS: &[ContractStub] = &[
         uses_result: true,
     },
 ];
+/// Retired members in a named interface. Ordinals 2 and 4 can never be
+/// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+/// reserved ordinal 2 (`legacyWheelPhase`) — retired, never reused.
+/// reserved ordinal 4 — retired, never reused.
+/// The consumer face of `WheelHistory` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait WheelHistoryConsumer {
+    /// signal `wheelTicks` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn wheel_ticks(&mut self) -> &mut dyn SignalHandle<FanLevel>;
+    /// signal `wheelTemp` — ordinal 3 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn wheel_temp(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Temperature>;
+    /// signal `wheelSlipRate` — ordinal 5 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn wheel_slip_rate(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Ratio>;
+}
+/// Retired members in a named interface. Ordinals 2 and 4 can never be
+/// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+/// The provider face of `WheelHistory` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait WheelHistoryProvider {
+    /// Publishes `wheelTicks` — signal ordinal 1 (ridl §4).
+    fn publish_wheel_ticks(&mut self, value: FanLevel);
+    /// Publishes `wheelTemp` — signal ordinal 3 (ridl §4).
+    fn publish_wheel_temp(&mut self, value: crate::veh::common::Temperature);
+    /// Publishes `wheelSlipRate` — signal ordinal 5 (ridl §4).
+    fn publish_wheel_slip_rate(&mut self, value: crate::veh::common::Ratio);
+}
+/// Resolved timing for every signal and event of `WheelHistory`, keyed by the source name, in exact microseconds (ridl §9).
+pub const WHEEL_HISTORY_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "wheelTicks",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(100000),
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "wheelTemp",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(1000000),
+            max_us: Some(10000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "wheelSlipRate",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(500000),
+            max_us: Some(5000000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `WheelHistory` as data, in source order, for an observer to install (ridl §13).
+pub const WHEEL_HISTORY_CONTRACTS: &[ContractStub] = &[];
 /// A package-private contract shape: realized inside this package, never part
 /// of the cross-package surface.
 /// The consumer face of `WheelDiagnostics` — what a component that uses this interface calls (ridl §10.1).
@@ -581,6 +646,49 @@ pub const WHEEL_SUMMARY_TIMING: &[(&str, TimingConst)] = &[
 ];
 /// Every `require` and `ensure` clause of `WheelSummary` as data, in source order, for an observer to install (ridl §13).
 pub const WHEEL_SUMMARY_CONTRACTS: &[ContractStub] = &[];
+/// reserved ordinal 2 (`legacyTicks`) — retired, never reused.
+/// reserved ordinal 3 — retired, never reused.
+/// The consumer face of `ServiceVehClusterWheels` — what a component that uses this interface calls (ridl §10.1).
+#[allow(async_fn_in_trait)]
+pub trait ServiceVehClusterWheelsConsumer {
+    /// signal `ticks` — ordinal 1 (ridl §4).
+    /// The channel is never empty: a read before the provider's first publication yields `0`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
+    fn ticks(&mut self) -> &mut dyn SignalHandle<FanLevel>;
+    /// event `slipped` — ordinal 4 (ridl §5).
+    /// An occurrence is not state: there is no last-value cache and no provenance.
+    fn slipped(&mut self) -> &mut dyn EventHandle<FilterState>;
+}
+/// The provider face of `ServiceVehClusterWheels` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+#[allow(async_fn_in_trait)]
+pub trait ServiceVehClusterWheelsProvider {
+    /// Publishes `ticks` — signal ordinal 1 (ridl §4).
+    fn publish_ticks(&mut self, value: FanLevel);
+    /// Raises `slipped` — event ordinal 4 (ridl §5).
+    fn raise_slipped(&mut self, occurrence: FilterState);
+}
+/// Resolved timing for every signal and event of `ServiceVehClusterWheels`, keyed by the source name, in exact microseconds (ridl §9).
+pub const SERVICE_VEH_CLUSTER_WHEELS_TIMING: &[(&str, TimingConst)] = &[
+    (
+        "ticks",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(100000),
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "slipped",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(50000),
+            max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+];
+/// Every `require` and `ensure` clause of `ServiceVehClusterWheels` as data, in source order, for an observer to install (ridl §13).
+pub const SERVICE_VEH_CLUSTER_WHEELS_CONTRACTS: &[ContractStub] = &[];
 /// reserved ordinal 8 (`setEcoMode`) — retired, never reused.
 /// The consumer face of `ServiceVehHvacCabin` — what a component that uses this interface calls (ridl §10.1).
 #[allow(async_fn_in_trait)]
@@ -686,6 +794,27 @@ pub trait ServiceVehHvacCabinConsumer {
     /// final `supportedModes` — ordinal 17 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn supported_modes(&self) -> &Vec<crate::ridl::std::Label>;
+    /// Boolean conjunction.
+    ///
+    /// command `setFan` — ordinal 18 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: level >= 0 && level <= 7
+    async fn set_fan(&self, level: FanLevel);
+    /// Arithmetic over a parameter, and a reference to a declared `const`.
+    ///
+    /// command `trimFan` — ordinal 19 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// require: level + 1 <= 7
+    /// require: level <= MAX_FAN
+    async fn trim_fan(&self, level: FanLevel);
+    /// Arithmetic over `result`.
+    ///
+    /// query `scaledFan` — ordinal 20 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// ensure: result * 2 >= 0
+    async fn scaled_fan(&self) -> FanLevel;
 }
 /// The provider face of `ServiceVehHvacCabin` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
@@ -725,6 +854,12 @@ pub trait ServiceVehHvacCabinProvider {
     /// Handles `getCabinTemp` — query ordinal 15 (ridl §7).
     #[deprecated(note = "use getClimate — this returns only the cabin reading")]
     async fn on_get_cabin_temp(&mut self) -> crate::veh::common::Temperature;
+    /// Handles `setFan` — command ordinal 18 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_set_fan(&mut self, level: FanLevel);
+    /// Handles `trimFan` — command ordinal 19 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_trim_fan(&mut self, level: FanLevel);
+    /// Handles `scaledFan` — query ordinal 20 (ridl §7).
+    async fn on_scaled_fan(&mut self) -> FanLevel;
 }
 /// Resolved timing for every signal and event of `ServiceVehHvacCabin`, keyed by the source name, in exact microseconds (ridl §9).
 pub const SERVICE_VEH_HVAC_CABIN_TIMING: &[(&str, TimingConst)] = &[
@@ -817,6 +952,38 @@ pub const SERVICE_VEH_HVAC_CABIN_CONTRACTS: &[ContractStub] = &[
         params: &[],
         uses_result: true,
     },
+    ContractStub {
+        id: "veh.hvac.cabin.setFan.require[0]",
+        kind: ContractKind::Require,
+        source: "level >= 0 && level <= 7",
+        signals: &[],
+        params: &["level"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.trimFan.require[0]",
+        kind: ContractKind::Require,
+        source: "level + 1 <= 7",
+        signals: &[],
+        params: &["level"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.trimFan.require[1]",
+        kind: ContractKind::Require,
+        source: "level <= MAX_FAN",
+        signals: &[],
+        params: &["level"],
+        uses_result: false,
+    },
+    ContractStub {
+        id: "veh.hvac.cabin.scaledFan.ensure[0]",
+        kind: ContractKind::Ensure,
+        source: "result * 2 >= 0",
+        signals: &[],
+        params: &[],
+        uses_result: true,
+    },
 ];
 /// Every service this package declares: the deployment address and the
 /// interface that answers at it (ridl §11).
@@ -826,6 +993,7 @@ pub const SERVICE_VEH_HVAC_CABIN_CONTRACTS: &[ContractStub] = &[
 /// shape they differ by construction, and the address — not the type
 /// name — is the identity the wire and the observers use.
 pub const SERVICES: &[(&str, &str)] = &[
+    ("veh.cluster.wheels", "ServiceVehClusterWheels"),
     ("veh.cluster.status", "VehicleStatus"),
     ("veh.cluster.standby", "VehicleStatus"),
     ("veh.hvac.cabin", "ServiceVehHvacCabin"),

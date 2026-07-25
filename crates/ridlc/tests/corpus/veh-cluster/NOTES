@@ -27,9 +27,21 @@ and §14.5 needs both service forms exercised.
   bounds, lower-bound-only, upper-bound-only, and one untimed interaction whose
   bounds come from the package `[defaults].timing`. The IR carries resolved
   microsecond bounds in every case, with `default_applied` set only on the last.
-- **Ordinals with a gap.** `reserved setEcoMode` holds ordinal 8 in the inline
-  shape and `reserved resetCounters` holds ordinal 6 in `VehicleStatus`; the
-  surviving interactions carry the gap.
+- **Ordinals with a gap, in both tombstone forms.** `reserved setEcoMode` holds
+  ordinal 8 in the inline shape and `reserved resetCounters` holds ordinal 6 in
+  `VehicleStatus`. `cluster/evolution.ridl` adds the *nameless* form,
+  `reserved <ordinal>`, in a named interface and in an inline shape — the two
+  stores lower through separate loops. The load-bearing consumer is
+  `tools/diff/src/classify.rs::slots`, which folds tombstones into the ordinal
+  sequence so a freed slot never looks free; without that a new interaction
+  reusing a retired wire identity classifies as a clean append.
+- **The whole guaranteed expression subset.** Comparison, boolean connectives,
+  enum access, tuple-field access and duration comparison come from Appendix A
+  and the inline shape; conjunction, arithmetic over a parameter, arithmetic
+  over `result`, and a reference to a declared `const` (`MAX_FAN`) are the three
+  members appended at the end of `veh.hvac.cabin`. They are appended rather than
+  inserted so the ordinals above — and the synthesized transport identity
+  `veh.hvac.cabin#13` — do not move.
 - **Cross-package references.** Appendix A's five imports resolve through the
   workspace member, and `ridl.std` types (`Label`, `Message`, `Timestamp`,
   `Version`) resolve without an import.
@@ -49,6 +61,13 @@ and §14.5 needs both service forms exercised.
   discoverable (the convention `backends/typescript` set), so Node stays
   optional for `cargo test`; the generated-source markers are asserted either
   way, so it never passes by type-checking nothing.
+
+  _Known limitation._ Under a plain `cargo test` libtest captures the skip
+  notice, so a skipped run reports a bare `ok` and is indistinguishable from a
+  checked one without `--nocapture`. This matches the `backends/typescript`
+  precedent and the markers keep the test non-vacuous either way. If it is
+  closed later, the shape is an opt-in `RIDL_REQUIRE_TSC=1` that turns the skip
+  into a failure.
 
 ## Diagnostics the entry draws, and why they are kept
 
@@ -120,6 +139,22 @@ source — from `source.interfaces()` only. An interaction removed from an inlin
 shape therefore produces a RIDL-407 warning with no file, no line and no
 snippet, where the same removal from a named interface falls back to the
 interface name. The fix belongs to `DeclIndex`.
+
+### A non-integer `reserved` literal is accepted and discarded
+
+typl Appendix E defines `reserved = "reserved" ( camelCase_id | int_lit )`, but
+the parser accepts **any** literal in that position (`Parser::reserved_entry`
+falls through to `self.literal()`) and the lowering keeps only integers. So
+`reserved "oldName"`, `reserved true` and `reserved 1.5` compile with **no
+diagnostic at all** and lower to `Reserved { name: None, value: None }`.
+
+The ordinal slot is still held, so the identity-reuse guarantee survives — but
+nothing records *what* was retired, which is what `ridl diff` needs in order to
+report a dangling tombstone (TYPL-211). Input outside the grammar accepted in
+silence is the failure family this corpus exists to find. Pinned by
+`reserved_accepts_ungrammatical_literals_and_discards_them`, which drives
+`compile` directly so the corpus files themselves stay grammatical, and which
+fails with instructions when the parser learns to reject them.
 
 ### Imports bind at package scope, and a repeated import is a hard error
 

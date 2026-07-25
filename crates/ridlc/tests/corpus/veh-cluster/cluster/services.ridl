@@ -40,6 +40,11 @@ error enum HvacError {
   SENSOR_FAULT   = 1
 }
 
+/// A declared constant, so a contract clause can reference one. The guaranteed
+/// expression subset admits constants (ridl §13) and nothing in the corpus
+/// exercised that until these members were added.
+const MAX_FAN : FanLevel = 7
+
 // --- the named-reference form (ridl §14.5) ---
 
 /// The cluster's published vehicle-status contract.
@@ -124,4 +129,25 @@ service veh.hvac.cabin {
 
   /// A collection-typed final.
   final supportedModes : [Label; 0..8]
+
+  // The rest of the guaranteed expression subset (ridl §13). One property per
+  // clause, so a regression names itself. Appended at the end so the ordinals
+  // above — and the synthesized transport identity `veh.hvac.cabin#13` — do
+  // not move.
+
+  /// Boolean conjunction.
+  command setFan(level: FanLevel) [
+    require level >= 0 && level <= 7
+  ]
+
+  /// Arithmetic over a parameter, and a reference to a declared `const`.
+  command trimFan(level: FanLevel) [
+    require level + 1 <= 7
+    require level <= MAX_FAN
+  ]
+
+  /// Arithmetic over `result`.
+  query scaledFan(): FanLevel [
+    ensure result * 2 >= 0
+  ]
 }

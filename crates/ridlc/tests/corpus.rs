@@ -381,8 +381,14 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
 /// means the showcase's source changed shape.
 const SHOWCASE_INCIDENTAL_CODES: &[&str] = &[
     // The interface body cannot hold a `struct`, so the parser reports the
-    // token before the checker reports RIDL-107.
+    // token before the checker reports RIDL-107; the interaction-boundary
+    // narrowings (`narrowing.ridl`) report through it too.
     "FORM-102",
+    // A rejected return type (`narrowing_returns.ridl`). Both this and
+    // FORM-102 are raised from many places, which is why the narrowings have
+    // their own message-level assertion — set equality over codes alone would
+    // not notice one of them starting to accept.
+    "FORM-101",
     // `Serial` carries a `match` pattern, so it has no derivable init — the
     // typl-level statement of the condition RIDL-109 escalates for a signal.
     "TYPL-115",
@@ -485,6 +491,7 @@ fn showcase_pins_every_severity() {
     use std::collections::BTreeMap;
 
     const EXPECTED: &[(&str, Severity)] = &[
+        ("FORM-101", Severity::Error),
         ("FORM-102", Severity::Error),
         ("FORM-106", Severity::Error),
         ("FORM-107", Severity::Error),
@@ -869,6 +876,23 @@ fn services_workspace_composed_compiles_with_rustc() {
 // is weakest exactly where the criterion rests. These proofs close that gap.
 // ==========================================================================
 
+/// The checked IR of the package named `package` in the entry rooted at
+/// `entry`. The snapshots render the same data as JSON; these tests read the
+/// typed form so an assertion names a field rather than a substring.
+fn checked_ir(entry: &Path, package: &str) -> ridl_ir::v2::Package {
+    let mut db = RidlDatabase::default();
+    let std = std_package(&mut db);
+    let workspace = load_workspace(&mut db, entry)
+        .expect("a corpus entry loads")
+        .workspace;
+    let packages: Vec<Package> = workspace.packages(&db).clone();
+    let pkg = packages
+        .iter()
+        .find(|pkg| pkg.name(&db) == package)
+        .unwrap_or_else(|| panic!("the entry has a package named {package}"));
+    check_package(&db, workspace, *pkg, std).ir
+}
+
 /// The generated TypeScript of every package in the entry rooted at `entry`, as
 /// `(package-name, typescript-source)` pairs, in workspace order — the
 /// TypeScript counterpart of [`generated_packages`]. One file per package,
@@ -1102,6 +1126,7 @@ fn internal_on_the_interaction_layer_is_dropped_by_both_backends() {
         "export interface WheelDiagnosticsConsumer",
         "export interface WheelDiagnosticsProvider",
         "export const wheelDiagnosticsTiming",
+        "export const wheelDiagnosticsContracts",
     ] {
         assert!(
             compiled.typescript.contains(leaked),
@@ -1121,4 +1146,292 @@ fn internal_on_the_interaction_layer_is_dropped_by_both_backends() {
                 .contains("export interface WheelSummaryConsumer"),
         "the public `WheelSummary` is the comparison point for `WheelDiagnostics`",
     );
+}
+
+// ==========================================================================
+// Message-level and IR-level pins.
+//
+// The snapshots record everything below, but a snapshot is reviewed by a human
+// and set equality over diagnostic codes is reviewed by a machine that cannot
+// tell two FORM-102s apart. These tests name the property each construct is in
+// the corpus for, so a regression reports which guarantee broke rather than
+// which bytes changed.
+// ==========================================================================
+
+/// The interaction boundary narrows the typl type surface: optional in any
+/// interaction position, a map in any position, and a collection in return
+/// position are all rejected. E5's function signatures and E7's registry
+/// inherit that rule, and it had no corpus instance before `narrowing.ridl`.
+///
+/// Asserted on the messages, not the codes. These paths report FORM-101 and
+/// FORM-102, both of which the showcase raises from several other places, so
+/// the set-equality guard cannot see one of them starting to accept — which is
+/// precisely the silent-acceptance direction.
+#[test]
+fn showcase_pins_the_interaction_boundary_narrowings() {
+    let rendered = compile_entry(Path::new("tests/corpus/ridl-diag-showcase")).diagnostics;
+
+    for (construct, expected) in [
+        (
+            "optional signal payload",
+            "error[FORM-102]: signal payload must be a named type",
+        ),
+        (
+            "optional event payload",
+            "error[FORM-102]: event payload must be a named type",
+        ),
+        (
+            "optional command parameter",
+            "error[FORM-102]: command parameter must be a named type or a stream",
+        ),
+        (
+            "optional final payload",
+            "error[FORM-102]: final payload must be a named type or an array",
+        ),
+        // The map parameter shares the command-parameter message; the count
+        // assertion below is what distinguishes the two occurrences.
+        (
+            "map command parameter",
+            "error[FORM-102]: command parameter must be a named type or a stream",
+        ),
+        (
+            "collection return type",
+            "error[FORM-101]: expected a return type",
+        ),
+    ] {
+        assert!(
+            rendered.contains(expected),
+            "the interaction boundary must still reject a {construct}: `{expected}` is gone from \
+             the showcase diagnostics",
+        );
+    }
+
+    // Two command parameters are rejected — the optional one and the map one.
+    // Without this the optional case could start being accepted and the map
+    // case would keep the message alive.
+    assert_eq!(
+        rendered
+            .matches("error[FORM-102]: command parameter must be a named type or a stream")
+            .count(),
+        2,
+        "both the optional and the map command parameter must be rejected",
+    );
+}
+
+/// A `reserved` tombstone holds its ordinal for ever, in both the named-form
+/// (`reserved legacyWheelPhase`) and the nameless form (`reserved 4`), and in
+/// both interaction stores — a named `interface` and a service's inline shape,
+/// which lower through separate loops.
+///
+/// The load-bearing consumer is `tools/diff/src/classify.rs::slots`, which
+/// folds tombstones into the ordinal sequence so a freed slot never looks free.
+/// Without that, a new interaction reusing a retired wire identity classifies
+/// as a clean append — the identity-reuse guarantee a registry gate rests on.
+/// The assertion here is on the *gap*: the interaction after two tombstones
+/// must carry ordinal 5, not ordinal 3.
+#[test]
+fn tombstones_hold_their_ordinals_in_both_interaction_stores() {
+    use ridl_ir::v2::decl::Kind;
+
+    let ir = checked_ir(Path::new("tests/corpus/veh-cluster"), "veh.cluster");
+
+    let named = ir
+        .interfaces
+        .iter()
+        .find(|interface| interface.name == "WheelHistory")
+        .expect("the tombstone interface is in the corpus");
+    let inline = ir
+        .services
+        .iter()
+        .find(|service| service.name == "veh.cluster.wheels")
+        .and_then(|service| match &service.shape {
+            Some(ridl_ir::v2::service::Shape::Inline(shape)) => Some(shape),
+            _ => None,
+        })
+        .expect("the tombstone inline shape is in the corpus");
+
+    for (store, interface) in [("interface", named), ("inline shape", inline)] {
+        let reserved: Vec<(u32, Option<String>, Option<i64>)> = interface
+            .interactions
+            .iter()
+            .filter_map(|decl| match &decl.kind {
+                Some(Kind::ReservedSlot(slot)) => {
+                    Some((decl.ordinal, slot.name.clone(), slot.value))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            reserved.len(),
+            2,
+            "{store}: both tombstone forms must survive lowering, got {reserved:?}",
+        );
+        assert!(
+            reserved.iter().any(|(_, name, _)| name.is_some()),
+            "{store}: the named form must keep its retired name, got {reserved:?}",
+        );
+        assert!(
+            reserved
+                .iter()
+                .any(|(ordinal, name, value)| name.is_none() && value == &Some(i64::from(*ordinal))),
+            "{store}: the nameless form must keep the ordinal it protects, got {reserved:?}",
+        );
+    }
+
+    // The gap, stated directly: two tombstones sit at ordinals 2 and 4, so the
+    // last live interaction is 5. If a tombstone ever stopped consuming a slot
+    // this would read 3 and a retired wire identity would be reissuable.
+    let last = named
+        .interactions
+        .last()
+        .expect("WheelHistory has interactions");
+    assert_eq!(
+        (last.name.as_str(), last.ordinal),
+        ("wheelSlipRate", 5),
+        "a tombstone must consume an ordinal slot",
+    );
+}
+
+/// The synthesized transport identity of an inline `T | E` return has two
+/// shapes, and a registry keys a wire contract on the string (ADR-0008
+/// decision 4), so both belong in the golden record:
+///
+/// - **bare**, when both arms are declared in the same package;
+/// - **fully qualified**, when they are imported from another package.
+///
+/// The third assertion is the stability property: an import *alias* is a
+/// source-level convenience and must be canonicalized away, so a consumer
+/// cannot change a wire identity by renaming its own import.
+#[test]
+fn transport_identity_carries_both_arm_spellings() {
+    let rust = compile_entry(Path::new("tests/corpus/services-workspace")).rust;
+
+    for (property, identity) in [
+        (
+            "same-package arms stay bare",
+            "transport identity: DoorControl#4:DoorReport|DoorFault",
+        ),
+        (
+            "cross-package arms are fully qualified",
+            "transport identity: fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault",
+        ),
+        (
+            "an import alias is canonicalized away",
+            "transport identity: fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault",
+        ),
+    ] {
+        assert!(
+            rust.contains(identity),
+            "{property}: `{identity}` is not in the generated Rust",
+        );
+    }
+
+    // The alias is genuinely written in source — otherwise the third assertion
+    // above proves nothing about canonicalization.
+    let source = std::fs::read_to_string("tests/corpus/services-workspace/vehicle/publish.ridl")
+        .expect("the publishing member is readable");
+    assert!(
+        source.contains("import fleet.legacy.DoorFault as LegacyFault")
+            && source.contains(": DoorReport | LegacyFault"),
+        "the aliased arm must be written through its alias in source",
+    );
+}
+
+/// The guaranteed expression subset (ridl §13) is exercised end to end.
+/// Comparison, boolean connectives, enum access, tuple-field access and
+/// duration comparison were already in the corpus; conjunction, arithmetic and
+/// a reference to a declared `const` were not. E5.1 restructures
+/// `Contract.source` from canonical text into an expression tree with this
+/// corpus as its regression set, so a form with no instance here is a form that
+/// restructure would land without ever having been exercised.
+#[test]
+fn contract_clauses_cover_the_guaranteed_expression_subset() {
+    let ir = checked_ir(Path::new("tests/corpus/veh-cluster"), "veh.cluster");
+    let sources: Vec<String> = ir
+        .services
+        .iter()
+        .filter_map(|service| match &service.shape {
+            Some(ridl_ir::v2::service::Shape::Inline(shape)) => Some(shape),
+            _ => None,
+        })
+        .chain(ir.interfaces.iter())
+        .flat_map(|interface| interface.interactions.iter())
+        .flat_map(|decl| match &decl.kind {
+            Some(ridl_ir::v2::decl::Kind::CommandDef(command)) => command.contracts.clone(),
+            Some(ridl_ir::v2::decl::Kind::QueryDef(query)) => query.contracts.clone(),
+            _ => Vec::new(),
+        })
+        .map(|contract| contract.source)
+        .collect();
+
+    for (form, needle) in [
+        ("boolean conjunction", "level >= 0 && level <= 7"),
+        ("boolean disjunction", "||"),
+        ("arithmetic over a parameter", "level + 1 <= 7"),
+        ("arithmetic over `result`", "result * 2 >= 0"),
+        ("a reference to a declared `const`", "level <= MAX_FAN"),
+        ("enum member access", "GearPosition.PARK"),
+        ("tuple-field access on `result`", "result.min <= result.max"),
+        ("duration comparison", "window > 0ms"),
+    ] {
+        assert!(
+            sources.iter().any(|source| source.contains(needle)),
+            "the corpus must exercise {form}: no contract clause contains `{needle}`",
+        );
+    }
+}
+
+/// **This test pins a defect, deliberately.**
+///
+/// typl Appendix E defines `reserved = "reserved" ( camelCase_id | int_lit )`,
+/// but the parser accepts *any* literal in that position and the lowering keeps
+/// only integers. `reserved "oldName"`, `reserved true` and `reserved 1.5` are
+/// therefore accepted with **no diagnostic at all** and lower to
+/// `Reserved { name: None, value: None }` — a slot that still holds its ordinal
+/// (so the identity-reuse guarantee survives) but records nothing about what
+/// was retired, which is what `ridl diff` needs to report a dangling tombstone
+/// (TYPL-211).
+///
+/// Input outside the grammar accepted in silence is the failure family this
+/// corpus exists to find, so it is recorded rather than worked around. The
+/// corpus files themselves use only the two grammatical forms; this test drives
+/// `compile` directly so the golden entries stay grammatical.
+///
+/// When the parser learns to reject these, flip the assertions to expect a
+/// diagnostic and update `veh-cluster/NOTES`, section "a non-integer `reserved`
+/// literal is accepted and discarded".
+#[test]
+fn reserved_accepts_ungrammatical_literals_and_discards_them() {
+    for literal in ["\"oldName\"", "true", "1.5"] {
+        let source = format!(
+            "package app\ntype L: integer [0..7]\ninterface I {{\n  signal a : L @1s\n  \
+             reserved {literal}\n  signal b : L @1s\n}}\n"
+        );
+        let output = ridlc::compile("app.ridl", &source);
+
+        let codes: Vec<&str> = output
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect();
+        assert!(
+            codes.is_empty(),
+            "the parser has learned to reject `reserved {literal}` — good. Flip this assertion \
+             and update `veh-cluster/NOTES`. Got: {codes:?}",
+        );
+
+        let slot = output.package.interfaces[0]
+            .interactions
+            .iter()
+            .find_map(|decl| match &decl.kind {
+                Some(ridl_ir::v2::decl::Kind::ReservedSlot(slot)) => Some(slot),
+                _ => None,
+            })
+            .expect("the tombstone lowers");
+        assert_eq!(
+            (slot.ordinal, slot.name.as_deref(), slot.value),
+            (2, None, None),
+            "`reserved {literal}` holds its ordinal but discards what was retired",
+        );
+    }
 }

@@ -254,8 +254,23 @@ export const telemetryContracts = [
 ] as const;
 
 
+// ===== package fleet.legacy =====
+/**
+ * The M1 fleet's door failure set, kept for contracts still on the old wire.
+ */
+export enum DoorFault {
+  STUCK = 0,
+  NO_POWER = 1,
+}
+
+export function initDoorFault(): DoorFault {
+  return DoorFault.STUCK;
+}
+
+
 // ===== package fleet.vehicle =====
 import * as fleet_contracts from './fleet.contracts';
+import * as fleet_legacy from './fleet.legacy';
 
 /**
  * What a signal read is standing on (ridl §4.5). `'init'` — the provider has
@@ -332,6 +347,24 @@ export interface Service_fleet_vehicle_mirrorsConsumer {
    */
   readFold(door: fleet_contracts.DoorId): Promise<fleet_contracts.Percent>;
   readonly mirrorCount: fleet_contracts.DoorId;
+  /**
+   * Cross-package `T | E`: both arms live in `fleet.contracts`, so the
+   * synthesized transport identity carries their fully qualified names.
+   *
+   * @transportIdentity fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readDoor(door: fleet_contracts.DoorId): Promise<Result<fleet_contracts.DoorReport, fleet_contracts.DoorFault>>;
+  /**
+   * The same, with the error arm reached through an import alias. The alias
+   * is a source-level convenience; the transport identity must show the
+   * canonical `fleet.legacy.DoorFault`, because a registry keying on it has
+   * to be stable against how a consumer chose to spell its imports.
+   *
+   * @transportIdentity fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readLegacyDoor(door: fleet_contracts.DoorId): Promise<Result<fleet_contracts.DoorReport, fleet_legacy.DoorFault>>;
 }
 
 /**
@@ -370,6 +403,24 @@ export interface Service_fleet_vehicle_mirrorsProvider {
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readFold(door: fleet_contracts.DoorId): Promise<fleet_contracts.Percent>;
+  /**
+   * Cross-package `T | E`: both arms live in `fleet.contracts`, so the
+   * synthesized transport identity carries their fully qualified names.
+   *
+   * @transportIdentity fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readDoor(door: fleet_contracts.DoorId): Promise<Result<fleet_contracts.DoorReport, fleet_contracts.DoorFault>>;
+  /**
+   * The same, with the error arm reached through an import alias. The alias
+   * is a source-level convenience; the transport identity must show the
+   * canonical `fleet.legacy.DoorFault`, because a registry keying on it has
+   * to be stable against how a consumer chose to spell its imports.
+   *
+   * @transportIdentity fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readLegacyDoor(door: fleet_contracts.DoorId): Promise<Result<fleet_contracts.DoorReport, fleet_legacy.DoorFault>>;
 }
 
 /**

@@ -1559,6 +1559,22 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "reserved": []
         }
       }
+    },
+    {
+      "name": "MAX_FAN",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "A declared constant, so a contract clause can reference one. The guaranteed\nexpression subset admits constants (ridl §13) and nothing in the corpus\nexercised that until these members were added.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanLevel",
+          "value": "7",
+          "regex": null
+        }
+      }
     }
   ],
   "interfaces": [
@@ -1900,6 +1916,122 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       ]
     },
     {
+      "name": "WheelHistory",
+      "visibility": 1,
+      "doc": "Retired members in a named interface. Ordinals 2 and 4 can never be\nreissued; `wheelSlipRate` is ordinal 5, not ordinal 3.",
+      "labels": [],
+      "deprecated": null,
+      "interactions": [
+        {
+          "name": "wheelTicks",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 1,
+          "kind": {
+            "SignalDef": {
+              "payload": "FanLevel",
+              "declared_init": null,
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": 2,
+                "min_us": "100000",
+                "max_us": "1000000",
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 2,
+          "kind": {
+            "ReservedSlot": {
+              "ordinal": 2,
+              "name": "legacyWheelPhase",
+              "value": null
+            }
+          }
+        },
+        {
+          "name": "wheelTemp",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 3,
+          "kind": {
+            "SignalDef": {
+              "payload": "veh.common.Temperature",
+              "declared_init": null,
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": 2,
+                "min_us": "1000000",
+                "max_us": "10000000",
+                "default_applied": false
+              }
+            }
+          }
+        },
+        {
+          "name": "",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 4,
+          "kind": {
+            "ReservedSlot": {
+              "ordinal": 4,
+              "name": null,
+              "value": 4
+            }
+          }
+        },
+        {
+          "name": "wheelSlipRate",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 5,
+          "kind": {
+            "SignalDef": {
+              "payload": "veh.common.Ratio",
+              "declared_init": null,
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": 2,
+                "min_us": "500000",
+                "max_us": "5000000",
+                "default_applied": false
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "WheelDiagnostics",
       "visibility": 2,
       "doc": "A package-private contract shape: realized inside this package, never part\nof the cross-package surface.",
@@ -2014,6 +2146,101 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     }
   ],
   "services": [
+    {
+      "name": "veh.cluster.wheels",
+      "visibility": 1,
+      "doc": "The same two forms inside a service's inline shape.",
+      "labels": [],
+      "deprecated": null,
+      "shape": {
+        "Inline": {
+          "name": "",
+          "visibility": 0,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "interactions": [
+            {
+              "name": "ticks",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 1,
+              "kind": {
+                "SignalDef": {
+                  "payload": "FanLevel",
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "timing": {
+                    "mode": 2,
+                    "min_us": "100000",
+                    "max_us": "1000000",
+                    "default_applied": false
+                  }
+                }
+              }
+            },
+            {
+              "name": "",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 2,
+              "kind": {
+                "ReservedSlot": {
+                  "ordinal": 2,
+                  "name": "legacyTicks",
+                  "value": null
+                }
+              }
+            },
+            {
+              "name": "",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 3,
+              "kind": {
+                "ReservedSlot": {
+                  "ordinal": 3,
+                  "name": null,
+                  "value": 3
+                }
+              }
+            },
+            {
+              "name": "slipped",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 4,
+              "kind": {
+                "EventDef": {
+                  "payload": "FilterState",
+                  "timing": {
+                    "mode": 2,
+                    "min_us": "50000",
+                    "max_us": "500000",
+                    "default_applied": false
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
     {
       "name": "veh.cluster.status",
       "visibility": 1,
@@ -2559,6 +2786,122 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                       }
                     }
                   }
+                }
+              }
+            },
+            {
+              "name": "setFan",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "Boolean conjunction.",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 18,
+              "kind": {
+                "CommandDef": {
+                  "params": [
+                    {
+                      "name": "level",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "FanLevel"
+                        }
+                      }
+                    }
+                  ],
+                  "contracts": [
+                    {
+                      "kind": 1,
+                      "source": "level >= 0 && level <= 7",
+                      "signal_refs": [],
+                      "param_refs": [
+                        "level"
+                      ],
+                      "uses_result": false,
+                      "observer_id": "veh.hvac.cabin.setFan.require[0]"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "trimFan",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "Arithmetic over a parameter, and a reference to a declared `const`.",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 19,
+              "kind": {
+                "CommandDef": {
+                  "params": [
+                    {
+                      "name": "level",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "FanLevel"
+                        }
+                      }
+                    }
+                  ],
+                  "contracts": [
+                    {
+                      "kind": 1,
+                      "source": "level + 1 <= 7",
+                      "signal_refs": [],
+                      "param_refs": [
+                        "level"
+                      ],
+                      "uses_result": false,
+                      "observer_id": "veh.hvac.cabin.trimFan.require[0]"
+                    },
+                    {
+                      "kind": 1,
+                      "source": "level <= MAX_FAN",
+                      "signal_refs": [],
+                      "param_refs": [
+                        "level"
+                      ],
+                      "uses_result": false,
+                      "observer_id": "veh.hvac.cabin.trimFan.require[1]"
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "name": "scaledFan",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "Arithmetic over `result`.",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 20,
+              "kind": {
+                "QueryDef": {
+                  "params": [],
+                  "return_type": {
+                    "kind": {
+                      "Value": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "FanLevel"
+                        }
+                      }
+                    }
+                  },
+                  "contracts": [
+                    {
+                      "kind": 2,
+                      "source": "result * 2 >= 0",
+                      "signal_refs": [],
+                      "param_refs": [],
+                      "uses_result": true,
+                      "observer_id": "veh.hvac.cabin.scaledFan.ensure[0]"
+                    }
+                  ]
                 }
               }
             }

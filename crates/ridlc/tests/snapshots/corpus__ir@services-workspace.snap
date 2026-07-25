@@ -429,6 +429,41 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
   "services": []
 }
 
+// ===== package fleet.legacy =====
+{
+  "name": "fleet.legacy",
+  "decls": [
+    {
+      "name": "DoorFault",
+      "visibility": 1,
+      "is_error": true,
+      "doc": "The M1 fleet's door failure set, kept for contracts still on the old wire.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "EnumDef": {
+          "values": [
+            {
+              "name": "STUCK",
+              "value": 0,
+              "doc": ""
+            },
+            {
+              "name": "NO_POWER",
+              "value": 1,
+              "doc": ""
+            }
+          ],
+          "reserved": []
+        }
+      }
+    }
+  ],
+  "interfaces": [],
+  "services": []
+}
+
 // ===== package fleet.vehicle =====
 {
   "name": "fleet.vehicle",
@@ -468,7 +503,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
     {
       "name": "fleet.vehicle.mirrors",
       "visibility": 1,
-      "doc": "An inline shape in a package that owns none of its vocabulary: every\npayload, parameter and return type here is a cross-package reference\nresolved through the workspace member above.",
+      "doc": "An inline shape in a package that owns none of its vocabulary: every\npayload, parameter and return type here is a cross-package reference\nresolved through the workspace members above.",
       "labels": [],
       "deprecated": null,
       "shape": {
@@ -599,6 +634,72 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                       "Named": "fleet.contracts.DoorId"
                     }
                   }
+                }
+              }
+            },
+            {
+              "name": "readDoor",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "Cross-package `T | E`: both arms live in `fleet.contracts`, so the\nsynthesized transport identity carries their fully qualified names.",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 5,
+              "kind": {
+                "QueryDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "fleet.contracts.DoorId"
+                        }
+                      }
+                    }
+                  ],
+                  "return_type": {
+                    "kind": {
+                      "Fallible": {
+                        "ok": "fleet.contracts.DoorReport",
+                        "err": "fleet.contracts.DoorFault"
+                      }
+                    }
+                  },
+                  "contracts": []
+                }
+              }
+            },
+            {
+              "name": "readLegacyDoor",
+              "visibility": 0,
+              "is_error": false,
+              "doc": "The same, with the error arm reached through an import alias. The alias\nis a source-level convenience; the transport identity must show the\ncanonical `fleet.legacy.DoorFault`, because a registry keying on it has\nto be stable against how a consumer chose to spell its imports.",
+              "labels": [],
+              "deprecated": null,
+              "ordinal": 6,
+              "kind": {
+                "QueryDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "kind": {
+                          "Named": "fleet.contracts.DoorId"
+                        }
+                      }
+                    }
+                  ],
+                  "return_type": {
+                    "kind": {
+                      "Fallible": {
+                        "ok": "fleet.contracts.DoorReport",
+                        "err": "fleet.legacy.DoorFault"
+                      }
+                    }
+                  },
+                  "contracts": []
                 }
               }
             }

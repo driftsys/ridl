@@ -1,8 +1,23 @@
 // The publishing member: it declares no interface of its own and gives global
-// identity to shapes that live in the sibling member. This is the
+// identity to shapes that live in the sibling members. This is the
 // cross-package service path — the checker has to resolve `DoorControl`
 // through the workspace-member import before it can tell a service names an
 // interface (RIDL-141 is what it would say otherwise).
+//
+// It is also where the corpus records what a *cross-package* transport
+// identity looks like. An inline `T | E` return synthesizes its union's
+// transport identity from the enclosing shape, the ordinal, and the two arm
+// references (ADR-0008 decision 4) — and the arm references are written
+// differently depending on where the arms live:
+//
+//   same-package arms  →  DoorControl#4:DoorReport|DoorFault
+//   cross-package arms →  fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|…
+//
+// A registry keys a wire contract on that string, so both shapes belong in the
+// golden record. `fleet.contracts` holds the bare one; the two queries at the
+// end of the inline shape below hold the qualified one, including the property
+// that an *alias* is canonicalized away: `LegacyFault` is written in source and
+// `fleet.legacy.DoorFault` appears in the identity.
 
 package fleet.vehicle
 
@@ -10,6 +25,9 @@ import fleet.contracts.DoorControl
 import fleet.contracts.Telemetry
 import fleet.contracts.DoorId
 import fleet.contracts.Percent
+import fleet.contracts.DoorReport
+import fleet.contracts.DoorFault
+import fleet.legacy.DoorFault as LegacyFault
 
 /// Two services over one imported shape: the front and rear door controllers
 /// are separate system-wide addresses realizing the same contract.
@@ -22,7 +40,7 @@ service fleet.vehicle.telemetry : Telemetry
 
 /// An inline shape in a package that owns none of its vocabulary: every
 /// payload, parameter and return type here is a cross-package reference
-/// resolved through the workspace member above.
+/// resolved through the workspace members above.
 service fleet.vehicle.mirrors {
   signal foldAngle : Percent @[200ms..2s]
   command fold(door: DoorId)
@@ -31,4 +49,14 @@ service fleet.vehicle.mirrors {
     ensure result >= 0.0
   ]
   final mirrorCount : DoorId
+
+  /// Cross-package `T | E`: both arms live in `fleet.contracts`, so the
+  /// synthesized transport identity carries their fully qualified names.
+  query readDoor(door: DoorId): DoorReport | DoorFault
+
+  /// The same, with the error arm reached through an import alias. The alias
+  /// is a source-level convenience; the transport identity must show the
+  /// canonical `fleet.legacy.DoorFault`, because a registry keying on it has
+  /// to be stable against how a consumer chose to spell its imports.
+  query readLegacyDoor(door: DoorId): DoorReport | LegacyFault
 }

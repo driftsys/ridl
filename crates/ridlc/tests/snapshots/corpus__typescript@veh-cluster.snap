@@ -305,6 +305,13 @@ export function initHvacError(): HvacError {
 }
 
 /**
+ * A declared constant, so a contract clause can reference one. The guaranteed
+ * expression subset admits constants (ridl §13) and nothing in the corpus
+ * exercised that until these members were added.
+ */
+export const MAX_FAN = 7;
+
+/**
  * What a signal read is standing on (ridl §4.5). `'init'` — the provider has
  * not published yet and the value is the channel init (ridl §4.4); `'live'` —
  * a published value; `'invalid'` — the channel is in the invalid state
@@ -504,6 +511,81 @@ export const vehicleStatusContracts = [
 ] as const;
 
 /**
+ * Retired members in a named interface. Ordinals 2 and 4 can never be
+ * reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+ *
+ * The consumer face of this interface (ridl §14): what code holding a
+ * binding to it sees. Signals are read and subscribed, events are
+ * subscribed, commands and queries are called, finals are read.
+ */
+export interface WheelHistoryConsumer {
+  /**
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  wheelTicks: SignalHandle<FanLevel>;
+  /**
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  wheelTemp: SignalHandle<veh_common.Temperature>;
+  /**
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  wheelSlipRate: SignalHandle<veh_common.Ratio>;
+}
+
+/**
+ * Retired members in a named interface. Ordinals 2 and 4 can never be
+ * reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
+ *
+ * The provider face of this interface (ridl §14): what code realizing it
+ * implements. Signals and events are published, commands and queries are
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
+ */
+export interface WheelHistoryProvider {
+  /**
+   * @init 0
+   */
+  wheelTicks: { publish(value: FanLevel): void };
+  /**
+   * @init 0
+   */
+  wheelTemp: { publish(value: veh_common.Temperature): void };
+  /**
+   * @init 0
+   */
+  wheelSlipRate: { publish(value: veh_common.Ratio): void };
+}
+
+/**
+ * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
+ * staleness bound, both in microseconds. `defaultApplied` marks a bound the
+ * compiler resolved from the configured default rather than from source —
+ * "untimed" does not exist beyond the parser (ridl §9.1).
+ */
+export const wheelHistoryTiming = {
+  wheelTicks: { mode: 'range', minUs: 100000n, maxUs: 1000000n, defaultApplied: false },
+  wheelTemp: { mode: 'range', minUs: 1000000n, maxUs: 10000000n, defaultApplied: false },
+  wheelSlipRate: { mode: 'range', minUs: 500000n, maxUs: 5000000n, defaultApplied: false },
+} as const;
+
+/**
+ * The require/ensure clauses of this interface, as data (ridl §13). `id` is
+ * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
+ * is the canonical expression text; `signals` and `params` name what the
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
+ */
+export const wheelHistoryContracts = [] as const;
+
+/**
  * A package-private contract shape: realized inside this package, never part
  * of the cross-package surface.
  *
@@ -623,6 +705,78 @@ export const wheelSummaryTiming = {
  * named `resultCode` or a field access `.result`.
  */
 export const wheelSummaryContracts = [] as const;
+
+/**
+ * This is the inline shape of service `veh.cluster.wheels` (ridl §14.5). The
+ * shape is anonymous in source, so its generated name is
+ * `Service_veh_cluster_wheels` — a TypeScript identifier derived from the
+ * service name, because a TypeScript identifier cannot contain dots. The
+ * service's own identity stays the dotted `veh.cluster.wheels`: that is what
+ * the `services` map is keyed by, what a runtime resolves, and what
+ * observer-stub ids are prefixed with. The generated name and the dotted
+ * address are deliberately different things; neither substitutes for the
+ * other.
+ *
+ * The consumer face of this interface (ridl §14): what code holding a
+ * binding to it sees. Signals are read and subscribed, events are
+ * subscribed, commands and queries are called, finals are read.
+ */
+export interface Service_veh_cluster_wheelsConsumer {
+  /**
+   * @init 0
+   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   */
+  ticks: SignalHandle<FanLevel>;
+  slipped: EventHandle<FilterState>;
+}
+
+/**
+ * This is the inline shape of service `veh.cluster.wheels` (ridl §14.5). The
+ * shape is anonymous in source, so its generated name is
+ * `Service_veh_cluster_wheels` — a TypeScript identifier derived from the
+ * service name, because a TypeScript identifier cannot contain dots. The
+ * service's own identity stays the dotted `veh.cluster.wheels`: that is what
+ * the `services` map is keyed by, what a runtime resolves, and what
+ * observer-stub ids are prefixed with. The generated name and the dotted
+ * address are deliberately different things; neither substitutes for the
+ * other.
+ *
+ * The provider face of this interface (ridl §14): what code realizing it
+ * implements. Signals and events are published, commands and queries are
+ * handled. Finals are absent here — they are provisioned externally (ridl
+ * §8) and initiated by neither side (ridl §3), so they appear on the
+ * consumer face only.
+ */
+export interface Service_veh_cluster_wheelsProvider {
+  /**
+   * @init 0
+   */
+  ticks: { publish(value: FanLevel): void };
+  slipped: { publish(occurrence: FilterState): void };
+}
+
+/**
+ * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
+ * staleness bound, both in microseconds. `defaultApplied` marks a bound the
+ * compiler resolved from the configured default rather than from source —
+ * "untimed" does not exist beyond the parser (ridl §9.1).
+ */
+export const service_veh_cluster_wheelsTiming = {
+  ticks: { mode: 'range', minUs: 100000n, maxUs: 1000000n, defaultApplied: false },
+  slipped: { mode: 'range', minUs: 50000n, maxUs: 500000n, defaultApplied: false },
+} as const;
+
+/**
+ * The require/ensure clauses of this interface, as data (ridl §13). `id` is
+ * the observer-stub identity `<Interface>.<interaction>.<kind>[n]`; `source`
+ * is the canonical expression text; `signals` and `params` name what the
+ * expression reads; `usesResult` says whether the clause reads the query's
+ * result, which an `ensure` observer must know before it can be scheduled —
+ * it cannot run until the result exists. That flag is carried rather than
+ * inferred: `source` is text, so matching on it would misread a parameter
+ * named `resultCode` or a field access `.result`.
+ */
+export const service_veh_cluster_wheelsContracts = [] as const;
 
 /**
  * This is the inline shape of service `veh.hvac.cabin` (ridl §14.5). The
@@ -755,6 +909,36 @@ export interface Service_veh_hvac_cabinConsumer {
    * A collection-typed final.
    */
   readonly supportedModes: readonly ridl_std.Label[];
+  /**
+   * Boolean conjunction.
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  setFan(level: FanLevel): Promise<void>;
+  /**
+   * Arithmetic over a parameter, and a reference to a declared `const`.
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  trimFan(level: FanLevel): Promise<void>;
+  /**
+   * Arithmetic over `result`.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  scaledFan(): Promise<FanLevel>;
 }
 
 /**
@@ -877,6 +1061,36 @@ export interface Service_veh_hvac_cabinProvider {
    * @deprecated use getClimate — this returns only the cabin reading
    */
   getCabinTemp(): Promise<veh_common.Temperature>;
+  /**
+   * Boolean conjunction.
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  setFan(level: FanLevel): Promise<void>;
+  /**
+   * Arithmetic over a parameter, and a reference to a declared `const`.
+   *
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  trimFan(level: FanLevel): Promise<void>;
+  /**
+   * Arithmetic over `result`.
+   *
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  scaledFan(): Promise<FanLevel>;
 }
 
 /**
@@ -909,6 +1123,10 @@ export const service_veh_hvac_cabinContracts = [
   { id: 'veh.hvac.cabin.setTarget.require[1]', kind: 'require', source: 'cabinTemp >= -40.0', signals: ['veh.hvac.cabin.cabinTemp'], params: [], usesResult: false },
   { id: 'veh.hvac.cabin.getBounds.require[0]', kind: 'require', source: 'true', signals: [], params: [], usesResult: false },
   { id: 'veh.hvac.cabin.getBounds.ensure[0]', kind: 'ensure', source: 'result.min <= result.max', signals: [], params: [], usesResult: true },
+  { id: 'veh.hvac.cabin.setFan.require[0]', kind: 'require', source: 'level >= 0 && level <= 7', signals: [], params: ['level'], usesResult: false },
+  { id: 'veh.hvac.cabin.trimFan.require[0]', kind: 'require', source: 'level + 1 <= 7', signals: [], params: ['level'], usesResult: false },
+  { id: 'veh.hvac.cabin.trimFan.require[1]', kind: 'require', source: 'level <= MAX_FAN', signals: [], params: ['level'], usesResult: false },
+  { id: 'veh.hvac.cabin.scaledFan.ensure[0]', kind: 'ensure', source: 'result * 2 >= 0', signals: [], params: [], usesResult: true },
 ] as const;
 
 /**
@@ -921,6 +1139,7 @@ export const service_veh_hvac_cabinContracts = [
  * faces of an entry named `Foo` are `FooConsumer` and `FooProvider`.
  */
 export const services = {
+  'veh.cluster.wheels': { interface: 'Service_veh_cluster_wheels' },
   'veh.cluster.status': { interface: 'VehicleStatus' },
   'veh.cluster.standby': { interface: 'VehicleStatus' },
   'veh.hvac.cabin': { interface: 'Service_veh_hvac_cabin' },

@@ -15,6 +15,16 @@ Two members, because one package cannot provoke everything:
   `diag.showcase.duplicate`, because the service catalog is a workspace-wide
   namespace and RIDL-140 cannot be provoked from a single package.
 
+`main/narrowing.ridl` and `main/narrowing_returns.ridl` cover what typl shapes
+may cross an interaction boundary — optional in any interaction position, a map
+in any position, a collection in return position. They report FORM-101 and
+FORM-102, which the set-equality guard raises from several other places and so
+cannot tell apart, which is why
+`showcase_pins_the_interaction_boundary_narrowings` asserts each *message*
+individually. The rule is inherited by E5's function signatures and E7's
+registry, so a position that quietly started accepting one of these would
+otherwise go unnoticed.
+
 `main/inline_shape.ridl` is the exception to "one file per family": it re-provokes
 RIDL-201, RIDL-301, RIDL-302 and RIDL-308 from inside a service's *inline* shape.
 Those four are already covered from a named `interface`; provoking them a second
@@ -73,6 +83,15 @@ behaves, so the snapshot pins the behaviour rather than hiding it.
   deliberate and documented at the emission site (a dropped manifest error
   would be worse than an unanchored one), but the rendered result reads oddly
   and is worth revisiting when manifest spans exist.
+- **A rejected return type reports the wrong thing and cascades — a defect to
+  fix.** A shape the interaction boundary refuses in *parameter* position gets a
+  description-first message naming what is allowed ("command parameter must be a
+  named type or a stream"). The same refusal in *return* position gets
+  `FORM-101: expected a return type`, which says nothing about what is allowed,
+  and the parser then reads the rest of the member as an attribute block —
+  `narrowing_returns.ridl` shows one collection return turning into a
+  FORM-102 plus a FORM-106 "unknown attribute key `Level`". Worth its own issue
+  alongside the TYPL-006 and `is_top_level_start` findings.
 - **RIDL-405 is emitted once per participating query, not once per error
   type.** Three queries share `SharedFault`, so the note appears three times
   with the same message. The count is the lint's design, not a defect; it is

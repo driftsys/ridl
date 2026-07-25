@@ -247,6 +247,20 @@ pub const TELEMETRY_CONTRACTS: &[ContractStub] = &[
 ];
 
 
+// ===== package fleet.legacy =====
+/// The M1 fleet's door failure set, kept for contracts still on the old wire.
+#[repr(i64)]
+pub enum DoorFault {
+    STUCK = 0,
+    NO_POWER = 1,
+}
+impl Default for DoorFault {
+    fn default() -> Self {
+        DoorFault::STUCK
+    }
+}
+
+
 // ===== package fleet.vehicle =====
 /// Where a signal's current value came from (ridl §4.4, §4.5).
 ///
@@ -352,6 +366,28 @@ pub trait ServiceFleetVehicleMirrorsConsumer {
     /// final `mirrorCount` — ordinal 4 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn mirror_count(&self) -> &crate::fleet::contracts::DoorId;
+    /// Cross-package `T | E`: both arms live in `fleet.contracts`, so the
+    /// synthesized transport identity carries their fully qualified names.
+    ///
+    /// query `readDoor` — ordinal 5 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// transport identity: fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault
+    async fn read_door(
+        &self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::contracts::DoorFault>;
+    /// The same, with the error arm reached through an import alias. The alias
+    /// is a source-level convenience; the transport identity must show the
+    /// canonical `fleet.legacy.DoorFault`, because a registry keying on it has
+    /// to be stable against how a consumer chose to spell its imports.
+    ///
+    /// query `readLegacyDoor` — ordinal 6 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    /// transport identity: fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault
+    async fn read_legacy_door(
+        &self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::legacy::DoorFault>;
 }
 /// The provider face of `ServiceFleetVehicleMirrors` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
@@ -365,6 +401,16 @@ pub trait ServiceFleetVehicleMirrorsProvider {
         &mut self,
         door: crate::fleet::contracts::DoorId,
     ) -> crate::fleet::contracts::Percent;
+    /// Handles `readDoor` — query ordinal 5 (ridl §7).
+    async fn on_read_door(
+        &mut self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::contracts::DoorFault>;
+    /// Handles `readLegacyDoor` — query ordinal 6 (ridl §7).
+    async fn on_read_legacy_door(
+        &mut self,
+        door: crate::fleet::contracts::DoorId,
+    ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::legacy::DoorFault>;
 }
 /// Resolved timing for every signal and event of `ServiceFleetVehicleMirrors`, keyed by the source name, in exact microseconds (ridl §9).
 pub const SERVICE_FLEET_VEHICLE_MIRRORS_TIMING: &[(&str, TimingConst)] = &[

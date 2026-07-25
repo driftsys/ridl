@@ -16,7 +16,7 @@ warning[RIDL-308]: query returns the named result union `FaultPageResult` — in
    │                                           ^^^^^^^^^^^^^^^
 
 warning[RIDL-100]: event without a timing annotation — the default [200000us..2000000us] is applied
-   ┌─ tests/corpus/veh-cluster/cluster/services.ridl:78:9
+   ┌─ tests/corpus/veh-cluster/cluster/services.ridl:83:9
    │
-78 │   event filterClogged : FilterState
+83 │   event filterClogged : FilterState
    │         ^^^^^^^^^^^^^
