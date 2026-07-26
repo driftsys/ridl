@@ -838,8 +838,9 @@ second channel anywhere in the family.
 ## 11. Tuples
 
 A tuple is an anonymous composite of **named** fields used inline — as struct
-fields at the typl layer; higher profiles additionally use tuples as interaction
-parameters and query returns.
+fields at the typl layer; higher profiles additionally use tuples as query
+returns (ridl §7.1). A tuple is not an interaction parameter type: a parameter
+is a named type or a stream (ridl §6.1, §7.1).
 
 ```ridl
 struct SensorBounds {

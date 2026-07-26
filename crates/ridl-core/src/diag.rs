@@ -232,9 +232,11 @@ impl DiagCode {
     /// package level (ridl §14.1, §16.1). Emitted by the checker (E2 task 5)
     /// from the parser's recovered ErrorNode.
     pub const RIDL_107: DiagCode = DiagCode("RIDL-107");
-    /// A range annotation `@[X..X]` whose bounds are equal — equivalent to the
-    /// strict-periodic `@Xms` (ridl §9.2, §16.1). Warning. Emitted by the
-    /// checker (E2 task 9).
+    /// A range annotation `@[X..X]` whose bounds are equal — a degenerate
+    /// range, the rate floor equal to its staleness bound, on a `signal` and an
+    /// `event` alike (ridl §9.2, §16.1; ADR-0008 decision 17). Not a spelling
+    /// of the strict-periodic `@Xms`, which is a separate `TimingMode`.
+    /// Warning. Emitted by the checker (E2 task 9).
     pub const RIDL_108: DiagCode = DiagCode("RIDL-108");
     /// Signal payload type has no derivable init value and no `= value`
     /// override (ridl §4.4, §16.1). Emitted by the checker (E2 task 5).

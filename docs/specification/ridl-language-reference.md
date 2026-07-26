@@ -381,8 +381,9 @@ command uploadFirmware(data: <FwBlock>)
 
 ### 6.1 Rules
 
-- Parameters are named typl types; tuples of parameters as in typl §11; stream
-  `<T>` permitted on parameters
+- Parameters are named typl types; stream `<T>` permitted on parameters. A tuple
+  is not a parameter type — pass a named `struct` (a tuple _is_ a query return
+  type, §7.1)
 - Always returns `()` — writing a return type is an error (RIDL-104); if the
   caller needs a result or a completion signal, use `query`
 - **No functional-error channel, by construction**: a command has no return, so
@@ -620,7 +621,7 @@ Rules:
 - A query with no success path is an error (RIDL-303): a bare error type in
   return position, or an `error`-typed left arm of an inline `T | E`
 - `command` remains failure-free **by construction**: it has no return, so there
-  is nowhere to put a result union — nothing to ban. A command's observable
+  is nowhere for a fallible return — nothing to ban. A command's observable
   failure is state, like every other command outcome: publish a fault signal
   (§6.1)
 - Because errors are ordinary vocabulary, **pub/sub can carry them**:
@@ -686,7 +687,8 @@ degraded modes, health monitoring, halt management — is a
 **safety/quality-management concern**, specified separately and never expressed
 in ridl syntax. The division of labour:
 
-- **ridl declares** the functional failure vocabulary (result unions) and the
+- **ridl declares** which failures a fallible query can answer with (the error
+  arm of its `T | E` return — the vocabulary itself is typl's, §10.1) and the
   bounds whose violation _defines_ failure (typl constraints,
   `require`/`ensure`, freshness)
 - **the runtime detects** every failure across all three strata — quarantines,

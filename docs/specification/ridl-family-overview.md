@@ -194,17 +194,22 @@ By home; see each reference for full statements.
 ## 7. Shared Diagnostic Namespaces — `FORM-` and `MANI-`
 
 Diagnostic codes are namespaced and grouped by hundreds, never renumbered and
-never reused (typl §16). Four namespaces are in play. Two belong to a profile
-and are tabulated in that profile's reference — `TYPL-` in typl §16, `RIDL-` in
-ridl §16. The two below belong to no profile: `FORM-` is the **shared family
-grammar** (surface syntax, plus the attribute-block rules of general form §4.3)
-and `MANI-` is the **manifest and distribution layer** (ADR-0002). Both are
-tabulated once here and cited from each reference rather than restated — a
-per-language copy would be five copies of one list.
+never reused (typl §16). **One namespace per profile**, tabulated in that
+profile's own reference: `TYPL-` (typl §16), `RIDL-` (ridl §16), `UXDL-` (uxdl
+§15), `RMDL-` (rmdl §11), `RSDL-` (rsdl §12). Of those five, `TYPL-` and `RIDL-`
+are implemented in the shipped toolchain; the other three are specified ahead of
+their layers.
 
-`crates/ridl-core/src/diag.rs` is the single source of truth these tables
-mirror; `FORM_CATALOG` and `MANI_CATALOG` there carry the same codes,
-severities, and summaries.
+The two namespaces below belong to no profile. `FORM-` is the **shared family
+grammar** — surface syntax, plus the attribute-block rules of general form §4.3
+— and `MANI-` is the **manifest and distribution layer** (ADR-0002). Both are
+tabulated once here and cited from each reference rather than restated: a
+per-language copy would be five copies of one list, drifting apart as codes are
+added.
+
+`crates/ridl-core/src/diag.rs` is the single source of truth these two tables
+mirror; `FORM_CATALOG` and `MANI_CATALOG` there carry the same codes and
+severities.
 
 ### 7.1 Surface grammar (`FORM-`)
 
