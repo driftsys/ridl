@@ -917,7 +917,11 @@ fn map_init(ctx: &Ctx, map: &v2::MapType, slot: &Slot) -> Option<String> {
 }
 
 /// `Array.from({ length: n }, () => body)` — the one place this backend emits
-/// an arrow function, so the rule below cannot be missed by a later call site.
+/// an arrow function **expression**, so the rule below cannot be missed by a
+/// later call site. Arrow **types** are a separate matter: [`interact`] writes
+/// two of them into the prelude's handle interfaces
+/// (`subscribe(fn: (value: T, …) => void): () => void`), which are type
+/// annotations with no body and no parse ambiguity to resolve.
 ///
 /// A concise arrow body that starts with `{` is parsed as a **block**, not as
 /// an object literal: `() => { first: x }` is a block holding a labelled

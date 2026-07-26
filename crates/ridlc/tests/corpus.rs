@@ -1078,6 +1078,11 @@ fn veh_cluster_generated_typescript_type_checks() {
             "export const service_veh_hvac_cabinTiming",
             "export const service_veh_hvac_cabinContracts",
             "export const services",
+            // The array-of-tuple init (issue #177). Without this marker the
+            // proof goes quiet if `RawWheelSpan.bursts` is ever dropped from
+            // the corpus: the remaining source still type-checks, so only the
+            // snapshot would move, and `cargo insta accept` would take it.
+            "bursts: Array.from({ length: 2 }, () => ({",
         ],
     );
 }
