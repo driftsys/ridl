@@ -249,8 +249,11 @@ members when two were unreachable at its own date. The dated-evidence rule
 therefore does not cover it, on the precedent the fourth sweep set at decision
 20, so it is corrected rather than left. That defect was found by review of this
 pass, not by the pass, which had opened and rewritten the sentence around it
-without seeing it — the same miss the second and fourth sweeps recorded, in the
-same shape.
+without seeing it. That is the same miss the second and fourth sweeps recorded
+in one sense only — that review of the correction, not the correction, is what
+found it. It is expressly **not** the same in mechanism: the fourth sweep called
+its own the harder case, evidence outside everything the revision touched,
+whereas this one sat in the sentence the pass was editing.
 
 Everything else was re-derived from the source and held: the four catalogue
 counts (`FORM` 13, `TYPL` 39, `RIDL` 31, `MANI` 13) and decision 21's `RIDL-`
@@ -297,9 +300,11 @@ is discharged as of this one, which the discharge note at decision 19 records.
 _And this round damaged the document too._ A draft of this note claimed the
 sixth round was the first in which a correction did not, and review of the pass
 falsified that before it merged. It found four false or materially incomplete
-sentences in the three paragraphs above — the paragraphs whose whole job is to
-be exact. The superlative was false twice over. "Which nothing had recorded" was
-false: driftsys/ridl#172 carries the item and quotes decision 11's wording. The
+sentences in this note's own summary — three in the paragraphs just above, and
+the redirect's stated reason in the dated extension beside the cross-check,
+about 180 lines earlier. These are the sentences whose whole job is to be exact.
+The superlative was false twice over. "Which nothing had recorded" was false:
+driftsys/ridl#172 carries the item and quotes decision 11's wording. The
 redirect above was given a reason that does not hold — that a reader would find
 nothing at driftsys/ridl#172 — when the true reason is that the entry there
 points onward. And driftsys/ridl#184's contribution was halved, which is how the
@@ -308,10 +313,29 @@ rather than false: this note called a dated sentence "corrected" when the
 discharge leaves it verbatim, and it did not disclose that one of the three
 cross-check sentences was edited in place. None is counted in the total, on the
 third sweep's precedent that a round's own damage caught before it ships is not
-a pre-existing stale sentence. The rate the note above reports is therefore
-unbroken at six rounds: every round that corrected this document also damaged
-it, and the correction's own review is what has caught it every time since the
-fourth.
+a pre-existing stale sentence.
+
+_The rate, stated as a count over named rounds rather than as a rule about all
+of them._ **Five of the six rounds damaged this document while correcting it:
+rounds 1, 2, 3, 4 and 6.** Round 5 is the exception, and round 6 is what
+establishes it, having found nothing written by the round before it. Of the
+five, round 3 caught three of its own before shipping and shipped a fourth
+unfound; rounds 1, 2 and 6 were caught by review of their own commit; what
+rounds 3 and 4 shipped was caught by the round that followed each. The fifth
+sweep's "across five sweeps, every round that corrected this document also
+damaged it" is dated to that round, which could not yet know whether it had
+damaged the document itself, and is left as written; this list is the current
+record.
+
+An earlier draft of this paragraph said "every round", which is false at
+round 5. **Three claims of this family have now failed inside this single
+round**, and naming them is more useful than another rule: that one; "the first
+round in which that figure has not moved", false because round 3 also left the
+figure still; and its scoped replacement, false because round 1 also drew most
+of its findings from outside the document. The remedy was the same each time and
+is applied here — name the rounds. A list carries the same information as the
+rule it replaces, and a later round extends it rather than having to re-check
+it.
 
 _Which sentences are dated, and which are live._ Every sentence here is one of
 two kinds, and **the split does not follow the paragraph headings**. A sentence
