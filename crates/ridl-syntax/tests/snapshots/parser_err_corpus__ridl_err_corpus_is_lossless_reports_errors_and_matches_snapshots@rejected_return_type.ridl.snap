@@ -1,0 +1,82 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/rejected_return_type.ridl
+---
+SourceFile@0..136
+  PackageDecl@0..15
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..15
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..15 "err"
+  Whitespace@15..17 "\n\n"
+  InterfaceDef@17..135
+    InterfaceKw@17..26 "interface"
+    Whitespace@26..27 " "
+    Name@27..33
+      Ident@27..33 "Broken"
+    Whitespace@33..34 " "
+    LBrace@34..35 "{"
+    Whitespace@35..38 "\n  "
+    QueryDef@38..72
+      QueryKw@38..43 "query"
+      Whitespace@43..44 " "
+      Name@44..54
+        Ident@44..54 "listLevels"
+      ParamList@54..56
+        LParen@54..55 "("
+        RParen@55..56 ")"
+      Whitespace@56..57 " "
+      Colon@57..58 ":"
+      Whitespace@58..59 " "
+      ErrorNode@59..72
+        LBracket@59..60 "["
+        Ident@60..65 "Level"
+        Semicolon@65..66 ";"
+        Whitespace@66..67 " "
+        IntNumber@67..68 "0"
+        DotDot@68..70 ".."
+        IntNumber@70..71 "8"
+        RBracket@71..72 "]"
+    Whitespace@72..75 "\n  "
+    QueryDef@75..104
+      QueryKw@75..80 "query"
+      Whitespace@80..81 " "
+      Name@81..91
+        Ident@81..91 "alsoBroken"
+      ParamList@91..93
+        LParen@91..92 "("
+        RParen@92..93 ")"
+      Whitespace@93..94 " "
+      Colon@94..95 ":"
+      Whitespace@95..96 " "
+      ErrorNode@96..98
+        IntNumber@96..98 "42"
+      Whitespace@98..99 " "
+      Timing@99..104
+        At@99..100 "@"
+        Duration@100..104 "10ms"
+    Whitespace@104..107 "\n  "
+    SignalDef@107..133
+      SignalKw@107..113 "signal"
+      Whitespace@113..114 " "
+      Name@114..119
+        Ident@114..119 "speed"
+      Whitespace@119..120 " "
+      Colon@120..121 ":"
+      Whitespace@121..122 " "
+      PathType@122..127
+        QualifiedName@122..127
+          Ident@122..127 "Speed"
+      Whitespace@127..128 " "
+      Timing@128..133
+        At@128..129 "@"
+        Duration@129..133 "10ms"
+    Whitespace@133..134 "\n"
+    RBrace@134..135 "}"
+  Whitespace@135..136 "\n"
+errors:
+  FORM-101 59..60 a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)
+  FORM-101 96..98 a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)

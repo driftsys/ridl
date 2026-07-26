@@ -41,10 +41,10 @@
 //! final; an init value parses on event and final; a stream `<T>` parses in
 //! every type position, including signal/event payloads and struct fields;
 //! a typl definition inside an interface body whose `}` still lies ahead
-//! recovers into one body-local `ErrorNode` (E2 task 5 attaches RIDL-107
-//! from its leading keyword), while a body with no `}` ahead reports an
-//! unclosed `{` and keeps the declarations that follow it.
-//! The rejections are checker scope (RIDL-104/-106/-107/-201/-301, E2
+//! recovers into one body-local `ErrorNode` and draws **RIDL-107** here,
+//! where the keyword is recognised, while a body with no `}` ahead reports
+//! an unclosed `{` and keeps the declarations that follow it.
+//! The other rejections are checker scope (RIDL-104/-106/-201/-301, E2
 //! task 5).
 //!
 //! # Profile boundary
@@ -220,11 +220,22 @@ fn is_interaction_start(kind: SyntaxKind) -> bool {
     )
 }
 
+/// Where recovery from a rejected return type stops: the interface-body sync
+/// set plus `@`, so a timing annotation written after a broken return type is
+/// still parsed into its own node and still draws its own diagnostic.
+fn is_return_sync(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::RBrace | SyntaxKind::Comma | SyntaxKind::ReservedKw | SyntaxKind::At
+    ) || is_interaction_start(kind)
+        || is_top_level_start(kind)
+}
+
 /// Whether `kind` is a typl definition keyword. Inside an interface body
 /// whose `}` still lies ahead, these recover into a body-local
 /// [`ErrorNode`](SyntaxKind::ErrorNode) — the ridl reference forbids type
-/// declarations there (§14.1) and reserves RIDL-107 for them (§16.1, checker
-/// scope, E2 task 5). In a body with no `}` ahead they signal an unclosed
+/// declarations there (§14.1) and reserves RIDL-107 for them (§16.1), which
+/// the body loop raises. In a body with no `}` ahead they signal an unclosed
 /// `{` exactly like the remaining top-level keywords, so a genuinely
 /// unclosed interface keeps the declarations that follow it.
 fn is_typl_definition_start(kind: SyntaxKind) -> bool {
@@ -322,6 +333,14 @@ impl<'a> Parser<'a> {
 
     fn at(&self, kind: SyntaxKind) -> bool {
         self.current() == Some(kind)
+    }
+
+    /// Source text of the next significant token, or `""` at end of input —
+    /// for a message that quotes the word the author wrote.
+    fn current_text(&self) -> &'a str {
+        self.tokens
+            .get(self.significant_pos())
+            .map_or("", |token| token.text)
     }
 
     // --- token consumption (feeds the tree, keeps losslessness) ----------
@@ -525,10 +544,18 @@ impl<'a> Parser<'a> {
                     format!("interaction declaration in typl context: `{text}`"),
                 ),
             },
+            // The message names neither "behaviour" nor "user-interaction" nor
+            // "architecture": those are the catalogue's words for the three
+            // profiles, and the author wrote one word, not a taxonomy. What is
+            // wrong is that the word is spoken for; what is allowed is the two
+            // declarations a `.ridl` file makes.
             Profile::Ridl => (
                 "RIDL-403",
                 format!(
-                    "behaviour, user-interaction, or architecture declaration in ridl context: `{text}`"
+                    "`{text}` is reserved by another profile of the family, so it cannot start a \
+                     declaration here — a `.ridl` file declares `interface` and `service`. Move \
+                     the declaration to the profile that owns the word, or, if `{text}` was meant \
+                     as a name, choose one the family does not reserve (ridl reference §16.4)"
                 ),
             ),
         };
@@ -733,7 +760,7 @@ impl<'a> Parser<'a> {
     /// `InterfaceDef = 'internal'? 'error'? 'interface' Name '{' (members
     /// ','?)* '}'` — an interface body holds interactions and `reserved`
     /// tombstones only (ridl reference §14.1); a type declaration inside it
-    /// is RIDL-107, checker scope. The body loop is the interaction
+    /// is RIDL-107, raised by the body loop. The body loop is the interaction
     /// counterpart of [`Parser::block_body`]: members are announced by the
     /// five interaction keywords instead of an `Ident`, and those keywords
     /// are the recovery sync points, so garbage inside a body
@@ -747,7 +774,7 @@ impl<'a> Parser<'a> {
             self.builder.finish_node();
             return;
         }
-        self.interface_body();
+        self.interface_body("an interface", "interface");
         self.builder.finish_node();
     }
 
@@ -758,7 +785,12 @@ impl<'a> Parser<'a> {
     /// points, so garbage inside a body resynchronizes at the next
     /// interaction. A `service` inline body runs the same structural pass as
     /// an interface (ridl reference §14.5).
-    fn interface_body(&mut self) {
+    ///
+    /// `noun` and `shape` name the enclosing construct for the RIDL-107
+    /// message — `"an interface"`/`"interface"` or `"a service"`/`"service"`.
+    /// The two callers share this loop, and a reader is told where the stray
+    /// declaration has to move to.
+    fn interface_body(&mut self, noun: &str, shape: &str) {
         loop {
             self.eat_trivia();
             match self.current() {
@@ -781,17 +813,32 @@ impl<'a> Parser<'a> {
                 // interactions and tombstones only (ridl §14.1). When the
                 // body's `}` still lies ahead, the declaration recovers into
                 // a body-local ErrorNode — brace-aware, so a composite body
-                // stays inside it and the members after it keep their place
-                // — for the checker to code as RIDL-107 (E2 task 5). With no
-                // `}` ahead the guard fails and the keyword falls through to
-                // the unclosed-`{` arm below, exactly like the remaining
-                // top-level keywords (`package`, `import`, `internal`,
-                // `error`, `interface`, `service`).
+                // stays inside it and the members after it keep their place.
+                // With no `}` ahead the guard fails and the keyword falls
+                // through to the unclosed-`{` arm below, exactly like the
+                // remaining top-level keywords (`package`, `import`,
+                // `internal`, `error`, `interface`, `service`).
+                //
+                // RIDL-107 is raised here rather than by the checker over the
+                // recovered node. The parser has already recognised exactly
+                // what this is, so the generic FORM-102 "unexpected token in
+                // an interface body" it used to raise was both wrong and a
+                // second diagnostic for one mistake: every RIDL-107 arrived
+                // paired with a contradicting FORM-102 at the same span. The
+                // profile-boundary codes RIDL-403 and TYPL-304 are raised from
+                // the parser for the same reason.
                 Some(kind)
                     if is_typl_definition_start(kind) && self.interface_body_close_ahead() =>
                 {
-                    let (code, message) = self.unexpected_token_diag("in an interface body");
-                    self.error_at_current(code, message);
+                    self.error_at_current(
+                        "RIDL-107",
+                        format!(
+                            "`{}` starts a typl declaration, and {noun} body holds interactions \
+                             and `reserved` tombstones only — move the declaration to package \
+                             level, beside the {shape} (ridl reference §14.1)",
+                            self.current_text(),
+                        ),
+                    );
                     self.recover_definition_in_body();
                 }
                 // An unclosed `{`: the body ran into the next top-level
@@ -831,7 +878,7 @@ impl<'a> Parser<'a> {
             }
             Some(SyntaxKind::LBrace) => {
                 self.bump(); // '{'
-                self.interface_body();
+                self.interface_body("a service", "service");
             }
             _ => self.error_at_current(
                 "FORM-101",
@@ -870,7 +917,7 @@ impl<'a> Parser<'a> {
     /// brace-aware, for an `RBrace` at depth 0 before the end of input or an
     /// unambiguous new-top-level marker (`package`, `import`, `interface`).
     /// Decides the recovery for a typl definition keyword inside a body: a
-    /// body-local ErrorNode when the body closes (RIDL-107, checker scope),
+    /// body-local ErrorNode when the body closes (RIDL-107),
     /// an unclosed-`{` report when it does not. The scan runs through the
     /// definition keywords themselves — several stray declarations inside
     /// one closed body must all recover in place.
@@ -1060,7 +1107,24 @@ impl<'a> Parser<'a> {
                 self.builder.finish_node();
             }
             _ => {
-                self.error_at_current("FORM-101", "expected a return type".to_string());
+                self.error_at_current(
+                    "FORM-101",
+                    "a return type must be a named type, a named-field tuple `(a: A, b: B)`, a \
+                     stream `<T>`, or a fallible `T | E` (ridl reference §7.1)"
+                        .to_string(),
+                );
+                // Consume what stands here into an `ErrorNode` rather than
+                // leaving it for `interaction_annotations`. A rejected return
+                // shape most often starts with `[` — a collection, `[Level;
+                // 0..8]` — and leaving it behind made the annotation parser
+                // read it as this member's attribute block, so one mistake drew
+                // a FORM-102 and a FORM-106 "unknown attribute key `Level`" on
+                // top of the real diagnostic. `@` stays in the sync set so a
+                // timing annotation written after a broken return is still
+                // parsed and still reaches its own check.
+                if self.current().is_some_and(|kind| !is_return_sync(kind)) {
+                    self.recover(is_return_sync);
+                }
             }
         }
     }

@@ -1,0 +1,7 @@
+package veh.err
+
+interface Broken {
+  query listLevels() : [Level; 0..8]
+  query alsoBroken() : 42 @10ms
+  signal speed : Speed @10ms
+}

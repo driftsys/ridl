@@ -25,10 +25,10 @@
 //!   [`crate::init`]. A named type whose init is neither declared nor derivable
 //!   is marked `{ derivable: false }` and reported as TYPL-115 (info).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use ridl_core::db::{InputFile, profile_of_path};
-use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
+use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_ir::v2;
 use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, HasName};
@@ -487,6 +487,35 @@ impl Checker<'_> {
 
     fn error(&mut self, code: DiagCode, range: TextRange, message: String) {
         self.diag(code, Severity::Error, range, message);
+    }
+
+    /// An error with one secondary label, pointing at the declaration the
+    /// reader has to look at to understand the primary one — the shape
+    /// RIDL-140 established for a name collision ("`x` is first declared
+    /// here"). Both spans are in the file being checked.
+    fn error_with_label(
+        &mut self,
+        code: DiagCode,
+        range: TextRange,
+        message: String,
+        label_range: TextRange,
+        label: String,
+    ) {
+        let file = self.file_ids[self.current_file];
+        self.diagnostics.push(Diagnostic {
+            code,
+            severity: Severity::Error,
+            message,
+            primary: Span { file, range },
+            labels: vec![Label {
+                span: Span {
+                    file,
+                    range: label_range,
+                },
+                message: label,
+            }],
+            fixits: Vec::new(),
+        });
     }
 
     pub(crate) fn warning(&mut self, code: DiagCode, range: TextRange, message: String) {
@@ -2717,12 +2746,14 @@ impl Checker<'_> {
     //   streams) with pointed FORM-102 messages;
     // - the `error` modifier parses on `interface` → TYPL-212;
     // - a return type parses on `command` → RIDL-104;
-    // - timing parses on `command`/`query`/`final` → FORM-102 on the
-    //   callables (§16.1 scopes RIDL-106 to `final`), RIDL-106 on `final`;
+    // - timing parses on `command`/`query`/`final` → RIDL-106 on all three:
+    //   one rule (timing belongs to `signal` and `event`, §9), one code;
     // - an attr block parses on `signal`/`event`/`final` → RIDL-106 on
     //   `final`; predicates draw RIDL-301/-302, keys the gf §4.3 allow-list
     //   (FORM-106/-107/-108);
     // - an init value parses on `event` and `final` → FORM-102;
+    // - a typl declaration parses inside an interface or service body →
+    //   RIDL-107, raised by the parser where the keyword is recognised;
     // - a stream `<T>` parses in every type position → RIDL-201 on
     //   signal/event payloads, FORM-102 on `final`, TYPL-301 elsewhere
     //   (struct fields and collections, ridl §12.3), via
@@ -2730,6 +2761,40 @@ impl Checker<'_> {
     // - timing and attrs parse in either order → no separate order rule:
     //   no interaction kind legally carries both, so every wrong-order
     //   combination already draws its kind rule.
+
+    /// RIDL-401: an interaction re-declaring a name a `reserved` tombstone
+    /// retired. The secondary label points at the tombstone, so the reader does
+    /// not have to search the body for what the message is talking about.
+    fn redeclared_reserved(&mut self, name: &str, range: TextRange, tombstone: TextRange) {
+        self.error_with_label(
+            DiagCode::RIDL_401,
+            range,
+            format!(
+                "`{name}` is retired: this body reserves the name, and a retired name keeps its \
+                 wire identity for ever, so a consumer still holding the old contract would read \
+                 this interaction as the retired one. Give it a different name (ridl §11)"
+            ),
+            tombstone,
+            format!("`{name}` is retired here"),
+        );
+    }
+
+    /// RIDL-402: two interactions of one body declaring the same name. The
+    /// secondary label points at the declaration that wins, because which of
+    /// the two survives is the part a reader cannot guess.
+    fn duplicate_interaction(&mut self, name: &str, range: TextRange, first: TextRange) {
+        self.error_with_label(
+            DiagCode::RIDL_402,
+            range,
+            format!(
+                "`{name}` is already declared in this body — a name identifies one interaction, \
+                 so this second declaration is dropped and takes no slot of its own. Rename it, \
+                 or fold the two into one declaration (ridl §14.1)"
+            ),
+            first,
+            format!("`{name}` is declared here, and this is the one that is kept"),
+        );
+    }
 
     /// The structural rules of one interface (ridl §16, E2 task 5).
     /// Checks one interface and lowers it to its IR shape (ridl §14.0, §11;
@@ -2749,37 +2814,24 @@ impl Checker<'_> {
             );
         }
 
-        // RIDL-107: a typl declaration inside the body. The parser recovers
-        // it into an ErrorNode; the code attaches when the recovered node's
-        // first token is a typl definition keyword.
-        for node in def.syntax().children() {
-            if node.kind() == SyntaxKind::ErrorNode
-                && node
-                    .children_with_tokens()
-                    .filter_map(|element| element.into_token())
-                    .find(|token| !token.kind().is_trivia())
-                    .is_some_and(|token| is_typl_definition_keyword(token.kind()))
-            {
-                self.error(
-                    DiagCode::RIDL_107,
-                    node.text_range(),
-                    "type declaration inside an interface body — typl declarations live at package level"
-                        .to_string(),
-                );
-            }
-        }
+        // RIDL-107 (a typl declaration inside the body) is the parser's: it
+        // recognises the keyword, recovers the declaration into an ErrorNode,
+        // and raises the code there. Raising it a second time here paired every
+        // RIDL-107 with a contradicting FORM-102 at the same span.
 
         // Pre-pass: the reserved tombstone names (ridl §11). Recorded debt
         // (E2 ledger M1): duplicate `reserved` tombstones in one interface
         // are silent here although each occupies an ordinal slot and shifts
         // the later ordinals — whether that deserves a diagnostic (TYPL-211
         // is the struct-side precedent) is decided in a later task.
-        let mut reserved: HashSet<String> = HashSet::new();
+        // The tombstone's own span is kept, not just its name: RIDL-401 points
+        // the reader at the `reserved` entry that retired the name.
+        let mut reserved: HashMap<String, TextRange> = HashMap::new();
         for member in def.members() {
             if let ast::InterfaceMember::Reserved(entry) = &member
                 && let Some(name) = member_name(entry.name())
             {
-                reserved.insert(name);
+                reserved.insert(name, member_name_range(entry.name(), entry.syntax()));
             }
         }
 
@@ -2801,7 +2853,8 @@ impl Checker<'_> {
             })
             .collect();
 
-        let mut seen: HashSet<String> = HashSet::new();
+        // The winner's span is kept so RIDL-402 can point at it.
+        let mut seen: HashMap<String, TextRange> = HashMap::new();
         let mut interactions = Vec::new();
         let mut ordinal = 0u32;
         for member in def.members() {
@@ -2819,22 +2872,14 @@ impl Checker<'_> {
                     continue;
                 };
                 let range = member_name_range(member.name(), member.syntax());
-                if reserved.contains(&name) {
-                    self.error(
-                        DiagCode::RIDL_401,
-                        range,
-                        format!("interaction `{name}` re-declares a `reserved` name"),
-                    );
+                if let Some(tombstone) = reserved.get(&name).copied() {
+                    self.redeclared_reserved(&name, range, tombstone);
                 }
-                if !seen.insert(name.clone()) {
+                if let Some(first) = seen.insert(name.clone(), range) {
                     // RIDL-402: first wins; the loser is excluded from the
                     // lowering, is not re-checked, and holds no ordinal slot
                     // — the same rule `lower_service_inline` applies below.
-                    self.error(
-                        DiagCode::RIDL_402,
-                        range,
-                        format!("duplicate interaction name `{name}`"),
-                    );
+                    self.duplicate_interaction(&name, range, first);
                     continue;
                 }
             }
@@ -2986,7 +3031,11 @@ impl Checker<'_> {
                 self.error(
                     DiagCode::RIDL_141,
                     range,
-                    format!("service names `{written}`, which is not an interface"),
+                    format!(
+                        "`{written}` is not an interface, and a service publishes an interface — \
+                         name the interface that carries these interactions, or give the service \
+                         an inline `{{ … }}` body of its own (ridl §14.5)"
+                    ),
                 );
                 self.canonical_ref(&symbol)
             }
@@ -2994,7 +3043,11 @@ impl Checker<'_> {
                 self.error(
                     DiagCode::RIDL_141,
                     range,
-                    format!("service names unknown shape `{written}` — expected an interface"),
+                    format!(
+                        "`{written}` does not resolve to anything this package can see, and a \
+                         service publishes an interface — declare or import the interface, or \
+                         give the service an inline `{{ … }}` body of its own (ridl §14.5)"
+                    ),
                 );
                 written
             }
@@ -3008,25 +3061,8 @@ impl Checker<'_> {
     /// first-wins) — on the inline body's own §11 ordinal sequence, and
     /// RIDL-107 for a stray typl declaration inside the body.
     fn lower_service_inline(&mut self, service: &ast::ServiceDef) -> v2::Interface {
-        // RIDL-107: a typl declaration inside the body. The parser recovers it
-        // into an ErrorNode; the code attaches when the recovered node's first
-        // token is a typl definition keyword.
-        for node in service.syntax().children() {
-            if node.kind() == SyntaxKind::ErrorNode
-                && node
-                    .children_with_tokens()
-                    .filter_map(|element| element.into_token())
-                    .find(|token| !token.kind().is_trivia())
-                    .is_some_and(|token| is_typl_definition_keyword(token.kind()))
-            {
-                self.error(
-                    DiagCode::RIDL_107,
-                    node.text_range(),
-                    "type declaration inside a service body — typl declarations live at package level"
-                        .to_string(),
-                );
-            }
-        }
+        // RIDL-107 for a stray typl declaration in this body is the parser's —
+        // see [`Checker::lower_interface`].
 
         // An inline shape has no name of its own, so its observer stubs are
         // scoped to the service's dotted global name (E2.5). A service takes no
@@ -3051,16 +3087,17 @@ impl Checker<'_> {
             })
             .collect();
 
-        let mut reserved: HashSet<String> = HashSet::new();
+        let mut reserved: HashMap<String, TextRange> = HashMap::new();
         for member in service.inline_members() {
             if let ast::InterfaceMember::Reserved(entry) = &member
                 && let Some(name) = member_name(entry.name())
             {
-                reserved.insert(name);
+                reserved.insert(name, member_name_range(entry.name(), entry.syntax()));
             }
         }
 
-        let mut seen: HashSet<String> = HashSet::new();
+        // The winner's span is kept so RIDL-402 can point at it.
+        let mut seen: HashMap<String, TextRange> = HashMap::new();
         let mut interactions = Vec::new();
         let mut ordinal = 0u32;
         for member in service.inline_members() {
@@ -3073,19 +3110,11 @@ impl Checker<'_> {
                     continue;
                 };
                 let range = member_name_range(member.name(), member.syntax());
-                if reserved.contains(&name) {
-                    self.error(
-                        DiagCode::RIDL_401,
-                        range,
-                        format!("interaction `{name}` re-declares a `reserved` name"),
-                    );
+                if let Some(tombstone) = reserved.get(&name).copied() {
+                    self.redeclared_reserved(&name, range, tombstone);
                 }
-                if !seen.insert(name.clone()) {
-                    self.error(
-                        DiagCode::RIDL_402,
-                        range,
-                        format!("duplicate interaction name `{name}`"),
-                    );
+                if let Some(first) = seen.insert(name.clone(), range) {
+                    self.duplicate_interaction(&name, range, first);
                     continue;
                 }
             }
@@ -3626,11 +3655,7 @@ impl Checker<'_> {
             );
         }
         if let Some(timing) = command.timing() {
-            self.error(
-                DiagCode::FORM_102,
-                timing.syntax().text_range(),
-                "timing annotation not valid on command".to_string(),
-            );
+            self.reject_timing(&timing, "command");
         }
         let params = command
             .params()
@@ -3646,11 +3671,7 @@ impl Checker<'_> {
     /// Appendix C; inline `T | E` per general form §6.1, ADR-0008 decision 1).
     fn lower_query(&mut self, query: &ast::QueryDef, name: &str) -> v2::QueryDef {
         if let Some(timing) = query.timing() {
-            self.error(
-                DiagCode::FORM_102,
-                timing.syntax().text_range(),
-                "timing annotation not valid on query".to_string(),
-            );
+            self.reject_timing(&timing, "query");
         }
         let params = query
             .params()
@@ -3827,6 +3848,40 @@ impl Checker<'_> {
         error_arms == 1 && success_arms == 1
     }
 
+    /// RIDL-106: a timing annotation on a kind that carries none.
+    ///
+    /// Timing belongs to `signal` and `event` (ridl §9); the grammar accepts
+    /// `@` on all five kinds so that the narrowing is a semantic rule with a
+    /// semantic message, and this is that rule for the three kinds that carry
+    /// no timing. `command` and `query` used to draw FORM-102 here while
+    /// `final` drew RIDL-106 — one rule under two codes, one of them a parse
+    /// code whose catalogue meaning is "unexpected token", for a token the
+    /// parser deliberately accepts.
+    fn reject_timing(&mut self, timing: &ast::Timing, kind: &str) {
+        let because = match kind {
+            "command" => {
+                "a command is invoked on demand, not published on a schedule, and its \
+                 acknowledgement is not a publication"
+            }
+            "query" => {
+                "a query is answered on demand, not published on a schedule, and its reply is \
+                 not a publication"
+            }
+            _ => {
+                "a `final` is provisioned externally and never republished, so it has no rate \
+                 floor and no staleness bound"
+            }
+        };
+        self.error(
+            DiagCode::RIDL_106,
+            timing.syntax().text_range(),
+            format!(
+                "a timing annotation is not valid on `{kind}` — {because}. Timing belongs to \
+                 `signal` and `event` (ridl §9)"
+            ),
+        );
+    }
+
     /// `final Name : (type_ref | array_type)` (ridl §8, Appendix C) — no
     /// init, no timing, no attribute block (RIDL-106).
     fn lower_final(&mut self, fin: &ast::FinalDef) -> v2::FinalDef {
@@ -3858,17 +3913,16 @@ impl Checker<'_> {
             );
         }
         if let Some(timing) = fin.timing() {
-            self.error(
-                DiagCode::RIDL_106,
-                timing.syntax().text_range(),
-                "timing annotation not valid on final".to_string(),
-            );
+            self.reject_timing(&timing, "final");
         }
         if let Some(block) = fin.attr_block() {
             self.error(
                 DiagCode::RIDL_106,
                 block.syntax().text_range(),
-                "attribute block not valid on final".to_string(),
+                "an attribute block is not valid on `final` — a `final` has no timing to \
+                 override and no contract to state, because it is provisioned externally and \
+                 never changes while the software runs (ridl §8)"
+                    .to_string(),
             );
         }
         self.check_member_attrs(fin.syntax(), MemberKind::Final);
@@ -3942,7 +3996,12 @@ impl Checker<'_> {
                 self.error(
                     DiagCode::RIDL_202,
                     path.syntax().text_range(),
-                    "stream element type must be a named type, `string`, or `bytes`".to_string(),
+                    format!(
+                        "`{}` is a primitive, and a stream element is a named type or the raw \
+                         `string`/`bytes` spelling — declare a `type` for it, so the element \
+                         carries the range, unit and bounds one element promises (ridl §12.2)",
+                        significant_text(path.syntax()),
+                    ),
                 );
                 Some(v2::stream_type::Element::Named(significant_text(
                     path.syntax(),
@@ -4061,12 +4120,20 @@ impl Checker<'_> {
                 Some(SyntaxKind::SignalDef) => self.error(
                     DiagCode::RIDL_201,
                     range,
-                    "stream `<T>` not valid on a signal payload".to_string(),
+                    "a stream `<T>` is not valid on a signal payload — a signal already is the \
+                     stream for state, publishing its current value on the bounds it declares. \
+                     A stream is for an RPC-scoped transfer with a beginning and an end, so it \
+                     belongs on a `command` parameter or a `query` return (ridl §12.3)"
+                        .to_string(),
                 ),
                 Some(SyntaxKind::EventDef) => self.error(
                     DiagCode::RIDL_201,
                     range,
-                    "stream `<T>` not valid on an event payload".to_string(),
+                    "a stream `<T>` is not valid on an event payload — an unbounded push of \
+                     occurrences is what the event itself is. A stream is for an RPC-scoped \
+                     transfer with a beginning and an end, so it belongs on a `command` \
+                     parameter or a `query` return (ridl §12.3)"
+                        .to_string(),
                 ),
                 Some(SyntaxKind::FinalDef) => self.error(
                     DiagCode::FORM_102,
@@ -4437,20 +4504,6 @@ const STRATUM_2_CATEGORIES: &[&str] = &[
     "CONTRACT_BROKEN",
     "UNKNOWN_INTERACTION",
 ];
-
-/// Whether `kind` is a typl definition keyword — the RIDL-107 trigger when it
-/// leads an ErrorNode recovered inside an interface body.
-fn is_typl_definition_keyword(kind: SyntaxKind) -> bool {
-    matches!(
-        kind,
-        SyntaxKind::TypeKw
-            | SyntaxKind::ConstKw
-            | SyntaxKind::StructKw
-            | SyntaxKind::EnumKw
-            | SyntaxKind::EnumsetKw
-            | SyntaxKind::UnionKw
-    )
-}
 
 /// The `InitValue` child of an interaction node. `EventDef` and `FinalDef`
 /// admit no init in the reference grammar, so the generated AST carries no
@@ -6526,23 +6579,21 @@ mod tests {
 
     #[test]
     fn ridl_106_timing_or_attr_block_on_final() {
-        let timed = check_ridl(
-            "app",
-            &format!("{PRELUDE}interface I {{\n  final v : Version @10ms\n}}\n"),
-        );
-        assert_eq!(codes(&timed), vec!["RIDL-106"]);
-        assert_eq!(
-            timed.diagnostics[0].message,
-            "timing annotation not valid on final",
-        );
-
-        // The attribute block draws RIDL-106; its key additionally draws the
-        // gf §4.3 allow-list verdict (FORM-107).
+        // The timing half is `ridl_106_timing_on_every_kind_that_carries_none`;
+        // this is the attribute-block half, which stays `final`-only because a
+        // command and a query do take an attribute block (their contracts).
         let attributed = check_ridl(
             "app",
             &format!("{PRELUDE}interface I {{\n  final v : Version [ persist ]\n}}\n"),
         );
         assert_eq!(codes(&attributed), vec!["RIDL-106", "FORM-107"]);
+        assert!(
+            attributed.diagnostics[0]
+                .message
+                .starts_with("an attribute block is not valid on `final`"),
+            "got: {}",
+            attributed.diagnostics[0].message,
+        );
 
         let good = check_ridl(
             "app",
@@ -6551,19 +6602,108 @@ mod tests {
         assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
     }
 
+    /// RIDL-401 and RIDL-402 each carry a secondary label pointing at the
+    /// declaration the reader has to look at — the tombstone that retired the
+    /// name, and the declaration that wins a duplicate.
+    ///
+    /// RIDL-140 is the house precedent ("`x` is first declared here"), and it
+    /// was the only code in the namespace using one. Without the label a reader
+    /// of "`speed` is already declared in this body" has to search the body to
+    /// find out which `speed` survives, which is exactly the fact the checker
+    /// already knows and was throwing away.
     #[test]
-    fn ridl_107_type_declaration_inside_an_interface_body() {
-        let checked = check_ridl(
-            "app",
-            &format!("{PRELUDE}interface I {{\n  type X: m\n  signal s : Speed @10ms\n}}\n"),
-        );
-        assert_eq!(codes(&checked), vec!["RIDL-107"]);
+    fn evolution_codes_point_at_the_declaration_they_are_about() {
+        for (name, source, label) in [
+            (
+                "RIDL-401",
+                format!(
+                    "{PRELUDE}interface I {{\n  reserved legacyTemp\n  \
+                     signal legacyTemp : Speed @10ms\n}}\n"
+                ),
+                "`legacyTemp` is retired here",
+            ),
+            (
+                "RIDL-402",
+                format!(
+                    "{PRELUDE}interface I {{\n  signal speed : Speed @10ms\n  \
+                     signal speed : Speed @10ms\n}}\n"
+                ),
+                "`speed` is declared here, and this is the one that is kept",
+            ),
+            (
+                "RIDL-401, service inline shape",
+                format!(
+                    "{PRELUDE}service app.svc {{\n  reserved legacyTemp\n  \
+                     signal legacyTemp : Speed @10ms\n}}\n"
+                ),
+                "`legacyTemp` is retired here",
+            ),
+        ] {
+            let checked = check_ridl("app", &source);
+            let diagnostic = &checked.diagnostics[0];
+            assert_eq!(
+                diagnostic.labels.len(),
+                1,
+                "{name} must carry one secondary label: {diagnostic:?}",
+            );
+            assert_eq!(diagnostic.labels[0].message, label, "{name}");
+            // The label points at the *other* declaration, not back at the
+            // primary span — a label on the same range tells the reader nothing.
+            assert_ne!(
+                diagnostic.labels[0].span.range, diagnostic.primary.range,
+                "{name}: the label must point somewhere else",
+            );
+            let earlier = &source[usize::from(diagnostic.labels[0].span.range.start())..];
+            assert!(
+                earlier.starts_with("legacyTemp") || earlier.starts_with("speed"),
+                "{name}: the label lands on the name it talks about, got `{}`",
+                &earlier[..earlier.len().min(20)],
+            );
+        }
+    }
 
-        let composite = check_ridl(
-            "app",
-            &format!("{PRELUDE}interface I {{\n  struct S {{ a: Speed }}\n}}\n"),
-        );
-        assert_eq!(codes(&composite), vec!["RIDL-107"]);
+    /// RIDL-107 is raised once, by the parser, and the checker adds nothing on
+    /// top of it.
+    ///
+    /// It used to be raised twice for every stray declaration: the parser drew
+    /// a FORM-102 "unexpected token in an interface body" and the checker then
+    /// coded the recovered node RIDL-107, so one mistake produced two
+    /// diagnostics at the same span whose messages contradicted each other.
+    /// Asserting *both* halves is what pins that: the parse-side count alone
+    /// would pass if the checker started re-reporting, and the checker-side
+    /// silence alone would pass if the parser went back to FORM-102.
+    #[test]
+    fn ridl_107_is_raised_once_by_the_parser() {
+        for (shape, source) in [
+            (
+                "an interface",
+                format!("{PRELUDE}interface I {{\n  type X: m\n  signal s : Speed @10ms\n}}\n"),
+            ),
+            (
+                "an interface, composite",
+                format!("{PRELUDE}interface I {{\n  struct S {{ a: Speed }}\n}}\n"),
+            ),
+            (
+                "a service inline shape",
+                format!("{PRELUDE}service app.svc {{\n  type X: m\n  signal s : Speed @10ms\n}}\n"),
+            ),
+        ] {
+            let parsed = ridl_syntax::parse(&source, ridl_syntax::Profile::Ridl);
+            let raised: Vec<&str> = parsed.errors().iter().map(|error| error.code).collect();
+            assert_eq!(raised, vec!["RIDL-107"], "{shape}: {:?}", parsed.errors());
+            let message = &parsed.errors()[0].message;
+            assert!(
+                message.contains("move the declaration to package level"),
+                "{shape}: the message must say where the declaration goes: {message}",
+            );
+
+            let checked = check_ridl("app", &source);
+            assert!(
+                !codes(&checked).contains(&"RIDL-107"),
+                "{shape}: the checker must not re-report the parser's code: {:?}",
+                checked.diagnostics,
+            );
+        }
     }
 
     #[test]
@@ -6576,9 +6716,19 @@ mod tests {
             "{PRELUDE}interface I {{\n  struct Extra {{ a: Speed }}\n  signal s : Speed @10ms\n  enum Mode {{ A, B }}\n  event e : Speed\n}}\n"
         );
         let checked = check_ridl("app", &text);
-        // The untimed `event e` additionally draws RIDL-100 (default applied,
-        // E2 task 9); the two in-body composites are RIDL-107.
-        assert_eq!(codes(&checked), vec!["RIDL-107", "RIDL-107", "RIDL-100"]);
+        // The two in-body composites are the parser's RIDL-107 (see
+        // `ridl_107_is_raised_once_by_the_parser`), so the only checker
+        // diagnostic left here is RIDL-100 for the untimed `event e`.
+        assert_eq!(codes(&checked), vec!["RIDL-100"]);
+        assert_eq!(
+            ridl_syntax::parse(&text, ridl_syntax::Profile::Ridl)
+                .errors()
+                .iter()
+                .map(|error| error.code)
+                .collect::<Vec<_>>(),
+            vec!["RIDL-107", "RIDL-107"],
+            "each stray declaration draws its own code",
+        );
 
         assert_eq!(interface_walk(&checked), [("s", 1), ("e", 2)]);
     }
@@ -6765,60 +6915,100 @@ const MAX_SPEED : Speed = 250.0\n\
 const MAX_COUNT : Count = 500\n\
 enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
 
+    /// The expr-core §8 boundary, end to end through the package checker, each
+    /// row pinned by the **rule that fires** and the source it fires on.
+    ///
+    /// RIDL-306 covers the whole boundary with one code, so `codes ==
+    /// ["RIDL-306"]` is satisfied by any rule at all rejecting the row — the
+    /// wrong one included. The `expr.rs` counterpart of this test carries the
+    /// worked demonstration; the same reasoning applies here, over the checker
+    /// that assembles the scope rather than over the typing rules alone.
     #[test]
     fn ridl_306_expression_outside_the_guaranteed_subset() {
-        // Every row is one expr-core §8 boundary form, checked end to end
-        // through the package checker.
-        for (name, body) in [
+        // `(name, body, message fragment, the source the span must cover)`.
+        for (name, body, fragment, offending) in [
             (
                 "unknown reference",
                 "command c(p: Speed) [ require unknownName > 0 ]",
+                "`unknownName` does not resolve here",
+                "unknownName",
             ),
             (
                 "cross-domain arithmetic",
                 "command c(speed: Speed, window: Duration) [ require speed + window > 0 ]",
+                "`+` over a duration",
+                "speed + window",
             ),
             (
                 "cross-named-type arithmetic",
                 "command c(speed: Speed, torque: Torque) [ require speed + torque > 0.0 ]",
+                "`+` requires numeric operands of one type",
+                "speed + torque",
             ),
-            ("non-boolean root", "command c(p: Speed) [ require 3 ]"),
+            (
+                "non-boolean root",
+                "command c(p: Speed) [ require 3 ]",
+                "not a predicate",
+                "3",
+            ),
             (
                 "signal read in an ensure",
                 "query q(): Speed [ ensure currentSpeed >= 0.0 ]",
+                "`currentSpeed` does not resolve here",
+                "currentSpeed",
             ),
             (
                 "a qualified member chain",
                 "command c(position: GearPosition) [ require position != app.GearPosition.PARK ]",
+                "`.GearPosition` names a type, not a member",
+                "app.GearPosition",
             ),
             (
                 "`result` in a require",
                 "query q(): Speed [ require result >= 0.0 ]",
+                "`result` is not in scope here",
+                "result",
             ),
             (
                 "struct-field access",
                 "query q(n: Count): Speed [ require n.severity >= 4\n    ensure result >= 0.0 ]",
+                "the guaranteed subset admits field access on a tuple-typed `result` only",
+                "n.severity",
             ),
             (
                 "`%` over a float-backed operand",
                 "query q(n: Count): Speed [ require n % 0.5 == 0.0\n    ensure result >= 0.0 ]",
+                "`%` requires integer-backed operands",
+                "n % 0.5",
             ),
             (
                 "duration arithmetic",
                 "query q(w: Duration): Speed [ require w + 10ms < 1s\n    ensure result >= 0.0 ]",
+                "`+` over a duration",
+                "w + 10ms",
             ),
         ] {
-            let checked = check_ridl(
-                "app",
-                &format!(
-                    "{CONTRACT_PRELUDE}interface I {{\n  signal currentSpeed : Speed @10ms\n  {body}\n}}\n"
-                ),
+            let source = format!(
+                "{CONTRACT_PRELUDE}interface I {{\n  signal currentSpeed : Speed @10ms\n  {body}\n}}\n"
             );
+            let checked = check_ridl("app", &source);
             assert_eq!(
                 codes(&checked),
                 vec!["RIDL-306"],
                 "{name}: {:?}",
                 checked.diagnostics
+            );
+            let diagnostic = &checked.diagnostics[0];
+            assert!(
+                diagnostic.message.contains(fragment),
+                "{name} must be rejected by the rule that says `{fragment}`, got: {}",
+                diagnostic.message,
+            );
+            let range = diagnostic.primary.range;
+            assert_eq!(
+                &source[usize::from(range.start())..usize::from(range.end())],
+                offending,
+                "{name}: the span must cover the form the rule rejected",
             );
         }
     }
@@ -6828,14 +7018,16 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         // A constant carries its declared type, so a cross-named-type
         // comparison against it is as much an error as any other
         // (expr-core §5.2 — two named types never unify; typl §5.7).
-        for (name, body) in [
+        for (name, body, both) in [
             (
                 "float-backed named type against a `Speed` constant",
                 "command c(t: Torque) [ require t < MAX_SPEED ]",
+                ["`app.Torque`", "`app.Speed`"],
             ),
             (
                 "integer-backed named type against a `Speed` parameter",
                 "command c(s: Speed) [ require s < MAX_COUNT ]",
+                ["`app.Speed`", "`app.Count`"],
             ),
         ] {
             let checked = check_ridl(
@@ -6848,6 +7040,21 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
                 "{name}: {:?}",
                 checked.diagnostics
             );
+            // The rule is nominal unification, and the evidence is that the
+            // message names *both* types: "requires operands of one ordered
+            // domain, found X and Y". A message naming one of them would be
+            // some other rule reaching the same code.
+            let message = &checked.diagnostics[0].message;
+            assert!(
+                message.contains("`<` requires operands of one ordered domain"),
+                "{name}: {message}",
+            );
+            for named in both {
+                assert!(
+                    message.contains(named),
+                    "{name}: the message must name {named}: {message}",
+                );
+            }
         }
 
         // The expr-core §9 walk of `require max <= MAX_SPEED`: a `Speed`
@@ -6893,6 +7100,16 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
                 vec!["RIDL-306"],
                 "{name}: {:?}",
                 checked.diagnostics
+            );
+            // It must be the `%` backing rule that fires. Every row here is
+            // well-formed apart from the backing, so any other RIDL-306 rule
+            // reaching this code would be reporting the wrong thing.
+            assert!(
+                checked.diagnostics[0]
+                    .message
+                    .contains("`%` requires integer-backed operands"),
+                "{name}: {}",
+                checked.diagnostics[0].message,
             );
         }
 
@@ -7294,30 +7511,36 @@ interface I {\n\
         assert_eq!(interface_walk(&checked), [("a", 1), ("b", 2)]);
     }
 
+    /// One rule, one code: a timing annotation on any kind that carries none is
+    /// RIDL-106, and each message says why *that* kind carries none.
+    ///
+    /// `command` and `query` used to draw FORM-102 while `final` drew RIDL-106.
+    /// FORM-102's catalogue meaning is "unexpected token", and the grammar
+    /// accepts `@` on all five kinds on purpose, so the token was never
+    /// unexpected — the rejection is semantic and now wears a semantic code.
     #[test]
-    fn form_102_timing_on_command_and_query() {
-        // §16.1 scopes RIDL-106 to `final` and the reference grammar has no
-        // timing production on the callables — FORM-102 with a pointed
-        // message, no new RIDL code (E2 plan task 5).
-        let on_command = check_ridl(
-            "app",
-            &format!("{PRELUDE}interface I {{\n  command c() @10ms\n}}\n"),
-        );
-        assert_eq!(codes(&on_command), vec!["FORM-102"]);
-        assert_eq!(
-            on_command.diagnostics[0].message,
-            "timing annotation not valid on command",
-        );
-
-        let on_query = check_ridl(
-            "app",
-            &format!("{PRELUDE}interface I {{\n  query q(): Speed @10ms\n}}\n"),
-        );
-        assert_eq!(codes(&on_query), vec!["FORM-102"]);
-        assert_eq!(
-            on_query.diagnostics[0].message,
-            "timing annotation not valid on query",
-        );
+    fn ridl_106_timing_on_every_kind_that_carries_none() {
+        for (kind, member, because) in [
+            ("command", "command c() @10ms", "invoked on demand"),
+            ("query", "query q(): Speed @10ms", "answered on demand"),
+            ("final", "final v : Version @10ms", "provisioned externally"),
+        ] {
+            let checked = check_ridl("app", &format!("{PRELUDE}interface I {{\n  {member}\n}}\n"));
+            assert_eq!(codes(&checked), vec!["RIDL-106"], "{kind}");
+            let message = &checked.diagnostics[0].message;
+            assert!(
+                message.starts_with(&format!("a timing annotation is not valid on `{kind}`")),
+                "{kind}: {message}",
+            );
+            assert!(
+                message.contains(because),
+                "{kind}: the message must say why this kind carries no timing: {message}",
+            );
+            assert!(
+                message.contains("`signal` and `event`"),
+                "{kind}: the message must name the kinds that do carry timing: {message}",
+            );
+        }
     }
 
     #[test]
@@ -7956,10 +8179,11 @@ interface VehicleStatus {
         );
         assert_eq!(codes(&checked), vec!["RIDL-100"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+        // The IR carries microseconds; the message does not. It names the
+        // applied default in the units a `[defaults].timing` is written in.
         assert!(
-            checked.diagnostics[0].message.contains("100000")
-                && checked.diagnostics[0].message.contains("1000000"),
-            "RIDL-100 must name the applied bounds, got {:?}",
+            checked.diagnostics[0].message.contains("`@[100ms..1s]`"),
+            "RIDL-100 must name the applied bounds as durations, got {:?}",
             checked.diagnostics[0].message,
         );
         assert_eq!(

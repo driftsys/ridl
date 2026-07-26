@@ -391,9 +391,10 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
 /// listed so the exact-set assertion below stays exact — a new one appearing
 /// means the showcase's source changed shape.
 const SHOWCASE_INCIDENTAL_CODES: &[&str] = &[
-    // The interface body cannot hold a `struct`, so the parser reports the
-    // token before the checker reports RIDL-107; the interaction-boundary
-    // narrowings (`narrowing.ridl`) report through it too.
+    // The interaction-boundary narrowings (`narrowing.ridl`) report through it:
+    // an optional payload, an optional parameter, a map parameter. The stray
+    // `struct` in an interface body no longer does — that is RIDL-107, raised
+    // by the parser where the declaration is recognised.
     "FORM-102",
     // A rejected return type (`narrowing_returns.ridl`). Both this and
     // FORM-102 are raised from many places, which is why the narrowings have
@@ -1281,7 +1282,8 @@ fn showcase_pins_the_interaction_boundary_narrowings() {
         ),
         (
             "collection return type",
-            "error[FORM-101]: expected a return type",
+            "error[FORM-101]: a return type must be a named type, a named-field tuple \
+             `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)",
         ),
     ] {
         assert!(
@@ -1300,6 +1302,24 @@ fn showcase_pins_the_interaction_boundary_narrowings() {
             .count(),
         2,
         "both the optional and the map command parameter must be rejected",
+    );
+
+    // The rejected return type is *one* diagnostic. It used to be three: the
+    // parser left `[Level; 0..8]` for the annotation parser, which read it as
+    // this member's attribute block and produced a FORM-102 plus a FORM-106
+    // naming the array's element type as an unknown attribute key — the last of
+    // them rendered after unrelated files, because attribute checks run in a
+    // different pass from parse errors. `Level` is the array element in
+    // `narrowing_returns.ridl` and an attribute key nowhere in the showcase, so
+    // the absence of that key is exactly the absence of the cascade.
+    assert!(
+        !rendered.contains("unknown attribute key `Level`"),
+        "a rejected return type must not be re-read as an attribute block:\n{rendered}",
+    );
+    assert_eq!(
+        rendered.matches("narrowing_returns.ridl").count(),
+        1,
+        "the rejected return type draws exactly one diagnostic:\n{rendered}",
     );
 }
 

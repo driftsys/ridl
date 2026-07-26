@@ -159,9 +159,12 @@ pub fn resolve_timing(
             file,
             anchor,
             format!(
-                "{} without a timing annotation — the default {} is applied",
+                "{} without a timing annotation — the default `@{}` is applied: it publishes no \
+                 slower than the rate floor and a subscriber may treat a value older than the \
+                 staleness bound as stale. Write the bounds this {} really promises (ridl §9.1)",
                 kind_noun(kind),
                 render_bounds(&spec),
+                kind_noun(kind),
             ),
         );
         return (Some(spec), vec![diag]);
@@ -172,15 +175,32 @@ pub fn resolve_timing(
         // An explicit range `@[min..max]`, `@[min..]`, or `@[..max]`. A written
         // bound always resolves through `bound_us`, so an illegal duration is
         // reported rather than silently unset; `None` means genuinely absent.
-        let min = bound_us(range.min().as_ref(), file, &mut diags);
-        let max = bound_us(range.max().as_ref(), file, &mut diags);
+        let min_token = range.min();
+        let max_token = range.max();
+        let min = bound_us(min_token.as_ref(), file, &mut diags);
+        let max = bound_us(max_token.as_ref(), file, &mut diags);
         let node = range.syntax().text_range();
-        if min.as_ref().is_some_and(is_zero) || max.as_ref().is_some_and(is_zero) {
+        // The written text of each bound, so every message below quotes the
+        // annotation the author typed rather than the microseconds the IR
+        // carries.
+        let min_text = written(min_token.as_ref());
+        let max_text = written(max_token.as_ref());
+        let zero = [
+            (&min, &min_text, "rate floor"),
+            (&max, &max_text, "staleness bound"),
+        ]
+        .into_iter()
+        .find(|(value, _, _)| value.as_ref().is_some_and(is_zero));
+        if let Some((_, text, role)) = zero {
             diags.push(error(
                 DiagCode::RIDL_102,
                 file,
                 node,
-                "a timing duration must be greater than zero".to_string(),
+                format!(
+                    "the {role} is `{text}` — a timing bound is a duration greater than zero, \
+                     because a bound of zero promises a publication with no delay at all \
+                     (ridl §9.2)"
+                ),
             ));
         }
         if let (Some(lo), Some(hi)) = (&min, &max) {
@@ -190,20 +210,30 @@ pub fn resolve_timing(
                     file,
                     node,
                     format!(
-                        "timing lower bound {}us exceeds the upper bound {}us",
-                        lo.to_decimal_string(),
-                        hi.to_decimal_string(),
+                        "the rate floor `{min_text}` is longer than the staleness bound \
+                         `{max_text}` — in `@[min..max]` the first bound is how often the value \
+                         is published and the second how old it may get, so the first must not \
+                         exceed the second (ridl §9.2)"
                     ),
                 ));
             } else if lo == hi {
+                let alternative = match kind {
+                    InteractionKind::Signal => format!(
+                        ", or write the strict period `@{min_text}` if the rate really is \
+                         isochronous — that is a separate mode, not a spelling of this range"
+                    ),
+                    _ => String::new(),
+                };
                 diags.push(diagnostic(
                     DiagCode::RIDL_108,
                     Severity::Warning,
                     file,
                     node,
                     format!(
-                        "degenerate timing range: the rate floor equals the staleness bound at {}us",
-                        lo.to_decimal_string(),
+                        "the rate floor and the staleness bound are both `{min_text}` — a \
+                         subscriber may then call the value stale the moment the next \
+                         publication is due, leaving no margin for jitter. Widen the staleness \
+                         bound{alternative} (ridl §9.2)"
                     ),
                 ));
             }
@@ -226,7 +256,12 @@ pub fn resolve_timing(
                 DiagCode::RIDL_102,
                 file,
                 node,
-                "a timing duration must be greater than zero".to_string(),
+                format!(
+                    "the strict period is `{}` — a period is a duration greater than zero, \
+                     because a period of zero promises a publication with no delay at all \
+                     (ridl §9.2)",
+                    token.text(),
+                ),
             ));
         }
         if matches!(kind, InteractionKind::Event) {
@@ -234,8 +269,12 @@ pub fn resolve_timing(
                 DiagCode::RIDL_103,
                 file,
                 node,
-                "strict-periodic `@Xms` is not valid on an event — use a range `@[min..max]`"
-                    .to_string(),
+                format!(
+                    "the strict period `@{}` is not valid on an event — a strict period is an \
+                     isochronous publication rate, and an event reports occurrences that arrive \
+                     when they arrive. Write a range `@[min..max]` instead (ridl §9.2)",
+                    token.text(),
+                ),
             ));
         }
         let spec = TimingSpec {
@@ -395,14 +434,48 @@ fn kind_noun(kind: InteractionKind) -> &'static str {
     }
 }
 
-/// Renders a resolved timing as `[<min>us..<max>us]` for a diagnostic message —
-/// each bound in exact microseconds, an unset bound rendered as an empty side.
+/// The source text of a written bound token, or `…` when the bound is absent
+/// (the half-open forms `@[20ms..]` and `@[..1s]`). Every timing message quotes
+/// this rather than a microsecond count: microseconds are the IR's canonical
+/// unit and appear in no `.ridl` file.
+fn written(token: Option<&ridl_syntax::SyntaxToken>) -> String {
+    token.map_or_else(|| "…".to_string(), |token| token.text().to_string())
+}
+
+/// Renders a resolved timing as `[<min>..<max>]` for a diagnostic message —
+/// each bound as a duration literal, an unset bound rendered as an empty side.
 fn render_bounds(spec: &TimingSpec) -> String {
     let render = |bound: &Option<ExactValue>| match bound {
-        Some(value) => format!("{}us", value.to_decimal_string()),
+        Some(value) => render_duration(value),
         None => String::new(),
     };
     format!("[{}..{}]", render(&spec.min_us), render(&spec.max_us))
+}
+
+/// Renders an exact microsecond count as a duration literal in the largest of
+/// the five ridl §2.1 time units that divides it exactly: `100000` renders
+/// `100ms` and `1000000` renders `1s`.
+///
+/// This is used only where nothing was written to echo — the default applied to
+/// an untimed signal or event (RIDL-100), which comes from `[defaults].timing`
+/// or from the built-in fallback. The units are the ones a `.ridl` file and a
+/// manifest are written in, so the message never answers in the canonical
+/// microseconds only the IR carries. A value no unit divides exactly (a
+/// fractional microsecond, which only a rejected literal produces) falls back
+/// to `us`.
+fn render_duration(value: &ExactValue) -> String {
+    for (suffix, factor) in [
+        ("h", 3_600_000_000u64),
+        ("min", 60_000_000),
+        ("s", 1_000_000),
+        ("ms", 1_000),
+    ] {
+        let scaled = &value.0 / BigRational::from_integer(BigInt::from(factor));
+        if scaled.is_integer() {
+            return format!("{}{suffix}", scaled.to_integer());
+        }
+    }
+    format!("{}us", value.to_decimal_string())
 }
 
 /// Builds a timing [`Diagnostic`]; timing diagnostics carry no secondary labels
@@ -549,6 +622,33 @@ mod tests {
         assert_eq!(spec.max_us, None, "the absent upper bound stays unset");
     }
 
+    /// Every timing message quotes the durations the author wrote, and none
+    /// answers in the microseconds the IR canonicalises to.
+    ///
+    /// The assertion is on the written text, not merely on "some number":
+    /// `@[100ms..50ms]` used to render `timing lower bound 100000us exceeds the
+    /// upper bound 50000us`, which is a true statement about a unit that
+    /// appears in no `.ridl` file. A message that regressed to microseconds
+    /// would still name two bounds and still carry RIDL-101, so the code
+    /// assertion alone cannot see it.
+    fn assert_written_units(message: &str, quoted: &[&str]) {
+        for text in quoted {
+            assert!(
+                message.contains(&format!("`{text}`")),
+                "the message must quote the written duration `{text}`: {message}",
+            );
+        }
+        // A digit immediately followed by `us` is a microsecond count. Looking
+        // for the bare substring `us` would match `because`.
+        assert!(
+            !message
+                .as_bytes()
+                .windows(3)
+                .any(|window| window[0].is_ascii_digit() && &window[1..] == b"us"),
+            "the message must not answer in canonical microseconds: {message}",
+        );
+    }
+
     #[test]
     fn ridl_101_lower_bound_exceeds_upper() {
         let (_, diags) = resolve(
@@ -557,6 +657,12 @@ mod tests {
             &builtin_default_timing(),
         );
         assert_eq!(codes(&diags), vec!["RIDL-101"]);
+        assert_written_units(&diags[0].message, &["100ms", "50ms"]);
+        assert!(
+            diags[0].message.contains("rate floor") && diags[0].message.contains("staleness bound"),
+            "the message names both bounds by their role: {}",
+            diags[0].message,
+        );
     }
 
     #[test]
@@ -567,6 +673,12 @@ mod tests {
             &builtin_default_timing(),
         );
         assert_eq!(codes(&strict), vec!["RIDL-102"]);
+        assert_written_units(&strict[0].message, &["0ms"]);
+        assert!(
+            strict[0].message.contains("strict period"),
+            "the strict-period spelling is named as such: {}",
+            strict[0].message,
+        );
 
         let (_, ranged) = resolve(
             Some(&annot("signal s : Speed @[0ms..100ms]")),
@@ -574,6 +686,28 @@ mod tests {
             &builtin_default_timing(),
         );
         assert_eq!(codes(&ranged), vec!["RIDL-102"]);
+        assert_written_units(&ranged[0].message, &["0ms"]);
+        assert!(
+            ranged[0].message.contains("rate floor"),
+            "the offending bound is named, not just the annotation: {}",
+            ranged[0].message,
+        );
+
+        // The zero on the far side is reported against *its* role, so the
+        // message never mislabels which bound the author must fix. The
+        // inversion is reported too — `100ms > 0ms` — which is why the codes
+        // are two here and not one.
+        let (_, upper) = resolve(
+            Some(&annot("signal s : Speed @[100ms..0ms]")),
+            InteractionKind::Signal,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&upper), vec!["RIDL-102", "RIDL-101"]);
+        assert!(
+            upper[0].message.contains("staleness bound") && upper[0].message.contains("`0ms`"),
+            "the upper bound is the zero one here: {}",
+            upper[0].message,
+        );
     }
 
     #[test]
@@ -584,6 +718,12 @@ mod tests {
             &builtin_default_timing(),
         );
         assert_eq!(codes(&diags), vec!["RIDL-103"]);
+        assert_written_units(&diags[0].message, &["@10ms"]);
+        assert!(
+            diags[0].message.contains("@[min..max]"),
+            "the message names the spelling an event does take: {}",
+            diags[0].message,
+        );
         // The written bounds still lower honestly.
         assert_eq!(spec.expect("resolved").min_us, Some(us("10000")));
     }
@@ -597,6 +737,27 @@ mod tests {
         );
         assert_eq!(codes(&diags), vec!["RIDL-108"]);
         assert_eq!(diags[0].severity, Severity::Warning);
+        assert_written_units(&diags[0].message, &["30ms"]);
+        // A signal is the one kind that has a strict period to offer, so it is
+        // the one kind whose message offers it (ridl §9.2: a strict period is a
+        // separate mode, admitted on signals only).
+        assert!(
+            diags[0].message.contains("`@30ms`"),
+            "a signal is offered the strict period: {}",
+            diags[0].message,
+        );
+
+        let (_, on_event) = resolve(
+            Some(&annot("event e : Speed @[30ms..30ms]")),
+            InteractionKind::Event,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&on_event), vec!["RIDL-108"]);
+        assert!(
+            !on_event[0].message.contains("@30ms"),
+            "an event has no strict period to be offered: {}",
+            on_event[0].message,
+        );
     }
 
     #[test]
@@ -605,16 +766,41 @@ mod tests {
         let (spec, diags) = resolve(None, InteractionKind::Signal, &default);
         assert_eq!(codes(&diags), vec!["RIDL-100"]);
         assert_eq!(diags[0].severity, Severity::Warning);
-        // The warning names the applied bounds in microseconds.
+        // The warning names the applied bounds as durations. Nothing was
+        // written to echo here — the default comes from the manifest or the
+        // built-in fallback — so the bounds are rendered in the units a
+        // `[defaults].timing` is written in, never in canonical microseconds.
+        assert_written_units(&diags[0].message, &[]);
         assert!(
-            diags[0].message.contains("50000") && diags[0].message.contains("2000000"),
-            "RIDL-100 must name the applied bounds, got {:?}",
+            diags[0].message.contains("`@[50ms..2s]`"),
+            "RIDL-100 must name the applied bounds as durations, got {:?}",
             diags[0].message,
         );
         let spec = spec.expect("a signal always resolves timing");
         assert!(spec.default_applied, "the applied default is flagged");
         assert_eq!(spec.min_us, Some(us("50000")));
         assert_eq!(spec.max_us, Some(us("2000000")));
+    }
+
+    /// [`render_duration`] picks the largest unit that divides the value
+    /// exactly, so an applied default reads the way a manifest is written.
+    #[test]
+    fn durations_render_in_the_largest_exact_unit() {
+        for (micros, rendered) in [
+            ("1", "1us"),
+            ("1500", "1500us"),
+            ("100000", "100ms"),
+            ("1000000", "1s"),
+            ("1500000", "1500ms"),
+            ("60000000", "1min"),
+            ("3600000000", "1h"),
+            ("7200000000", "2h"),
+            // No unit divides a fractional microsecond, which only a rejected
+            // literal (`@1.5us`) produces; it falls back rather than rounding.
+            ("1.5", "1.5us"),
+        ] {
+            assert_eq!(render_duration(&us(micros)), rendered, "{micros}us");
+        }
     }
 
     #[test]

@@ -457,16 +457,32 @@ diag_codes! {
         RIDL_105 = "RIDL-105", Error,
             "`query` returning `()`";
 
-        /// Timing annotation or attribute block on `final` (ridl §8, §16.1).
-        /// Emitted by the checker (E2 task 5).
+        /// A timing annotation on an interaction kind that carries none —
+        /// `command`, `query`, or `final` — or an attribute block on `final`
+        /// (ridl §8, §9, §16.1). Emitted by the checker (E2 task 5).
+        ///
+        /// The callables drew FORM-102 until the E2 close-out, so one rule sat
+        /// under two codes and one of them was a parse code whose catalogue
+        /// meaning is "unexpected token" — for a token the grammar accepts on
+        /// purpose, precisely so the narrowing can be a semantic rule with a
+        /// semantic message.
         RIDL_106 = "RIDL-106", Error,
-            "timing annotation or attribute block on `final`";
+            "timing annotation on a kind that carries none, or attribute block on `final`";
 
-        /// Type declaration inside an `interface` body — typl declarations live at
-        /// package level (ridl §14.1, §16.1). Emitted by the checker (E2 task 5)
-        /// from the parser's recovered ErrorNode.
+        /// Type declaration inside an `interface` or `service` body — typl
+        /// declarations live at package level (ridl §14.1, §16.1).
+        ///
+        /// Emitted by the **parser**, as a bare string literal (`ridl-syntax`
+        /// cannot reference [`DiagCode`]), at the point where it recognises the
+        /// keyword and recovers the declaration into an `ErrorNode`. The
+        /// checker used to code that node a second time, so every RIDL-107
+        /// arrived paired with a contradicting FORM-102 at the same span; the
+        /// parser knows exactly what the construct is, so it is the one that
+        /// names it. RIDL-403 and TYPL-304 are parser-raised for the same
+        /// reason. The constant is kept for the catalogue and for the error
+        /// index.
         RIDL_107 = "RIDL-107", Error,
-            "type declaration inside an `interface` body";
+            "type declaration inside an `interface` or `service` body";
 
         /// A range annotation `@[X..X]` whose bounds are equal — a degenerate
         /// range, the rate floor equal to its staleness bound, on a `signal` and an

@@ -1,6 +1,5 @@
 ---
 source: crates/ridl-syntax/tests/parser_err_corpus.rs
-assertion_line: 75
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/err/type_decl_in_interface.ridl
 ---
@@ -55,4 +54,4 @@ SourceFile@0..97
     RBrace@95..96 "}"
   Whitespace@96..97 "\n"
 errors:
-  FORM-102 38..42 unexpected token in an interface body
+  RIDL-107 38..42 `type` starts a typl declaration, and an interface body holds interactions and `reserved` tombstones only — move the declaration to package level, beside the interface (ridl reference §14.1)

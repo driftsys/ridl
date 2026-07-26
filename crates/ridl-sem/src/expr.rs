@@ -999,9 +999,16 @@ mod tests {
     use ridl_syntax::Profile;
     use std::collections::HashMap;
 
+    /// The minimal ridl file `parse_expr` puts a contract expression in. Kept
+    /// separate so a test can slice a diagnostic's span out of the same text
+    /// the expression was parsed from.
+    fn contract_source(text: &str) -> String {
+        format!("package app\ninterface I {{\n  command c() [ require {text} ]\n}}\n")
+    }
+
     /// The `require` expression of `text`, parsed in a minimal ridl file.
     fn parse_expr(text: &str) -> ast::Expr {
-        let source = format!("package app\ninterface I {{\n  command c() [ require {text} ]\n}}\n");
+        let source = contract_source(text);
         let parse = ridl_syntax::parse(&source, Profile::Ridl);
         parse
             .syntax()
@@ -1009,6 +1016,17 @@ mod tests {
             .find_map(ast::Attribute::cast)
             .and_then(|attribute| attribute.expr())
             .unwrap_or_else(|| panic!("`{text}` does not parse as a contract expression"))
+    }
+
+    /// The source text a diagnostic's primary span covers, given the contract
+    /// expression `text` it was raised over.
+    ///
+    /// This is what tells two RIDL-306 rules apart when both fire over the same
+    /// fixture: the code is one for the whole boundary (expr-core §8), so the
+    /// span and the message are the only evidence of *which* rule ran.
+    fn spanned<'a>(source: &'a str, diagnostic: &Diagnostic) -> &'a str {
+        let range = diagnostic.primary.range;
+        &source[usize::from(range.start())..usize::from(range.end())]
     }
 
     /// The resolved vocabulary a contract may name: `MAX_SPEED : Speed`,
@@ -1185,9 +1203,16 @@ mod tests {
         assert_eq!(ty, None);
         assert_eq!(codes(&diagnostics), vec!["RIDL-306"]);
         assert!(
-            diagnostics[0].message.contains("unknownName"),
-            "the message names the offending form: {}",
+            diagnostics[0]
+                .message
+                .contains("`unknownName` does not resolve here"),
+            "the message names the offending form and the rule: {}",
             diagnostics[0].message
+        );
+        assert_eq!(
+            spanned(&contract_source("unknownName > 0"), &diagnostics[0]),
+            "unknownName",
+            "the span is the name, not the comparison around it",
         );
     }
 
@@ -1207,9 +1232,21 @@ mod tests {
             vocabulary: &vocabulary,
             resolution: &resolution,
         };
-        let (ty, diagnostics) = check_contract_expr(&parse_expr("speed + window > 0"), &scope);
+        let text = "speed + window > 0";
+        let (ty, diagnostics) = check_contract_expr(&parse_expr(text), &scope);
         assert_eq!(ty, None);
         assert_eq!(codes(&diagnostics), vec!["RIDL-306"]);
+        // The rule is the arithmetic one, on the `+`, not the comparison one
+        // on the `>` that would also have a mismatch to report.
+        assert!(
+            diagnostics[0].message.contains("`+` over a duration"),
+            "got: {}",
+            diagnostics[0].message,
+        );
+        assert_eq!(
+            spanned(&contract_source(text), &diagnostics[0]),
+            "speed + window"
+        );
     }
 
     #[test]
@@ -1228,9 +1265,24 @@ mod tests {
             vocabulary: &vocabulary,
             resolution: &resolution,
         };
-        let (ty, diagnostics) = check_contract_expr(&parse_expr("speed + torque > 0.0"), &scope);
+        let text = "speed + torque > 0.0";
+        let (ty, diagnostics) = check_contract_expr(&parse_expr(text), &scope);
         assert_eq!(ty, None);
         assert_eq!(codes(&diagnostics), vec!["RIDL-306"]);
+        // Two named types never unify (§5.2), and the message names both.
+        assert!(
+            diagnostics[0]
+                .message
+                .contains("`+` requires numeric operands of one type")
+                && diagnostics[0].message.contains("veh.common.Speed")
+                && diagnostics[0].message.contains("veh.common.Torque"),
+            "got: {}",
+            diagnostics[0].message,
+        );
+        assert_eq!(
+            spanned(&contract_source(text), &diagnostics[0]),
+            "speed + torque"
+        );
     }
 
     #[test]
@@ -1249,7 +1301,9 @@ mod tests {
         assert_eq!(ty, None);
         assert_eq!(codes(&diagnostics), vec!["RIDL-306"]);
         assert!(
-            diagnostics[0].message.contains("boolean"),
+            diagnostics[0]
+                .message
+                .contains("not a predicate — the root of a `require`/`ensure` must be boolean"),
             "{}",
             diagnostics[0].message
         );
@@ -1302,12 +1356,33 @@ mod tests {
         assert_eq!(ty, None);
         assert_eq!(codes(&diagnostics), vec!["RIDL-306"]);
         assert!(
-            diagnostics[0].message.contains("GearPosition"),
-            "the message names the offending segment: {}",
+            diagnostics[0]
+                .message
+                .contains("`.GearPosition` names a type, not a member"),
+            "the message names the offending segment and the rule: {}",
             diagnostics[0].message
         );
     }
 
+    /// The expr-core §8 boundary forms, each pinned by the **rule that fires**
+    /// and not only by the code.
+    ///
+    /// RIDL-306 is one code for the whole boundary, so a code assertion says
+    /// nothing about which rule ran. That is not a theoretical gap. Making
+    /// duration arithmetic produce a numeric — deleting the `Duration` arm from
+    /// the `+ - * / %` handler — left this suite green while the message the
+    /// author reads changed from "`+` over a duration, duration supports
+    /// comparison only (§5.3)" to "`<` requires operands of one ordered domain
+    /// (§5.2)": a different rule, a different span, and a fix suggestion that
+    /// sends the reader to the wrong operator. E5.1 extends this rule, so a
+    /// partial regression there is exactly the shape that would pass.
+    ///
+    /// Two things close it. The **message fragment** names the rule. The
+    /// **span** names the operator the rule fired on, which is what the masking
+    /// fixture `window + 10ms < 1s` cannot show on its own: the outer `<` is a
+    /// second chance to raise RIDL-306 over the same source, so only the span
+    /// distinguishes "the `+` was rejected" from "the `+` was accepted and the
+    /// `<` was rejected".
     #[test]
     fn ridl_306_further_boundary_forms() {
         let db = RidlDatabase::default();
@@ -1319,23 +1394,55 @@ mod tests {
             ("position".to_string(), gear()),
             ("flag".to_string(), ExprType::Boolean),
         ];
-        for text in [
-            // duration arithmetic (§5.3)
-            "window + 10ms < 1s",
+        for (text, fragment, offending) in [
+            // duration arithmetic (§5.3). The span is the `+` sub-expression:
+            // the enclosing `<` must never be what is reported here.
+            ("window + 10ms < 1s", "`+` over a duration", "window + 10ms"),
+            // The same rule with no second operator to hide behind — the
+            // masking-free control for the row above.
+            (
+                "window + 10ms == 20ms",
+                "`+` over a duration",
+                "window + 10ms",
+            ),
             // enum ordering (§5.3)
-            "position < GearPosition.DRIVE",
+            (
+                "position < GearPosition.DRIVE",
+                "`<` orders enum values",
+                "position < GearPosition.DRIVE",
+            ),
             // `%` over a float-backed operand (§5.3)
-            "speed % 0.5 == 0.0",
+            (
+                "speed % 0.5 == 0.0",
+                "`%` requires integer-backed operands",
+                "speed % 0.5",
+            ),
             // a string operand (§5.3)
-            "speed == \"x\"",
+            (
+                "speed == \"x\"",
+                "string or regex literal in a contract expression",
+                "\"x\"",
+            ),
             // a boolean where a number is required
-            "flag + 1 > 0",
+            (
+                "flag + 1 > 0",
+                "`+` requires numeric operands of one type",
+                "flag + 1",
+            ),
             // an enum type name in value position
-            "GearPosition == 0",
+            (
+                "GearPosition == 0",
+                "names an enum type, which has no value",
+                "GearPosition",
+            ),
             // field access on a non-tuple
-            "speed.min >= 0.0",
+            (
+                "speed.min >= 0.0",
+                "the guaranteed subset admits field access on a tuple-typed `result` only",
+                "speed.min",
+            ),
             // `result` in a require
-            "result >= 0.0",
+            ("result >= 0.0", "`result` is not in scope here", "result"),
         ] {
             let scope = ContractScope {
                 params: &params,
@@ -1346,9 +1453,17 @@ mod tests {
             };
             let (ty, diagnostics) = check_contract_expr(&parse_expr(text), &scope);
             assert_eq!(ty, None, "`{text}` must not type-check");
+            assert_eq!(codes(&diagnostics), vec!["RIDL-306"], "`{text}`");
             assert!(
-                codes(&diagnostics).contains(&"RIDL-306"),
-                "`{text}`: {diagnostics:?}"
+                diagnostics[0].message.contains(fragment),
+                "`{text}` must be rejected by the rule that says `{fragment}`, got: {}",
+                diagnostics[0].message,
+            );
+            let source = contract_source(text);
+            assert_eq!(
+                spanned(&source, &diagnostics[0]),
+                offending,
+                "`{text}`: the span must cover the form the rule rejected",
             );
         }
     }
