@@ -52,8 +52,11 @@ standalone member; rsdl is the apex.
     just check      lint gate — prim --check + markdownlint (no writes)
     just compile    compile the Rust workspace
     just test       run the Rust workspace test suite
+    just fmt-check  cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just lint       cargo clippy --workspace --all-targets -- -D warnings
-    just build      compile + test + lint + check — the full local gate
+    just wasm-check cargo check for wasm32 with --no-default-features
+    just build      fmt-check + compile + test + lint + wasm-check + check — the
+                    full local gate, and every member ADR-0008 decision 11 names
     just verify     commit-message lint over the branch range, then build — run before a PR
     just book       serve the mdBook docs locally
     just release    git std bump — version, changelog, tag

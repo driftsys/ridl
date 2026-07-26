@@ -97,18 +97,20 @@ Markdown/JSON/YAML/TOML), then wires up the repo-local hooks in `.githooks/`.
 
 The task runner is [`just`](https://github.com/casey/just):
 
-| recipe         | what it does                                            |
-| -------------- | ------------------------------------------------------- |
-| `just`         | list the recipes                                        |
-| `just fmt`     | reformat the connective tissue with prim, fix Markdown  |
-| `just check`   | lint gate — `prim --check` + markdownlint, no writes    |
-| `just compile` | compile the Rust workspace                              |
-| `just test`    | run the Rust workspace test suite                       |
-| `just lint`    | `cargo clippy --workspace --all-targets -- -D warnings` |
-| `just build`   | `compile` + `test` + `lint` + `check` — the local gate  |
-| `just verify`  | commit-message lint + `build` — run before a PR         |
-| `just book`    | serve the mdBook docs locally                           |
-| `just release` | `git std bump` — version, changelog, tag                |
+| recipe            | what it does                                                                        |
+| ----------------- | ----------------------------------------------------------------------------------- |
+| `just`            | list the recipes                                                                    |
+| `just fmt`        | reformat the connective tissue with prim, fix Markdown                              |
+| `just check`      | lint gate — `prim --check` + markdownlint, no writes                                |
+| `just compile`    | compile the Rust workspace                                                          |
+| `just test`       | run the Rust workspace test suite                                                   |
+| `just fmt-check`  | `cargo fmt --all --check` (no writes)                                               |
+| `just lint`       | `cargo clippy --workspace --all-targets -- -D warnings`                             |
+| `just wasm-check` | `cargo check` for wasm32, `--no-default-features`                                   |
+| `just build`      | `fmt-check` + `compile` + `test` + `lint` + `wasm-check` + `check` — the local gate |
+| `just verify`     | commit-message lint + `build` — run before a PR                                     |
+| `just book`       | serve the mdBook docs locally                                                       |
+| `just release`    | `git std bump` — version, changelog, tag                                            |
 
 Commits are [Conventional Commits](https://www.conventionalcommits.org), linted
 against `.git-std.toml`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
