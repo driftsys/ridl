@@ -646,9 +646,10 @@ interface Transfer {
 }
 ```
 
-Direction follows position: a stream in return position flows from provider to
-consumer, a stream in parameter position flows the other way, and a query with
-both is full-duplex. A stream on a `signal` or an `event` is a `RIDL-201`
+Direction follows position. A stream in return position is declared to flow
+from provider to consumer, one in parameter position the other way, and a query
+with both declares full duplex. That is a statement about the contract; nothing
+flows until a binding exists to carry it. A stream on a `signal` or an `event` is a `RIDL-201`
 error — a signal is the better stream for state, and an unbounded push of
 occurrences is an event.
 
@@ -740,20 +741,19 @@ validate a vocabulary and its combinations (diagnostics `TYPL-402` and
 ridl build --emit rust --out-dir out
 ```
 
-`ridl build` compiles a workspace and writes one artifact per package. Three
+`ridl build` compiles a workspace and writes one artifact per package. Four
 emit targets exist today:
 
-| `--emit`   | Output          | Contents                                     |
-| ---------- | --------------- | -------------------------------------------- |
-| `rust`     | `<package>.rs`  | idiomatic Rust source (the default)          |
-| `c-header` | `<package>.h`   | the extern-C header                          |
-| `ir-json`  | `<package>.ir.json` | the lowered IR v2 as exact-decimal JSON  |
+| `--emit`     | Output              | Contents                                |
+| ------------ | ------------------- | --------------------------------------- |
+| `rust`       | `<package>.rs`      | idiomatic Rust source (the default)     |
+| `c-header`   | `<package>.h`       | the extern-C header                     |
+| `ir-json`    | `<package>.ir.json` | the lowered IR v2 as exact-decimal JSON |
+| `typescript` | `<package>.ts`      | idiomatic TypeScript source             |
 
 There is no transport binding and no code generator for SOME/IP, gRPC, DDS,
 MQTT or AIDL yet. Those mappings are specified in the ridl language reference,
-Appendix B, and are the work of later epics. A TypeScript generator exists in
-the workspace as a library; check `ridl build --emit --help` for whether your
-build exposes it on the command line.
+Appendix B, and are the work of later epics.
 
 Classic CAN is not on that list, and never will be for a whole interface:
 Appendix B records that DBC/CAN binds `signal` declarations only, and that an
@@ -811,8 +811,11 @@ An `interface` is an abstract shape: a reusable, identity-less group of
 interactions. It is not addressable and not deployed.
 
 A `service` is a global, named, published declaration of one — the catalog
-entry that gives a contract a concrete identity in the system, addressable as
-`service.member`. Service names are unique across the system and always public.
+entry that gives a contract a concrete identity in the system. The
+specification defines its members as addressed `service.member`; no runtime
+resolves such an address today, so read it as the naming scheme a deployment
+will use. Service names are unique across the system and always public, and
+that uniqueness the compiler does enforce (`RIDL-140`).
 
 ```ridl
 package veh.cluster

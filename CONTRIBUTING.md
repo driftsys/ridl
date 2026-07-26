@@ -58,7 +58,8 @@ Every fenced block in `docs/book/` whose info string starts with `ridl` or
 `typl` is **compiled by `crates/ridl/tests/book_examples.rs`**, which runs under
 `cargo test --workspace`. A verified block must be a complete, self-contained
 package file — it declares its own `package`, and blocks sharing a package name
-are staged side by side so a later one can `import` from an earlier one.
+are staged side by side, so one can `import` from another regardless of which
+comes first in the book.
 
 Mark a block that is deliberately not compilable — a fragment quoted out of its
 file, a counter-example, a shape the language rejects — with `ignore`:
@@ -84,13 +85,19 @@ highlighting.
 The harness is fail-closed. Each of these is an error rather than a silent skip:
 
 - a verified block with no `package` declaration;
-- an unrecognised marker, or `ignore` and `allow=` on the same fence;
+- an unrecognised marker, an empty `allow=`, or `ignore` and `allow=` on the
+  same fence;
 - **any** diagnostic the block did not name — error, warning, note, or one of
   the uncoded diagnostics, which can never be allowed because they have no code
   to name;
-- an `import` naming a package no block declares, or a name no block in that
-  package provides. The compiler does not diagnose an unresolved import yet, so
-  the harness checks it rather than trusting the gap;
+- an `allow=` naming a code the block does **not** draw, so a marker cannot
+  outlive the example it was written for;
+- an `import` naming a package no block declares, a name no block in that
+  package provides, or the block's own package. The compiler resolves the
+  package and stops — an unresolved _name_ inside a package it found draws no
+  diagnostic — so the harness checks it rather than trusting the gap;
+- a fence the scanner cannot read (see below);
+- an unclosed fence, which would swallow every example after it;
 - a book with no verified blocks at all.
 
 A package name is a **book-wide** namespace, not a per-chapter one. Two chapters
@@ -98,10 +105,28 @@ that both declare `package veh.demo` are staged into one directory and collide
 (`TYPL-009`) on every declaration they repeat, so give each chapter its own
 package prefix.
 
-Fences are read per CommonMark: three or more backticks or tildes, up to three
-spaces of indentation. An indented fence inside a numbered step is verified like
-any other, and a `ridl` fence quoted inside a longer fence — as in the samples
-above — is documentation rather than an example.
+### Where a fence may sit
+
+Fences are three or more backticks or tildes, closed by at least as long a run
+of the same marker. **Indentation is unrestricted**: a fence inside a list item,
+at any nesting depth, is verified like any other — including from step 10 of an
+ordered list, where the content column passes the three that CommonMark allows a
+top-level fence.
+
+Two placements the scanner declines, and **fails the book rather than
+skipping**:
+
+- a fence inside a **block quote**, because reading it means tracking block
+  structure;
+- a language word that is not exactly `ridl` or `typl` — `RIDL`, `ridl{.class}`.
+
+mdBook renders both as `class="language-ridl"`, so a reader believes them. If
+you hit this, move the fence out of the block quote or fix the language word.
+The refusal is deliberate: guessing at CommonMark block structure is how the
+harness would go back to failing silently.
+
+A `ridl` fence quoted inside a longer fence — as in the samples above — is
+documentation rather than an example, and is left alone.
 
 Failures name the Markdown file and the exact line, because each block is staged
 with the line offset it has in its source file.

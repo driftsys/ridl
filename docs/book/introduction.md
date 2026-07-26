@@ -25,11 +25,11 @@ Two layers of the family have a working toolchain in this repository:
 - **typl** — the vocabulary layer (epic E1): compiler, `ridl fmt`, an LSP
   server, and a VS Code extension.
 - **ridl** — the interface layer over it (epic E2): the five interaction kinds,
-  timing annotations, contracts, interfaces and services, and `ridl diff`.
+  timing annotations, contracts, interfaces and services, a TypeScript code
+  generator beside the Rust one, and `ridl diff`.
 
-`ridl build` emits Rust source, an extern-C header, or the IR as JSON. A
-TypeScript generator exists in the workspace as a library; whether the command
-line exposes it depends on your build, so check `ridl build --emit --help`.
+`ridl build --emit` writes Rust source, TypeScript source, an extern-C header,
+or the IR as JSON.
 
 **uxdl, rmdl, and rsdl are specified but not built.** Their language references
 are complete enough to design against, but no compiler accepts them and nothing
