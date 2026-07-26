@@ -18,8 +18,8 @@ ADR-0006 decision 8 made the gate local while CI is stuck, and ADR-0008 decision
 members were not reachable from `just build`, and PR #184 wired them in. Review
 of #184 found the deeper problem: the local gate and `.github/workflows/ci.yml`
 were two independent copies of the same command set, and they had drifted in
-four places. Every one of the four let a tree that is clean locally fail CI, or
-the reverse.
+four places. Review of the commit that fixed those four found a fifth. Every one
+of the five let a tree that is clean locally fail CI, or the reverse.
 
 1. **No toolchain pin.** There was no `rust-toolchain.toml` and no
    `rustfmt.toml`. CI installed `dtolnay/rust-toolchain@stable`; a contributor
@@ -49,9 +49,20 @@ the reverse.
    removed from `.markdownlintignore`, CI's command exits 0 and the local
    command exits 1 on the same tree.
 
-The four are one defect with four instances: a gate command written down twice
-drifts. Closing the four instances without closing the mechanism guarantees a
-fifth.
+5. **The commit-message lint was written down twice, and the copies had already
+   drifted.** The `convco` job ran
+   `git std lint --range
+   origin/$base_ref..HEAD`; the `verify` recipe ran
+   `origin/main..HEAD`. They agreed only for PRs based on `main`. This one was
+   not in the review that opened this ADR — it was found in review of the commit
+   that first stated the rule against exactly this, in the same workflow file
+   that stated it, and in the one place `gate-parity` cannot see, because
+   `verify` is not a dependency of `build`.
+
+The five are one defect with five instances: a gate command written down twice
+drifts. Closing the instances without closing the mechanism guarantees a sixth —
+and the fifth instance is what that sentence looks like when it is not a
+prediction.
 
 ## Decision
 
@@ -95,21 +106,33 @@ fifth.
    the single definition of every gate command. CI installs the tools a runner
    needs and then invokes the recipes — `just check`, `just compile`,
    `just test`, and the rest — rather than restating their command lines. Two
-   copies that agree today are one edit away from disagreeing, and the four gaps
-   above are that edit having happened four times. The copies are gone, so there
-   is nothing left to keep in sync. CI installs a pinned `just` (1.38.0, the
-   release the recipes were verified against locally) for the same reason the
-   Rust toolchain is pinned: an unpinned runner tool is a second toolchain
-   nobody chose.
+   copies that agree today are one edit away from disagreeing, and the five gaps
+   above are that edit having happened five times. What remains in the workflow
+   is tool installation and job plumbing; no gate command is written there.
+
+   When CI needs a variant of a check, the recipe takes a parameter and CI
+   passes it. That is how the fifth instance was closed: the `convco` job held
+   its own `git std lint --range origin/$base_ref..HEAD` and `verify` held
+   `origin/main..HEAD`, so the two had **already** drifted and agreed only for
+   PRs based on `main`. Both now invoke `just lint-commits`, whose base is a
+   parameter defaulting to `main`. This one was found in review of the commit
+   that stated the rule, in the same file that stated it — which is the argument
+   for the rule, not against it.
 
 6. **`just gate-parity` guards the half that single-sourcing does not reach.**
    Single-sourcing the command text cannot stop a member from being dropped from
    CI, or added to `build` and never wired into CI — which is how `mdbook build`
    came to run in CI alone, and how `wasm-check` came to be a recipe nothing
    depended on (#182). The recipe reads `build`'s dependency list from the
-   justfile and fails when any member is not invoked as `just <recipe>` in
-   `.github/workflows/ci.yml`. It proves CI runs no less than the local gate; it
-   does not prove CI runs nothing else.
+   justfile and fails when any member is not invoked by a `run:` step in
+   `.github/workflows/ci.yml`.
+
+   What it proves is narrow: that the text of each step is present. It does not
+   prove the step is reached — dropping a job from the `ci` aggregate's
+   `needs:`, narrowing `on:`, or adding an `if:` that never holds all leave it
+   green while the gates diverge — and it says nothing about `verify` or
+   `lint-commits`, which are not dependencies of `build`. That last blind spot
+   is where the `lint-commits` drift in decision 5 lived unnoticed.
 
 7. **`--locked` is added where CI had it and nowhere else.** `just compile` and
    `just test` carry it; `fmt-check`, `lint`, and `wasm-check` do not, because
@@ -117,14 +140,27 @@ fifth.
    the flag where CI does not have it would be a new divergence, not a fix.
 
 8. **`mdbook build` becomes a gate member, `just book-check`, and mdBook becomes
-   a hard local requirement.** The cost was weighed and accepted: the build
-   takes about 30 ms on this book, and the alternative — leaving the check in CI
-   alone — is what made an unparseable `SUMMARY.md` unreportable before pushing.
-   mdBook is not pinned, unlike the Rust toolchain: `mdbook build` is a
-   pass-or-fail check whose verdict does not vary with patch version, where
-   rustfmt and clippy produce version-shaped output; and rustup selects a
-   toolchain per directory while mdBook has no equivalent, so pinning it would
-   force a global downgrade on a contributor who already has a newer one.
+   a hard local requirement.** The cost was weighed and accepted: the build is a
+   small fraction of a second on this book, and the alternative — leaving the
+   check in CI alone — is what made an unparseable `SUMMARY.md` unreportable
+   before pushing. The recipe builds a **copy** of the book, because
+   `mdbook build` writes into its own source: a `SUMMARY.md` naming a chapter
+   file that does not exist makes mdBook create that file and exit 0. A check
+   that mutates the tree it is checking is not a check.
+
+   `mdbook` and `just` are pinned **on the CI side only** — `MDBOOK_VERSION` and
+   `JUST_VERSION` in the workflow's `env:`, so both pins are visible in one
+   place rather than buried in a curl URL. Nothing applies either pin to a
+   contributor, who runs whatever their package manager gave them; the version
+   CI installs and the version a contributor runs can differ, and do (CI 0.4.40,
+   this branch verified on 0.4.52). That asymmetry is real and is not closed
+   here. Decision 1's argument does not carry over to it: rustup applies
+   `rust-toolchain.toml` to both sides at no cost and selects per directory,
+   where mdBook and `just` have no such mechanism, so a contributor-side pin
+   would mean forcing a global downgrade on someone who already has a newer
+   build. What is claimed for `mdbook build` is only that its **verdict** is
+   stable across patch versions in the narrow class it actually checks (decision
+   13); that is an argument for tolerating the skew, not for calling it absent.
 
 9. **`.markdownlintignore` is the exclusion list; the `--ignore` flags are
    removed from CI.** CI was the wrong side. The file is committed, both
@@ -140,12 +176,18 @@ fifth.
     produces. A gate that quietly weakens itself when a tool is absent is the
     defect this ADR is about, so no guard downgrades to a warning or a skip.
 
-11. **`just toolchain-check` verifies the pin is actually in force.** Without
-    rustup, `rust-toolchain.toml` is read by nobody and ignored without a word,
-    and the gate then measures a toolchain nobody chose. A `RUSTUP_TOOLCHAIN`
-    variable or a `rustup override set` in the working directory does the same
-    with rustup present. The recipe compares `rustc --version` against the
-    `channel` in the file and fails on any mismatch, which covers all three.
+11. **`just toolchain-check` compares versions.** It reads the `channel` from
+    `rust-toolchain.toml` and fails when `rustc --version` reports a different
+    one. It does not detect an override as such, and should not be described as
+    doing so: `RUSTUP_TOOLCHAIN=stable` passes today because `stable` is 1.95.0,
+    which is the right answer — what the gate measures against is the compiler
+    version, not the alias that selected it. What the comparison does catch is
+    every way the version can end up wrong: no rustup, in which case the file is
+    read by nobody and ignored without a word; a `RUSTUP_TOOLCHAIN` or a
+    `rustup override` naming a different release; or a pin nobody installed. It
+    also rejects a `channel` that is not an exact version, with that as the
+    stated reason — a moving alias is the gap the pin exists to close, and the
+    recipe previously blamed `RUSTUP_TOOLCHAIN` for it.
 
 12. **`./bootstrap` installs the pinned toolchain and names every other tool the
     gate requires.** It keeps installing git-std and prim, and now runs
@@ -158,20 +200,40 @@ fifth.
     reconciliation — silence was the previous behaviour, and silence is what let
     mdBook become a gate requirement nothing told a contributor about.
 
+13. **What `just book-check` catches is a `SUMMARY.md` parse check, not "the
+    book compiles".** Measured against mdBook 0.4.52 on this book:
+    `mdbook build` exits non-zero on a `SUMMARY.md` mdBook cannot parse (a
+    suffix chapter followed by a list) and on a missing `SUMMARY.md`. It exits
+    **0** on a chapter file that does not exist (creating it), on a broken
+    `{{#include}}` (an ERROR line, then exit 0), on a `SUMMARY.md` holding no
+    list items, on one that is not a summary at all, and on bad nesting. The
+    recipe comment, `README.md`, `CONTRIBUTING.md`, and `AGENTS.md` say that
+    rather than "the docs book compiles", which they said first and which is
+    false. A recipe is described by what it fails on, not by what its name
+    suggests.
+
 ## Consequences
 
 - Positive: one toolchain, named in one file, installed the same way on both
-  sides. One definition per gate command. Every gap in the list above now has a
-  local check that fails on it, and each of those checks was run against a
-  constructed failure before it was accepted.
-- Positive: `just build` gained three members and about a second. The four
-  members that need no compilation run first, so a wrong toolchain, an unwired
-  CI job, a formatting regression, or an unparseable `SUMMARY.md` all report
-  before a compile starts. Measured: 0.94 s for the four together.
+  sides. One definition per gate command. Gaps 1 to 4 each gained a local check
+  that fails on them, and every one of those checks was run against a
+  constructed failure before it was accepted. Gap 5 gained no check — nothing
+  watches `verify` — and is closed by single-sourcing alone.
+- Positive: `just build` gained three members, all cheap. The four members that
+  need no compilation run first, so a wrong toolchain, an unwired CI job, a
+  formatting regression, or an unparseable `SUMMARY.md` all report before a
+  compile starts. No wall-clock figure is quoted here: the first draft quoted
+  two, and neither reproduced on a second machine.
 - Negative / accepted: mdBook and `just` are now hard requirements for running
   the gate at all, and `./bootstrap` fails when they are absent. That is the
   intended trade — a named missing tool over a silently skipped check.
-- Negative / accepted: CI installs `just` in four jobs, which is four copies of
+- Negative / accepted: mdBook and `just` are pinned on the CI side and unpinned
+  on the contributor side (decision 8). The two sides can run different releases
+  of both, and did while this ADR was being written.
+- Negative / accepted: `gate-parity` watches only the members of `build`.
+  `verify` and `lint-commits` are outside it, and that is where the fifth
+  instance hid. Single-sourcing is what protects those two; no check does.
+- Negative / accepted: CI installs `just` in five jobs, which is five copies of
   one download step. A composite action would remove the repetition and add a
   file that cannot be exercised while CI is stuck.
 - Negative / accepted: pinning to an exact version means the repository no
@@ -194,6 +256,6 @@ fifth.
 - ADR-0008 — E2 execution decisions; decision 11 enumerates the gate's members,
   which this ADR does not change.
 - Issue #182 and PR #184 — the two members that were not reachable from
-  `just build`, and the review that found these four gaps.
+  `just build`, and the review that found the first four of these gaps.
 - `justfile`, `.github/workflows/ci.yml`, `rust-toolchain.toml`, `bootstrap` —
   the files this ADR governs.

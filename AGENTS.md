@@ -54,7 +54,8 @@ standalone member; rsdl is the apex.
     just toolchain-check the running toolchain is the one rust-toolchain.toml pins
     just gate-parity     CI invokes every member of just build
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
-    just book-check      mdbook build — the docs book compiles
+    just book-check      mdbook build on a copy — catches a SUMMARY.md mdBook
+                         cannot parse (it does not prove the book is whole)
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
@@ -63,7 +64,9 @@ standalone member; rsdl is the apex.
                          compile + test + lint + wasm-check + check — the full
                          local gate: every member ADR-0008 decision 11 names, plus
                          the four CI checks ADR-0009 brought back to this side
-    just verify          commit-message lint over the branch range, then build — run before a PR
+    just lint-commits    git std lint over the commits on top of a base branch
+                         (BASE defaults to main; CI passes the PR base branch)
+    just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just release         git std bump — version, changelog, tag
     just install         ./bootstrap — toolchain, git hooks, gate requirements
@@ -73,11 +76,17 @@ driftsys/git-std (commits, versioning, hooks) and driftsys/prim
 (connective-tissue formatting).
 
 **The justfile is the single definition of every gate command.**
-`.github/workflows/ci.yml` installs tools and then invokes these recipes; it
-never restates a command. Adding a check means adding a recipe, adding it to
-`build`, and adding `just <recipe>` to the workflow — `just gate-parity` fails
-until the last of those is done. Never write a gate command directly into the
-workflow (ADR-0009).
+`.github/workflows/ci.yml` installs tools and then invokes these recipes; what
+remains in the workflow is tool installation and job plumbing, never a gate
+command. Adding a check means adding a recipe, adding it to `build`, and adding
+`run: just <recipe>` to the workflow — `just gate-parity` fails until the last
+of those is done. When CI needs a variant of a check, give the recipe a
+parameter and pass it (as `convco` does with `just lint-commits <base>`); do not
+write a second copy of the command into the workflow (ADR-0009).
+
+`gate-parity` covers only the members of `build`. `verify` and `lint-commits`
+are outside its reach, which is where the workflow and the justfile last drifted
+apart unnoticed — check those two by reading when you touch either file.
 
 ## Conventions
 

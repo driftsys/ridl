@@ -110,13 +110,14 @@ The task runner is [`just`](https://github.com/casey/just):
 | `just toolchain-check` | the running toolchain is the one `rust-toolchain.toml` pins                                                                                                   |
 | `just gate-parity`     | CI invokes every member of `just build`                                                                                                                       |
 | `just fmt-check`       | `cargo fmt --all --check` (no writes)                                                                                                                         |
-| `just book-check`      | `mdbook build` — the docs book compiles                                                                                                                       |
+| `just book-check`      | `mdbook build` on a copy — catches a SUMMARY.md mdBook cannot parse                                                                                           |
 | `just compile`         | compile the Rust workspace (`--locked`)                                                                                                                       |
 | `just test`            | run the Rust workspace test suite (`--locked`)                                                                                                                |
 | `just lint`            | `cargo clippy --workspace --all-targets -- -D warnings`                                                                                                       |
 | `just wasm-check`      | `cargo check` for wasm32, `--no-default-features`                                                                                                             |
 | `just build`           | `toolchain-check` + `gate-parity` + `fmt-check` + `book-check` + `compile` + `test` + `lint` + `wasm-check` + `check` — the local gate, which is what CI runs |
-| `just verify`          | commit-message lint + `build` — run before a PR                                                                                                               |
+| `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                       |
+| `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                    |
 | `just book`            | serve the mdBook docs locally                                                                                                                                 |
 | `just release`         | `git std bump` — version, changelog, tag                                                                                                                      |
 

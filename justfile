@@ -32,15 +32,17 @@ check:
     prim --check .
     markdownlint '**/*.md'
 
-# Check that the running Rust toolchain is the one rust-toolchain.toml pins.
+# Check that the rustc about to run is the version rust-toolchain.toml pins.
 #
-# rustup applies that file per directory, so with rustup installed every cargo
-# invocation below is already the pinned version. Without rustup the file is
-# read by nobody and ignored without a word, and `cargo fmt --all --check` then
-# measures whatever rustfmt the contributor happens to have — the check reports
-# green against a different standard than CI applies. A `RUSTUP_TOOLCHAIN` in
-# the environment or a `rustup override set` in this directory does the same
-# thing with rustup present. One version comparison catches all three.
+# It compares versions, and only versions. It does not detect an override as
+# such: `RUSTUP_TOOLCHAIN=stable` passes today because `stable` is 1.95.0, which
+# is the right answer — what the gate measures against is the compiler version,
+# not which alias selected it. What it does catch is every way the version can
+# end up wrong: no rustup at all, in which case this file is read by nobody and
+# ignored without a word; a `RUSTUP_TOOLCHAIN` or a `rustup override set`
+# naming a different release; or a pin nobody installed. Any of those leaves
+# `cargo fmt --all --check` measuring a rustfmt other than the one CI applies,
+# and reporting green against it.
 toolchain-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -53,6 +55,12 @@ toolchain-check:
         echo "toolchain-check: rust-toolchain.toml names no channel." >&2
         exit 1
     fi
+    if ! printf '%s' "$pinned" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+        echo "toolchain-check: rust-toolchain.toml pins the channel '$pinned'." >&2
+        echo "toolchain-check: the pin has to be an exact version, not a moving alias —" >&2
+        echo "toolchain-check: an alias is the gap the pin exists to close (ADR-0009)." >&2
+        exit 1
+    fi
     if ! command -v rustc >/dev/null 2>&1; then
         echo "toolchain-check: rustc is required and is not on PATH." >&2
         echo "toolchain-check: install rustup (https://rustup.rs); it applies the pin." >&2
@@ -61,8 +69,9 @@ toolchain-check:
     running="$(rustc --version | cut -d' ' -f2)"
     if [ "$running" != "$pinned" ]; then
         echo "toolchain-check: rust-toolchain.toml pins $pinned, rustc reports $running." >&2
-        echo "toolchain-check: install rustup, or clear the RUSTUP_TOOLCHAIN variable or" >&2
-        echo "toolchain-check: the 'rustup override' that is outranking the pin." >&2
+        echo "toolchain-check: install rustup so the pin is applied, or clear whatever names" >&2
+        echo "toolchain-check: another release — a RUSTUP_TOOLCHAIN variable, or a" >&2
+        echo "toolchain-check: 'rustup override' set on this directory." >&2
         exit 1
     fi
     echo "toolchain-check: rustc $running matches the pin."
@@ -151,18 +160,34 @@ lint:
         echo "lint: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
-# Build the mdBook docs as a gate member (build output: ./book, gitignored).
+# Build the mdBook docs as a gate member. `just book` serves the book and is for
+# reading it; this recipe builds it and is for failing on it. Until this recipe
+# existed the only place that check ran was CI, so it could not be run before
+# pushing.
 #
-# `just book` serves the book and is for reading it; this recipe builds it and
-# is for failing on it. mdBook rejects a SUMMARY.md it cannot parse, which is
-# how a docs-only PR breaks the published book. Until this recipe existed the
-# only place that check ran was CI, so it could not be run before pushing.
+# What it catches is less than "the book compiles", and the difference matters.
+# Measured against mdBook 0.4.52 on this book, `mdbook build` exits non-zero on
+# a SUMMARY.md mdBook cannot parse (a suffix chapter followed by a list, for
+# one) and on a missing SUMMARY.md. It exits 0 on a chapter file that does not
+# exist, on a broken `{{#include}}` (an ERROR line, then exit 0), on a
+# SUMMARY.md holding no list items, on one that is not a summary at all, and on
+# bad nesting. So this recipe is a SUMMARY.md parse check, not a proof that the
+# rendered book is whole.
 #
-# The guard is deliberate. Making this a `build` dependency makes mdBook a hard
-# requirement for every local build, and a missing binary would otherwise fail
-# with exit 127 and no explanation (the reasoning that put a `command -v rustup`
-# guard on `wasm-check`). It costs about 30 ms once mdBook is installed, and
-# `./bootstrap` names it among the tools the gate requires.
+# It builds a copy, because `mdbook build` writes into its own source: a
+# SUMMARY.md naming a chapter file that does not exist makes mdBook **create
+# that file** in `docs/book/` and exit 0. A check that mutates the tree it is
+# checking is not a check. Copying `book.toml` plus `docs/book` into a temporary
+# directory keeps the repository read-only for the duration; the book has no
+# `{{#include}}` reaching outside `docs/book`, which is what makes the copy
+# faithful. `just book` still writes ./book, which is gitignored.
+#
+# The mdBook guard is deliberate. Making this a `build` dependency makes mdBook
+# a hard requirement for every local build, and a missing binary would otherwise
+# fail with exit 127 and no explanation (the reasoning that put a
+# `command -v rustup` guard on `wasm-check`). The build is a small fraction of a
+# second on this book, and `./bootstrap` names mdBook among the tools the gate
+# requires.
 book-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -172,7 +197,12 @@ book-check:
         echo "book-check: or from https://github.com/rust-lang/mdBook/releases." >&2
         exit 1
     fi
-    mdbook build
+    scratch="$(mktemp -d)"
+    trap 'rm -rf "$scratch"' EXIT
+    mkdir -p "$scratch/docs"
+    cp book.toml "$scratch/"
+    cp -R docs/book "$scratch/docs/book"
+    mdbook build "$scratch"
 
 # Check that CI still invokes every recipe the local gate is made of.
 #
@@ -181,13 +211,23 @@ book-check:
 # dropped from CI, or added to `build` and never wired into CI, which is how
 # `mdbook build` came to run in CI and nowhere else. This compares the two
 # lists: every dependency of `build` must appear in .github/workflows/ci.yml as
-# `just <recipe>`.
+# a `run:` step invoking `just <recipe>`.
 #
-# It does not prove CI runs nothing else; it proves CI runs no less.
+# What it checks is narrow, and the narrowness is the point of this paragraph.
+# It checks that the text of a `run: just <member>` step is present in the
+# workflow file. It does not check that the step is reached: dropping a job from
+# the `ci` aggregate's `needs:`, narrowing `on:`, or adding an `if:` that never
+# holds all leave this green while the two gates genuinely diverge. It also says
+# nothing about `verify` and `lint-commits`, which are not dependencies of
+# `build`.
 #
-# The pattern matches a run step and only a run step. A looser pattern would
-# have been satisfied by this file's own name appearing in a YAML comment, which
-# is a check that cannot fail.
+# Whole-line YAML comments are excluded, so a recipe named only in a comment —
+# this workflow's own header names several — does not satisfy the check. A
+# trailing comment on a real step does not break it, and neither does a `name:`
+# on the step, because the pattern is not anchored to the start of the line:
+# five steps in that workflow already use the `name:` + `run:` form, so
+# requiring gate steps to stay unnamed would have been a rule nothing announced,
+# enforced by a check whose remedy degrades the Actions UI.
 gate-parity:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -201,9 +241,10 @@ gate-parity:
         echo "gate-parity: could not read the dependencies of 'build' from the justfile." >&2
         exit 1
     fi
+    steps="$(grep -vE '^[[:space:]]*#' "$workflow")"
     missing=""
     for member in $members; do
-        if ! grep -qE "^[[:space:]]*-[[:space:]]+run:[[:space:]]+just $member[[:space:]]*\$" "$workflow"; then
+        if ! printf '%s\n' "$steps" | grep -qE "run:[[:space:]]+just $member[[:space:]]*(#.*)?\$"; then
             missing="$missing $member"
         fi
     done
@@ -225,40 +266,55 @@ gate-parity:
 # reachable from here, because `just verify` is what the pre-push hook runs — a
 # member that is not a dependency of `build` is not enforced.
 #
-# The four cheap members run first, and together take about a second: they
-# need no compilation, so a wrong toolchain, an unwired CI job, a formatting
-# regression, or an unparseable SUMMARY.md all report before a compile starts
-# rather than after a full compile and test run.
+# The four members that need no compilation run first, so a wrong toolchain, an
+# unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
+# report before a compile starts rather than after a full compile and test run.
 build: toolchain-check gate-parity fmt-check book-check compile test lint wasm-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
     mdbook serve
 
-# Commit-message lint over commits not yet on origin/main, then build.
-# Run before opening a PR (also wired as the pre-push hook). The range is
-# taken against origin/main because local main goes stale relative to the
-# remote; an empty range is benign and handled rather than failed.
-verify:
+# Commit-message lint over the commits this branch adds on top of a base.
+#
+# The range is taken against the remote-tracking ref because a local branch goes
+# stale relative to the remote; an empty range is benign and handled rather than
+# failed. The base is a parameter so that CI's convco job, which lints against
+# whatever branch a PR targets, and `verify`, which lints against `main`, run
+# this one definition rather than each holding its own `git std lint` line. They
+# held two before, and the two already differed: the workflow's read
+# `origin/$base_ref..HEAD` and the recipe's read `origin/main..HEAD`, so they
+# agreed only for PRs based on `main`.
+#
+# This is the one gate command `gate-parity` cannot watch, because `verify` is
+# not a dependency of `build` — which is exactly why the two copies drifted
+# unnoticed. One definition is the fix; the guard is not available here.
+lint-commits base="main":
     #!/usr/bin/env bash
     set -euo pipefail
-    if ! git rev-parse --verify --quiet origin/main >/dev/null; then
-        echo "verify: origin/main is missing — run 'git fetch origin'." >&2
-        echo "verify: refusing to skip the commit-message lint." >&2
+    ref="origin/{{ base }}"
+    if ! git rev-parse --verify --quiet "$ref" >/dev/null; then
+        echo "lint-commits: $ref is missing — run 'git fetch origin'." >&2
+        echo "lint-commits: refusing to skip the commit-message lint." >&2
         exit 1
     fi
-    if [ -z "$(git rev-list -n 1 origin/main..HEAD)" ]; then
-        echo "verify: no commits in origin/main..HEAD — nothing to lint"
+    if [ -z "$(git rev-list -n 1 "$ref"..HEAD)" ]; then
+        echo "lint-commits: no commits in $ref..HEAD — nothing to lint"
     else
-        git std lint --range origin/main..HEAD
+        git std lint --range "$ref"..HEAD
     fi
-    just build
+
+# Commit-message lint over commits not yet on origin/main, then build.
+# Run before opening a PR (also wired as the pre-push hook).
+verify: lint-commits build
 
 # Cut a release: git-std bumps the version, writes the changelog, tags.
 release:
     git std bump
 
-# Install the local toolchain: git-std, prim, and the git hooks.
+# Set up a clone or worktree: git-std, prim, the git hooks, the Rust toolchain
+# rust-toolchain.toml pins, and a report on any of the four tools the gate needs
+# (just, rustup, mdbook, markdownlint) that bootstrap cannot find.
 install:
     ./bootstrap
 

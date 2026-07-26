@@ -23,9 +23,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # The just release CI installs. Pinned for the same reason the Rust toolchain
-  # is: an unpinned runner tool is a second toolchain nobody chose.
+  # The runner-tool versions CI installs, in one place so the pins are visible
+  # rather than buried in a curl URL. Both are pinned on this side only: rustup
+  # applies rust-toolchain.toml to a contributor too, but nothing applies these
+  # two, so a contributor runs whatever their package manager gave them.
+  # ADR-0009 decision 8 records that asymmetry and why it is not closed here.
   JUST_VERSION: 1.38.0
+  MDBOOK_VERSION: 0.4.40
 
 jobs:
   markdown:
@@ -68,7 +72,7 @@ jobs:
       - name: install mdbook
         run: |
           mkdir -p "$HOME/.local/bin"
-          curl -fsSL https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz \
+          curl -fsSL "https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
             | tar -xz -C "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: just book-check
@@ -127,11 +131,22 @@ jobs:
           # synthetic merge commit, which can never pass a conventional-commit
           # lint.
           ref: ${{ github.event.pull_request.head.sha }}
+      - name: install just
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: install git-std
         run: curl -fsSL https://raw.githubusercontent.com/driftsys/git-std/main/install.sh | bash
         env:
           GIT_STD_INSTALL_DIR: /usr/local/bin
-      - run: git std lint --range origin/${{ github.base_ref }}..HEAD
+      # The recipe, not a `git std lint` line of its own. This step and the
+      # `verify` recipe each held one before, and they already differed: this one
+      # linted against the PR's base branch and `verify` against `main`, so they
+      # agreed only for PRs based on `main`.
+      - name: lint commit messages against the PR base branch
+        run: just lint-commits ${{ github.base_ref }}
 
   ci:
     name: ci
