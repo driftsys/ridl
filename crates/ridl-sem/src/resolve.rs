@@ -594,17 +594,27 @@ fn import_has_relative_prefix(import: &Import) -> bool {
 }
 
 /// Every name referenced by a bare identifier in the package's bodies — the
-/// single-segment type references and named-constant references. Qualified
-/// references (`pkg.Type`) do not consume a bare import, so they are excluded.
+/// single-segment type references, named-constant references, and the bare
+/// identifiers of a contract clause. Qualified references (`pkg.Type`) do not
+/// consume a bare import, so they are excluded.
 fn collect_used_names(db: &dyn salsa::Database, files: &[InputFile]) -> HashSet<String> {
     let mut used = HashSet::new();
     for file in files {
         let source = source_file(db, *file);
         for node in source.syntax().descendants() {
             match node.kind() {
-                // A named constant used as a bound or a `match` pattern is an
-                // `Ident` inside a `Literal`.
-                SyntaxKind::Literal => {
+                // A named constant used as a bound, an init value, an
+                // attribute value, or a `match` pattern is an `Ident` inside a
+                // `Literal`.
+                //
+                // A bare identifier inside a contract clause (`require` /
+                // `ensure`, ridl §13) is a `PathExpr`: a referenced constant
+                // (`MAX_FAN`) or the enum type at the head of a member access
+                // (`GearPosition.PARK`). The `.member` identifiers of a
+                // `MemberExpr` are tokens of that node rather than of a nested
+                // `PathExpr`, so an enum member name never counts as a use of
+                // an import.
+                SyntaxKind::Literal | SyntaxKind::PathExpr => {
                     for token in node.children_with_tokens().filter_map(|e| e.into_token()) {
                         if token.kind() == SyntaxKind::Ident {
                             used.insert(token.text().to_string());
@@ -1294,6 +1304,80 @@ mod package_tests {
             resolution.symbols["Speed"].package.as_str(),
             "x",
             "the first import still wins the binding",
+        );
+    }
+
+    #[test]
+    fn an_import_used_only_in_a_contract_clause_is_not_unused() {
+        // `collect_used_names` walked `Literal` and `QualifiedName` only, so a
+        // name referenced from a `require`/`ensure` expression — a `PathExpr`
+        // — was invisible and TYPL-007 fired on a live import. `MAX_FAN` is
+        // reached only from `require`, `Gear` only from `ensure`.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport x.Level\nimport x.MAX_FAN\nimport x.Gear\n\
+             interface Fan {\n  \
+             command setFan(level : Level) [ require level <= MAX_FAN ]\n  \
+             query state() : Level [ ensure result >= 0 && Gear.PARK != Gear.DRIVE ]\n}\n",
+        );
+        let x = package(
+            &db,
+            "x",
+            "package x\ntype Level: integer [0..7]\nconst MAX_FAN: Level = 7\n\
+             enum Gear { PARK = 0, DRIVE = 1 }\n",
+        );
+        let ws = Workspace::new(&db, vec![app, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, app, std);
+        assert!(
+            codes(&resolution).is_empty(),
+            "a contract clause is a use, got: {:?}",
+            resolution.diagnostics,
+        );
+    }
+
+    #[test]
+    fn an_import_reached_only_as_an_enum_member_name_is_still_unused() {
+        // The other direction. `import x.PARK` binds the local name `PARK`,
+        // and `PARK` does occur in the contract — but only after a `.`, as the
+        // member selected from the locally declared `Gear`. A `.member`
+        // identifier is a token of the `MemberExpr` itself rather than of a
+        // nested `PathExpr`, so it is not a reference to the import and
+        // TYPL-007 must still fire. Counting `MemberExpr` tokens as uses would
+        // silence TYPL-007 for every name that shares a spelling with an enum
+        // member.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport x.Level\nimport x.PARK\n\
+             enum Gear { PARK = 0, DRIVE = 1 }\n\
+             interface Fan {\n  \
+             query state() : Gear [ ensure result == Gear.PARK ]\n  \
+             signal level : Level @1s\n}\n",
+        );
+        let x = package(
+            &db,
+            "x",
+            "package x\ntype Level: integer [0..7]\nconst PARK: Level = 0\n",
+        );
+        let ws = Workspace::new(&db, vec![app, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, app, std);
+        assert_eq!(
+            codes(&resolution),
+            vec!["TYPL-007"],
+            "got: {:?}",
+            resolution.diagnostics,
+        );
+        assert!(
+            resolution.diagnostics[0].message.contains("PARK"),
+            "the genuinely unreferenced import is the one flagged, got: {:?}",
+            resolution.diagnostics,
         );
     }
 }
