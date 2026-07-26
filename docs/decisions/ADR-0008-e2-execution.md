@@ -10,7 +10,7 @@ cost of a small refactor before a later epic builds on it. This ADR follows the
 pattern of ADR-0006 (E0) and ADR-0007 (E1).
 
 **Editing note.** Revisions to this document have repeatedly left behind a
-sentence describing the state they replaced — fifteen found and corrected so
+sentence describing the state they replaced — sixteen found and corrected so
 far. They were scattered rather than clustered: a decision's lead contradicting
 its own body, the Status line above, a scoping claim in `## Consequences`, and a
 closed enumeration in an earlier decision that a later one silently extended.
@@ -22,23 +22,55 @@ diligence.**
 _Extended (2026-07-26)._ The count above stood at six until this sweep, and the
 sixth was found during review of the note that said five. The whole-document
 sweep this note demands was then run for the first time — against the repository
-at `af7ef7c`, not against a diff — and found nine more. Two were already
-recorded as issues: decision 13's allocation ledger (#169) and decision 17's
-"those are the only sites" claim (logged in #172). The other seven nothing had
-recorded: four in decision 21, one in decision 20, and two in `## Consequences`.
-Seven PRs merged between the amendments landing (#165) and this sweep, and every
-one of the seven stale sentences was stranded by a PR that never opened this
-file. That is the mechanism this note describes, measured: one sweep found more
-stale sentences than three rounds of diff review had. Decisions 6, 8, 16, and 18
-also carry dated extensions from this sweep; those record work that shipped as
-bound and are not counted above, because no sentence in them was falsified.
+at `af7ef7c`, not against a diff — and found **ten** more.
 
-_How to read the amendments' evidence paragraphs._ In decisions 16 to 21, a
-paragraph headed `_What the sources say._` states the evidence as it stood on
-the amendment's own date. It is not a claim about the repository today, and it
-is deliberately left alone when the work it justifies ships — rewriting it would
-delete the reason the decision was taken. Read those paragraphs as dated; read
-`_What was decided._` and `_What it binds._` as live, and sweep them.
+The tenth arrived the way the sixth did. Review of the sweep that reported nine
+found it in **decision 1**, whose "the ridl reference text is stale on these
+four" the same sweep's own new `## Consequences` note contradicted in the same
+commit — a correction stranding a sentence in the document it was correcting.
+Two of the sixteen have now been found by reviewing a correction rather than by
+making one: the sixth and the sixteenth.
+
+Two of the ten were already recorded as issues: decision 13's allocation ledger
+(#169) and decision 17's "those are the only sites" claim (logged in #172). The
+other eight nothing had recorded — four in decision 21, one in decision 20, two
+in `## Consequences`, and decision 1's. Seven PRs merged between the amendments
+landing (#165) and this sweep, and every one of those eight was stranded by a PR
+that never opened this file. That is the mechanism this note describes,
+measured: one sweep found more stale sentences than three rounds of diff review
+had. Decisions 6, 8, 16, and 18 also carry dated extensions from this sweep;
+those record work that shipped as bound and are not counted above, because no
+sentence in them was falsified.
+
+_Which sentences are dated, and which are live._ Every sentence here is one of
+two kinds, and **the split does not follow the paragraph headings**. A sentence
+that **describes repository state** — what a file said, what a test checked,
+what no document carried, what a message read — is dated to the revision that
+wrote it. It is deliberately left alone when the work it justifies ships:
+rewriting it would delete the evidence the decision rested on. A sentence that
+**states a rule, a decision, or an obligation** is live, and a sweep must check
+it against the repository.
+
+Both kinds appear under the same headings. Only `_What the sources say._`
+(decisions 16 to 21) is dated end to end. Every other heading is mixed. Decision
+21's `_What the guard has to be, which the existing two are not._` opens with
+the before-picture — the hand-maintained arrays and what their guard did not
+check — and closes with the remedy, which is live and has shipped. Decision 16's
+`_What it binds._` quotes two diagnostic messages as they read on 2026-07-25 —
+both read differently now, correctly — while the obligation in the same
+paragraph is live and has shipped. Decision 15's `_What changed and why._`,
+`_What it preserves._` and `_One constraint the shape records._` are mixed the
+same way. So classify by what a sentence asserts, not by the heading above it.
+**Never correct a dated sentence to today's state**; record what changed in a
+dated note beside it, the way decisions 1, 16 and 18 do.
+
+_`## Context` is dated by construction, and is not swept._ That section records
+the situation that prompted this ADR — including that the ridl reference and
+general form disagreed on four points, which PR #173 has since reconciled
+(decision 1). Correcting it forward would delete the reason the ADR exists, so
+it is exempt in whole, the same way the evidence sentences above are.
+`## Status` and `## Consequences` carry no such exemption and are swept, as this
+note's own history records.
 
 ## Context
 
@@ -85,7 +117,17 @@ disagreeing sources is the correct one.
    undeclared" (§6.4) — each cited by the roadmap. The ridl reference text is
    stale on these four and is corrected at epic close-out (a docs-sync item, the
    same way E1 closed out). Everywhere else the published ridl reference
-   outranks the general form (ADR-0007 decision 11 still holds).
+   outranks the general form (ADR-0007 decision 11 still holds). **Extended
+   (2026-07-26):** the close-out happened, so the staleness this decision routes
+   around is gone. PR #173 absorbed all four supersessions into
+   `docs/specification/ridl-language-reference.md`, whose header block now reads
+   "Four supersessions from general form §6 are now absorbed rather than
+   pending" and names them — §7, §10.1, Appendix A and Appendix C for inline
+   `T | E`; §4.3, §5.2 and §9 for generic `min`/`max` timing; RIDL-407 for
+   ordinal drift; §10.3 for the Stratum-3 wording. The authority rule itself is
+   unchanged and still stands: where general form §6 states a supersession the
+   reference has not absorbed, the general form governs for E2. It simply has no
+   remaining case to govern.
 
 2. **Signal init is the bare `= value` form, before any timing; signals carry no
    attribute block.**
@@ -673,9 +715,10 @@ disagreeing sources is the correct one.
 
     **Extended (2026-07-26) — what the fix wave shipped, and how it differs.**
     PR #175 took the catalogue half and left the minting half. The paragraph
-    headed _What the guard has to be_ is the before-picture that motivated the
-    change and is left as written; two passages above are now wrong about the
-    repository, and are named below.
+    headed _What the guard has to be_ opens with the before-picture that
+    motivated the change — left as written — and its remedy shipped as
+    described; two other passages above are now wrong about the repository, and
+    are named below.
 
     - **The catalogues.** `diag_codes!` in `crates/ridl-core/src/diag.rs`
       declares each code once and expands to the constant and its catalogue row,
