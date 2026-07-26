@@ -92,7 +92,7 @@ impl DiagCode {
 /// actually declared, so a constant added to neither compiled and turned nothing
 /// red. `RIDL` and `TYPL` had no catalogue at all.
 ///
-/// The remedy available in `tools/diff` — make the guard an exhaustive `match`
+/// The remedy available in `crates/ridl-diff` — make the guard an exhaustive `match`
 /// and let the compiler enforce totality — does not exist here: `DiagCode` is a
 /// newtype over `&'static str`, not an enum, so there is no variant set to match
 /// on. Declaring the constant and its entry from one line is the shape that

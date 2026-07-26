@@ -1,0 +1,15 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: "ts_for(vec![speed_decl()])"
+---
+/**
+ * Vehicle speed over ground
+ *
+ * @unit km/h
+ * @range [0.0..250.0 step 0.5]
+ */
+export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
+
+export function initSpeed(): Speed {
+  return 0.0 as Speed;
+}

@@ -1,0 +1,179 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: generated.source
+---
+import * as ridl_std from './ridl.std';
+
+/**
+ * Vehicle speed over ground
+ *
+ * @unit km/h
+ * @range [0.0..250.0 step 0.5]
+ */
+export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
+
+export function initSpeed(): Speed {
+  return 0.0 as Speed;
+}
+
+/**
+ * Coolant / ambient temperature
+ *
+ * @unit Cel
+ * @range [-40.0..125.0 step 0.1]
+ */
+export type Temperature = number & { readonly __ridl: 'veh.common.Temperature' };
+
+export function initTemperature(): Temperature {
+  return 0.0 as Temperature;
+}
+
+/**
+ * Engine crankshaft speed
+ *
+ * @unit /min
+ * @range [0.0..8000.0 step 10.0]
+ */
+export type RPM = number & { readonly __ridl: 'veh.common.RPM' };
+
+export function initRPM(): RPM {
+  return 0.0 as RPM;
+}
+
+/**
+ * Normalised ratio
+ *
+ * @unit %
+ * @range [0.0..100.0 step 0.1]
+ */
+export type Ratio = number & { readonly __ridl: 'veh.common.Ratio' };
+
+export function initRatio(): Ratio {
+  return 0.0 as Ratio;
+}
+
+export type Counter = number & { readonly __ridl: 'veh.common.Counter' };
+
+export function initCounter(): Counter {
+  return 0 as Counter;
+}
+
+/**
+ * @range [0.0..1.0 step 0.01]
+ */
+export type Gain = number & { readonly __ridl: 'veh.common.Gain' };
+
+export function initGain(): Gain {
+  return 0.0 as Gain;
+}
+
+export const MAX_SPEED = 250.0;
+
+export const SPEED_LIMIT_EU = 130.0;
+
+export const IDLE_RPM = 800.0;
+
+export const MAX_GEAR = 6;
+
+export enum GearPosition {
+  PARK = 0,
+  DRIVE = 1,
+  REVERSE = 2,
+  NEUTRAL = 3,
+}
+
+export function initGearPosition(): GearPosition {
+  return GearPosition.PARK;
+}
+
+export enum Warning {
+  LOW_FUEL = 0,
+  CHECK_ENGINE = 1,
+  DOOR_OPEN = 2,
+  SEATBELT = 3,
+}
+
+export function initWarning(): Warning {
+  return Warning.LOW_FUEL;
+}
+
+export type WarningFlags = number & { readonly __ridl: 'veh.common.WarningFlags' };
+
+export const WarningFlagsBits = {
+  LOW_FUEL: 1,
+  CHECK_ENGINE: 2,
+  DOOR_OPEN: 4,
+  SEATBELT: 8,
+} as const;
+
+export function initWarningFlags(): WarningFlags {
+  return 0 as WarningFlags;
+}
+
+export interface SpeedLimitPayload {
+  limit: Speed;
+  actual: Speed;
+}
+
+export function initSpeedLimitPayload(): SpeedLimitPayload {
+  return {
+    limit: initSpeed(),
+    actual: initSpeed(),
+  };
+}
+
+export interface DriverProfile {
+  name: ridl_std.Name;
+  speed: Speed;
+  override?: Speed;
+  /**
+   * @range [0..6]
+   */
+  gears: number;
+}
+
+export interface SensorBounds {
+  range: { min: Speed; max: Speed };
+  /**
+   * @bounds 8
+   */
+  readings: readonly Speed[];
+  /**
+   * @bounds 1..16
+   */
+  labels: readonly ridl_std.Label[];
+  /**
+   * @bounds 0..32
+   */
+  meta: ReadonlyArray<readonly [ridl_std.Label, ridl_std.Name]>;
+}
+
+export type SensorResult =
+  | { kind: 'ok'; value: SensorReading }
+  | { kind: 'err'; value: SensorFault };
+
+export function initSensorResult(): SensorResult {
+  return { kind: 'ok', value: initSensorReading() };
+}
+
+export interface SensorReading {
+  value: Speed;
+  timestamp: ridl_std.Timestamp;
+}
+
+export function initSensorReading(): SensorReading {
+  return {
+    value: initSpeed(),
+    timestamp: ridl_std.initTimestamp(),
+  };
+}
+
+export interface SensorFault {
+  code: Counter;
+  message: ridl_std.Message;
+}
+
+interface RawWheelFrame {
+  ticks: Counter;
+  frame: Uint8Array;
+}

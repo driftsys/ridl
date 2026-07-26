@@ -1,0 +1,10 @@
+[package]
+name = "ridl-fmt"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ridl-syntax = { path = "../ridl-syntax" }
+rowan.workspace = true

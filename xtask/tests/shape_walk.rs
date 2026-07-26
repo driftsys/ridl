@@ -55,14 +55,14 @@ struct Allowed {
 
 const ALLOWED: &[Allowed] = &[
     Allowed {
-        path: "backends/rust/src/c_header.rs",
+        path: "crates/ridl-backend-rust/src/c_header.rs",
         lines: 1,
         why: "a comment-only listing of what the C ABI does not express — it \
               names interfaces and services without descending into either, so \
               an inline shape has nothing to contribute",
     },
     Allowed {
-        path: "backends/rust/src/interact.rs",
+        path: "crates/ridl-backend-rust/src/interact.rs",
         lines: 1,
         why: "an emptiness test over BOTH stores (`interfaces.is_empty() && \
               services.is_empty()`), which is not a walk; a package holding \
@@ -70,12 +70,12 @@ const ALLOWED: &[Allowed] = &[
               service table",
     },
     Allowed {
-        path: "backends/rust/src/tests.rs",
+        path: "crates/ridl-backend-rust/src/tests.rs",
         lines: 1,
         why: "a test asserting how many named interfaces one fixture lowers to",
     },
     Allowed {
-        path: "backends/typescript/src/interact.rs",
+        path: "crates/ridl-backend-ts/src/interact.rs",
         lines: 1,
         why: "the same emptiness test as the Rust backend's",
     },
@@ -130,17 +130,17 @@ const ALLOWED: &[Allowed] = &[
               sweep",
     },
     Allowed {
-        path: "tools/diff/src/tests.rs",
+        path: "crates/ridl-diff/src/tests.rs",
         lines: 1,
         why: "a test mutating one fixture interface",
     },
     Allowed {
-        path: "tools/diff/src/classify/classify_tests.rs",
+        path: "crates/ridl-diff/src/classify/classify_tests.rs",
         lines: 7,
         why: "tests mutating fixture interfaces to provoke each category",
     },
     Allowed {
-        path: "tools/diff/src/walk.rs",
+        path: "crates/ridl-diff/src/walk.rs",
         lines: 1,
         why: "`walk_packages` diffs the two stores PAIRWISE — old against new, \
               by name, detecting adds and removals. An inline shape is reached \
@@ -164,7 +164,7 @@ fn workspace_root() -> PathBuf {
 /// generated code no author edits.
 fn rust_sources(root: &Path) -> Vec<String> {
     let mut files = Vec::new();
-    let mut stack: Vec<PathBuf> = ["crates", "backends", "tools", "xtask"]
+    let mut stack: Vec<PathBuf> = ["crates", "xtask"]
         .iter()
         .map(|dir| root.join(dir))
         .collect();

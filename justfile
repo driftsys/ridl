@@ -69,7 +69,7 @@ wasm-check:
 # Lint the Rust workspace the way CI does (.github/workflows/ci.yml).
 #
 # Part of the local gate rather than CI's alone: some guards are enforced by a
-# clippy lint and by nothing else. `tools/diff` denies
+# clippy lint and by nothing else. `crates/ridl-diff` denies
 # `clippy::match_wildcard_for_single_variants` on the three matches over
 # `Category`, because a new variant swept into a wildcard arm — the arm rustc's
 # own `help:` text proposes — compiles and passes the whole test suite

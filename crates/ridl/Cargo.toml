@@ -15,8 +15,8 @@ num-rational.workspace = true
 # which the E1.19 wasm check does not build, so nothing here reaches that gate.
 proptest = { workspace = true, features = ["std"] }
 ridl-core = { path = "../ridl-core" }
-ridl-diff = { path = "../../tools/diff" }
-ridl-fmt = { path = "../../tools/fmt" }
+ridl-diff = { path = "../ridl-diff" }
+ridl-fmt = { path = "../ridl-fmt" }
 ridl-ir = { path = "../ridl-ir" }
 ridl-sem = { path = "../ridl-sem" }
 ridl-syntax = { path = "../ridl-syntax" }

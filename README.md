@@ -34,9 +34,11 @@ crates/                         The compiler workspace (typl v0.1 preview)
 ├── ridl-ir/                    IR v1 protobuf schema + generated types
 ├── ridlc/                      Compiler driver (check / build / emit)
 ├── ridl/                       Porcelain facade (check / build / fmt)
-└── ridl-lsp/                   Language server (diagnostics, hover, goto, rename, inlay)
-backends/rust/                  Rust + extern-C code generation over the IR
-tools/fmt/                      The `ridl fmt` engine (rowan-based)
+├── ridl-lsp/                   Language server (diagnostics, hover, goto, rename, inlay)
+├── ridl-backend-rust/          Rust + extern-C code generation over the IR
+├── ridl-backend-ts/            TypeScript code generation over the IR
+├── ridl-diff/                  The `ridl diff` IR-snapshot compare engine + classifier
+└── ridl-fmt/                   The `ridl fmt` engine (rowan-based)
 editors/vscode/                 VS Code extension (TextMate grammar + LSP client)
 xtask/                          Workspace automation (ungrammar codegen, drift checks)
 Cargo.toml                      Cargo workspace root
