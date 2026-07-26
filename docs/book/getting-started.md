@@ -5,8 +5,11 @@ RIDL family. It is written for engineers who describe the contracts between
 software components — in a vehicle, or in any component-based reactive system.
 
 Every `ridl` code block in this chapter is compiled by the repository's test
-suite against the toolchain in this repository. If a block is shown here, it
-compiles.
+suite against the toolchain in this repository, and must draw no diagnostic
+beyond the ones its own fence names. If a block is shown here, it compiles.
+The prose around the blocks is not machine-checked; where it describes
+behaviour rather than syntax, read
+[the note below](#what-the-contract-requires-means-in-this-chapter) first.
 
 ## What ridl is
 
@@ -19,10 +22,28 @@ is what makes it usable as the single source of truth between teams,
 components, and tools.
 
 ridl is transport-neutral by design: the same contract is intended to bind to
-SOME/IP, gRPC, DDS, MQTT, AIDL, or CAN without modification. The transport
-bindings are specified in the ridl language reference, Appendix B. **They are
-not implemented yet.** What the compiler emits today is listed under
+SOME/IP, gRPC, DDS, MQTT, or AIDL without modification. The transport bindings
+are specified in the ridl language reference, Appendix B. **They are not
+implemented yet.** What the compiler emits today is listed under
 [What the compiler produces](#what-the-compiler-produces).
+
+### What "the contract requires" means in this chapter
+
+Several sections below describe what happens when a contract runs: that a
+subscriber is delivered the last value, that an occurrence past its staleness
+bound is discarded, that a provider checks a `require` clause before your code
+sees the call. **Every one of those is a requirement the specification places on
+a future runtime and its transport bindings. None of it is implemented.** There
+is no runtime in this repository — eleven compiler crates, and nothing that
+delivers a message.
+
+The sentences are written in the present tense because they describe what the
+contract means, which is the thing you are designing against. They do not
+describe behaviour you can observe today. What you can observe today is the
+toolchain: it checks your declarations, generates data types, samples your
+`require` clauses, and classifies changes between versions. Where a comment
+inside a listing says "discarded after 2 s", read it as what the contract
+demands of a binding, not as something running.
 
 ### ridl is one language of five
 
@@ -64,18 +85,23 @@ The tutorial builds this layout:
 
 ```text
 tutorial/
-├── ridl.toml            the workspace root
-├── veh/
-│   └── common/
-│       ├── ridl.toml
-│       └── types.ridl   the shared vocabulary
+├── ridl.toml                 the workspace root
 └── veh/
-    └── cluster/
-        ├── ridl.toml
-        └── cluster.ridl the interfaces
+    ├── common/
+    │   ├── ridl.toml
+    │   ├── types.ridl        the shared vocabulary
+    │   └── scalars.ridl
+    ├── cluster/
+    │   ├── ridl.toml
+    │   └── cluster.ridl      the interfaces
+    ├── identity/             annex 1
+    ├── powertrain/           annex 2
+    ├── body/                 annex 3
+    └── dms/                  annex 4
 ```
 
-The root manifest lists the members:
+The root manifest lists every member. Start with the two the tutorial builds
+first, and add the annex packages as you reach them:
 
 ```toml
 [workspace]
@@ -133,8 +159,8 @@ Line by line:
   are single-type and qualified; there are no wildcards and no relative
   imports.
 - `interface VehicleSpeed` — the contract boundary.
-- `signal currentSpeed : Speed @10ms` — a continuously published value, emitted
-  every 10 ms.
+- `signal currentSpeed : Speed @10ms` — a continuously published value, whose
+  contract requires the provider to publish it every 10 ms.
 
 ## Checking it
 
@@ -149,20 +175,22 @@ defaults to the current directory. It exits 0 when nothing is wrong, 1 when a
 diagnostic is an error, and 2 when it cannot even load the workspace — for
 example when no `ridl.toml` is found.
 
-A diagnostic looks like this:
+Swap the bounds in `types.ridl` to `[250.0..0.0 step 0.5]` and run it again:
 
 ```text
-error[TYPL-104]: range minimum 10 is greater than maximum 0
-  ┌─ ./veh/common/types.ridl:3:20
+error[TYPL-104]: range minimum 250 is greater than maximum 0
+  ┌─ ./veh/common/types.ridl:4:19
   │
-3 │ type Speed : km/h [10.0..0.0]
-  │                    ^^^^^^^^^
+4 │ type Speed : km/h [250.0..0.0 step 0.5]
+  │                   ^^^^^^^^^^^^^^^^^^^^^
 ```
 
-Every diagnostic carries a stable code. `TYPL-` codes come from the vocabulary
+Most diagnostics carry a stable code. `TYPL-` codes come from the vocabulary
 layer, `RIDL-` codes from the interaction layer, `FORM-` codes from the shared
-surface syntax, and `MANI-` codes from the manifest. The codes are listed in
-the language references and are never renumbered or reused.
+surface syntax, and `MANI-` codes from the manifest. Those codes are listed in
+the language references and are never renumbered or reused. A few diagnostics
+are still uncoded and print as a bare `error:` — an unresolved type name is
+one — so do not assume a code is always there to search for.
 
 ## Primitives and named types
 
@@ -175,11 +203,15 @@ declare `type DoorCount : integer [1..8]` and use the name. This is the single
 rule that most often surprises newcomers, and it is what gives every value on
 the boundary a domain meaning rather than a width.
 
-Struct fields are more permissive — an inline constrained primitive is accepted
-there — but `string` and `bytes` must always go through a named type, and named
-types are the recommendation everywhere.
+Struct fields are more permissive. An inline constrained primitive is accepted
+there, including `string [1..10]` and `bytes [64]` — what the compiler rejects
+in a field is a **bare** `string` or `bytes` with no constraint at all
+(`TYPL-208`). The typl reference states the rule without that qualification, so
+trust the compiler here: the constraint is what the check is about, and the
+reference's own Appendix B writes `frame : bytes [8]`. Named types remain the
+recommendation everywhere, and they are mandatory on a boundary.
 
-Add to `veh/common/types.ridl`, in a second file `veh/common/scalars.ridl`:
+Add a second file, `veh/common/scalars.ridl`:
 
 ```ridl
 package veh.common
@@ -210,12 +242,15 @@ Two details in that listing:
   transport; `integer [0..65535]` is a `uint16`. The generated language type is
   always `int64`. You never write a width.
 - `= "ABC"` is an **init value** — the value a consumer holds before anything
-  real arrives. It is derived automatically for most types (`false` for
-  booleans, `0` for numbers in range, the empty string when the bounds allow
-  length 0). It cannot be derived for a string with a `match` pattern or a
-  non-zero minimum length, so those declare one. Without it the compiler
-  records a `TYPL-115` note, which becomes an error only if the type is used as
-  a signal payload.
+  real arrives. It is derived automatically for most types: `false` for
+  booleans, `0` for a number whose range contains it and the range minimum
+  otherwise, and the empty value when a `string` or `bytes` bound allows length
+  0. It cannot be derived for a `string` **or** `bytes` type carrying a `match`
+  pattern or a non-zero minimum length, so those declare one — which is why
+  `ModelCode` and `Notes` above do. Without a declared init such a type draws a
+  `TYPL-115` note. That note stays informational, always; what turns a missing
+  init into an error is _using_ the type as a signal payload, and the error is
+  `RIDL-109`, raised at the signal.
 
 Standard library types are always available without an import: `Uuid`, `Ulid`,
 `Vin`, `Uri`, `Url`, `Email`, `Label`, `Name`, `Message`, `Timestamp`,
@@ -245,20 +280,25 @@ struct GearState {
 }
 ```
 
-Constants are `SCREAMING_SNAKE`. The declared value must satisfy the constant's
-own type constraints.
+Constants are written `SCREAMING_SNAKE` by convention. The compiler does not
+enforce it — the lexer folds every case shape into one identifier kind, so a
+lower-case constant name compiles. The declared value, on the other hand, must
+satisfy the constant's own type constraints, and that is checked.
 
 ## Signals and events
 
 The split between `signal` and `event` is the load-bearing distinction in ridl.
+It is a distinction in _meaning_, which the specification then turns into
+demands on a binding (see the note above — no binding exists yet):
 
-- A **signal** is continuous state. The latest sample is the truth; an
-  intermediate sample may be missed, and the channel is never empty — a new
-  subscriber is delivered a value immediately, the init value before the first
-  publication and the latest value after it.
-- An **event** is a discrete occurrence. Every occurrence matters; occurrences
-  are queued rather than coalesced, and there is no late-joiner delivery. An
-  occurrence that happened before you subscribed did not happen to you.
+- A **signal** is continuous state. The latest sample is the truth, and an
+  intermediate sample may be missed. The contract requires the channel never to
+  be empty: a new subscriber must be delivered a value immediately — the init
+  value before the first publication, the latest value after it.
+- An **event** is a discrete occurrence. Every occurrence matters, so the
+  contract requires occurrences to be queued rather than coalesced, and forbids
+  late-joiner delivery. An occurrence that happened before you subscribed did
+  not happen to you.
 
 ```ridl
 package veh.cluster
@@ -287,13 +327,14 @@ interface Sampling {
 
 The bounds have one meaning everywhere: `min` is the **rate floor**, the
 minimum interval between publications, and `max` is the **staleness bound**,
-the maximum age of the value. What the runtime does at each bound follows from
-the declaring keyword:
+the maximum age of the value. Those two bounds are what the compiler records in
+the IR, and they are all it records. What a binding is _required_ to do at each
+bound follows from the declaring keyword — specified, not implemented:
 
-| Bound                   | On a `signal` (state)                        | On an `event` (occurrence)                  |
-| ----------------------- | -------------------------------------------- | ------------------------------------------- |
-| `min` — rate floor      | debounce: a faster update is coalesced       | throttle: the provider must not raise faster |
-| `max` — staleness bound | refresh ceiling: re-publish even if unchanged | TTL: an older occurrence is discarded        |
+| Bound                   | Required on a `signal` (state)                 | Required on an `event` (occurrence)       |
+| ----------------------- | ---------------------------------------------- | ----------------------------------------- |
+| `min` — rate floor      | debounce — coalesce a faster update            | throttle — do not raise occurrences faster |
+| `max` — staleness bound | refresh ceiling — re-publish even if unchanged | TTL — discard an older occurrence          |
 
 Events take a range only. Strict periodic `@Xms` on an event is a `RIDL-103`
 error, because an isochronous rate is meaningless for occurrences:
@@ -310,10 +351,12 @@ struct DoorPayload {
 
 interface DoorEvents {
 
-  /// Raised on every door state change; stale after 500 ms.
+  /// Raised on every door state change; a binding must treat it as stale
+  /// 500 ms after it was raised.
   event doorOpened : DoorPayload @[50ms..500ms]
 
-  /// Throttled to one occurrence per 100 ms; discarded after 2 s.
+  /// A binding must throttle to one occurrence per 100 ms, and must discard
+  /// one that reaches a consumer more than 2 s after it was raised.
   event speedLimitExceeded : DoorPayload @[100ms..2000ms]
 }
 ```
@@ -418,10 +461,12 @@ interface VehicleIdentityBasics {
 }
 ```
 
-A `final` is safe to cache unconditionally — it never changes while the
-software is running. It takes no timing annotation and no contract block; both
-are `RIDL-106` errors. Note `hasCruise : Enabled` rather than
-`hasCruise : boolean`: a boundary value names a type.
+Declaring a value `final` is a promise that it never changes while the software
+runs, which is what makes it safe for a consumer to cache unconditionally — a
+promise to a future binding, like the rest of the delivery semantics. What the
+compiler enforces today is the shape: a `final` takes no timing annotation and
+no contract block, and both are `RIDL-106` errors. Note `hasCruise : Enabled`
+rather than `hasCruise : boolean`: a boundary value names a type.
 
 ## Commands and queries
 
@@ -525,16 +570,22 @@ interface Calibration {
 ```
 
 The left arm is the success type, the right arm exactly one `error` type.
-Bindings split the union mechanically: the success arm becomes the reply
-payload, the error arm maps onto the transport's own error channel and onto
-`Result<T, E>` in generated Rust.
 
-Two other failure kinds never appear in source at all. **Contract violations** —
-a payload outside its declared range, or a failed `require` — are derived from
-the declarations you already wrote and reported uniformly by the runtime.
-**Transport failures** — timeouts, broker loss, connection resets — are
-infrastructure failures: detected by the runtime, undeclared in the language,
-because a contract author has no knowledge to express about them.
+One half of what follows from that you can see today: the Rust backend renders
+the fallible return as a `Result<T, E>`, so exhaustive handling is enforced by
+the compiler you already use. The other half is specified only — a binding is
+required to split the union mechanically, sending the success arm as the reply
+payload and mapping the error arm onto the transport's own error channel. No
+binding exists to do it.
+
+Two other failure kinds never appear in source at all, and both belong entirely
+to that unbuilt layer. **Contract violations** — a payload outside its declared
+range, or a failed `require` — are derived from the declarations you already
+wrote, and the specification requires a runtime to report them uniformly rather
+than making you declare them. **Transport failures** — timeouts, broker loss,
+connection resets — are infrastructure failures the specification requires a
+runtime to detect and leaves undeclared in the language, because a contract
+author has no knowledge to express about them.
 
 ## Collections and streams
 
@@ -560,7 +611,7 @@ interaction position — on a command or query parameter, or a query return. Its
 element type is a named type describing one logical element; framing and
 backpressure are transport concerns.
 
-```ridl
+```ridl,allow=TYPL-115
 package veh.common
 
 type LogLine : string [1..1024] = "-"
@@ -570,6 +621,12 @@ struct SensorSample { value : Speed }
 struct ProcessedSample { value : Speed }
 struct DiagFilter { severity : Severity }
 ```
+
+`FwBlock` draws a `TYPL-115` note: `bytes` with a minimum length above zero has
+no derivable init value, exactly as a `string` with a minimum length above zero
+or a `match` pattern does. The note is harmless here — a stream element is never
+a signal payload, so nothing ever asks it for an init — and the block's fence
+carries `allow=TYPL-115` to say so.
 
 ```ridl
 package veh.cluster
@@ -632,9 +689,13 @@ Anything outside it is a `RIDL-306` error. Reading a field of a struct-typed
 signal is outside the subset — publish the scalar you want to constrain as its
 own signal instead.
 
-The clauses are not documentation. `ridl test` samples them, and they are the
-source for the runtime checks a provider binding performs before your code
-runs.
+The clauses are not documentation, and one use of them runs today: `ridl test`
+draws sample parameter tuples and evaluates each `require` clause against them.
+It does not evaluate `ensure` clauses — it lists them as observer stubs,
+because checking a postcondition needs a result, and producing one needs the
+runtime that does not exist yet. That same unbuilt layer is where the
+specification puts the other use: a provider binding evaluating `require`
+before your code runs, and `ensure` after it returns.
 
 ## Labels
 
@@ -689,10 +750,15 @@ emit targets exist today:
 | `ir-json`  | `<package>.ir.json` | the lowered IR v2 as exact-decimal JSON  |
 
 There is no transport binding and no code generator for SOME/IP, gRPC, DDS,
-MQTT, AIDL, or CAN yet. Those mappings are specified in the ridl language
-reference, Appendix B, and are the work of later epics. A TypeScript generator
-exists in the workspace as a library but is not reachable from the command
-line.
+MQTT or AIDL yet. Those mappings are specified in the ridl language reference,
+Appendix B, and are the work of later epics. A TypeScript generator exists in
+the workspace as a library; check `ridl build --emit --help` for whether your
+build exposes it on the command line.
+
+Classic CAN is not on that list, and never will be for a whole interface:
+Appendix B records that DBC/CAN binds `signal` declarations only, and that an
+`event`, `command` or `query` on classic CAN is a profile error. A bus carries
+dataflow, not calls.
 
 ## The rest of the toolchain
 
@@ -703,7 +769,7 @@ line.
 | `ridl fmt`      | rewrite `.typl` and `.ridl` files into one canonical form; `--check` reports without writing |
 | `ridl baseline` | publish the current workspace as `.ridl/baseline/<package>.ir.json` snapshots            |
 | `ridl diff`     | compare two IR snapshots or source trees and classify the change                         |
-| `ridl test`     | run the property suite: range self-corpora, and sampling of `require` clauses            |
+| `ridl test`     | run the property suite: range self-corpora, and sampling of `require` clauses. `ensure` clauses are listed as observer stubs, never evaluated |
 
 `ridlc` is the plumbing underneath, with `check` and `build` only. Use `ridl`
 unless you are scripting the compiler directly.
@@ -724,7 +790,9 @@ interaction with a `reserved` tombstone rather than deleting it:
 package veh.cluster
 
 import veh.common.Speed
-import veh.common.DoorPayload
+
+// `DoorPayload` is declared earlier in this same package (`veh.cluster`), so
+// it needs no import — everything in a package is visible to the rest of it.
 
 interface VehicleStatus {
   signal currentSpeed : Speed @10ms
@@ -863,7 +931,7 @@ not reach into a struct-typed one. And the engine state field is named
 `engineState`: `state` is a reserved word family-wide, so it cannot be an
 identifier.
 
-```ridl
+```ridl,allow=RIDL-406
 package veh.powertrain
 
 type RPM         : /min  [0.0..8000.0 step 10.0]
@@ -962,7 +1030,7 @@ published through a struct that wraps the array rather than as a bare array.
 Command parameters name types too: `DoorIndex`, not `integer [0..7]`. And the
 lock parameter is named `lock`, because `state` is reserved.
 
-```ridl
+```ridl,allow=RIDL-406
 package veh.body
 
 import veh.common.Temperature
@@ -1055,7 +1123,7 @@ interface BodyControl {
 
 ## Annex 4 — Driver monitoring
 
-```ridl
+```ridl,allow=RIDL-406
 package veh.dms
 
 type Ratio          : %       [0.0..100.0 step 0.1]

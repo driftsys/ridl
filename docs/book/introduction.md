@@ -25,12 +25,19 @@ Two layers of the family have a working toolchain in this repository:
 - **typl** — the vocabulary layer (epic E1): compiler, `ridl fmt`, an LSP
   server, and a VS Code extension.
 - **ridl** — the interface layer over it (epic E2): the five interaction kinds,
-  timing annotations, contracts, interfaces and services, a TypeScript code
-  generator beside the Rust one, and `ridl diff`.
+  timing annotations, contracts, interfaces and services, and `ridl diff`.
+
+`ridl build` emits Rust source, an extern-C header, or the IR as JSON. A
+TypeScript generator exists in the workspace as a library; whether the command
+line exposes it depends on your build, so check `ridl build --emit --help`.
 
 **uxdl, rmdl, and rsdl are specified but not built.** Their language references
 are complete enough to design against, but no compiler accepts them and nothing
 in this book describes them as usable. They are sequenced in the roadmap.
+
+**There is no runtime.** The transport bindings, the delivery semantics, and the
+provider-side contract enforcement are all specified and none of them are
+implemented. This repository holds a compiler and its tooling.
 
 [Getting started](getting-started.md) walks through what you can run today.
 
@@ -47,7 +54,8 @@ repository:
 - **Decisions** — `docs/decisions/`: the architecture decision records —
   ADR-0002 (module system), ADR-0004 (implementation sequencing and stack),
   ADR-0005 (agent enablement), ADR-0006 (walking-skeleton execution),
-  ADR-0007 (E1 execution), and ADR-0008 (E2 execution).
+  ADR-0007 (E1 execution), ADR-0008 (E2 execution), and ADR-0009 (toolchain and
+  gate parity).
 - **Technotes** — `docs/technotes/`: informative architecture notes, which bind
   nothing.
 - **Roadmap** — `docs/ROADMAP.md`: the epics, stories, and the V1/V2 release

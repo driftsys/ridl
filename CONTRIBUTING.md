@@ -69,14 +69,46 @@ signal currentSpeed : Speed @10ms      // a fragment, not a whole file
 ```
 ````
 
-mdBook renders `ridl,ignore` and `ridl` the same way, so the marker costs no
-syntax highlighting. The harness is fail-closed: a verified block with no
-`package`, an unrecognised marker, or a book with no verified blocks at all is
-an error rather than a silent skip. Warnings fail the run alongside errors,
-because an example that draws a warning teaches the warned-about thing.
+Mark a block that draws a diagnostic **on purpose** with the code it expects.
+Repeat the marker for several codes; prefer fixing the example over allowing a
+code, because an allowance claims the surrounding prose explains the diagnostic:
+
+````markdown
+```ridl,allow=RIDL-406,allow=TYPL-115
+```
+````
+
+mdBook renders all of these the same way, so no marker costs syntax
+highlighting.
+
+The harness is fail-closed. Each of these is an error rather than a silent skip:
+
+- a verified block with no `package` declaration;
+- an unrecognised marker, or `ignore` and `allow=` on the same fence;
+- **any** diagnostic the block did not name — error, warning, note, or one of
+  the uncoded diagnostics, which can never be allowed because they have no code
+  to name;
+- an `import` naming a package no block declares, or a name no block in that
+  package provides. The compiler does not diagnose an unresolved import yet, so
+  the harness checks it rather than trusting the gap;
+- a book with no verified blocks at all.
+
+A package name is a **book-wide** namespace, not a per-chapter one. Two chapters
+that both declare `package veh.demo` are staged into one directory and collide
+(`TYPL-009`) on every declaration they repeat, so give each chapter its own
+package prefix.
+
+Fences are read per CommonMark: three or more backticks or tildes, up to three
+spaces of indentation. An indented fence inside a numbered step is verified like
+any other, and a `ridl` fence quoted inside a longer fence — as in the samples
+above — is documentation rather than an example.
 
 Failures name the Markdown file and the exact line, because each block is staged
 with the line offset it has in its source file.
+
+The harness checks syntax, never claims. Prose about delivery, timing behaviour,
+or provider-side enforcement describes a specification, not this workspace —
+there is no runtime here. Write it so a reader cannot mistake the two.
 
 ## Recipes
 
