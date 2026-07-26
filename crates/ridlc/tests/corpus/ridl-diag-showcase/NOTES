@@ -113,7 +113,9 @@ behaves, so the snapshot pins the behaviour rather than hiding it.
   and the parser then reads the rest of the member as an attribute block —
   `narrowing_returns.ridl` shows one collection return turning into a
   FORM-102 plus a FORM-106 "unknown attribute key `Level`". Worth its own issue
-  alongside the TYPL-006 and `is_top_level_start` findings.
+  alongside the `is_top_level_start` finding above. (The TYPL-006 finding this
+  once also pointed at — a repeated identical import reported as a collision —
+  was fixed in #174; see `veh-cluster/NOTES`.)
 - **RIDL-405 is emitted once per participating query, not once per error
   type.** Three queries share `SharedFault`, so the note appears three times
   with the same message. The count is the lint's design, not a defect; it is

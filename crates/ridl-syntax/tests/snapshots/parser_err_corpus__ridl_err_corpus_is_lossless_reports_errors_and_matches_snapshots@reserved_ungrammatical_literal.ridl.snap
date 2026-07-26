@@ -1,0 +1,135 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/reserved_ungrammatical_literal.ridl
+---
+SourceFile@0..567
+  LineComment@0..78 "// The tombstone gram ..."
+  Whitespace@78..79 "\n"
+  LineComment@79..157 "// cites typl §7.4), ..."
+  Whitespace@157..158 "\n"
+  LineComment@158..236 "// the same literals  ..."
+  Whitespace@236..237 "\n"
+  LineComment@237..286 "// refused entry keep ..."
+  Whitespace@286..287 "\n"
+  PackageDecl@287..302
+    PackageKw@287..294 "package"
+    Whitespace@294..295 " "
+    QualifiedName@295..302
+      Ident@295..298 "veh"
+      Dot@298..299 "."
+      Ident@299..302 "err"
+  Whitespace@302..304 "\n\n"
+  InterfaceDef@304..439
+    InterfaceKw@304..313 "interface"
+    Whitespace@313..314 " "
+    Name@314..327
+      Ident@314..327 "VehicleStatus"
+    Whitespace@327..328 " "
+    LBrace@328..329 "{"
+    Whitespace@329..332 "\n  "
+    SignalDef@332..365
+      SignalKw@332..338 "signal"
+      Whitespace@338..339 " "
+      Name@339..351
+        Ident@339..351 "currentSpeed"
+      Whitespace@351..352 " "
+      Colon@352..353 ":"
+      Whitespace@353..354 " "
+      PathType@354..359
+        QualifiedName@354..359
+          Ident@354..359 "Speed"
+      Whitespace@359..360 " "
+      Timing@360..365
+        At@360..361 "@"
+        Duration@361..365 "10ms"
+    Whitespace@365..368 "\n  "
+    ReservedEntry@368..389
+      ReservedKw@368..376 "reserved"
+      Whitespace@376..377 " "
+      ErrorNode@377..389
+        String@377..389 "\"legacyTemp\""
+    Whitespace@389..392 "\n  "
+    EventDef@392..437
+      EventKw@392..397 "event"
+      Whitespace@397..398 " "
+      Name@398..408
+        Ident@398..408 "doorOpened"
+      Whitespace@408..409 " "
+      Colon@409..410 ":"
+      Whitespace@410..411 " "
+      PathType@411..422
+        QualifiedName@411..422
+          Ident@411..422 "DoorPayload"
+      Whitespace@422..423 " "
+      Timing@423..437
+        At@423..424 "@"
+        LBracket@424..425 "["
+        TimingRange@425..436
+          Duration@425..429 "50ms"
+          DotDot@429..431 ".."
+          Duration@431..436 "500ms"
+        RBracket@436..437 "]"
+    Whitespace@437..438 "\n"
+    RBrace@438..439 "}"
+  Whitespace@439..441 "\n\n"
+  ServiceDef@441..566
+    ServiceKw@441..448 "service"
+    Whitespace@448..449 " "
+    DottedName@449..463
+      Ident@449..452 "veh"
+      Dot@452..453 "."
+      Ident@453..456 "err"
+      Dot@456..457 "."
+      Ident@457..463 "status"
+    Whitespace@463..464 " "
+    LBrace@464..465 "{"
+    Whitespace@465..468 "\n  "
+    SignalDef@468..501
+      SignalKw@468..474 "signal"
+      Whitespace@474..475 " "
+      Name@475..487
+        Ident@475..487 "currentSpeed"
+      Whitespace@487..488 " "
+      Colon@488..489 ":"
+      Whitespace@489..490 " "
+      PathType@490..495
+        QualifiedName@490..495
+          Ident@490..495 "Speed"
+      Whitespace@495..496 " "
+      Timing@496..501
+        At@496..497 "@"
+        Duration@497..501 "10ms"
+    Whitespace@501..504 "\n  "
+    ReservedEntry@504..516
+      ReservedKw@504..512 "reserved"
+      Whitespace@512..513 " "
+      ErrorNode@513..516
+        FloatNumber@513..516 "2.5"
+    Whitespace@516..519 "\n  "
+    EventDef@519..564
+      EventKw@519..524 "event"
+      Whitespace@524..525 " "
+      Name@525..535
+        Ident@525..535 "doorOpened"
+      Whitespace@535..536 " "
+      Colon@536..537 ":"
+      Whitespace@537..538 " "
+      PathType@538..549
+        QualifiedName@538..549
+          Ident@538..549 "DoorPayload"
+      Whitespace@549..550 " "
+      Timing@550..564
+        At@550..551 "@"
+        LBracket@551..552 "["
+        TimingRange@552..563
+          Duration@552..556 "50ms"
+          DotDot@556..558 ".."
+          Duration@558..563 "500ms"
+        RBracket@563..564 "]"
+    Whitespace@564..565 "\n"
+    RBrace@565..566 "}"
+  Whitespace@566..567 "\n"
+errors:
+  FORM-102 377..389 a `reserved` tombstone takes a retired member name or a retired integer value, not a string literal
+  FORM-102 513..516 a `reserved` tombstone takes a retired member name or a retired integer value, not a floating-point literal

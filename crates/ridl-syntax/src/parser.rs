@@ -169,6 +169,20 @@ fn is_value_token(kind: SyntaxKind) -> bool {
     )
 }
 
+/// Names the literal shape a `reserved` tombstone refused, for the FORM-102
+/// message. `kind` is a value token other than `IntNumber` — the one shape
+/// typl Appendix E admits after `reserved` alongside a name.
+fn ungrammatical_reserved_noun(kind: SyntaxKind) -> &'static str {
+    match kind {
+        SyntaxKind::FloatNumber => "a floating-point literal",
+        SyntaxKind::String => "a string literal",
+        SyntaxKind::TrueKw | SyntaxKind::FalseKw => "a boolean literal",
+        SyntaxKind::Regex => "a regex literal",
+        SyntaxKind::Ident => "a constant reference",
+        _ => "a literal of that shape",
+    }
+}
+
 /// Whether `kind` starts a top-level construct. These are the
 /// resynchronization points recovery falls back to, both at the file level
 /// and when a block body runs past an unclosed `}` into the next declaration.
@@ -1566,18 +1580,64 @@ impl<'a> Parser<'a> {
         self.builder.finish_node();
     }
 
-    /// `ReservedEntry = 'reserved' (Name | Literal)` — the tombstone (§7.4):
-    /// name form for structs and unions, integer form for enums. The parser
-    /// accepts both forms everywhere; the checker narrows.
+    /// `ReservedEntry = 'reserved' (Name | int_lit)` — the tombstone (§7.4).
+    /// typl Appendix E spells it `reserved = "reserved" ( camelCase_id |
+    /// int_lit )`. The production is body-agnostic and this parser keeps it
+    /// that way: both forms parse in every body that admits a tombstone.
+    ///
+    /// What each form *means* is per body, and **nothing narrows it** — there
+    /// is no per-body check anywhere, so this comment describes the language,
+    /// not an enforced rule. The name form is meaningful everywhere (TYPL-210
+    /// in a struct, union or enum; RIDL-401 in an interface). The integer form
+    /// is meaningful in an `enum`, where it retires a wire value (TYPL-210),
+    /// and in an interaction body, where the nameless spelling records the
+    /// ordinal it protects (`veh-cluster/cluster/evolution.ridl`). In a
+    /// `struct` or `union` body it is **inert**: members there carry no
+    /// explicit value, so nothing can ever match it and no retired name is
+    /// recorded. `test_data/parser/ok/grammar_overapprox.typl` carries that
+    /// case as an over-approximation awaiting a checker rule; see
+    /// `veh-cluster/NOTES` for the residual and what closing it needs.
+    ///
+    /// Any other literal — a string, a boolean, a float, a regex, a bare
+    /// constant reference — is outside the grammar and draws FORM-102 here
+    /// rather than parsing as a `Literal`. Lowering keeps only a `Name` or an
+    /// integer, so an ungrammatical literal would otherwise consume the
+    /// ordinal while recording neither: the tombstone survives but the
+    /// retired identity it exists to record is destroyed, with no diagnostic.
+    /// The offending token is held in an `ErrorNode` so the tree stays
+    /// lossless and the body loop resumes at the next member.
     fn reserved_entry(&mut self) {
         self.start(SyntaxKind::ReservedEntry);
         self.bump(); // 'reserved'
         if self.at(SyntaxKind::Ident) {
             self.name();
-        } else if self.literal_len_at(0) > 0 {
-            self.literal();
+        } else if let Some(kind) = self.literal_value_kind_at(0) {
+            if kind == SyntaxKind::IntNumber {
+                self.literal();
+            } else {
+                self.start(SyntaxKind::ErrorNode);
+                // A leading `-` belongs to the literal but is not what makes
+                // it ungrammatical, so it is consumed before the diagnostic is
+                // raised: the caret then lands on the value token the message
+                // names, as it already does for every single-token shape.
+                if self.at(SyntaxKind::Minus) {
+                    self.bump();
+                }
+                self.error_at_current(
+                    "FORM-102",
+                    format!(
+                        "a `reserved` tombstone takes a retired member name or a retired integer value, not {}",
+                        ungrammatical_reserved_noun(kind),
+                    ),
+                );
+                self.bump();
+                self.builder.finish_node();
+            }
         } else {
-            self.error_at_current("FORM-101", "expected a name or value".to_string());
+            self.error_at_current(
+                "FORM-101",
+                "expected a name or an integer value".to_string(),
+            );
         }
         self.builder.finish_node();
     }
@@ -1865,6 +1925,17 @@ impl<'a> Parser<'a> {
             },
             Some(kind) if is_value_token(kind) => 1,
             _ => 0,
+        }
+    }
+
+    /// The value token of the literal starting at the `n`-th significant
+    /// position, looking past a leading `-`. `None` when no literal starts
+    /// there. Lets a caller admit one literal shape and refuse the rest.
+    fn literal_value_kind_at(&self, n: usize) -> Option<SyntaxKind> {
+        match self.nth(n) {
+            Some(SyntaxKind::Minus) => self.nth(n + 1).filter(|kind| is_value_token(*kind)),
+            Some(kind) if is_value_token(kind) => Some(kind),
+            _ => None,
         }
     }
 
@@ -2342,6 +2413,149 @@ mod tests {
             "expected a bounded diagnostic count, got {}: {:?}",
             parse.errors().len(),
             parse.errors(),
+        );
+    }
+
+    /// typl Appendix E: `reserved = "reserved" ( camelCase_id | int_lit )`.
+    /// The literal shapes outside that production draw FORM-102 in every body
+    /// that admits a tombstone, under both profiles. Before this rule the
+    /// entry parsed as an ordinary `Literal`, lowered to a slot with neither a
+    /// name nor a value, and reported nothing.
+    #[test]
+    fn ungrammatical_reserved_literal_flags_form_102_in_every_body() {
+        let bodies = [
+            (
+                Profile::Typl,
+                "struct S {\n  a : X\n  reserved {}\n  b : X\n}",
+            ),
+            (
+                Profile::Typl,
+                "enum E {\n  A = 1\n  reserved {}\n  B = 2\n}",
+            ),
+            (
+                Profile::Typl,
+                "union U {\n  a : X\n  reserved {}\n  b : X\n}",
+            ),
+            (
+                Profile::Ridl,
+                "interface I {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
+            ),
+            (
+                Profile::Ridl,
+                "service p.svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
+            ),
+        ];
+        for (profile, shape) in bodies {
+            for literal in ["\"oldName\"", "true", "false", "1.5", "-1.5", "-MAX"] {
+                let input = format!("package p\n{}\n", shape.replace("{}", literal));
+                let parsed = parse(&input, profile);
+                assert_eq!(
+                    parsed.syntax().text().to_string(),
+                    input,
+                    "refusing `reserved {literal}` must stay lossless in {shape}",
+                );
+                assert_eq!(
+                    parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+                    vec!["FORM-102"],
+                    "`reserved {literal}` in {shape} must draw exactly one FORM-102",
+                );
+                assert!(
+                    parsed.errors()[0].message.starts_with(
+                        "a `reserved` tombstone takes a retired member name or a retired \
+                         integer value, not "
+                    ),
+                    "the message must lead with what a tombstone does take, got {:?}",
+                    parsed.errors()[0].message,
+                );
+                // The entry keeps its place as a member and the refused token
+                // is held losslessly, so the member after it is still parsed
+                // in position and no ordinal shifts.
+                let entry = parsed
+                    .syntax()
+                    .descendants()
+                    .find(|node| node.kind() == SyntaxKind::ReservedEntry)
+                    .expect("the tombstone still forms a ReservedEntry");
+                assert!(
+                    entry
+                        .children()
+                        .any(|child| child.kind() == SyntaxKind::ErrorNode),
+                    "the refused literal is held in an ErrorNode, got {entry:#?}",
+                );
+                assert!(
+                    entry
+                        .children()
+                        .all(|child| child.kind() != SyntaxKind::Literal),
+                    "the refused literal must not form a Literal, got {entry:#?}",
+                );
+            }
+        }
+    }
+
+    /// The two grammatical tombstone forms keep parsing, in every body and
+    /// under both profiles: a name, a bare integer, and a negative integer
+    /// (`int_lit = "-"? [0-9]+`). Narrowing the production must not narrow it
+    /// past what Appendix E writes.
+    #[test]
+    fn grammatical_reserved_forms_still_parse_in_every_body() {
+        let bodies = [
+            (
+                Profile::Typl,
+                "struct S {\n  a : X\n  reserved {}\n  b : X\n}",
+            ),
+            (
+                Profile::Typl,
+                "enum E {\n  A = 1\n  reserved {}\n  B = 2\n}",
+            ),
+            (
+                Profile::Typl,
+                "union U {\n  a : X\n  reserved {}\n  b : X\n}",
+            ),
+            (
+                Profile::Ridl,
+                "interface I {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
+            ),
+            (
+                Profile::Ridl,
+                "service p.svc {\n  signal a : X\n  reserved {}\n  signal b : X\n}",
+            ),
+        ];
+        for (profile, shape) in bodies {
+            for literal in ["legacyChecksum", "3", "-3"] {
+                let input = format!("package p\n{}\n", shape.replace("{}", literal));
+                let parsed = parse(&input, profile);
+                assert!(
+                    parsed.errors().is_empty(),
+                    "`reserved {literal}` in {shape} must parse clean, got {:?}",
+                    parsed.errors(),
+                );
+                let entry = parsed
+                    .syntax()
+                    .descendants()
+                    .find(|node| node.kind() == SyntaxKind::ReservedEntry)
+                    .expect("the tombstone forms a ReservedEntry");
+                let kept = entry
+                    .children()
+                    .any(|child| matches!(child.kind(), SyntaxKind::Name | SyntaxKind::Literal));
+                assert!(
+                    kept,
+                    "`reserved {literal}` must keep the retired identity, got {entry:#?}",
+                );
+            }
+        }
+    }
+
+    /// Nothing at all after `reserved` is a missing token, not a wrong one:
+    /// FORM-101, naming both admitted forms.
+    #[test]
+    fn reserved_with_no_target_flags_form_101() {
+        let parsed = parse("package p\nstruct S {\n  reserved\n}\n", Profile::Typl);
+        assert_eq!(
+            parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+            vec!["FORM-101"],
+        );
+        assert_eq!(
+            parsed.errors()[0].message,
+            "expected a name or an integer value",
         );
     }
 }

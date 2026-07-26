@@ -260,20 +260,29 @@ fn apply_imports(
     symbols: &mut HashMap<String, Symbol>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let mut local_name_counts: HashMap<&str, usize> = HashMap::new();
-    let mut base_name_counts: HashMap<&str, usize> = HashMap::new();
+    // The distinct package paths each base name is imported from. An alias
+    // resolves a collision only when the base name would name *something else*
+    // without it, so this counts targets rather than import lines: importing
+    // one symbol twice under one alias leaves the base name unambiguous and
+    // the alias still needless (TYPL-008). Counting lines suppressed that
+    // warning, which stayed invisible while the repeat was a TYPL-006 error.
+    let mut base_name_sources: HashMap<&str, HashSet<&str>> = HashMap::new();
     for record in records {
-        *local_name_counts
-            .entry(record.local_name.as_str())
-            .or_default() += 1;
-        *base_name_counts
+        base_name_sources
             .entry(record.base_name.as_str())
-            .or_default() += 1;
+            .or_default()
+            .insert(record.package_path.as_str());
     }
 
-    let mut seen_local: HashSet<&str> = HashSet::new();
+    // The first import to claim each local name, and the target it binds it
+    // to — `(package_path, base_name)`, the declaration the name resolves to.
+    // A later import claiming the same local name for the *same* target is an
+    // identical repeat: it binds precisely what is already bound, so nothing
+    // conflicts. Only a later import naming a *different* target is TYPL-006.
+    let mut first_target: HashMap<&str, (&str, &str)> = HashMap::new();
     for record in records {
-        let first_for_name = !seen_local.contains(record.local_name.as_str());
+        let target = (record.package_path.as_str(), record.base_name.as_str());
+        let first_for_name = !first_target.contains_key(record.local_name.as_str());
 
         if let Some(url) = &record.remote_url {
             // The import itself is valid; remote materialization is not yet
@@ -304,12 +313,22 @@ fn apply_imports(
             ));
         }
 
-        // TYPL-006: two imports bind the same local name and neither is aliased
-        // to a distinct one. The first keeps the name; each later one is flagged.
-        let colliding = local_name_counts
+        // TYPL-006: two imports bind the same local name to *different*
+        // declarations and neither is aliased to a distinct one. The first
+        // keeps the name; each later one naming something else is flagged, and
+        // aliasing one of them is the remedy the message gives.
+        //
+        // An identical repeat is deliberately silent. Imports bind at package
+        // scope and files within a package are purely organisational
+        // (ADR-0002 §1), so a package's imports are a set: repeating one adds
+        // nothing to it and removes nothing from it. Flagging a repeat only
+        // when the two lines share a file would make the file boundary
+        // significant, which §1 denies; flagging it across files would report
+        // the ordinary habit of writing each file's imports at its head.
+        let colliding = first_target
             .get(record.local_name.as_str())
-            .is_some_and(|count| *count >= 2);
-        if colliding && !first_for_name {
+            .is_some_and(|first| *first != target);
+        if colliding {
             diagnostics.push(diagnostic(
                 DiagCode::TYPL_006,
                 Severity::Error,
@@ -325,9 +344,9 @@ fn apply_imports(
         // TYPL-008: an alias that resolves no collision — its base name is not
         // shared by another import and does not clash with a local declaration.
         if record.aliased {
-            let base_shared = base_name_counts
+            let base_shared = base_name_sources
                 .get(record.base_name.as_str())
-                .is_some_and(|count| *count >= 2);
+                .is_some_and(|sources| sources.len() >= 2);
             if !base_shared && !locals.contains(&record.base_name) {
                 diagnostics.push(diagnostic(
                     DiagCode::TYPL_008,
@@ -362,7 +381,9 @@ fn apply_imports(
             symbols.insert(record.local_name.clone(), symbol.clone());
         }
 
-        seen_local.insert(record.local_name.as_str());
+        first_target
+            .entry(record.local_name.as_str())
+            .or_insert(target);
     }
 }
 
@@ -580,17 +601,36 @@ fn import_has_relative_prefix(import: &Import) -> bool {
 }
 
 /// Every name referenced by a bare identifier in the package's bodies — the
-/// single-segment type references and named-constant references. Qualified
-/// references (`pkg.Type`) do not consume a bare import, so they are excluded.
+/// single-segment type references, named-constant references, and the bare
+/// identifiers of a contract clause. Qualified references (`pkg.Type`) do not
+/// consume a bare import, so they are excluded.
 fn collect_used_names(db: &dyn salsa::Database, files: &[InputFile]) -> HashSet<String> {
     let mut used = HashSet::new();
     for file in files {
         let source = source_file(db, *file);
         for node in source.syntax().descendants() {
             match node.kind() {
-                // A named constant used as a bound or a `match` pattern is an
-                // `Ident` inside a `Literal`.
-                SyntaxKind::Literal => {
+                // A named constant used as a bound, an init value, an
+                // attribute value, or a `match` pattern is an `Ident` inside a
+                // `Literal`.
+                //
+                // A bare identifier inside a contract clause (`require` /
+                // `ensure`, ridl §13) is a `PathExpr`: a referenced constant
+                // (`MAX_FAN`) or the enum type at the head of a member access
+                // (`GearPosition.PARK`). The `.member` identifiers of a
+                // `MemberExpr` are tokens of that node rather than of a nested
+                // `PathExpr`, so an enum member name never counts as a use of
+                // an import.
+                //
+                // Both arms are deliberately coarse: they collect every bare
+                // `Ident` in the node rather than resolving it, so a parameter
+                // name, `result`, or a local declaration that happens to share
+                // an import's local name marks that import used. The `Literal`
+                // arm has behaved this way since E1 and the `PathExpr` arm
+                // inherits it. The cost is a missed TYPL-007 warning; the
+                // alternative — resolving each reference before counting it —
+                // needs the symbol table this function runs ahead of.
+                SyntaxKind::Literal | SyntaxKind::PathExpr => {
                     for token in node.children_with_tokens().filter_map(|e| e.into_token()) {
                         if token.kind() == SyntaxKind::Ident {
                             used.insert(token.text().to_string());
@@ -1161,6 +1201,270 @@ mod package_tests {
             resolution.symbols["Timestamp"].package.as_str(),
             "app",
             "the local declaration wins over the implicit `ridl.std` name",
+        );
+    }
+
+    /// A multi-file workspace-member package, files named `<name>0.typl`,
+    /// `<name>1.typl`, … in the order given.
+    fn multi_file_package(db: &RidlDatabase, name: &str, texts: &[&str]) -> Package {
+        Package::new(
+            db,
+            name.to_string(),
+            texts
+                .iter()
+                .enumerate()
+                .map(|(index, text)| input(db, &format!("{name}{index}.typl"), text))
+                .collect(),
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            None,
+        )
+    }
+
+    #[test]
+    fn an_identical_repeated_import_is_not_a_collision() {
+        // TYPL-006 counted local-name collisions without comparing the target,
+        // so two identical import lines collided with each other. Nothing
+        // conflicts: both bind `x.Speed` to `Speed`, and the fix-it TYPL-006
+        // carries ("alias one of the colliding imports") only trades the error
+        // for TYPL-007 or forks one symbol into two local names.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let a = package(
+            &db,
+            "a",
+            "package a\nimport x.Speed\nimport x.Speed\nstruct S { p: Speed }\n",
+        );
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let ws = Workspace::new(&db, vec![a, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert!(
+            codes(&resolution).is_empty(),
+            "an identical repeat binds what is already bound, got: {:?}",
+            resolution.diagnostics,
+        );
+        assert_eq!(resolution.symbols["Speed"].package.as_str(), "x");
+    }
+
+    #[test]
+    fn an_identical_import_repeated_across_files_of_a_package_is_not_a_collision() {
+        // Imports bind at package scope and files within a package are purely
+        // organisational (ADR-0002 §1), so writing each file's imports at its
+        // own head is ordinary practice, not a conflict.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let a = multi_file_package(
+            &db,
+            "a",
+            &[
+                "package a\nimport x.Speed\nstruct S { p: Speed }\n",
+                "package a\nimport x.Speed\nstruct T { q: Speed }\n",
+            ],
+        );
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let ws = Workspace::new(&db, vec![a, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert!(
+            codes(&resolution).is_empty(),
+            "per-file imports of one package must not collide, got: {:?}",
+            resolution.diagnostics,
+        );
+    }
+
+    #[test]
+    fn a_repeated_import_under_one_alias_is_not_a_collision() {
+        // The same target reached under the same alias twice is still one
+        // binding — the local name and the target both match — so no TYPL-006.
+        //
+        // TYPL-008 *does* fire, once per line: nothing else brings `Speed` in,
+        // so the alias resolves no collision. Asserting the exact code list
+        // rather than emptiness is the point. `base_name_counts` used to count
+        // import lines, so the repeat made the base name look shared and
+        // suppressed the warning; the suppression was invisible while the
+        // repeat was still a TYPL-006 error, and asserting emptiness here
+        // would have pinned it as correct.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let a = package(
+            &db,
+            "a",
+            "package a\nimport x.Speed as VehSpeed\nimport x.Speed as VehSpeed\nstruct S { p: VehSpeed }\n",
+        );
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let ws = Workspace::new(&db, vec![a, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert_eq!(
+            codes(&resolution),
+            vec!["TYPL-008", "TYPL-008"],
+            "no collision, but neither alias is needed; got: {:?}",
+            resolution.diagnostics,
+        );
+    }
+
+    #[test]
+    fn a_repeated_aliased_import_still_draws_the_needless_alias_warning() {
+        // The regression guard for the TYPL-008 half, stated on its own. One
+        // `import x.Speed as VehSpeed` draws TYPL-008; repeating the identical
+        // line must not make the alias look necessary. Before the fix the pair
+        // produced literally no diagnostic at all — TYPL-006 correctly silent
+        // and TYPL-008 wrongly suppressed.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+
+        let once = package(
+            &db,
+            "a",
+            "package a\nimport x.Speed as VehSpeed\nstruct S { p: VehSpeed }\n",
+        );
+        let ws_once = Workspace::new(&db, vec![once, x], BTreeMap::new());
+        assert_eq!(
+            codes(&resolve_package(&db, ws_once, once, std)),
+            ["TYPL-008"]
+        );
+
+        let twice = package(
+            &db,
+            "b",
+            "package b\nimport x.Speed as VehSpeed\nimport x.Speed as VehSpeed\nstruct S { p: VehSpeed }\n",
+        );
+        let ws_twice = Workspace::new(&db, vec![twice, x], BTreeMap::new());
+        let repeated = resolve_package(&db, ws_twice, twice, std);
+        assert!(
+            codes(&repeated).contains(&"TYPL-008"),
+            "repeating an import must not make its alias look needed, got: {:?}",
+            repeated.diagnostics,
+        );
+    }
+
+    #[test]
+    fn an_alias_over_two_different_targets_is_still_needed() {
+        // The other direction, which the target-counting must preserve: when a
+        // second package genuinely exports the same base name, the alias does
+        // resolve a collision and TYPL-008 must stay silent. This is what
+        // stops the fix above from becoming an over-report.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let a = package(
+            &db,
+            "a",
+            "package a\nimport x.Speed\nimport y.Speed as MarineSpeed\nimport y.Speed as MarineSpeed\nstruct S { p: Speed, q: MarineSpeed }\n",
+        );
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let y = package(&db, "y", "package y\ntype Speed: m/s\n");
+        let ws = Workspace::new(&db, vec![a, x, y], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert!(
+            codes(&resolution).is_empty(),
+            "`Speed` comes from two packages, so the alias is needed even when \
+             its line is repeated; got: {:?}",
+            resolution.diagnostics,
+        );
+    }
+
+    #[test]
+    fn a_repeat_between_two_genuine_collisions_still_flags_only_the_conflict() {
+        // Three imports of `Speed`: `x.Speed`, then `y.Speed`, then `x.Speed`
+        // again. Only the middle one names something the winner does not, so
+        // exactly one TYPL-006 fires, on that line.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let text =
+            "package a\nimport x.Speed\nimport y.Speed\nimport x.Speed\nstruct S { p: Speed }\n";
+        let a = package(&db, "a", text);
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let y = package(&db, "y", "package y\ntype Speed: m/s\n");
+        let ws = Workspace::new(&db, vec![a, x, y], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert_eq!(codes(&resolution), vec!["TYPL-006"]);
+        assert_eq!(
+            u32::from(resolution.diagnostics[0].primary.range.start()),
+            text.find("import y.Speed").expect("the y import") as u32,
+            "the conflicting import is the one flagged, not the repeat",
+        );
+        assert_eq!(
+            resolution.symbols["Speed"].package.as_str(),
+            "x",
+            "the first import still wins the binding",
+        );
+    }
+
+    #[test]
+    fn an_import_used_only_in_a_contract_clause_is_not_unused() {
+        // `collect_used_names` walked `Literal` and `QualifiedName` only, so a
+        // name referenced from a `require`/`ensure` expression — a `PathExpr`
+        // — was invisible and TYPL-007 fired on a live import. `MAX_FAN` is
+        // reached only from `require`, `Gear` only from `ensure`.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport x.Level\nimport x.MAX_FAN\nimport x.Gear\n\
+             interface Fan {\n  \
+             command setFan(level : Level) [ require level <= MAX_FAN ]\n  \
+             query currentGear() : Level [ ensure result >= 0 && Gear.PARK != Gear.DRIVE ]\n}\n",
+        );
+        let x = package(
+            &db,
+            "x",
+            "package x\ntype Level: integer [0..7]\nconst MAX_FAN: Level = 7\n\
+             enum Gear { PARK = 0, DRIVE = 1 }\n",
+        );
+        let ws = Workspace::new(&db, vec![app, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, app, std);
+        assert!(
+            codes(&resolution).is_empty(),
+            "a contract clause is a use, got: {:?}",
+            resolution.diagnostics,
+        );
+    }
+
+    #[test]
+    fn an_import_reached_only_as_an_enum_member_name_is_still_unused() {
+        // The other direction. `import x.PARK` binds the local name `PARK`,
+        // and `PARK` does occur in the contract — but only after a `.`, as the
+        // member selected from the locally declared `Gear`. A `.member`
+        // identifier is a token of the `MemberExpr` itself rather than of a
+        // nested `PathExpr`, so it is not a reference to the import and
+        // TYPL-007 must still fire. Counting `MemberExpr` tokens as uses would
+        // silence TYPL-007 for every name that shares a spelling with an enum
+        // member.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let app = ridl_package(
+            &db,
+            "app",
+            "package app\nimport x.Level\nimport x.PARK\n\
+             enum Gear { PARK = 0, DRIVE = 1 }\n\
+             interface Fan {\n  \
+             query currentGear() : Gear [ ensure result == Gear.PARK ]\n  \
+             signal level : Level @1s\n}\n",
+        );
+        let x = package(
+            &db,
+            "x",
+            "package x\ntype Level: integer [0..7]\nconst PARK: Level = 0\n",
+        );
+        let ws = Workspace::new(&db, vec![app, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, app, std);
+        assert_eq!(
+            codes(&resolution),
+            vec!["TYPL-007"],
+            "got: {:?}",
+            resolution.diagnostics,
+        );
+        assert!(
+            resolution.diagnostics[0].message.contains("PARK"),
+            "the genuinely unreferenced import is the one flagged, got: {:?}",
+            resolution.diagnostics,
         );
     }
 }

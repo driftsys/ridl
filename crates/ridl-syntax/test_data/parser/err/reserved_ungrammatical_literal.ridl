@@ -1,0 +1,17 @@
+// The tombstone grammar is inherited unchanged by ridl (ridl reference §14.1
+// cites typl §7.4), so an interface body and a `service` inline shape refuse
+// the same literals a typl composite body does, and the interaction after the
+// refused entry keeps its place and its ordinal.
+package veh.err
+
+interface VehicleStatus {
+  signal currentSpeed : Speed @10ms
+  reserved "legacyTemp"
+  event doorOpened : DoorPayload @[50ms..500ms]
+}
+
+service veh.err.status {
+  signal currentSpeed : Speed @10ms
+  reserved 2.5
+  event doorOpened : DoorPayload @[50ms..500ms]
+}

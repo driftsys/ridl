@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/ok/grammar_overapprox.typl
 ---
-SourceFile@0..1214
+SourceFile@0..1616
   LineComment@0..75 "// Deliberate grammar ..."
   Whitespace@75..76 "\n"
   LineComment@76..153 "// checker narrows th ..."
@@ -243,91 +243,101 @@ SourceFile@0..1214
           Ident@872..881 "FRAME_LEN"
       RBracket@881..882 "]"
   Whitespace@882..884 "\n\n"
-  LineComment@884..948 "// Non-integer litera ..."
-  Whitespace@948..949 "\n"
-  StructDef@949..1001
-    StructKw@949..955 "struct"
-    Whitespace@955..956 " "
-    Name@956..969
-      Ident@956..969 "LooseReserved"
-    Whitespace@969..970 " "
-    LBrace@970..971 "{"
-    Whitespace@971..974 "\n  "
-    ReservedEntry@974..984
-      ReservedKw@974..982 "reserved"
-      Whitespace@982..983 " "
-      Literal@983..984
-        IntNumber@983..984 "7"
-    Whitespace@984..987 "\n  "
-    FieldDef@987..999
-      Name@987..991
-        Ident@987..991 "keep"
-      Whitespace@991..992 " "
-      Colon@992..993 ":"
-      Whitespace@993..994 " "
-      PathType@994..999
-        QualifiedName@994..999
-          Ident@994..999 "Speed"
-    Whitespace@999..1000 "\n"
-    RBrace@1000..1001 "}"
-  Whitespace@1001..1003 "\n\n"
-  LineComment@1003..1070 "// The `error` modifi ..."
-  Whitespace@1070..1071 "\n"
-  LineComment@1071..1102 "// (TYPL-212 is check ..."
-  Whitespace@1102..1103 "\n"
-  TypeDef@1103..1141
-    ErrorKw@1103..1108 "error"
-    Whitespace@1108..1109 " "
-    TypeKw@1109..1113 "type"
-    Whitespace@1113..1114 " "
-    Name@1114..1124
-      Ident@1114..1124 "LegacyMark"
-    Whitespace@1124..1125 " "
-    Colon@1125..1126 ":"
-    Whitespace@1126..1127 " "
-    PrimitiveType@1127..1134
-      IntegerKw@1127..1134 "integer"
-    Whitespace@1134..1135 " "
-    Constraint@1135..1141
-      LBracket@1135..1136 "["
-      Literal@1136..1137
-        IntNumber@1136..1137 "0"
-      DotDot@1137..1139 ".."
-      Literal@1139..1140
-        IntNumber@1139..1140 "1"
-      RBracket@1140..1141 "]"
-  Whitespace@1141..1142 "\n"
-  ConstDef@1142..1177
-    ErrorKw@1142..1147 "error"
-    Whitespace@1147..1148 " "
-    ConstKw@1148..1153 "const"
-    Whitespace@1153..1154 " "
-    Name@1154..1163
-      Ident@1154..1163 "LEGACY_ID"
-    Whitespace@1163..1164 " "
-    Colon@1164..1165 ":"
-    Whitespace@1165..1166 " "
-    PathType@1166..1173
-      QualifiedName@1166..1173
-        IntegerKw@1166..1173 "integer"
-    Whitespace@1173..1174 " "
-    Eq@1174..1175 "="
-    Whitespace@1175..1176 " "
-    Literal@1176..1177
-      IntNumber@1176..1177 "9"
-  Whitespace@1177..1178 "\n"
-  EnumSetDef@1178..1213
-    ErrorKw@1178..1183 "error"
-    Whitespace@1183..1184 " "
-    EnumsetKw@1184..1191 "enumset"
-    Whitespace@1191..1192 " "
-    Name@1192..1203
-      Ident@1192..1203 "LegacyFlags"
-    Whitespace@1203..1204 " "
-    Colon@1204..1205 ":"
-    Whitespace@1205..1206 " "
-    PathType@1206..1213
-      QualifiedName@1206..1213
-        Ident@1206..1213 "Warning"
-  Whitespace@1213..1214 "\n"
+  LineComment@884..963 "// An integer tombsto ..."
+  Whitespace@963..964 "\n"
+  LineComment@964..1043 "// is no longer an ov ..."
+  Whitespace@1043..1044 "\n"
+  LineComment@1044..1123 "// `err/reserved_ungr ..."
+  Whitespace@1123..1124 "\n"
+  LineComment@1124..1200 "// the *body* an inte ..."
+  Whitespace@1200..1201 "\n"
+  LineComment@1201..1274 "// body-agnostic, and ..."
+  Whitespace@1274..1275 "\n"
+  LineComment@1275..1350 "// retire, so this en ..."
+  Whitespace@1350..1351 "\n"
+  StructDef@1351..1403
+    StructKw@1351..1357 "struct"
+    Whitespace@1357..1358 " "
+    Name@1358..1371
+      Ident@1358..1371 "LooseReserved"
+    Whitespace@1371..1372 " "
+    LBrace@1372..1373 "{"
+    Whitespace@1373..1376 "\n  "
+    ReservedEntry@1376..1386
+      ReservedKw@1376..1384 "reserved"
+      Whitespace@1384..1385 " "
+      Literal@1385..1386
+        IntNumber@1385..1386 "7"
+    Whitespace@1386..1389 "\n  "
+    FieldDef@1389..1401
+      Name@1389..1393
+        Ident@1389..1393 "keep"
+      Whitespace@1393..1394 " "
+      Colon@1394..1395 ":"
+      Whitespace@1395..1396 " "
+      PathType@1396..1401
+        QualifiedName@1396..1401
+          Ident@1396..1401 "Speed"
+    Whitespace@1401..1402 "\n"
+    RBrace@1402..1403 "}"
+  Whitespace@1403..1405 "\n\n"
+  LineComment@1405..1472 "// The `error` modifi ..."
+  Whitespace@1472..1473 "\n"
+  LineComment@1473..1504 "// (TYPL-212 is check ..."
+  Whitespace@1504..1505 "\n"
+  TypeDef@1505..1543
+    ErrorKw@1505..1510 "error"
+    Whitespace@1510..1511 " "
+    TypeKw@1511..1515 "type"
+    Whitespace@1515..1516 " "
+    Name@1516..1526
+      Ident@1516..1526 "LegacyMark"
+    Whitespace@1526..1527 " "
+    Colon@1527..1528 ":"
+    Whitespace@1528..1529 " "
+    PrimitiveType@1529..1536
+      IntegerKw@1529..1536 "integer"
+    Whitespace@1536..1537 " "
+    Constraint@1537..1543
+      LBracket@1537..1538 "["
+      Literal@1538..1539
+        IntNumber@1538..1539 "0"
+      DotDot@1539..1541 ".."
+      Literal@1541..1542
+        IntNumber@1541..1542 "1"
+      RBracket@1542..1543 "]"
+  Whitespace@1543..1544 "\n"
+  ConstDef@1544..1579
+    ErrorKw@1544..1549 "error"
+    Whitespace@1549..1550 " "
+    ConstKw@1550..1555 "const"
+    Whitespace@1555..1556 " "
+    Name@1556..1565
+      Ident@1556..1565 "LEGACY_ID"
+    Whitespace@1565..1566 " "
+    Colon@1566..1567 ":"
+    Whitespace@1567..1568 " "
+    PathType@1568..1575
+      QualifiedName@1568..1575
+        IntegerKw@1568..1575 "integer"
+    Whitespace@1575..1576 " "
+    Eq@1576..1577 "="
+    Whitespace@1577..1578 " "
+    Literal@1578..1579
+      IntNumber@1578..1579 "9"
+  Whitespace@1579..1580 "\n"
+  EnumSetDef@1580..1615
+    ErrorKw@1580..1585 "error"
+    Whitespace@1585..1586 " "
+    EnumsetKw@1586..1593 "enumset"
+    Whitespace@1593..1594 " "
+    Name@1594..1605
+      Ident@1594..1605 "LegacyFlags"
+    Whitespace@1605..1606 " "
+    Colon@1606..1607 ":"
+    Whitespace@1607..1608 " "
+    PathType@1608..1615
+      QualifiedName@1608..1615
+        Ident@1608..1615 "Warning"
+  Whitespace@1615..1616 "\n"
 errors: none

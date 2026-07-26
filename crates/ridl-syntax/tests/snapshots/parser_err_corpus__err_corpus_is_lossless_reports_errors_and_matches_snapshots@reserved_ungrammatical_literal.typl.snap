@@ -1,0 +1,166 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/reserved_ungrammatical_literal.typl
+---
+SourceFile@0..516
+  LineComment@0..77 "// typl Appendix E: ` ..."
+  Whitespace@77..78 "\n"
+  LineComment@78..155 "// other literal shap ..."
+  Whitespace@155..156 "\n"
+  LineComment@156..230 "// and the member aft ..."
+  Whitespace@230..231 "\n"
+  PackageDecl@231..243
+    PackageKw@231..238 "package"
+    Whitespace@238..239 " "
+    QualifiedName@239..243
+      Ident@239..243 "demo"
+  Whitespace@243..245 "\n\n"
+  StructDef@245..321
+    StructKw@245..251 "struct"
+    Whitespace@251..252 " "
+    Name@252..259
+      Ident@252..259 "Profile"
+    Whitespace@259..260 " "
+    LBrace@260..261 "{"
+    Whitespace@261..264 "\n  "
+    FieldDef@264..275
+      Name@264..268
+        Ident@264..268 "name"
+      Whitespace@268..269 " "
+      Colon@269..270 ":"
+      Whitespace@270..271 " "
+      PathType@271..275
+        QualifiedName@271..275
+          Ident@271..275 "Name"
+    Whitespace@275..278 "\n  "
+    ReservedEntry@278..303
+      ReservedKw@278..286 "reserved"
+      Whitespace@286..287 " "
+      ErrorNode@287..303
+        String@287..303 "\"legacyChecksum\""
+    Whitespace@303..306 "\n  "
+    FieldDef@306..319
+      Name@306..311
+        Ident@306..311 "speed"
+      Whitespace@311..312 " "
+      Colon@312..313 ":"
+      Whitespace@313..314 " "
+      PathType@314..319
+        QualifiedName@314..319
+          Ident@314..319 "Speed"
+    Whitespace@319..320 "\n"
+    RBrace@320..321 "}"
+  Whitespace@321..323 "\n\n"
+  EnumDef@323..374
+    EnumKw@323..327 "enum"
+    Whitespace@327..328 " "
+    Name@328..332
+      Ident@328..332 "Gear"
+    Whitespace@332..333 " "
+    LBrace@333..334 "{"
+    Whitespace@334..337 "\n  "
+    EnumValue@337..345
+      Name@337..341
+        Ident@337..341 "PARK"
+      Whitespace@341..342 " "
+      Eq@342..343 "="
+      Whitespace@343..344 " "
+      Literal@344..345
+        IntNumber@344..345 "0"
+    Whitespace@345..348 "\n  "
+    ReservedEntry@348..360
+      ReservedKw@348..356 "reserved"
+      Whitespace@356..357 " "
+      ErrorNode@357..360
+        FloatNumber@357..360 "1.5"
+    Whitespace@360..363 "\n  "
+    EnumValue@363..372
+      Name@363..368
+        Ident@363..368 "DRIVE"
+      Whitespace@368..369 " "
+      Eq@369..370 "="
+      Whitespace@370..371 " "
+      Literal@371..372
+        IntNumber@371..372 "2"
+    Whitespace@372..373 "\n"
+    RBrace@373..374 "}"
+  Whitespace@374..376 "\n\n"
+  UnionDef@376..438
+    UnionKw@376..381 "union"
+    Whitespace@381..382 " "
+    Name@382..389
+      Ident@382..389 "Reading"
+    Whitespace@389..390 " "
+    LBrace@390..391 "{"
+    Whitespace@391..394 "\n  "
+    UnionArm@394..404
+      Name@394..396
+        Ident@394..396 "ok"
+      Whitespace@396..397 " "
+      Colon@397..398 ":"
+      Whitespace@398..399 " "
+      PathType@399..404
+        QualifiedName@399..404
+          Ident@399..404 "Speed"
+    Whitespace@404..407 "\n  "
+    ReservedEntry@407..420
+      ReservedKw@407..415 "reserved"
+      Whitespace@415..416 " "
+      ErrorNode@416..420
+        TrueKw@416..420 "true"
+    Whitespace@420..423 "\n  "
+    UnionArm@423..436
+      Name@423..428
+        Ident@423..428 "stale"
+      Whitespace@428..429 " "
+      Colon@429..430 ":"
+      Whitespace@430..431 " "
+      PathType@431..436
+        QualifiedName@431..436
+          Ident@431..436 "Speed"
+    Whitespace@436..437 "\n"
+    RBrace@437..438 "}"
+  Whitespace@438..440 "\n\n"
+  StructDef@440..515
+    StructKw@440..446 "struct"
+    Whitespace@446..447 " "
+    Name@447..457
+      Ident@447..457 "Referenced"
+    Whitespace@457..458 " "
+    LBrace@458..459 "{"
+    Whitespace@459..462 "\n  "
+    FieldDef@462..475
+      Name@462..467
+        Ident@462..467 "first"
+      Whitespace@467..468 " "
+      Colon@468..469 ":"
+      Whitespace@469..470 " "
+      PathType@470..475
+        QualifiedName@470..475
+          Ident@470..475 "Speed"
+    Whitespace@475..478 "\n  "
+    ReservedEntry@478..496
+      ReservedKw@478..486 "reserved"
+      Whitespace@486..487 " "
+      ErrorNode@487..496
+        Minus@487..488 "-"
+        Ident@488..496 "MAX_GEAR"
+    Whitespace@496..499 "\n  "
+    FieldDef@499..513
+      Name@499..505
+        Ident@499..505 "second"
+      Whitespace@505..506 " "
+      Colon@506..507 ":"
+      Whitespace@507..508 " "
+      PathType@508..513
+        QualifiedName@508..513
+          Ident@508..513 "Speed"
+    Whitespace@513..514 "\n"
+    RBrace@514..515 "}"
+  Whitespace@515..516 "\n"
+errors:
+  FORM-102 287..303 a `reserved` tombstone takes a retired member name or a retired integer value, not a string literal
+  FORM-102 357..360 a `reserved` tombstone takes a retired member name or a retired integer value, not a floating-point literal
+  FORM-102 416..420 a `reserved` tombstone takes a retired member name or a retired integer value, not a boolean literal
+  FORM-102 488..496 a `reserved` tombstone takes a retired member name or a retired integer value, not a constant reference

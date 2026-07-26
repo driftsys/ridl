@@ -1414,33 +1414,137 @@ fn contract_clauses_cover_the_guaranteed_expression_subset() {
     }
 }
 
-/// **This test pins a defect, deliberately.**
-///
 /// typl Appendix E defines `reserved = "reserved" ( camelCase_id | int_lit )`,
-/// but the parser accepts *any* literal in that position and the lowering keeps
-/// only integers. `reserved "oldName"`, `reserved true` and `reserved 1.5` are
-/// therefore accepted with **no diagnostic at all** and lower to
-/// `Reserved { name: None, value: None }` — a slot that still holds its ordinal
-/// (so the identity-reuse guarantee survives) but records nothing about what
-/// was retired, which is what `ridl diff` needs to report a dangling tombstone
-/// (TYPL-211).
+/// and the parser holds that line: every other literal shape draws FORM-102.
 ///
-/// Input outside the grammar accepted in silence is the failure family this
-/// corpus exists to find, so it is recorded rather than worked around. The
-/// corpus files themselves use only the two grammatical forms; this test drives
-/// `compile` directly so the golden entries stay grammatical.
+/// This test pinned the opposite until the parser was fixed. Any other literal
+/// used to parse as an ordinary `Literal`, and since lowering keeps only a name
+/// or an integer, `reserved "oldName"`, `reserved true` and `reserved 1.5`
+/// compiled with **no diagnostic at all** and lowered to
+/// `Reserved { name: None, value: None }` — a slot that still held its ordinal,
+/// so the identity-reuse guarantee survived, but that recorded nothing about
+/// *what* was retired. That is what `ridl diff` needs in order to report a
+/// dangling tombstone (TYPL-211), and in an `enum` body the retired wire value
+/// was lost outright.
 ///
-/// When the parser learns to reject these, flip the assertions to expect a
-/// diagnostic and update `veh-cluster/NOTES`, section "a non-integer `reserved`
-/// literal is accepted and discarded".
+/// The corpus files themselves use only the two grammatical forms; this test
+/// drives `compile` directly so the golden entries stay grammatical.
 #[test]
-fn reserved_accepts_ungrammatical_literals_and_discards_them() {
-    for literal in ["\"oldName\"", "true", "1.5"] {
+fn reserved_rejects_ungrammatical_literals() {
+    for literal in ["\"oldName\"", "true", "1.5", "-MAX"] {
         let source = format!(
             "package app\ntype L: integer [0..7]\ninterface I {{\n  signal a : L @1s\n  \
              reserved {literal}\n  signal b : L @1s\n}}\n"
         );
         let output = ridlc::compile("app.ridl", &source);
+
+        let form_102: Vec<&str> = output
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code.as_str() == "FORM-102")
+            .map(|diagnostic| diagnostic.message.as_str())
+            .collect();
+        assert_eq!(
+            form_102.len(),
+            1,
+            "`reserved {literal}` is outside the grammar and must draw exactly one FORM-102, \
+             got {:?}",
+            output
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.code.as_str())
+                .collect::<Vec<_>>(),
+        );
+        assert!(
+            form_102[0].starts_with(
+                "a `reserved` tombstone takes a retired member name or a retired integer value"
+            ),
+            "the message must say what a tombstone does take, got {:?}",
+            form_102[0],
+        );
+
+        // Recovery keeps the tombstone in place: the entry still occupies its
+        // ordinal and the interaction after it is still ordinal 3, so a refused
+        // literal never silently renumbers the interactions that follow it.
+        let ordinals: Vec<(u32, &str)> = output.package.interfaces[0]
+            .interactions
+            .iter()
+            .map(|decl| (decl.ordinal, decl.name.as_str()))
+            .collect();
+        assert_eq!(
+            ordinals,
+            vec![(1, "a"), (2, ""), (3, "b")],
+            "`reserved {literal}` must keep its slot and leave the ordinals after it alone",
+        );
+    }
+}
+
+/// Every tombstone spelling that is **meaningful** in its body compiles clean:
+/// the name form in a struct, a union, an enum, a named `interface` and a
+/// `service` inline shape, and the integer form where it carries a retired
+/// identity — an enum wire value (TYPL-210) and the nameless interaction
+/// spelling that records the ordinal it protects
+/// (`veh-cluster/cluster/evolution.ridl`, guarded by `parity.rs`'s
+/// `MUST_COVER`).
+///
+/// The companion of [`reserved_rejects_ungrammatical_literals`]: refusing the
+/// ungrammatical literals must not narrow the production past what Appendix E
+/// writes. The struct/union integer case is deliberately **not** here — see
+/// [`reserved_integer_in_a_struct_or_union_is_inert`].
+#[test]
+fn reserved_accepts_every_meaningful_form() {
+    let source = "package app\n\
+         type L: integer [0..7]\n\
+         struct S {\n  a : L\n  reserved legacyChecksum\n  b : L\n}\n\
+         enum E {\n  A = 1\n  reserved 2\n  reserved -3\n  B = 4\n}\n\
+         union U {\n  x : L\n  reserved oldArm\n  y : L\n}\n\
+         interface I {\n  signal a : L @1s\n  reserved legacyTemp\n  reserved 3\n  \
+         signal b : L @1s\n}\n\
+         service app.svc {\n  signal c : L @1s\n  reserved legacyRate\n  reserved 3\n  \
+         signal d : L @1s\n}\n";
+    let output = ridlc::compile("app.ridl", source);
+
+    let codes: Vec<&str> = output
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect();
+    assert!(
+        codes.is_empty(),
+        "the meaningful tombstone forms must compile clean, got {codes:?}",
+    );
+}
+
+/// **This test pins a residual, deliberately.** It replaces the pin
+/// `reserved_accepts_ungrammatical_literals_and_discards_them` carried, at the
+/// one spelling that still reaches the same outcome through a *grammatical*
+/// form.
+///
+/// `reserved <int>` in a `struct` or `union` body lowers to
+/// `Reserved { name: None, value: Some(n) }` and compiles clean. Members there
+/// carry no explicit value, so nothing can ever match `value`, and `name: None`
+/// leaves TYPL-210 with no retired name to match — the same empty provenance
+/// the ungrammatical literals produced, reached through a form Appendix E's
+/// body-agnostic production admits.
+///
+/// It is recorded rather than repaired because refusing it needs a per-body
+/// checker rule under a new TYPL-2xx code, and allocating a code is an ADR
+/// decision (ADR-0008 decision 13). `test_data/parser/ok/grammar_overapprox.typl`
+/// already carries the case as an over-approximation awaiting exactly that
+/// rule. When the rule lands, flip the assertions to expect a diagnostic and
+/// update `veh-cluster/NOTES`.
+///
+/// Not in scope, and asserted as legal above: the *enum* integer form retires a
+/// wire value and TYPL-210 matches it, and the nameless *interaction* form
+/// records the ordinal it protects by design.
+#[test]
+fn reserved_integer_in_a_struct_or_union_is_inert() {
+    for (kind, body) in [
+        ("struct", "struct S {\n  a : L\n  reserved 3\n  b : L\n}"),
+        ("union", "union U {\n  x : L\n  reserved 7\n  y : L\n}"),
+    ] {
+        let source = format!("package app\ntype L: integer [0..7]\n{body}\n");
+        let output = ridlc::compile("app.typl", &source);
 
         let codes: Vec<&str> = output
             .diagnostics
@@ -1449,22 +1553,38 @@ fn reserved_accepts_ungrammatical_literals_and_discards_them() {
             .collect();
         assert!(
             codes.is_empty(),
-            "the parser has learned to reject `reserved {literal}` — good. Flip this assertion \
-             and update `veh-cluster/NOTES`. Got: {codes:?}",
-        );
-
-        let slot = output.package.interfaces[0]
-            .interactions
-            .iter()
-            .find_map(|decl| match &decl.kind {
-                Some(ridl_ir::v2::decl::Kind::ReservedSlot(slot)) => Some(slot),
-                _ => None,
-            })
-            .expect("the tombstone lowers");
-        assert_eq!(
-            (slot.ordinal, slot.name.as_deref(), slot.value),
-            (2, None, None),
-            "`reserved {literal}` holds its ordinal but discards what was retired",
+            "the {kind} integer tombstone has learned to draw a diagnostic — good. \
+             Flip this assertion and update `veh-cluster/NOTES`. Got: {codes:?}",
         );
     }
+
+    // The retired identity is empty, which is the residual stated as an
+    // assertion rather than only in prose.
+    let source = "package app\ntype L: integer [0..7]\n\
+         struct S {\n  a : L\n  reserved 3\n  b : L\n}\n";
+    let output = ridlc::compile("app.typl", source);
+    let structure = output
+        .package
+        .decls
+        .iter()
+        .find_map(|decl| match &decl.kind {
+            Some(ridl_ir::v2::decl::Kind::StructDef(structure)) => Some(structure),
+            _ => None,
+        })
+        .expect("the struct lowers");
+    let tombstones: Vec<(u32, Option<String>, Option<i64>)> = structure
+        .members
+        .iter()
+        .filter_map(|member| match &member.member {
+            Some(ridl_ir::v2::struct_member::Member::Reserved(slot)) => {
+                Some((slot.ordinal, slot.name.clone(), slot.value))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        tombstones,
+        vec![(2, None, Some(3))],
+        "the struct tombstone holds its ordinal but records no retired name",
+    );
 }
