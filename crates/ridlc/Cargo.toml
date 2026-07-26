@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 clap.workspace = true
 ridl-backend-rust = { path = "../ridl-backend-rust" }
+ridl-backend-ts = { path = "../ridl-backend-ts" }
 ridl-core = { path = "../ridl-core" }
 ridl-ir = { path = "../ridl-ir" }
 ridl-sem = { path = "../ridl-sem" }
@@ -18,7 +19,3 @@ rowan.workspace = true
 # The `glob` feature drives the full-pipeline corpus runner (tests/corpus.rs,
 # E1.18); `json` rides in from the workspace default.
 insta = { workspace = true, features = ["glob"] }
-# The corpus runner snapshots generated TypeScript beside the generated Rust
-# (E2 task 22). The compile path itself does not emit TypeScript yet, so the
-# backend is a test-only dependency here.
-ridl-backend-ts = { path = "../ridl-backend-ts" }

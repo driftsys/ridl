@@ -41,7 +41,8 @@ enum Command {
         /// The directory to write generated artifacts into.
         #[arg(long)]
         out_dir: PathBuf,
-        /// The artifacts to emit: `rust` (default), `c-header`, `ir-json`.
+        /// The artifacts to emit: `rust` (default), `c-header`, `ir-json`,
+        /// `typescript`.
         #[arg(long, value_delimiter = ',', default_value = "rust")]
         emit: Vec<Emit>,
         /// Verify remote imports against `ridl.lock` without fetching or

@@ -162,6 +162,100 @@ fn build_emit_c_header_writes_header() {
     assert!(!header.is_empty(), "the header must not be empty");
 }
 
+/// `build --emit typescript` writes `<pkg-name>.ts` holding the TypeScript
+/// backend's output for that package.
+///
+/// The expected source is regenerated inside the test from the same entry over
+/// the public library path (`compile_workspace` then
+/// `ridl_backend_ts::generate`), so the assertion is byte equality against the
+/// backend rather than a restatement of whatever the emit happens to write. The
+/// non-empty guard is what keeps the equality meaningful: an emit arm that
+/// wrote nothing would otherwise have to be compared against an empty string.
+#[test]
+fn build_emit_typescript_writes_the_backend_module() {
+    let dir = TempDir::new("build-ts");
+    dir.write("pkg/ridl.toml", PACKAGE_MANIFEST);
+    dir.write("pkg/speed.typl", SPEED_SOURCE);
+    let out = TempDir::new("build-ts-out");
+    let entry = dir.path().join("pkg");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "typescript".as_ref(),
+    ]);
+    assert_eq!(code, 0, "a clean package must exit 0, stderr:\n{stderr}");
+
+    let written = std::fs::read_to_string(out.path().join("veh.common.ts"))
+        .expect("typescript writes <pkg-name>.ts");
+
+    let mut db = ridl_core::RidlDatabase::default();
+    let checked = ridlc::compile_workspace(&mut db, &entry)
+        .expect("the fixture loads")
+        .checked;
+    let [package] = checked.as_slice() else {
+        panic!("the fixture is one package, got {}", checked.len());
+    };
+    let expected = ridl_backend_ts::generate(&package.ir)
+        .expect("the fixture generates TypeScript")
+        .source;
+
+    assert!(
+        expected.contains("export type Speed"),
+        "the fixture must generate a branded Speed, or the equality below proves nothing, got:\n{expected}"
+    );
+    assert_eq!(
+        written, expected,
+        "the emitted file must hold the TypeScript backend's output"
+    );
+    assert!(
+        !out.path().join("veh.common.rs").exists(),
+        "typescript alone writes no Rust file"
+    );
+}
+
+/// `build --help` offers exactly the artifacts [`ridlc::Emit`] defines, and the
+/// `--emit` summary line names every one of them.
+///
+/// A variant added to the enum without extending that summary line compiles,
+/// runs, and leaves the flag's own documentation stale — the defect this test
+/// guards.
+#[test]
+fn build_help_documents_every_emit_value() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ridlc"))
+        .args(["build", "--help"])
+        .output()
+        .expect("the ridlc binary must run");
+    let help = String::from_utf8_lossy(&output.stdout).into_owned();
+
+    // The only list items in `build --help` are the `--emit` possible values.
+    let listed: Vec<&str> = help
+        .lines()
+        .filter_map(|line| line.trim().strip_prefix("- "))
+        .filter_map(|item| item.split_once(':'))
+        .map(|(value, _)| value)
+        .collect();
+    assert_eq!(
+        listed,
+        ["rust", "c-header", "ir-json", "typescript"],
+        "`--emit` must offer exactly these artifacts, help:\n{help}"
+    );
+
+    let summary = help
+        .lines()
+        .find(|line| line.contains("The artifacts to emit"))
+        .expect("the --emit flag carries a summary line");
+    for value in &listed {
+        assert!(
+            summary.contains(value),
+            "the --emit summary must name `{value}`, got:{summary}"
+        );
+    }
+}
+
 /// A workspace build emits every member package's artifacts.
 #[test]
 fn build_workspace_emits_every_member() {

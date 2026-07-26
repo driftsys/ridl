@@ -124,14 +124,16 @@ facade gained `ridl diff`, `ridl baseline`, and `ridl test`. Deferred per
 ADR-0008: `persist` (d3), the `final` → `fixed`/`provisioned` reconsideration
 (d5, still open), the general-form §4.7 promotion of `labels`/`deprecated` to
 attributes, and diagnostic codes RIDL-111 and RIDL-142 — reserved by d21 and
-still unminted. `ridlc build` emits Rust, the extern-C header, and IR JSON;
-TypeScript is produced through the backend library and pinned by the corpus
-snapshots, with no CLI emit path. E2 also paid three codes of the E1 debt
-ADR-0007 d10 recorded: TYPL-301, TYPL-303, and TYPL-304 ship, emitted by the
-parser once the family grammar made the constructs they reject parseable, each
-with a showcase entry. E2.10's "alias-not-required" row needed no new work —
-TYPL-008 has covered it from the resolver since E1. The consolidated E2 debt
-roll-up is **#172**, on the E1 (#135) pattern.
+still unminted. `ridlc build` emits Rust, the extern-C header, IR JSON, and
+TypeScript. The epic itself shipped the TypeScript backend as a library only,
+pinned by the corpus snapshots and reachable from no command; the
+`--emit typescript` path landed afterwards, as a prerequisite for E3.3
+(driftsys/ridl#172). E2 also paid three codes of the E1 debt ADR-0007 d10
+recorded: TYPL-301, TYPL-303, and TYPL-304 ship, emitted by the parser once the
+family grammar made the constructs they reject parseable, each with a showcase
+entry. E2.10's "alias-not-required" row needed no new work — TYPL-008 has
+covered it from the resolver since E1. The consolidated E2 debt roll-up is
+**#172**, on the E1 (#135) pattern.
 
 | ID    | Story                                                                                                                                                   | Done when                                                               | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---- |
