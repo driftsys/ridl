@@ -1582,10 +1582,21 @@ impl<'a> Parser<'a> {
 
     /// `ReservedEntry = 'reserved' (Name | int_lit)` — the tombstone (§7.4).
     /// typl Appendix E spells it `reserved = "reserved" ( camelCase_id |
-    /// int_lit )`: the name form retires a struct field, a union arm, or an
-    /// interaction; the integer form retires an enum wire value. The parser
-    /// accepts both forms in every body that admits a tombstone; the checker
-    /// narrows which one each body kind wants.
+    /// int_lit )`. The production is body-agnostic and this parser keeps it
+    /// that way: both forms parse in every body that admits a tombstone.
+    ///
+    /// What each form *means* is per body, and **nothing narrows it** — there
+    /// is no per-body check anywhere, so this comment describes the language,
+    /// not an enforced rule. The name form is meaningful everywhere (TYPL-210
+    /// in a struct, union or enum; RIDL-401 in an interface). The integer form
+    /// is meaningful in an `enum`, where it retires a wire value (TYPL-210),
+    /// and in an interaction body, where the nameless spelling records the
+    /// ordinal it protects (`veh-cluster/cluster/evolution.ridl`). In a
+    /// `struct` or `union` body it is **inert**: members there carry no
+    /// explicit value, so nothing can ever match it and no retired name is
+    /// recorded. `test_data/parser/ok/grammar_overapprox.typl` carries that
+    /// case as an over-approximation awaiting a checker rule; see
+    /// `veh-cluster/NOTES` for the residual and what closing it needs.
     ///
     /// Any other literal — a string, a boolean, a float, a regex, a bare
     /// constant reference — is outside the grammar and draws FORM-102 here
@@ -1604,6 +1615,14 @@ impl<'a> Parser<'a> {
             if kind == SyntaxKind::IntNumber {
                 self.literal();
             } else {
+                self.start(SyntaxKind::ErrorNode);
+                // A leading `-` belongs to the literal but is not what makes
+                // it ungrammatical, so it is consumed before the diagnostic is
+                // raised: the caret then lands on the value token the message
+                // names, as it already does for every single-token shape.
+                if self.at(SyntaxKind::Minus) {
+                    self.bump();
+                }
                 self.error_at_current(
                     "FORM-102",
                     format!(
@@ -1611,10 +1630,6 @@ impl<'a> Parser<'a> {
                         ungrammatical_reserved_noun(kind),
                     ),
                 );
-                self.start(SyntaxKind::ErrorNode);
-                if self.at(SyntaxKind::Minus) {
-                    self.bump();
-                }
                 self.bump();
                 self.builder.finish_node();
             }

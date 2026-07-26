@@ -275,6 +275,40 @@ recovery shape is pinned in the err corpus by
 `test_data/parser/err/reserved_ungrammatical_literal.{typl,ridl}` under
 `crates/ridl-syntax/`.
 
+**Residual, still open: `reserved <int>` in a `struct` or `union` body.**
+Appendix E's production is body-agnostic, so refusing this at the parser would
+be wrong — the residual is a missing *checker* rule, and #174 did not add one.
+The entry compiles clean and lowers to
+`Reserved { name: None, value: Some(n) }`, which is the same empty provenance
+the ungrammatical literals produced: a struct field and a union arm carry no
+explicit value, so nothing can ever match `value`, and `name: None` leaves
+TYPL-210 with no retired name to match.
+
+The scope is exactly those two bodies, which was established by running each
+form rather than by reading the grammar:
+
+- `struct` / `union`, **name** form — TYPL-210 fires on a field or arm that
+  re-declares the retired name. Functional.
+- `enum`, **name** form — TYPL-210 fires on a value re-declaring the name.
+  Functional. **integer** form — TYPL-210 fires on a value re-using the wire
+  number. Functional; this is the form typl §7.4 documents for enums.
+- `interface` / inline shape, **integer** form — not a hole. The nameless
+  spelling is the deliberate second form: `cluster/evolution.ridl` carries it
+  and documents the `Reserved { name: None, value: Some(n) }` lowering as "a
+  slot that records the ordinal it protects and nothing else", and `parity.rs`'s
+  `MUST_COVER` guards it as "the other grammatical form (typl §7.4)".
+- `struct` / `union`, **integer** form — inert. The residual.
+
+It is recorded rather than repaired for the same reason FORM-109 and TYPL-010
+were not taken in #174: refusing it needs a new TYPL-2xx code, and allocating a
+code is an ADR decision (ADR-0008 decision 13). The repo already anticipated the
+rule — `crates/ridl-syntax/test_data/parser/ok/grammar_overapprox.typl` carries
+`struct LooseReserved { reserved 7 }` under a header reading "the parser accepts
+these and the checker narrows them later (typl reference §16 — TYPL-2xx and
+friends)". The narrowing was never written.
+`reserved_integer_in_a_struct_or_union_is_inert` pins the residual and fails
+with instructions when the rule lands.
+
 ### Imports bind at package scope; a repeated import was an error — fixed
 
 **Status: fixed in #174.** Recorded because this entry is what found it.
@@ -314,12 +348,32 @@ import's symbol *is* used. TYPL-010 is free in the module band and would be the
 right home if the project ever wants the notice; allocating a code is an ADR
 decision (ADR-0008 decision 13).
 
-This entry keeps `services.ridl` as written — the imports were never the point
-of the file, and rewriting them would churn four golden snapshots for nothing —
-but it is now free to import `Speed` and `Temperature` itself if that ever
-reads better. The behaviour is guarded by unit tests in `resolve.rs` rather
-than here: `an_identical_repeated_import_is_not_a_collision`,
+**The entry now closes it in source too.** `services.ridl` imports `Speed` and
+`Temperature`, which it references and which it had to omit while a repeat was
+an error, so the repaired behaviour is pinned end to end: two identical
+repeated imports in a real multi-file package, compiled through the real
+driver, drawing nothing. The whole cost was one line number in
+`corpus__diagnostics@veh-cluster.snap`, where the existing RIDL-100 warning
+moved from line 83 to 87; no diagnostic was added or removed. It is not a
+prose-only record — reverting the resolver fix turns five corpus and parity
+tests red from the source change alone.
+
+`resolve.rs` carries the unit guards for the shapes a golden entry cannot hold
+at once: `an_identical_repeated_import_is_not_a_collision`,
 `an_identical_import_repeated_across_files_of_a_package_is_not_a_collision`,
 `a_repeated_import_under_one_alias_is_not_a_collision`, and
 `a_repeat_between_two_genuine_collisions_still_flags_only_the_conflict`, which
 asserts the span so a repeat cannot be the line flagged.
+
+**A second defect surfaced when this one was repaired.** TYPL-008 (needless
+import alias) counted import *lines* per base name, so repeating an aliased
+import made its own base name look shared and suppressed the warning: two
+identical `import x.Speed as VehSpeed` lines produced no diagnostic at all,
+where one line correctly draws TYPL-008. It was invisible while TYPL-006 fired
+on the repeat and went live the moment TYPL-006 went silent. `base_name_sources`
+now counts distinct package paths, so an alias is needed only when the base name
+would name something else without it. Both directions are guarded:
+`a_repeated_aliased_import_still_draws_the_needless_alias_warning` and
+`an_alias_over_two_different_targets_is_still_needed`.
+Recorded because it is the reason a repeated aliased import is not silent: the
+alias warning is the remaining signal on a line that binds nothing new.

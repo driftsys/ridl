@@ -29,7 +29,12 @@ type OpenStep : float [0.0.. step 0.5]
 type BoundedByConsts : string [MIN_LEN..MAX_LEN]
 type FixedByConst    : bytes [FRAME_LEN]
 
-// Non-integer literals in a reserved tombstone (checker scope).
+// An integer tombstone in a struct body (checker scope). A non-integer literal
+// is no longer an over-approximation: it is refused at parse with FORM-102, in
+// `err/reserved_ungrammatical_literal.typl`. What remains over-approximated is
+// the *body* an integer tombstone appears in — Appendix E's production is
+// body-agnostic, and a struct member carries no explicit value for it to
+// retire, so this entry records nothing. Awaiting a per-body checker rule.
 struct LooseReserved {
   reserved 7
   keep : Speed

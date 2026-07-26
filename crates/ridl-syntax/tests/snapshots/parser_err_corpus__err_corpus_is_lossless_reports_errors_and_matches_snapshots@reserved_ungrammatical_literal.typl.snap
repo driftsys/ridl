@@ -163,4 +163,4 @@ errors:
   FORM-102 287..303 a `reserved` tombstone takes a retired member name or a retired integer value, not a string literal
   FORM-102 357..360 a `reserved` tombstone takes a retired member name or a retired integer value, not a floating-point literal
   FORM-102 416..420 a `reserved` tombstone takes a retired member name or a retired integer value, not a boolean literal
-  FORM-102 487..488 a `reserved` tombstone takes a retired member name or a retired integer value, not a constant reference
+  FORM-102 488..496 a `reserved` tombstone takes a retired member name or a retired integer value, not a constant reference

@@ -1479,15 +1479,20 @@ fn reserved_rejects_ungrammatical_literals() {
     }
 }
 
-/// The two grammatical tombstone forms of typl Appendix E — `reserved
-/// camelCase_id` and `reserved int_lit`, the latter with an optional `-` —
-/// compile clean in every body that admits a tombstone: the three typl
-/// composites, a named `interface`, and a `service` inline shape.
+/// Every tombstone spelling that is **meaningful** in its body compiles clean:
+/// the name form in a struct, a union, an enum, a named `interface` and a
+/// `service` inline shape, and the integer form where it carries a retired
+/// identity — an enum wire value (TYPL-210) and the nameless interaction
+/// spelling that records the ordinal it protects
+/// (`veh-cluster/cluster/evolution.ridl`, guarded by `parity.rs`'s
+/// `MUST_COVER`).
 ///
-/// The companion of [`reserved_rejects_ungrammatical_literals`]: narrowing the
-/// tombstone grammar must not narrow it past what Appendix E writes.
+/// The companion of [`reserved_rejects_ungrammatical_literals`]: refusing the
+/// ungrammatical literals must not narrow the production past what Appendix E
+/// writes. The struct/union integer case is deliberately **not** here — see
+/// [`reserved_integer_in_a_struct_or_union_is_inert`].
 #[test]
-fn reserved_accepts_both_grammatical_forms_in_every_body() {
+fn reserved_accepts_every_meaningful_form() {
     let source = "package app\n\
          type L: integer [0..7]\n\
          struct S {\n  a : L\n  reserved legacyChecksum\n  b : L\n}\n\
@@ -1506,6 +1511,80 @@ fn reserved_accepts_both_grammatical_forms_in_every_body() {
         .collect();
     assert!(
         codes.is_empty(),
-        "the grammatical tombstone forms must compile clean, got {codes:?}",
+        "the meaningful tombstone forms must compile clean, got {codes:?}",
+    );
+}
+
+/// **This test pins a residual, deliberately.** It replaces the pin
+/// `reserved_accepts_ungrammatical_literals_and_discards_them` carried, at the
+/// one spelling that still reaches the same outcome through a *grammatical*
+/// form.
+///
+/// `reserved <int>` in a `struct` or `union` body lowers to
+/// `Reserved { name: None, value: Some(n) }` and compiles clean. Members there
+/// carry no explicit value, so nothing can ever match `value`, and `name: None`
+/// leaves TYPL-210 with no retired name to match — the same empty provenance
+/// the ungrammatical literals produced, reached through a form Appendix E's
+/// body-agnostic production admits.
+///
+/// It is recorded rather than repaired because refusing it needs a per-body
+/// checker rule under a new TYPL-2xx code, and allocating a code is an ADR
+/// decision (ADR-0008 decision 13). `test_data/parser/ok/grammar_overapprox.typl`
+/// already carries the case as an over-approximation awaiting exactly that
+/// rule. When the rule lands, flip the assertions to expect a diagnostic and
+/// update `veh-cluster/NOTES`.
+///
+/// Not in scope, and asserted as legal above: the *enum* integer form retires a
+/// wire value and TYPL-210 matches it, and the nameless *interaction* form
+/// records the ordinal it protects by design.
+#[test]
+fn reserved_integer_in_a_struct_or_union_is_inert() {
+    for (kind, body) in [
+        ("struct", "struct S {\n  a : L\n  reserved 3\n  b : L\n}"),
+        ("union", "union U {\n  x : L\n  reserved 7\n  y : L\n}"),
+    ] {
+        let source = format!("package app\ntype L: integer [0..7]\n{body}\n");
+        let output = ridlc::compile("app.typl", &source);
+
+        let codes: Vec<&str> = output
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect();
+        assert!(
+            codes.is_empty(),
+            "the {kind} integer tombstone has learned to draw a diagnostic — good. \
+             Flip this assertion and update `veh-cluster/NOTES`. Got: {codes:?}",
+        );
+    }
+
+    // The retired identity is empty, which is the residual stated as an
+    // assertion rather than only in prose.
+    let source = "package app\ntype L: integer [0..7]\n\
+         struct S {\n  a : L\n  reserved 3\n  b : L\n}\n";
+    let output = ridlc::compile("app.typl", source);
+    let structure = output
+        .package
+        .decls
+        .iter()
+        .find_map(|decl| match &decl.kind {
+            Some(ridl_ir::v2::decl::Kind::StructDef(structure)) => Some(structure),
+            _ => None,
+        })
+        .expect("the struct lowers");
+    let tombstones: Vec<(u32, Option<String>, Option<i64>)> = structure
+        .members
+        .iter()
+        .filter_map(|member| match &member.member {
+            Some(ridl_ir::v2::struct_member::Member::Reserved(slot)) => {
+                Some((slot.ordinal, slot.name.clone(), slot.value))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        tombstones,
+        vec![(2, None, Some(3))],
+        "the struct tombstone holds its ordinal but records no retired name",
     );
 }
