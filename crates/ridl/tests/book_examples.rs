@@ -160,8 +160,12 @@ struct Fenced {
 
 /// The exact `pulldown-cmark` options mdBook parses with.
 ///
-/// mdBook builds its parser from `Options::empty()` and inserts exactly these
-/// five (`mdbook::utils::new_cmark_parser`).
+/// mdBook builds its parser from `Options::empty()` and inserts these five
+/// (`mdbook::utils::new_cmark_parser`). It inserts a sixth,
+/// `ENABLE_SMART_PUNCTUATION`, when `[output.html] smart-punctuation` is set —
+/// so "five" is this book's configuration, not a universal. That flag rewrites
+/// text runs and moves no fences, so enabling it in `book.toml` could not open
+/// a gap here; it would only mean this constant no longer names the whole set.
 ///
 /// **Using the same parser is not enough on its own.** The option set decides
 /// block structure too, and three flags in `Options::all()` move fences:
@@ -1020,9 +1024,15 @@ fn an_ignored_block_is_skipped_and_an_empty_book_fails() {
 /// That is the shape the defect took — fail-open, not merely a skip.
 #[test]
 fn an_indented_fence_is_verified_at_every_list_depth() {
-    // (label, indent) — 3 is a short ordered item, 4 is `10.`, 6 is a nested
-    // ordered list, and a tab is what an editor inserts.
-    let indents = [("three", "   "), ("four", "    "), ("six", "      ")];
+    // (label, indent) — 3 columns is a short ordered item, 4 is `10.`, 6 is a
+    // nested ordered list, and a tab is what an editor inserts under any of
+    // them.
+    let indents = [
+        ("three spaces", "   "),
+        ("four spaces", "    "),
+        ("six spaces", "      "),
+        ("a tab", "\t"),
+    ];
     for (label, pad) in indents {
         let book = book_of(
             label,
@@ -1720,4 +1730,39 @@ fn a_failure_report_names_the_book_not_the_staging_directory() {
         !report.contains(".ridl:"),
         "no staged source path should survive the rewrite, got:\n{report}"
     );
+}
+
+/// A block that declares no usable package is refused, however it fails to.
+///
+/// An empty or whitespace-only body has no `package` line at all; `package `
+/// and `package // comment` have the keyword and no name. All five must be
+/// refused: a block that reached staging with an empty package name would be
+/// written to the workspace root, outside any member, where nothing compiles
+/// it. The code is right — this pins it.
+#[test]
+fn a_block_without_a_usable_package_is_refused() {
+    let cases = [
+        ("an empty body", ""),
+        ("a whitespace-only body", "   \n\t\n"),
+        ("a bare `package` keyword", "package\n"),
+        ("`package` with no name", "package \n"),
+        ("`package` with only a comment", "package // which one?\n"),
+    ];
+
+    for (label, body) in cases {
+        let (examples, problems) = classify("chapter.md", &format!("```ridl\n{body}```\n"));
+        assert!(
+            examples.is_empty(),
+            "{label}: nothing may reach staging without a package name"
+        );
+        assert!(
+            problems.iter().any(|p| p.contains("declares no `package`")),
+            "{label}: the author must be told what is wrong, got: {problems:?}"
+        );
+    }
+
+    // And end to end, so the refusal is not merely computed but acted on.
+    let book = book_of("no-package", "```ridl\npackage \n```\n");
+    let report = verify_book(book.path()).expect_err("the book must be refused");
+    assert!(report.contains("declares no `package`"), "got:\n{report}");
 }
