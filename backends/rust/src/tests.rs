@@ -632,6 +632,181 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     );
 }
 
+/// Two tuples whose paths mangle to one struct name are **refused**, in either
+/// layer, rather than deduplicated.
+///
+/// `struct AB { c : … }` and `struct A { bC : … }` both reach the name `ABC`,
+/// and nothing upstream keeps them apart — `ridlc check` exits 0. The worklist
+/// used to keep the first discovery, which gave the second declaration the
+/// first one's shape: a module that compiles and states the wrong contract.
+///
+/// It is also the corner that makes carrying an inducing declaration's
+/// visibility (issue #167) unsafe on its own. With one declaration `internal`
+/// and the other public — **and no `internal` payload type anywhere**, so
+/// TYPL-005 has nothing to see — first-wins would put a `pub(crate)` struct in a
+/// `pub` struct's field and rustc would report `private_interfaces` on a program
+/// that built before. Keeping the widest visibility instead would publish the
+/// package-private declaration's shape, which is the defect #167 fixed. Neither
+/// dedup rule is sound; only rejection is.
+///
+/// The mixed-visibility pair is the fixture on purpose: a same-visibility pair
+/// would be refused by a check that ignored visibility entirely, so it would not
+/// show that the rejection is what keeps the visibility rule safe.
+#[test]
+fn two_tuples_mangling_to_one_name_are_refused() {
+    let hidden = v2::Decl {
+        visibility: v2::Visibility::Internal as i32,
+        ..public_decl(
+            "A",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(shaped_field(
+                    "bC",
+                    1,
+                    tuple_of(&[("y", "Counter")]),
+                ))],
+                fixed_layout: false,
+            }),
+        )
+    };
+    let shown = public_decl(
+        "AB",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(shaped_field(
+                "c",
+                1,
+                tuple_of(&[("x", "Counter")]),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+
+    let error = generate(&package("veh.common", vec![counter_decl(), hidden, shown]))
+        .expect_err("two tuples generating one name are refused");
+    assert!(
+        error.message.contains("ABC"),
+        "the refusal names the generated name, got: {}",
+        error.message,
+    );
+    // The mangled name cannot tell the two apart — that is the defect — so the
+    // message names both field lists, which is what a reader can search for.
+    assert!(
+        error.message.contains("(x)") && error.message.contains("(y)"),
+        "the refusal names both tuple shapes, got: {}",
+        error.message,
+    );
+
+    // The interaction layer reaches the same collision through two query
+    // returns, and is refused identically. It was NOT refused before:
+    // `check_name_collisions` treats a repeated tuple name as the worklist's own
+    // deduplication and skips it.
+    let error = generate(&interaction_package(
+        vec![counter_decl()],
+        vec![
+            interface(
+                "AB",
+                "",
+                vec![interaction(
+                    "c",
+                    1,
+                    "",
+                    v2::decl::Kind::QueryDef(v2::QueryDef {
+                        params: Vec::new(),
+                        return_type: Some(v2::ReturnType {
+                            kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                                optional: false,
+                                kind: Some(tuple_of(&[("x", "Counter")])),
+                            })),
+                        }),
+                        contracts: Vec::new(),
+                    }),
+                )],
+            ),
+            interface(
+                "A",
+                "",
+                vec![interaction(
+                    "bC",
+                    1,
+                    "",
+                    v2::decl::Kind::QueryDef(v2::QueryDef {
+                        params: Vec::new(),
+                        return_type: Some(v2::ReturnType {
+                            kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                                optional: false,
+                                kind: Some(tuple_of(&[("y", "Counter")])),
+                            })),
+                        }),
+                        contracts: Vec::new(),
+                    }),
+                )],
+            ),
+        ],
+        Vec::new(),
+    ))
+    .expect_err("two interaction tuples generating one name are refused");
+    assert!(
+        error.message.contains("ABCResult"),
+        "the refusal names the generated name, got: {}",
+        error.message,
+    );
+}
+
+/// The regression direction for the refusal: one tuple **legitimately**
+/// discovered twice is not a collision.
+///
+/// This is not hypothetical — it is how the worklist runs. `interact::emit`
+/// walks its own slice to pre-discover the names of tuples nested inside
+/// tuples, because the collision check cannot wait for the caller's drain; the
+/// drain then finds each of them a second time while emitting the outer tuple's
+/// fields. A refusal that compared names alone would reject every package with
+/// a tuple inside a tuple in an interaction position.
+#[test]
+fn one_tuple_discovered_twice_is_not_a_collision() {
+    let nested = v2::TupleType {
+        fields: vec![v2::TupleField {
+            name: "outer".to_string(),
+            r#type: Some(v2::FieldType {
+                optional: false,
+                kind: Some(tuple_of(&[("inner", "Counter")])),
+            }),
+        }],
+    };
+    let Generated { rust_source, .. } = generate(&interaction_package(
+        vec![counter_decl()],
+        vec![interface(
+            "Panel",
+            "",
+            vec![interaction(
+                "read",
+                1,
+                "",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: Vec::new(),
+                    return_type: Some(v2::ReturnType {
+                        kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::Tuple(nested)),
+                        })),
+                    }),
+                    contracts: Vec::new(),
+                }),
+            )],
+        )],
+        Vec::new(),
+    ))
+    .expect("a tuple nested in a tuple generates");
+
+    assert!(
+        rust_source.contains("pub struct PanelReadResult"),
+        "the outer tuple must be emitted, got:\n{rust_source}"
+    );
+    assert_eq!(
+        rust_source.matches("struct PanelReadResultOuter").count(),
+        1,
+        "the nested tuple is discovered twice and emitted once, got:\n{rust_source}"
+    );
+}
+
 fn array_field(name: &str, element: &str, min: u64, max: u64) -> v2::Field {
     v2::Field {
         r#type: Some(v2::FieldType {

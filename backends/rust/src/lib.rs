@@ -74,14 +74,25 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     // Tuple types generate a named nested struct each (typl §11). Process the
     // worklist: emitting a tuple struct's fields can discover further nested
     // tuples, which are appended and drained here.
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    //
+    // A name is emitted once. The same tuple genuinely arrives twice — the
+    // interaction module pre-discovers nested tuples to learn their names, and
+    // emitting the outer tuple's fields finds them again — so a repeat of an
+    // *identical* discovery is expected and skipped. A repeat under one name
+    // with a different shape is a collision, and it is refused rather than
+    // deduplicated; see [`tuple_collision`].
+    let mut seen: HashMap<String, InducedTuple> = HashMap::new();
     let mut index = 0;
     while index < tuples.len() {
         let induced = tuples[index].clone();
         index += 1;
-        if !seen.insert(induced.name.clone()) {
+        if let Some(previous) = seen.get(&induced.name) {
+            if previous.tuple != induced.tuple || previous.visibility != induced.visibility {
+                return Err(tuple_collision(previous, &induced));
+            }
             continue;
         }
+        seen.insert(induced.name.clone(), induced.clone());
         items.push(emit_tuple_struct(&ctx, &induced, &mut tuples));
     }
 
@@ -109,8 +120,12 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// struct came to be emitted `pub` over an `internal` declaration's payload
 /// (issue #167).
 ///
-/// A name discovered twice keeps the first discovery, worklist and visibility
-/// alike; see [`generate`].
+/// One name is one struct. The same discovery repeated — the interaction
+/// module pre-discovers a nested tuple's name and the drain finds it again —
+/// is skipped; a repeat under one name with a different shape or visibility is
+/// a collision and is refused ([`tuple_collision`]), because carrying a
+/// visibility onto a name two declarations share has no sound answer. See
+/// [`generate`].
 #[derive(Debug, Clone)]
 pub(crate) struct InducedTuple {
     /// The generated struct name — the CamelCase of the path that reached the
@@ -120,6 +135,52 @@ pub(crate) struct InducedTuple {
     /// The visibility of the declaration this tuple was reached from: an
     /// `internal struct`'s field, or an `internal interface`'s query return.
     pub(crate) visibility: i32,
+}
+
+/// Refuses a package in which two different tuples generate one struct name.
+///
+/// The name is the CamelCase of the path that reaches the tuple, and nothing
+/// upstream keeps two paths from mangling to one string: `struct AB { c : … }`
+/// and `struct A { bC : … }` both reach `ABC`, and neither draws a ridl
+/// diagnostic. There is no sound way to pick between them, which is why this is
+/// a refusal rather than a rule:
+///
+/// - **Keeping the first** — what the worklist did before — gives the second
+///   declaration the *first one's shape*. `ridlc check` exits 0, the module
+///   compiles, and the contract is silently wrong. It is also how carrying an
+///   inducing declaration's visibility (issue #167) could narrow a struct a
+///   public declaration uses, turning a silent wrong shape into a
+///   `private_interfaces` build failure.
+/// - **Keeping the widest visibility** would publish a package-private type's
+///   shape to escape that build failure, which is the defect #167 fixed.
+///
+/// So neither dedup rule is sound and only rejection is. This is the same
+/// answer `interact::check_name_collisions` gives every other generated-name
+/// clash: codegen names the failure itself rather than handing rustc a module
+/// whose meaning it cannot state.
+///
+/// The two shapes are named because the mangled name cannot distinguish them —
+/// that is the whole defect — and the field lists are what a reader greps for.
+fn tuple_collision(previous: &InducedTuple, current: &InducedTuple) -> GenerateError {
+    fn shape(induced: &InducedTuple) -> String {
+        let fields: Vec<String> = induced
+            .tuple
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect();
+        format!("({})", fields.join(", "))
+    }
+    GenerateError {
+        message: format!(
+            "the generated name {name} is claimed by two different tuple types, {a} and {b}; \
+             a tuple generates a struct named for the path that reaches it, and these two paths \
+             spell one name — rename a field or a declaration so they differ",
+            name = current.name,
+            a = shape(previous),
+            b = shape(current),
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -690,10 +751,17 @@ pub(crate) fn deprecated_attr(reason: Option<&str>) -> TokenStream {
 /// denies that lint by name, and `ridlc check` accepts the source, so the two
 /// halves disagreed until the visibility was carried.
 ///
-/// The reverse direction cannot arise: a *public* declaration naming an
-/// `internal` one is TYPL-005, so a `pub` induced struct never holds a
-/// `pub(crate)` type. A tuple struct is therefore never wider than the
-/// declaration it belongs to, and never narrower than the types it holds.
+/// The reverse direction is closed by TYPL-005 on the **source** route: a
+/// public declaration naming an `internal` one is rejected, so a `pub` induced
+/// struct never holds a `pub(crate)` type. That is not the same as an invariant,
+/// and the difference is load-bearing. Two declarations whose paths mangle to
+/// one struct name reach the same state by a route TYPL-005 cannot see — one
+/// declaration `internal`, the other public, no `internal` payload type
+/// anywhere — and carrying a visibility onto a name two declarations share
+/// would make a program that compiled today fail `private_interfaces`. That is
+/// why [`tuple_collision`] refuses the collision instead: the invariant holds
+/// because the state that breaks it is not generated, not because it cannot be
+/// described.
 pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
     match v2::Visibility::try_from(visibility).unwrap_or(v2::Visibility::Unspecified) {
         v2::Visibility::Internal => quote! { pub(crate) },
