@@ -23,9 +23,11 @@ struct Sample {
   level : Level
 }
 
-/// A payload struct that re-declares the envelope (ridl §3.1): `publishedAt`
-/// is publication time and `frameCounter` is a frame counter, both already
-/// supplied by the runtime on every interaction instance.
+/// A payload struct that re-declares the envelope (ridl §3.1): `frameCounter`
+/// is a frame counter, already supplied by the runtime on every interaction
+/// instance, so it draws RIDL-406. `publishedAt` carries publication time and
+/// does **not** draw it — the lint matches eight exact spellings (§16.4), and
+/// that is not one of them.
 struct EnvelopeEcho {
   publishedAt  : Timestamp
   frameCounter : integer [0..65535]
