@@ -36,7 +36,6 @@ typedef struct {
  *   struct DiagFilter — variable layout (optional, string, or collection field)
  *   struct FaultEvent — variable layout (optional, string, or collection field)
  *   struct FaultPage — variable layout (optional, string, or collection field)
- *   union FaultPageResult — tagged union
  */
 
 /* not represented in the C ABI — interactions are a binding concern, not a data layout: interface VehicleStatus */

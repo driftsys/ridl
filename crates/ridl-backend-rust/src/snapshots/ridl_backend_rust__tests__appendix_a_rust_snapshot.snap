@@ -51,15 +51,6 @@ impl Default for FaultPage {
         FaultPage { faults: Vec::new() }
     }
 }
-pub enum FaultPageResult {
-    Page(FaultPage),
-    Err(DiagError),
-}
-impl Default for FaultPageResult {
-    fn default() -> Self {
-        FaultPageResult::Page(FaultPage::default())
-    }
-}
 /// Where a signal's current value came from (ridl §4.4, §4.5).
 ///
 /// `Init` is the channel's seeded value, before the provider's first
@@ -195,7 +186,8 @@ pub trait VehicleStatusConsumer {
     ///
     /// query `getFaultPage` — ordinal 9 (ridl §7).
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
-    async fn get_fault_page(&self, filter: DiagFilter) -> FaultPageResult;
+    /// transport identity: VehicleStatus#9:FaultPage|DiagError
+    async fn get_fault_page(&self, filter: DiagFilter) -> Result<FaultPage, DiagError>;
     /// final `softwareVersion` — ordinal 10 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn software_version(&self) -> &crate::ridl::std::Version;
@@ -228,7 +220,10 @@ pub trait VehicleStatusProvider {
         filter: DiagFilter,
     ) -> impl RidlStream<Item = FaultEvent>;
     /// Handles `getFaultPage` — query ordinal 9 (ridl §7).
-    async fn on_get_fault_page(&mut self, filter: DiagFilter) -> FaultPageResult;
+    async fn on_get_fault_page(
+        &mut self,
+        filter: DiagFilter,
+    ) -> Result<FaultPage, DiagError>;
 }
 /// Resolved timing for every signal and event of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9).
 pub const VEHICLE_STATUS_TIMING: &[(&str, TimingConst)] = &[

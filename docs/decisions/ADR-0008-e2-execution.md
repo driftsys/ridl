@@ -12,7 +12,7 @@ and ADR-0007 (E1).
 
 **Editing note.** Revisions to this document have repeatedly left behind a
 sentence describing the state they replaced, or written a new one that was false
-on the day it was written — twenty-two found and corrected so far. They were
+on the day it was written — twenty-seven found and corrected so far. They were
 scattered rather than clustered: a decision's lead contradicting its own body,
 the Status line above, a scoping claim in `## Consequences`, and a closed
 enumeration in an earlier decision that a later one silently extended. Several
@@ -97,11 +97,29 @@ is **not** true of the `ridlc` command line: `ridl-backend-ts` is a
 dev-dependency of `ridlc`, and `ridlc build --emit` offers `rust`, `c-header`,
 and `ir-json` only. The decision claims a second backend over one IR and the
 ADR-0002 §8 mapping, both of which shipped, so the sentence stands as written;
-the missing emit path is recorded on #172 rather than read into it here.
-Decision 11's gate enumeration is a rule, and it holds as a rule — but
-`cargo fmt --all --check` sits in no `just` recipe, so `just verify` does not
-enforce one of the five things this decision names (issue #182), and "CI is
-still stuck" is a claim the repository cannot confirm or refute either way.
+the missing emit path was recorded on driftsys/ridl#172 and has since shipped in
+driftsys/ridl#188 rather than being read into it here. Decision 11's gate
+enumeration is a rule, and it holds as a rule — but `cargo fmt --all --check`
+sits in no `just` recipe, so `just verify` does not enforce one of the five
+things this decision names (issue #182), and "CI is still stuck" is a claim the
+repository cannot confirm or refute either way.
+
+_Extended (2026-07-26) — two clauses of the cross-check above are overtaken, and
+a third is redirected._ Both overtaken clauses were true at `4cffb74` and are
+left as written; neither describes the repository now. driftsys/ridl#188 made
+`ridl-backend-ts` a normal dependency of `ridlc` — `crates/ridlc/Cargo.toml`
+lists it under `[dependencies]`, not `[dev-dependencies]` — and added a fourth
+`--emit` value, so `ridlc build --emit` offers `rust`, `c-header`, `ir-json`,
+and `typescript`. So the emit path decision 7 was read as promising now exists
+on the command line as well as in the backends. The redirect is in the same
+sentence: it pointed at driftsys/ridl#172, which recorded the gap while it was
+open, and now names driftsys/ridl#188, which closed it, because a reader sent to
+driftsys/ridl#172 for this item will not find it there. Separately,
+driftsys/ridl#184 added the `fmt-check` recipe and made it a member of
+`just build`, so `just verify` now enforces all five things decision 11 names
+and driftsys/ridl#182 is closed. Neither decision changes: decision 7 claimed a
+second backend over one IR and the ADR-0002 §8 mapping, and decision 11 stated a
+gate as a rule. Each is now true of one more thing than when it was checked.
 
 _Extended (2026-07-26) — the fourth sweep, and the eighteenth._ Review of the
 gardening pass above returned request-changes, and the correction round ran the
@@ -186,6 +204,49 @@ document also damaged it. The third sweep came closest — it caught three of it
 own strandings before shipping and still shipped one unfound. A sweep is a
 precondition, and it is not sufficient — the correction needs its own review, by
 someone who did not write it.
+
+_Extended (2026-07-26) — the sixth sweep, and the twenty-seventh._ The pass that
+discharged decision 19 opened this document and ran the sweep the rule above
+demands, against the repository at `499ec32`. It found **five** stale sentences,
+and this is the first round in which none of them was written by the round
+before it: every one was stranded by a pull request that never opened this file,
+and the three responsible — driftsys/ridl#184, driftsys/ridl#188, and
+driftsys/ridl#189 — all merged the same day. Three sit in the third sweep's
+cross-check above and are corrected in a dated extension beside it; the other
+two are decision 21's and are corrected there. Four of the five were carried
+into this pass as known; the fifth is the `cargo fmt --all --check` clause in
+that same cross-check, which driftsys/ridl#184 closed and which nothing had
+recorded. The count above therefore stands at twenty-seven. The figure for stale
+sentences found by reviewing a correction rather than by making one stays at
+**eight**: none of these five was found that way, and this is the first round in
+which that figure has not moved.
+
+Everything else was re-derived from the source and held: the four catalogue
+counts (`FORM` 13, `TYPL` 39, `RIDL` 31, `MANI` 13) and decision 21's `RIDL-`
+free-code enumeration — 100 to 110, 140, 141, 143, 201, 202, 301 to 308, and 401
+to 407 — both counted inside the `diag_codes!` invocation; decision 13's
+seven-in-source figure, re-counted code by code against `diag.rs`, with RIDL-111
+and RIDL-142 still absent from it; decision 15's two `WorkspaceOutput` fields;
+decision 16's two messages, both reading "us/ms/s/min/h", and `timing.rs`'s
+module comment citing ridl §2.1; decision 17's retired characterisation, which
+appears nowhere in the live tree outside this ADR's own quotations of it, with
+`docs/archive/` excluded as verbatim provenance, as everywhere in this document;
+decision 8's `crates/ridl-ir/proto/ridl/ir/`, which holds `v2` alone; decision
+9's boundary, where `ridl-diff` is a dependency of `crates/ridl`'s manifest and
+of no other crate in the workspace; and decision 20's three citations, which
+read `issue #172` while the string `E2 ledger` appears in no `.rs` file.
+
+Two sentences **would** have been stranded by this pass's own changes and are
+corrected in the same commit: decision 19's "Closing it is separate work …
+rather than done here", which the discharge makes false, and the running total
+above. A third was avoided rather than corrected. The fix-wave bullet at
+decision 21 quotes that decision's "the declare-once mechanism therefore covers
+the showcase list as well as the catalogs", so the re-derivation of the argument
+around it leaves the quoted sentence standing verbatim; rewriting the paragraph
+freely would have stranded the bullet that cites it. Decision 19's six-file
+Appendix A extent, recorded by the third and fourth sweeps, is dated to those
+sweeps and left as written — it is discharged as of this one, which the
+discharge note at decision 19 records.
 
 _Which sentences are dated, and which are live._ Every sentence here is one of
 two kinds, and **the split does not follow the paragraph headings**. A sentence
@@ -753,6 +814,68 @@ disagreeing sources is the correct one.
     make. Nothing about RIDL-308's living example is affected; the diagnostic
     showcase still provokes it.
 
+    _Discharged (2026-07-26)._ The extent above is closed. The sentence directly
+    above — that closing it is separate work rather than done here — is what
+    this note falsifies, and it is dated to the sweep that wrote it. No copy of
+    Appendix A in the live tree now declares a named result union. The two
+    remaining sources were edited to the inline `FaultPage | DiagError` return
+    with the union declaration deleted —
+    `crates/ridl-syntax/test_data/parser/ok/appendix_a_full_example.ridl` and
+    `APPENDIX_A_PACKAGE` in `crates/ridl-sem/src/check.rs` — and the four
+    snapshots regenerated from them: the parser corpus snapshot, the checker's
+    IR golden `ridl_sem__check__tests__appendix_a_ir.snap`, and the two
+    `ridl-backend-rust` snapshots generated from that golden. No TypeScript
+    snapshot moved, and the reason is not that one was missed.
+    `_What it binds._` above names a TypeScript snapshot because it is
+    describing the corpus copy, whose entry generates both languages; this chain
+    is the checker golden's, and `ridl-backend-ts` reaches Appendix A through a
+    hand-built `v2::Package` in `crates/ridl-backend-ts/src/interact/tests.rs`
+    that has always modelled `getFaultPage` as
+    `fallible("FaultPage", "DiagError")`. Its snapshot already read
+    `Promise<Result<FaultPage, DiagError>>`, so it had nothing to lose.
+
+    Every snapshot line that moved is one this decision predicted. The golden
+    loses the `FaultPageResult` `UnionDef` and rewrites `getFaultPage`'s return
+    from `Value { Named }` to `Fallible { ok: "FaultPage", err: "DiagError" }`;
+    the Rust snapshot loses the generated `enum FaultPageResult` and its
+    `Default` impl and returns `Result<FaultPage, DiagError>`; the C header
+    loses its tagged-union line; the parser snapshot loses the `UnionDef` node
+    and lowers the return as a `FallibleType`. One line moved that this decision
+    did not name, and it is decision 4 becoming visible rather than a surprise:
+    the Rust signature gains the comment
+    `transport identity: VehicleStatus#9:FaultPage|DiagError`, which is that
+    decision's rule — interface, interaction ordinal, ordered arm types — shown
+    in generated code, because an inline `T | E` carries a synthesized transport
+    identity and a named union does not.
+
+    Two checker assertions went with the fixture. The RIDL-308 assertion in
+    `appendix_a_lowers_clean_and_its_ir_v2_json_is_the_golden` becomes an
+    assertion that Appendix A draws no diagnostic at all, and the comment above
+    it — which still stated the "kept verbatim rather than rewritten" position
+    this decision reversed — is replaced.
+    `appendix_a_named_result_union_returns_as_a_named_value`, which existed only
+    to pin the retired shape, becomes
+    `appendix_a_inline_result_return_lowers_as_a_fallible` and pins the shape
+    that replaced it, so the worked example keeps a test over its own return
+    type rather than losing one. **Nine** tests call `check_appendix_a()`. Two
+    of them pinned the retired shape, which is what the note above says; the
+    other seven read ordinals, the tombstone, the stream return, payloads and
+    finals, contract kinds and source text, observer stubs, and timing, and none
+    of them names the union. The fixture edit therefore reached all nine and
+    changed what two of them expect, which is the propagation the note above
+    describes, measured.
+
+    Two files that carry the name `FaultPageResult` are deliberately untouched,
+    because neither is a copy of Appendix A.
+    `crates/ridlc/tests/corpus/veh-cluster/NOTES` names it only in the paragraph
+    recording that RIDL-308 no longer fires there, which is already true.
+    `crates/ridl-sem/src/lint.rs` builds three fixtures around a union of that
+    name; they are RIDL-308's own tests and RIDL-405's, and retiring the
+    spelling from a worked example is not a reason to stop testing the lint that
+    steers away from it. RIDL-308 therefore keeps two living examples, the
+    diagnostic showcase and those lint tests. driftsys/ridl#172 carries this
+    extent as one of its items and can drop it.
+
 20. **Amendment (2026-07-25) — ridl §16.1's RIDL-110 row is narrowed to what the
     checker validates, and the difference is recorded as a known gap.**
 
@@ -912,19 +1035,51 @@ disagreeing sources is the correct one.
     change — leaving two namespaces on a guard that cannot fail while two others
     have one that can is worse than either state on its own.
 
-    The same hole sits behind this decision's own argument for coding the two
-    diagnostics. `RIDL_PROFILE_CODES` in `crates/ridlc/tests/corpus.rs` is a
-    hand-maintained list of code **strings**, with no link to the declared
-    constants at all, so a code missing from it is never checked for a living
-    example and nothing turns red. An implementer could mint RIDL-111 and
-    RIDL-142, add their catalog entries through the new mechanism, omit the
-    showcase entries, and see a green suite — which is the guarantee this
-    decision invokes as its reason for acting. The declare-once mechanism
-    therefore covers the showcase list as well as the catalogs. If that proves
-    impractical — the list carries a `Provoked` discriminator the catalogs have
-    no equivalent of — the fix wave states so explicitly and records the
-    showcase gap as separate work, rather than leaving this decision implying a
-    guarantee that does not hold.
+    The same hole sat behind this decision's own argument for coding the two
+    diagnostics. When this decision was recorded, `RIDL_PROFILE_CODES` in
+    `crates/ridlc/tests/corpus.rs` was a hand-maintained list of code
+    **strings**, with no link to the declared constants at all, so a code
+    missing from it was never checked for a living example and nothing turned
+    red. An implementer could then mint RIDL-111 and RIDL-142, add their catalog
+    entries through the new mechanism, omit the showcase entries, and see a
+    green suite — which is the guarantee this decision invokes as its reason for
+    acting. The declare-once mechanism therefore covers the showcase list as
+    well as the catalogs. If that proves impractical — the list carries a
+    `Provoked` discriminator the catalogs have no equivalent of — the fix wave
+    states so explicitly and records the showcase gap as separate work, rather
+    than leaving this decision implying a guarantee that does not hold.
+
+    _Re-derived (2026-07-26)._ The fix wave took that escape clause, and the
+    hole was then closed by another route, so this decision keeps its conclusion
+    and no longer rests on the paragraph above. The reason to mint RIDL-111 and
+    RIDL-142 is now the guarantee itself rather than the need to build it.
+    driftsys/ridl#189 added `ridl_profile_codes_match_the_catalogue`, which
+    asserts set **equality** between the `RIDL-` half of `RIDL_PROFILE_CODES`
+    and `RIDL_CATALOG`. The membership the paragraph above found unguarded is
+    therefore binding in both directions: a code minted in the catalogue and
+    left out of the list turns the suite red, and so does a list entry naming a
+    code the catalogue does not declare. Minting a code is what puts an error
+    inside the coverage index at all, and from the moment it is minted the suite
+    demands an entry for it — which is exactly what the two uncoded errors
+    cannot be given while they carry `DiagCode::NONE`. The argument is the
+    stronger for it: what this decision invoked as a guarantee that had to be
+    built first is now one that already holds.
+
+    What that guard does **not** reach is the `Provoked` discriminator. An entry
+    recorded as `Showcase` is checked against what the showcase actually emits,
+    so it cannot be claimed falsely; an entry recorded as
+    `Elsewhere { fixture, reason }` is checked only against the fixture path
+    existing, so a code can still be recorded as covered by a fixture that does
+    not provoke it. The guard also compares the `RIDL-` namespace alone, which
+    is deliberate — the list carries shared FORM, MANI, and TYPL codes whose
+    catalogues hold many codes the ridl profile does not claim, so equality over
+    them would assert something untrue — and it is the namespace both codes this
+    decision mints belong to, so the coverage this decision argues from is the
+    coverage the guard provides. `corpus.rs` states the residual gap at the
+    `Provoked` declaration and records it on driftsys/ridl#172. The
+    declare-once-generates-the-list remedy the paragraph above asks for is still
+    not what shipped; what shipped is a guard that can fail, which is what the
+    argument needed and what the two hand-maintained arrays never had.
 
     Two subsystems reached the same idea independently, which is the argument
     for making it the house pattern — and the sibling case marks how far it has
@@ -991,6 +1146,26 @@ disagreeing sources is the correct one.
     minted**. Neither appears in `diag.rs`, in ridl §16.1 or §16.4, or in the
     showcase, and both errors still carry `DiagCode::NONE`. The numbers are not
     reused.
+
+    **Extended (2026-07-26) — the showcase list gained a guard, and the RIDL-150
+    experiment reverses.** The bullet list above describes driftsys/ridl#175 and
+    is left as written; its second item no longer describes the repository.
+    driftsys/ridl#189 added `ridl_profile_codes_match_the_catalogue`, and the
+    experiment driftsys/ridl#175 ran to prove the gap open has been re-run
+    against this branch to record what it proves now. Minting `RIDL_150` in
+    `RIDL_CATALOG` with no `RIDL_PROFILE_CODES` entry no longer leaves the suite
+    green: `ridl_profile_codes_match_the_catalogue` fails at
+    `crates/ridlc/tests/corpus.rs:472` with "in the catalogue, absent from this
+    list: [\"RIDL-150\"]". Adding it to the list as `("RIDL-150", Showcase)`
+    without a fixture that provokes it fails two more,
+    `every_ridl_profile_code_has_a_living_example` at `corpus.rs:519` with
+    "RIDL-150 is recorded as provoked by the showcase but the showcase does not
+    emit it", and `showcase_provokes_exactly_the_expected_codes` at
+    `corpus.rs:438`. Only recording it as `Elsewhere { fixture, reason }` with a
+    path that exists returns the suite to green, on a fixture that provokes
+    nothing — which is the residual gap re-derived above, reproduced rather than
+    read. `RIDL_150` was removed after the run. It is not allocated, it is not
+    in the enumeration this decision keeps, and it stays free.
 
 ## Consequences
 

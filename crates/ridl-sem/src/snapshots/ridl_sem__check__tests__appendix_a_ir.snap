@@ -344,35 +344,6 @@ expression: "v2::to_json_pretty(&checked.ir)"
           "fixed_layout": false
         }
       }
-    },
-    {
-      "name": "FaultPageResult",
-      "visibility": 1,
-      "is_error": false,
-      "doc": "",
-      "labels": [],
-      "deprecated": null,
-      "ordinal": 0,
-      "kind": {
-        "UnionDef": {
-          "arms": [
-            {
-              "name": "page",
-              "ordinal": 1,
-              "type_ref": "FaultPage",
-              "doc": ""
-            },
-            {
-              "name": "err",
-              "ordinal": 2,
-              "type_ref": "DiagError",
-              "doc": ""
-            }
-          ],
-          "is_result": true,
-          "reserved": []
-        }
-      }
     }
   ],
   "interfaces": [
@@ -652,11 +623,9 @@ expression: "v2::to_json_pretty(&checked.ir)"
               ],
               "return_type": {
                 "kind": {
-                  "Value": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "FaultPageResult"
-                    }
+                  "Fallible": {
+                    "ok": "FaultPage",
+                    "err": "DiagError"
                   }
                 }
               },
