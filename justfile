@@ -58,12 +58,31 @@ wasm-check:
     #!/usr/bin/env bash
     set -euo pipefail
     if [ -f Cargo.toml ]; then
+        if ! command -v rustup >/dev/null 2>&1; then
+            echo "wasm-check: rustup is required to add the wasm32 target." >&2
+            echo "wasm-check: install it, or install the target another way." >&2
+            exit 1
+        fi
         rustup target add wasm32-unknown-unknown
         cargo check --target wasm32-unknown-unknown \
             -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir \
             --no-default-features
     else
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
+    fi
+
+# Check Rust formatting without writing. Separate from `just fmt`, which owns
+# the connective tissue (prim + markdownlint) and does not touch Rust.
+# ADR-0008 decision 11 names `cargo fmt --all --check` in the merge gate; until
+# issue #182 it sat in no recipe, so the gate a contributor runs did not enforce
+# it. Run `cargo fmt --all` to repair what this reports.
+fmt-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f Cargo.toml ]; then
+        cargo fmt --all --check
+    else
+        echo "fmt-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
 # Lint the Rust workspace the way CI does (.github/workflows/ci.yml).
@@ -84,9 +103,20 @@ lint:
         echo "lint: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
-# Full local gate: compile the code, run the tests, lint the Rust, then run the
-# connective-tissue lint checks.
-build: compile test lint check
+# Full local gate: check Rust formatting, compile the code, run the tests, lint
+# the Rust, check the wasm target builds, then run the connective-tissue lint
+# checks.
+#
+# The members are ADR-0008 decision 11's enumeration. Two of them were absent
+# until issue #182: `cargo fmt --all --check` was in no recipe at all, and
+# `wasm-check` was a recipe that nothing depended on. Anything decision 11 names
+# has to be reachable from here, because `just verify` is what the pre-push hook
+# runs — a member that is not a dependency of `build` is not enforced.
+#
+# `fmt-check` runs first on purpose. It needs no compilation and takes under a
+# second, so a formatting-only regression — the case issue #182 was filed over —
+# reports in a second rather than after a full compile and test run.
+build: fmt-check compile test lint wasm-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

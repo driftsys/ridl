@@ -42,16 +42,19 @@ manager as needed.
 
 Run `just --list` for the full set. The common ones:
 
-| recipe         | what it does                                           |
-| -------------- | ------------------------------------------------------ |
-| `just fmt`     | reformat the connective tissue with prim, fix Markdown |
-| `just check`   | lint gate — `prim --check` + markdownlint, no writes   |
-| `just compile` | compile the Rust workspace                             |
-| `just test`    | run the Rust workspace test suite                      |
-| `just build`   | `compile` + `test` + `check` — the full local gate     |
-| `just verify`  | commit-message lint + `build` — run before a PR        |
-| `just book`    | serve the mdBook docs locally                          |
-| `just release` | `git std bump` — version, changelog, tag               |
+| recipe            | what it does                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------- |
+| `just fmt`        | reformat the connective tissue with prim, fix Markdown                                   |
+| `just check`      | lint gate — `prim --check` + markdownlint, no writes                                     |
+| `just compile`    | compile the Rust workspace                                                               |
+| `just test`       | run the Rust workspace test suite                                                        |
+| `just fmt-check`  | `cargo fmt --all --check` (no writes)                                                    |
+| `just lint`       | `cargo clippy --workspace --all-targets -- -D warnings`                                  |
+| `just wasm-check` | `cargo check` for wasm32, `--no-default-features`                                        |
+| `just build`      | `fmt-check` + `compile` + `test` + `lint` + `wasm-check` + `check` — the full local gate |
+| `just verify`     | commit-message lint + `build` — run before a PR                                          |
+| `just book`       | serve the mdBook docs locally                                                            |
+| `just release`    | `git std bump` — version, changelog, tag                                                 |
 
 ## Reporting issues
 
