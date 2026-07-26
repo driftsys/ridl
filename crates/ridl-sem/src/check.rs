@@ -2820,7 +2820,7 @@ impl Checker<'_> {
         // RIDL-107 with a contradicting FORM-102 at the same span.
 
         // Pre-pass: the reserved tombstone names (ridl §11). Recorded debt
-        // (E2 ledger M1): duplicate `reserved` tombstones in one interface
+        // (issue #172, M1): duplicate `reserved` tombstones in one interface
         // are silent here although each occupies an ordinal slot and shifts
         // the later ordinals — whether that deserves a diagnostic (TYPL-211
         // is the struct-side precedent) is decided in a later task.
@@ -3171,7 +3171,7 @@ impl Checker<'_> {
                         // against the payload constraints — the E1 scalar
                         // validation with the ridl code (§4.4) — and lowers
                         // as `declared_init` in canonical text (ADR-0008
-                        // decision 2). Recorded debt (E2 ledger M2): the
+                        // decision 2). Recorded debt (issue #172, M2): the
                         // leniency is E1's exactly — a type-mismatched
                         // literal (`= true` on a numeric payload), a value
                         // off the `step` grid, or an override on a
@@ -4505,7 +4505,7 @@ impl MemberKind {
 /// The attribute keys the general form §4.3 table defines (the key forms —
 /// `require`/`ensure` parse as predicates, never as keys). A key outside
 /// this list is FORM-106; inside it but not consumable here, FORM-107.
-/// Recorded debt (E2 ledger M3): in E2 no key is consumable, so a flat list
+/// Recorded debt (issue #172, M3): in E2 no key is consumable, so a flat list
 /// suffices; the task that first consumes a key (`persist`, `labels`, …)
 /// must turn this into the full gf §4.3 key×kind allow-list.
 const GF_ATTRIBUTE_KEYS: &[&str] = &[
