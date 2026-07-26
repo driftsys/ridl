@@ -229,20 +229,21 @@ fn renders_as_examples(markdown: &str) -> usize {
 /// Isolated for the same reason [`verdict`] is — a guard no test can fail is
 /// how this harness shipped three fail-open versions.
 ///
-/// It cannot catch the parser being wrong, only this file being wrong about the
-/// parser — which, now that the parser owns block structure, is the whole
-/// remaining risk. Its purpose is forward-looking: a future `pulldown-cmark`
-/// release that changes the event stream in a way the walk mishandles would
-/// show up here rather than as an example quietly going unchecked.
+/// It cannot catch `pulldown-cmark` being wrong, only a disagreement about what
+/// the book contains. Two such disagreements are live: the event walk in
+/// [`fenced_blocks`] mishandling a future release's event stream, and — the one
+/// that outlives this file — **`mdbook` carrying its own vendored
+/// `pulldown-cmark`**, resolved independently of the one this crate depends on.
+/// Nothing in this repository ties those two versions together, so if they ever
+/// differ about fence handling, what the harness compiles and what a reader sees
+/// come apart. That is the divergence class this branch shipped three times.
 ///
-/// **Known untested seam.** Two of the three parts are covered:
-/// `render_agreement_reports_a_mismatch` fails if this comparison stops
-/// reporting, and `the_event_walk_agrees_with_the_renderer` fails if the walk
-/// and the renderer diverge over the container shapes a book uses. The third —
-/// that [`verify_book`] still *calls* this — is not covered, and cannot be
-/// without a genuine walk/renderer divergence, which is precisely the condition
-/// this exists to detect. Unhooking the call is therefore a mutation the suite
-/// does not catch. Recorded rather than papered over.
+/// All three parts are covered. `render_agreement_reports_a_mismatch` fails if
+/// this comparison stops reporting; `the_event_walk_agrees_with_the_renderer`
+/// fails if the walk and the renderer diverge over the container shapes a book
+/// uses; and `a_render_count_disagreement_fails_the_book` fails if
+/// [`verify_book_with`] stops acting on the result, because it injects a
+/// divergent count rather than waiting for a real divergence.
 fn render_agreement(origin: &str, rendered: usize, accounted: usize) -> Option<String> {
     (rendered != accounted).then(|| {
         format!(
@@ -692,6 +693,23 @@ fn verdict(code: i32, unallowed: &[String], stale: &[String]) -> Result<(), Stri
 /// `Ok(count)` carries the number of verified blocks; `Err` carries a report
 /// naming each offending Markdown file and block.
 fn verify_book(book_root: &Path) -> Result<usize, String> {
+    verify_book_with(book_root, renders_as_examples)
+}
+
+/// [`verify_book`], with the render count injected.
+///
+/// The count is a parameter so that a test can supply a divergent one and
+/// assert the book fails — which is what makes the [`render_agreement`] call
+/// below a wire a mutation can break, rather than a line nothing exercises.
+/// That matters because the divergence the guard now watches for is real:
+/// `mdbook` is a separate binary carrying its own vendored `pulldown-cmark`,
+/// and nothing in this repository ties its version to the one this crate
+/// resolves. If the two ever disagree about fence handling, the harness and the
+/// renderer disagree about what the book contains.
+fn verify_book_with(
+    book_root: &Path,
+    render_count: impl Fn(&str) -> usize,
+) -> Result<usize, String> {
     let mut examples = Vec::new();
     let mut problems = Vec::new();
     for file in markdown_files(book_root) {
@@ -708,7 +726,7 @@ fn verify_book(book_root: &Path) -> Result<usize, String> {
 
         problems.extend(render_agreement(
             &origin,
-            renders_as_examples(&markdown),
+            render_count(&markdown),
             accounted,
         ));
     }
@@ -1401,40 +1419,92 @@ fn an_empty_allow_value_is_rejected() {
 }
 
 /// A reported line number is the block's true line in the Markdown file, not
-/// its offset within the block.
+/// its offset within the block — at top level and inside every container.
 ///
-/// This is the docstring's headline claim — "open them directly" — and the
-/// line-offset padding is what makes it true. Removing the padding makes this
-/// test fail. The fixture puts the fault deep into the second block so that the
-/// two numbers cannot coincide.
+/// This is the docstring's headline claim, "open them directly", and it rests
+/// on two things. The fence line is a parser fact: a byte offset, converted by
+/// counting newlines. The body lines are an **assumption** — that a fenced
+/// block's contents run one source line per body line, never reflowed, merged
+/// or normalised. `staged_text`'s padding turns the two into a line number.
+///
+/// The assumption is not checked by anything in `pulldown-cmark`'s API, so it
+/// is checked here, and the containers are the cases that would break first: a
+/// list item strips an indent from every body line, and a block quote strips a
+/// `>` marker. If a future release ever normalised fenced content, these
+/// fixtures are what would fail. Each puts the fault deep into the file, so a
+/// harness that reported block-relative lines could not accidentally agree.
 #[test]
 fn a_reported_line_is_the_markdown_line() {
     let filler = "\n".repeat(40);
-    let markdown = format!(
-        "# Chapter\n{filler}\n```ridl\npackage zz.deep\n\ntype Bad : integer [10..0]\n```\n"
-    );
-    // The fence is the line after the filler; the fault is three lines below it.
-    let fence_line = markdown
-        .lines()
-        .position(|line| line.starts_with("```ridl"))
-        .expect("the fixture has a fence")
-        + 1;
-    let fault_line = markdown
-        .lines()
-        .position(|line| line.contains("type Bad"))
-        .expect("the fixture has a fault")
-        + 1;
-    assert!(
-        fault_line > 40,
-        "the fixture must put the fault well below the top of the file"
-    );
+    let body = "package zz.deep\n\ntype Bad : integer [10..0]";
+    let cases = [
+        (
+            "top level",
+            format!("# Chapter\n{filler}\n```ridl\n{body}\n```\n"),
+        ),
+        (
+            "list item",
+            format!(
+                "# Chapter\n{filler}\n10. Step:\n\n    ```ridl\n    {}\n    ```\n",
+                body.replace('\n', "\n    ")
+            ),
+        ),
+        (
+            "block quote",
+            format!(
+                "# Chapter\n{filler}\n> ```ridl\n{}> ```\n",
+                body.lines()
+                    .map(|line| if line.is_empty() {
+                        ">\n".to_owned()
+                    } else {
+                        format!("> {line}\n")
+                    })
+                    .collect::<String>()
+            ),
+        ),
+        (
+            "nested list at column 6",
+            format!(
+                "# Chapter\n{filler}\n1. a\n   1. b:\n\n      ```ridl\n      {}\n      ```\n",
+                body.replace('\n', "\n      ")
+            ),
+        ),
+    ];
 
-    let book = book_of("deep", &markdown);
-    let report = verify_book(book.path()).expect_err("the broken block must be rejected");
+    // Every case is checked before failing, so that a change breaking the
+    // one-line-per-body-line assumption names each container it breaks rather
+    // than only the first.
+    let mut wrong = Vec::new();
+    for (label, markdown) in cases {
+        let fault_line = markdown
+            .lines()
+            .position(|line| line.contains("type Bad"))
+            .expect("the fixture has a fault")
+            + 1;
+        assert!(
+            fault_line > 40,
+            "{label}: the fixture must put the fault well below the top of the file"
+        );
+
+        let book = book_of("deep", &markdown);
+        let report = verify_book(book.path()).expect_err("the broken block must be rejected");
+        if !report.contains(&format!("chapter.md:{fault_line}:")) {
+            let reported = report
+                .lines()
+                .find(|line| line.contains("chapter.md:"))
+                .unwrap_or("<no location reported>")
+                .trim();
+            wrong.push(format!(
+                "  {label}: expected chapter.md:{fault_line}, report says: {reported}"
+            ));
+        }
+    }
+
     assert!(
-        report.contains(&format!("chapter.md:{fault_line}:")),
-        "the diagnostic must be reported at Markdown line {fault_line} (fence at {fence_line}), \
-         got:\n{report}"
+        wrong.is_empty(),
+        "a reported line must be the Markdown line, in every container. The body-line \
+         assumption this rests on has broken in:\n{}",
+        wrong.join("\n")
     );
 }
 
@@ -1541,4 +1611,32 @@ fn the_event_walk_agrees_with_the_renderer() {
              this is:\n{markdown}"
         );
     }
+}
+
+/// A render count that disagrees with the walk fails the book.
+///
+/// The count is injected, so this exercises the wire — that [`verify_book_with`]
+/// acts on [`render_agreement`] — without waiting for a real divergence between
+/// this crate's `pulldown-cmark` and mdbook's vendored one. Unhooking the call
+/// makes this test fail.
+#[test]
+fn a_render_count_disagreement_fails_the_book() {
+    let book = book_of(
+        "divergent",
+        "```ridl\npackage zz.clean\n\ntype Ok : integer [0..1]\n```\n",
+    );
+
+    assert_eq!(
+        verify_book(book.path()).expect("the book is clean under the real renderer"),
+        1,
+    );
+
+    // One more example rendered than the walk accounted for: what a version
+    // skew between the two parsers would look like from here.
+    let report = verify_book_with(book.path(), |markdown| renders_as_examples(markdown) + 1)
+        .expect_err("a disagreement must fail the book");
+    assert!(
+        report.contains("going unverified"),
+        "the report must say a block is going unverified, got:\n{report}"
+    );
 }
