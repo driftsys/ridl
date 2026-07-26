@@ -10,6 +10,10 @@
 - **ADR-0007 — Epic E1 execution.** E1-scoped execution decisions (ungrammar
   tooling, diagnostic namespaces, corpus layout, `ridl-sem` split, IR exactness,
   scope cuts).
+- **ADR-0008 — Epic E2 execution.** E2-scoped execution decisions (general-form
+  authority for the interaction surface, IR v2 placement, the TypeScript second
+  backend, `ridl diff` placement and its classifier rules, the `RIDL-`
+  diagnostic allocations, and six close-out amendments).
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview.

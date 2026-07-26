@@ -10,10 +10,9 @@ This repository holds the specifications, the architecture decision records
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-backend-rust`, `ridl-backend-ts`, `ridl-diff`, and
 `ridl-fmt` — plus `xtask` at the root and the `editors/vscode` extension. The
-typl v0.1 toolchain (epic E1) is built; the four description languages (`ridl`,
-`uxdl`, `rmdl`, `rsdl`) are sequenced in the roadmap. See
-`docs/technotes/walking-skeleton-architecture.md` for the as-built map of the E1
-spine.
+typl v0.1 toolchain (epic E1) and the ridl interface layer over it (epic E2) are
+built; `uxdl`, `rmdl`, and `rsdl` are sequenced in the roadmap. See
+`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Read these before doing anything else in this repo:**
 
@@ -28,7 +27,8 @@ spine.
 - `docs/specification/{typl,ridl,uxdl,rmdl,rsdl}-language-reference.md` — the
   five language references.
 - `docs/decisions/` — ADR-0002 (module system), ADR-0004 (sequencing and stack),
-  ADR-0005 (agent enablement), ADR-0006 (E0 execution), ADR-0007 (E1 execution).
+  ADR-0005 (agent enablement), ADR-0006 (E0 execution), ADR-0007 (E1 execution),
+  ADR-0008 (E2 execution — read its `## Status` before editing it).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 
@@ -75,6 +75,9 @@ driftsys/git-std (commits, versioning, hooks) and driftsys/prim
   `.editorconfig` only, no per-tool config. `.primignore` is the escape hatch
   for files that must stay byte-exact.
 - **markdownlint** enforces Markdown style (`.markdownlint.json`).
+- **Prose — comments, commit messages, docs, PR descriptions — is plain and
+  literal**: no idioms, no figures of speech. Technical terms and acronyms stay
+  as they are.
 - Documents are prose, in Markdown, under `docs/`. The specs read as one system:
   doctrines are indexed once in the overview, cited from each reference — keep
   that discipline when editing.

@@ -264,5 +264,16 @@ Agent enablement is not a separate program; it rides the existing phases:
   (evolution), §5 (ranges/units/width — the IR-query payload).
 - ridl Language Reference §3–§10 (the `interact` core, timing, errors — the
   kind-selection tables), §11 (evolution), §16 (diagnostics).
-- Companion: `claude/skill-ridl-authoring-outline.md` — the distilled skill
+- Companion: `docs/wip/skill-ridl-authoring-outline.md` — the distilled skill
   table of contents this ADR's Layer A refers to.
+
+_Corrected (2026-07-26)._ The entry above read
+`claude/skill-ridl-authoring-outline.md`, which named no file: no `claude/`
+directory has existed at any commit in this repository, and the outline and this
+ADR were added in the same initial commit, so the path was wrong when it was
+written rather than overtaken by a later move. The target is not in doubt — the
+outline opens by naming itself the table of contents for the skill this ADR's
+Layer A describes, and it is the only such file — so the path is repaired here
+rather than carried as debt. The correction is a repair, not a record of
+something E2 changed: nothing about ADR-0005's decisions, Layer A, or the E8
+story that builds the skill is touched.

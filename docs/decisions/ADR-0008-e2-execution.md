@@ -4,20 +4,21 @@
 
 Accepted (agent-taken, maintainer-reviewable); decisions 15 to 21 are later
 amendments, each dated in its own text. Each numbered decision below was taken
-to unblock the epic E2 execution plan
-(`docs/wip/2026-07-19-e2-ridl-interface-layer-plan.md`) and is reversible at the
-cost of a small refactor before a later epic builds on it. This ADR follows the
-pattern of ADR-0006 (E0) and ADR-0007 (E1).
+to unblock the epic E2 execution plan, which lives at
+`docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` (moved from
+`docs/wip/` at epic close), and is reversible at the cost of a small refactor
+before a later epic builds on it. This ADR follows the pattern of ADR-0006 (E0)
+and ADR-0007 (E1).
 
 **Editing note.** Revisions to this document have repeatedly left behind a
-sentence describing the state they replaced — seventeen found and corrected so
-far. They were scattered rather than clustered: a decision's lead contradicting
-its own body, the Status line above, a scoping claim in `## Consequences`, and a
-closed enumeration in an earlier decision that a later one silently extended.
-Several sat in sections the revision that falsified them never opened, so
-reading the diff does not find them. **Sweeping the whole document for sentences
-the edit has falsified is a precondition for editing it here, not optional
-diligence.**
+sentence describing the state they replaced, or written a new one that was false
+on the day it was written — twenty-two found and corrected so far. They were
+scattered rather than clustered: a decision's lead contradicting its own body,
+the Status line above, a scoping claim in `## Consequences`, and a closed
+enumeration in an earlier decision that a later one silently extended. Several
+sat in sections the revision that falsified them never opened, so reading the
+diff does not find them. **Sweeping the whole document for sentences the edit
+has falsified is a precondition for editing it here, not optional diligence.**
 
 _Extended (2026-07-26)._ The count above stood at six until this sweep, and the
 sixth was found during review of the note that said five. The whole-document
@@ -62,6 +63,129 @@ correction's own review, rather than the correction, is what found the miss, and
 the second time the falsifying evidence was sitting in the correcting commit.
 The lesson the mechanism keeps teaching: a sweep that reports "everything held"
 has to be checked against what the same change reports elsewhere.
+
+_Extended (2026-07-26) — the third sweep, and the first change to anticipate its
+own stranding._ The epic E2 gardening pass opened this document to record that
+decision 20's repointing had happened, and ran the sweep the rule above demands
+against the repository at `4cffb74`. It found **no pre-existing stale
+sentence**. Re-derived from the source rather than read off the previous sweep,
+and holding: the four catalogue counts (`FORM` 13, `TYPL` 39, `RIDL` 31,
+`MANI` 13) and decision 21's `RIDL-` free-code enumeration, both counted inside
+the `diag_codes!` invocation; decision 13's seven-codes-in-source figure;
+decision 6's three shipped service codes, enumerated from `diag.rs` and from
+ridl §16.4 separately and agreeing; decision 15's two `WorkspaceOutput` fields;
+decision 16's two diagnostic messages and the module comment now citing ridl
+§2.1; decision 19's six-file Appendix A extent, re-enumerated by listing every
+file in the workspace containing `FaultPageResult` and classifying each;
+decision 21's account of what PR #175 shipped, RIDL-111 and RIDL-142 still
+unminted included.
+
+Three sentences **would** have been stranded, every one of them by this pass's
+own changes, and all three are corrected in the same commit rather than left for
+a later sweep: the plan's path in `## Status` and in `## References` (the plan
+moved to `docs/archive/` at epic close), and decision 20's "still name no issue"
+(the three `check.rs` citations now name #172). The count above therefore stands
+at seventeen — these three were not stale when the sweep began, and this is the
+first revision to find its own stranding before shipping it rather than after.
+
+The cross-check this note demands — that a sweep reporting "everything held" be
+read against what the same change reports elsewhere — was run, and two of the
+gardening pass's findings touch sentences here without falsifying one. Decision
+7's "both the Rust and the TypeScript backends compile ridl interactions" is
+true of the backends and of the corpus, which generates both from one IR v2, and
+is **not** true of the `ridlc` command line: `ridl-backend-ts` is a
+dev-dependency of `ridlc`, and `ridlc build --emit` offers `rust`, `c-header`,
+and `ir-json` only. The decision claims a second backend over one IR and the
+ADR-0002 §8 mapping, both of which shipped, so the sentence stands as written;
+the missing emit path is recorded on #172 rather than read into it here.
+Decision 11's gate enumeration is a rule, and it holds as a rule — but
+`cargo fmt --all --check` sits in no `just` recipe, so `just verify` does not
+enforce one of the five things this decision names (issue #182), and "CI is
+still stuck" is a claim the repository cannot confirm or refute either way.
+
+_Extended (2026-07-26) — the fourth sweep, and the eighteenth._ Review of the
+gardening pass above returned request-changes, and the correction round ran the
+sweep again, against the repository at `fa11ace`. It found **one** stale
+sentence, and the pass immediately above is what wrote it: decision 20's third
+extension claimed that every key in `GF_ATTRIBUTE_KEYS` raises FORM-107
+unconditionally, which was false for `init` on the day it was written. It is
+corrected at decision 20 rather than left as dated evidence, because the
+dated-evidence rule below protects a sentence that was true about the state at
+its own date, and this one was not.
+
+That makes eighteen, and it is the fourth found by reviewing a correction rather
+than by making one. It also falsifies the paragraph above on its own terms: the
+third sweep reported "no pre-existing stale sentence" and called itself the
+first revision to find its own stranding before shipping it rather than after,
+and it shipped this one unfound. The mechanism was the harder one, not the same
+one: `crates/ridl-syntax/src/keywords.rs` lists `init` among the reserved words,
+and this pull request opens no file under `crates/ridl-syntax/`. That is the
+case the editing note describes — evidence outside everything the revision
+touched, where reading the diff does not find it. The nearest warning inside the
+diff is `crates/ridl-sem/src/check.rs:4098`, recording that a reserved-word key
+already drew FORM-105 at parse; the commit opened that file, but not that line.
+Those two sentences were what that sweep believed at its own date and are left
+as written; so is its "the count above therefore stands at seventeen", which was
+true then. The running total in the editing note is what moves.
+
+Everything else was re-derived from the source and held: the four catalogue
+counts (`FORM` 13, `TYPL` 39, `RIDL` 31, `MANI` 13) and decision 21's `RIDL-`
+free-code enumeration — 100 to 110, 140, 141, 143, 201, 202, 301 to 308, and 401
+to 407 — both counted inside the `diag_codes!` invocation; decision 13's
+seven-in-source figure; decision 6's three shipped service codes; decision 15's
+two `WorkspaceOutput` fields; decision 16's two messages, both reading
+"us/ms/s/min/h", and `timing.rs`'s module comment citing ridl §2.1; decision
+17's retired characterisation, which now appears nowhere in the live tree
+outside this ADR's own quotations of it — `docs/archive/` still carries it, and
+is excluded here as verbatim provenance, as everywhere in this document;
+decision 19's six-file Appendix A extent; and decision 9's boundary, where
+`ridl-diff` is a dependency of `crates/ridl`'s manifest and of no other crate in
+the workspace. Decision 20's M1 and M2 were re-reproduced against a `ridlc`
+built from this branch rather than read off the pass that wrote them: M1's two
+`reserved oldOne` tombstones lower at ordinals 1 and 2 with the signal at
+ordinal 3 and no diagnostic, and M2's cases each lower a `declared_init` —
+`"true"`, `"15"`, `"5"`, `"42"` — with the compile exiting 0.
+
+_The "CI is still stuck" premise is now confirmable, from outside the
+repository._ The sentence above — that the repository can neither confirm nor
+refute it — stays true of the repository. `gh run list` settles the question
+from outside: read on 2026-07-26, all 247 runs recorded since 2026-07-18 — every
+run on `main` and on every pull request, this one included — conclude as
+failures, and in every run inspected no job executes a single step. Every job
+that reaches `failure` carries the annotation "The job was not started because
+recent account payments have failed or your spending limit needs to be
+increased"; jobs a condition skips carry none. No job starts, which is how
+`.github/workflows/ci.yml` can be complete while CI runs nothing. The count and
+the date are a dated reading; the ruling below does not depend on them. Decision
+11's premise therefore holds on external evidence, and its ruling is unchanged:
+the local gate is the merge gate.
+
+_Extended (2026-07-26) — the fifth sweep, and the twenty-second._ Review of the
+correction round above found **four** more, and three of the four were written
+by that round. Two were false when written. The fourth extension claimed the
+falsifying evidence for its own miss "again" sat inside the correcting commit:
+it did not — `crates/ridl-syntax/src/keywords.rs` is in no commit of this pull
+request, and the claim inverted the mechanism, asserting the easy case where the
+document had just lived the hard one. And the reading above first said every run
+completes "in five to eight seconds", which is false for 19 of the 247 runs, one
+of them by 65 minutes; the duration was never load-bearing, and the sentence now
+carries what is: no job starts.
+
+The other two are the same scope elision in two places — the fourth sweep's
+account of decision 17, and decision 17's own `_Corrected_` note from the first
+sweep, which said the retired wording was "gone from the repository" when
+`docs/archive/ridl-language-reference-v0.1.md` still carries it. This document
+excludes `docs/archive/` everywhere as verbatim provenance, but no sentence said
+so, and a claim about "the repository" is not a claim about the live tree. Both
+now say which tree they mean.
+
+That makes twenty-two, and all four of these were found by reviewing a
+correction rather than by making one, bringing that figure to **eight**. The
+rate is the finding: across five sweeps, every round that corrected this
+document also damaged it. The third sweep came closest — it caught three of its
+own strandings before shipping and still shipped one unfound. A sweep is a
+precondition, and it is not sufficient — the correction needs its own review, by
+someone who did not write it.
 
 _Which sentences are dated, and which are live._ Every sentence here is one of
 two kinds, and **the split does not follow the paragraph headings**. A sentence
@@ -506,15 +630,17 @@ disagreeing sources is the correct one.
     bounds — the same thing as `@250ms`"). The second states the claim in
     different words, which is why a search for "equivalent" did not reach it.
     Both were repaired by PR #173 in the same commit as §9.2 and §16.1, so the
-    wording is gone from the repository; what stayed wrong until this sweep was
-    the count and the closure of the enumeration here. Editing the two
-    regenerated no snapshot: the showcase entry carries errors, so its IR, Rust,
-    and TypeScript snapshots are one-line placeholders, and the diagnostic
-    snapshot pins the message rather than the source comment. The rest of this
-    decision is unaffected — RIDL-108 is still a warning on both kinds, verified
-    against the built `ridlc` at `af7ef7c`: `@[50ms..50ms]` on a signal and on
-    an event each draw one RIDL-108 and the compile exits 0, and `@50ms` on an
-    event is still RIDL-103.
+    wording is gone from the live tree — `docs/archive/`
+    `ridl-language-reference-v0.1.md` still carries it at the line the
+    supersession retired, and is left as verbatim provenance; what stayed wrong
+    until this sweep was the count and the closure of the enumeration here.
+    Editing the two regenerated no snapshot: the showcase entry carries errors,
+    so its IR, Rust, and TypeScript snapshots are one-line placeholders, and the
+    diagnostic snapshot pins the message rather than the source comment. The
+    rest of this decision is unaffected — RIDL-108 is still a warning on both
+    kinds, verified against the built `ridlc` at `af7ef7c`: `@[50ms..50ms]` on a
+    signal and on an event each draw one RIDL-108 and the compile exits 0, and
+    `@50ms` on an event is still RIDL-103.
 
 18. **Amendment (2026-07-25) — the FORM and MANI diagnostic code tables are
     written in the family overview, and each language reference cites them.**
@@ -673,6 +799,44 @@ disagreeing sources is the correct one.
     ledger" citations (M1, M2 — this row's own emission site — and M3) still
     name no issue, so the pointer still resolves to nothing. #172 carries that
     repointing as one of its own items.
+
+    **Extended (2026-07-26) — the repointing shipped.** The E2 gardening pass
+    made the three citations read `issue #172, M1`, `issue #172, M2`, and
+    `issue #172, M3`; the string `E2 ledger` no longer appears in any `.rs` file
+    in the workspace, and #172 carries an M1/M2/M3 section for the three to land
+    on. Each was re-verified against the built `ridlc` before being repointed,
+    because a citation is worth repointing only if it still describes something
+    true. M1: two `reserved oldOne` tombstones in one interface draw no
+    diagnostic and the compile exits 0, while both occupy an ordinal — the
+    signal after them lowers at ordinal 3. M2: all three silent cases still
+    compile clean and lower a `declared_init` — `= true` on an integer-backed
+    payload, `= 15.0` off a `step 10.0` grid, and `= 5` on a struct or `= 42` on
+    an enum with no such member. M3: five of the six keys in `GF_ATTRIBUTE_KEYS`
+    — `default`, `persist`, `invariant`, `labels`, and `deprecated` — raise
+    FORM-107 wherever they are written, and the sixth, `init`, never reaches
+    that branch at all, because it is a family reserved word and is rejected as
+    an identifier first. No key is consumable either way, so the flat list still
+    suffices.
+
+    _Corrected (2026-07-26)._ The M3 sentence above read "every key in
+    `GF_ATTRIBUTE_KEYS` raises FORM-107 unconditionally" when this extension was
+    written, and it was false for `init` on that date rather than overtaken
+    later. `init` is in `FAMILY_RESERVED` in
+    `crates/ridl-syntax/src/keywords.rs` — an rmdl keyword, reserved in every
+    profile — so under the ridl profile it lexes to `ReservedWord` rather than
+    to an identifier, and the attribute check never runs
+    `GF_ATTRIBUTE_KEYS.contains(...)` on it. Reproduced against a `ridlc` built
+    from this branch, with one package writing all six keys as flag attributes
+    on a `command`: five FORM-107 and one FORM-105, "reserved word `init` used
+    as identifier". The assignment spelling `init = 3` and `init` on a signal
+    each draw FORM-105 as well, so no spelling of the key reaches the
+    allow-list. The same claim was written into issue #172's M3 note in the same
+    pass and is corrected there too. What the correction does not touch is the
+    ruling: `init` is not consumable either, so "no key is consumable, and a
+    flat list suffices" stands, and so does the reason a later task must replace
+    the flat list with the general form §4.3 key-by-kind allow-list.
+    `check.rs`'s comment at the constant claims only what the branch does with a
+    key that reaches it, which is accurate, and is left as written.
 
 21. **Amendment (2026-07-25) — RIDL-142 and RIDL-111 are allocated for the two
     uncoded E2 errors, and `ridl-core` gains a `RIDL_CATALOG` and a
@@ -886,5 +1050,5 @@ disagreeing sources is the correct one.
   supersessions decision 1 adopts).
 - docs/wip/ridl-family-concept.md — §9.1 (the `ridl diff` exit-code contract,
   decision 9).
-- docs/wip/2026-07-19-e2-ridl-interface-layer-plan.md — the execution plan
-  citing these decisions.
+- docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md — the execution plan
+  citing these decisions, archived from `docs/wip/` at epic close.

@@ -17,3 +17,6 @@ documents in [`../archive/`](../archive/).
   steps/timeline, the flow stdlib.
 - **rsdl-language-reference.md** — the architecture layer: components, services,
   systems, deployment, transport/posture.
+- **expr-core-specification.md** — the cross-profile contract-term grammar: the
+  guaranteed subset `require`/`ensure` uses today, the function layer rmdl
+  extends it into, the typing rules, and the evaluation domains.

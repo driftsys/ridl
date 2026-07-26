@@ -32,6 +32,14 @@ at epic close) and cites these decisions by number.
    the rust-analyzer codegen around it is entangled with rust-analyzer
    internals, so the generator itself is easier to own than to vendor.
 
+   **Extended (2026-07-26):** the grammar file was renamed and this decision was
+   not. E2 moved it to `crates/ridl-syntax/family.ungram` when the ridl
+   interaction grammar joined the typl one in the same description, so the path
+   above names no file in the repository. What the decision fixes — an
+   `ungrammar` description, an in-repo generator run by `cargo xtask codegen`, a
+   committed accessor file, and a drift test that regenerates and fails on
+   divergence — is unchanged and still holds.
+
 2. **Diagnostic namespaces beyond the specs.** The typl reference fixes `TYPL-…`
    for typl semantic rules but codes nothing for the shared surface grammar or
    the manifest layer. E1 allocates two namespaces: `FORM-…` for family-grammar
@@ -102,6 +110,13 @@ at epic close) and cites these decisions by number.
     roll into the E1 debt issue. TYPL-106 regex validation is implemented with
     the `regress` crate (an ECMA-262 engine, matching the reference's §2.7
     syntax choice, where Rust's `regex` crate dialect would not).
+
+    **Extended (2026-07-26):** E2 paid the profile-boundary half of this cut.
+    TYPL-301, TYPL-303, and TYPL-304 ship — the family grammar made the
+    constructs they reject parseable, the parser emits all three, and the ridl
+    diagnostic showcase provokes each one. TYPL-107, TYPL-205, and TYPL-401 to
+    TYPL-403 are still unimplemented and still deferred; that remaining
+    inventory is carried on the E2 debt issue #172 beside the E1 one (#135).
 
 11. **The general form's attribute promotion is E2 scope.** E1 parses the typl
     profile per typl reference Appendix E, with `@labels` and `@deprecated` as
