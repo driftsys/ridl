@@ -2,7 +2,7 @@
 // ( camelCase_id | int_lit )`).
 //
 // A `reserved` entry retires an interaction and holds its ordinal for ever.
-// `tools/diff/src/classify.rs::slots` is the consumer that matters: it folds
+// `crates/ridl-diff/src/classify.rs::slots` is the consumer that matters: it folds
 // tombstones into the ordinal sequence so a freed slot never looks free, which
 // is what stops a new interaction reusing a retired wire identity from
 // classifying as a clean append. That guarantee is what a registry gate rests

@@ -1,0 +1,158 @@
+---
+source: crates/ridl-backend-rust/src/tests.rs
+expression: rust_source
+---
+/// Vehicle speed over ground
+#[repr(transparent)]
+pub struct Speed(pub f64);
+impl Default for Speed {
+    fn default() -> Self {
+        Speed(0.0)
+    }
+}
+/// Coolant / ambient temperature
+#[repr(transparent)]
+pub struct Temperature(pub f64);
+impl Default for Temperature {
+    fn default() -> Self {
+        Temperature(0.0)
+    }
+}
+/// Engine crankshaft speed
+#[repr(transparent)]
+pub struct RPM(pub f64);
+impl Default for RPM {
+    fn default() -> Self {
+        RPM(0.0)
+    }
+}
+/// Normalised ratio
+#[repr(transparent)]
+pub struct Ratio(pub f64);
+impl Default for Ratio {
+    fn default() -> Self {
+        Ratio(0.0)
+    }
+}
+#[repr(transparent)]
+pub struct Counter(pub i64);
+impl Default for Counter {
+    fn default() -> Self {
+        Counter(0)
+    }
+}
+#[repr(transparent)]
+pub struct Gain(pub f64);
+impl Default for Gain {
+    fn default() -> Self {
+        Gain(0.0)
+    }
+}
+pub const MAX_SPEED: Speed = Speed(250.0);
+pub const SPEED_LIMIT_EU: Speed = Speed(130.0);
+pub const IDLE_RPM: RPM = RPM(800.0);
+pub const MAX_GEAR: i64 = 6;
+#[repr(i64)]
+pub enum GearPosition {
+    PARK = 0,
+    DRIVE = 1,
+    REVERSE = 2,
+    NEUTRAL = 3,
+}
+impl Default for GearPosition {
+    fn default() -> Self {
+        GearPosition::PARK
+    }
+}
+#[repr(i64)]
+pub enum Warning {
+    LOW_FUEL = 0,
+    CHECK_ENGINE = 1,
+    DOOR_OPEN = 2,
+    SEATBELT = 3,
+}
+impl Default for Warning {
+    fn default() -> Self {
+        Warning::LOW_FUEL
+    }
+}
+#[repr(transparent)]
+pub struct WarningFlags(pub i64);
+impl WarningFlags {
+    pub const LOW_FUEL: WarningFlags = WarningFlags(1 << 0);
+    pub const CHECK_ENGINE: WarningFlags = WarningFlags(1 << 1);
+    pub const DOOR_OPEN: WarningFlags = WarningFlags(1 << 2);
+    pub const SEATBELT: WarningFlags = WarningFlags(1 << 3);
+}
+impl Default for WarningFlags {
+    fn default() -> Self {
+        WarningFlags(0)
+    }
+}
+#[repr(C)]
+pub struct SpeedLimitPayload {
+    pub limit: Speed,
+    pub actual: Speed,
+}
+impl Default for SpeedLimitPayload {
+    fn default() -> Self {
+        SpeedLimitPayload {
+            limit: Speed::default(),
+            actual: Speed::default(),
+        }
+    }
+}
+pub struct DriverProfile {
+    pub name: crate::ridl::std::Name,
+    pub speed: Speed,
+    pub r#override: Option<Speed>,
+    pub gears: i64,
+}
+pub struct SensorBounds {
+    pub range: SensorBoundsRange,
+    pub readings: [Speed; 8],
+    pub labels: Vec<crate::ridl::std::Label>,
+    pub meta: Vec<(crate::ridl::std::Label, crate::ridl::std::Name)>,
+}
+pub enum SensorResult {
+    Ok(SensorReading),
+    Err(SensorFault),
+}
+impl Default for SensorResult {
+    fn default() -> Self {
+        SensorResult::Ok(SensorReading::default())
+    }
+}
+#[repr(C)]
+pub struct SensorReading {
+    pub value: Speed,
+    pub timestamp: crate::ridl::std::Timestamp,
+}
+impl Default for SensorReading {
+    fn default() -> Self {
+        SensorReading {
+            value: Speed::default(),
+            timestamp: crate::ridl::std::Timestamp::default(),
+        }
+    }
+}
+pub struct SensorFault {
+    pub code: Counter,
+    pub message: crate::ridl::std::Message,
+}
+pub(crate) struct RawWheelFrame {
+    pub ticks: Counter,
+    pub frame: Vec<u8>,
+}
+pub struct SensorBoundsRange {
+    pub min: Speed,
+    pub max: Speed,
+}
+impl Default for SensorBoundsRange {
+    fn default() -> Self {
+        SensorBoundsRange {
+            min: Speed::default(),
+            max: Speed::default(),
+        }
+    }
+}

@@ -18,10 +18,14 @@ happened to its open items.
 
 ## The workspace map
 
-One Cargo workspace (`Cargo.toml`,
-`members = ["crates/*", "backends/*", "tools/*", "xtask"]`): seven crates under
-`crates/`, one backend, one tool, and the `xtask` automation member. The VS Code
-extension (`editors/vscode`) is TypeScript and is not a workspace member.
+One Cargo workspace (`Cargo.toml`, `members = ["crates/*", "xtask"]`): every
+crate under `crates/` with its directory named after it, and the `xtask`
+automation member at the root. The VS Code extension (`editors/vscode`) is
+TypeScript and is not a workspace member.
+
+The map below is the E1 spine — the seven `ridl-*` compiler crates plus
+`ridl-backend-rust` and `ridl-fmt`. E2 added two more crates under the same
+rule, `ridl-backend-ts` and `ridl-diff`, which this note does not describe.
 
 - **`crates/ridl-syntax`** — the surface layer. A `logos` lexer over the full
   typl token set; a hand-written recursive-descent parser producing a lossless
@@ -70,7 +74,7 @@ extension (`editors/vscode`) is TypeScript and is not a workspace member.
   or double field — and derived wire widths ride alongside as enums (ADR-0007
   decision 9). The prost types carry `serde` for the exact-decimal JSON debug
   rendering.
-- **`backends/rust`** (crate `ridl-backend-rust`) — one IR v1 package to
+- **`crates/ridl-backend-rust`** — one IR v1 package to
   `Generated { rust_source, c_header }`. Rust is built as a `quote` token stream
   and formatted with `prettyplease`: named scalar types become
   `#[repr(transparent)]` newtypes, and structs whose IR `fixed_layout` flag
@@ -86,12 +90,12 @@ extension (`editors/vscode`) is TypeScript and is not a workspace member.
   write the selected artifacts: `<base>.rs`, `<base>.h`, and `<base>.ir.json`.
   The binary exposes `ridlc check` and `ridlc build`.
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl build`, and
-  `ridl fmt`, driving the same `ridlc` command drivers and the `tools/fmt`
+  `ridl fmt`, driving the same `ridlc` command drivers and the `crates/ridl-fmt`
   engine (the plumbing/porcelain split of concept note §8.1).
-- **`tools/fmt`** — the `ridl fmt` engine: CST-based and trivia-aware (comments
-  are preserved and re-anchored), total (input with parse errors is returned
-  untouched), and idempotent, implementing the tight `name: Type` style of
-  general form §5.
+- **`crates/ridl-fmt`** — the `ridl fmt` engine: CST-based and trivia-aware
+  (comments are preserved and re-anchored), total (input with parse errors is
+  returned untouched), and idempotent, implementing the tight `name: Type` style
+  of general form §5.
 - **`crates/ridl-lsp`** — the language server; see the next section.
 - **`editors/vscode`** — the VS Code extension: an LSP client plus a TextMate
   grammar, built with npm/tsc.
@@ -106,7 +110,7 @@ single .typl file | package directory | workspace root
   -> parse     Parse { GreenNode, errors }          ridl-syntax salsa-memoized per InputFile
   -> resolve   Resolution { symbols, diagnostics }  ridl-sem    ADR-0002 §5 order
   -> check     ir v1 Package + diagnostics          ridl-sem -> ridl-ir types
-  -> generate  Rust source + C header               backends/rust
+  -> generate  Rust source + C header               ridl-backend-rust
 ```
 
 Every stage emits coded `Diagnostic` values, concatenated in pipeline order

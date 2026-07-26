@@ -959,7 +959,7 @@ fn generated_typescript_packages(entry: &Path) -> Vec<(String, String)> {
 /// `npx --no-install tsc` (network-free). Returns the program and its leading
 /// arguments, or `None` when neither responds to `--version`.
 ///
-/// Mirrors `discover_tsc` in `backends/typescript/src/tests.rs` exactly — that
+/// Mirrors `discover_tsc` in `crates/ridl-backend-ts/src/tests.rs` exactly — that
 /// helper is `pub(crate)` inside a `#[cfg(test)]` module and so is not
 /// reachable from an integration test in another crate. Deliberately the same
 /// mechanism rather than a second one: skip-if-absent is the established
@@ -1328,7 +1328,7 @@ fn showcase_pins_the_interaction_boundary_narrowings() {
 /// both interaction stores — a named `interface` and a service's inline shape,
 /// which lower through separate loops.
 ///
-/// The load-bearing consumer is `tools/diff/src/classify.rs::slots`, which
+/// The load-bearing consumer is `crates/ridl-diff/src/classify.rs::slots`, which
 /// folds tombstones into the ordinal sequence so a freed slot never looks free.
 /// Without that, a new interaction reusing a retired wire identity classifies
 /// as a clean append — the identity-reuse guarantee a registry gate rests on.

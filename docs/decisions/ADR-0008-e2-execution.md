@@ -10,7 +10,7 @@ cost of a small refactor before a later epic builds on it. This ADR follows the
 pattern of ADR-0006 (E0) and ADR-0007 (E1).
 
 **Editing note.** Revisions to this document have repeatedly left behind a
-sentence describing the state they replaced — sixteen found and corrected so
+sentence describing the state they replaced — seventeen found and corrected so
 far. They were scattered rather than clustered: a decision's lead contradicting
 its own body, the Status line above, a scoping claim in `## Consequences`, and a
 closed enumeration in an earlier decision that a later one silently extended.
@@ -28,8 +28,8 @@ The tenth arrived the way the sixth did. Review of the sweep that reported nine
 found it in **decision 1**, whose "the ridl reference text is stale on these
 four" the same sweep's own new `## Consequences` note contradicted in the same
 commit — a correction stranding a sentence in the document it was correcting.
-Two of the sixteen have now been found by reviewing a correction rather than by
-making one: the sixth and the sixteenth.
+Three of the seventeen have now been found by reviewing a correction rather than
+by making one: the sixth, the sixteenth, and the seventeenth.
 
 Two of the ten were already recorded as issues: decision 13's allocation ledger
 (#169) and decision 17's "those are the only sites" claim (logged in #172). The
@@ -41,6 +41,27 @@ measured: one sweep found more stale sentences than three rounds of diff review
 had. Decisions 6, 8, 16, and 18 also carry dated extensions from this sweep;
 those record work that shipped as bound and are not counted above, because no
 sentence in them was falsified.
+
+_Extended (2026-07-26) — the second sweep, and the seventeenth._ The
+crate-layout move (issue #180) opened this document again and ran the sweep the
+rule above demands, against the repository at `06c3f7a`. Most live claims were
+re-checked in the source and held: the four catalogue counts (`FORM` 13, `TYPL`
+39, `RIDL` 31, `MANI` 13), the `RIDL-` free-code enumeration, decision 13's
+seven-codes-in-source figure, decision 15's two `WorkspaceOutput` fields,
+decision 20's three `E2 ledger` citations that still name no issue, and decision
+21's account of what PR #175 shipped. The move itself falsified nothing here: it
+changed the directories four crates sit in, which decision 9 records in a dated
+note rather than by rewriting its own text.
+
+The sweep's first report claimed **decisions 16 to 20's shipped bindings** all
+held, and that claim was wrong about decision 19 — in the same commit whose own
+findings list named a copy of Appendix A that decision 19's binding does not
+cover. Review of that sweep caught the contradiction, and the seventeenth stale
+sentence with it (`_Corrected_` at decision 19). This is the third time a
+correction's own review, rather than the correction, is what found the miss, and
+the second time the falsifying evidence was sitting in the correcting commit.
+The lesson the mechanism keeps teaching: a sweep that reports "everything held"
+has to be checked against what the same change reports elsewhere.
 
 _Which sentences are dated, and which are live._ Every sentence here is one of
 two kinds, and **the split does not follow the paragraph headings**. A sentence
@@ -198,6 +219,22 @@ disagreeing sources is the correct one.
    carries plumbing-grade stability: stable flags, machine-readable output, and
    the defined exit codes **0 = compatible, 1 = breaking, 2 = error** (concept
    note §9.1), the same contract class as `ridlc --frozen`.
+
+   **Extended (2026-07-26):** the engine crate moved and the decision did not.
+   `tools/` was dissolved when every crate went to `crates/<crate-name>/`, with
+   the directory named after the crate (issue #180). The diff engine is now
+   `crates/ridl-diff`; `tools/fmt`, `backends/rust`, and `backends/typescript`
+   became `crates/ridl-fmt`, `crates/ridl-backend-rust`, and
+   `crates/ridl-backend-ts` in the same move. The boundary this decision draws
+   is over crate **dependencies**, not over directories: `ridl-diff` is a
+   dependency of the `ridl` facade and of nothing `ridlc` compiles, which is
+   what keeps the compiler a pure source→IR function. Relocating it neither
+   weakens nor strengthens that argument. Read "over a `tools/` engine crate"
+   above as "over an engine crate outside `ridlc`". Dated sentences elsewhere in
+   this ADR keep the old paths, because they are the evidence they were written
+   as — decision 21's 2026-07-26 extension describes `tools/diff/src/lib.rs` as
+   PR #175 left it, and rewriting it would claim PR #175 touched a path that did
+   not exist when it merged.
 
 10. **The expr-core specification (E2.12) is a document, and it lands before or
     with the E2.4 subset implementation.** E2.4 implements only the guaranteed
@@ -554,6 +591,41 @@ disagreeing sources is the correct one.
     statement about the appendix, and is edited with it. RIDL-308 keeps a living
     example either way: the diagnostic showcase provokes it independently,
     inside a service's inline shape.
+
+    _Corrected (2026-07-26)._ "`…/veh-cluster/cluster/appendix-a.ridl` is the
+    appendix text compiled" was false when written. **Three** copies of Appendix
+    A are compiled or parsed in this workspace, not one, and the binding above
+    covers only the first. PR #173 edited that one and the reference itself;
+    both now read `FaultPage | DiagError`. The other two still declare
+    `union
+    FaultPageResult` and return it:
+
+    - `crates/ridl-syntax/test_data/parser/ok/appendix_a_full_example.ridl`,
+      with its parser corpus snapshot. Parsing is all this fixture does, so no
+      semantic pass reaches it and nothing flags the retired spelling.
+    - `APPENDIX_A_PACKAGE` in `crates/ridl-sem/src/check.rs`, which is the
+      larger miss because it propagates. Two tests pin the retired shape —
+      `appendix_a_named_result_union_returns_as_a_named_value` asserts the
+      return lowers to `Named("FaultPageResult")`, and
+      `appendix_a_lowers_clean_and_its_ir_v2_json_is_the_golden` asserts the
+      package's only diagnostic is the RIDL-308 this decision removes. Its
+      comment still reads "Appendix A is kept verbatim rather than rewritten —
+      the gf §7 erratum that restates it is a documentation task, not this one",
+      which is exactly the position this decision reversed. Its golden,
+      `ridl_sem__check__tests__appendix_a_ir.snap`, therefore still carries the
+      union, and `crates/ridl-backend-rust/src/tests.rs` reads that golden as
+      its Appendix A input — so the retired spelling reaches
+      `ridl_backend_rust__tests__appendix_a_rust_snapshot.snap` and
+      `…_c_header_snapshot.snap` as generated code.
+
+    What was decided does not change: Appendix A's named result union is
+    deleted. What changes is the extent — **six** further files, four of them
+    snapshots: the parser corpus snapshot, the checker's IR golden, and the two
+    backend snapshots generated from that golden. Closing it is separate work,
+    recorded against the `debt(E2)` issue #172 rather than done here, because
+    regenerating a checker golden and two backend goldens is not a rename's to
+    make. Nothing about RIDL-308's living example is affected; the diagnostic
+    showcase still provokes it.
 
 20. **Amendment (2026-07-25) — ridl §16.1's RIDL-110 row is narrowed to what the
     checker validates, and the difference is recorded as a known gap.**

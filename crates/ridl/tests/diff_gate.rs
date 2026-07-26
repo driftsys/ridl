@@ -28,10 +28,10 @@ fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
     )
 }
 
-/// One of the checked-in gate trees under `tools/diff/test_data/gate/`.
+/// One of the checked-in gate trees under `crates/ridl-diff/test_data/gate/`.
 fn gate(variant: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tools/diff/test_data/gate")
+        .join("../ridl-diff/test_data/gate")
         .join(variant)
 }
 

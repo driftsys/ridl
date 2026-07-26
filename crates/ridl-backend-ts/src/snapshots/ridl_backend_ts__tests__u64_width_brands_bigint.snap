@@ -1,0 +1,12 @@
+---
+source: crates/ridl-backend-ts/src/tests.rs
+expression: source
+---
+/**
+ * @range [0..18446744073709551615]
+ */
+export type Odometer = bigint & { readonly __ridl: 'veh.common.Odometer' };
+
+export function initOdometer(): Odometer {
+  return 0n as Odometer;
+}

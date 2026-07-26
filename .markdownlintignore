@@ -17,3 +17,6 @@ node_modules/
 
 # mdBook build output.
 book/
+
+# Cargo build output — `cargo doc` writes Markdown there.
+target/

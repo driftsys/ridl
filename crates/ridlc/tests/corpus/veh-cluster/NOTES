@@ -32,7 +32,7 @@ and §14.5 needs both service forms exercised.
   `VehicleStatus`. `cluster/evolution.ridl` adds the *nameless* form,
   `reserved <ordinal>`, in a named interface and in an inline shape — the two
   stores lower through separate loops. The load-bearing consumer is
-  `tools/diff/src/classify.rs::slots`, which folds tombstones into the ordinal
+  `crates/ridl-diff/src/classify.rs::slots`, which folds tombstones into the ordinal
   sequence so a freed slot never looks free; without that a new interaction
   reusing a retired wire identity classifies as a clean append.
 - **The whole guaranteed expression subset.** Comparison, boolean connectives,
@@ -79,13 +79,13 @@ and §14.5 needs both service forms exercised.
   Both snapshots are therefore proofs rather than transcripts, which is what the
   E2 exit criterion — IR neutrality demonstrated by two backends — actually
   asks for. The tsc proof skips with a printed notice when no tsc is
-  discoverable (the convention `backends/typescript` set), so Node stays
+  discoverable (the convention `crates/ridl-backend-ts` set), so Node stays
   optional for `cargo test`; the generated-source markers are asserted either
   way, so it never passes by type-checking nothing.
 
   _Known limitation._ Under a plain `cargo test` libtest captures the skip
   notice, so a skipped run reports a bare `ok` and is indistinguishable from a
-  checked one without `--nocapture`. This matches the `backends/typescript`
+  checked one without `--nocapture`. This matches the `crates/ridl-backend-ts`
   precedent and the markers keep the test non-vacuous either way. If it is
   closed later, the shape is an opt-in `RIDL_REQUIRE_TSC=1` that turns the skip
   into a failure.
@@ -240,7 +240,7 @@ nothing left to name, and a publisher who typed a quote around a retired name
 got a provenance-free tombstone with no warning at all.
 
 The identity-reuse guarantee itself survived throughout:
-`tools/diff/src/classify.rs::slots` maps a nameless tombstone to
+`crates/ridl-diff/src/classify.rs::slots` maps a nameless tombstone to
 `("", ordinal)`, which never equals a real interaction name. So this was a
 provenance hole, not a wire-safety hole — which is exactly why nothing else
 caught it. Input outside the grammar accepted in silence is the failure family

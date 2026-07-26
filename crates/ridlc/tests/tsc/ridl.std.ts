@@ -8,7 +8,7 @@
 // it is written by hand for the same reason: it stands in for a dependency, it
 // does not stand in for anything under test.
 //
-// The branding follows the convention in `backends/typescript/src/tests.rs`, so
+// The branding follows the convention in `crates/ridl-backend-ts/src/tests.rs`, so
 // a generated reference that resolves to a bare `string` or `number` by
 // accident does not type-check.
 

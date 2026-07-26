@@ -6,13 +6,14 @@ A shared vocabulary layer (`typl`) plus four description languages over it
 (`ridl`, `uxdl`, `rmdl`, `rsdl`), sharing one toolchain and one IR.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace. The typl v0.1
-toolchain (epic E1) is built — seven crates under `crates/` (`ridl-syntax`,
-`ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`, `ridl`, `ridl-lsp`) plus
-`backends/rust`, `tools/fmt`, `xtask`, and the `editors/vscode` extension; the
-four description languages (`ridl`, `uxdl`, `rmdl`, `rsdl`) are sequenced in the
-roadmap. See `docs/technotes/walking-skeleton-architecture.md` for the as-built
-map.
+(ADRs), the implementation roadmap, and the compiler workspace: eleven crates
+under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
+`ridl`, `ridl-lsp`, `ridl-backend-rust`, `ridl-backend-ts`, `ridl-diff`, and
+`ridl-fmt` — plus `xtask` at the root and the `editors/vscode` extension. The
+typl v0.1 toolchain (epic E1) is built; the four description languages (`ridl`,
+`uxdl`, `rmdl`, `rsdl`) are sequenced in the roadmap. See
+`docs/technotes/walking-skeleton-architecture.md` for the as-built map of the E1
+spine.
 
 **Read these before doing anything else in this repo:**
 
@@ -66,6 +67,10 @@ driftsys/git-std (commits, versioning, hooks) and driftsys/prim
 
 - **Conventional Commits**, linted by git-std against `.git-std.toml` — types
   and scopes are enumerated there. Never push directly to `main`; use a PR.
+- **Every crate lives at `crates/<crate-name>/`** — the directory name equals
+  the crate name. `xtask` at the root is the one exception. A new crate adds its
+  own scope to `.git-std.toml`, which is an explicit list, not path-derived
+  (issue #180).
 - **prim owns the connective tissue** (Markdown/JSON/YAML/TOML) — it honors
   `.editorconfig` only, no per-tool config. `.primignore` is the escape hatch
   for files that must stay byte-exact.
