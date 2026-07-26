@@ -33,6 +33,11 @@ proptest = { version = "1.11.0", default-features = false }
 prost = "0.14.4"
 prost-build = "0.14.4"
 protox = "0.9.1"
+# The book-example harness parses `docs/book/` with the same CommonMark parser
+# mdBook uses, so what the harness compiles and what a reader sees are decided
+# by one implementation rather than two. `html` powers the render-count check
+# that guards the harness's own event walk.
+pulldown-cmark = { version = "0.13.4", default-features = false, features = ["html"] }
 quote = "1.0.46"
 regress = "0.11.1"
 rowan = "0.16.1"

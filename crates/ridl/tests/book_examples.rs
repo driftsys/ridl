@@ -75,28 +75,46 @@
 //!   package provides, or the block's own package. The compiler resolves the
 //!   *package* and stops, so an unresolved *name* inside a package it found
 //!   draws nothing — the harness checks rather than trusting the gap;
-//! - a fence the scanner cannot read, or one left unclosed;
+//! - a language word that is not exactly `ridl` or `typl` — `RIDL`,
+//!   `ridl{.class}` — which mdBook still renders as an example while the
+//!   convention does not recognise it. `ignore` suppresses this, as it
+//!   suppresses everything;
 //! - finding no verified blocks at all — what a moved or renamed book
 //!   directory looks like.
 //!
-//! # Which fences are read
+//! # Which fences are read, and why a parser reads them
 //!
-//! Three or more backticks or tildes, closed by at least as long a run of the
-//! same marker. **Indentation is unrestricted.** CommonMark caps a top-level
-//! fence at three columns, but a fence inside a list item is measured from that
-//! item's content column — four from step 10 of an ordered list, more when
-//! nested — and a numbered-step tutorial is exactly where an author reaches for
-//! one. mdBook renders every one of them as an ordinary example.
+//! Extraction is [`pulldown_cmark`], **the CommonMark parser mdBook itself
+//! uses**. Blocks come from `Start(CodeBlock(Fenced(info)))` … `End`; the info
+//! string and the body are the parser's, not this file's.
 //!
-//! Two placements are declined, and **fail the book rather than being
-//! skipped**: a fence inside a block quote, and a language word that is not
-//! exactly `ridl`/`typl` (`RIDL`, `ridl{.class}`). Reading those means tracking
-//! block structure, which is CommonMark's job, not this file's.
-//! [`unaccounted_fences`] is the backstop that turns every such case — these
-//! two and whatever nobody has thought of — into a loud failure instead of a
-//! silent skip. That property, not the scanner's reach, is what keeps this
-//! harness honest.
+//! That is a correction, not a preference. Three earlier versions scanned lines
+//! by hand and each one failed *open* — a fence indented past column three, a
+//! fence in a block quote, a `ridl` fence swallowed by an unclosed fence in an
+//! earlier list item. Every one rendered as `class="language-ridl"`, so a reader
+//! believed it, while the harness never compiled it. The failures were not one
+//! bug repeated; they were the same missing thing each time — block structure.
+//! Lists, block quotes, HTML blocks, indented code and unclosed fences all
+//! change where a fence begins and ends, and none of that is derivable from
+//! looking at lines.
+//!
+//! With the parser, agreement with mdBook is structural. Two consequences worth
+//! knowing:
+//!
+//! - a fence inside a block quote or a list, at any depth, is an ordinary
+//!   example and is verified like any other;
+//! - a block indented four spaces is an *indented* code block in CommonMark, has
+//!   no info string, and is skipped — which is also how mdBook renders it, with
+//!   no language class.
+//!
+//! [`renders_as_examples`] is the remaining guard: it renders each file to HTML
+//! with the same parser's renderer and requires the count of `language-ridl` /
+//! `language-typl` blocks to equal the number this harness accounted for. It is
+//! independent of the event walk below — the only hand-written part left — but
+//! *not* of `pulldown-cmark` itself. Agreement with `pulldown-cmark` is exactly
+//! what buys agreement with mdBook, so that is the right thing to depend on.
 
+use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -129,137 +147,126 @@ impl Drop for TempDir {
     }
 }
 
-// ---------------------------------------------------------------- fences ---
+// ------------------------------------------------------- parsing the book ---
 
-/// An opening code fence: its marker character, its length, and how far it is
-/// indented.
+/// One fenced code block as the parser reported it.
+struct Fenced {
+    /// The raw info string, e.g. `ridl,allow=RIDL-406`.
+    info: String,
+    /// The block's contents, already free of any container prefix.
+    body: String,
+    /// 1-based line of the opening fence in the source.
+    fence_line: usize,
+}
+
+/// Every fenced code block in `markdown`, from [`pulldown_cmark`].
 ///
-/// No cap is placed on the indentation. CommonMark caps a *top-level* fence at
-/// three columns, but a fence inside a list item is measured from that item's
-/// content column, which is four from step 10 of an ordered list and grows with
-/// nesting. Guessing the container's column means reimplementing block
-/// structure, so the scanner accepts any indentation and
-/// [`unaccounted_fences`] is the backstop for whatever this still reads wrongly.
-struct Fence {
-    marker: char,
-    length: usize,
-    indent: usize,
-}
-
-/// Columns of leading whitespace, counting a tab as the four columns
-/// CommonMark gives it.
-fn indent_of(line: &str) -> (usize, &str) {
-    let mut columns = 0;
-    for (offset, character) in line.char_indices() {
-        match character {
-            ' ' => columns += 1,
-            '\t' => columns += 4,
-            _ => return (columns, &line[offset..]),
-        }
-    }
-    (columns, "")
-}
-
-/// Reads `line` as an opening fence, returning the fence and its info string.
-fn opening_fence(line: &str) -> Option<(Fence, &str)> {
-    let (indent, rest) = indent_of(line);
-    let marker = rest.chars().next()?;
-    if marker != '`' && marker != '~' {
-        return None;
-    }
-    let length = rest
-        .chars()
-        .take_while(|character| *character == marker)
-        .count();
-    if length < 3 {
-        return None;
-    }
-    let info = rest[length..].trim();
-    if marker == '`' && info.contains('`') {
-        return None;
-    }
-    Some((
-        Fence {
-            marker,
-            length,
-            indent,
-        },
-        info,
-    ))
-}
-
-/// Whether `line` closes `fence`: at least as long a run of **the same**
-/// marker, with nothing after it but whitespace. A backtick run never closes a
-/// tilde fence, so a `~~~ridl` block that holds a ``` line stays one block.
-fn closes(line: &str, fence: &Fence) -> bool {
-    let (_, rest) = indent_of(line);
-    let run = rest
-        .chars()
-        .take_while(|character| *character == fence.marker)
-        .count();
-    run >= fence.length && rest[run..].trim().is_empty()
-}
-
-/// Whether `line`, whatever its indentation and whatever encloses it, looks
-/// like it opens a `ridl` or `typl` example.
+/// The parser owns block structure, so a fence inside a list item, a block
+/// quote, or an HTML block arrives here the same way a top-level one does, and
+/// an indented code block — which has no info string and no language class in
+/// mdBook's output — never arrives at all.
 ///
-/// Deliberately looser than [`opening_fence`]: it matches any run of three or
-/// more markers whose info string begins, case-insensitively, with `ridl` or
-/// `typl`. That makes it catch what the strict scanner declines — a fence in a
-/// block quote, `RIDL`, `ridl{.class}` — which is the point. It is the input to
-/// [`unaccounted_fences`], never to extraction.
-fn looks_like_example_fence(line: &str) -> bool {
-    // Strip whatever a container prefixes the line with — indentation and
-    // block-quote markers — because the point is to see the fence a *reader*
-    // sees, not the one the scanner is willing to read.
-    let mut rest = line;
-    loop {
-        let (_, stripped) = indent_of(rest);
-        match stripped.strip_prefix('>') {
-            Some(inner) => rest = inner,
-            None => {
-                rest = stripped;
-                break;
+/// # Line numbers
+///
+/// `fence_line` is derived from the byte offset the parser gives for the block,
+/// counting newlines before it. It is exact for the *opening fence*. Body lines
+/// are then assumed to run one-per-source-line from there, which holds for
+/// fenced blocks because a fence's contents are never reflowed or merged;
+/// `a_reported_line_is_the_markdown_line` pins it, including inside a list and a
+/// block quote.
+fn fenced_blocks(markdown: &str) -> Vec<Fenced> {
+    let mut blocks = Vec::new();
+    let mut open: Option<Fenced> = None;
+    let parser = Parser::new_ext(markdown, Options::all()).into_offset_iter();
+
+    for (event, range) in parser {
+        match event {
+            Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(info))) => {
+                open = Some(Fenced {
+                    info: info.into_string(),
+                    body: String::new(),
+                    fence_line: markdown[..range.start].matches('\n').count() + 1,
+                });
             }
+            Event::Text(text) => {
+                if let Some(block) = open.as_mut() {
+                    block.body.push_str(&text);
+                }
+            }
+            Event::End(TagEnd::CodeBlock) => {
+                if let Some(block) = open.take() {
+                    blocks.push(block);
+                }
+            }
+            _ => {}
         }
     }
-    let Some(marker) = rest.chars().next() else {
-        return false;
-    };
-    if marker != '`' && marker != '~' {
-        return false;
-    }
-    let length = rest
-        .chars()
-        .take_while(|character| *character == marker)
-        .count();
-    if length < 3 {
-        return false;
-    }
-    let info = rest[length..].trim().to_ascii_lowercase();
-    info.starts_with("ridl") || info.starts_with("typl")
+
+    blocks
 }
 
-/// Strips up to `indent` columns of leading whitespace from a content line, as
-/// CommonMark does for an indented fenced block.
-fn dedent(line: &str, indent: usize) -> &str {
-    let mut columns = 0;
-    for (offset, character) in line.char_indices() {
-        if columns >= indent {
-            return &line[offset..];
-        }
-        match character {
-            ' ' => columns += 1,
-            '\t' => columns += 4,
-            _ => return &line[offset..],
-        }
-    }
-    ""
+/// How many blocks in `markdown` mdBook will render with a `language-ridl` or
+/// `language-typl` class.
+///
+/// Rendered with the parser's own HTML renderer, so this counts what a reader
+/// sees. It is the cross-check on the event walk in [`fenced_blocks`] — the last
+/// hand-written step — not on the parser, which both sides share.
+fn renders_as_examples(markdown: &str) -> usize {
+    let mut html = String::new();
+    pulldown_cmark::html::push_html(&mut html, Parser::new_ext(markdown, Options::all()));
+    html.match_indices("<code class=\"language-")
+        .filter(|(index, _)| {
+            let rest = &html[index + "<code class=\"language-".len()..];
+            let language = rest.split('"').next().unwrap_or_default();
+            is_example_language(language)
+        })
+        .count()
+}
+
+/// The cross-check on the event walk: what a reader will see must be what the
+/// harness looked at.
+///
+/// Isolated for the same reason [`verdict`] is — a guard no test can fail is
+/// how this harness shipped three fail-open versions.
+///
+/// It cannot catch the parser being wrong, only this file being wrong about the
+/// parser — which, now that the parser owns block structure, is the whole
+/// remaining risk. Its purpose is forward-looking: a future `pulldown-cmark`
+/// release that changes the event stream in a way the walk mishandles would
+/// show up here rather than as an example quietly going unchecked.
+///
+/// **Known untested seam.** Two of the three parts are covered:
+/// `render_agreement_reports_a_mismatch` fails if this comparison stops
+/// reporting, and `the_event_walk_agrees_with_the_renderer` fails if the walk
+/// and the renderer diverge over the container shapes a book uses. The third —
+/// that [`verify_book`] still *calls* this — is not covered, and cannot be
+/// without a genuine walk/renderer divergence, which is precisely the condition
+/// this exists to detect. Unhooking the call is therefore a mutation the suite
+/// does not catch. Recorded rather than papered over.
+fn render_agreement(origin: &str, rendered: usize, accounted: usize) -> Option<String> {
+    (rendered != accounted).then(|| {
+        format!(
+            "{origin}: mdBook will render {rendered} `ridl`/`typl` example block(s), but the \
+             harness accounted for {accounted}. Every block a reader sees as an example must be \
+             one this harness looked at, so the difference is a block going unverified.",
+        )
+    })
+}
+
+/// Whether an info string's language word names an example, however it is
+/// spelled. Used for the render count and for catching a near-miss spelling.
+fn is_example_language(info: &str) -> bool {
+    let word = info
+        .split([',', ' '])
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    word.starts_with("ridl") || word.starts_with("typl")
 }
 
 // -------------------------------------------------------------- examples ---
 
-/// One fenced block worth staging: where it came from, and what it holds.
+/// One block worth staging: where it came from, and what it holds.
 #[derive(Debug)]
 struct Example {
     /// Path of the Markdown file, relative to the book root.
@@ -270,8 +277,7 @@ struct Example {
     language: String,
     /// Diagnostic codes this block declares it expects.
     allowed: BTreeSet<String>,
-    /// The block's contents, without the fences and without the fence's own
-    /// indentation.
+    /// The block's contents.
     body: String,
 }
 
@@ -310,8 +316,7 @@ impl Example {
                 if !KINDS.contains(&word) {
                     return None;
                 }
-                let name = words.next()?;
-                let name = name.trim_end_matches([':', '{', ',']);
+                let name = words.next()?.trim_end_matches([':', '{', ',']);
                 (!name.is_empty()).then(|| name.to_owned())
             })
             .collect()
@@ -346,156 +351,94 @@ impl Example {
     }
 }
 
-/// Pulls the verifiable blocks out of one Markdown file.
+/// Sorts one file's example blocks into the ones to verify and the convention
+/// violations, and counts how many blocks were recognised as examples at all.
 ///
-/// Every fenced block is tracked, so that a fence inside a longer-fenced block
-/// (a Markdown sample showing a ```` ```ridl ```` fence, say) is content rather
-/// than an opener. Only `ridl` and `typl` blocks are collected.
-///
-/// Returns the examples to stage, the convention violations found, and the set
-/// of line numbers the scanner accounted for — every fence it opened or closed
-/// and every line it read as content. [`unaccounted_fences`] uses that set to
-/// find fences this scanner missed.
-fn extract(origin: &str, markdown: &str) -> (Vec<Example>, Vec<String>, BTreeSet<usize>) {
+/// Markers are read **before** anything else, so `ignore` suppresses every
+/// objection this function could raise. An author who hits a refusal must
+/// always have a way to say "not an example" — otherwise the only remaining
+/// move is to delete the example, which is worse than not checking it.
+fn classify(origin: &str, markdown: &str) -> (Vec<Example>, Vec<String>, usize) {
     let mut examples = Vec::new();
     let mut problems = Vec::new();
-    let mut accounted = BTreeSet::new();
-    let mut open: Option<(Fence, usize, Option<Example>)> = None;
+    let mut accounted = 0;
 
-    for (index, line) in markdown.lines().enumerate() {
-        let number = index + 1;
-        match &mut open {
-            Some((fence, _, collecting)) => {
-                accounted.insert(number);
-                if closes(line, fence) {
-                    if let Some(example) = collecting.take() {
-                        if example.package().is_none() {
-                            problems.push(format!(
-                                "{}: a verified `{}` block declares no `package`. Every verified \
-                                 block is staged as a whole source file, so it needs one. Give it \
-                                 a `package` declaration, or mark the fence `{},ignore` if the \
-                                 block is a fragment shown for illustration.",
-                                example.locator(),
-                                example.language,
-                                example.language,
-                            ));
-                        } else {
-                            examples.push(example);
-                        }
-                    }
-                    open = None;
-                } else if let Some(example) = collecting {
-                    example.body.push_str(dedent(line, fence.indent));
-                    example.body.push('\n');
+    for block in fenced_blocks(markdown) {
+        if !is_example_language(&block.info) {
+            continue;
+        }
+        accounted += 1;
+        let locator = format!("{origin}:{}", block.fence_line);
+
+        let mut words = block.info.split([',', ' ']).filter(|word| !word.is_empty());
+        let language = words.next().unwrap_or_default().to_owned();
+
+        let mut allowed = BTreeSet::new();
+        let mut skip = false;
+        let mut bad = Vec::new();
+        for marker in words {
+            if marker == "ignore" {
+                skip = true;
+            } else if let Some(code) = marker.strip_prefix("allow=") {
+                if code.is_empty() {
+                    bad.push(marker.to_owned());
+                } else {
+                    allowed.insert(code.to_owned());
                 }
+            } else {
+                bad.push(marker.to_owned());
             }
-            None => {
-                let Some((fence, info)) = opening_fence(line) else {
-                    continue;
-                };
-                let mut words = info.split([',', ' ']).filter(|word| !word.is_empty());
-                let language = words.next().unwrap_or_default();
-                if language != "ridl" && language != "typl" {
-                    // Track the block, so its contents cannot be read as fences
-                    // of their own — but leave the opener unaccounted, so that
-                    // a near-miss language word (`RIDL`, `ridl{.class}`) reaches
-                    // the backstop instead of passing as some other language.
-                    open = Some((fence, number, None));
-                    continue;
-                }
-                accounted.insert(number);
+        }
 
-                let mut allowed = BTreeSet::new();
-                let mut skip = false;
-                let mut bad = Vec::new();
-                for marker in words {
-                    if marker == "ignore" {
-                        skip = true;
-                    } else if let Some(code) = marker.strip_prefix("allow=") {
-                        if code.is_empty() {
-                            bad.push(marker.to_owned());
-                        } else {
-                            allowed.insert(code.to_owned());
-                        }
-                    } else {
-                        bad.push(marker.to_owned());
-                    }
-                }
-                if !bad.is_empty() {
-                    problems.push(format!(
-                        "{origin}:{number}: unrecognised fence marker(s) {bad:?} on a \
-                         `{language}` block. This harness knows `ignore`, which skips the block, \
-                         and `allow=<CODE>`, which permits one diagnostic code; anything else is \
-                         a typo that would have silently skipped verification.",
-                    ));
-                    open = Some((fence, number, None));
-                    continue;
-                }
-                if skip {
-                    if !allowed.is_empty() {
-                        problems.push(format!(
-                            "{origin}:{number}: `ignore` and `allow=` together — an ignored block \
-                             is never compiled, so it can allow nothing.",
-                        ));
-                    }
-                    open = Some((fence, number, None));
-                    continue;
-                }
-
-                let example = Example {
-                    origin: origin.to_owned(),
-                    fence_line: number,
-                    language: language.to_owned(),
-                    allowed,
-                    body: String::new(),
-                };
-                open = Some((fence, number, Some(example)));
+        if skip {
+            if !allowed.is_empty() {
+                problems.push(format!(
+                    "{locator}: `ignore` and `allow=` together — an ignored block is never \
+                     compiled, so it can allow nothing."
+                ));
             }
+            continue;
+        }
+        if !bad.is_empty() {
+            problems.push(format!(
+                "{locator}: unrecognised fence marker(s) {bad:?}. This harness knows `ignore`, \
+                 which skips the block, and `allow=<CODE>`, which permits one diagnostic code; \
+                 anything else is a typo that would have silently skipped verification.",
+            ));
+            continue;
+        }
+        if language != "ridl" && language != "typl" {
+            problems.push(format!(
+                "{locator}: the language word is `{language}`, not exactly `ridl` or `typl`. \
+                 mdBook still renders this as an example a reader will believe, but the \
+                 convention does not recognise it, so nothing would have compiled it. Spell the \
+                 language word exactly, or mark the fence `ignore` if it is not an example.",
+            ));
+            continue;
+        }
+
+        let example = Example {
+            origin: origin.to_owned(),
+            fence_line: block.fence_line,
+            language,
+            allowed,
+            body: block.body,
+        };
+        if example.package().is_none() {
+            problems.push(format!(
+                "{}: a verified `{}` block declares no `package`. Every verified block is staged \
+                 as a whole source file, so it needs one. Give it a `package` declaration, or \
+                 mark the fence `{},ignore` if the block is a fragment shown for illustration.",
+                example.locator(),
+                example.language,
+                example.language,
+            ));
+        } else {
+            examples.push(example);
         }
     }
 
-    if let Some((_, fence_line, _)) = open {
-        problems.push(format!(
-            "{origin}:{fence_line}: a code fence is never closed. Everything after it was read \
-             as part of that block, so any example below it went unverified."
-        ));
-    }
-
     (examples, problems, accounted)
-}
-
-/// The backstop: any line that looks like it opens a `ridl` or `typl` example
-/// but which [`extract`] never saw.
-///
-/// The scanner reads fences; it does not read block structure. A fence inside a
-/// block quote, or one whose language word is misspelled `RIDL`, is a fence to
-/// mdBook — it renders as `class="language-ridl"`, so a reader believes it — and
-/// invisible to the scanner. Rather than reimplement CommonMark to catch every
-/// such case, this refuses to pass a book containing one.
-///
-/// That makes the failure mode *loud* rather than silent, which is the property
-/// that matters: an author gets told to move the fence somewhere the harness can
-/// read it, instead of shipping an example nothing checked.
-fn unaccounted_fences(origin: &str, markdown: &str, accounted: &BTreeSet<usize>) -> Vec<String> {
-    markdown
-        .lines()
-        .enumerate()
-        .filter_map(|(index, line)| {
-            let number = index + 1;
-            if accounted.contains(&number) || !looks_like_example_fence(line) {
-                return None;
-            }
-            Some(format!(
-                "{origin}:{number}: this looks like a `ridl`/`typl` example fence, but the \
-                 scanner did not read it as one, so it was never verified — while mdBook still \
-                 renders it as an example a reader will believe. Usual causes: the fence sits \
-                 inside a block quote, or its language word is not exactly `ridl` or `typl` \
-                 (`RIDL`, `ridl{{.class}}`). Move it out of the block quote, or spell the \
-                 language word exactly.\n    {}",
-                line.trim()
-            ))
-        })
-        .collect()
 }
 
 // ------------------------------------------------------------ diagnostics ---
@@ -759,10 +702,15 @@ fn verify_book(book_root: &Path) -> Result<usize, String> {
             .into_owned();
         let markdown = std::fs::read_to_string(&file)
             .unwrap_or_else(|error| panic!("read {}: {error}", file.display()));
-        let (found, found_problems, accounted) = extract(&origin, &markdown);
+        let (found, found_problems, accounted) = classify(&origin, &markdown);
         examples.extend(found);
         problems.extend(found_problems);
-        problems.extend(unaccounted_fences(&origin, &markdown, &accounted));
+
+        problems.extend(render_agreement(
+            &origin,
+            renders_as_examples(&markdown),
+            accounted,
+        ));
     }
 
     if !problems.is_empty() {
@@ -1065,24 +1013,49 @@ fn an_indented_fence_is_verified_at_every_list_depth() {
     }
 }
 
-/// A fence the scanner cannot read — inside a block quote, or with a language
-/// word that is not exactly `ridl`/`typl` — fails the book rather than being
-/// skipped.
+/// Every container CommonMark defines puts a fence somewhere a hand-written
+/// scanner used to miss. Each of these is now an ordinary example, compiled
+/// like any other.
 ///
-/// mdBook renders all of these as `class="language-ridl"`, so a reader believes
-/// them. Reading them correctly means reimplementing CommonMark block
-/// structure; refusing them is the honest alternative, and it is robust against
-/// the cases nobody has thought of yet.
+/// Each fixture carries a clean block first, so a skipped block would make the
+/// book *pass*: that is the shape the defect took three times running.
 #[test]
-fn a_fence_the_scanner_cannot_read_fails_the_book() {
+fn a_fence_in_any_container_is_verified() {
+    let broken = "package zz.probe\n\ntype Bad : integer [10..0]";
+    let quoted: String = broken.lines().map(|line| format!("> {line}\n")).collect();
     let cases = [
-        ("block-quote", "> ```ridl\n> package zz.quoted\n> ```\n"),
-        ("upper-case", "```RIDL\npackage zz.upper\n```\n"),
-        ("attribute", "```ridl{.class}\npackage zz.attr\n```\n"),
+        ("block quote", format!("> ```ridl\n{quoted}> ```\n")),
+        (
+            "list item, unclosed fence in the step before it",
+            format!(
+                "1. Run it:\n\n   ```console\n   $ ridl check\n\n2. Then:\n\n   ```ridl\n   {}\n   ```\n",
+                broken.replace('\n', "\n   ")
+            ),
+        ),
+        (
+            "list ended by a column-zero fence",
+            format!("- Step:\n\n  ```console\n  $ ridl check\n\n```ridl\n{broken}\n```\n"),
+        ),
+        (
+            "after an indented code block holding an unclosed fence",
+            format!("Text:\n\n    ```console\n    $ ridl check\n\n```ridl\n{broken}\n```\n"),
+        ),
+        (
+            "HTML block",
+            format!("<div>\n\n```ridl\n{broken}\n```\n\n</div>\n"),
+        ),
+        (
+            "nested list at column 6",
+            format!(
+                "1. outer\n   1. inner:\n\n      ```ridl\n      {}\n      ```\n",
+                broken.replace('\n', "\n      ")
+            ),
+        ),
     ];
+
     for (label, markdown) in cases {
         let book = book_of(
-            label,
+            "container",
             &format!("```ridl\npackage zz.clean\n\ntype Ok : integer [0..1]\n```\n\n{markdown}"),
         );
         let report = match verify_book(book.path()) {
@@ -1090,8 +1063,56 @@ fn a_fence_the_scanner_cannot_read_fails_the_book() {
             Err(report) => report,
         };
         assert!(
-            report.contains("never verified"),
-            "{label}: the report must say the fence went unverified, got:\n{report}"
+            report.contains("TYPL-104"),
+            "{label}: the block must be compiled and its diagnostic reported, got:\n{report}"
+        );
+    }
+}
+
+/// A language word that is not exactly `ridl`/`typl` is refused: mdBook renders
+/// it as an example a reader believes, while the convention does not recognise
+/// it, so nothing would compile it.
+#[test]
+fn a_near_miss_language_word_is_refused() {
+    for spelling in ["RIDL", "Ridl", "ridl{.class}", "typl-ish"] {
+        let book = book_of(
+            "near-miss",
+            &format!(
+                "```ridl\npackage zz.clean\n\ntype Ok : integer [0..1]\n```\n\n\
+                 ```{spelling}\npackage zz.probe\n```\n"
+            ),
+        );
+        let report = match verify_book(book.path()) {
+            Ok(count) => panic!("{spelling}: the book passed with {count} block(s) verified"),
+            Err(report) => report,
+        };
+        assert!(
+            report.contains("not exactly `ridl` or `typl`"),
+            "{spelling}: the report must name the language word, got:\n{report}"
+        );
+    }
+}
+
+/// `ignore` suppresses the refusal above, and every other objection.
+///
+/// A refusal is only honest if the author has a way out. Without this, an
+/// author told "this is not an example" has no way to say so, and their only
+/// remaining move is to delete the block.
+#[test]
+fn ignore_suppresses_a_refusal() {
+    for spelling in ["RIDL", "ridl{.class}"] {
+        let book = book_of(
+            "ignore-refusal",
+            &format!(
+                "```ridl\npackage zz.clean\n\ntype Ok : integer [0..1]\n```\n\n\
+                 ```{spelling},ignore\nnot an example at all\n```\n"
+            ),
+        );
+        assert_eq!(
+            verify_book(book.path())
+                .unwrap_or_else(|report| panic!("{spelling},ignore must pass, got:\n{report}")),
+            1,
+            "{spelling}: only the clean block is verified"
         );
     }
 }
@@ -1231,10 +1252,38 @@ fn an_uncoded_diagnostic_cannot_be_allowed() {
     );
 
     let report = verify_book(book.path()).expect_err("an uncoded diagnostic must be rejected");
+    let (_, unnamed) = report
+        .split_once("diagnostic(s) no block named:")
+        .expect("the report lists the diagnostics no block named");
     assert!(
-        report.contains("unknown type name"),
-        "the report must carry the uncoded diagnostic, got:\n{report}"
+        unnamed.contains("unknown type name"),
+        "the uncoded diagnostic must reach the `no block named` list, not merely appear in the \
+         raw report — that list is what the allow-check reasons over; got:\n{report}"
     );
+}
+
+/// `parse_report` recognises a diagnostic printed without a code.
+///
+/// The detection half of the uncoded-diagnostic chain. `allows` refuses an
+/// uncoded diagnostic, but only if one is ever parsed out in the first place:
+/// the compiler prints those as a bare `error:` with no `[CODE]`, and dropping
+/// that arm makes them vanish from the reasoning silently.
+#[test]
+fn parse_report_detects_an_uncoded_diagnostic() {
+    let report = "error: unknown type name `Speed`\n   ┌─ /staging/veh/common/a.ridl:4:20\n   │\n";
+
+    let found = parse_report(report);
+    assert_eq!(found.len(), 1, "one diagnostic is parsed");
+    assert!(
+        found[0].code.is_none(),
+        "a diagnostic printed without `[CODE]` parses as uncoded"
+    );
+    assert_eq!(
+        found[0].file,
+        Some(PathBuf::from("/staging/veh/common/a.ridl")),
+        "its locator is attributed to the staged file"
+    );
+    assert_eq!(found[0].position, "4:20", "its position is carried through");
 }
 
 /// The unit half of the same guarantee, which no book fixture can reach: an
@@ -1288,20 +1337,22 @@ fn verdict_fails_on_a_bare_non_zero_exit() {
     );
 }
 
-/// An unclosed fence is reported. Without the check, everything after it is
-/// swallowed as that block's content and silently goes unverified.
+/// An unclosed fence is closed at the end of its container, per CommonMark, and
+/// the block is verified — the same block mdBook renders. The hand-written
+/// scanner used to swallow everything after it instead, which is how a broken
+/// example in a later list item went unchecked.
 #[test]
-fn an_unclosed_fence_is_rejected() {
+fn an_unclosed_fence_is_still_verified() {
     let book = book_of(
         "unclosed",
         "```ridl\npackage zz.clean\n\ntype Ok : integer [0..1]\n```\n\n\
          ```ridl\npackage zz.unclosed\n\ntype Bad : integer [10..0]\n",
     );
 
-    let report = verify_book(book.path()).expect_err("an unclosed fence must be rejected");
+    let report = verify_book(book.path()).expect_err("the unclosed block must be verified");
     assert!(
-        report.contains("never closed"),
-        "the report must name the unclosed fence, got:\n{report}"
+        report.contains("TYPL-104"),
+        "the unclosed block must be compiled, got:\n{report}"
     );
 }
 
@@ -1420,4 +1471,74 @@ fn markdown_in_a_subdirectory_is_read() {
         report.contains("deep.md") && report.contains("TYPL-104"),
         "the nested file must be read and named, got:\n{report}"
     );
+}
+
+/// The render-count guard fires on a mismatch and stays quiet on agreement.
+#[test]
+fn render_agreement_reports_a_mismatch() {
+    assert!(
+        render_agreement("chapter.md", 3, 3).is_none(),
+        "agreement is silent"
+    );
+    let problem = render_agreement("chapter.md", 3, 2).expect("a mismatch is reported");
+    assert!(
+        problem.contains("chapter.md") && problem.contains("going unverified"),
+        "the report must name the file and what the difference means, got:\n{problem}"
+    );
+}
+
+/// The property that guard asserts: over every container shape the book might
+/// use, the event walk finds exactly the blocks the renderer marks as examples.
+#[test]
+fn the_event_walk_agrees_with_the_renderer() {
+    let body = "package zz.probe\n\ntype Ok : integer [0..1]";
+    let quoted: String = body.lines().map(|line| format!("> {line}\n")).collect();
+    let corpus = [
+        ("top level", format!("```ridl\n{body}\n```\n")),
+        ("block quote", format!("> ```ridl\n{quoted}> ```\n")),
+        (
+            "list item at column 4",
+            format!(
+                "10. Step:\n\n    ```ridl\n    {}\n    ```\n",
+                body.replace('\n', "\n    ")
+            ),
+        ),
+        (
+            "nested list at column 6",
+            format!(
+                "1. a\n   1. b:\n\n      ```ridl\n      {}\n      ```\n",
+                body.replace('\n', "\n      ")
+            ),
+        ),
+        (
+            "html block",
+            format!("<div>\n\n```ridl\n{body}\n```\n\n</div>\n"),
+        ),
+        ("tilde fence", format!("~~~ridl\n{body}\n~~~\n")),
+        ("long fence", format!("````ridl\n{body}\n````\n")),
+        ("ignored block", format!("```ridl,ignore\n{body}\n```\n")),
+        ("near-miss language word", format!("```RIDL\n{body}\n```\n")),
+        (
+            "quoted inside a longer fence",
+            "````markdown\n```ridl\nnot an example\n```\n````\n".to_owned(),
+        ),
+        (
+            "indented code block, which is not an example",
+            format!(
+                "Text:\n\n    ```ridl\n    {}\n    ```\n",
+                body.replace('\n', "\n    ")
+            ),
+        ),
+        ("no examples at all", "```sh\nridl check\n```\n".to_owned()),
+    ];
+
+    for (label, markdown) in corpus {
+        let (_, _, accounted) = classify("chapter.md", &markdown);
+        assert_eq!(
+            accounted,
+            renders_as_examples(&markdown),
+            "{label}: the event walk and the renderer must agree on how many example blocks \
+             this is:\n{markdown}"
+        );
+    }
 }

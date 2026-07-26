@@ -105,10 +105,13 @@ apart unnoticed — check those two by reading when you touch either file.
   does not name — nor name one it does not draw. A verified block declares its
   own `package` and is a whole file; a fragment is marked `` ```ridl,ignore ``;
   a deliberate diagnostic is marked `` ```ridl,allow=<CODE> ``. Package names
-  are book-wide. A fence may be indented to any depth, but one inside a block
-  quote, or with a language word that is not exactly `ridl`/`typl`, fails the
-  book rather than being skipped. See `CONTRIBUTING.md`, "Writing examples in
-  the book".
+  are book-wide. Extraction uses `pulldown-cmark`, the parser mdBook uses, so a
+  fence anywhere mdBook reads one is verified — do not replace it with pattern
+  matching. See `CONTRIBUTING.md`, "Writing examples in the book".
+- **Diagnostic codes written in Markdown are unguarded.** The catalogue drift
+  check (issue #189) scans `.rs` sources only, so a `TYPL-`/`RIDL-` code cited
+  in `docs/` — including an `allow=<CODE>` fence marker — is not checked against
+  the catalogue. Recorded on driftsys/ridl#191.
 - **The book describes the system as built.** There is no runtime in this
   workspace, so prose about delivery, timing behaviour, or provider-side
   contract enforcement is describing the specification — say so where it

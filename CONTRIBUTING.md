@@ -96,8 +96,9 @@ The harness is fail-closed. Each of these is an error rather than a silent skip:
   package provides, or the block's own package. The compiler resolves the
   package and stops — an unresolved _name_ inside a package it found draws no
   diagnostic — so the harness checks it rather than trusting the gap;
-- a fence the scanner cannot read (see below);
-- an unclosed fence, which would swallow every example after it;
+- a language word that is not exactly `ridl` or `typl` — `RIDL`, `ridl{.class}`
+  — which mdBook still renders as an example a reader believes, while the
+  convention does not recognise it;
 - a book with no verified blocks at all.
 
 A package name is a **book-wide** namespace, not a per-chapter one. Two chapters
@@ -105,25 +106,34 @@ that both declare `package veh.demo` are staged into one directory and collide
 (`TYPL-009`) on every declaration they repeat, so give each chapter its own
 package prefix.
 
+`ignore` suppresses every one of those objections. If the harness refuses a
+block you did not mean as an example, that is the answer.
+
+One gap to know about: the diagnostic-catalogue drift check scans `.rs` sources
+only, so a code written in Markdown — including in an `allow=` marker — is not
+checked against the catalogue. A typo there shows up as a stale-allowance
+failure rather than an unknown-code one (driftsys/ridl#191).
+
 ### Where a fence may sit
 
-Fences are three or more backticks or tildes, closed by at least as long a run
-of the same marker. **Indentation is unrestricted**: a fence inside a list item,
-at any nesting depth, is verified like any other — including from step 10 of an
-ordered list, where the content column passes the three that CommonMark allows a
-top-level fence.
+**Anywhere mdBook reads one.** Extraction uses `pulldown-cmark`, the CommonMark
+parser mdBook itself uses, so a fence inside a list item at any depth, inside a
+block quote, or inside an HTML block is an ordinary example. So is one after an
+unclosed fence earlier in the file, which CommonMark closes at the end of its
+container.
 
-Two placements the scanner declines, and **fails the book rather than
-skipping**:
+Two consequences worth knowing:
 
-- a fence inside a **block quote**, because reading it means tracking block
-  structure;
-- a language word that is not exactly `ridl` or `typl` — `RIDL`, `ridl{.class}`.
+- a block indented four spaces is an _indented_ code block in CommonMark. It has
+  no info string, mdBook gives it no language class, and the harness skips it —
+  so indenting a fence is a way to show one without it being compiled.
+- the info string's language word must be exactly `ridl` or `typl`. `RIDL` and
+  `ridl{.class}` render as examples but are refused, because nothing would have
+  compiled them.
 
-mdBook renders both as `class="language-ridl"`, so a reader believes them. If
-you hit this, move the fence out of the block quote or fix the language word.
-The refusal is deliberate: guessing at CommonMark block structure is how the
-harness would go back to failing silently.
+Earlier versions of this harness scanned lines by hand and failed _open_ three
+times over — each time on a fence that mdBook rendered and the harness never
+saw. Do not replace the parser with pattern matching.
 
 A `ridl` fence quoted inside a longer fence — as in the samples above — is
 documentation rather than an example, and is left alone.
