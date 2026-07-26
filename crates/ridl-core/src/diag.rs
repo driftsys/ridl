@@ -72,9 +72,18 @@ impl DiagCode {
 ///
 /// One entry expands to both the `DiagCode` constant and the [`CatalogEntry`]
 /// that names it, so a code with no catalogue entry cannot be written: there is
-/// no second list to forget. The macro also generates [`ALL_CATALOGS`], which
-/// makes it invocable exactly once — a second invocation redefines that constant
-/// and the crate stops compiling.
+/// no second list to forget.
+///
+/// The macro also generates [`ALL_CATALOGS`], which the guards read to find
+/// every catalogue. That makes it invocable only once **per module** — a second
+/// invocation beside this one redefines the constant and the crate stops
+/// compiling. It does **not** make it invocable once per crate: a second
+/// invocation inside a child module of `diag` compiles, and its catalogue is
+/// invisible to `ALL_CATALOGS` here. What covers that case is
+/// `codes_written_as_string_literals_are_all_catalogued`, and it covers it for a
+/// structural reason rather than by luck — `$code:literal` guarantees every code
+/// the macro declares is spelled as a literal in a `.rs` file, so a catalogue
+/// the guards cannot see still puts its codes where the scan can.
 ///
 /// This replaces the pair of hand-maintained arrays `FORM_CATALOG` and
 /// `MANI_CATALOG` carried until E2 close-out, each guarded by a test that
@@ -406,6 +415,16 @@ diag_codes! {
     /// anomaly kept as written (ADR-0008 decision 6). RIDL-111 and RIDL-142 are
     /// reserved by ADR-0008 decision 21 and are not declared yet, so they are
     /// absent here too.
+    ///
+    /// Adding a code here does **not** make it show up in a corpus fixture.
+    /// `RIDL_PROFILE_CODES` in `crates/ridlc/tests/corpus.rs` — the list that
+    /// gives every ridl code a living example — is a list of code *strings*
+    /// with no link to these constants, so a code minted here and omitted there
+    /// compiles and passes the suite. Decision 21 asks the declare-once
+    /// mechanism to cover that list as well, and it does not: the list carries a
+    /// `Provoked` discriminator this catalogue has no equivalent of. Stated
+    /// here as decision 21 requires; the gap is separate work, tracked in issue
+    /// #172.
     RIDL_CATALOG {
         /// `signal` or `event` without a timing annotation — the default
         /// `[100ms..1000ms]` (or the configured `[defaults].timing`) is applied
@@ -1131,6 +1150,20 @@ mod tests {
     ///   `no_diagnostic_constant_is_declared_outside_the_macro` covers the
     ///   hand-written-constant case; a `concat!` at a *parser* emission site
     ///   evades both;
+    /// - a code spelled **inside a longer literal**, such as
+    ///   `"error[TYPL-905]: boom"`. A quote is required on both sides of the
+    ///   code, which is what keeps prose out, and it is also what lets an
+    ///   embedded code through;
+    /// - a **four-digit** code, `"TYPL-9060"`. The scan takes exactly three
+    ///   digits followed by the closing quote, matching the shape ADR-0007
+    ///   decision 2 fixes. Neither of these two is live: an audit of all 104
+    ///   `PREFIX-NNN` occurrences in `.rs` sources regardless of quoting found
+    ///   the only uncatalogued ones are the reserved codes and the typl §16
+    ///   codes named below, every one of them in prose;
+    /// - a code written in a **comment**, which is stripped before the scan
+    ///   runs. Nothing emits a diagnostic from a comment, and leaving comments
+    ///   in made this file report its own prose about reserved and absent
+    ///   codes;
     /// - a code written only in Markdown, in a `.typl`/`.ridl` fixture, or in a
     ///   snapshot. The typl reference §16 documents six codes no constant
     ///   declares — TYPL-107, TYPL-112, TYPL-205, and TYPL-401 to TYPL-403 — so
@@ -1165,6 +1198,11 @@ mod tests {
         for path in &sources {
             let text = std::fs::read_to_string(path)
                 .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+            // Comments first: a diagnostic is never emitted from one, and prose
+            // about a code that is deliberately absent — a reserved number, a
+            // worked example of the shape this file rejects — would otherwise
+            // be reported as an escape.
+            let text = strip_line_comments(&text);
             let literals = code_literals(&text);
             if !literals.is_empty() {
                 files_holding_codes += 1;
@@ -1191,9 +1229,11 @@ mod tests {
 
         // Width. Every assertion above is vacuous if the walk finds nothing, and
         // a walk rooted at the wrong directory finds nothing quietly. These
-        // floors are well under what the workspace holds today (79 `.rs` files,
-        // 79 distinct codes outside this module, 16 files carrying a code) and
-        // fail loudly if the scan stops reaching past its own crate.
+        // floors are well under what the workspace holds today — 79 `.rs` files,
+        // 21 of them carrying a code, 92 distinct codes outside this module —
+        // and fail loudly if the scan stops reaching past its own crate. The
+        // three figures are measured, not maintained: they are a comment, and
+        // the assertions below hold whether or not they drift.
         assert!(
             sources.len() >= 60,
             "the walk found only {} `.rs` files under {} — it is not reaching \
@@ -1213,63 +1253,109 @@ mod tests {
         );
     }
 
-    /// No `DiagCode` constant is declared outside [`diag_codes!`].
+    /// No `DiagCode` constant is declared outside [`diag_codes!`], anywhere in
+    /// the workspace.
     ///
-    /// An inherent `impl DiagCode` can only be written in this crate, so this
-    /// crate is the whole surface. The scan above already reports a hand-written
-    /// constant whose code is spelled as a literal, because the literal is what
-    /// it looks for — but one written `DiagCode(concat!("RIDL", "-199"))`
-    /// compiles and slips past it. This catches that form, and any other, by
-    /// looking at the declaration rather than at the code string.
+    /// The scan above already reports a hand-written constant whose code is
+    /// spelled as a literal, because the literal is what it looks for — but one
+    /// whose code is assembled compiles and slips past it. This catches that
+    /// form, and any other, by looking at the declaration rather than at the
+    /// code string.
     ///
-    /// It is a textual check over one crate's sources, so it recognises the two
-    /// forms a `DiagCode` constant is written in and rejects everything else. A
-    /// declaration deliberately reworded to avoid the two — a block expression,
-    /// a `const fn` indirection — evades it. That is a different act from
-    /// forgetting a catalogue entry, which is what this file is defending
-    /// against.
+    /// The surface is the whole workspace, not this crate. An inherent
+    /// `impl DiagCode` can only be written here, but the newtype's field is
+    /// public, so any crate can construct one and give it a name. A constant of
+    /// this type declared in `ridl-sem` with an assembled code compiles and
+    /// passes both the suite and clippy when this walks `ridl-core` alone, so it
+    /// walks everything.
+    ///
+    /// Matching is whitespace-insensitive and accepts a path-qualified type,
+    /// because a declaration in another crate writes the type as
+    /// `ridl_core::diag::…` and rustfmt may break it across lines. Comments are
+    /// stripped first, so prose describing the forbidden shape — including this
+    /// paragraph — does not report itself; the cost is that a `//` inside a
+    /// string literal hides the rest of that line from the scan.
+    ///
+    /// It remains a textual check: it recognises the two shapes a `DiagCode`
+    /// constant is written in and rejects everything else, so a declaration
+    /// reworded to avoid both evades it. The two evasions are not symmetric,
+    /// and only their combination gets through:
+    ///
+    /// - a declaration writing the type under an alias (`use … DiagCode as DC;`
+    ///   then `const RIDL_199: DC = DC("RIDL-199");`) is invisible here, but its
+    ///   code is spelled, so `codes_written_as_string_literals_are_all_catalogued`
+    ///   reports it;
+    /// - a declaration with an assembled code is invisible to that scan, but
+    ///   names the type, so this one reports it — verified against a qualified,
+    ///   line-broken `concat!` declaration in `ridl-sem` and against one in a
+    ///   child module of `diag`;
+    /// - **both at once** — an aliased type and an assembled code — passes the
+    ///   whole workspace suite and clippy. That is a surviving escape, and it is
+    ///   a deliberate act rather than the omission this file defends against.
     #[test]
     fn no_diagnostic_constant_is_declared_outside_the_macro() {
-        // The needle and the two accepted forms are assembled rather than
-        // spelled: this test lives in the file it scans, so writing them out
-        // whole would make the test report itself.
-        let needle = format!(": DiagCode = DiagCode{}", '(');
+        // Assembled rather than spelled: this test lives in a file it scans, so
+        // writing the shapes out whole would make the test report itself.
+        let anchor = format!("DiagCode{}", '=');
         // The macro body, expanding one entry into its constant.
-        let in_macro = format!("pub const $konst{needle}$code);");
+        let in_macro = format!("pubconst$konst:{anchor}DiagCode($code);");
         // The sentinel, which has no catalogue entry by design.
-        let sentinel = format!("pub const NONE{needle}\"\");");
+        let sentinel = format!("pubconstNONE:{anchor}DiagCode(\"\");");
+        let accepted = [in_macro.as_str(), sentinel.as_str()];
 
+        let root = workspace_root();
         let mut sources = Vec::new();
-        collect_rust_sources(&workspace_root().join("crates/ridl-core/src"), &mut sources);
+        collect_rust_sources(&root, &mut sources);
         assert!(
-            sources.len() >= 5,
-            "the walk found only {} sources in `ridl-core`",
+            sources.len() >= 60,
+            "the walk found only {} `.rs` files under {} — it is not reaching \
+             the workspace",
             sources.len(),
+            root.display(),
         );
 
         let mut declarations = 0usize;
         for path in &sources {
             let text = std::fs::read_to_string(path)
                 .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
-            for line in text.lines() {
-                let line = line.trim();
-                if !line.contains(&needle) {
-                    continue;
-                }
-                declarations += 1;
+            let stripped = strip_line_comments(&text);
+            let despaced: String = stripped.chars().filter(|c| !c.is_whitespace()).collect();
+
+            for (at, _) in despaced.match_indices(&anchor) {
+                let recognised = accepted.iter().any(|form| {
+                    let offset = form.find(&anchor).expect("each form holds the anchor");
+                    at >= offset && despaced[at - offset..].starts_with(form)
+                });
                 assert!(
-                    line == in_macro || line == sentinel,
-                    "{}: `{line}` declares a `DiagCode` constant outside \
+                    recognised,
+                    "{}: `…{}…` declares a `DiagCode` constant outside \
                      `diag_codes!`, so it carries no catalogue entry. Move it \
                      into the macro.",
                     path.display(),
+                    &despaced[at.saturating_sub(40)..(at + 40).min(despaced.len())],
                 );
+                declarations += 1;
             }
         }
         assert_eq!(
             declarations, 2,
-            "expected exactly the macro body and the `NONE` sentinel",
+            "expected exactly two `DiagCode` constant declarations in the \
+             workspace — the macro body and the `NONE` sentinel, both in this \
+             file",
         );
+    }
+
+    /// `text` with every `//` line comment removed, so prose about a forbidden
+    /// code shape is not mistaken for the shape itself. A `//` inside a string
+    /// literal takes the rest of its line with it.
+    fn strip_line_comments(text: &str) -> String {
+        text.lines()
+            .map(|line| match line.find("//") {
+                Some(at) => &line[..at],
+                None => line,
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// The workspace root: two levels above `crates/ridl-core`.

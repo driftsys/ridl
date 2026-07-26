@@ -60,10 +60,19 @@ pub enum Verdict {
 /// A 21st variant therefore stops three functions compiling — [`classify`],
 /// [`explain`], and [`category_word`] — and reaches `CATEGORIES` with no second
 /// edit. The escape rustc's own `help:` text proposes for those three errors is
-/// a wildcard arm, which compiles and passes the whole suite; each of the three
-/// functions denies `clippy::wildcard_enum_match_arm` and
-/// `clippy::match_wildcard_for_single_variants` for exactly that reason (the
-/// second is the one that fires when the wildcard covers a single new variant).
+/// a wildcard arm. Each of the three functions denies
+/// `clippy::wildcard_enum_match_arm` and
+/// `clippy::match_wildcard_for_single_variants` for exactly that reason. The
+/// second lint is the load-bearing one: the first does not fire when the
+/// wildcard covers a single variant, which is precisely the 21st-variant case,
+/// so denying it alone leaves clippy green.
+///
+/// How far the wildcard gets before clippy stops it depends on what its body
+/// says. `_ => todo!()` panics the `--explain` coverage test, and a bare
+/// `_ => "unknown"` fails it — the row names no verdict. A wildcard whose text
+/// happens to contain "compatible" passes all 115 tests. So the escape is real
+/// but narrow, and `cargo test` alone catches the two careless spellings of it.
+/// `just build` runs clippy so that the third is caught too.
 ///
 /// What this does **not** close: rustc forces *an* arm, not the right one. A
 /// 21st variant given an explicit arm that classifies compatible, or whose rule
