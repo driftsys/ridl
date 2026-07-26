@@ -10,15 +10,19 @@
 // tombstones and deprecation therefore appear here inside an inline shape, so
 // a consumer that misses them is caught by a snapshot rather than by a reader.
 //
-// `Speed` and `Temperature` are not imported here: imports bind at package
-// scope (ADR-0002 §1 — "files within a package are purely organisational"), so
-// `appendix-a.ridl`'s imports already carry them. Repeating an import in a
-// second file of the same package is reported as a collision (TYPL-006); the
-// diagnostic showcase pins that behaviour.
+// `Speed` and `Temperature` are already imported by `appendix-a.ridl`, and
+// imports bind at package scope (ADR-0002 §1 — "files within a package are
+// purely organisational"), so these two lines bind nothing new. They are
+// written anyway, so this file reads on its own — and so the entry pins that a
+// repeated identical import draws no diagnostic. Until #174 it drew TYPL-006,
+// which is why they were once omitted; see NOTES, "Imports bind at package
+// scope; a repeated import was an error".
 
 package veh.cluster
 
 import veh.common.Ratio
+import veh.common.Speed
+import veh.common.Temperature
 
 // --- vocabulary for the inline shape ---
 

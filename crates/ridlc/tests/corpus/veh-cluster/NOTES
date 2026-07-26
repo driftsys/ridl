@@ -42,6 +42,19 @@ and §14.5 needs both service forms exercised.
   members appended at the end of `veh.hvac.cabin`. They are appended rather than
   inserted so the ordinals above — and the synthesized transport identity
   `veh.hvac.cabin#13` — do not move.
+
+  _What this entry does not isolate._ Appendix A's
+  `require position != GearPosition.PARK` references an **imported** name from a
+  contract clause, which is the shape of the TYPL-007 defect #174 fixed: the
+  resolver's use-collection walked type references and literals but not
+  expressions, so a name reached only from a contract was reported unused. This
+  entry did not surface it, because `GearPosition` is also the parameter's type
+  two lines above and the type reference alone marks it used. Isolating it needs
+  an import that a contract clause is the *only* reader of, which is a fixture
+  rather than a corpus entry:
+  `an_import_used_only_in_a_contract_clause_is_not_unused` in `resolve.rs`. The
+  `const` reference here, `MAX_FAN`, is declared in `services.ridl` rather than
+  imported, so it never reached the rule either.
 - **Cross-package references.** Appendix A's five imports resolve through the
   workspace member, and `ridl.std` types (`Label`, `Message`, `Timestamp`,
   `Version`) resolve without an import.
@@ -101,10 +114,11 @@ which provokes it independently.
 ## Findings this entry pins
 
 Nothing here is worked around. Each is written the way the toolchain behaves, so
-the snapshots pin the behaviour and a repair shows up as a snapshot change. One
-of them — `internal` on the interaction layer — has since been repaired that
-way; its history is kept below rather than deleted, because what the corpus
-found and why the coverage exists is part of what the corpus is for.
+the snapshots pin the behaviour and a repair shows up as a snapshot change.
+Several have since been repaired that way. A repaired one is marked
+**Status: fixed** and its history is kept below rather than deleted, because
+what the corpus found and why the coverage exists is part of what the corpus is
+for — a section that silently disappears teaches nothing.
 
 ### `internal` was dropped by both backends — found here, fixed in #160
 
@@ -207,33 +221,105 @@ above). `DeclIndex` now walks `SourceFile::shapes()` and the inline-shape
 warning spans the service's dotted name;
 `inline_shape_removal_spans_the_service_name` pins that.
 
-### A non-integer `reserved` literal is accepted and discarded
+### A non-integer `reserved` literal destroyed the retired identity — fixed
+
+**Status: fixed in #174.** Recorded because this entry is what found it.
 
 typl Appendix E defines `reserved = "reserved" ( camelCase_id | int_lit )`, but
-the parser accepts **any** literal in that position (`Parser::reserved_entry`
-falls through to `self.literal()`) and the lowering keeps only integers. So
-`reserved "oldName"`, `reserved true` and `reserved 1.5` compile with **no
-diagnostic at all** and lower to `Reserved { name: None, value: None }`.
+`Parser::reserved_entry` fell through to `self.literal()`, which admits **any**
+literal shape. `reserved "oldName"`, `reserved true` and `reserved 1.5`
+therefore compiled with **no diagnostic at all**.
 
-The ordinal slot is still held, so the identity-reuse guarantee survives — but
-nothing records *what* was retired, which is what `ridl diff` needs in order to
-report a dangling tombstone (TYPL-211). Input outside the grammar accepted in
-silence is the failure family this corpus exists to find. Pinned by
-`reserved_accepts_ungrammatical_literals_and_discards_them`, which drives
-`compile` directly so the corpus files themselves stay grammatical, and which
-fails with instructions when the parser learns to reject them.
+**The consequence, which is why it was worth fixing.** Silent acceptance was
+not the cost — `lower_reserved` keeps a `Name` or an integer and nothing else,
+so an ungrammatical entry lowered to `Reserved { name: None, value: None }`.
+The slot still consumed its ordinal, but **the retired identity the tombstone
+exists to record was destroyed in the IR**. In an `enum` body the retired wire
+value was lost outright. A dangling-tombstone report (TYPL-211) then has
+nothing left to name, and a publisher who typed a quote around a retired name
+got a provenance-free tombstone with no warning at all.
 
-### Imports bind at package scope, and a repeated import is a hard error
+The identity-reuse guarantee itself survived throughout:
+`tools/diff/src/classify.rs::slots` maps a nameless tombstone to
+`("", ordinal)`, which never equals a real interaction name. So this was a
+provenance hole, not a wire-safety hole — which is exactly why nothing else
+caught it. Input outside the grammar accepted in silence is the failure family
+this corpus exists to find.
 
-`services.ridl` imports only `Ratio`, not `Speed` or `Temperature`, because
-`appendix-a.ridl` already imports those and imports bind per package, not per
-file (ADR-0002 §1: "files within a package are purely organisational").
+**The extent, once looked for.** The defect was reported for the interface
+body. `reserved_entry` is one production reached by five bodies — `struct`,
+`enum` and `union` through `block_body`, `interface` and a `service` inline
+shape through `interface_body` — and all five were affected, under both
+profiles. Walking the token inventory rather than the reported literals also
+turned up `reserved -MAX_GEAR`: `literal_len_at` counts `-` plus any value
+token and `Ident` is a value token, so a negated constant reference parsed as a
+`Literal` and lowered to nothing in the same way.
 
-Repeating an import is not merely redundant — it is a hard **error**: TYPL-006,
-"conflicting import … alias one of the colliding imports". The message is
-written for two *different* symbols competing for one local name, which is not
-the situation, and the only way to satisfy the checker is to give one file a
-different local name for the same type. `resolve.rs` counts local-name
-collisions without comparing the imported package path, so it fires for two
-identical imports in the same file as well as across files of one package.
-A defect to fix, not a curiosity.
+**The repair (#174).** The literal shapes outside the production now draw
+**FORM-102** at the parser, and the refused token is held in an `ErrorNode`
+inside the `ReservedEntry`, so the tree stays lossless, the entry keeps its
+place as a member, and the member after it keeps its ordinal. FORM-102 was
+reused rather than a new code allocated: a token is present and the grammar has
+no production admitting it there, which is what FORM-102 means, and allocating
+a code is an ADR decision (ADR-0008 decision 13). The two grammatical forms are
+unchanged, negative integers included. `reserved` with nothing after it stays
+FORM-101, with its message reworded to name both admitted forms.
+
+The pinning test `reserved_accepts_ungrammatical_literals_and_discards_them` is
+replaced by `reserved_rejects_ungrammatical_literals` — which asserts the code,
+the message, and that the ordinals around the refused entry do not move — and
+by `reserved_accepts_both_grammatical_forms_in_every_body`, which guards
+against narrowing the production past what Appendix E writes. Both drive
+`compile` directly, so the corpus files themselves stay grammatical. The
+recovery shape is pinned in the err corpus by
+`test_data/parser/err/reserved_ungrammatical_literal.{typl,ridl}` under
+`crates/ridl-syntax/`.
+
+### Imports bind at package scope; a repeated import was an error — fixed
+
+**Status: fixed in #174.** Recorded because this entry is what found it.
+
+The scope rule is unchanged and still holds: imports bind per package, not per
+file (ADR-0002 §1, "files within a package are purely organisational"). What
+was a defect is what the toolchain did with a repeat.
+
+`services.ridl` once imported only `Ratio`, though it references `Speed` and
+`Temperature` too, because `appendix-a.ridl` already imports those — and, at
+the time this entry was written, importing them a second time was not merely
+redundant but a hard **error**: TYPL-006, "conflicting import … alias one of
+the colliding imports". `apply_imports` counted local-name collisions without
+comparing what each import named, so two identical lines collided with each
+other, across files of one package and within a single file alike.
+
+**The fix-it made it worse.** "Alias one of the colliding imports" is written
+for two *different* symbols competing for one local name, which is not the
+situation. Applying it to an identical repeat either trades the error for
+TYPL-007 (unused import) or forks one symbol into two local names. Deleting the
+repeat — the remedy that works — was never offered.
+
+**The repair (#174).** An import collides only when it claims a local name that
+the first import of that name bound to a **different target**, meaning a
+different package path or a different symbol. A genuine collision keeps firing
+TYPL-006 with its message and its aliasing remedy unchanged, and the first
+import still wins the binding.
+
+An identical repeat is **silent**, in one file and across the files of a
+package alike. A distinct duplicate-import warning was considered and not
+taken: under ADR-0002 §1 a package's imports are a set, so repeating one adds
+nothing to it, and a rule that fired only when two lines share a file would
+make the file boundary semantically significant, which §1 denies — while a rule
+that fired across files would report the ordinary habit of writing each file's
+imports at its own head. TYPL-007 could not be reused, since the repeated
+import's symbol *is* used. TYPL-010 is free in the module band and would be the
+right home if the project ever wants the notice; allocating a code is an ADR
+decision (ADR-0008 decision 13).
+
+This entry keeps `services.ridl` as written — the imports were never the point
+of the file, and rewriting them would churn four golden snapshots for nothing —
+but it is now free to import `Speed` and `Temperature` itself if that ever
+reads better. The behaviour is guarded by unit tests in `resolve.rs` rather
+than here: `an_identical_repeated_import_is_not_a_collision`,
+`an_identical_import_repeated_across_files_of_a_package_is_not_a_collision`,
+`a_repeated_import_under_one_alias_is_not_a_collision`, and
+`a_repeat_between_two_genuine_collisions_still_flags_only_the_conflict`, which
+asserts the span so a repeat cannot be the line flagged.
