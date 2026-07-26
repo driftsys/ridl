@@ -10,14 +10,35 @@ cost of a small refactor before a later epic builds on it. This ADR follows the
 pattern of ADR-0006 (E0) and ADR-0007 (E1).
 
 **Editing note.** Revisions to this document have repeatedly left behind a
-sentence describing the state they replaced — six found and corrected so far,
-the sixth during review of the note that said five. They were scattered rather
-than clustered: a decision's lead contradicting its own body, the Status line
-above, a scoping claim in `## Consequences`, and a closed enumeration in an
-earlier decision that a later one silently extended. Several sat in sections the
-revision that falsified them never opened, so reading the diff does not find
-them. **Sweeping the whole document for sentences the edit has falsified is a
-precondition for editing it here, not optional diligence.**
+sentence describing the state they replaced — fifteen found and corrected so
+far. They were scattered rather than clustered: a decision's lead contradicting
+its own body, the Status line above, a scoping claim in `## Consequences`, and a
+closed enumeration in an earlier decision that a later one silently extended.
+Several sat in sections the revision that falsified them never opened, so
+reading the diff does not find them. **Sweeping the whole document for sentences
+the edit has falsified is a precondition for editing it here, not optional
+diligence.**
+
+_Extended (2026-07-26)._ The count above stood at six until this sweep, and the
+sixth was found during review of the note that said five. The whole-document
+sweep this note demands was then run for the first time — against the repository
+at `af7ef7c`, not against a diff — and found nine more. Two were already
+recorded as issues: decision 13's allocation ledger (#169) and decision 17's
+"those are the only sites" claim (logged in #172). The other seven nothing had
+recorded: four in decision 21, one in decision 20, and two in `## Consequences`.
+Seven PRs merged between the amendments landing (#165) and this sweep, and every
+one of the seven stale sentences was stranded by a PR that never opened this
+file. That is the mechanism this note describes, measured: one sweep found more
+stale sentences than three rounds of diff review had. Decisions 6, 8, 16, and 18
+also carry dated extensions from this sweep; those record work that shipped as
+bound and are not counted above, because no sentence in them was falsified.
+
+_How to read the amendments' evidence paragraphs._ In decisions 16 to 21, a
+paragraph headed `_What the sources say._` states the evidence as it stood on
+the amendment's own date. It is not a claim about the repository today, and it
+is deliberately left alone when the work it justifies ships — rewriting it would
+delete the reason the decision was taken. Read those paragraphs as dated; read
+`_What was decided._` and `_What it binds._` as live, and sweep them.
 
 ## Context
 
@@ -98,6 +119,11 @@ disagreeing sources is the correct one.
    evolution/profile table — a documented anomaly. E2 keeps 140/141 as written
    rather than renumbering, so the emitted codes match the reference a reader
    consults; the numbering anomaly is noted for a future reference cleanup.
+   **Extended (2026-07-26):** the service codes are no longer only those two.
+   RIDL-143 (a `service` publishing an `internal` interface, PR #168) was minted
+   in the same band under the same §16.4 table, and RIDL-142 is reserved by
+   decision 21 for a third. The anomaly this decision carried at two codes now
+   stands at three shipped, four once RIDL-142 is minted.
 
 7. **Both the Rust and the TypeScript backends compile ridl interactions; the
    second, neutrality-proving backend is TypeScript.** The E2 exit criteria
@@ -117,7 +143,11 @@ disagreeing sources is the correct one.
    interaction kinds take the `Decl.kind` oneof members reserved for them;
    envelope-related additions take the reserved `Decl` fields; the stream type
    takes the reserved `FieldType.kind` members. IR v1 is retained until the v2
-   lowering lands, mirroring the E1 v0→v1 transition.
+   lowering lands, mirroring the E1 v0→v1 transition. **Extended (2026-07-26):**
+   that retention has ended. The v2 lowering landed in PR #144 and removed the
+   v1 schema with it, so `crates/ridl-ir/proto/ridl/ir/` holds `v2` alone. The
+   field reservations this decision consumed are still visible in v2's
+   numbering; the v1 proto that pre-cut them is not.
 
 9. **`ridl diff` lives in the `ridl` facade (over a `tools/` engine crate), not
    in `ridlc`.** The compiler stays a pure source→IR function — the minimal ISO
@@ -169,7 +199,15 @@ disagreeing sources is the correct one.
     so `deprecated`-without-reason keeps the E1 doc-tag code TYPL-405 and no
     attribute code is minted for it. **Extended (2026-07-25):** decision 21 adds
     RIDL-111 and RIDL-142 for two errors E2 shipped uncoded, so E2 allocates
-    eight codes, not the six listed above.
+    eight codes, not the six listed above. **Extended (2026-07-26):** PR #168
+    minted **RIDL-143** for a `service` publishing an `internal` interface, so
+    the figure is **nine** (issue #169). The nine are the six above plus
+    RIDL-111, RIDL-142, and RIDL-143. Only RIDL-143 of those three is declared
+    in `crates/ridl-core/src/diag.rs`; RIDL-111 and RIDL-142 stay reserved and
+    unimplemented, so a reader counting this ledger's codes in the source finds
+    seven. This ledger is what decision 18 treats as authoritative and what a
+    later epic will read, so the figure is maintained here rather than
+    reconstructed from decision 21.
 
 14. **`ridl diff` classifies changes directionally, comparing the resolved IR,
     and reads a workspace-local baseline.** Direction is judged from the
@@ -306,6 +344,15 @@ disagreeing sources is the correct one.
     (`timing.rs`'s module comment cites "ridl §2.8" for the atom set, where
     ridl's table is §2.1 and typl's is §2.8; corrected with the rest.)
 
+    **Extended (2026-07-26):** PR #173 shipped all of it, and the "not
+    documentation-only" claim held — `crates/ridl-sem/src/timing.rs` changed in
+    the same commit as the reference. Both messages now read "must be a whole
+    number of us/ms/s/min/h", the module comment cites ridl §2.1, and ridl §2.1
+    carries five rows against typl §2.8's five-suffix parenthetical. Re-verified
+    against the built `ridlc` at `af7ef7c`: `@[1min..1h]` compiles clean,
+    `@[1ms..1.5h]` is FORM-102 quoting the new message, and `@[1min..1d]` is
+    FORM-101 at the `d`.
+
 17. **Amendment (2026-07-25) — `@[X..X]` is a degenerate range that warns on
     both signals and events; ridl §9.2 drops the "invalid on events" clause and
     the "equivalent to `@Xms`" characterisation together.**
@@ -371,6 +418,25 @@ disagreeing sources is the correct one.
     code and its severity without the message text. The code's severity, span,
     and kind-neutrality do not change.
 
+    _Corrected (2026-07-26)._ "Those are the only sites" was false when written,
+    and so was the "three places" it depends on. The retired characterisation
+    lived in **five** places. The two the enumeration missed are
+    `crates/ridl-core/src/diag.rs`'s `RIDL_108` doc comment ("equivalent to the
+    strict-periodic `@Xms`") and the worked example that provokes the code,
+    `crates/ridlc/tests/corpus/ridl-diag-showcase/main/timing.ridl` ("Equal
+    bounds — the same thing as `@250ms`"). The second states the claim in
+    different words, which is why a search for "equivalent" did not reach it.
+    Both were repaired by PR #173 in the same commit as §9.2 and §16.1, so the
+    wording is gone from the repository; what stayed wrong until this sweep was
+    the count and the closure of the enumeration here. Editing the two
+    regenerated no snapshot: the showcase entry carries errors, so its IR, Rust,
+    and TypeScript snapshots are one-line placeholders, and the diagnostic
+    snapshot pins the message rather than the source comment. The rest of this
+    decision is unaffected — RIDL-108 is still a warning on both kinds, verified
+    against the built `ridlc` at `af7ef7c`: `@[50ms..50ms]` on a signal and on
+    an event each draw one RIDL-108 and the compile exits 0, and `@50ms` on an
+    event is still RIDL-103.
+
 18. **Amendment (2026-07-25) — the FORM and MANI diagnostic code tables are
     written in the family overview, and each language reference cites them.**
 
@@ -403,6 +469,14 @@ disagreeing sources is the correct one.
     overview rather than left to drift — it describes where the namespaces live
     in the code, which stays true, but a reader sent there for the codes
     themselves now has a table to be sent to instead.
+
+    **Extended (2026-07-26):** PR #173 shipped both tables, as
+    `docs/specification/ridl-family-overview.md` §7 — §7.1 for `FORM-` and §7.2
+    for `MANI-` — and repointed
+    `docs/technotes/walking-skeleton-architecture.md` at them. The overview is
+    therefore now a specification document naming FORM and MANI codes, which the
+    evidence paragraph above says none was; that paragraph is the state on
+    2026-07-25 and is left as written.
 
 19. **Amendment (2026-07-25) — Appendix A's `union FaultPageResult` is deleted
     when the appendix adopts the inline `T | E` return.**
@@ -477,6 +551,15 @@ disagreeing sources is the correct one.
     field's declared init is treated the same way — so a later widening is one
     change across both, not a ridl-only fix.
 
+    **Extended (2026-07-26):** the `debt(E2)` issue now exists — **#172**,
+    opened by the close-out documentation sync (#173), with the RIDL-110 gap and
+    its three silent cases written up and each one verified against the built
+    `ridlc`. The §16.1 narrowing shipped in the same PR. What has **not**
+    happened is the second half of the sentence above: `check.rs`'s three "E2
+    ledger" citations (M1, M2 — this row's own emission site — and M3) still
+    name no issue, so the pointer still resolves to nothing. #172 carries that
+    repointing as one of its own items.
+
 21. **Amendment (2026-07-25) — RIDL-142 and RIDL-111 are allocated for the two
     uncoded E2 errors, and `ridl-core` gains a `RIDL_CATALOG` and a
     `TYPL_CATALOG`, generated rather than hand-maintained.**
@@ -517,6 +600,20 @@ disagreeing sources is the correct one.
     with RIDL-111 and RIDL-142 the figure is eight. That list is what E4.2's
     error index and any later epic asking what E2 allocated will read, so it is
     annotated there rather than left to be reconstructed from here.
+
+    **Extended (2026-07-26) — the free-code enumeration and the two counts.**
+    RIDL-111 and RIDL-142 are still free and still unimplemented, but the
+    enumeration above is no longer the whole allocated set: PR #168 minted
+    **RIDL-143**, so the `RIDL-` codes allocated anywhere in the repository are
+    100 to 110, 140, 141, 143, 201, 202, 301 to 308, and 401 to 407. RIDL-143
+    sits in the 1xx band under the §16.4 table, so the cleanup decision 6
+    deferred reached three codes through it rather than through RIDL-142;
+    minting RIDL-142 will make four. Decision 13's ledger accordingly reads
+    nine, not eight (issue #169). The two namespace counts moved with the same
+    work: RIDL declares 31 codes rather than 30 (RIDL-143), and typl 39 rather
+    than 38 — PR #175 found TYPL-303 emitted as a bare string with no constant
+    at all and declared it. typl is still the larger of the two, which is what
+    the comparison was made for.
 
     _What the guard has to be, which the existing two are not._ `FORM_CATALOG`
     and `MANI_CATALOG` are hand-maintained arrays, and
@@ -574,6 +671,48 @@ disagreeing sources is the correct one.
     RIDL-142 are reserved from the moment this decision is recorded and are not
     reused if that work is resequenced.
 
+    **Extended (2026-07-26) — what the fix wave shipped, and how it differs.**
+    PR #175 took the catalogue half and left the minting half. The paragraph
+    headed _What the guard has to be_ is the before-picture that motivated the
+    change and is left as written; two passages above are now wrong about the
+    repository, and are named below.
+
+    - **The catalogues.** `diag_codes!` in `crates/ridl-core/src/diag.rs`
+      declares each code once and expands to the constant and its catalogue row,
+      and all **four** namespaces are on it — `FORM_CATALOG`, `MANI_CATALOG`,
+      `TYPL_CATALOG`, `RIDL_CATALOG` — with `ALL_CATALOGS` generated from the
+      same expansion. The paired hand-written lists inside the old FORM and MANI
+      guards are gone. #175 also added a guard the decision did not ask for,
+      `codes_written_as_string_literals_are_all_catalogued`, which scans the
+      workspace's `.rs` files for code strings emitted without a `DiagCode`
+      constant — the escape #172 recorded, and how TYPL-303 came to be declared.
+    - **The showcase list is _not_ covered.** The escape clause above was taken,
+      and stated explicitly rather than left implied: `RIDL_PROFILE_CODES` in
+      `crates/ridlc/tests/corpus.rs` is still a list of strings with no link to
+      the constants, the gap is now recorded as **issue #172**, and #175 proved
+      it by minting `RIDL-150` in `RIDL_CATALOG` with no showcase entry and
+      watching the suite stay green. So the sentence "the declare-once mechanism
+      therefore covers the showcase list as well as the catalogs" describes an
+      intent the fix wave did not reach, on the ground the clause after it
+      names.
+    - **`tools/diff` went the same way, not the shadowed way.** #175 moved it
+      too: `declare_categories!` in `tools/diff/src/lib.rs` now produces
+      `CATEGORIES` from the `Category` declaration, and the in-test macro that
+      shadowed it — with the paragraph naming the shadow as the close it did not
+      reach — was deleted. So `tools/diff` is no longer the sibling case that
+      stopped short; it is the second subsystem on the house pattern. What #175
+      added beyond it is the wildcard defence: `classify`, `explain`, and
+      `category_word` each `#[deny]` `clippy::wildcard_enum_match_arm` and
+      `clippy::match_wildcard_for_single_variants`, the second being the
+      load-bearing one for a 21st variant. That is enforced by clippy and by
+      nothing else, which is why `just build` now runs `just lint` as well as
+      `cargo test`.
+
+    Still outstanding, and still reserved: **RIDL-111 and RIDL-142 are not
+    minted**. Neither appears in `diag.rs`, in ridl §16.1 or §16.4, or in the
+    showcase, and both errors still carry `DiagCode::NONE`. The numbers are not
+    reused.
+
 ## Consequences
 
 - Positive: IR v2 reuses IR v1's pre-cut field reservations, so the interaction
@@ -597,6 +736,20 @@ disagreeing sources is the correct one.
   diagnostic messages, a corpus fixture and its snapshots, comment citations,
   and the new codes and catalogs — so only decision 18 is documentation-only and
   the close-out is not a documentation-only pass.
+- **Extended (2026-07-26):** two clauses of the bullet above have been overtaken
+  by the close-out PRs, and the rest still holds. **The reference staleness is
+  closed.** PR #173 absorbed all four of decision 1's supersessions and
+  corrected §2.1's duration table, §9.2's `@[X..X]` rule, §16.1's RIDL-108 and
+  RIDL-110 rows, and Appendix C's grammar; the reference's own header block
+  records the reconciliation and cites this ADR for it. **The service-code
+  anomaly reached three codes by another route.** RIDL-142 is still reserved and
+  unimplemented; what grew the anomaly from two to three is RIDL-143 (PR #168),
+  in the 1xx band under the §16.4 table, and minting RIDL-142 will make four.
+  Unchanged: `persist` is still deferred, `final` still ships under an open
+  reconsideration, the inline `T|E` transport-identity rule is still an
+  agent-taken derivation, `WorkspaceOutput` still carries `resolutions` and
+  `std_ir`, and five of the six close-out amendments still bind changes under
+  `crates/` with decision 18 the only documentation-only one.
 - Review hook: each numbered decision is reversible at the cost of a small
   refactor before a later epic builds on it; the maintainer can veto any of them
   by reopening this ADR.
