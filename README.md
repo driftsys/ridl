@@ -45,6 +45,7 @@ crates/                         The compiler workspace (typl + ridl)
 editors/vscode/                 VS Code extension (TextMate grammars + LSP client)
 xtask/                          Workspace automation (ungrammar codegen, drift checks)
 Cargo.toml                      Cargo workspace root
+rust-toolchain.toml             The pinned Rust toolchain (ADR-0009)
 docs/
 ├── ROADMAP.md                  Implementation backlog — epics, stories, V1/V2 release plan
 ├── getting-started.md          Getting started with RIDL
@@ -74,7 +75,8 @@ docs/
     ├── ADR-0005-agent-enablement.md
     ├── ADR-0006-walking-skeleton-execution.md
     ├── ADR-0007-e1-execution.md
-    └── ADR-0008-e2-execution.md
+    ├── ADR-0008-e2-execution.md
+    └── ADR-0009-toolchain-and-gate-parity.md
 ```
 
 ## Where to start
@@ -93,24 +95,34 @@ This repository follows the driftsys house style. After cloning, run
 `./bootstrap` — it installs [git-std](https://github.com/driftsys/git-std)
 (conventional commits, versioning, changelog, and git hooks) and
 [prim](https://github.com/driftsys/prim) (the connective-tissue formatter for
-Markdown/JSON/YAML/TOML), then wires up the repo-local hooks in `.githooks/`.
+Markdown/JSON/YAML/TOML), then wires up the repo-local hooks in `.githooks/`. It
+also installs the Rust toolchain `rust-toolchain.toml` pins, and reports any
+other tool the gate needs — `just`, `rustup`, mdBook, markdownlint — that it
+cannot find.
 
 The task runner is [`just`](https://github.com/casey/just):
 
-| recipe            | what it does                                                                        |
-| ----------------- | ----------------------------------------------------------------------------------- |
-| `just`            | list the recipes                                                                    |
-| `just fmt`        | reformat the connective tissue with prim, fix Markdown                              |
-| `just check`      | lint gate — `prim --check` + markdownlint, no writes                                |
-| `just compile`    | compile the Rust workspace                                                          |
-| `just test`       | run the Rust workspace test suite                                                   |
-| `just fmt-check`  | `cargo fmt --all --check` (no writes)                                               |
-| `just lint`       | `cargo clippy --workspace --all-targets -- -D warnings`                             |
-| `just wasm-check` | `cargo check` for wasm32, `--no-default-features`                                   |
-| `just build`      | `fmt-check` + `compile` + `test` + `lint` + `wasm-check` + `check` — the local gate |
-| `just verify`     | commit-message lint + `build` — run before a PR                                     |
-| `just book`       | serve the mdBook docs locally                                                       |
-| `just release`    | `git std bump` — version, changelog, tag                                            |
+| recipe                 | what it does                                                                                                                                                  |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `just`                 | list the recipes                                                                                                                                              |
+| `just fmt`             | reformat the connective tissue with prim, fix Markdown                                                                                                        |
+| `just check`           | lint gate — `prim --check` + markdownlint, no writes                                                                                                          |
+| `just toolchain-check` | the running toolchain is the one `rust-toolchain.toml` pins                                                                                                   |
+| `just gate-parity`     | CI invokes every member of `just build`                                                                                                                       |
+| `just fmt-check`       | `cargo fmt --all --check` (no writes)                                                                                                                         |
+| `just book-check`      | `mdbook build` on a copy — catches a SUMMARY.md mdBook cannot parse                                                                                           |
+| `just compile`         | compile the Rust workspace (`--locked`)                                                                                                                       |
+| `just test`            | run the Rust workspace test suite (`--locked`)                                                                                                                |
+| `just lint`            | `cargo clippy --workspace --all-targets -- -D warnings`                                                                                                       |
+| `just wasm-check`      | `cargo check` for wasm32, `--no-default-features`                                                                                                             |
+| `just build`           | `toolchain-check` + `gate-parity` + `fmt-check` + `book-check` + `compile` + `test` + `lint` + `wasm-check` + `check` — the local gate, which is what CI runs |
+| `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                       |
+| `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                    |
+| `just book`            | serve the mdBook docs locally                                                                                                                                 |
+| `just release`         | `git std bump` — version, changelog, tag                                                                                                                      |
+
+CI (`.github/workflows/ci.yml`) invokes these recipes rather than restating
+their commands, so there is one definition of each (ADR-0009).
 
 Commits are [Conventional Commits](https://www.conventionalcommits.org), linted
 against `.git-std.toml`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and

@@ -28,7 +28,8 @@ built; `uxdl`, `rmdl`, and `rsdl` are sequenced in the roadmap. See
   five language references.
 - `docs/decisions/` — ADR-0002 (module system), ADR-0004 (sequencing and stack),
   ADR-0005 (agent enablement), ADR-0006 (E0 execution), ADR-0007 (E1 execution),
-  ADR-0008 (E2 execution — read its `## Status` before editing it).
+  ADR-0008 (E2 execution — read its `## Status` before editing it), ADR-0009
+  (toolchain pin and gate parity — binds every contributor, not one epic).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 
@@ -48,23 +49,44 @@ standalone member; rsdl is the apex.
 
 ## Commands
 
-    just fmt        reformat connective tissue with prim + fix Markdown
-    just check      lint gate — prim --check + markdownlint (no writes)
-    just compile    compile the Rust workspace
-    just test       run the Rust workspace test suite
-    just fmt-check  cargo fmt --all --check (no writes; repair with cargo fmt --all)
-    just lint       cargo clippy --workspace --all-targets -- -D warnings
-    just wasm-check cargo check for wasm32 with --no-default-features
-    just build      fmt-check + compile + test + lint + wasm-check + check — the
-                    full local gate, and every member ADR-0008 decision 11 names
-    just verify     commit-message lint over the branch range, then build — run before a PR
-    just book       serve the mdBook docs locally
-    just release    git std bump — version, changelog, tag
-    just install    ./bootstrap — installs git-std, prim, and git hooks
+    just fmt             reformat connective tissue with prim + fix Markdown
+    just check           lint gate — prim --check + markdownlint (no writes)
+    just toolchain-check the running toolchain is the one rust-toolchain.toml pins
+    just gate-parity     CI invokes every member of just build
+    just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
+    just book-check      mdbook build on a copy — catches a SUMMARY.md mdBook
+                         cannot parse (it does not prove the book is whole)
+    just compile         compile the Rust workspace (--locked)
+    just test            run the Rust workspace test suite (--locked)
+    just lint            cargo clippy --workspace --all-targets -- -D warnings
+    just wasm-check      cargo check for wasm32 with --no-default-features
+    just build           toolchain-check + gate-parity + fmt-check + book-check +
+                         compile + test + lint + wasm-check + check — the full
+                         local gate: every member ADR-0008 decision 11 names, plus
+                         the four CI checks ADR-0009 brought back to this side
+    just lint-commits    git std lint over the commits on top of a base branch
+                         (BASE defaults to main; CI passes the PR base branch)
+    just verify          lint-commits, then build — run before a PR
+    just book            serve the mdBook docs locally
+    just release         git std bump — version, changelog, tag
+    just install         ./bootstrap — toolchain, git hooks, gate requirements
 
 Full recipe set: `justfile`. The toolchain conventions come from
 driftsys/git-std (commits, versioning, hooks) and driftsys/prim
 (connective-tissue formatting).
+
+**The justfile is the single definition of every gate command.**
+`.github/workflows/ci.yml` installs tools and then invokes these recipes; what
+remains in the workflow is tool installation and job plumbing, never a gate
+command. Adding a check means adding a recipe, adding it to `build`, and adding
+`run: just <recipe>` to the workflow — `just gate-parity` fails until the last
+of those is done. When CI needs a variant of a check, give the recipe a
+parameter and pass it (as `convco` does with `just lint-commits <base>`); do not
+write a second copy of the command into the workflow (ADR-0009).
+
+`gate-parity` covers only the members of `build`. `verify` and `lint-commits`
+are outside its reach, which is where the workflow and the justfile last drifted
+apart unnoticed — check those two by reading when you touch either file.
 
 ## Conventions
 

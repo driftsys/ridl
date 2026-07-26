@@ -7,9 +7,14 @@
 # repo-local git hooks in .githooks/. Run right after `git clone` or
 # `git worktree add`.
 #
-# markdownlint (via `npx markdownlint-cli`) and mdBook are additionally
-# needed for `just check` / `just compile`; install those with your
-# package manager (npm, cargo/mdbook) as needed.
+# It then installs the pinned Rust toolchain named in rust-toolchain.toml, if
+# rustup is present, and checks for every other tool `just build` shells out to.
+# It does not install those: `just`, mdBook, and markdownlint-cli come from
+# three different package ecosystems, and writing into a contributor's global
+# npm, cargo, or system prefix is a choice this script should not make for them.
+# It names each missing tool with the command that installs it and exits
+# non-zero, so a fresh clone reports what the gate needs up front instead of
+# failing part-way through a gate run (ADR-0009).
 
 set -euo pipefail
 
@@ -39,4 +44,35 @@ case ":${PATH}:" in
 esac
 
 log "wiring git hooks via git std bootstrap"
-exec git std bootstrap
+git std bootstrap
+
+# The pinned Rust toolchain. rustup reads rust-toolchain.toml and installs the
+# channel, the components, and the targets it names; `just toolchain-check`
+# fails the gate when the running toolchain is not that one.
+if command -v rustup >/dev/null 2>&1; then
+  log "installing the pinned Rust toolchain from rust-toolchain.toml"
+  rustup show >/dev/null
+fi
+
+missing=0
+require() {
+  if command -v "$1" >/dev/null 2>&1; then
+    log "$1 found: $(command -v "$1")"
+  else
+    log "MISSING $1 — install with: $2"
+    missing=1
+  fi
+}
+
+log "checking the tools 'just build' requires"
+require just "see https://just.systems/man/en/packages.html"
+require rustup "see https://rustup.rs — it is what applies rust-toolchain.toml"
+require mdbook "cargo install mdbook --locked"
+require markdownlint "npm install --global markdownlint-cli"
+
+if [ "$missing" -ne 0 ]; then
+  log "'just build' cannot run until the tools listed above are installed"
+  exit 1
+fi
+
+log "ready — run 'just build'"
