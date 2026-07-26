@@ -228,10 +228,11 @@ edges — never the computation domain.
 
 Because the envelope always exists, **contract payloads should not re-declare
 it**: a payload field carrying publication time or a frame counter draws an info
-lint (RIDL-406). The legitimate exception is _domain_ time distinct from
-transport time — a `FaultEvent.timestamp` recording when the fault _occurred_
-belongs in the payload, because the envelope of a streamed history reply
-timestamps delivery, not occurrence.
+lint (RIDL-406; §16.4 names the eight field spellings it matches). The
+legitimate exception is _domain_ time distinct from transport time — a
+`FaultEvent.timestamp` recording when the fault _occurred_ belongs in the
+payload, because the envelope of a streamed history reply timestamps delivery,
+not occurrence.
 
 ---
 
@@ -448,7 +449,8 @@ The contract does not serialize queries — providers may answer concurrently an
 out of order. Queries **should** be read-only or idempotent; a state-mutating
 request belongs to `command` (with state observation) unless the mutation
 inherently needs a result (e.g. `allocate`, `calibrate`). Linters flag
-verb-named queries (`set…`, `reset…`) as probable commands.
+verb-named queries (`set…`, `reset…`) as probable commands; §16.4 names the six
+verbs RIDL-404 matches.
 
 ---
 
@@ -1046,18 +1048,18 @@ either direction.
 
 ### 16.4 Evolution and Profile (RIDL-4xx)
 
-| Code     | Rule                                                                                                                                           | Severity |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| RIDL-401 | interaction re-declared under a `reserved` name                                                                                                | error    |
-| RIDL-402 | duplicate interaction name within an interface                                                                                                 | error    |
-| RIDL-403 | behaviour/user-interaction/architecture declaration in `.ridl` context                                                                         | error    |
-| RIDL-404 | query named like a mutation (`set…`, `reset…`)                                                                                                 | warning  |
-| RIDL-405 | one `error` type shared across unrelated failure domains (heuristic)                                                                           | info     |
-| RIDL-406 | payload field duplicating envelope metadata — publication time or frame counter (§3.1); domain time distinct from transport time is legitimate | info     |
-| RIDL-407 | interaction ordinal changed against the published baseline (§11) — the desk-time drift check, emitted by `ridl check`, never by `ridlc`        | warning  |
-| RIDL-140 | duplicate `service` name across the system — the service catalog is a flat global namespace                                                    | error    |
-| RIDL-141 | `service` names a type that is not an `interface`, and has no inline shape                                                                     | error    |
-| RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                      | error    |
+| Code     | Rule                                                                                                                                                                                                                                                                                | Severity |
+| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| RIDL-401 | interaction re-declared under a `reserved` name                                                                                                                                                                                                                                     | error    |
+| RIDL-402 | duplicate interaction name within an interface                                                                                                                                                                                                                                      | error    |
+| RIDL-403 | behaviour/user-interaction/architecture declaration in `.ridl` context                                                                                                                                                                                                              | error    |
+| RIDL-404 | query named like a mutation — the name begins with `set`, `reset`, `clear`, `apply`, `write`, or `update` followed by an upper-case letter (`setMode`, `resetReason`)                                                                                                               | warning  |
+| RIDL-405 | one `error` type shared across unrelated failure domains — it is the failure arm of queries in 3 or more interaction scopes (heuristic)                                                                                                                                             | info     |
+| RIDL-406 | payload field duplicating envelope metadata (§3.1) — a `signal` or `event` payload struct declaring `timestamp`, `time`, `seq`, `seqNo`, `sequence`, `sequenceNumber`, `frameCounter`, or `frameNo`; domain time or a domain counter distinct from transport metadata is legitimate | info     |
+| RIDL-407 | interaction ordinal changed against the published baseline (§11) — the desk-time drift check, emitted by `ridl check`, never by `ridlc`                                                                                                                                             | warning  |
+| RIDL-140 | duplicate `service` name across the system — the service catalog is a flat global namespace                                                                                                                                                                                         | error    |
+| RIDL-141 | `service` names a type that is not an `interface`, and has no inline shape                                                                                                                                                                                                          | error    |
+| RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                                                                                                                                                           | error    |
 
 (Classifying a reorder, insert, or delete as breaking or compatible is
 `ridl-diff`'s jurisdiction, not the compiler's — typl §7.4 discussion applies.
