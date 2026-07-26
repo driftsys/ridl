@@ -274,6 +274,22 @@ pub enum Emit {
     CHeader,
     /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`.
     IrJson,
+    /// Idiomatic TypeScript source, written to `<base>.ts`.
+    ///
+    /// The flag value is spelled `typescript` rather than the derived
+    /// `type-script`: the language emits are named after the language, as
+    /// `rust` is.
+    ///
+    /// The `.ts` extension is forced rather than chosen **in package and
+    /// workspace mode**, where `base` is the package name: one generated module
+    /// imports another as `./<package-name>`, which resolves only against a
+    /// file named `<package-name>.ts`. Single-file mode names artifacts after
+    /// the input file stem instead ([`run_build`]), so `ridlc build
+    /// common.typl` writes `common.ts` for `package veh.common`, and a sibling
+    /// module importing `./veh.common` would not resolve against it. The Rust
+    /// emit carries the same asymmetry, and both keep it.
+    #[value(name = "typescript")]
+    TypeScript,
 }
 
 /// The render-ready result of a [`run_check`] or [`run_build`] command: the
@@ -350,8 +366,9 @@ pub fn run_build(
     // generation over error-bearing IR produces invalid or misleading output,
     // and a malformed IR could even crash a backend (C1). `check` never runs
     // codegen; `build` matches that by skipping every emit — Rust, C header,
-    // and ir-json alike — when any error-severity diagnostic is present, from
-    // the compile or from materialization. Warnings and info do not gate.
+    // ir-json, and TypeScript alike — when any error-severity diagnostic is
+    // present, from the compile or from materialization. Warnings and info do
+    // not gate.
     let succeeded = !diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error);
@@ -540,7 +557,11 @@ fn materialize_and_lock(
 ///
 /// The Rust and C-header emits share one [`generate`](ridl_backend_rust::generate)
 /// call; a codegen failure is recorded as a diagnostic and those two emits are
-/// skipped, while `ir-json` (a direct IR dump) is always written.
+/// skipped, while `ir-json` (a direct IR dump) is always written. The TypeScript
+/// emit is a second, independent backend
+/// ([`generate`](ridl_backend_ts::generate)) over the same IR, with its own
+/// result type and its own failure path — a backend that cannot render this
+/// package skips only its own artifact.
 fn write_emits(
     out_dir: &Path,
     base: &str,
@@ -568,6 +589,23 @@ fn write_emits(
         None
     };
 
+    let generated_ts = if emits.iter().any(|emit| matches!(emit, Emit::TypeScript)) {
+        match ridl_backend_ts::generate(ir) {
+            Ok(generated) => Some(generated),
+            Err(ridl_backend_ts::GenerateError::Unrepresentable(message)) => {
+                diagnostics.push(error_diagnostic(
+                    "",
+                    message,
+                    FileId::DETACHED,
+                    TextRange::default(),
+                ));
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     for emit in emits {
         match emit {
             Emit::Rust => {
@@ -585,6 +623,11 @@ fn write_emits(
                     out_dir.join(format!("{base}.ir.json")),
                     ridl_ir::v2::to_json_pretty(ir),
                 )?;
+            }
+            Emit::TypeScript => {
+                if let Some(generated) = &generated_ts {
+                    std::fs::write(out_dir.join(format!("{base}.ts")), &generated.source)?;
+                }
             }
         }
     }
