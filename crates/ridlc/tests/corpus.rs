@@ -845,17 +845,27 @@ pub mod ridl {
 /// `veh-cluster` is the entry that exercises the whole interaction surface,
 /// including the consumer and provider faces of a service's inline shape, the
 /// synthesized tuple-return struct, and the `#[deprecated]` attribute.
+///
+/// It also carries a **tuple under an `internal` declaration**, in both layers
+/// (`internal-shape.ridl`). That is the shape issue #167 was about, and the two
+/// markers for it below are what keep this proof from going quiet on it again:
+/// the entry deliberately held no such tuple while the defect was open, so the
+/// `-D private-interfaces` deny in [`rustc_accepts`] had nothing to bite on.
 #[test]
 fn veh_cluster_generated_rust_compiles_with_rustc() {
     let source = composed_source(Path::new("tests/corpus/veh-cluster"));
     // Anti-vacuity: rustc accepts an empty crate, so the proof is only worth
     // something if the interaction layer is actually in the source it sees —
-    // both faces of a named interface and both faces of an inline shape.
+    // both faces of a named interface, both faces of an inline shape, and the
+    // package-private struct each layer's `internal` tuple induces.
     for marker in [
         "pub trait VehicleStatusConsumer",
         "pub trait VehicleStatusProvider",
         "pub trait ServiceVehHvacCabinConsumer",
         "pub trait ServiceVehHvacCabinProvider",
+        "pub(crate) struct WheelDiagnosticsReadSpanResult",
+        "pub(crate) struct WheelDiagnosticsTickBoundsElement",
+        "pub(crate) struct RawWheelSpanSpan",
     ] {
         assert!(
             source.contains(marker),
@@ -1131,13 +1141,21 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "control: an `internal` typl declaration must stay unexported in TypeScript",
     );
 
-    // Rust. `WheelDiagnostics` is declared `internal`, so all four of the names
-    // it generates are `pub(crate)`.
+    // Rust. `WheelDiagnostics` is declared `internal`, so all **six** of the
+    // names it generates are `pub(crate)` — the two faces, the two metadata
+    // constants, and the structs induced by its two tuple positions: a query's
+    // tuple return and a `final` payload's array element (issue #167). The
+    // typl-layer tuple beside it (`RawWheelSpan.span`) is in the same list: a
+    // tuple has no visibility of its own, so it takes the one of the
+    // declaration that induced it, whichever layer that declaration is in.
     for item in [
         "pub(crate) trait WheelDiagnosticsConsumer",
         "pub(crate) trait WheelDiagnosticsProvider",
         "pub(crate) const WHEEL_DIAGNOSTICS_TIMING",
         "pub(crate) const WHEEL_DIAGNOSTICS_CONTRACTS",
+        "pub(crate) struct WheelDiagnosticsReadSpanResult",
+        "pub(crate) struct WheelDiagnosticsTickBoundsElement",
+        "pub(crate) struct RawWheelSpanSpan",
     ] {
         assert!(
             compiled.rust.contains(item),
@@ -1152,11 +1170,28 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "pub trait WheelDiagnosticsProvider",
         "pub const WHEEL_DIAGNOSTICS_TIMING",
         "pub const WHEEL_DIAGNOSTICS_CONTRACTS",
+        "pub struct WheelDiagnosticsReadSpanResult",
+        "pub struct WheelDiagnosticsTickBoundsElement",
+        "pub struct RawWheelSpanSpan",
     ] {
         assert!(
             !compiled.rust.contains(leaked),
             "an `internal` interface must not generate `{leaked}` — that is the \
              pre-#160 defect this entry was added to catch",
+        );
+    }
+    // The regression direction for the induced struct: a PUBLIC declaration's
+    // tuple still generates a `pub` struct. `veh.hvac.cabin` is a public
+    // service whose inline shape returns a tuple, and `SensorBounds.range` is a
+    // public typl struct's tuple field — one per layer, matching the two
+    // package-private ones above.
+    for item in [
+        "pub struct ServiceVehHvacCabinGetBoundsResult",
+        "pub struct SensorBoundsRange",
+    ] {
+        assert!(
+            compiled.rust.contains(item),
+            "a public declaration's tuple must still generate `{item}`",
         );
     }
 
@@ -1423,6 +1458,94 @@ fn contract_clauses_cover_the_guaranteed_expression_subset() {
     }
 }
 
+/// **Issue #170.** A constant whose value is another constant reaches both
+/// backends as a **value**, never as the referenced name.
+///
+/// The compile proofs above are not enough on their own, and the two halves
+/// asserted here say why:
+///
+/// - `FAN_LIMIT`, a two-hop chain at a named integer backing, used to emit
+///   `FanLevel(MAX_FAN)` in Rust — `error[E0308]`, caught by compilation.
+/// - `FAN_LABEL`, the same shape at a string backing, used to emit
+///   `"FAN_TAG"` — the *reference's own name* as the string value. That
+///   compiles. A compile proof, a `tsc --strict` run and a snapshot review all
+///   pass on it, which is why the value is asserted directly.
+///
+/// Both backends are checked from one lowering, which is the point of fixing it
+/// there: `ConstDef.value` carries no discriminator between a value and a
+/// reference, so no backend could have told them apart, and each one failed
+/// differently — Rust would not compile, TypeScript refused the package
+/// outright with a message about `Number.MAX_SAFE_INTEGER`.
+#[test]
+fn const_chains_lower_as_values_not_names() {
+    let compiled = compile_entry(Path::new("tests/corpus/veh-cluster"));
+
+    // The IR: the value at the end of the chain, not the name of the next hop.
+    let ir = checked_ir(Path::new("tests/corpus/veh-cluster"), "veh.cluster");
+    let const_value = |name: &str| -> String {
+        let decl = ir
+            .decls
+            .iter()
+            .find(|decl| decl.name == name)
+            .unwrap_or_else(|| panic!("the corpus declares `{name}`"));
+        let Some(ridl_ir::v2::decl::Kind::ConstDef(def)) = &decl.kind else {
+            panic!("`{name}` is not a constant");
+        };
+        def.value.clone()
+    };
+    assert_eq!(const_value("FAN_CEILING"), "7", "one hop");
+    assert_eq!(const_value("FAN_LIMIT"), "7", "two hops");
+    assert_eq!(const_value("FAN_LABEL"), "cabin-fan");
+
+    for (backend, source, expected) in [
+        (
+            "Rust",
+            &compiled.rust,
+            "pub const FAN_LIMIT: FanLevel = FanLevel(7);",
+        ),
+        (
+            "Rust",
+            &compiled.rust,
+            "pub const FAN_LABEL: &str = \"cabin-fan\";",
+        ),
+        (
+            "TypeScript",
+            &compiled.typescript,
+            "export const FAN_LIMIT = 7;",
+        ),
+        (
+            "TypeScript",
+            &compiled.typescript,
+            "export const FAN_LABEL = 'cabin-fan' as const;",
+        ),
+    ] {
+        assert!(
+            source.contains(expected),
+            "the {backend} backend must emit `{expected}`",
+        );
+    }
+
+    // The negatives: the referenced NAME must not be the emitted value. Each is
+    // an INITIALIZER rather than a bare name, because `FAN_CEILING` and
+    // `FAN_TAG` are still declared names in both outputs, and because the
+    // source doc comment quoting the old wrong output rides into the generated
+    // one.
+    for (backend, source, leaked) in [
+        ("Rust", &compiled.rust, "= FanLevel(FAN_CEILING);"),
+        ("Rust", &compiled.rust, "= \"FAN_TAG\";"),
+        ("TypeScript", &compiled.typescript, "= FAN_CEILING;"),
+        ("TypeScript", &compiled.typescript, "= 'FAN_TAG' as const;"),
+    ] {
+        assert!(
+            !source.contains(leaked),
+            "the {backend} backend must not emit `{leaked}` — that is the \
+             unresolved reference issue #170 reported",
+        );
+    }
+}
+
+/// **This test pins a defect, deliberately.**
+///
 /// typl Appendix E defines `reserved = "reserved" ( camelCase_id | int_lit )`,
 /// and the parser holds that line: every other literal shape draws FORM-102.
 ///

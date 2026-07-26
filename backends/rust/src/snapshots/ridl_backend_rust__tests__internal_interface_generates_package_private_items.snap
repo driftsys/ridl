@@ -144,6 +144,9 @@ pub trait ShownConsumer {
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     /// ensure: result >= ShownFloor
     async fn read_summary(&self) -> Counter;
+    /// query `getBounds` — ordinal 3 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn get_bounds(&self) -> ShownGetBoundsResult;
 }
 /// The provider face of `Shown` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
@@ -152,6 +155,8 @@ pub trait ShownProvider {
     fn publish_cabin_temp(&mut self, value: Counter);
     /// Handles `readSummary` — query ordinal 2 (ridl §7).
     async fn on_read_summary(&mut self) -> Counter;
+    /// Handles `getBounds` — query ordinal 3 (ridl §7).
+    async fn on_get_bounds(&mut self) -> ShownGetBoundsResult;
 }
 /// Resolved timing for every signal and event of `Shown`, keyed by the source name, in exact microseconds (ridl §9).
 pub const SHOWN_TIMING: &[(&str, TimingConst)] = &[
@@ -186,6 +191,9 @@ pub trait ServiceVehClusterDiagConsumer {
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     /// ensure: result >= DiagFloor
     async fn read_summary(&self) -> Counter;
+    /// query `getBounds` — ordinal 3 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn get_bounds(&self) -> ServiceVehClusterDiagGetBoundsResult;
 }
 /// The provider face of `ServiceVehClusterDiag` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
@@ -194,6 +202,8 @@ pub trait ServiceVehClusterDiagProvider {
     fn publish_cabin_temp(&mut self, value: Counter);
     /// Handles `readSummary` — query ordinal 2 (ridl §7).
     async fn on_read_summary(&mut self) -> Counter;
+    /// Handles `getBounds` — query ordinal 3 (ridl §7).
+    async fn on_get_bounds(&mut self) -> ServiceVehClusterDiagGetBoundsResult;
 }
 /// Resolved timing for every signal and event of `ServiceVehClusterDiag`, keyed by the source name, in exact microseconds (ridl §9).
 pub const SERVICE_VEH_CLUSTER_DIAG_TIMING: &[(&str, TimingConst)] = &[
@@ -229,13 +239,37 @@ pub const SERVICES: &[(&str, &str)] = &[
     ("veh.cluster.hidden", "Hidden"),
     ("veh.cluster.diag", "ServiceVehClusterDiag"),
 ];
-pub struct HiddenGetBoundsResult {
+pub(crate) struct HiddenGetBoundsResult {
     pub min: Counter,
     pub max: Counter,
 }
 impl Default for HiddenGetBoundsResult {
     fn default() -> Self {
         HiddenGetBoundsResult {
+            min: Counter::default(),
+            max: Counter::default(),
+        }
+    }
+}
+pub struct ShownGetBoundsResult {
+    pub min: Counter,
+    pub max: Counter,
+}
+impl Default for ShownGetBoundsResult {
+    fn default() -> Self {
+        ShownGetBoundsResult {
+            min: Counter::default(),
+            max: Counter::default(),
+        }
+    }
+}
+pub struct ServiceVehClusterDiagGetBoundsResult {
+    pub min: Counter,
+    pub max: Counter,
+}
+impl Default for ServiceVehClusterDiagGetBoundsResult {
+    fn default() -> Self {
+        ServiceVehClusterDiagGetBoundsResult {
             min: Counter::default(),
             max: Counter::default(),
         }

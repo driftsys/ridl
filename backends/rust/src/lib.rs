@@ -59,7 +59,7 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let ctx = Ctx::new(package);
 
     let mut items: Vec<TokenStream> = Vec::new();
-    let mut tuples: Vec<(String, v2::TupleType)> = Vec::new();
+    let mut tuples: Vec<InducedTuple> = Vec::new();
 
     for decl in &package.decls {
         items.push(emit_decl(&ctx, decl, &mut tuples));
@@ -74,15 +74,26 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     // Tuple types generate a named nested struct each (typl §11). Process the
     // worklist: emitting a tuple struct's fields can discover further nested
     // tuples, which are appended and drained here.
-    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+    //
+    // A name is emitted once. The same tuple genuinely arrives twice — the
+    // interaction module pre-discovers nested tuples to learn their names, and
+    // emitting the outer tuple's fields finds them again — so a repeat of an
+    // *identical* discovery is expected and skipped. A repeat under one name
+    // with a different shape is a collision, and it is refused rather than
+    // deduplicated; see [`tuple_collision`].
+    let mut seen: HashMap<String, InducedTuple> = HashMap::new();
     let mut index = 0;
     while index < tuples.len() {
-        let (name, tuple) = tuples[index].clone();
+        let induced = tuples[index].clone();
         index += 1;
-        if !seen.insert(name.clone()) {
+        if let Some(previous) = seen.get(&induced.name) {
+            if previous.tuple != induced.tuple || previous.visibility != induced.visibility {
+                return Err(tuple_collision(previous, &induced));
+            }
             continue;
         }
-        items.push(emit_tuple_struct(&ctx, &name, &tuple, &mut tuples));
+        seen.insert(induced.name.clone(), induced.clone());
+        items.push(emit_tuple_struct(&ctx, &induced, &mut tuples));
     }
 
     let tokens = quote! { #(#items)* };
@@ -94,6 +105,82 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
         rust_source: prettyplease::unparse(&file),
         c_header: c_header::render(package)?,
     })
+}
+
+/// One tuple type reached from a declaration, with the visibility that
+/// declaration was declared at (typl §11).
+///
+/// A tuple has no name in source; the struct it generates is named after the
+/// path that reached it and is emitted at module scope beside the declaration
+/// that induced it. The visibility travels with the discovery for the same
+/// reason [`v2::InterfaceShape::visibility`] carries a service's: the value is
+/// authoritative at the point of discovery and nowhere else. By the time
+/// [`emit_tuple_struct`] runs, the tuple is one entry in a flat worklist and
+/// the declaration it came from is out of reach — which is exactly how the
+/// struct came to be emitted `pub` over an `internal` declaration's payload
+/// (issue #167).
+///
+/// One name is one struct. The same discovery repeated — the interaction
+/// module pre-discovers a nested tuple's name and the drain finds it again —
+/// is skipped; a repeat under one name with a different shape or visibility is
+/// a collision and is refused ([`tuple_collision`]), because carrying a
+/// visibility onto a name two declarations share has no sound answer. See
+/// [`generate`].
+#[derive(Debug, Clone)]
+pub(crate) struct InducedTuple {
+    /// The generated struct name — the CamelCase of the path that reached the
+    /// tuple.
+    pub(crate) name: String,
+    pub(crate) tuple: v2::TupleType,
+    /// The visibility of the declaration this tuple was reached from: an
+    /// `internal struct`'s field, or an `internal interface`'s query return.
+    pub(crate) visibility: i32,
+}
+
+/// Refuses a package in which two different tuples generate one struct name.
+///
+/// The name is the CamelCase of the path that reaches the tuple, and nothing
+/// upstream keeps two paths from mangling to one string: `struct AB { c : … }`
+/// and `struct A { bC : … }` both reach `ABC`, and neither draws a ridl
+/// diagnostic. There is no sound way to pick between them, which is why this is
+/// a refusal rather than a rule:
+///
+/// - **Keeping the first** — what the worklist did before — gives the second
+///   declaration the *first one's shape*. `ridlc check` exits 0, the module
+///   compiles, and the contract is silently wrong. It is also how carrying an
+///   inducing declaration's visibility (issue #167) could narrow a struct a
+///   public declaration uses, turning a silent wrong shape into a
+///   `private_interfaces` build failure.
+/// - **Keeping the widest visibility** would publish a package-private type's
+///   shape to escape that build failure, which is the defect #167 fixed.
+///
+/// So neither dedup rule is sound and only rejection is. This is the same
+/// answer `interact::check_name_collisions` gives every other generated-name
+/// clash: codegen names the failure itself rather than handing rustc a module
+/// whose meaning it cannot state.
+///
+/// The two shapes are named because the mangled name cannot distinguish them —
+/// that is the whole defect — and the field lists are what a reader greps for.
+fn tuple_collision(previous: &InducedTuple, current: &InducedTuple) -> GenerateError {
+    fn shape(induced: &InducedTuple) -> String {
+        let fields: Vec<String> = induced
+            .tuple
+            .fields
+            .iter()
+            .map(|field| field.name.clone())
+            .collect();
+        format!("({})", fields.join(", "))
+    }
+    GenerateError {
+        message: format!(
+            "the generated name {name} is claimed by two different tuple types, {a} and {b}; \
+             a tuple generates a struct named for the path that reaches it, and these two paths \
+             spell one name — rename a field or a declaration so they differ",
+            name = current.name,
+            a = shape(previous),
+            b = shape(current),
+        ),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -151,7 +238,7 @@ impl<'a> Ctx<'a> {
 // Declaration emission.
 // ---------------------------------------------------------------------------
 
-fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<(String, v2::TupleType)>) -> TokenStream {
+fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> TokenStream {
     let item = match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => emit_type_def(decl, td),
         Some(v2::decl::Kind::ConstDef(cd)) => return emit_const(ctx, decl, cd),
@@ -263,11 +350,7 @@ fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
     }
 }
 
-fn emit_struct(
-    decl: &v2::Decl,
-    sd: &v2::StructDef,
-    tuples: &mut Vec<(String, v2::TupleType)>,
-) -> TokenStream {
+fn emit_struct(decl: &v2::Decl, sd: &v2::StructDef, tuples: &mut Vec<InducedTuple>) -> TokenStream {
     let name = ident(&decl.name);
     let attrs = decl_attrs(decl);
     let vis = vis_tokens(decl.visibility);
@@ -279,7 +362,7 @@ fn emit_struct(
 
     let fields = sd.members.iter().filter_map(|member| match &member.member {
         Some(v2::struct_member::Member::Field(field)) => {
-            Some(emit_field(&decl.name, field, tuples))
+            Some(emit_field(&decl.name, decl.visibility, field, tuples))
         }
         // A reserved tombstone occupies an ordinal but emits no field
         // (typl §7.4).
@@ -297,8 +380,9 @@ fn emit_struct(
 
 fn emit_field(
     parent: &str,
+    visibility: i32,
     field: &v2::Field,
-    tuples: &mut Vec<(String, v2::TupleType)>,
+    tuples: &mut Vec<InducedTuple>,
 ) -> TokenStream {
     let field_name = ident(&field.name);
     let attrs = field_attrs(field);
@@ -306,7 +390,7 @@ fn emit_field(
     let ty = field
         .r#type
         .as_ref()
-        .map(|ft| field_type_tokens(ft, &hint, tuples))
+        .map(|ft| field_type_tokens(ft, &hint, visibility, tuples))
         .unwrap_or_else(|| quote! { () });
     quote! { #attrs pub #field_name: #ty }
 }
@@ -382,26 +466,38 @@ fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef) -> TokenStream {
 
 /// Emits the generated struct for one tuple type (typl §11), plus its `Default`
 /// impl when every tuple field is derivable.
+///
+/// The struct carries the visibility of the declaration that induced it, and a
+/// tuple nested inside it inherits the same one — a tuple has no visibility of
+/// its own to declare, so the only visibility it can have is the one it was
+/// reached at (see [`InducedTuple`] and [`vis_tokens`]). The fields stay `pub`,
+/// as they are on a declared `struct`: a field's effective visibility is capped
+/// by the item's, so `pub(crate) struct T { pub f: Private }` exposes nothing.
 fn emit_tuple_struct(
     ctx: &Ctx,
-    name: &str,
-    tuple: &v2::TupleType,
-    tuples: &mut Vec<(String, v2::TupleType)>,
+    induced: &InducedTuple,
+    tuples: &mut Vec<InducedTuple>,
 ) -> TokenStream {
+    let InducedTuple {
+        name,
+        tuple,
+        visibility,
+    } = induced;
     let name_id = ident(name);
+    let vis = vis_tokens(*visibility);
     let fields = tuple.fields.iter().map(|field| {
         let fname = ident(&field.name);
         let hint = format!("{}{}", name, camel_case(&field.name));
         let ty = field
             .r#type
             .as_ref()
-            .map(|ft| field_type_tokens(ft, &hint, tuples))
+            .map(|ft| field_type_tokens(ft, &hint, *visibility, tuples))
             .unwrap_or_else(|| quote! { () });
         quote! { pub #fname: #ty }
     });
 
     let struct_item = quote! {
-        pub struct #name_id {
+        #vis struct #name_id {
             #(#fields),*
         }
     };
@@ -419,10 +515,17 @@ fn emit_tuple_struct(
 
 /// The Rust type of a field. Tuple field types generate a named nested struct
 /// (recorded in `tuples`); the struct name is `hint` (CamelCase of the path).
+///
+/// `visibility` is the visibility of the declaration this position belongs to.
+/// It is carried rather than derived because a tuple is anonymous in source and
+/// declares none of its own, and because it reaches [`emit_tuple_struct`]
+/// through a flat worklist that has forgotten where it came from
+/// ([`InducedTuple`]).
 pub(crate) fn field_type_tokens(
     ft: &v2::FieldType,
     hint: &str,
-    tuples: &mut Vec<(String, v2::TupleType)>,
+    visibility: i32,
+    tuples: &mut Vec<InducedTuple>,
 ) -> TokenStream {
     let inner = match &ft.kind {
         Some(v2::field_type::Kind::Named(name)) => type_path(name),
@@ -430,7 +533,11 @@ pub(crate) fn field_type_tokens(
         Some(v2::field_type::Kind::InlineScalar(td)) => inline_scalar_tokens(td),
         Some(v2::field_type::Kind::Tuple(tuple)) => {
             let tuple_name = hint.to_string();
-            tuples.push((tuple_name.clone(), tuple.clone()));
+            tuples.push(InducedTuple {
+                name: tuple_name.clone(),
+                tuple: tuple.clone(),
+                visibility,
+            });
             let id = ident(&tuple_name);
             quote! { #id }
         }
@@ -438,7 +545,7 @@ pub(crate) fn field_type_tokens(
             let element = array
                 .element
                 .as_ref()
-                .map(|el| field_type_tokens(el, &format!("{hint}Element"), tuples))
+                .map(|el| field_type_tokens(el, &format!("{hint}Element"), visibility, tuples))
                 .unwrap_or_else(|| quote! { () });
             if array.min == array.max {
                 let len = usize_tokens(array.min);
@@ -451,12 +558,12 @@ pub(crate) fn field_type_tokens(
             let key = map
                 .key
                 .as_ref()
-                .map(|k| field_type_tokens(k, &format!("{hint}Key"), tuples))
+                .map(|k| field_type_tokens(k, &format!("{hint}Key"), visibility, tuples))
                 .unwrap_or_else(|| quote! { () });
             let value = map
                 .value
                 .as_ref()
-                .map(|v| field_type_tokens(v, &format!("{hint}Value"), tuples))
+                .map(|v| field_type_tokens(v, &format!("{hint}Value"), visibility, tuples))
                 .unwrap_or_else(|| quote! { () });
             quote! { Vec<(#key, #value)> }
         }
@@ -627,19 +734,34 @@ pub(crate) fn deprecated_attr(reason: Option<&str>) -> TokenStream {
 /// not per module: a package holding one `internal` and one public declaration
 /// generates one `pub(crate)` item and one `pub` item.
 ///
-/// It governs the item a declaration is realized as, not the auxiliary types
-/// that item's shape induces. A tuple in a field or an interaction position
-/// generates a named struct of its own ([`emit_tuple_struct`]), which stays
-/// `pub` whether or not the declaration that induced it is `internal` — the
-/// same rule the typl surface has followed since E1.
+/// It governs the item a declaration is realized as **and the auxiliary types
+/// that item's shape induces**. A tuple in a field or an interaction position
+/// generates a named struct of its own ([`emit_tuple_struct`]), and that struct
+/// carries the visibility of the declaration that induced it, the way #160
+/// derived one visibility per interface and applied it to all four of that
+/// interface's names.
 ///
-/// Widening is the safe direction, and only that direction. A `pub` item
-/// exposing a `pub(crate)` type draws the `private_interfaces` lint — on rustc
-/// 1.95 it is warn-by-default rather than the hard E0446 it once was, so it
-/// compiles, but a consumer crate building with `-D warnings` (this repo's own
-/// gate does) turns it into a build failure. A `pub(crate)` item naming a `pub`
-/// type is unremarkable in every configuration. Narrowing an induced struct
-/// would therefore put the failure mode on the wrong side of the rule.
+/// Until issue #167 the induced struct was fixed at `pub`, which is wrong in
+/// both directions. It publishes the shape of a declaration the keyword hides —
+/// the argument #160 made for the interface's own four names applies unchanged
+/// to a fifth name the same declaration generates. And it does not compile: an
+/// `internal` declaration may name `internal` declarations freely (typl §3.3),
+/// so `internal struct Holder { t : (a : Hidden) }` puts a `pub(crate)` type in
+/// a `pub` struct's field and rustc reports `private_interfaces`. The corpus
+/// denies that lint by name, and `ridlc check` accepts the source, so the two
+/// halves disagreed until the visibility was carried.
+///
+/// The reverse direction is closed by TYPL-005 on the **source** route: a
+/// public declaration naming an `internal` one is rejected, so a `pub` induced
+/// struct never holds a `pub(crate)` type. That is not the same as an invariant,
+/// and the difference is load-bearing. Two declarations whose paths mangle to
+/// one struct name reach the same state by a route TYPL-005 cannot see — one
+/// declaration `internal`, the other public, no `internal` payload type
+/// anywhere — and carrying a visibility onto a name two declarations share
+/// would make a program that compiled today fail `private_interfaces`. That is
+/// why [`tuple_collision`] refuses the collision instead: the invariant holds
+/// because the state that breaks it is not generated, not because it cannot be
+/// described.
 pub(crate) fn vis_tokens(visibility: i32) -> TokenStream {
     match v2::Visibility::try_from(visibility).unwrap_or(v2::Visibility::Unspecified) {
         v2::Visibility::Internal => quote! { pub(crate) },

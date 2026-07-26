@@ -1344,6 +1344,65 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
+      "name": "RawWheelSpan",
+      "visibility": 2,
+      "is_error": false,
+      "doc": "The window of raw tick counts a wheel diagnostic covers.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "span",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Tuple": {
+                        "fields": [
+                          {
+                            "name": "first",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "RawTickCount"
+                              }
+                            }
+                          },
+                          {
+                            "name": "latest",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "RawTickCount"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": true
+        }
+      }
+    },
+    {
       "name": "FanLevel",
       "visibility": 1,
       "is_error": false,
@@ -1578,6 +1637,103 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
         "ConstDef": {
           "type_ref": "FanLevel",
           "value": "7",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "FAN_CEILING",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The ceiling a fan request is clamped to.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanLevel",
+          "value": "7",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "FAN_LIMIT",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The same ceiling, one hop further along the chain.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanLevel",
+          "value": "7",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "FanTag",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The label a cabin fan reports itself under.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Primitive": 4
+            }
+          },
+          "constraint": {
+            "min": null,
+            "max": null,
+            "step": null,
+            "len_min": 1,
+            "len_max": 32,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": "unset",
+          "init": {
+            "derivable": true,
+            "value": "unset"
+          },
+          "width": null
+        }
+      }
+    },
+    {
+      "name": "FAN_TAG",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The cabin fan's label.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanTag",
+          "value": "cabin-fan",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "FAN_LABEL",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The same label, reached through the constant above.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanTag",
+          "value": "cabin-fan",
           "regex": null
         }
       }
@@ -2134,6 +2290,101 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               ],
               "contracts": []
+            }
+          }
+        },
+        {
+          "name": "readSpan",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 5,
+          "kind": {
+            "QueryDef": {
+              "params": [],
+              "return_type": {
+                "kind": {
+                  "Value": {
+                    "optional": false,
+                    "kind": {
+                      "Tuple": {
+                        "fields": [
+                          {
+                            "name": "min",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "RawTickCount"
+                              }
+                            }
+                          },
+                          {
+                            "name": "max",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "RawTickCount"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "contracts": []
+            }
+          }
+        },
+        {
+          "name": "tickBounds",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 6,
+          "kind": {
+            "FinalDef": {
+              "payload": {
+                "optional": false,
+                "kind": {
+                  "Array": {
+                    "element": {
+                      "optional": false,
+                      "kind": {
+                        "Tuple": {
+                          "fields": [
+                            {
+                              "name": "low",
+                              "type": {
+                                "optional": false,
+                                "kind": {
+                                  "Named": "RawTickCount"
+                                }
+                              }
+                            },
+                            {
+                              "name": "high",
+                              "type": {
+                                "optional": false,
+                                "kind": {
+                                  "Named": "RawTickCount"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "min": 2,
+                    "max": 2
+                  }
+                }
+              }
             }
           }
         }

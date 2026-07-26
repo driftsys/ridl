@@ -221,6 +221,18 @@ impl Default for RawTickCount {
         RawTickCount(0)
     }
 }
+/// The window of raw tick counts a wheel diagnostic covers.
+#[repr(C)]
+pub(crate) struct RawWheelSpan {
+    pub span: RawWheelSpanSpan,
+}
+impl Default for RawWheelSpan {
+    fn default() -> Self {
+        RawWheelSpan {
+            span: RawWheelSpanSpan::default(),
+        }
+    }
+}
 #[repr(transparent)]
 pub struct FanLevel(pub i64);
 impl Default for FanLevel {
@@ -270,6 +282,22 @@ impl Default for HvacError {
 /// expression subset admits constants (ridl §13) and nothing in the corpus
 /// exercised that until these members were added.
 pub const MAX_FAN: FanLevel = FanLevel(7);
+/// The ceiling a fan request is clamped to.
+pub const FAN_CEILING: FanLevel = FanLevel(7);
+/// The same ceiling, one hop further along the chain.
+pub const FAN_LIMIT: FanLevel = FanLevel(7);
+/// The label a cabin fan reports itself under.
+#[repr(transparent)]
+pub struct FanTag(pub String);
+impl Default for FanTag {
+    fn default() -> Self {
+        FanTag("unset".to_string())
+    }
+}
+/// The cabin fan's label.
+pub const FAN_TAG: &str = "cabin-fan";
+/// The same label, reached through the constant above.
+pub const FAN_LABEL: &str = "cabin-fan";
 /// Where a signal's current value came from (ridl §4.4, §4.5).
 ///
 /// `Init` is the channel's seeded value, before the provider's first
@@ -589,6 +617,12 @@ pub(crate) trait WheelDiagnosticsConsumer {
     /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     async fn reset_ticks(&self, seed: RawTickCount);
+    /// query `readSpan` — ordinal 5 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn read_span(&self) -> WheelDiagnosticsReadSpanResult;
+    /// final `tickBounds` — ordinal 6 (ridl §8).
+    /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
+    fn tick_bounds(&self) -> &[WheelDiagnosticsTickBoundsElement; 2];
 }
 /// A package-private contract shape: realized inside this package, never part
 /// of the cross-package surface.
@@ -603,6 +637,8 @@ pub(crate) trait WheelDiagnosticsProvider {
     async fn on_read_ticks(&mut self) -> RawTickCount;
     /// Handles `resetTicks` — command ordinal 4 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
     async fn on_reset_ticks(&mut self, seed: RawTickCount);
+    /// Handles `readSpan` — query ordinal 5 (ridl §7).
+    async fn on_read_span(&mut self) -> WheelDiagnosticsReadSpanResult;
 }
 /// Resolved timing for every signal and event of `WheelDiagnostics`, keyed by the source name, in exact microseconds (ridl §9).
 pub(crate) const WHEEL_DIAGNOSTICS_TIMING: &[(&str, TimingConst)] = &[
@@ -1010,6 +1046,42 @@ pub const SERVICES: &[(&str, &str)] = &[
     ("veh.cluster.standby", "VehicleStatus"),
     ("veh.hvac.cabin", "ServiceVehHvacCabin"),
 ];
+pub(crate) struct RawWheelSpanSpan {
+    pub first: RawTickCount,
+    pub latest: RawTickCount,
+}
+impl Default for RawWheelSpanSpan {
+    fn default() -> Self {
+        RawWheelSpanSpan {
+            first: RawTickCount::default(),
+            latest: RawTickCount::default(),
+        }
+    }
+}
+pub(crate) struct WheelDiagnosticsReadSpanResult {
+    pub min: RawTickCount,
+    pub max: RawTickCount,
+}
+impl Default for WheelDiagnosticsReadSpanResult {
+    fn default() -> Self {
+        WheelDiagnosticsReadSpanResult {
+            min: RawTickCount::default(),
+            max: RawTickCount::default(),
+        }
+    }
+}
+pub(crate) struct WheelDiagnosticsTickBoundsElement {
+    pub low: RawTickCount,
+    pub high: RawTickCount,
+}
+impl Default for WheelDiagnosticsTickBoundsElement {
+    fn default() -> Self {
+        WheelDiagnosticsTickBoundsElement {
+            low: RawTickCount::default(),
+            high: RawTickCount::default(),
+        }
+    }
+}
 pub struct ServiceVehHvacCabinGetBoundsResult {
     pub min: crate::veh::common::Temperature,
     pub max: crate::veh::common::Temperature,

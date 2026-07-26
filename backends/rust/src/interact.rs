@@ -38,13 +38,14 @@
 //! both faces and both metadata constants — never a `pub` one, the same
 //! package-private mapping the typl surface gives an `internal` declaration
 //! (ADR-0002 §8, ADR-0008 decision 7). Publishing the API of a declaration the
-//! keyword hides would defeat the modifier. The vocabulary and the service
-//! table are package-level and stay `pub`; so do the tuple structs an
-//! interaction position induces, which follow the typl rule for a tuple under
-//! an `internal` declaration.
+//! keyword hides would defeat the modifier, and the struct a query's tuple
+//! return induces is a fifth name the same declaration generates, so it carries
+//! the same visibility (issue #167). The vocabulary and the service table are
+//! package-level and stay `pub`: they are emitted once per module and belong to
+//! no single declaration.
 
 use crate::{
-    GenerateError, camel_case, deprecated_attr, doc_attrs, field_type_tokens, ident,
+    GenerateError, InducedTuple, camel_case, deprecated_attr, doc_attrs, field_type_tokens, ident,
     primitive_tokens, type_path, vis_tokens,
 };
 use proc_macro2::{Literal, TokenStream};
@@ -61,7 +62,7 @@ use std::collections::{HashMap, HashSet};
 /// `tuples`, which the caller drains alongside the ones found in declarations.
 pub(crate) fn emit(
     package: &v2::Package,
-    tuples: &mut Vec<(String, v2::TupleType)>,
+    tuples: &mut Vec<InducedTuple>,
 ) -> Result<TokenStream, GenerateError> {
     if package.interfaces.is_empty() && package.services.is_empty() {
         return Ok(quote! {});
@@ -119,17 +120,17 @@ pub(crate) fn emit(
     let mut seen: HashSet<String> = HashSet::new();
     let mut index = tuples_start;
     while index < tuples.len() {
-        let (name, tuple) = tuples[index].clone();
+        let induced = tuples[index].clone();
         index += 1;
-        if !seen.insert(name.clone()) {
+        if !seen.insert(induced.name.clone()) {
             continue;
         }
-        for field in &tuple.fields {
+        for field in &induced.tuple.fields {
             if let Some(field_type) = field.r#type.as_ref() {
-                let hint = format!("{}{}", name, camel_case(&field.name));
+                let hint = format!("{}{}", induced.name, camel_case(&field.name));
                 // The tokens are discarded; the side effect on `tuples` is the
                 // point.
-                let _ = field_type_tokens(field_type, &hint, tuples);
+                let _ = field_type_tokens(field_type, &hint, induced.visibility, tuples);
             }
         }
     }
@@ -308,7 +309,7 @@ struct Emitted {
 fn emit_interface(
     names: Names,
     interface: &v2::Interface,
-    tuples: &mut Vec<(String, v2::TupleType)>,
+    tuples: &mut Vec<InducedTuple>,
 ) -> Result<TokenStream, GenerateError> {
     let mut out = Emitted::default();
     let name = names.r#type;
@@ -400,7 +401,7 @@ fn emit_interface(
 fn emit_interaction(
     names: Names,
     decl: &v2::Decl,
-    tuples: &mut Vec<(String, v2::TupleType)>,
+    tuples: &mut Vec<InducedTuple>,
     out: &mut Emitted,
 ) -> Result<(), GenerateError> {
     // The two spellings, bound once so every use below is explicit about which
@@ -556,7 +557,7 @@ fn emit_interaction(
             let ty = final_def
                 .payload
                 .as_ref()
-                .map(|ft| field_type_tokens(ft, &hint, tuples))
+                .map(|ft| field_type_tokens(ft, &hint, names.visibility, tuples))
                 .unwrap_or_else(|| quote! { () });
             let doc = doc_attrs(&doc_body(
                 &decl.doc,
@@ -608,7 +609,7 @@ fn param_tokens(
     names: Names,
     interaction: &str,
     params: &[v2::Param],
-    tuples: &mut Vec<(String, v2::TupleType)>,
+    tuples: &mut Vec<InducedTuple>,
 ) -> Result<Vec<TokenStream>, GenerateError> {
     let mut out = Vec::with_capacity(params.len());
     for p in params {
@@ -631,7 +632,7 @@ fn param_tokens(
                 let item = stream_item_tokens(names.identity, interaction, stream)?;
                 quote! { impl RidlStream<Item = #item> }
             }
-            Some(ft) => field_type_tokens(ft, &hint, tuples),
+            Some(ft) => field_type_tokens(ft, &hint, names.visibility, tuples),
             None => quote! { () },
         };
         out.push(quote! { #name: #ty });
@@ -654,7 +655,7 @@ fn return_tokens(
     names: Names,
     interaction: &str,
     query: &v2::QueryDef,
-    tuples: &mut Vec<(String, v2::TupleType)>,
+    tuples: &mut Vec<InducedTuple>,
 ) -> TokenStream {
     match query.return_type.as_ref().and_then(|r| r.kind.as_ref()) {
         // The failure vocabulary is closed and declared, so it maps to a native
@@ -671,7 +672,7 @@ fn return_tokens(
                 camel_case(names.r#type),
                 camel_case(interaction)
             );
-            field_type_tokens(ft, &hint, tuples)
+            field_type_tokens(ft, &hint, names.visibility, tuples)
         }
         None => quote! { () },
     }
@@ -1116,7 +1117,7 @@ fn claim(
 fn check_name_collisions(
     package: &v2::Package,
     owners: &[(String, String)],
-    generated_tuples: &[(String, v2::TupleType)],
+    generated_tuples: &[InducedTuple],
 ) -> Result<(), GenerateError> {
     // (name, namespace) -> the construct that generated it. Building this map
     // detects generated-vs-generated collisions on its own.
@@ -1173,7 +1174,8 @@ fn check_name_collisions(
         )?;
     }
 
-    for (name, _) in generated_tuples {
+    for induced in generated_tuples {
+        let name = &induced.name;
         // A tuple name can legitimately be discovered twice — the worklist is
         // deduplicated by the caller — so a repeat is not a collision.
         if claimed.contains_key(&(name.clone(), Namespace::Type)) {

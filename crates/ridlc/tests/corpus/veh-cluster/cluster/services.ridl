@@ -49,6 +49,35 @@ error enum HvacError {
 /// exercised that until these members were added.
 const MAX_FAN : FanLevel = 7
 
+// A constant whose value is **another constant** (typl §6) — the shape of
+// issue #170, which no corpus entry held. `FAN_CEILING` lowered as the text
+// `MAX_FAN`, and the Rust backend emitted `FanLevel(MAX_FAN)`, which does not
+// compile. `veh_cluster_generated_rust_compiles_with_rustc` is the guard, and
+// the chain is two hops so a one-step resolution is not enough.
+
+/// The ceiling a fan request is clamped to.
+const FAN_CEILING : FanLevel = MAX_FAN
+
+/// The same ceiling, one hop further along the chain.
+const FAN_LIMIT   : FanLevel = FAN_CEILING
+
+// The same shape at a string backing, which is the half that failed
+// *silently*: the referring constant lowered as the literal text of the name it
+// referred to, and both backends emitted that as the value. A compile proof
+// cannot see a wrong value, so `const_chains_lower_as_values_not_names` asserts
+// it directly. The backing type is declared here rather than imported because a
+// backend skips a constant whose type is cross-package — the backing is unknown
+// to it — so an imported one would emit nothing to assert on.
+
+/// The label a cabin fan reports itself under.
+type FanTag : string [1..32] = "unset"
+
+/// The cabin fan's label.
+const FAN_TAG   : FanTag = "cabin-fan"
+
+/// The same label, reached through the constant above.
+const FAN_LABEL : FanTag = FAN_TAG
+
 // --- the named-reference form (ridl §14.5) ---
 
 /// The cluster's published vehicle-status contract.
