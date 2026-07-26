@@ -29,7 +29,9 @@ scopes = [
   "ci",
   "hooks",
   "deps",
-  # compiler workspace crates (docs/ROADMAP.md, epics E0–E1)
+  # compiler workspace crates (docs/ROADMAP.md, epics E0–E2 — `ridl-backend-ts`
+  # is E2.6 and `ridl-diff` is E2.8). The `ridl` crate is not repeated here; it
+  # takes the `ridl` scope listed above with the language it drives.
   "ridl-syntax",
   "ridl-core",
   "ridl-ir",

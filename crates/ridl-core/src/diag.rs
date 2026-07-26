@@ -423,11 +423,12 @@ diag_codes! {
     /// `RIDL_PROFILE_CODES` in `crates/ridlc/tests/corpus.rs` — the list that
     /// gives every ridl code a living example — is a list of code *strings*
     /// with no link to these constants, so a code minted here and omitted there
-    /// compiles and passes the suite. Decision 21 asks the declare-once
-    /// mechanism to cover that list as well, and it does not: the list carries a
-    /// `Provoked` discriminator this catalogue has no equivalent of. Stated
-    /// here as decision 21 requires; the gap is separate work, tracked in issue
-    /// #172.
+    /// is caught by a string-set equality standing beside the declaration
+    /// (`ridl_profile_codes_match_the_catalogue`) rather than by the declaration
+    /// itself. Decision 21 asks the declare-once mechanism to cover that list as
+    /// well, and it does not: the list carries a `Provoked` discriminator this
+    /// catalogue has no equivalent of. Stated here as decision 21 requires; the
+    /// gap is separate work, tracked in issue #172.
     RIDL_CATALOG {
         /// `signal` or `event` without a timing annotation — the default
         /// `[100ms..1000ms]` (or the configured `[defaults].timing`) is applied
@@ -893,10 +894,11 @@ pub fn house_style_message(raw: &str) -> String {
     raw.to_string()
 }
 
-/// The backticked glyph for a punctuation `SyntaxKind` `Debug` name, or `None`
-/// when the name is not a known punctuation token. Covers every punctuation kind
-/// the parser can name in a FORM-101 `expected` message, so the mapping stays
-/// correct if new `expect` call sites are added.
+/// The backticked glyph for a punctuation or operator `SyntaxKind` `Debug`
+/// name, or `None` when the name is not a known single-glyph token. Covers every
+/// kind the parser can name in a FORM-101 `expected` message, so the mapping
+/// stays correct if new `expect` call sites are added — an invariant the
+/// `every_expectable_token_has_a_glyph` test enforces against the parser source.
 fn punctuation_glyph(debug_name: &str) -> Option<&'static str> {
     Some(match debug_name {
         "Colon" => "`:`",
@@ -914,6 +916,9 @@ fn punctuation_glyph(debug_name: &str) -> Option<&'static str> {
         "Question" => "`?`",
         "At" => "`@`",
         "Pipe" => "`|`",
+        // `>` closes a stream type `<T>` (ridl reference §12), which is the
+        // one operator token the parser reaches through `expect`.
+        "Gt" => "`>`",
         _ => return None,
     })
 }
@@ -1011,12 +1016,107 @@ mod tests {
         );
     }
 
+    /// The rendered text for every `SyntaxKind` the parser hands to `expect`.
+    ///
+    /// One row per kind in the reachable set the
+    /// `every_expectable_token_has_a_glyph` test derives, so a wrong glyph is
+    /// caught here and a missing one is caught there.
     #[test]
     fn house_style_rewrites_debug_token_names() {
         assert_eq!(house_style_message("expected RBracket"), "expected `]`");
         assert_eq!(house_style_message("expected Colon"), "expected `:`");
         assert_eq!(house_style_message("expected Eq"), "expected `=`");
         assert_eq!(house_style_message("expected Semicolon"), "expected `;`");
+        assert_eq!(house_style_message("expected RParen"), "expected `)`");
+        assert_eq!(house_style_message("expected DotDot"), "expected `..`");
+        // Reached since stream types landed: `query a(): <Speed` with no `>`.
+        assert_eq!(house_style_message("expected Gt"), "expected `>`");
+    }
+
+    /// Every `SyntaxKind` the parser hands to `expect` has a glyph.
+    ///
+    /// `expect` is the one call site in the workspace that formats a
+    /// `SyntaxKind` `Debug` name into a diagnostic message, and every caller of
+    /// [`house_style_message`] feeds it a parser message, so the set of kinds
+    /// that can reach [`punctuation_glyph`] is exactly the set of literal
+    /// arguments `expect` is called with. A kind outside the table renders as
+    /// its raw `Debug` name — `expected Gt` reached users this way, because
+    /// stream types added an `expect(SyntaxKind::Gt)` call site and nothing
+    /// tied the two files together.
+    ///
+    /// The first assertion pins that single-producer premise, and pins it
+    /// **workspace-wide**: a second `Debug`-shaped emitter anywhere would widen
+    /// the reachable set past what the scan below reads, so it has to fail
+    /// rather than pass silently. Reading only the parser would leave the
+    /// premise's own scope unchecked — the same shape of gap as the one this
+    /// test exists to close.
+    #[test]
+    fn every_expectable_token_has_a_glyph() {
+        const CALL: &str = ".expect(SyntaxKind::";
+
+        let root = workspace_root();
+        let mut sources = Vec::new();
+        collect_rust_sources(&root, &mut sources);
+        assert!(
+            sources.len() >= 60,
+            "the walk found only {} `.rs` files under {} — it is not reaching \
+             the workspace",
+            sources.len(),
+            root.display(),
+        );
+
+        let parser = root.join("crates/ridl-syntax/src/parser.rs");
+        let emitters: Vec<String> = sources
+            .iter()
+            .filter(|path| {
+                let text = std::fs::read_to_string(path)
+                    .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+                let stripped = strip_line_comments(&text);
+                stripped
+                    .match_indices(r#""expected {"#)
+                    .any(|(at, matched)| is_whole_debug_message(&stripped[at + matched.len()..]))
+            })
+            .map(|path| path.display().to_string())
+            .collect();
+        assert_eq!(
+            emitters,
+            vec![parser.display().to_string()],
+            "the workspace no longer has exactly one message that is a \
+             `Debug`-formatted token name and nothing else, so the reachable \
+             kinds are no longer just `expect`'s arguments in the parser. Either \
+             route the new emitter through `expect`, or widen the scan below to \
+             read its argument too",
+        );
+
+        let text = std::fs::read_to_string(&parser)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", parser.display()));
+        let despaced: String = strip_line_comments(&text)
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let mut expectable = std::collections::BTreeSet::new();
+        for (at, _) in despaced.match_indices(CALL) {
+            let rest = &despaced[at + CALL.len()..];
+            let end = rest
+                .find(')')
+                .expect("an `expect` call closes its parenthesis");
+            expectable.insert(rest[..end].to_string());
+        }
+
+        assert!(
+            expectable.len() >= 7,
+            "the scan found only {} expectable kinds in {} — it is not reading \
+             the call sites",
+            expectable.len(),
+            parser.display(),
+        );
+        for kind in &expectable {
+            assert!(
+                punctuation_glyph(kind).is_some(),
+                "the parser can emit `expected {kind}`, which renders the raw \
+                 `Debug` name to the user. Add `{kind}` to `punctuation_glyph`.",
+            );
+        }
     }
 
     #[test]
@@ -1458,6 +1558,29 @@ mod tests {
              not finding them",
             documented.len(),
         );
+    }
+
+    /// Whether `rest` — the source just past a `"expected {` — closes the
+    /// format string immediately as `ident:?}"`, making the whole message a
+    /// `Debug`-formatted value and nothing else.
+    ///
+    /// That exact shape is what reaches [`punctuation_glyph`]: anything with
+    /// prose after the placeholder (`"expected {text:?} to parse"`) is not a
+    /// bare token name, and a `Display` placeholder (`"expected {name}"`) is not
+    /// a `Debug` name. Both occur in the workspace and both are correctly
+    /// ignored. What this does not catch is an emitter that formats the name
+    /// through a variable rather than inline; no such site exists, and the
+    /// recurrence worth guarding is a second `expect`-shaped helper.
+    fn is_whole_debug_message(rest: &str) -> bool {
+        let Some(colon) = rest.find(':') else {
+            return false;
+        };
+        let placeholder = &rest[..colon];
+        !placeholder.is_empty()
+            && placeholder
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && rest[colon..].starts_with(":?}\"")
     }
 
     /// `text` with every `//` line comment removed, so prose about a forbidden

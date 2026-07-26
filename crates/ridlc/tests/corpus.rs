@@ -292,15 +292,19 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
 /// listed as `Showcase` that stops firing fails
 /// [`showcase_provokes_exactly_the_expected_codes`].
 ///
-/// A code with **no entry at all** does not fail anything. `RIDL_PROFILE_CODES`
-/// is a list of code *strings* with no link to the `DiagCode` constants, so a
-/// code minted in `ridl-core` and left out of this list compiles and passes the
-/// suite — proven by minting `RIDL-150` in `RIDL_CATALOG` with no entry here.
-/// The two lists agree today by coincidence, not by construction. ADR-0008
-/// decision 21's declare-once macro closes the catalogue half and does not
-/// reach this one: the `Provoked` discriminator has no catalogue equivalent, so
-/// generating this list from the same declaration was not attempted. The gap is
-/// recorded as separate work in issue #172.
+/// Membership is checked against the catalogue by
+/// [`ridl_profile_codes_match_the_catalogue`]: this list holds every `RIDL-`
+/// code in `RIDL_CATALOG` and no others. That was not always so. The list is
+/// code *strings* with no link to the `DiagCode` constants, so a code minted in
+/// `ridl-core` and left out of it compiled and passed the suite — proven by
+/// minting `RIDL-150` in `RIDL_CATALOG` with no entry here. The two lists
+/// agreed by coincidence rather than by construction until that test was added.
+///
+/// The remaining gap is the `Provoked` half. ADR-0008 decision 21's declare-once
+/// macro covers the catalogue and does not reach this list: the discriminator
+/// has no catalogue equivalent, so generating the list from the same declaration
+/// was not attempted, and which fixture provokes a code is still written down by
+/// hand. That gap is recorded as separate work in issue #172.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Provoked {
     /// Emitted by the `ridl-diag-showcase` corpus entry.
@@ -434,6 +438,42 @@ fn showcase_provokes_exactly_the_expected_codes() {
         missing.is_empty() && unexpected.is_empty(),
         "the diagnostic showcase drifted.\n  no longer provoked: {missing:?}\n  \
          newly provoked: {unexpected:?}",
+    );
+}
+
+/// `RIDL_PROFILE_CODES` holds every `RIDL-` code the catalogue declares, and no
+/// others.
+///
+/// Without this, the only thing tying the two together was that someone
+/// remembered to edit both: a code minted in `RIDL_CATALOG` and left out of the
+/// list is invisible to the whole suite, because every other assertion here
+/// iterates the list. The coverage index would then be silently incomplete
+/// while still passing.
+///
+/// Only the `RIDL-` namespace is compared. The list also carries the shared
+/// FORM, MANI, and TYPL codes E2 added or folded into the ridl profile, and
+/// those catalogues hold many codes the profile does not claim, so equality
+/// over them would assert something untrue. Membership is all this checks —
+/// where each code is provoked stays hand-written (issue #172).
+#[test]
+fn ridl_profile_codes_match_the_catalogue() {
+    let catalogued: std::collections::BTreeSet<&str> = ridl_core::diag::RIDL_CATALOG
+        .iter()
+        .map(|entry| entry.code.as_str())
+        .collect();
+    let listed: std::collections::BTreeSet<&str> = RIDL_PROFILE_CODES
+        .iter()
+        .map(|(code, _)| *code)
+        .filter(|code| code.starts_with("RIDL-"))
+        .collect();
+
+    let unlisted: Vec<&str> = catalogued.difference(&listed).copied().collect();
+    let uncatalogued: Vec<&str> = listed.difference(&catalogued).copied().collect();
+    assert!(
+        unlisted.is_empty() && uncatalogued.is_empty(),
+        "`RIDL_PROFILE_CODES` and `RIDL_CATALOG` disagree.\n  \
+         in the catalogue, absent from this list: {unlisted:?}\n  \
+         in this list, absent from the catalogue: {uncatalogued:?}",
     );
 }
 
