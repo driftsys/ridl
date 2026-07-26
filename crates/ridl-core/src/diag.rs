@@ -893,10 +893,11 @@ pub fn house_style_message(raw: &str) -> String {
     raw.to_string()
 }
 
-/// The backticked glyph for a punctuation `SyntaxKind` `Debug` name, or `None`
-/// when the name is not a known punctuation token. Covers every punctuation kind
-/// the parser can name in a FORM-101 `expected` message, so the mapping stays
-/// correct if new `expect` call sites are added.
+/// The backticked glyph for a punctuation or operator `SyntaxKind` `Debug`
+/// name, or `None` when the name is not a known single-glyph token. Covers every
+/// kind the parser can name in a FORM-101 `expected` message, so the mapping
+/// stays correct if new `expect` call sites are added — an invariant the
+/// `every_expectable_token_has_a_glyph` test enforces against the parser source.
 fn punctuation_glyph(debug_name: &str) -> Option<&'static str> {
     Some(match debug_name {
         "Colon" => "`:`",
@@ -914,6 +915,9 @@ fn punctuation_glyph(debug_name: &str) -> Option<&'static str> {
         "Question" => "`?`",
         "At" => "`@`",
         "Pipe" => "`|`",
+        // `>` closes a stream type `<T>` (ridl reference §12), which is the
+        // one operator token the parser reaches through `expect`.
+        "Gt" => "`>`",
         _ => return None,
     })
 }
@@ -1011,12 +1015,79 @@ mod tests {
         );
     }
 
+    /// The rendered text for every `SyntaxKind` the parser hands to `expect`.
+    ///
+    /// One row per kind in the reachable set the
+    /// `every_expectable_token_has_a_glyph` test derives, so a wrong glyph is
+    /// caught here and a missing one is caught there.
     #[test]
     fn house_style_rewrites_debug_token_names() {
         assert_eq!(house_style_message("expected RBracket"), "expected `]`");
         assert_eq!(house_style_message("expected Colon"), "expected `:`");
         assert_eq!(house_style_message("expected Eq"), "expected `=`");
         assert_eq!(house_style_message("expected Semicolon"), "expected `;`");
+        assert_eq!(house_style_message("expected RParen"), "expected `)`");
+        assert_eq!(house_style_message("expected DotDot"), "expected `..`");
+        // Reached since stream types landed: `query a(): <Speed` with no `>`.
+        assert_eq!(house_style_message("expected Gt"), "expected `>`");
+    }
+
+    /// Every `SyntaxKind` the parser hands to `expect` has a glyph.
+    ///
+    /// `expect` is the one call site in the workspace that formats a
+    /// `SyntaxKind` `Debug` name into a diagnostic message, and every caller of
+    /// [`house_style_message`] feeds it a parser message, so the set of kinds
+    /// that can reach [`punctuation_glyph`] is exactly the set of literal
+    /// arguments `expect` is called with. A kind outside the table renders as
+    /// its raw `Debug` name — `expected Gt` reached users this way, because
+    /// stream types added an `expect(SyntaxKind::Gt)` call site and nothing
+    /// tied the two files together.
+    ///
+    /// The first assertion pins that single-producer premise: a second
+    /// `Debug`-shaped emitter would widen the reachable set past what the scan
+    /// below reads, so it has to fail rather than pass silently.
+    #[test]
+    fn every_expectable_token_has_a_glyph() {
+        const CALL: &str = ".expect(SyntaxKind::";
+
+        let parser = workspace_root().join("crates/ridl-syntax/src/parser.rs");
+        let text = std::fs::read_to_string(&parser)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", parser.display()));
+        assert_eq!(
+            text.matches(r#"format!("expected {kind:?}")"#).count(),
+            1,
+            "{} no longer holds exactly one `Debug`-shaped `expected` message, \
+             so the reachable kinds are no longer just `expect`'s arguments",
+            parser.display(),
+        );
+
+        let despaced: String = strip_line_comments(&text)
+            .chars()
+            .filter(|c| !c.is_whitespace())
+            .collect();
+        let mut expectable = std::collections::BTreeSet::new();
+        for (at, _) in despaced.match_indices(CALL) {
+            let rest = &despaced[at + CALL.len()..];
+            let end = rest
+                .find(')')
+                .expect("an `expect` call closes its parenthesis");
+            expectable.insert(rest[..end].to_string());
+        }
+
+        assert!(
+            expectable.len() >= 7,
+            "the scan found only {} expectable kinds in {} — it is not reading \
+             the call sites",
+            expectable.len(),
+            parser.display(),
+        );
+        for kind in &expectable {
+            assert!(
+                punctuation_glyph(kind).is_some(),
+                "the parser can emit `expected {kind}`, which renders the raw \
+                 `Debug` name to the user. Add `{kind}` to `punctuation_glyph`.",
+            );
+        }
     }
 
     #[test]
