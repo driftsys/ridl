@@ -1828,9 +1828,23 @@ fn a_type_init_change_is_breaking() {
 /// Every category the report can print has a rule row, and every row names its
 /// verdicts — `--explain` is the CI-facing documentation of record, so a
 /// category added without a row would leave a reader with nothing.
+///
+/// This iterates `CATEGORIES`, and since ADR-0008 decision 21 `CATEGORIES` is
+/// generated from the `Category` declaration by `declare_categories!` rather
+/// than maintained beside it, so iterating it is iterating every variant. The
+/// companion test that used to check that claim — one list of names expanded
+/// into an exhaustive `match` and an array, asserted to agree with `CATEGORIES`
+/// — is gone: it compared `CATEGORIES` against a list inside the test, which is
+/// exactly the shadow the generated array removes.
+///
+/// What is still not proved: rustc forces *an* arm in `classify`, `explain`, and
+/// `category_word` for a new variant, not the right one. The assertions below
+/// catch a rule row with no verdict in it and a word that does not round-trip;
+/// they do not catch a row that describes the wrong rule, or a `classify` arm
+/// that silently answers compatible.
 #[test]
 fn every_category_has_a_rule_row_naming_its_verdicts() {
-    for category in super::CATEGORIES {
+    for category in crate::CATEGORIES {
         let word = crate::category_word(category);
         let text = super::explain(category);
         assert!(
@@ -1848,89 +1862,4 @@ fn every_category_has_a_rule_row_naming_its_verdicts() {
 #[test]
 fn an_unknown_category_word_has_no_rule_row() {
     assert_eq!(super::category_from_word("no_such_category"), None);
-}
-
-/// Every `Category` variant reaches `CATEGORIES`, which is what
-/// `ridl diff --explain` reads.
-///
-/// The test above iterates `CATEGORIES`, and so is blind to the one mistake
-/// worth catching here: `CATEGORIES` is a hand-maintained array, so a variant
-/// added with only the arms rustc demands — `classify`, `explain`,
-/// `category_word` — and never listed leaves the whole suite green while
-/// `ridl diff --explain <its word>` answers "unknown change category". Note also
-/// what exhaustiveness does not buy: rustc forces *an* arm in `classify`, not
-/// the right one, so a new variant silently classifying compatible compiles.
-///
-/// The guard is the macro, not a second hand-maintained list. One list of names
-/// expands to both the array the assertions iterate and a `match` over
-/// `Category`, so the two cannot drift: a 21st variant makes the generated match
-/// non-exhaustive and this file stops compiling. The fix rustc's error steers
-/// you to is naming the variant in the list, and naming it there is what puts it
-/// in front of the assertion below.
-///
-/// What this is not is proof. It is still an assertion comparing two lists, and
-/// an assertion can be defeated by editing what feeds it: a wildcard arm, or an
-/// arm written after the repetition, compiles and passes. Both are edits to a
-/// `macro_rules!` directly beneath this paragraph — defeating the guard, not
-/// slipping past it. (The arm rustc's own `help:` suggests lands *inside* the
-/// repetition and is emitted once per name, so `clippy -D warnings` rejects it
-/// as an unreachable pattern. The most likely lazy path does die in CI, but only
-/// that one.)
-///
-/// The structural close is to generate `CATEGORIES` from a single declaration
-/// instead of comparing it against one. This list shadows `CATEGORIES` where it
-/// should produce it, and until it does, the class of mistake stays open.
-#[test]
-fn every_category_variant_reaches_the_explain_table() {
-    /// Expands one list of variant names into an exhaustive `match` and the
-    /// array built through it. rustc rejects the match unless the list is
-    /// complete, so the array cannot go stale.
-    macro_rules! every_category {
-        ($($variant:ident),+ $(,)?) => {{
-            fn through_an_exhaustive_match(category: Category) -> Category {
-                match category {
-                    $(Category::$variant => Category::$variant),+
-                }
-            }
-            [$(through_an_exhaustive_match(Category::$variant)),+]
-        }};
-    }
-
-    let every = every_category![
-        DeclAdded,
-        DeclRemoved,
-        InteractionAppended,
-        InteractionInserted,
-        InteractionReordered,
-        InteractionRemoved,
-        InteractionRetired,
-        KindChanged,
-        PayloadChanged,
-        ReturnChanged,
-        ParamsChanged,
-        TimingChanged,
-        ContractChanged,
-        WidthChanged,
-        ConstraintChanged,
-        InitChanged,
-        ReservedNameRedeclared,
-        ServiceChanged,
-        DocOnly,
-        VisibilityChanged,
-    ];
-
-    for category in every {
-        let word = crate::category_word(category);
-        assert!(
-            super::CATEGORIES.contains(&category),
-            "{word} is a Category the report can print, but it never reached \
-             CATEGORIES, so `ridl diff --explain {word}` answers \"unknown \
-             change category\""
-        );
-    }
-    assert_eq!(
-        every.len(),
-        super::CATEGORIES.len(),
-        "CATEGORIES holds a category this test does not know about"
-    );
 }

@@ -66,8 +66,27 @@ wasm-check:
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
-# Full local gate: compile the code, run the tests, then run the lint checks.
-build: compile test check
+# Lint the Rust workspace the way CI does (.github/workflows/ci.yml).
+#
+# Part of the local gate rather than CI's alone: some guards are enforced by a
+# clippy lint and by nothing else. `tools/diff` denies
+# `clippy::match_wildcard_for_single_variants` on the three matches over
+# `Category`, because a new variant swept into a wildcard arm — the arm rustc's
+# own `help:` text proposes — compiles and passes the whole test suite
+# (ADR-0008 decision 21). A gate that runs `cargo test` and not `cargo clippy`
+# does not enforce that guard at all.
+lint:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ -f Cargo.toml ]; then
+        cargo clippy --workspace --all-targets -- -D warnings
+    else
+        echo "lint: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
+    fi
+
+# Full local gate: compile the code, run the tests, lint the Rust, then run the
+# connective-tissue lint checks.
+build: compile test lint check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

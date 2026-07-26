@@ -290,8 +290,17 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
 ///
 /// This table is the machine-checked half of the diagnostic index: a code
 /// listed as `Showcase` that stops firing fails
-/// [`showcase_provokes_exactly_the_expected_codes`], and a code that has no
-/// entry at all fails to compile this file.
+/// [`showcase_provokes_exactly_the_expected_codes`].
+///
+/// A code with **no entry at all** does not fail anything. `RIDL_PROFILE_CODES`
+/// is a list of code *strings* with no link to the `DiagCode` constants, so a
+/// code minted in `ridl-core` and left out of this list compiles and passes the
+/// suite — proven by minting `RIDL-150` in `RIDL_CATALOG` with no entry here.
+/// The two lists agree today by coincidence, not by construction. ADR-0008
+/// decision 21's declare-once macro closes the catalogue half and does not
+/// reach this one: the `Provoked` discriminator has no catalogue equivalent, so
+/// generating this list from the same declaration was not attempted. The gap is
+/// recorded as separate work in issue #172.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Provoked {
     /// Emitted by the `ridl-diag-showcase` corpus entry.

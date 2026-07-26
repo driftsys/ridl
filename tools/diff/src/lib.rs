@@ -29,7 +29,7 @@ use ridl_ir::v2::Package;
 mod classify;
 mod walk;
 
-pub use classify::{CATEGORIES, category_from_word, classify, explain};
+pub use classify::{category_from_word, classify, explain};
 
 #[cfg(test)]
 mod tests;
@@ -47,60 +47,126 @@ pub enum Verdict {
     Breaking,
 }
 
-/// The kind of a single difference. The walk emits the structural categories;
-/// the E2.8b classifier (task 17) maps them to directional verdicts.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Category {
-    /// A package-level declaration, interface, or service present only in the
-    /// new snapshot.
-    DeclAdded,
-    /// A package-level declaration, interface, or service present only in the
-    /// old snapshot.
-    DeclRemoved,
-    /// A new interaction added at the end of an interface (no earlier
-    /// interaction shifted).
-    InteractionAppended,
-    /// A new interaction added before the end — an earlier interaction now
-    /// sits after it (ridl §11: insert shifts ordinals, a wire break).
-    InteractionInserted,
-    /// A surviving interaction whose relative order within the interface
-    /// changed (ridl §11: reorder shifts ordinals, a wire break).
-    InteractionReordered,
-    /// An interaction removed without leaving a `reserved` tombstone.
-    InteractionRemoved,
-    /// An interaction removed and replaced by a `reserved` tombstone in the
-    /// same slot (ridl §11).
-    InteractionRetired,
-    /// A surviving interaction whose kind changed (signal ↔ event, etc.).
-    KindChanged,
-    /// A signal/event/final payload type changed.
-    PayloadChanged,
-    /// A query return type changed.
-    ReturnChanged,
-    /// A command/query parameter list changed.
-    ParamsChanged,
-    /// A signal/event resolved timing changed.
-    TimingChanged,
-    /// A command/query require/ensure clause set changed.
-    ContractChanged,
-    /// A derived wire width or scalar backing changed.
-    WidthChanged,
-    /// A scalar constraint (range, step, length, pattern) changed, or a
-    /// composite member changed in place.
-    ConstraintChanged,
-    /// A resolved or declared init value changed.
-    InitChanged,
-    /// A name that was a `reserved` tombstone is a live interaction again.
-    ReservedNameRedeclared,
-    /// A service's published shape or interface reference changed.
-    ServiceChanged,
-    /// Only doc comment, labels, or deprecation metadata changed.
-    DocOnly,
-    /// The visibility a declaration is published at changed. Separate from
-    /// [`Category::DocOnly`] because `internal` removes the declaration from
-    /// every out-of-package consumer (ADR-0002 §8), so the change has a
-    /// direction.
-    VisibilityChanged,
+/// Declares the [`Category`] vocabulary once (ADR-0008 decision 21).
+///
+/// One list of variants expands to both the enum and the [`CATEGORIES`] array
+/// that `ridl diff --explain` iterates, so a variant that never reaches
+/// `CATEGORIES` cannot be written: there is no second list to forget. This
+/// replaces the guard PR #163 shipped, which expanded one list into an
+/// exhaustive `match` and an array *inside the test* — that narrowed the gap but
+/// left `CATEGORIES` shadowed rather than produced, and an assertion comparing
+/// two lists can be defeated by editing what feeds it.
+///
+/// A 21st variant therefore stops three functions compiling — [`classify`],
+/// [`explain`], and [`category_word`] — and reaches `CATEGORIES` with no second
+/// edit. The escape rustc's own `help:` text proposes for those three errors is
+/// a wildcard arm. Each of the three functions denies
+/// `clippy::wildcard_enum_match_arm` and
+/// `clippy::match_wildcard_for_single_variants` for exactly that reason. The
+/// second lint is the load-bearing one: the first does not fire when the
+/// wildcard covers a single variant, which is precisely the 21st-variant case,
+/// so denying it alone leaves clippy green.
+///
+/// How far the wildcard gets before clippy stops it depends on what its body
+/// says. `_ => todo!()` panics the `--explain` coverage test, and a bare
+/// `_ => "unknown"` fails it — the row names no verdict. A wildcard whose text
+/// happens to contain "compatible" passes all 115 tests. So the escape is real
+/// but narrow, and `cargo test` alone catches the two careless spellings of it.
+/// `just build` runs clippy so that the third is caught too.
+///
+/// What this does **not** close: rustc forces *an* arm, not the right one. A
+/// 21st variant given an explicit arm that classifies compatible, or whose rule
+/// row describes the wrong rule, still compiles and still passes. The [`explain`]
+/// coverage test checks that each row names a verdict and that its word
+/// round-trips; neither is proof that the row is correct.
+macro_rules! declare_categories {
+    (
+        $(#[$enum_meta:meta])*
+        $vis:vis enum $name:ident {
+            $(
+                $(#[$variant_meta:meta])*
+                $variant:ident,
+            )+
+        }
+    ) => {
+        $(#[$enum_meta])*
+        $vis enum $name {
+            $(
+                $(#[$variant_meta])*
+                $variant,
+            )+
+        }
+
+        /// Every category, in the order `--explain` lists them when asked for an
+        /// unknown one.
+        ///
+        /// Generated from the [`Category`] declaration by
+        /// [`declare_categories!`], not maintained beside it.
+        //
+        // The length counts the variants rather than being written down:
+        // `${count(...)}` is still unstable (rust-lang/rust#83527), so the
+        // count comes from the same repetition that fills the array.
+        pub const CATEGORIES: [$name; [$(stringify!($variant)),+].len()] =
+            [$($name::$variant),+];
+    };
+}
+
+declare_categories! {
+    /// The kind of a single difference. The walk emits the structural categories;
+    /// the E2.8b classifier (task 17) maps them to directional verdicts.
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+    pub enum Category {
+        /// A package-level declaration, interface, or service present only in the
+        /// new snapshot.
+        DeclAdded,
+        /// A package-level declaration, interface, or service present only in the
+        /// old snapshot.
+        DeclRemoved,
+        /// A new interaction added at the end of an interface (no earlier
+        /// interaction shifted).
+        InteractionAppended,
+        /// A new interaction added before the end — an earlier interaction now
+        /// sits after it (ridl §11: insert shifts ordinals, a wire break).
+        InteractionInserted,
+        /// A surviving interaction whose relative order within the interface
+        /// changed (ridl §11: reorder shifts ordinals, a wire break).
+        InteractionReordered,
+        /// An interaction removed without leaving a `reserved` tombstone.
+        InteractionRemoved,
+        /// An interaction removed and replaced by a `reserved` tombstone in the
+        /// same slot (ridl §11).
+        InteractionRetired,
+        /// A surviving interaction whose kind changed (signal ↔ event, etc.).
+        KindChanged,
+        /// A signal/event/final payload type changed.
+        PayloadChanged,
+        /// A query return type changed.
+        ReturnChanged,
+        /// A command/query parameter list changed.
+        ParamsChanged,
+        /// A signal/event resolved timing changed.
+        TimingChanged,
+        /// A command/query require/ensure clause set changed.
+        ContractChanged,
+        /// A derived wire width or scalar backing changed.
+        WidthChanged,
+        /// A scalar constraint (range, step, length, pattern) changed, or a
+        /// composite member changed in place.
+        ConstraintChanged,
+        /// A resolved or declared init value changed.
+        InitChanged,
+        /// A name that was a `reserved` tombstone is a live interaction again.
+        ReservedNameRedeclared,
+        /// A service's published shape or interface reference changed.
+        ServiceChanged,
+        /// Only doc comment, labels, or deprecation metadata changed.
+        DocOnly,
+        /// The visibility a declaration is published at changed. Separate from
+        /// [`Category::DocOnly`] because `internal` removes the declaration from
+        /// every out-of-package consumer (ADR-0002 §8), so the change has a
+        /// direction.
+        VisibilityChanged,
+    }
 }
 
 /// One difference between two snapshots, with an honest path into the IR and
@@ -269,6 +335,16 @@ pub(crate) fn verdict_word(verdict: Verdict) -> &'static str {
 /// The stable snake_case word for a category — the single source of truth for
 /// both renderers and for `ridl diff --explain`, which takes a category exactly
 /// as the report prints it.
+// A new variant must be given a real arm here, not swept into a
+// catch-all: rustc forces *an* arm, and the arm its `help:` text
+// proposes is `_ =>`, which classifies the new variant silently. The
+// two lints below reject a wildcard over `Category` — the first when
+// it covers several variants, the second when it covers exactly one,
+// which is the case a 21st variant creates.
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
 pub fn category_word(category: Category) -> &'static str {
     match category {
         Category::DeclAdded => "decl_added",

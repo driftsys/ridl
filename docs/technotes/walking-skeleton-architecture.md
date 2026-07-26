@@ -37,18 +37,21 @@ extension (`editors/vscode`) is TypeScript and is not a workspace member.
   The coded diagnostic model (`diag`): a `Diagnostic` value with a stable
   `DiagCode`, severity, message, primary `Span`, secondary labels, and optional
   fix-its, accumulated in a `Vec` and rendered to the terminal over
-  `codespan-reporting`; the `TYPL-`/`FORM-`/`MANI-` namespaces live here as the
-  single source of truth (ADR-0007 decision 2). For the codes themselves, the
-  `FORM-` and `MANI-` tables are in the family overview §7 and the `TYPL-`
-  tables in typl §16 — this note says where the namespaces live, not what is in
-  them. (3) The "ns" core: `ridl.toml` manifest parsing (standalone + workspace
-  modes), the package model with per-package `[imports]` (ADR-0007 decision 17),
-  workspace loading, the lockfile, the content-addressed cache, and `ureq` fetch
-  of uncompressed tar artifacts (ADR-0007 decision 12). `ridl.std` is embedded
-  via `include_str!` (decision 15). Filesystem discovery sits behind the `fs`
-  feature and network fetch behind `fetch` (which pulls `ureq`, `sha2`, `tar`
-  and implies `fs`), so the compiler crates build for `wasm32-unknown-unknown`
-  with `--no-default-features` (decision 5).
+  `codespan-reporting`; the `TYPL-`/`FORM-`/`RIDL-`/`MANI-` namespaces live here
+  as the single source of truth (ADR-0007 decision 2), one catalogue each,
+  declared through the `diag_codes!` macro so a code and its catalogue entry
+  come out of the same line (ADR-0008 decision 21). For the codes themselves,
+  the `FORM-` and `MANI-` tables are in the family overview §7, the `TYPL-`
+  tables in typl §16, and the `RIDL-` tables in ridl §16 — this note says where
+  the namespaces live, not what is in them. (3) The "ns" core: `ridl.toml`
+  manifest parsing (standalone + workspace modes), the package model with
+  per-package `[imports]` (ADR-0007 decision 17), workspace loading, the
+  lockfile, the content-addressed cache, and `ureq` fetch of uncompressed tar
+  artifacts (ADR-0007 decision 12). `ridl.std` is embedded via `include_str!`
+  (decision 15). Filesystem discovery sits behind the `fs` feature and network
+  fetch behind `fetch` (which pulls `ureq`, `sha2`, `tar` and implies `fs`), so
+  the compiler crates build for `wasm32-unknown-unknown` with
+  `--no-default-features` (decision 5).
 - **`crates/ridl-sem`** — the semantic passes, carved out of `ridl-core` at the
   start of E1 (ADR-0007 decision 4). `resolve` implements the ADR-0002 §5
   reference order (workspace member → the package's own `[imports]` → the
