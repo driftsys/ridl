@@ -1,12 +1,13 @@
-// The return-position half of the interaction-boundary narrowing, kept in its
-// own file because it recovers badly (see `ridl-diag-showcase/NOTES`, "a
-// rejected return type reports the wrong thing and cascades"): the parser
-// reports `expected a return type`, which says nothing about what is allowed,
-// and then reads the rest of the member as an attribute block.
+// The return-position half of the interaction-boundary narrowing (ridl §7.1).
 //
-// One member per file section would be cleaner still, but the cascade is part
-// of what is being recorded — a reader of the diagnostics snapshot should see
-// what this actually looks like at a desk.
+// A shape the interaction boundary refuses in *parameter* position gets a
+// description-first message naming what is allowed; the return position now
+// gets one too, and the offending shape is consumed into an error node rather
+// than being handed to the annotation parser. It used to report
+// `FORM-101: expected a return type` — which says nothing about what is allowed
+// — and then read `[Level; 0..8]` as this member's attribute block, so one
+// mistake also drew a FORM-102 and a FORM-106 "unknown attribute key `Level`",
+// the last of them rendered after unrelated files.
 
 package diag.ridl
 

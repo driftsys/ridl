@@ -216,21 +216,21 @@ severities.
 Lexical errors are `0xx`, parse errors `1xx`, and the attribute-block rules
 `106`–`108`. Every code is an error.
 
-| Code     | Rule                                                                                                                           | Severity |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------ | -------- |
-| FORM-001 | invalid character                                                                                                              | error    |
-| FORM-002 | unterminated string literal                                                                                                    | error    |
-| FORM-003 | unterminated regex literal                                                                                                     | error    |
-| FORM-004 | unterminated block comment                                                                                                     | error    |
-| FORM-005 | leading zeros in an integer literal                                                                                            | error    |
-| FORM-101 | expected a specific token                                                                                                      | error    |
-| FORM-102 | unexpected token — also the code for a literal the reference grammar does not admit, such as a fractional duration (ridl §2.1) | error    |
-| FORM-103 | unclosed delimiter                                                                                                             | error    |
-| FORM-104 | missing `package` declaration                                                                                                  | error    |
-| FORM-105 | reserved word used as an identifier                                                                                            | error    |
-| FORM-106 | unknown attribute key — not a key the general form §4.3 table defines                                                          | error    |
-| FORM-107 | attribute key not allowed on this declaration kind (general form §4.3)                                                         | error    |
-| FORM-108 | duplicate attribute key in one `[ ]` block (general form §4.3)                                                                 | error    |
+| Code     | Rule                                                                                                                                                    | Severity |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| FORM-001 | invalid character                                                                                                                                       | error    |
+| FORM-002 | unterminated string literal                                                                                                                             | error    |
+| FORM-003 | unterminated regex literal                                                                                                                              | error    |
+| FORM-004 | unterminated block comment                                                                                                                              | error    |
+| FORM-005 | leading zeros in an integer literal                                                                                                                     | error    |
+| FORM-101 | expected a specific token, or a construct the grammar admits here — most call sites name a token, the interaction positions name the shapes (ridl §7.1) | error    |
+| FORM-102 | unexpected token — also the code for a literal the reference grammar does not admit, such as a fractional duration (ridl §2.1)                          | error    |
+| FORM-103 | unclosed delimiter                                                                                                                                      | error    |
+| FORM-104 | missing `package` declaration                                                                                                                           | error    |
+| FORM-105 | reserved word used as an identifier                                                                                                                     | error    |
+| FORM-106 | unknown attribute key — not a key the general form §4.3 table defines                                                                                   | error    |
+| FORM-107 | attribute key not allowed on this declaration kind (general form §4.3)                                                                                  | error    |
+| FORM-108 | duplicate attribute key in one `[ ]` block (general form §4.3)                                                                                          | error    |
 
 ### 7.2 Manifest and distribution (`MANI-`)
 

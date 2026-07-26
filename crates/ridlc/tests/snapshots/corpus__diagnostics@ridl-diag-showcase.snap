@@ -15,60 +15,52 @@ error[RIDL-105]: query returning `()` — a query must return a value; use `comm
 12 │   query nothingBack(): ()
    │                        ^^
 
-error[RIDL-106]: timing annotation not valid on final
+error[RIDL-106]: a timing annotation is not valid on `final` — a `final` is provisioned externally and never republished, so it has no rate floor and no staleness bound. Timing belongs to `signal` and `event` (ridl §9)
    ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:15:28
    │
 15 │   final timedFinal : Level @1s
    │                            ^^^
 
-error[RIDL-106]: attribute block not valid on final
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:18:34
+error[RIDL-106]: a timing annotation is not valid on `command` — a command is invoked on demand, not published on a schedule, and its acknowledgement is not a publication. Timing belongs to `signal` and `event` (ridl §9)
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:20:26
+   │
+20 │   command timedCommand() @1s
+   │                          ^^^
+
+error[RIDL-106]: a timing annotation is not valid on `query` — a query is answered on demand, not published on a schedule, and its reply is not a publication. Timing belongs to `signal` and `event` (ridl §9)
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:23:29
+   │
+23 │   query timedQuery(): Level @1s
+   │                             ^^^
+
+error[RIDL-106]: an attribute block is not valid on `final` — a `final` has no timing to override and no contract to state, because it is provisioned externally and never changes while the software runs (ridl §8)
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:26:34
    │  
-18 │     final constrainedFinal : Level [
+26 │     final constrainedFinal : Level [
    │ ╭──────────────────────────────────^
-19 │ │     require true
-20 │ │   ]
+27 │ │     require true
+28 │ │   ]
    │ ╰───^
 
 error[RIDL-301]: `require` not valid on final — contracts belong to `command` and `query`
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:19:5
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:27:5
    │
-19 │     require true
+27 │     require true
    │     ^^^^^^^^^^^^
 
-error[FORM-102]: unexpected token in an interface body
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:23:3
+error[RIDL-107]: `struct` starts a typl declaration, and an interface body holds interactions and `reserved` tombstones only — move the declaration to package level, beside the interface (ridl reference §14.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:31:3
    │
-23 │   struct Nested {
+31 │   struct Nested {
    │   ^^^^^^
 
-error[RIDL-107]: type declaration inside an interface body — typl declarations live at package level
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:23:3
-   │  
-23 │ ╭   struct Nested {
-24 │ │     x : Level
-25 │ │   }
-   │ ╰───^
-
-error[FORM-101]: expected a return type
-   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:23
+error[FORM-101]: a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:17:23
    │
-16 │   query listLevels(): [Level; 0..8]
+17 │   query listLevels(): [Level; 0..8]
    │                       ^
 
-error[FORM-106]: unknown attribute key `Level`
-   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:24
-   │
-16 │   query listLevels(): [Level; 0..8]
-   │                        ^^^^^
-
-error[FORM-102]: unexpected token in an attribute block
-   ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:16:29
-   │
-16 │   query listLevels(): [Level; 0..8]
-   │                             ^
-
-error[RIDL-403]: behaviour, user-interaction, or architecture declaration in ridl context: `view`
+error[RIDL-403]: `view` is reserved by another profile of the family, so it cannot start a declaration here — a `.ridl` file declares `interface` and `service`. Move the declaration to the profile that owns the word, or, if `view` was meant as a name, choose one the family does not reserve (ridl reference §16.4)
   ┌─ tests/corpus/ridl-diag-showcase/main/profile_boundary.ridl:7:1
   │
 7 │ view MediaHome {
@@ -170,15 +162,21 @@ warning[RIDL-308]: query returns the named result union `NamedResult` — in ret
 24 │   query paged(limit: Level): NamedResult
    │                              ^^^^^^^^^^^
 
-error[RIDL-401]: interaction `legacyTemp` re-declares a `reserved` name
+error[RIDL-401]: `legacyTemp` is retired: this body reserves the name, and a retired name keeps its wire identity for ever, so a consumer still holding the old contract would read this interaction as the retired one. Give it a different name (ridl §11)
    ┌─ tests/corpus/ridl-diag-showcase/main/evolution.ridl:13:10
    │
+10 │   reserved legacyTemp
+   │            ---------- `legacyTemp` is retired here
+   ·
 13 │   signal legacyTemp : Speed @10ms
    │          ^^^^^^^^^^
 
-error[RIDL-402]: duplicate interaction name `speed`
+error[RIDL-402]: `speed` is already declared in this body — a name identifies one interaction, so this second declaration is dropped and takes no slot of its own. Rename it, or fold the two into one declaration (ridl §14.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/evolution.ridl:16:10
    │
+ 7 │   signal speed : Speed @10ms
+   │          ----- `speed` is declared here, and this is the one that is kept
+   ·
 16 │   signal speed : Speed @10ms
    │          ^^^^^
 
@@ -230,7 +228,7 @@ error[RIDL-110]: init value 99 is outside the declared range [0..7]
 12 │   signal level : Level = 99 @[1s..10s]
    │                          ^^
 
-error[RIDL-201]: stream `<T>` not valid on a signal payload
+error[RIDL-201]: a stream `<T>` is not valid on a signal payload — a signal already is the stream for state, publishing its current value on the bounds it declares. A stream is for an RPC-scoped transfer with a beginning and an end, so it belongs on a `command` parameter or a `query` return (ridl §12.3)
    ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:16:17
    │
 16 │   signal live : <Sample> @1s
@@ -284,7 +282,7 @@ error[FORM-102]: command parameter must be a named type or a stream
 32 │   command takeMap(table: [Level : Sample; 0..8])
    │                          ^^^^^^^^^^^^^^^^^^^^^^
 
-error[RIDL-141]: service names `Sample`, which is not an interface
+error[RIDL-141]: `Sample` is not an interface, and a service publishes an interface — name the interface that carries these interactions, or give the service an inline `{ … }` body of its own (ridl §14.5)
    ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:14:34
    │
 14 │ service diag.showcase.mistyped : Sample
@@ -296,49 +294,49 @@ error[TYPL-301]: stream type `<T>` not valid on a struct field or collection —
 8 │   chunks : <Sample>
   │            ^^^^^^^^
 
-error[RIDL-201]: stream `<T>` not valid on a signal payload
+error[RIDL-201]: a stream `<T>` is not valid on a signal payload — a signal already is the stream for state, publishing its current value on the bounds it declares. A stream is for an RPC-scoped transfer with a beginning and an end, so it belongs on a `command` parameter or a `query` return (ridl §12.3)
    ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:14:17
    │
 14 │   signal live : <Sample> @1s
    │                 ^^^^^^^^
 
-error[RIDL-201]: stream `<T>` not valid on an event payload
+error[RIDL-201]: a stream `<T>` is not valid on an event payload — an unbounded push of occurrences is what the event itself is. A stream is for an RPC-scoped transfer with a beginning and an end, so it belongs on a `command` parameter or a `query` return (ridl §12.3)
    ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:17:17
    │
 17 │   event burst : <Sample> @[1s..10s]
    │                 ^^^^^^^^
 
-error[RIDL-202]: stream element type must be a named type, `string`, or `bytes`
+error[RIDL-202]: `integer` is a primitive, and a stream element is a named type or the raw `string`/`bytes` spelling — declare a `type` for it, so the element carries the range, unit and bounds one element promises (ridl §12.2)
    ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:20:33
    │
 20 │   query numbers(limit: Level): <integer>
    │                                 ^^^^^^^
 
-warning[RIDL-100]: signal without a timing annotation — the default [100000us..1000000us] is applied
+warning[RIDL-100]: signal without a timing annotation — the default `@[100ms..1s]` is applied: it publishes no slower than the rate floor and a subscriber may treat a value older than the staleness bound as stale. Write the bounds this signal really promises (ridl §9.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:10:10
    │
 10 │   signal untimed : Speed
    │          ^^^^^^^
 
-error[RIDL-101]: timing lower bound 500000us exceeds the upper bound 100000us
+error[RIDL-101]: the rate floor `500ms` is longer than the staleness bound `100ms` — in `@[min..max]` the first bound is how often the value is published and the second how old it may get, so the first must not exceed the second (ridl §9.2)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:13:29
    │
 13 │   signal inverted : Speed @[500ms..100ms]
    │                             ^^^^^^^^^^^^
 
-error[RIDL-102]: a timing duration must be greater than zero
+error[RIDL-102]: the strict period is `0ms` — a period is a duration greater than zero, because a period of zero promises a publication with no delay at all (ridl §9.2)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:16:23
    │
 16 │   signal zero : Speed @0ms
    │                       ^^^^
 
-warning[RIDL-108]: degenerate timing range: the rate floor equals the staleness bound at 250000us
+warning[RIDL-108]: the rate floor and the staleness bound are both `250ms` — a subscriber may then call the value stale the moment the next publication is due, leaving no margin for jitter. Widen the staleness bound, or write the strict period `@250ms` if the rate really is isochronous — that is a separate mode, not a spelling of this range (ridl §9.2)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:19:31
    │
 19 │   signal degenerate : Speed @[250ms..250ms]
    │                               ^^^^^^^^^^^^
 
-error[RIDL-103]: strict-periodic `@Xms` is not valid on an event — use a range `@[min..max]`
+error[RIDL-103]: the strict period `@100ms` is not valid on an event — a strict period is an isochronous publication rate, and an event reports occurrences that arrive when they arrive. Write a range `@[min..max]` instead (ridl §9.2)
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:23:23
    │
 23 │   event tick : Sample @100ms

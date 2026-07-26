@@ -55,7 +55,9 @@ review caught and no single-clause fixture could have. Keep both clauses.
 
 ## Codes exercised here
 
-- RIDL: 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 140, 141, 143,
+- RIDL: 100, 101, 102, 103, 104, 105, 106 (all four positions: `command`,
+  `query` and `final` timing, plus the `final` attribute block), 107, 108, 109,
+  110, 140, 141, 143,
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
   406.
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).
@@ -105,17 +107,26 @@ behaves, so the snapshot pins the behaviour rather than hiding it.
   deliberate and documented at the emission site (a dropped manifest error
   would be worse than an unanchored one), but the rendered result reads oddly
   and is worth revisiting when manifest spans exist.
-- **A rejected return type reports the wrong thing and cascades — a defect to
-  fix.** A shape the interaction boundary refuses in *parameter* position gets a
+- **A rejected return type used to report the wrong thing and cascade — fixed.**
+  A shape the interaction boundary refuses in *parameter* position gets a
   description-first message naming what is allowed ("command parameter must be a
-  named type or a stream"). The same refusal in *return* position gets
-  `FORM-101: expected a return type`, which says nothing about what is allowed,
-  and the parser then reads the rest of the member as an attribute block —
-  `narrowing_returns.ridl` shows one collection return turning into a
-  FORM-102 plus a FORM-106 "unknown attribute key `Level`". Worth its own issue
-  alongside the `is_top_level_start` finding above. (The TYPL-006 finding this
-  once also pointed at — a repeated identical import reported as a collision —
-  was fixed in #174; see `veh-cluster/NOTES`.)
+  named type or a stream"); the same refusal in *return* position got
+  `FORM-101: expected a return type`, which said nothing about what is allowed,
+  and the parser then read the rest of the member as an attribute block, so
+  `narrowing_returns.ridl` produced a FORM-102 and a FORM-106 "unknown attribute
+  key `Level`" on top of it — the last of them rendered after unrelated files.
+  The FORM-101 message now names the four shapes ridl §7.1 admits, and the
+  offending run is consumed into an error node, so the entry is one diagnostic.
+  (The TYPL-006 finding this once also pointed at — a repeated identical import
+  reported as a collision — was fixed in #174; see `veh-cluster/NOTES`.)
+
+- **RIDL-107 used to arrive with a contradicting FORM-102 — fixed.** The parser
+  recognised the stray typl declaration, raised the generic "unexpected token in
+  an interface body", and recovered it into an error node the checker then coded
+  RIDL-107 — two diagnostics at the same span for one mistake, one of them
+  saying the token was unexpected when the parser had in fact expected it well
+  enough to give it a dedicated recovery. `kinds.ridl` shows the single
+  diagnostic now; RIDL-107 is raised where the recognition happens.
 - **RIDL-405 is emitted once per participating query, not once per error
   type.** Three queries share `SharedFault`, so the note appears three times
   with the same message. The count is the lint's design, not a defect; it is

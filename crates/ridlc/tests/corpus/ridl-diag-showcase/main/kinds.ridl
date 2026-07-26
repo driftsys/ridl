@@ -1,4 +1,4 @@
-// Per-kind shape diagnostics (ridl §6.1, §7.1, §8, §14.1): RIDL-104, 105,
+// Per-kind shape diagnostics (ridl §6.1, §7.1, §8, §9, §14.1): RIDL-104, 105,
 // 106, 107.
 
 package diag.ridl
@@ -13,6 +13,14 @@ interface Kinds {
 
   /// `final` takes no timing annotation.
   final timedFinal : Level @1s
+
+  /// Neither does a command: timing belongs to `signal` and `event` (ridl §9),
+  /// and one rule is one code — this drew FORM-102 ("unexpected token") until
+  /// the E2 close-out, for a token the grammar accepts on purpose.
+  command timedCommand() @1s
+
+  /// Nor a query.
+  query timedQuery(): Level @1s
 
   /// `final` takes no attribute block either.
   final constrainedFinal : Level [

@@ -238,12 +238,12 @@ fn check_flags_a_reorder_against_the_baseline() {
         "the reorder draws the coded desk warning:\n{stderr}",
     );
     assert!(
-        stderr.contains("interaction ordinal changed against the baseline"),
-        "the message states what moved:\n{stderr}",
+        stderr.contains("`doorClosed` has moved in `VehicleStatus`"),
+        "the message names the interaction and the shape it is declared in:\n{stderr}",
     );
     assert!(
-        stderr.contains("veh.cluster/VehicleStatus/doorClosed"),
-        "the diff path names the moved interaction:\n{stderr}",
+        stderr.contains("wire identity") && stderr.contains("add new ones at the end"),
+        "the message states the consequence and the remedy:\n{stderr}",
     );
     assert!(
         stderr.contains("event doorClosed: DoorState"),
@@ -267,8 +267,11 @@ fn check_flags_a_removal_against_the_baseline() {
     let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
 
     assert!(
-        stderr.contains("RIDL-407") && stderr.contains("veh.cluster/VehicleStatus/doorOpened"),
-        "the removal draws the desk warning:\n{stderr}",
+        stderr.contains("RIDL-407")
+            && stderr.contains("`doorOpened` is gone in `VehicleStatus`")
+            && stderr.contains("`reserved doorOpened`"),
+        "the removal draws the desk warning, and it names the tombstone that \
+         keeps the slot:\n{stderr}",
     );
     assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
 }
@@ -448,7 +451,7 @@ fn check_matches_snapshots_by_package_name_not_file_name() {
     ]);
 
     assert!(
-        stderr.contains("RIDL-407") && stderr.contains("veh.cluster/VehicleStatus/doorClosed"),
+        stderr.contains("RIDL-407") && stderr.contains("`doorClosed` has moved"),
         "the misnamed snapshot is still attributed to its package:\n{stderr}",
     );
     assert_eq!(code, 0, "the exit code is untouched:\n{stderr}");
@@ -570,21 +573,26 @@ interface VehicleStatus {
     );
 }
 
-/// The rendered block of the RIDL-407 diagnostic whose message names `path`:
-/// its first line plus every following line up to the next diagnostic. The
-/// renderer draws a source snippet under a diagnostic that carries a span and
-/// nothing under one that does not, so "does this diagnostic have a span?" is
-/// answered by looking for the snippet gutter inside the block.
-fn ridl_407_block<'a>(stderr: &'a str, path: &str) -> &'a str {
-    let needle = format!("interaction ordinal changed against the baseline: {path} (");
+/// The rendered block of the RIDL-407 diagnostic about the interaction called
+/// `name`: its first line plus every following line up to the next diagnostic.
+/// The renderer draws a source snippet under a diagnostic that carries a span
+/// and nothing under one that does not, so "does this diagnostic have a span?"
+/// is answered by looking for the snippet gutter inside the block.
+///
+/// The message opens with the interaction's own name in backticks — it names
+/// what the author wrote rather than the slash-separated diff path it used to
+/// print — so that is what this looks for.
+fn ridl_407_block<'a>(stderr: &'a str, name: &str) -> &'a str {
+    let needle = format!("warning[RIDL-407]: `{name}` ");
     let start = stderr
         .find(&needle)
-        .unwrap_or_else(|| panic!("no RIDL-407 for {path} in:\n{stderr}"));
-    let line_start = stderr[..start].rfind('\n').map_or(0, |index| index + 1);
-    let rest = &stderr[start..];
-    match rest.find("warning[RIDL-407]") {
-        Some(next) => &stderr[line_start..start + next],
-        None => &stderr[line_start..],
+        .unwrap_or_else(|| panic!("no RIDL-407 for `{name}` in:\n{stderr}"));
+    // `needle` opens the diagnostic's first line, so the scan for the next
+    // diagnostic starts past it — searching from `start` would find this one.
+    let after = start + needle.len();
+    match stderr[after..].find("warning[RIDL-407]") {
+        Some(next) => &stderr[start..after + next],
+        None => &stderr[start..],
     }
 }
 
@@ -620,45 +628,115 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
 
     assert_eq!(code, 0, "a desk-check warning never moves the exit code");
 
-    // Pinned per diagnostic: the code, the severity word, the diff path in the
-    // message, the change category, and the source line the span points at.
-    for (path, category, line) in [
+    // Pinned per diagnostic: the code, the severity word, the interaction the
+    // message names, the remedy that identifies *which* drift it is, and the
+    // source line the span points at.
+    //
+    // The remedy is what distinguishes the categories now. Pinning the category
+    // word alone — `interaction_removed`, `interaction_reordered` — was pinning
+    // the enum variant's spelling, which is what a reader of the diff report
+    // sees and not what a reader of this warning needs; and the two categories'
+    // messages could have been swapped without any assertion noticing, because
+    // the rest of the line was identical between them.
+    for (name, remedy, line) in [
         (
-            "corpus.baseline/VehicleStatus/setGear",
-            "interaction_removed",
+            "setGear",
+            "retire it in place with `reserved setGear`",
             "interface VehicleStatus {",
         ),
         (
-            "corpus.baseline/VehicleStatus/doorOpened",
-            "interaction_reordered",
+            "tyrePressure",
+            "declare it at the end of the body instead",
+            "event tyrePressure : DoorState @[100ms..1s]",
+        ),
+        (
+            "legacyWheelPhase",
+            "give this interaction a different name",
+            "signal legacyWheelPhase : Speed @10ms",
+        ),
+        (
+            "doorOpened",
+            "put the declarations back in the baseline's order",
             "event doorOpened : DoorState @[100ms..1s]",
         ),
         (
-            "corpus.baseline/VehicleStatus/doorClosed",
-            "interaction_reordered",
+            "doorClosed",
+            "put the declarations back in the baseline's order",
             "event doorClosed : DoorState @[100ms..1s]",
         ),
     ] {
-        let block = ridl_407_block(&stderr, path);
-        let expected = format!(
-            "warning[RIDL-407]: interaction ordinal changed against the baseline: {path} ({category})"
+        let block = ridl_407_block(&stderr, name);
+        assert!(
+            block.starts_with(&format!("warning[RIDL-407]: `{name}` ")),
+            "the message opens by naming `{name}` in:\n{stderr}"
         );
         assert!(
-            block.starts_with(&expected),
-            "expected `{expected}` in:\n{stderr}"
+            block.contains(remedy),
+            "the message for `{name}` must carry its own remedy — `{remedy}` — in:\n{stderr}"
+        );
+        assert!(
+            block.contains("ridl §11"),
+            "the message for `{name}` must cite the rule it enforces in:\n{stderr}"
         );
         assert!(
             block.contains(line),
-            "the span for {path} must point at `{line}` in:\n{stderr}"
+            "the span for `{name}` must point at `{line}` in:\n{stderr}"
         );
     }
 
-    // The four above are the whole report: a fifth RIDL-407 would mean the desk
+    // A reorder states where the interaction was and where it is now, so the
+    // reader can count the declarations rather than diff the file by eye.
+    assert!(
+        ridl_407_block(&stderr, "doorOpened").contains("(position 2 there, position 4 here)"),
+        "a reorder names both positions in:\n{stderr}"
+    );
+    // …and drops the parenthetical when the two coincide. A reorder is detected
+    // on relative order, so `doorClosed` changed rank while keeping ordinal 3 —
+    // the insertion above it shifted the others past it. "has moved (position 3
+    // there, position 3 here)" contradicts itself, so the numbers are omitted.
+    assert!(
+        !ridl_407_block(&stderr, "doorClosed").contains("position"),
+        "a reorder whose absolute ordinal is unchanged must not print it:\n{stderr}"
+    );
+
+    // No message answers in the vocabulary of the IR or of the diff report.
+    // Scoped to the message lines: the source snippet under each one carries a
+    // file path, and a path holds a `/` legitimately.
+    let message_lines: Vec<&str> = stderr
+        .lines()
+        .filter(|line| line.starts_with("warning[RIDL-407]:"))
+        .collect();
+    assert_eq!(message_lines.len(), 6, "one line per diagnostic:\n{stderr}");
+    for line in &message_lines {
+        for internal in [
+            "ordinal",
+            "interaction_reordered",
+            "interaction_removed",
+            "interaction_inserted",
+            "reserved_name_redeclared",
+        ] {
+            assert!(
+                !line.contains(internal),
+                "RIDL-407 must not answer in `{internal}` — that is IR or diff-report \
+                 vocabulary, not the reader's:\n{line}"
+            );
+        }
+        // A diff path, in general and not just this fixture's: the message
+        // names the interaction and the shape, never `pkg/Shape/member`. No
+        // RIDL-407 message has a legitimate `/` in it, so the character is the
+        // check.
+        assert!(
+            !line.contains('/'),
+            "RIDL-407 must not print a diff path — the reader wrote no `/`:\n{line}"
+        );
+    }
+
+    // The six above are the whole report: a seventh RIDL-407 would mean the desk
     // check flagged an interaction whose ordinal did not move.
     assert_eq!(
         stderr.matches("RIDL-407").count(),
-        4,
-        "exactly four ordinal-affecting changes, no more:\n{stderr}"
+        6,
+        "exactly six ordinal-affecting changes, no more:\n{stderr}"
     );
 }
 
@@ -684,13 +762,13 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
 fn inline_shape_removal_spans_the_service_name() {
     let (_, _, stderr) = ridl(&["check".as_ref(), "tests/baseline-corpus".as_ref()]);
 
-    let inline = ridl_407_block(&stderr, "corpus.baseline/corpus.baseline.hvac/setEcoMode");
+    let inline = ridl_407_block(&stderr, "setEcoMode");
     assert!(
         inline.starts_with(
-            "warning[RIDL-407]: interaction ordinal changed against the baseline: \
-             corpus.baseline/corpus.baseline.hvac/setEcoMode (interaction_removed)"
+            "warning[RIDL-407]: `setEcoMode` is gone in `corpus.baseline.hvac` but the \
+             published baseline still declares it."
         ),
-        "the inline-shape removal is reported:\n{stderr}"
+        "the inline-shape removal is reported, naming the service it left:\n{stderr}"
     );
     assert!(
         inline.contains("┌─"),
@@ -707,7 +785,7 @@ fn inline_shape_removal_spans_the_service_name() {
     // still pass on a span widened leftwards to the keyword, because the
     // widened run is longer and `contains` matches any prefix of it.
     assert!(
-        inline.contains("cluster.ridl:38:9"),
+        inline.contains("cluster.ridl:46:9"),
         "the span starts at the dotted name, column 9 — not column 1, where \
          the `service` keyword is:\n{inline}"
     );
@@ -725,7 +803,7 @@ fn inline_shape_removal_spans_the_service_name() {
     // The control: the same change to a named interface spans the interface
     // name, so the two forms differ in which construct is underlined and in
     // nothing else.
-    let named = ridl_407_block(&stderr, "corpus.baseline/VehicleStatus/setGear");
+    let named = ridl_407_block(&stderr, "setGear");
     assert!(
         named.contains("┌─") && named.contains("interface VehicleStatus {"),
         "a removal from a named interface still spans its interface name:\n{named}"

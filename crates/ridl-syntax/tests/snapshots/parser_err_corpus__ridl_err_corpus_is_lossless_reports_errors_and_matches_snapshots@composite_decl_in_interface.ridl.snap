@@ -1,6 +1,5 @@
 ---
 source: crates/ridl-syntax/tests/parser_err_corpus.rs
-assertion_line: 75
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/err/composite_decl_in_interface.ridl
 ---
@@ -80,5 +79,5 @@ SourceFile@0..140
     RBrace@138..139 "}"
   Whitespace@139..140 "\n"
 errors:
-  FORM-102 38..44 unexpected token in an interface body
-  FORM-102 95..99 unexpected token in an interface body
+  RIDL-107 38..44 `struct` starts a typl declaration, and an interface body holds interactions and `reserved` tombstones only — move the declaration to package level, beside the interface (ridl reference §14.1)
+  RIDL-107 95..99 `enum` starts a typl declaration, and an interface body holds interactions and `reserved` tombstones only — move the declaration to package level, beside the interface (ridl reference §14.1)

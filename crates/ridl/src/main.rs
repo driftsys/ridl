@@ -507,11 +507,7 @@ fn desk_check(entry: &Path, location: &Path, run: &mut CliRun) -> Result<(), Exi
         warnings.push(Diagnostic {
             code: DiagCode::RIDL_407,
             severity: Severity::Warning,
-            message: format!(
-                "interaction ordinal changed against the baseline: {} ({})",
-                change.path,
-                ridl_diff::category_word(change.category),
-            ),
+            message: drift_message(change),
             primary: index.span_of(&change.path, &mut run.sources),
             labels: Vec::new(),
             fixits: Vec::new(),
@@ -519,6 +515,102 @@ fn desk_check(entry: &Path, location: &Path, run: &mut CliRun) -> Result<(), Exi
     }
     run.diagnostics.extend(warnings);
     Ok(())
+}
+
+/// The RIDL-407 message for one ordinal-affecting change.
+///
+/// Written for the reader of a `.ridl` file, not for a reader of the diff
+/// report. It names the interaction and the shape it is declared in — the words
+/// in the source — rather than the slash-separated diff path, states the one
+/// consequence that makes the warning worth reading (declaration order is the
+/// wire identity, ridl §11), and names the edit that keeps the baseline intact.
+/// It used to read `interaction ordinal changed against the baseline:
+/// fx.audit/Motion/reset (interaction_reordered)`: "ordinal" is an IR word, the
+/// path is a diff-report word, `interaction_reordered` is the enum variant's
+/// own spelling, and between them they stated neither consequence nor remedy.
+fn drift_message(change: &ridl_diff::Change) -> String {
+    let (shape, name) = shape_and_name(&change.path);
+    // "in `Motion`" when the shape is known, dropped when the path is not the
+    // three-segment form every ordinal category emits.
+    let in_shape = shape.map_or(String::new(), |shape| format!(" in `{shape}`"));
+    match change.category {
+        ridl_diff::Category::InteractionReordered => format!(
+            "`{name}` has moved{in_shape} since the published baseline{}. Declaration order is \
+             the wire identity of an interaction (ridl §11), so a consumer built against the \
+             baseline would now bind this slot to a different interaction — put the declarations \
+             back in the baseline's order and add new ones at the end",
+            baseline_position(change),
+        ),
+        ridl_diff::Category::InteractionInserted => format!(
+            "`{name}` is declared{in_shape} ahead of interactions the published baseline already \
+             numbers. An interaction inserted above an existing one shifts every later wire \
+             identity (ridl §11) — declare it at the end of the body instead",
+        ),
+        ridl_diff::Category::InteractionRemoved => format!(
+            "`{name}` is gone{in_shape} but the published baseline still declares it. Deleting \
+             the line frees its slot and every later interaction slides into a wire identity \
+             that is not its own (ridl §11) — retire it in place with `reserved {name}`, which \
+             holds the slot for ever",
+        ),
+        ridl_diff::Category::ReservedNameRedeclared => format!(
+            "`{name}` is declared again{in_shape}, and the published baseline retires that name \
+             with `reserved`. A retired name is a permanent wire reservation (ridl §11) — a \
+             consumer still holding the old contract would read the new interaction as the \
+             retired one, so give this interaction a different name",
+        ),
+        // `ORDINAL_CATEGORIES` is the caller's filter and holds exactly the four
+        // arms above. A fifth category reaching here would be a filter that
+        // grew without its messages, so this says only what it can defend — and
+        // says it without the raw category token, which is the vocabulary this
+        // code exists to keep out of the message.
+        _ => format!(
+            "`{name}`{in_shape} changed against the published baseline in a way that moves an \
+             interaction's wire identity (ridl §11)"
+        ),
+    }
+}
+
+/// The shape and interaction name of a `<package>/<shape>/<interaction>` diff
+/// path. A path of any other arity yields no shape and its last segment as the
+/// name, so the message degrades to naming what it can rather than printing the
+/// raw path.
+fn shape_and_name(path: &str) -> (Option<&str>, &str) {
+    let parts: Vec<&str> = path.split('/').collect();
+    match parts.as_slice() {
+        [_package, shape, name] => (Some(shape), name),
+        _ => (None, parts.last().copied().unwrap_or(path)),
+    }
+}
+
+/// ` (position 2 there, position 4 here)` for a reorder whose two sides carry
+/// two *different* positions, and the empty string otherwise.
+///
+/// The walk renders a live reorder's sides as bare ordinals (`"2"`) and a
+/// tombstone's as `"reserved at ordinal 2"`, so the trailing integer is what
+/// the two spellings share.
+///
+/// The equal case is dropped rather than printed. A reorder is detected on
+/// *relative* order among the survivors, so an interaction can change rank
+/// while its absolute ordinal stays put — an insertion above it shifts the
+/// others past it — and "`doorClosed` has moved (position 3 there, position 3
+/// here)" contradicts itself in the same breath. The sentence about relative
+/// order stands on its own; the numbers are a convenience that only helps when
+/// they differ.
+fn baseline_position(change: &ridl_diff::Change) -> String {
+    let position = |side: &Option<String>| -> Option<u32> {
+        side.as_ref()?
+            .rsplit(' ')
+            .next()?
+            .parse()
+            .ok()
+            .filter(|slot| *slot > 0)
+    };
+    match (position(&change.before), position(&change.after)) {
+        (Some(was), Some(now)) if was != now => {
+            format!(" (position {was} there, position {now} here)")
+        }
+        _ => String::new(),
+    }
 }
 
 /// Loads the baseline packages: every `.ir.json` in a directory, in file-name

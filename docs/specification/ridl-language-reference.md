@@ -565,6 +565,11 @@ which is almost always a mistake. It is **not** a spelling of the strict period
 defaulted (§9.1), recorded in the IR beside the bounds, and a change between the
 two modes is breaking whatever the bounds do.
 
+Timing belongs to `signal` and `event`. An `@` annotation on a `command`, a
+`query` or a `final` is RIDL-106 — one code for one rule, over all three kinds.
+The grammar admits the annotation on every interaction kind so that the
+narrowing is a semantic rule with a semantic message; it is not a parse error.
+
 A signal's `@Xms` or `@[..max]` is an alertable **freshness SLO**: a subscriber
 that has not seen a publication within the bound may treat the value as stale —
 generated bindings expose staleness, and the observability conventions map the
@@ -992,19 +997,19 @@ restated here.
 
 ### 16.1 Timing (RIDL-1xx)
 
-| Code     | Rule                                                                                                                  | Severity                                                  |
-| -------- | --------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| RIDL-100 | `signal` or `event` without timing annotation — default `[100ms..1000ms]` (or configured `[defaults].timing`) applied | warning; error if active profile requires explicit timing |
-| RIDL-101 | `@[X..Y]` where `X > Y`                                                                                               | error                                                     |
-| RIDL-102 | zero or negative duration                                                                                             | error                                                     |
-| RIDL-103 | strict periodic `@Xms` on `event`                                                                                     | error                                                     |
-| RIDL-104 | explicit return type on `command`                                                                                     | error                                                     |
-| RIDL-105 | `query` returning `()`                                                                                                | error                                                     |
-| RIDL-106 | timing annotation or attribute block on `final`                                                                       | error                                                     |
-| RIDL-107 | type declaration inside an `interface` body                                                                           | error                                                     |
-| RIDL-108 | `@[X..X]` — a degenerate range, the rate floor equal to its staleness bound (§9.2); `signal` and `event` alike        | warning                                                   |
-| RIDL-109 | signal payload type has no derivable init value and no `= value` override (§4.4)                                      | error                                                     |
-| RIDL-110 | signal `= value` init override violates a scalar payload's range, string length bound, or `match` pattern             | error                                                     |
+| Code     | Rule                                                                                                                                 | Severity                                                  |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
+| RIDL-100 | `signal` or `event` without timing annotation — default `[100ms..1000ms]` (or configured `[defaults].timing`) applied                | warning; error if active profile requires explicit timing |
+| RIDL-101 | `@[X..Y]` where `X > Y`                                                                                                              | error                                                     |
+| RIDL-102 | zero or negative duration                                                                                                            | error                                                     |
+| RIDL-103 | strict periodic `@Xms` on `event`                                                                                                    | error                                                     |
+| RIDL-104 | explicit return type on `command`                                                                                                    | error                                                     |
+| RIDL-105 | `query` returning `()`                                                                                                               | error                                                     |
+| RIDL-106 | timing annotation on a kind that carries none — `command`, `query`, `final` (§9); attribute block on `final` (§8)                    | error                                                     |
+| RIDL-107 | type declaration inside an `interface` or a `service` body — raised at parse time, where the declaration is recognised and recovered | error                                                     |
+| RIDL-108 | `@[X..X]` — a degenerate range, the rate floor equal to its staleness bound (§9.2); `signal` and `event` alike                       | warning                                                   |
+| RIDL-109 | signal payload type has no derivable init value and no `= value` override (§4.4)                                                     | error                                                     |
+| RIDL-110 | signal `= value` init override violates a scalar payload's range, string length bound, or `match` pattern                            | error                                                     |
 
 **Known gap — RIDL-110.** The check runs only where the payload names a scalar
 `type` declaration, and covers exactly the three violations the row names: a
