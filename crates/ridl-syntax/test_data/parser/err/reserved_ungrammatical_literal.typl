@@ -1,0 +1,28 @@
+// typl Appendix E: `reserved = "reserved" ( camelCase_id | int_lit )`. Every
+// other literal shape is refused in every typl body that admits a tombstone,
+// and the member after the refused entry keeps its place and its ordinal.
+package demo
+
+struct Profile {
+  name : Name
+  reserved "legacyChecksum"
+  speed : Speed
+}
+
+enum Gear {
+  PARK = 0
+  reserved 1.5
+  DRIVE = 2
+}
+
+union Reading {
+  ok : Speed
+  reserved true
+  stale : Speed
+}
+
+struct Referenced {
+  first : Speed
+  reserved -MAX_GEAR
+  second : Speed
+}

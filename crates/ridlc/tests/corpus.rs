@@ -1414,57 +1414,98 @@ fn contract_clauses_cover_the_guaranteed_expression_subset() {
     }
 }
 
-/// **This test pins a defect, deliberately.**
-///
 /// typl Appendix E defines `reserved = "reserved" ( camelCase_id | int_lit )`,
-/// but the parser accepts *any* literal in that position and the lowering keeps
-/// only integers. `reserved "oldName"`, `reserved true` and `reserved 1.5` are
-/// therefore accepted with **no diagnostic at all** and lower to
-/// `Reserved { name: None, value: None }` — a slot that still holds its ordinal
-/// (so the identity-reuse guarantee survives) but records nothing about what
-/// was retired, which is what `ridl diff` needs to report a dangling tombstone
-/// (TYPL-211).
+/// and the parser holds that line: every other literal shape draws FORM-102.
 ///
-/// Input outside the grammar accepted in silence is the failure family this
-/// corpus exists to find, so it is recorded rather than worked around. The
-/// corpus files themselves use only the two grammatical forms; this test drives
-/// `compile` directly so the golden entries stay grammatical.
+/// This test pinned the opposite until the parser was fixed. Any other literal
+/// used to parse as an ordinary `Literal`, and since lowering keeps only a name
+/// or an integer, `reserved "oldName"`, `reserved true` and `reserved 1.5`
+/// compiled with **no diagnostic at all** and lowered to
+/// `Reserved { name: None, value: None }` — a slot that still held its ordinal,
+/// so the identity-reuse guarantee survived, but that recorded nothing about
+/// *what* was retired. That is what `ridl diff` needs in order to report a
+/// dangling tombstone (TYPL-211), and in an `enum` body the retired wire value
+/// was lost outright.
 ///
-/// When the parser learns to reject these, flip the assertions to expect a
-/// diagnostic and update `veh-cluster/NOTES`, section "a non-integer `reserved`
-/// literal is accepted and discarded".
+/// The corpus files themselves use only the two grammatical forms; this test
+/// drives `compile` directly so the golden entries stay grammatical.
 #[test]
-fn reserved_accepts_ungrammatical_literals_and_discards_them() {
-    for literal in ["\"oldName\"", "true", "1.5"] {
+fn reserved_rejects_ungrammatical_literals() {
+    for literal in ["\"oldName\"", "true", "1.5", "-MAX"] {
         let source = format!(
             "package app\ntype L: integer [0..7]\ninterface I {{\n  signal a : L @1s\n  \
              reserved {literal}\n  signal b : L @1s\n}}\n"
         );
         let output = ridlc::compile("app.ridl", &source);
 
-        let codes: Vec<&str> = output
+        let form_102: Vec<&str> = output
             .diagnostics
             .iter()
-            .map(|diagnostic| diagnostic.code.as_str())
+            .filter(|diagnostic| diagnostic.code.as_str() == "FORM-102")
+            .map(|diagnostic| diagnostic.message.as_str())
             .collect();
+        assert_eq!(
+            form_102.len(),
+            1,
+            "`reserved {literal}` is outside the grammar and must draw exactly one FORM-102, \
+             got {:?}",
+            output
+                .diagnostics
+                .iter()
+                .map(|diagnostic| diagnostic.code.as_str())
+                .collect::<Vec<_>>(),
+        );
         assert!(
-            codes.is_empty(),
-            "the parser has learned to reject `reserved {literal}` — good. Flip this assertion \
-             and update `veh-cluster/NOTES`. Got: {codes:?}",
+            form_102[0].starts_with(
+                "a `reserved` tombstone takes a retired member name or a retired integer value"
+            ),
+            "the message must say what a tombstone does take, got {:?}",
+            form_102[0],
         );
 
-        let slot = output.package.interfaces[0]
+        // Recovery keeps the tombstone in place: the entry still occupies its
+        // ordinal and the interaction after it is still ordinal 3, so a refused
+        // literal never silently renumbers the interactions that follow it.
+        let ordinals: Vec<(u32, &str)> = output.package.interfaces[0]
             .interactions
             .iter()
-            .find_map(|decl| match &decl.kind {
-                Some(ridl_ir::v2::decl::Kind::ReservedSlot(slot)) => Some(slot),
-                _ => None,
-            })
-            .expect("the tombstone lowers");
+            .map(|decl| (decl.ordinal, decl.name.as_str()))
+            .collect();
         assert_eq!(
-            (slot.ordinal, slot.name.as_deref(), slot.value),
-            (2, None, None),
-            "`reserved {literal}` holds its ordinal but discards what was retired",
+            ordinals,
+            vec![(1, "a"), (2, ""), (3, "b")],
+            "`reserved {literal}` must keep its slot and leave the ordinals after it alone",
         );
     }
+}
+
+/// The two grammatical tombstone forms of typl Appendix E — `reserved
+/// camelCase_id` and `reserved int_lit`, the latter with an optional `-` —
+/// compile clean in every body that admits a tombstone: the three typl
+/// composites, a named `interface`, and a `service` inline shape.
+///
+/// The companion of [`reserved_rejects_ungrammatical_literals`]: narrowing the
+/// tombstone grammar must not narrow it past what Appendix E writes.
+#[test]
+fn reserved_accepts_both_grammatical_forms_in_every_body() {
+    let source = "package app\n\
+         type L: integer [0..7]\n\
+         struct S {\n  a : L\n  reserved legacyChecksum\n  b : L\n}\n\
+         enum E {\n  A = 1\n  reserved 2\n  reserved -3\n  B = 4\n}\n\
+         union U {\n  x : L\n  reserved oldArm\n  y : L\n}\n\
+         interface I {\n  signal a : L @1s\n  reserved legacyTemp\n  reserved 3\n  \
+         signal b : L @1s\n}\n\
+         service app.svc {\n  signal c : L @1s\n  reserved legacyRate\n  reserved 3\n  \
+         signal d : L @1s\n}\n";
+    let output = ridlc::compile("app.ridl", source);
+
+    let codes: Vec<&str> = output
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.code.as_str())
+        .collect();
+    assert!(
+        codes.is_empty(),
+        "the grammatical tombstone forms must compile clean, got {codes:?}",
+    );
 }
