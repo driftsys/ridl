@@ -260,11 +260,18 @@ fn apply_imports(
     symbols: &mut HashMap<String, Symbol>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let mut base_name_counts: HashMap<&str, usize> = HashMap::new();
+    // The distinct package paths each base name is imported from. An alias
+    // resolves a collision only when the base name would name *something else*
+    // without it, so this counts targets rather than import lines: importing
+    // one symbol twice under one alias leaves the base name unambiguous and
+    // the alias still needless (TYPL-008). Counting lines suppressed that
+    // warning, which stayed invisible while the repeat was a TYPL-006 error.
+    let mut base_name_sources: HashMap<&str, HashSet<&str>> = HashMap::new();
     for record in records {
-        *base_name_counts
+        base_name_sources
             .entry(record.base_name.as_str())
-            .or_default() += 1;
+            .or_default()
+            .insert(record.package_path.as_str());
     }
 
     // The first import to claim each local name, and the target it binds it
@@ -337,9 +344,9 @@ fn apply_imports(
         // TYPL-008: an alias that resolves no collision — its base name is not
         // shared by another import and does not clash with a local declaration.
         if record.aliased {
-            let base_shared = base_name_counts
+            let base_shared = base_name_sources
                 .get(record.base_name.as_str())
-                .is_some_and(|count| *count >= 2);
+                .is_some_and(|sources| sources.len() >= 2);
             if !base_shared && !locals.contains(&record.base_name) {
                 diagnostics.push(diagnostic(
                     DiagCode::TYPL_008,
@@ -614,6 +621,15 @@ fn collect_used_names(db: &dyn salsa::Database, files: &[InputFile]) -> HashSet<
                 // `MemberExpr` are tokens of that node rather than of a nested
                 // `PathExpr`, so an enum member name never counts as a use of
                 // an import.
+                //
+                // Both arms are deliberately coarse: they collect every bare
+                // `Ident` in the node rather than resolving it, so a parameter
+                // name, `result`, or a local declaration that happens to share
+                // an import's local name marks that import used. The `Literal`
+                // arm has behaved this way since E1 and the `PathExpr` arm
+                // inherits it. The cost is a missed TYPL-007 warning; the
+                // alternative — resolving each reference before counting it —
+                // needs the symbol table this function runs ahead of.
                 SyntaxKind::Literal | SyntaxKind::PathExpr => {
                     for token in node.children_with_tokens().filter_map(|e| e.into_token()) {
                         if token.kind() == SyntaxKind::Ident {
@@ -1260,7 +1276,15 @@ mod package_tests {
     #[test]
     fn a_repeated_import_under_one_alias_is_not_a_collision() {
         // The same target reached under the same alias twice is still one
-        // binding — the local name and the target both match.
+        // binding — the local name and the target both match — so no TYPL-006.
+        //
+        // TYPL-008 *does* fire, once per line: nothing else brings `Speed` in,
+        // so the alias resolves no collision. Asserting the exact code list
+        // rather than emptiness is the point. `base_name_counts` used to count
+        // import lines, so the repeat made the base name look shared and
+        // suppressed the warning; the suppression was invisible while the
+        // repeat was still a TYPL-006 error, and asserting emptiness here
+        // would have pinned it as correct.
         let mut db = RidlDatabase::default();
         let std = std_package(&mut db);
         let a = package(
@@ -1272,9 +1296,72 @@ mod package_tests {
         let ws = Workspace::new(&db, vec![a, x], BTreeMap::new());
 
         let resolution = resolve_package(&db, ws, a, std);
+        assert_eq!(
+            codes(&resolution),
+            vec!["TYPL-008", "TYPL-008"],
+            "no collision, but neither alias is needed; got: {:?}",
+            resolution.diagnostics,
+        );
+    }
+
+    #[test]
+    fn a_repeated_aliased_import_still_draws_the_needless_alias_warning() {
+        // The regression guard for the TYPL-008 half, stated on its own. One
+        // `import x.Speed as VehSpeed` draws TYPL-008; repeating the identical
+        // line must not make the alias look necessary. Before the fix the pair
+        // produced literally no diagnostic at all — TYPL-006 correctly silent
+        // and TYPL-008 wrongly suppressed.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+
+        let once = package(
+            &db,
+            "a",
+            "package a\nimport x.Speed as VehSpeed\nstruct S { p: VehSpeed }\n",
+        );
+        let ws_once = Workspace::new(&db, vec![once, x], BTreeMap::new());
+        assert_eq!(
+            codes(&resolve_package(&db, ws_once, once, std)),
+            ["TYPL-008"]
+        );
+
+        let twice = package(
+            &db,
+            "b",
+            "package b\nimport x.Speed as VehSpeed\nimport x.Speed as VehSpeed\nstruct S { p: VehSpeed }\n",
+        );
+        let ws_twice = Workspace::new(&db, vec![twice, x], BTreeMap::new());
+        let repeated = resolve_package(&db, ws_twice, twice, std);
+        assert!(
+            codes(&repeated).contains(&"TYPL-008"),
+            "repeating an import must not make its alias look needed, got: {:?}",
+            repeated.diagnostics,
+        );
+    }
+
+    #[test]
+    fn an_alias_over_two_different_targets_is_still_needed() {
+        // The other direction, which the target-counting must preserve: when a
+        // second package genuinely exports the same base name, the alias does
+        // resolve a collision and TYPL-008 must stay silent. This is what
+        // stops the fix above from becoming an over-report.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let a = package(
+            &db,
+            "a",
+            "package a\nimport x.Speed\nimport y.Speed as MarineSpeed\nimport y.Speed as MarineSpeed\nstruct S { p: Speed, q: MarineSpeed }\n",
+        );
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let y = package(&db, "y", "package y\ntype Speed: m/s\n");
+        let ws = Workspace::new(&db, vec![a, x, y], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
         assert!(
             codes(&resolution).is_empty(),
-            "one target under one alias is one binding, got: {:?}",
+            "`Speed` comes from two packages, so the alias is needed even when \
+             its line is repeated; got: {:?}",
             resolution.diagnostics,
         );
     }
@@ -1321,7 +1408,7 @@ mod package_tests {
             "package app\nimport x.Level\nimport x.MAX_FAN\nimport x.Gear\n\
              interface Fan {\n  \
              command setFan(level : Level) [ require level <= MAX_FAN ]\n  \
-             query state() : Level [ ensure result >= 0 && Gear.PARK != Gear.DRIVE ]\n}\n",
+             query currentGear() : Level [ ensure result >= 0 && Gear.PARK != Gear.DRIVE ]\n}\n",
         );
         let x = package(
             &db,
@@ -1357,7 +1444,7 @@ mod package_tests {
             "package app\nimport x.Level\nimport x.PARK\n\
              enum Gear { PARK = 0, DRIVE = 1 }\n\
              interface Fan {\n  \
-             query state() : Gear [ ensure result == Gear.PARK ]\n  \
+             query currentGear() : Gear [ ensure result == Gear.PARK ]\n  \
              signal level : Level @1s\n}\n",
         );
         let x = package(

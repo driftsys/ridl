@@ -742,12 +742,13 @@ struct Home<'a> {
 /// would have to guess between two packages exporting one name.
 ///
 /// Reading the resolver's map is also what makes the runner agree with the
-/// checker on the cases the resolver decides quietly. Two *imports* competing
-/// for one local name are a hard error (TYPL-006), but an import colliding with
-/// a **local** declaration is not diagnosed at all — the local declaration wins
-/// and the import is silently shadowed. The runner inherits that outcome
-/// because it reads the same map, rather than reproducing a rule it would have
-/// to keep in step by hand.
+/// checker on the cases the resolver decides quietly. Two *imports* bringing
+/// **different** declarations under one local name are a hard error (TYPL-006);
+/// an identical repeat binds what is already bound and is silent. An import
+/// colliding with a **local** declaration is not diagnosed at all — the local
+/// declaration wins and the import is silently shadowed. The runner inherits
+/// those outcomes because it reads the same map, rather than reproducing rules
+/// it would have to keep in step by hand.
 struct Names<'a> {
     packages: BTreeMap<&'a str, &'a v2::Package>,
 }
