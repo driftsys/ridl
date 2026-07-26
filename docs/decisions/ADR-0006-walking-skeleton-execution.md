@@ -25,6 +25,14 @@ landed.
    `ridl-backend-rust`, at `backends/rust` per the concept note §8.1 layout.
    Rust edition 2024; `version = "0.0.0"` until E1 cuts a preview.
 
+   **Extended (2026-07-26):** the paths above are E0's and are no longer where
+   the crates live. At the E2 boundary the workspace was normalised so that
+   every crate sits at `crates/<crate-name>/`, the directory named after the
+   crate, and `backends/` was dissolved (issue #180): `members` is now
+   `["crates/*", "xtask"]` and the backend crate is `crates/ridl-backend-rust`.
+   Nothing else in this decision changed — the crate set, the crate names, the
+   edition, and the `0.0.0` version are as recorded.
+
 2. **Semantic passes live in `ridl-core` for now.** The concept note places
    per-profile semantic passes in a `ridl-sem` crate, which E0 does not create.
    The E0 resolver and checker (and the salsa database) live in `ridl-core` and
