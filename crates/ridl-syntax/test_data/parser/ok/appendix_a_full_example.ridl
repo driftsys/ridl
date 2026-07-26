@@ -34,11 +34,6 @@ struct FaultPage {
   faults : [FaultEvent; 0..64]
 }
 
-union FaultPageResult {          // result union — Result<FaultPage, DiagError>
-  page : FaultPage
-  err  : DiagError
-}
-
 // --- the contract ---
 
 /**
@@ -75,8 +70,8 @@ interface VehicleStatus {
   /// Fault history as a finite stream
   query streamFaults(filter: DiagFilter): <FaultEvent>
 
-  /// Paged fault snapshot — fallible query via result union (§10.1)
-  query getFaultPage(filter: DiagFilter): FaultPageResult
+  /// Paged fault snapshot — fallible query via inline `T | E` (§10.1)
+  query getFaultPage(filter: DiagFilter): FaultPage | DiagError
 
   final softwareVersion : Version
   final capabilities    : [Label; 0..32]

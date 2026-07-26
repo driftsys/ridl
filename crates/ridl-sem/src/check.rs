@@ -7943,11 +7943,6 @@ struct FaultPage {
   faults : [FaultEvent; 0..64]
 }
 
-union FaultPageResult {
-  page : FaultPage
-  err  : DiagError
-}
-
 // --- the contract ---
 
 /**
@@ -7985,7 +7980,7 @@ interface VehicleStatus {
   query streamFaults(filter: DiagFilter): <FaultEvent>
 
   /// Paged fault snapshot
-  query getFaultPage(filter: DiagFilter): FaultPageResult
+  query getFaultPage(filter: DiagFilter): FaultPage | DiagError
 
   final softwareVersion : Version
   final capabilities    : [Label; 0..32]
@@ -8051,18 +8046,14 @@ interface VehicleStatus {
             "Appendix A must lower without errors, got: {:?}",
             checked.diagnostics,
         );
-        // The one advisory the reference's own worked example earns: its
-        // `query getFaultPage(…): FaultPageResult` is the named-result-union
-        // spelling, and the E2.10a lint (RIDL-308) steers return position to
-        // the inline `FaultPage | DiagError` (general form §6.1). Appendix A
-        // is kept verbatim rather than rewritten — the gf §7 erratum that
-        // restates it is a documentation task, not this one.
-        assert_eq!(
-            codes(&checked),
-            vec!["RIDL-308"],
-            "{:?}",
-            checked.diagnostics
-        );
+        // Appendix A draws no advisory. Its `query getFaultPage(…)` used to
+        // return the named union `FaultPageResult` and earn the E2.10a lint
+        // RIDL-308; the appendix now writes the inline `FaultPage | DiagError`
+        // that general form §6.1 made canonical in return position (ADR-0008
+        // decisions 1 and 19), so the lint no longer fires. RIDL-308 keeps a
+        // living example in the ridl diagnostic showcase, which provokes it
+        // independently.
+        assert!(codes(&checked).is_empty(), "{:?}", checked.diagnostics);
         assert_eq!(checked.ir.name, "veh.cluster");
         assert_eq!(checked.ir.interfaces.len(), 1);
         let interface = &checked.ir.interfaces[0];
@@ -8144,19 +8135,18 @@ interface VehicleStatus {
     }
 
     #[test]
-    fn appendix_a_named_result_union_returns_as_a_named_value() {
-        // Appendix A's getFaultPage returns the NAMED union `FaultPageResult`
-        // — a named `ReturnType.value`, never a synthesized fallible.
+    fn appendix_a_inline_result_return_lowers_as_a_fallible() {
+        // Appendix A's getFaultPage returns the inline `FaultPage | DiagError`
+        // — a synthesized `ReturnType.fallible`, never a named value.
         let checked = check_appendix_a();
         let query = query_def(&checked, "getFaultPage");
-        let Some(v2::return_type::Kind::Value(value)) = &query.return_type.as_ref().unwrap().kind
+        let Some(v2::return_type::Kind::Fallible(fallible)) =
+            &query.return_type.as_ref().unwrap().kind
         else {
-            panic!("getFaultPage does not return a plain value");
+            panic!("getFaultPage does not return an inline fallible");
         };
-        assert_eq!(
-            value.kind,
-            Some(v2::field_type::Kind::Named("FaultPageResult".to_string())),
-        );
+        assert_eq!(fallible.ok, "FaultPage");
+        assert_eq!(fallible.err, "DiagError");
     }
 
     #[test]
