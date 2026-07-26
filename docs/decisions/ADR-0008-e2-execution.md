@@ -100,26 +100,46 @@ ADR-0002 §8 mapping, both of which shipped, so the sentence stands as written;
 the missing emit path was recorded on driftsys/ridl#172 and has since shipped in
 driftsys/ridl#188 rather than being read into it here. Decision 11's gate
 enumeration is a rule, and it holds as a rule — but `cargo fmt --all --check`
-sits in no `just` recipe, so `just verify` does not enforce one of the five
-things this decision names (issue #182), and "CI is still stuck" is a claim the
-repository cannot confirm or refute either way.
+sits in no `just` recipe and nothing depends on `wasm-check`, so `just verify`
+does not enforce two of the five things this decision names (issue #182), and
+"CI is still stuck" is a claim the repository cannot confirm or refute either
+way.
 
-_Extended (2026-07-26) — two clauses of the cross-check above are overtaken, and
-a third is redirected._ Both overtaken clauses were true at `4cffb74` and are
-left as written; neither describes the repository now. driftsys/ridl#188 made
+_Extended (2026-07-26) — of the cross-check above, one clause is overtaken and
+left as written, one is redirected, and one is corrected in place because it
+undercounted on the day it was written._ The overtaken clause was true at
+`4cffb74` and no longer describes the repository. driftsys/ridl#188 made
 `ridl-backend-ts` a normal dependency of `ridlc` — `crates/ridlc/Cargo.toml`
 lists it under `[dependencies]`, not `[dev-dependencies]` — and added a fourth
 `--emit` value, so `ridlc build --emit` offers `rust`, `c-header`, `ir-json`,
 and `typescript`. So the emit path decision 7 was read as promising now exists
 on the command line as well as in the backends. The redirect is in the same
-sentence: it pointed at driftsys/ridl#172, which recorded the gap while it was
-open, and now names driftsys/ridl#188, which closed it, because a reader sent to
-driftsys/ridl#172 for this item will not find it there. Separately,
-driftsys/ridl#184 added the `fmt-check` recipe and made it a member of
-`just build`, so `just verify` now enforces all five things decision 11 names
-and driftsys/ridl#182 is closed. Neither decision changes: decision 7 claimed a
-second backend over one IR and the ADR-0002 §8 mapping, and decision 11 stated a
-gate as a rule. Each is now true of one more thing than when it was checked.
+sentence: it pointed at driftsys/ridl#172 and now names driftsys/ridl#188. The
+reason is not that a reader would find nothing at driftsys/ridl#172 — they will,
+under `## Gaps in what E2 shipped`, as "No CLI path emits TypeScript", and that
+entry is what called for this redirect. It is that the entry records the gap as
+open and points onward at driftsys/ridl#188, so driftsys/ridl#188 is where the
+closure lives and where the ADR should send a reader directly.
+
+Separately, driftsys/ridl#184 made `just build` reach **two** members decision
+11 names, not one, and the sentence above is corrected in place rather than
+dated because it undercounted on the day it was written. It read
+"`cargo fmt
+--all --check` sits in no `just` recipe, so `just verify` does not
+enforce one of the five things this decision names". At `4cffb74` the recipe
+read `build: compile test lint check` and `verify` ran `just build`, so two
+members were unreachable, not one: `cargo fmt --all --check` sat in no recipe at
+all, and `wasm-check` existed as a recipe that nothing depended on.
+driftsys/ridl#184 added `fmt-check` and wired both into `build`, so
+`just verify` now enforces all five and driftsys/ridl#182 is closed. The
+undercount propagated before it was caught — driftsys/ridl#172's line for
+driftsys/ridl#182 quotes it — and ADR-0009, which refines this decision without
+changing it, states the count correctly at two. The dated-evidence rule does not
+protect this sentence, because that rule protects a sentence that was true of
+the state at its own date, and this one was not; the fourth sweep set that
+precedent at decision 20. Neither decision changes: decision 7 claimed a second
+backend over one IR and the ADR-0002 §8 mapping, and decision 11 stated a gate
+as a rule. Each is now true of more than it was when it was checked.
 
 _Extended (2026-07-26) — the fourth sweep, and the eighteenth._ Review of the
 gardening pass above returned request-changes, and the correction round ran the
@@ -208,18 +228,29 @@ someone who did not write it.
 _Extended (2026-07-26) — the sixth sweep, and the twenty-seventh._ The pass that
 discharged decision 19 opened this document and ran the sweep the rule above
 demands, against the repository at `499ec32`. It found **five** stale sentences,
-and this is the first round in which none of them was written by the round
-before it: every one was stranded by a pull request that never opened this file,
-and the three responsible — driftsys/ridl#184, driftsys/ridl#188, and
-driftsys/ridl#189 — all merged the same day. Three sit in the third sweep's
-cross-check above and are corrected in a dated extension beside it; the other
-two are decision 21's and are corrected there. Four of the five were carried
-into this pass as known; the fifth is the `cargo fmt --all --check` clause in
-that same cross-check, which driftsys/ridl#184 closed and which nothing had
-recorded. The count above therefore stands at twenty-seven. The figure for stale
-sentences found by reviewing a correction rather than by making one stays at
-**eight**: none of these five was found that way, and this is the first round in
-which that figure has not moved.
+every one stranded by a pull request that never opened this file, and none
+written by the round before it. driftsys/ridl#188 stranded two,
+driftsys/ridl#189 two, and driftsys/ridl#184 one. The count above therefore
+stands at twenty-seven, and the figure for stale sentences found by reviewing a
+correction rather than by making one stays at **eight** — no superlative is
+claimed for either, and the third sweep is the precedent for a round leaving the
+second figure still.
+
+Three of the five sit in the third sweep's cross-check and are handled in the
+dated extension beside it, each differently: one left as written, one — the
+driftsys/ridl#172 pointer — **edited in place** rather than only noted beside,
+because a live cross-reference is not dated evidence, and one corrected in
+place. The other two are decision 21's and are corrected there.
+
+The one corrected in place carried a **second defect**, and it is counted once
+because it is one sentence. Besides being overtaken by driftsys/ridl#184, it
+undercounted: it said `just verify` failed to enforce one of decision 11's five
+members when two were unreachable at its own date. The dated-evidence rule
+therefore does not cover it, on the precedent the fourth sweep set at decision
+20, so it is corrected rather than left. That defect was found by review of this
+pass, not by the pass, which had opened and rewritten the sentence around it
+without seeing it — the same miss the second and fourth sweeps recorded, in the
+same shape.
 
 Everything else was re-derived from the source and held: the four catalogue
 counts (`FORM` 13, `TYPL` 39, `RIDL` 31, `MANI` 13) and decision 21's `RIDL-`
@@ -236,17 +267,51 @@ decision 8's `crates/ridl-ir/proto/ridl/ir/`, which holds `v2` alone; decision
 of no other crate in the workspace; and decision 20's three citations, which
 read `issue #172` while the string `E2 ledger` appears in no `.rs` file.
 
-Two sentences **would** have been stranded by this pass's own changes and are
-corrected in the same commit: decision 19's "Closing it is separate work …
-rather than done here", which the discharge makes false, and the running total
-above. A third was avoided rather than corrected. The fix-wave bullet at
-decision 21 quotes that decision's "the declare-once mechanism therefore covers
-the showcase list as well as the catalogs", so the re-derivation of the argument
-around it leaves the quoted sentence standing verbatim; rewriting the paragraph
-freely would have stranded the bullet that cites it. Decision 19's six-file
-Appendix A extent, recorded by the third and fourth sweeps, is dated to those
-sweeps and left as written — it is discharged as of this one, which the
-discharge note at decision 19 records.
+Exactly **five** pull requests merged between the last revision of this document
+(driftsys/ridl#183) and this sweep's baseline, and all five were read, not only
+the three that stranded a sentence. driftsys/ridl#185 parenthesises an object
+literal in the TypeScript backend and touches nothing this document claims.
+driftsys/ridl#186 created **ADR-0009**, which states that it refines decision 11
+by fixing what those five commands run against and **changes none of them** — so
+decision 11 is not falsified. ADR-0009 is also where the gate-member count is
+stated correctly, so reading decision 11 against it is what shows the
+cross-check's undercount. ADR-0009 is added to `## References`, which had
+stopped at ADR-0007 and so gave a reader of decision 11 no route to the document
+that now governs what its five members measure.
+
+Two sentences **would** have been stranded by this pass's own changes, and they
+are handled two different ways, which the summary must not blur. Only the
+running total above is **corrected**. Decision 19's "Closing it is separate work
+… rather than done here" is **left verbatim** and dated, with the discharge note
+beside it saying so, because it described the state truly on the day it was
+written — the same treatment every dated sentence here gets, and the opposite of
+the undercount above, which was not true at its date. A third was avoided rather
+than corrected. The fix-wave bullet at decision 21 quotes that decision's "the
+declare-once mechanism therefore covers the showcase list as well as the
+catalogs", so the re-derivation of the argument around it leaves the quoted
+sentence standing verbatim; rewriting the paragraph freely would have stranded
+the bullet that cites it. Decision 19's six-file Appendix A extent, recorded by
+the third and fourth sweeps, is dated to those sweeps and left as written — it
+is discharged as of this one, which the discharge note at decision 19 records.
+
+_And this round damaged the document too._ A draft of this note claimed the
+sixth round was the first in which a correction did not, and review of the pass
+falsified that before it merged. It found four false or materially incomplete
+sentences in the three paragraphs above — the paragraphs whose whole job is to
+be exact. The superlative was false twice over. "Which nothing had recorded" was
+false: driftsys/ridl#172 carries the item and quotes decision 11's wording. The
+redirect above was given a reason that does not hold — that a reader would find
+nothing at driftsys/ridl#172 — when the true reason is that the entry there
+points onward. And driftsys/ridl#184's contribution was halved, which is how the
+undercount survived a pass that had the sentence open. Two more were imprecise
+rather than false: this note called a dated sentence "corrected" when the
+discharge leaves it verbatim, and it did not disclose that one of the three
+cross-check sentences was edited in place. None is counted in the total, on the
+third sweep's precedent that a round's own damage caught before it ships is not
+a pre-existing stale sentence. The rate the note above reports is therefore
+unbroken at six rounds: every round that corrected this document also damaged
+it, and the correction's own review is what has caught it every time since the
+fourth.
 
 _Which sentences are dated, and which are live._ Every sentence here is one of
 two kinds, and **the split does not follow the paragraph headings**. A sentence
@@ -865,16 +930,21 @@ disagreeing sources is the correct one.
     changed what two of them expect, which is the propagation the note above
     describes, measured.
 
-    Two files that carry the name `FaultPageResult` are deliberately untouched,
-    because neither is a copy of Appendix A.
-    `crates/ridlc/tests/corpus/veh-cluster/NOTES` names it only in the paragraph
-    recording that RIDL-308 no longer fires there, which is already true.
-    `crates/ridl-sem/src/lint.rs` builds three fixtures around a union of that
-    name; they are RIDL-308's own tests and RIDL-405's, and retiring the
-    spelling from a worked example is not a reason to stop testing the lint that
-    steers away from it. RIDL-308 therefore keeps two living examples, the
-    diagnostic showcase and those lint tests. driftsys/ridl#172 carries this
-    extent as one of its items and can drop it.
+    Two files **in the live tree** carry the name `FaultPageResult` and are
+    deliberately untouched, because neither is a copy of Appendix A. The
+    qualifier is load-bearing: `git grep -l FaultPageResult` at `499ec32`
+    returns ten files, and without it this count reads as three, because
+    `docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` carries the name
+    at three lines and is untouched as well. It is excluded as verbatim
+    provenance, as everywhere in this document. The tenth file is this ADR,
+    quoting itself. `crates/ridlc/tests/corpus/veh-cluster/NOTES` names it only
+    in the paragraph recording that RIDL-308 no longer fires there, which is
+    already true. `crates/ridl-sem/src/lint.rs` builds three fixtures around a
+    union of that name; they are RIDL-308's own tests and RIDL-405's, and
+    retiring the spelling from a worked example is not a reason to stop testing
+    the lint that steers away from it. RIDL-308 therefore keeps two living
+    examples, the diagnostic showcase and those lint tests. driftsys/ridl#172
+    carries this extent as one of its items and can drop it.
 
 20. **Amendment (2026-07-25) — ridl §16.1's RIDL-110 row is narrowed to what the
     checker validates, and the difference is recorded as a known gap.**
@@ -1068,18 +1138,22 @@ disagreeing sources is the correct one.
     What that guard does **not** reach is the `Provoked` discriminator. An entry
     recorded as `Showcase` is checked against what the showcase actually emits,
     so it cannot be claimed falsely; an entry recorded as
-    `Elsewhere { fixture, reason }` is checked only against the fixture path
-    existing, so a code can still be recorded as covered by a fixture that does
-    not provoke it. The guard also compares the `RIDL-` namespace alone, which
-    is deliberate — the list carries shared FORM, MANI, and TYPL codes whose
-    catalogues hold many codes the ridl profile does not claim, so equality over
-    them would assert something untrue — and it is the namespace both codes this
-    decision mints belong to, so the coverage this decision argues from is the
-    coverage the guard provides. `corpus.rs` states the residual gap at the
-    `Provoked` declaration and records it on driftsys/ridl#172. The
-    declare-once-generates-the-list remedy the paragraph above asks for is still
-    not what shipped; what shipped is a guard that can fail, which is what the
-    argument needed and what the two hand-maintained arrays never had.
+    `Elsewhere { fixture, reason }` is checked against nothing but the existence
+    of the path in `fixture`. The escape is therefore wider than "a fixture that
+    does not provoke the code": the path need not be a ridl source, need not be
+    a fixture, and need not be reachable by any test. Recording a code as
+    `Elsewhere { fixture: "README.md", reason: "…" }` leaves the whole suite
+    green, which was reproduced rather than reasoned about. The guard also
+    compares the `RIDL-` namespace alone, which is deliberate — the list carries
+    shared FORM, MANI, and TYPL codes whose catalogues hold many codes the ridl
+    profile does not claim, so equality over them would assert something untrue
+    — and it is the namespace both codes this decision mints belong to, so the
+    coverage this decision argues from is the coverage the guard provides.
+    `corpus.rs` states the residual gap at the `Provoked` declaration and
+    records it on driftsys/ridl#172. The declare-once-generates-the-list remedy
+    the paragraph above asks for is still not what shipped; what shipped is a
+    guard that can fail, which is what the argument needed and what the two
+    hand-maintained arrays never had.
 
     Two subsystems reached the same idea independently, which is the argument
     for making it the house pattern — and the sibling case marks how far it has
@@ -1215,6 +1289,8 @@ disagreeing sources is the correct one.
 - ADR-0004 — sequencing and stack (the frame this refines).
 - ADR-0007 — E1 execution decisions (the pattern this follows; decision 11 the
   authority rule inverts for the four supersessions).
+- ADR-0009 — toolchain pin and gate parity (refines decision 11 by fixing what
+  its five commands run against, and changes none of them).
 - docs/ROADMAP.md — epic E2 stories and exit criteria.
 - docs/specification/ridl-family-overview.md — the home decision 18 gives the
   FORM and MANI code tables.
