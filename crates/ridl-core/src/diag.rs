@@ -1365,6 +1365,101 @@ mod tests {
         );
     }
 
+    /// The family overview's `FORM-` and `MANI-` tables list exactly the codes
+    /// this module declares, at the same severities.
+    ///
+    /// The overview says of those two tables that `crates/ridl-core/src/diag.rs`
+    /// "is the single source of truth these two tables mirror" — and until this
+    /// test, nothing checked the mirror. A code added to one and not the other
+    /// compiled and passed, and so did a severity that disagreed; the drift was
+    /// found the ordinary way, by a reviewer reading both.
+    ///
+    /// **Codes and severities only.** The `Rule` column is prose written for a
+    /// reader and the catalogue `summary` is written for the error index, so
+    /// they are deliberately not compared — pinning two prose strings to each
+    /// other would make every wording improvement a two-file edit for no gain.
+    /// What this catches is a code present in one list and absent from the
+    /// other, and a severity that disagrees. What it does not catch is a row
+    /// whose prose describes the wrong rule.
+    ///
+    /// TYPL and RIDL have no counterpart here: their tables live in their own
+    /// language references, and those tables carry codes no constant declares
+    /// yet (typl §16 documents six, recorded in issue #172), so the same
+    /// equality would fail today for a reason that is not drift.
+    #[test]
+    fn the_overview_form_and_mani_tables_mirror_the_catalogues() {
+        let overview = workspace_root().join("docs/specification/ridl-family-overview.md");
+        let text = std::fs::read_to_string(&overview)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", overview.display()));
+
+        // `| CODE | rule | severity |`, tolerant of the column padding prim
+        // applies. A row whose severity word is unknown is a malformed table,
+        // not something to skip quietly.
+        let mut documented: Vec<(String, Severity)> = Vec::new();
+        for line in text.lines() {
+            let mut cells = line.split('|').map(str::trim);
+            if cells.next() != Some("") {
+                continue;
+            }
+            let (Some(code), Some(_rule), Some(severity)) =
+                (cells.next(), cells.next(), cells.next())
+            else {
+                continue;
+            };
+            if !(code.starts_with("FORM-") || code.starts_with("MANI-")) {
+                continue;
+            }
+            let severity = match severity {
+                "error" => Severity::Error,
+                "warning" => Severity::Warning,
+                "info" => Severity::Info,
+                other => panic!("{code} in the overview carries no severity: `{other}`"),
+            };
+            documented.push((code.to_string(), severity));
+        }
+
+        let declared: Vec<(String, Severity)> = FORM_CATALOG
+            .iter()
+            .chain(MANI_CATALOG)
+            .map(|entry| (entry.code.as_str().to_string(), entry.severity))
+            .collect();
+
+        let names = |rows: &[(String, Severity)]| -> Vec<String> {
+            let mut names: Vec<String> = rows.iter().map(|(code, _)| code.clone()).collect();
+            names.sort();
+            names
+        };
+        assert_eq!(
+            names(&documented),
+            names(&declared),
+            "the family overview §7 tables and the FORM/MANI catalogues list \
+             different codes — {} documents the two namespaces `diag.rs` owns, \
+             so a code minted in one belongs in the other",
+            overview.display(),
+        );
+
+        for (code, severity) in &declared {
+            let (_, documented_severity) = documented
+                .iter()
+                .find(|(name, _)| name == code)
+                .expect("the code sets are equal");
+            assert_eq!(
+                documented_severity, severity,
+                "{code} is {severity:?} in the catalogue and \
+                 {documented_severity:?} in the overview",
+            );
+        }
+
+        // Width: a scan that matched nothing would satisfy both assertions
+        // against an empty catalogue, and cannot against a real one.
+        assert!(
+            documented.len() >= 25,
+            "only {} rows were read out of the overview tables — the parse is \
+             not finding them",
+            documented.len(),
+        );
+    }
+
     /// `text` with every `//` line comment removed, so prose about a forbidden
     /// code shape is not mistaken for the shape itself. A `//` inside a string
     /// literal takes the rest of its line with it.

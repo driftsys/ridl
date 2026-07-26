@@ -6684,6 +6684,29 @@ mod tests {
                 ),
                 "`legacyTemp` is retired here",
             ),
+            // Both first-wins shapes again, inside a service's inline shape.
+            // `lower_service_inline` is a hand-copied twin of the `interface`
+            // loop, and the interface rows above cover neither of its two maps:
+            // reverting either map in the twin alone left the whole workspace
+            // green. The twin is where a later edit diverges unnoticed — #174
+            // found a second instance of one bug two blocks below the first —
+            // so each shape is provoked from both stores.
+            (
+                "RIDL-402, three declarations, service inline shape",
+                format!(
+                    "{PRELUDE}service app.svc {{\n  signal speed : Speed @10ms\n  \
+                     signal speed : Speed @20ms\n  signal speed : Speed @30ms\n}}\n"
+                ),
+                "`speed` is declared here, and this is the one that is kept",
+            ),
+            (
+                "RIDL-401, two tombstones, service inline shape",
+                format!(
+                    "{PRELUDE}service app.svc {{\n  reserved legacyTemp\n  \
+                     reserved legacyTemp\n  signal legacyTemp : Speed @10ms\n}}\n"
+                ),
+                "`legacyTemp` is retired here",
+            ),
         ] {
             let checked = check_ridl("app", &source);
             assert!(

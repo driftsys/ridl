@@ -641,6 +641,13 @@ mod tests {
         // A digit followed by `us`, with or without a space between them, is a
         // microsecond count. Looking for the bare substring `us` would match
         // `because`; requiring the digit to be adjacent would miss `500000 us`.
+        //
+        // Adding a row whose *written* bound is in microseconds — `@[500us..1s]`
+        // is legal under ridl §2.1 — makes this fire on a message that is
+        // correctly echoing the author. That is the cost of the check being
+        // textual rather than knowing which numbers came from the source; no
+        // call site does it today, and a row that needs to should assert the
+        // quoted bounds and skip this helper rather than weaken it.
         let micros = message.match_indices("us").any(|(at, _)| {
             message[..at]
                 .trim_end_matches(' ')
