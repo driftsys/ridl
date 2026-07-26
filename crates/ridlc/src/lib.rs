@@ -276,10 +276,18 @@ pub enum Emit {
     IrJson,
     /// Idiomatic TypeScript source, written to `<base>.ts`.
     ///
-    /// The flag value is spelled `typescript`, not the derived `type-script`:
-    /// the language emits are named after the language (`rust`), and one
-    /// package's generated module imports another as `./<package-name>`, so the
-    /// file name has to be `<base>.ts` for the import to resolve.
+    /// The flag value is spelled `typescript` rather than the derived
+    /// `type-script`: the language emits are named after the language, as
+    /// `rust` is.
+    ///
+    /// The `.ts` extension is forced rather than chosen **in package and
+    /// workspace mode**, where `base` is the package name: one generated module
+    /// imports another as `./<package-name>`, which resolves only against a
+    /// file named `<package-name>.ts`. Single-file mode names artifacts after
+    /// the input file stem instead ([`run_build`]), so `ridlc build
+    /// common.typl` writes `common.ts` for `package veh.common`, and a sibling
+    /// module importing `./veh.common` would not resolve against it. The Rust
+    /// emit carries the same asymmetry, and both keep it.
     #[value(name = "typescript")]
     TypeScript,
 }

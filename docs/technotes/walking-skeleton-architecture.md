@@ -192,7 +192,7 @@ single .typl/.ridl file | package directory | workspace root
   -> resolve   Resolution { symbols, diagnostics }  ridl-sem    ADR-0002 §5 order
   -> check     ir v2 Package + diagnostics          ridl-sem -> ridl-ir types   (lint runs at the end of check)
   -> generate  Rust source + C header               ridl-backend-rust
-               TypeScript module                    ridl-backend-ts   (library and corpus only)
+               TypeScript module                    ridl-backend-ts
 ```
 
 Every stage emits coded `Diagnostic` values, concatenated in pipeline order
