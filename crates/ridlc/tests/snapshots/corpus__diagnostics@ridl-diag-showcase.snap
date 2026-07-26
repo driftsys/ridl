@@ -332,7 +332,7 @@ error[RIDL-102]: a timing duration must be greater than zero
 16 │   signal zero : Speed @0ms
    │                       ^^^^
 
-warning[RIDL-108]: timing range with equal bounds 250000us — equivalent to the strict period `@250000us`
+warning[RIDL-108]: degenerate timing range: the rate floor equals the staleness bound at 250000us
    ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:19:31
    │
 19 │   signal degenerate : Speed @[250ms..250ms]

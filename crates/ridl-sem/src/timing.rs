@@ -3,9 +3,9 @@
 //! IR carries (ridl language reference §9, general form §6.2, ADR-0008
 //! decision 12; E2 task 9).
 //!
-//! Durations convert to exact microseconds — the three ridl §9 timing units
-//! `us`/`ms`/`s` scale by 1 / 1_000 / 1_000_000; `min`/`h` (the remaining UCUM
-//! atoms the lexer emits, ridl §2.8) scale by 60_000_000 / 3_600_000_000.
+//! Durations convert to exact microseconds — the five duration suffixes ridl
+//! §2.1 tabulates: `us`/`ms`/`s` scale by 1 / 1_000 / 1_000_000, and `min`/`h`
+//! by 60_000_000 / 3_600_000_000.
 //!
 //! The lexer does **not** guarantee a whole-number duration: it merges an
 //! `IntNumber` **or** a `FloatNumber` followed by a time atom into one
@@ -202,8 +202,7 @@ pub fn resolve_timing(
                     file,
                     node,
                     format!(
-                        "timing range with equal bounds {}us — equivalent to the strict period `@{}us`",
-                        lo.to_decimal_string(),
+                        "degenerate timing range: the rate floor equals the staleness bound at {}us",
                         lo.to_decimal_string(),
                     ),
                 ));
@@ -261,7 +260,7 @@ fn whole_bound(text: &str) -> Result<ExactValue, String> {
     let duration = duration_us(text).ok_or_else(|| format!("invalid duration `{text}`"))?;
     if !duration.whole {
         return Err(format!(
-            "duration `{text}` must be a whole number of us/ms/s"
+            "duration `{text}` must be a whole number of us/ms/s/min/h"
         ));
     }
     Ok(duration.us)
@@ -294,7 +293,7 @@ struct Duration {
 /// to exact microseconds.
 ///
 /// Returns `None` only for text that is not a decimal number followed by a
-/// known UCUM time atom (ridl §2.8) — a genuinely unreadable token, which the
+/// known duration suffix (ridl §2.1) — a genuinely unreadable token, which the
 /// caller reports rather than dropping. A fractional literal parses and comes
 /// back with `whole: false`; scaling is exact rational arithmetic, so no value
 /// is rounded on the way in.
@@ -361,7 +360,7 @@ fn bound_us(
                     file,
                     span,
                     format!(
-                        "duration `{}` must be a whole number of us/ms/s (ridl §2.1)",
+                        "duration `{}` must be a whole number of us/ms/s/min/h (ridl §2.1)",
                         token.text(),
                     ),
                 ));

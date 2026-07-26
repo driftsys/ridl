@@ -79,19 +79,24 @@ and §14.5 needs both service forms exercised.
 
 ## Diagnostics the entry draws, and why they are kept
 
-The entry has no errors, so it is a full-pipeline golden. It carries three
-warnings, all of them true statements about the source:
+The entry has no errors, so it is a full-pipeline golden. It carries two
+warnings, both of them true statements about the source:
 
 - **TYPL-007, unused import `MAX_SPEED`** — Appendix A imports
   `veh.common.MAX_SPEED` and never uses it. A fact about the appendix text.
-- **RIDL-308, named result union in query-return position** — Appendix A writes
-  `query getFaultPage(filter: DiagFilter): FaultPageResult`. General form §6.1
-  made the inline `FaultPage | DiagError` spelling canonical in return position
-  after the appendix was written; the E2 close-out already lists §7/§10.1
-  adopting the inline form as doc-sync work. The lint firing here is the
-  appendix and the general form disagreeing, correctly reported.
 - **RIDL-100, untimed event** — deliberate, in `services.ridl`: it is the only
   way to exercise the default-applied path end to end.
+
+**RIDL-308 no longer fires here, and that is the recorded change.** Appendix A
+wrote `query getFaultPage(filter: DiagFilter): FaultPageResult` over a named
+`union FaultPageResult`, which drew the lint. General form §6.1 made the inline
+`FaultPage | DiagError` spelling canonical in return position after the appendix
+was written, and the E2 close-out adopted it in the reference text (ADR-0008
+decisions 1 and 19); the appendix now writes the inline form and the union
+declaration is deleted with it, because adopting the inline return leaves the
+union unreferenced and no pass reports an unused declaration — TYPL-007 covers
+unused imports only. RIDL-308 keeps a living example in `ridl-diag-showcase`,
+which provokes it independently.
 
 ## Findings this entry pins
 
