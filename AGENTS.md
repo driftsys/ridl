@@ -100,6 +100,23 @@ apart unnoticed — check those two by reading when you touch either file.
   `.editorconfig` only, no per-tool config. `.primignore` is the escape hatch
   for files that must stay byte-exact.
 - **markdownlint** enforces Markdown style (`.markdownlint.json`).
+- **Every `ridl`/`typl` fenced block in `docs/book/` is compiled** by
+  `crates/ridl/tests/book_examples.rs`, and must draw no diagnostic its fence
+  does not name — nor name one it does not draw. A verified block declares its
+  own `package` and is a whole file; a fragment is marked `` ```ridl,ignore ``;
+  a deliberate diagnostic is marked `` ```ridl,allow=<CODE> ``. Package names
+  are book-wide. Extraction uses `pulldown-cmark` with mdBook's exact option set
+  (`MDBOOK_OPTIONS`), so a fence anywhere mdBook reads one is verified — do not
+  replace it with pattern matching, and do not widen the options. See
+  `CONTRIBUTING.md`, "Writing examples in the book".
+- **Diagnostic codes written in Markdown are unguarded.** The catalogue drift
+  check (issue #189) scans `.rs` sources only, so a `TYPL-`/`RIDL-` code cited
+  in `docs/` — including an `allow=<CODE>` fence marker — is not checked against
+  the catalogue. Recorded on driftsys/ridl#191.
+- **The book describes the system as built.** There is no runtime in this
+  workspace, so prose about delivery, timing behaviour, or provider-side
+  contract enforcement is describing the specification — say so where it
+  appears.
 - **Prose — comments, commit messages, docs, PR descriptions — is plain and
   literal**: no idioms, no figures of speech. Technical terms and acronyms stay
   as they are.
