@@ -1078,6 +1078,11 @@ fn veh_cluster_generated_typescript_type_checks() {
             "export const service_veh_hvac_cabinTiming",
             "export const service_veh_hvac_cabinContracts",
             "export const services",
+            // The array-of-tuple init (issue #177). Without this marker the
+            // proof goes quiet if `RawWheelSpan.bursts` is ever dropped from
+            // the corpus: the remaining source still type-checks, so only the
+            // snapshot would move, and `cargo insta accept` would take it.
+            "bursts: Array.from({ length: 2 }, () => ({",
         ],
     );
 }
@@ -1146,9 +1151,10 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
     // names it generates are `pub(crate)` — the two faces, the two metadata
     // constants, and the structs induced by its two tuple positions: a query's
     // tuple return and a `final` payload's array element (issue #167). The
-    // typl-layer tuple beside it (`RawWheelSpan.span`) is in the same list: a
-    // tuple has no visibility of its own, so it takes the one of the
-    // declaration that induced it, whichever layer that declaration is in.
+    // typl-layer tuples beside it (`RawWheelSpan.span` and the element of
+    // `RawWheelSpan.bursts`) are in the same list: a tuple has no visibility of
+    // its own, so it takes the one of the declaration that induced it,
+    // whichever layer that declaration is in.
     for item in [
         "pub(crate) trait WheelDiagnosticsConsumer",
         "pub(crate) trait WheelDiagnosticsProvider",
@@ -1157,6 +1163,7 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "pub(crate) struct WheelDiagnosticsReadSpanResult",
         "pub(crate) struct WheelDiagnosticsTickBoundsElement",
         "pub(crate) struct RawWheelSpanSpan",
+        "pub(crate) struct RawWheelSpanBurstsElement",
     ] {
         assert!(
             compiled.rust.contains(item),
@@ -1174,6 +1181,7 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "pub struct WheelDiagnosticsReadSpanResult",
         "pub struct WheelDiagnosticsTickBoundsElement",
         "pub struct RawWheelSpanSpan",
+        "pub struct RawWheelSpanBurstsElement",
     ] {
         assert!(
             !compiled.rust.contains(leaked),

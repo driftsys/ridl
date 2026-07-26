@@ -551,6 +551,61 @@ fn fixed_and_bounded_arrays() {
     insta::assert_snapshot!(source);
 }
 
+/// An array whose element is a tuple is the one shape that puts an object
+/// literal in the concise arrow body of the generated `Array.from` init. A
+/// concise arrow body is parsed as a **block**, so the literal has to be
+/// parenthesised: unparenthesised, the two-field spelling below is a syntax
+/// error, and a one-field tuple parses as a labelled statement whose callback
+/// returns `undefined` (issue #177).
+///
+/// The direct tuple field beside it is the control — it is emitted as a plain
+/// object literal, was correct throughout, and must stay unparenthesised.
+#[test]
+fn array_of_tuple_init_parenthesizes_the_arrow_body() {
+    let tuple_element = || v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: vec![tuple_field("min", "Speed"), tuple_field("max", "Speed")],
+        })),
+    };
+    let range = v2::Field {
+        r#type: Some(tuple_element()),
+        ..named_field("range", 1, "", false, init_value(true, None))
+    };
+    let spans = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(tuple_element())),
+                min: 2,
+                max: 2,
+            }))),
+        }),
+        ..named_field("spans", 2, "", false, init_value(true, None))
+    };
+    let struct_def = v2::StructDef {
+        members: vec![field_member(range), field_member(spans)],
+        fixed_layout: false,
+    };
+    let decls = vec![
+        speed_decl(),
+        public_decl("SpanTable", v2::decl::Kind::StructDef(struct_def)),
+    ];
+    let source = ts_for(decls);
+    assert!(
+        source.contains(
+            "spans: Array.from({ length: 2 }, () => ({ min: initSpeed(), max: initSpeed() })),"
+        ),
+        "an array-of-tuple init must parenthesise its arrow body, got:\n{source}"
+    );
+    assert!(
+        source.contains("range: { min: initSpeed(), max: initSpeed() },"),
+        "a tuple in direct field position must stay an unparenthesised object \
+         literal, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
 #[test]
 fn bounded_map() {
     let map_field = v2::Field {
@@ -586,6 +641,49 @@ fn bounded_map() {
         "maps must be deterministic readonly entry lists, got:\n{source}"
     );
     insta::assert_snapshot!(source);
+}
+
+/// The map init is the other site that emits a concise arrow body, and its
+/// body is an array literal — `[k, v] as const` — so the parenthesisation rule
+/// of [`array_of_tuple_init_parenthesizes_the_arrow_body`] must leave it
+/// alone. Asserted rather than assumed: no snapshot covered a map with a
+/// non-zero minimum, so nothing else pins this form.
+#[test]
+fn a_map_init_with_a_non_zero_minimum_keeps_its_array_literal_arrow_body() {
+    let map_field = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("Counter".to_string())),
+                })),
+                value: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Named("Speed".to_string())),
+                })),
+                min: 3,
+                max: 32,
+            }))),
+        }),
+        ..named_field("meta", 1, "", false, init_value(true, None))
+    };
+    let struct_def = v2::StructDef {
+        members: vec![field_member(map_field)],
+        fixed_layout: false,
+    };
+    let decls = vec![
+        speed_decl(),
+        counter_decl(),
+        public_decl("Table", v2::decl::Kind::StructDef(struct_def)),
+    ];
+    let source = ts_for(decls);
+    assert!(
+        source.contains(
+            "meta: Array.from({ length: 3 }, () => [initCounter(), initSpeed()] as const),"
+        ),
+        "a map init must build its entries as `[k, v] as const`, got:\n{source}"
+    );
 }
 
 #[test]

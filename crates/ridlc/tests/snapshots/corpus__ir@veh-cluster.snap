@@ -1396,6 +1396,58 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "deprecated": null
                 }
               }
+            },
+            {
+              "member": {
+                "Field": {
+                  "name": "bursts",
+                  "ordinal": 2,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Array": {
+                        "element": {
+                          "optional": false,
+                          "kind": {
+                            "Tuple": {
+                              "fields": [
+                                {
+                                  "name": "first",
+                                  "type": {
+                                    "optional": false,
+                                    "kind": {
+                                      "Named": "RawTickCount"
+                                    }
+                                  }
+                                },
+                                {
+                                  "name": "latest",
+                                  "type": {
+                                    "optional": false,
+                                    "kind": {
+                                      "Named": "RawTickCount"
+                                    }
+                                  }
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        "min": 2,
+                        "max": 2
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
             }
           ],
           "fixed_layout": true

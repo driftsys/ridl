@@ -120,6 +120,39 @@ Several have since been repaired that way. A repaired one is marked
 what the corpus found and why the coverage exists is part of what the corpus is
 for — a section that silently disappears teaches nothing.
 
+### An array of tuples was emitted as a TypeScript block — fixed in #177
+
+**Status: fixed.** Recorded because the coverage that now guards it was added
+here, and because the reason it went undetected is a statement about the corpus
+rather than about the backend.
+
+`RawWheelSpan.bursts` is an array whose **element** is a tuple. Until it was
+added, no corpus entry held that combination: `veh-common` has an array of a
+named type (`readings : [Speed; 8]`) and a bare tuple field
+(`range : (min, max)`), and the interaction layer has an array of tuples in a
+`final` payload, which generates a type but no init. So no generated init ever
+placed an object literal in a concise arrow body, and the TypeScript backend
+emitted the `Array.from` callback as
+`() => { first: initRawTickCount(), latest: initRawTickCount() }`, with no
+parentheses around the object literal.
+
+A concise arrow body that starts with `{` is a **block**, not an object
+literal. The one-field spelling in the issue parses as a labelled statement and
+the callback returns `undefined` (TS2322); the two-field spelling here is a
+syntax error (TS1005). The repair parenthesises such a body —
+`() => ({ … })` — in `crates/ridl-backend-ts/src/lib.rs::array_from`, which is
+now the only place that backend emits an arrow function.
+
+`span` beside it is the control: a tuple in **direct field position** is
+emitted as a plain object literal, was correct throughout, and stays
+unparenthesised. Both forms are in one generated init function, so the
+TypeScript snapshot shows them next to each other. The Rust backend was
+unaffected — it emits `::core::array::from_fn(|_| …::default())` over the
+induced element struct — and the snapshot records that too.
+
+`veh_cluster_generated_typescript_type_checks` is the proof: with the field
+present and the repair reverted, `tsc --strict` refuses the emitted module.
+
 ### `internal` was dropped by both backends — found here, fixed in #160
 
 **Status: fixed.** Recorded because this entry is what found it.

@@ -897,9 +897,7 @@ fn array_init(ctx: &Ctx, array: &v2::ArrayType, slot: &Slot) -> Option<String> {
         flag: slot.flag,
     };
     let element = slot_init(ctx, array.element.as_deref()?, &element_slot)?;
-    Some(format!(
-        "Array.from({{ length: {count} }}, () => {element})"
-    ))
+    Some(array_from(count, &element))
 }
 
 /// The init of a map slot: the min-bound count of entry inits (typl §5.8) —
@@ -915,10 +913,34 @@ fn map_init(ctx: &Ctx, map: &v2::MapType, slot: &Slot) -> Option<String> {
     };
     let key = slot_init(ctx, map.key.as_deref()?, &entry_slot)?;
     let value = slot_init(ctx, map.value.as_deref()?, &entry_slot)?;
-    Some(format!(
-        "Array.from({{ length: {count} }}, () => [{key}, {value}] as const)",
-        count = map.min
-    ))
+    Some(array_from(map.min, &format!("[{key}, {value}] as const")))
+}
+
+/// `Array.from({ length: n }, () => body)` — the one place this backend emits
+/// an arrow function **expression**, so the rule below cannot be missed by a
+/// later call site. Arrow **types** are a separate matter: [`interact`] writes
+/// two of them into the prelude's handle interfaces
+/// (`subscribe(fn: (value: T, …) => void): () => void`), which are type
+/// annotations with no body and no parse ambiguity to resolve.
+///
+/// A concise arrow body that starts with `{` is parsed as a **block**, not as
+/// an object literal: `() => { first: x }` is a block holding a labelled
+/// statement, so the callback returns `undefined`, and `() => { first: x,
+/// latest: y }` is a syntax error. Such a body is parenthesised (issue #177).
+///
+/// Of the init forms [`slot_init`] produces, only [`tuple_init`] renders as an
+/// object literal, so today the array element form is the one that reaches the
+/// rule — an array whose element is a tuple. The map entry form renders
+/// `[k, v] as const` and is left unchanged. The check is on the emitted text
+/// rather than on the element kind, so a later init form that renders as an
+/// object literal is covered by construction.
+fn array_from(count: u64, body: &str) -> String {
+    let body = if body.starts_with('{') {
+        format!("({body})")
+    } else {
+        body.to_string()
+    };
+    format!("Array.from({{ length: {count} }}, () => {body})")
 }
 
 fn enum_init(name: &str, ed: &v2::EnumDef) -> Option<String> {
