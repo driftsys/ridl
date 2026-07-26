@@ -49,10 +49,16 @@ internal interface WheelDiagnostics {
   // own exposure position: it is one of the positions rustc reported when a
   // public interface carried an `internal` payload.
   command resetTicks(seed: RawTickCount)
-  // The tuple return — the interaction-layer half of issue #167. A query's
-  // return is the only interaction position a tuple can reach: a payload, a
-  // parameter and a `final` are narrowed to a named type (FORM-102).
+  // The tuple return — one of the two interaction positions a tuple can reach.
+  // A signal or event payload and a parameter are narrowed to a named type
+  // (FORM-102), and a collection return is FORM-101.
   query readSpan(): (min : RawTickCount, max : RawTickCount)
+  // The other one, and the position that had no corpus entry at all: FORM-102
+  // narrows a `final` payload to "a named type OR AN ARRAY" and does not
+  // descend into the element, so a tuple reaches an interaction through the
+  // array and induces `WheelDiagnosticsTickBoundsElement`. Everything
+  // `field_type_tokens` can build is reachable below that element.
+  final tickBounds : [(low : RawTickCount, high : RawTickCount); 2]
 }
 
 /// A public shape beside it, so the generated output shows the two side by

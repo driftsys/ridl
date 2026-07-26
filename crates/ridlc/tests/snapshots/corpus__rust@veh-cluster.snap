@@ -620,6 +620,9 @@ pub(crate) trait WheelDiagnosticsConsumer {
     /// query `readSpan` — ordinal 5 (ridl §7).
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     async fn read_span(&self) -> WheelDiagnosticsReadSpanResult;
+    /// final `tickBounds` — ordinal 6 (ridl §8).
+    /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
+    fn tick_bounds(&self) -> &[WheelDiagnosticsTickBoundsElement; 2];
 }
 /// A package-private contract shape: realized inside this package, never part
 /// of the cross-package surface.
@@ -1064,6 +1067,18 @@ impl Default for WheelDiagnosticsReadSpanResult {
         WheelDiagnosticsReadSpanResult {
             min: RawTickCount::default(),
             max: RawTickCount::default(),
+        }
+    }
+}
+pub(crate) struct WheelDiagnosticsTickBoundsElement {
+    pub low: RawTickCount,
+    pub high: RawTickCount,
+}
+impl Default for WheelDiagnosticsTickBoundsElement {
+    fn default() -> Self {
+        WheelDiagnosticsTickBoundsElement {
+            low: RawTickCount::default(),
+            high: RawTickCount::default(),
         }
     }
 }

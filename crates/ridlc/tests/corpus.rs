@@ -864,6 +864,7 @@ fn veh_cluster_generated_rust_compiles_with_rustc() {
         "pub trait ServiceVehHvacCabinConsumer",
         "pub trait ServiceVehHvacCabinProvider",
         "pub(crate) struct WheelDiagnosticsReadSpanResult",
+        "pub(crate) struct WheelDiagnosticsTickBoundsElement",
         "pub(crate) struct RawWheelSpanSpan",
     ] {
         assert!(
@@ -1140,9 +1141,10 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "control: an `internal` typl declaration must stay unexported in TypeScript",
     );
 
-    // Rust. `WheelDiagnostics` is declared `internal`, so all **five** of the
+    // Rust. `WheelDiagnostics` is declared `internal`, so all **six** of the
     // names it generates are `pub(crate)` — the two faces, the two metadata
-    // constants, and the struct its tuple return induces (issue #167). The
+    // constants, and the structs induced by its two tuple positions: a query's
+    // tuple return and a `final` payload's array element (issue #167). The
     // typl-layer tuple beside it (`RawWheelSpan.span`) is in the same list: a
     // tuple has no visibility of its own, so it takes the one of the
     // declaration that induced it, whichever layer that declaration is in.
@@ -1152,6 +1154,7 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "pub(crate) const WHEEL_DIAGNOSTICS_TIMING",
         "pub(crate) const WHEEL_DIAGNOSTICS_CONTRACTS",
         "pub(crate) struct WheelDiagnosticsReadSpanResult",
+        "pub(crate) struct WheelDiagnosticsTickBoundsElement",
         "pub(crate) struct RawWheelSpanSpan",
     ] {
         assert!(
@@ -1168,6 +1171,7 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "pub const WHEEL_DIAGNOSTICS_TIMING",
         "pub const WHEEL_DIAGNOSTICS_CONTRACTS",
         "pub struct WheelDiagnosticsReadSpanResult",
+        "pub struct WheelDiagnosticsTickBoundsElement",
         "pub struct RawWheelSpanSpan",
     ] {
         assert!(

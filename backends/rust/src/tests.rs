@@ -632,6 +632,184 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     );
 }
 
+/// A tuple reached through a `final` payload is package-private with the
+/// `internal interface` that declares it.
+///
+/// **This position was argued away and had no coverage.** FORM-102 narrows a
+/// `final` payload to "a named type **or an array**" and does not descend into
+/// the element, so `final bounds : [(lo : Hidden, hi : Hidden); 2]` is accepted
+/// — `ridlc check` exits 0 — and once inside the array element the whole of
+/// `field_type_tokens` is reachable again. A query's return is therefore not
+/// the only interaction position a tuple can reach, and this was the one
+/// position in the set with no corpus entry and no unit test.
+///
+/// All four element shapes are exercised, because each is a separate branch:
+/// a bare tuple element, an array of arrays, an optional element, and a tuple
+/// nested in the element (which induces two structs). A map is admitted inside
+/// the element too, though not as the payload itself.
+#[test]
+fn a_tuple_under_a_final_payload_is_package_private() {
+    // `[element; 2]`, with `element` supplied by the caller.
+    fn array_of(element: v2::field_type::Kind) -> v2::field_type::Kind {
+        v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(v2::FieldType {
+                optional: false,
+                kind: Some(element),
+            })),
+            min: 2,
+            max: 2,
+        }))
+    }
+    let final_of = |name: &str, ordinal: u32, payload: v2::field_type::Kind| {
+        interaction(
+            name,
+            ordinal,
+            "",
+            v2::decl::Kind::FinalDef(v2::FinalDef {
+                payload: Some(v2::FieldType {
+                    optional: false,
+                    kind: Some(payload),
+                }),
+            }),
+        )
+    };
+
+    let hidden = v2::Decl {
+        visibility: v2::Visibility::Internal as i32,
+        ..public_decl(
+            "Hidden",
+            primitive_type(
+                v2::PrimitiveType::Integer,
+                init_value(true, Some("0")),
+                Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
+            ),
+        )
+    };
+    let panel = v2::Interface {
+        visibility: v2::Visibility::Internal as i32,
+        ..interface(
+            "Panel",
+            "",
+            vec![
+                // 1. the array element is a tuple
+                final_of("bounds", 1, array_of(tuple_of(&[("lo", "Hidden")]))),
+                // 2. an array of arrays of tuples
+                final_of(
+                    "nested",
+                    2,
+                    array_of(array_of(tuple_of(&[("a", "Hidden")]))),
+                ),
+                // 3. the element is an OPTIONAL tuple
+                final_of(
+                    "opt",
+                    3,
+                    v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                        element: Some(Box::new(v2::FieldType {
+                            optional: true,
+                            kind: Some(tuple_of(&[("b", "Hidden")])),
+                        })),
+                        min: 2,
+                        max: 2,
+                    })),
+                ),
+                // 4. a tuple nested inside the element tuple — two structs
+                final_of(
+                    "deep",
+                    4,
+                    array_of(v2::field_type::Kind::Tuple(v2::TupleType {
+                        fields: vec![v2::TupleField {
+                            name: "d".to_string(),
+                            r#type: Some(v2::FieldType {
+                                optional: false,
+                                kind: Some(tuple_of(&[("e", "Hidden")])),
+                            }),
+                        }],
+                    })),
+                ),
+            ],
+        )
+    };
+    // The regression direction: the same shape on a PUBLIC interface stays
+    // `pub`. Its payload is `Counter`, because a public declaration naming an
+    // `internal` one is TYPL-005 and never reaches a backend.
+    let shown = interface(
+        "Shown",
+        "",
+        vec![final_of(
+            "bounds",
+            1,
+            array_of(tuple_of(&[("g", "Counter")])),
+        )],
+    );
+
+    let Generated { rust_source, .. } = generate(&interaction_package(
+        vec![counter_decl(), hidden],
+        vec![panel, shown],
+        Vec::new(),
+    ))
+    .expect("the package generates");
+
+    for item in [
+        "pub(crate) struct PanelBoundsElement",
+        "pub(crate) struct PanelNestedElementElement",
+        "pub(crate) struct PanelOptElement",
+        "pub(crate) struct PanelDeepElement",
+        "pub(crate) struct PanelDeepElementD",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "a tuple under an `internal` final must emit `{item}`, got:\n{rust_source}"
+        );
+    }
+    // `pub(crate) struct X` does not contain `pub struct X`, so these are
+    // genuine negatives.
+    for leaked in [
+        "pub struct PanelBoundsElement",
+        "pub struct PanelNestedElementElement",
+        "pub struct PanelOptElement",
+        "pub struct PanelDeepElement",
+        "pub struct PanelDeepElementD",
+    ] {
+        assert!(
+            !rust_source.contains(leaked),
+            "a tuple under an `internal` final must not emit `{leaked}`, got:\n{rust_source}"
+        );
+    }
+    assert!(
+        rust_source.contains("pub struct ShownBoundsElement"),
+        "a public interface's final tuple must still be `pub`, got:\n{rust_source}"
+    );
+
+    // The proof, denying the two lints by name for the reason `rustc_accepts`
+    // records: the generated code carries by-design naming and dead-code lints.
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("final_tuple.rs");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "private-interfaces",
+            "-D",
+            "private-bounds",
+        ])
+        .arg("-o")
+        .arg(dir.path().join("final_tuple.rmeta"))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "a tuple under an `internal` final must compile under \
+         `-D private-interfaces`, source:\n{rust_source}"
+    );
+}
+
 /// Two tuples whose paths mangle to one struct name are **refused**, in either
 /// layer, rather than deduplicated.
 ///

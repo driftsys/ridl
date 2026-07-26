@@ -708,6 +708,10 @@ interface WheelDiagnosticsConsumer {
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   readSpan(): Promise<{ min: RawTickCount; max: RawTickCount }>;
+  /**
+   * @ordinal 6
+   */
+  readonly tickBounds: readonly { low: RawTickCount; high: RawTickCount }[];
 }
 
 /**

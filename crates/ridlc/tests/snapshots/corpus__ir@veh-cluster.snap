@@ -2338,6 +2338,55 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "contracts": []
             }
           }
+        },
+        {
+          "name": "tickBounds",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 6,
+          "kind": {
+            "FinalDef": {
+              "payload": {
+                "optional": false,
+                "kind": {
+                  "Array": {
+                    "element": {
+                      "optional": false,
+                      "kind": {
+                        "Tuple": {
+                          "fields": [
+                            {
+                              "name": "low",
+                              "type": {
+                                "optional": false,
+                                "kind": {
+                                  "Named": "RawTickCount"
+                                }
+                              }
+                            },
+                            {
+                              "name": "high",
+                              "type": {
+                                "optional": false,
+                                "kind": {
+                                  "Named": "RawTickCount"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "min": 2,
+                    "max": 2
+                  }
+                }
+              }
+            }
+          }
         }
       ]
     },
