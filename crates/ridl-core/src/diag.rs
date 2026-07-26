@@ -1044,24 +1044,52 @@ mod tests {
     /// stream types added an `expect(SyntaxKind::Gt)` call site and nothing
     /// tied the two files together.
     ///
-    /// The first assertion pins that single-producer premise: a second
-    /// `Debug`-shaped emitter would widen the reachable set past what the scan
-    /// below reads, so it has to fail rather than pass silently.
+    /// The first assertion pins that single-producer premise, and pins it
+    /// **workspace-wide**: a second `Debug`-shaped emitter anywhere would widen
+    /// the reachable set past what the scan below reads, so it has to fail
+    /// rather than pass silently. Reading only the parser would leave the
+    /// premise's own scope unchecked — the same shape of gap as the one this
+    /// test exists to close.
     #[test]
     fn every_expectable_token_has_a_glyph() {
         const CALL: &str = ".expect(SyntaxKind::";
 
-        let parser = workspace_root().join("crates/ridl-syntax/src/parser.rs");
-        let text = std::fs::read_to_string(&parser)
-            .unwrap_or_else(|err| panic!("cannot read {}: {err}", parser.display()));
-        assert_eq!(
-            text.matches(r#"format!("expected {kind:?}")"#).count(),
-            1,
-            "{} no longer holds exactly one `Debug`-shaped `expected` message, \
-             so the reachable kinds are no longer just `expect`'s arguments",
-            parser.display(),
+        let root = workspace_root();
+        let mut sources = Vec::new();
+        collect_rust_sources(&root, &mut sources);
+        assert!(
+            sources.len() >= 60,
+            "the walk found only {} `.rs` files under {} — it is not reaching \
+             the workspace",
+            sources.len(),
+            root.display(),
         );
 
+        let parser = root.join("crates/ridl-syntax/src/parser.rs");
+        let emitters: Vec<String> = sources
+            .iter()
+            .filter(|path| {
+                let text = std::fs::read_to_string(path)
+                    .unwrap_or_else(|err| panic!("cannot read {}: {err}", path.display()));
+                let stripped = strip_line_comments(&text);
+                stripped
+                    .match_indices(r#""expected {"#)
+                    .any(|(at, matched)| is_whole_debug_message(&stripped[at + matched.len()..]))
+            })
+            .map(|path| path.display().to_string())
+            .collect();
+        assert_eq!(
+            emitters,
+            vec![parser.display().to_string()],
+            "the workspace no longer has exactly one message that is a \
+             `Debug`-formatted token name and nothing else, so the reachable \
+             kinds are no longer just `expect`'s arguments in the parser. Either \
+             route the new emitter through `expect`, or widen the scan below to \
+             read its argument too",
+        );
+
+        let text = std::fs::read_to_string(&parser)
+            .unwrap_or_else(|err| panic!("cannot read {}: {err}", parser.display()));
         let despaced: String = strip_line_comments(&text)
             .chars()
             .filter(|c| !c.is_whitespace())
@@ -1530,6 +1558,29 @@ mod tests {
              not finding them",
             documented.len(),
         );
+    }
+
+    /// Whether `rest` — the source just past a `"expected {` — closes the
+    /// format string immediately as `ident:?}"`, making the whole message a
+    /// `Debug`-formatted value and nothing else.
+    ///
+    /// That exact shape is what reaches [`punctuation_glyph`]: anything with
+    /// prose after the placeholder (`"expected {text:?} to parse"`) is not a
+    /// bare token name, and a `Display` placeholder (`"expected {name}"`) is not
+    /// a `Debug` name. Both occur in the workspace and both are correctly
+    /// ignored. What this does not catch is an emitter that formats the name
+    /// through a variable rather than inline; no such site exists, and the
+    /// recurrence worth guarding is a second `expect`-shaped helper.
+    fn is_whole_debug_message(rest: &str) -> bool {
+        let Some(colon) = rest.find(':') else {
+            return false;
+        };
+        let placeholder = &rest[..colon];
+        !placeholder.is_empty()
+            && placeholder
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_')
+            && rest[colon..].starts_with(":?}\"")
     }
 
     /// `text` with every `//` line comment removed, so prose about a forbidden
