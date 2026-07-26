@@ -14,6 +14,9 @@
   authority for the interaction surface, IR v2 placement, the TypeScript second
   backend, `ridl diff` placement and its classifier rules, the `RIDL-`
   diagnostic allocations, and six close-out amendments).
+- **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
+  justfile as the single definition of every gate command, and what happens when
+  a tool the gate needs is absent. Not epic-scoped: it binds every contributor.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview.

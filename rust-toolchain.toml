@@ -1,0 +1,25 @@
+# rust-toolchain.toml — the pinned Rust toolchain (ADR-0009).
+#
+# rustup reads this file for every cargo and rustc invocation made inside this
+# repository, so `cargo build`, `cargo test`, `cargo fmt`, and `cargo clippy`
+# all run the version named here whatever the contributor's rustup default is.
+# CI installs from this file rather than from a channel alias, so both sides
+# run one toolchain rather than two that happen to agree today.
+#
+# rustfmt output and clippy lints change between releases, so an unpinned
+# toolchain makes `cargo fmt --all --check` and `cargo clippy -- -D warnings`
+# pass locally and fail in CI. That is what the pin exists to prevent.
+#
+# Bumping it is a deliberate PR: change `channel`, run `just build`, repair
+# whatever the new rustfmt and clippy report, and land the repairs in the same
+# commit as the bump. The version lives here and in no other file.
+#
+# `just toolchain-check` fails when the running toolchain is not this one —
+# without rustup this file is silently ignored, and a silently ignored pin is
+# no pin at all.
+
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]
+targets = ["wasm32-unknown-unknown"]
+profile = "minimal"
