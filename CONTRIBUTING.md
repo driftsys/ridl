@@ -117,10 +117,17 @@ failure rather than an unknown-code one (driftsys/ridl#191).
 ### Where a fence may sit
 
 **Anywhere mdBook reads one.** Extraction uses `pulldown-cmark`, the CommonMark
-parser mdBook itself uses, so a fence inside a list item at any depth, inside a
-block quote, or inside an HTML block is an ordinary example. So is one after an
-unclosed fence earlier in the file, which CommonMark closes at the end of its
-container.
+parser mdBook itself uses, **with mdBook's exact option set**, so a fence inside
+a list item at any depth, inside a block quote, or inside an HTML block is an
+ordinary example. So is one after an unclosed fence earlier in the file, which
+CommonMark closes at the end of its container.
+
+Both halves matter. `Options::all()` differs from mdBook's five flags in three
+that move fences — a fence under a `[^1]:` footnote definition, or inside a
+leading `---…---` or `+++…+++` block, becomes invisible — and that produced a
+fail-open one round after the parser fixed three others. The option set is
+pinned in `MDBOOK_OPTIONS` with two tests on it. If you change it, change it
+because you checked mdBook, not because a flag looked harmless.
 
 Two consequences worth knowing:
 

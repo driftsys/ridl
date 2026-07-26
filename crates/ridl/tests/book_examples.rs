@@ -107,12 +107,11 @@
 //!   no info string, and is skipped — which is also how mdBook renders it, with
 //!   no language class.
 //!
-//! [`renders_as_examples`] is the remaining guard: it renders each file to HTML
-//! with the same parser's renderer and requires the count of `language-ridl` /
-//! `language-typl` blocks to equal the number this harness accounted for. It is
-//! independent of the event walk below — the only hand-written part left — but
-//! *not* of `pulldown-cmark` itself. Agreement with `pulldown-cmark` is exactly
-//! what buys agreement with mdBook, so that is the right thing to depend on.
+//! Agreement rests on two things, and the second is easy to miss: the same
+//! parser **and the same options**. `Options::all()` differs from mdBook's set
+//! in three flags that move fences, which produced a fourth fail-open one round
+//! after the parser fixed the first three. [`MDBOOK_OPTIONS`] pins the set, and
+//! two tests pin the constant.
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use std::collections::{BTreeMap, BTreeSet};
@@ -159,7 +158,39 @@ struct Fenced {
     fence_line: usize,
 }
 
-/// Every fenced code block in `markdown`, from [`pulldown_cmark`].
+/// The exact `pulldown-cmark` options mdBook parses with.
+///
+/// mdBook builds its parser from `Options::empty()` and inserts exactly these
+/// five (`mdbook::utils::new_cmark_parser`).
+///
+/// **Using the same parser is not enough on its own.** The option set decides
+/// block structure too, and three flags in `Options::all()` move fences:
+///
+/// - `ENABLE_OLD_FOOTNOTES` swallows a fence indented under a `[^1]:`
+///   definition;
+/// - `ENABLE_YAML_STYLE_METADATA_BLOCKS` and
+///   `ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS` swallow one inside a leading
+///   `---…---` or `+++…+++`;
+/// - `ENABLE_DEFINITION_LIST` invents one under a `: ` definition, where mdBook
+///   sees an indented code block.
+///
+/// The first three are **fail-open**: mdBook renders `class="language-ridl"`
+/// and the harness sees nothing. Calling the right parser with `Options::all()`
+/// is how this harness shipped its fourth silent skip, one round after moving
+/// to the parser to stop shipping the first three.
+///
+/// This constant is the thing that has to match, so it is the thing that is
+/// guarded: `the_option_set_matches_mdbook` pins it by name, and
+/// `the_option_set_reads_the_blocks_mdbook_reads` pins it by behaviour on the
+/// four shapes above.
+const MDBOOK_OPTIONS: Options = Options::ENABLE_TABLES
+    .union(Options::ENABLE_FOOTNOTES)
+    .union(Options::ENABLE_STRIKETHROUGH)
+    .union(Options::ENABLE_TASKLISTS)
+    .union(Options::ENABLE_HEADING_ATTRIBUTES);
+
+/// Every fenced code block in `markdown`, from [`pulldown_cmark`] under
+/// [`MDBOOK_OPTIONS`].
 ///
 /// The parser owns block structure, so a fence inside a list item, a block
 /// quote, or an HTML block arrives here the same way a top-level one does, and
@@ -177,7 +208,7 @@ struct Fenced {
 fn fenced_blocks(markdown: &str) -> Vec<Fenced> {
     let mut blocks = Vec::new();
     let mut open: Option<Fenced> = None;
-    let parser = Parser::new_ext(markdown, Options::all()).into_offset_iter();
+    let parser = Parser::new_ext(markdown, MDBOOK_OPTIONS).into_offset_iter();
 
     for (event, range) in parser {
         match event {
@@ -205,57 +236,8 @@ fn fenced_blocks(markdown: &str) -> Vec<Fenced> {
     blocks
 }
 
-/// How many blocks in `markdown` mdBook will render with a `language-ridl` or
-/// `language-typl` class.
-///
-/// Rendered with the parser's own HTML renderer, so this counts what a reader
-/// sees. It is the cross-check on the event walk in [`fenced_blocks`] — the last
-/// hand-written step — not on the parser, which both sides share.
-fn renders_as_examples(markdown: &str) -> usize {
-    let mut html = String::new();
-    pulldown_cmark::html::push_html(&mut html, Parser::new_ext(markdown, Options::all()));
-    html.match_indices("<code class=\"language-")
-        .filter(|(index, _)| {
-            let rest = &html[index + "<code class=\"language-".len()..];
-            let language = rest.split('"').next().unwrap_or_default();
-            is_example_language(language)
-        })
-        .count()
-}
-
-/// The cross-check on the event walk: what a reader will see must be what the
-/// harness looked at.
-///
-/// Isolated for the same reason [`verdict`] is — a guard no test can fail is
-/// how this harness shipped three fail-open versions.
-///
-/// It cannot catch `pulldown-cmark` being wrong, only a disagreement about what
-/// the book contains. Two such disagreements are live: the event walk in
-/// [`fenced_blocks`] mishandling a future release's event stream, and — the one
-/// that outlives this file — **`mdbook` carrying its own vendored
-/// `pulldown-cmark`**, resolved independently of the one this crate depends on.
-/// Nothing in this repository ties those two versions together, so if they ever
-/// differ about fence handling, what the harness compiles and what a reader sees
-/// come apart. That is the divergence class this branch shipped three times.
-///
-/// All three parts are covered. `render_agreement_reports_a_mismatch` fails if
-/// this comparison stops reporting; `the_event_walk_agrees_with_the_renderer`
-/// fails if the walk and the renderer diverge over the container shapes a book
-/// uses; and `a_render_count_disagreement_fails_the_book` fails if
-/// [`verify_book_with`] stops acting on the result, because it injects a
-/// divergent count rather than waiting for a real divergence.
-fn render_agreement(origin: &str, rendered: usize, accounted: usize) -> Option<String> {
-    (rendered != accounted).then(|| {
-        format!(
-            "{origin}: mdBook will render {rendered} `ridl`/`typl` example block(s), but the \
-             harness accounted for {accounted}. Every block a reader sees as an example must be \
-             one this harness looked at, so the difference is a block going unverified.",
-        )
-    })
-}
-
 /// Whether an info string's language word names an example, however it is
-/// spelled. Used for the render count and for catching a near-miss spelling.
+/// spelled. Used to catch a near-miss spelling.
 fn is_example_language(info: &str) -> bool {
     let word = info
         .split([',', ' '])
@@ -278,8 +260,13 @@ struct Example {
     language: String,
     /// Diagnostic codes this block declares it expects.
     allowed: BTreeSet<String>,
-    /// The block's contents.
+    /// The block's contents, as the parser handed them over: container
+    /// prefixes stripped. Everything that reads the source reads this.
     body: String,
+    /// The same contents with each line's container prefix restored as blank
+    /// space, so reported columns match the Markdown file. Only staging uses
+    /// this — see [`align_columns`].
+    staging_body: String,
 }
 
 impl Example {
@@ -336,13 +323,17 @@ impl Example {
             .collect()
     }
 
-    /// The staged file's contents: the body, padded with as many leading blank
-    /// lines as the block sits below the top of its Markdown file. Every line
-    /// and column the compiler reports then matches the Markdown file exactly,
-    /// so a failure can be read straight against `docs/book/…`.
+    /// The staged file's contents: the aligned body, padded with as many
+    /// leading blank lines as the block sits below the top of its Markdown
+    /// file.
+    ///
+    /// The padding fixes the line; [`align_columns`] fixes the column. Together
+    /// they make every position the compiler reports match the Markdown file, so
+    /// a failure can be read straight against `docs/book/…` — which is what the
+    /// report header promises.
     fn staged_text(&self) -> String {
         let mut text = "\n".repeat(self.fence_line);
-        text.push_str(&self.body);
+        text.push_str(&self.staging_body);
         text
     }
 
@@ -352,23 +343,51 @@ impl Example {
     }
 }
 
+/// Restores each body line's container prefix as blank space.
+///
+/// The parser hands a block's contents over with the container prefix stripped
+/// — a list item's indent, a block quote's `> `. The compiler then reports
+/// columns against the stripped line, which do not match the Markdown file: a
+/// fault at Markdown column 24 inside a list item was reported at column 20.
+///
+/// Re-inserting the prefix as spaces of the same byte length makes the column
+/// exact and changes nothing about what is compiled, because leading whitespace
+/// is insignificant in RIDL.
+///
+/// Falls back to the parser's line whenever the source line does not end with
+/// it. A shape this does not anticipate then keeps the old, block-relative
+/// column rather than producing a file that differs from what the parser read.
+fn align_columns(markdown: &str, fence_line: usize, body: &str) -> String {
+    let source: Vec<&str> = markdown.lines().collect();
+    body.lines()
+        .enumerate()
+        .map(|(offset, line)| {
+            let source_line = source.get(fence_line + offset).copied().unwrap_or_default();
+            match source_line.len().checked_sub(line.len()) {
+                Some(prefix) if source_line.ends_with(line) => {
+                    format!("{}{line}\n", " ".repeat(prefix))
+                }
+                _ => format!("{line}\n"),
+            }
+        })
+        .collect()
+}
+
 /// Sorts one file's example blocks into the ones to verify and the convention
-/// violations, and counts how many blocks were recognised as examples at all.
+/// violations.
 ///
 /// Markers are read **before** anything else, so `ignore` suppresses every
 /// objection this function could raise. An author who hits a refusal must
 /// always have a way to say "not an example" — otherwise the only remaining
 /// move is to delete the example, which is worse than not checking it.
-fn classify(origin: &str, markdown: &str) -> (Vec<Example>, Vec<String>, usize) {
+fn classify(origin: &str, markdown: &str) -> (Vec<Example>, Vec<String>) {
     let mut examples = Vec::new();
     let mut problems = Vec::new();
-    let mut accounted = 0;
 
     for block in fenced_blocks(markdown) {
         if !is_example_language(&block.info) {
             continue;
         }
-        accounted += 1;
         let locator = format!("{origin}:{}", block.fence_line);
 
         let mut words = block.info.split([',', ' ']).filter(|word| !word.is_empty());
@@ -423,6 +442,7 @@ fn classify(origin: &str, markdown: &str) -> (Vec<Example>, Vec<String>, usize) 
             fence_line: block.fence_line,
             language,
             allowed,
+            staging_body: align_columns(markdown, block.fence_line, &block.body),
             body: block.body,
         };
         if example.package().is_none() {
@@ -439,7 +459,7 @@ fn classify(origin: &str, markdown: &str) -> (Vec<Example>, Vec<String>, usize) 
         }
     }
 
-    (examples, problems, accounted)
+    (examples, problems)
 }
 
 // ------------------------------------------------------------ diagnostics ---
@@ -656,6 +676,21 @@ fn allows(allowed: &BTreeSet<String>, code: Option<&str>) -> bool {
     }
 }
 
+/// Whether a reported diagnostic is one some block named.
+///
+/// `None` means the diagnostic points at no staged file — a workspace- or
+/// manifest-level one. Those can never be allowed: no block owns them, so no
+/// fence could name them, and a warning or note there leaves the exit code at
+/// 0, which means [`verdict`]'s exit-code term would not notice it either.
+/// Isolated because no book fixture can produce one: the harness writes the
+/// manifests itself, and they are always well-formed.
+fn is_named(allowed: Option<&BTreeSet<String>>, code: Option<&str>) -> bool {
+    match allowed {
+        Some(allowed) => allows(allowed, code),
+        None => false,
+    }
+}
+
 /// The pass/fail decision, given what the run produced.
 ///
 /// Isolated because each of the three terms guards a different failure and no
@@ -693,23 +728,6 @@ fn verdict(code: i32, unallowed: &[String], stale: &[String]) -> Result<(), Stri
 /// `Ok(count)` carries the number of verified blocks; `Err` carries a report
 /// naming each offending Markdown file and block.
 fn verify_book(book_root: &Path) -> Result<usize, String> {
-    verify_book_with(book_root, renders_as_examples)
-}
-
-/// [`verify_book`], with the render count injected.
-///
-/// The count is a parameter so that a test can supply a divergent one and
-/// assert the book fails — which is what makes the [`render_agreement`] call
-/// below a wire a mutation can break, rather than a line nothing exercises.
-/// That matters because the divergence the guard now watches for is real:
-/// `mdbook` is a separate binary carrying its own vendored `pulldown-cmark`,
-/// and nothing in this repository ties its version to the one this crate
-/// resolves. If the two ever disagree about fence handling, the harness and the
-/// renderer disagree about what the book contains.
-fn verify_book_with(
-    book_root: &Path,
-    render_count: impl Fn(&str) -> usize,
-) -> Result<usize, String> {
     let mut examples = Vec::new();
     let mut problems = Vec::new();
     for file in markdown_files(book_root) {
@@ -720,15 +738,9 @@ fn verify_book_with(
             .into_owned();
         let markdown = std::fs::read_to_string(&file)
             .unwrap_or_else(|error| panic!("read {}: {error}", file.display()));
-        let (found, found_problems, accounted) = classify(&origin, &markdown);
+        let (found, found_problems) = classify(&origin, &markdown);
         examples.extend(found);
         problems.extend(found_problems);
-
-        problems.extend(render_agreement(
-            &origin,
-            render_count(&markdown),
-            accounted,
-        ));
     }
 
     if !problems.is_empty() {
@@ -773,10 +785,10 @@ fn verify_book_with(
         if let (Some(index), Some(code)) = (owner, &diagnostic.code) {
             emitted.insert((index, code.clone()));
         }
-        let allowed = match owner {
-            Some(index) => allows(&examples[index].allowed, diagnostic.code.as_deref()),
-            None => false,
-        };
+        let allowed = is_named(
+            owner.map(|index| &examples[index].allowed),
+            diagnostic.code.as_deref(),
+        );
         if !allowed {
             let origin = owner.map_or("<workspace>", |index| examples[index].origin.as_str());
             unallowed.push(format!(
@@ -1418,8 +1430,9 @@ fn an_empty_allow_value_is_rejected() {
     );
 }
 
-/// A reported line number is the block's true line in the Markdown file, not
-/// its offset within the block — at top level and inside every container.
+/// A reported position is the block's true line **and column** in the Markdown
+/// file, not its offset within the block — at top level and inside every
+/// container.
 ///
 /// This is the docstring's headline claim, "open them directly", and it rests
 /// on two things. The fence line is a parser fact: a byte offset, converted by
@@ -1486,24 +1499,36 @@ fn a_reported_line_is_the_markdown_line() {
             "{label}: the fixture must put the fault well below the top of the file"
         );
 
+        // The column the fault sits at in the Markdown file, 1-based, which is
+        // what "open them directly" promises. Inside a container this differs
+        // from the block-relative column by the prefix `align_columns` restores.
+        let fault_column = markdown
+            .lines()
+            .nth(fault_line - 1)
+            .expect("the fault line exists")
+            .find('[')
+            .expect("the fault is a range")
+            + 1;
+
         let book = book_of("deep", &markdown);
         let report = verify_book(book.path()).expect_err("the broken block must be rejected");
-        if !report.contains(&format!("chapter.md:{fault_line}:")) {
+        if !report.contains(&format!("chapter.md:{fault_line}:{fault_column}")) {
             let reported = report
                 .lines()
                 .find(|line| line.contains("chapter.md:"))
                 .unwrap_or("<no location reported>")
                 .trim();
             wrong.push(format!(
-                "  {label}: expected chapter.md:{fault_line}, report says: {reported}"
+                "  {label}: expected chapter.md:{fault_line}:{fault_column}, \
+                 report says: {reported}"
             ));
         }
     }
 
     assert!(
         wrong.is_empty(),
-        "a reported line must be the Markdown line, in every container. The body-line \
-         assumption this rests on has broken in:\n{}",
+        "a reported line and column must be the Markdown line and column, in every \
+         container. The body-line assumption, or the column alignment, has broken in:\n{}",
         wrong.join("\n")
     );
 }
@@ -1543,100 +1568,156 @@ fn markdown_in_a_subdirectory_is_read() {
     );
 }
 
-/// The render-count guard fires on a mismatch and stays quiet on agreement.
+/// The option set is exactly mdBook's, by name.
+///
+/// Enumerated rather than compared against `Options::all()`, so that a flag
+/// added in a future `pulldown-cmark` release is inert here until someone
+/// decides about it — the opposite of what `all()` does.
 #[test]
-fn render_agreement_reports_a_mismatch() {
-    assert!(
-        render_agreement("chapter.md", 3, 3).is_none(),
-        "agreement is silent"
+fn the_option_set_matches_mdbook() {
+    for (name, flag) in [
+        ("ENABLE_TABLES", Options::ENABLE_TABLES),
+        ("ENABLE_FOOTNOTES", Options::ENABLE_FOOTNOTES),
+        ("ENABLE_STRIKETHROUGH", Options::ENABLE_STRIKETHROUGH),
+        ("ENABLE_TASKLISTS", Options::ENABLE_TASKLISTS),
+        (
+            "ENABLE_HEADING_ATTRIBUTES",
+            Options::ENABLE_HEADING_ATTRIBUTES,
+        ),
+    ] {
+        assert!(
+            MDBOOK_OPTIONS.contains(flag),
+            "{name} is one of the five mdBook enables"
+        );
+    }
+
+    // The flags that move fences. Each of these caused a real fail-open.
+    for (name, flag) in [
+        ("ENABLE_OLD_FOOTNOTES", Options::ENABLE_OLD_FOOTNOTES),
+        (
+            "ENABLE_YAML_STYLE_METADATA_BLOCKS",
+            Options::ENABLE_YAML_STYLE_METADATA_BLOCKS,
+        ),
+        (
+            "ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS",
+            Options::ENABLE_PLUSES_DELIMITED_METADATA_BLOCKS,
+        ),
+        ("ENABLE_DEFINITION_LIST", Options::ENABLE_DEFINITION_LIST),
+    ] {
+        assert!(
+            !MDBOOK_OPTIONS.contains(flag),
+            "{name} changes block structure and mdBook does not enable it"
+        );
+    }
+
+    assert_eq!(
+        MDBOOK_OPTIONS.iter().count(),
+        5,
+        "exactly five flags — a sixth means someone widened the set without \
+         checking it against mdBook"
     );
-    let problem = render_agreement("chapter.md", 3, 2).expect("a mismatch is reported");
-    assert!(
-        problem.contains("chapter.md") && problem.contains("going unverified"),
-        "the report must name the file and what the difference means, got:\n{problem}"
+    assert_ne!(
+        MDBOOK_OPTIONS,
+        Options::all(),
+        "`Options::all()` is what this constant exists to stop being used"
     );
 }
 
-/// The property that guard asserts: over every container shape the book might
-/// use, the event walk finds exactly the blocks the renderer marks as examples.
+/// The option set reads the blocks mdBook reads, on the four shapes where the
+/// two option sets differ.
+///
+/// Behavioural rather than nominal, and checked against mdBook's rendered HTML
+/// when this branch landed: the first three render as examples for a reader, so
+/// the harness must see them; the fourth is an indented code block for mdBook,
+/// so the harness must not.
 #[test]
-fn the_event_walk_agrees_with_the_renderer() {
-    let body = "package zz.probe\n\ntype Ok : integer [0..1]";
-    let quoted: String = body.lines().map(|line| format!("> {line}\n")).collect();
-    let corpus = [
-        ("top level", format!("```ridl\n{body}\n```\n")),
-        ("block quote", format!("> ```ridl\n{quoted}> ```\n")),
+fn the_option_set_reads_the_blocks_mdbook_reads() {
+    let cases = [
         (
-            "list item at column 4",
-            format!(
-                "10. Step:\n\n    ```ridl\n    {}\n    ```\n",
-                body.replace('\n', "\n    ")
-            ),
+            "fence indented under a footnote definition",
+            "Text[^1]\n\n[^1]: Note:\n\n    ```ridl\n    package zz.a\n    ```\n",
+            1,
         ),
         (
-            "nested list at column 6",
-            format!(
-                "1. a\n   1. b:\n\n      ```ridl\n      {}\n      ```\n",
-                body.replace('\n', "\n      ")
-            ),
+            "fence inside a leading `---` block",
+            "---\n```ridl\npackage zz.a\n```\n---\n",
+            1,
         ),
         (
-            "html block",
-            format!("<div>\n\n```ridl\n{body}\n```\n\n</div>\n"),
-        ),
-        ("tilde fence", format!("~~~ridl\n{body}\n~~~\n")),
-        ("long fence", format!("````ridl\n{body}\n````\n")),
-        ("ignored block", format!("```ridl,ignore\n{body}\n```\n")),
-        ("near-miss language word", format!("```RIDL\n{body}\n```\n")),
-        (
-            "quoted inside a longer fence",
-            "````markdown\n```ridl\nnot an example\n```\n````\n".to_owned(),
+            "fence inside a leading `+++` block",
+            "+++\n```ridl\npackage zz.a\n```\n+++\n",
+            1,
         ),
         (
-            "indented code block, which is not an example",
-            format!(
-                "Text:\n\n    ```ridl\n    {}\n    ```\n",
-                body.replace('\n', "\n    ")
-            ),
+            "fence under a definition-list definition",
+            "Term\n\n: Definition:\n\n    ```ridl\n    package zz.a\n    ```\n",
+            0,
         ),
-        ("no examples at all", "```sh\nridl check\n```\n".to_owned()),
     ];
 
-    for (label, markdown) in corpus {
-        let (_, _, accounted) = classify("chapter.md", &markdown);
+    for (label, markdown, expected) in cases {
+        let found = fenced_blocks(markdown)
+            .into_iter()
+            .filter(|block| is_example_language(&block.info))
+            .count();
         assert_eq!(
-            accounted,
-            renders_as_examples(&markdown),
-            "{label}: the event walk and the renderer must agree on how many example blocks \
-             this is:\n{markdown}"
+            found, expected,
+            "{label}: the harness must see what mdBook renders"
         );
     }
 }
 
-/// A render count that disagrees with the walk fails the book.
+/// A diagnostic that points at no staged file is never allowed.
 ///
-/// The count is injected, so this exercises the wire — that [`verify_book_with`]
-/// acts on [`render_agreement`] — without waiting for a real divergence between
-/// this crate's `pulldown-cmark` and mdbook's vendored one. Unhooking the call
-/// makes this test fail.
+/// Workspace- and manifest-level diagnostics have no owning block, so no fence
+/// can name them — and an uncoded or note-severity one leaves the exit code at
+/// 0, so nothing else in the pipeline would see it. No book fixture can reach
+/// this, because the harness writes the manifests itself.
 #[test]
-fn a_render_count_disagreement_fails_the_book() {
-    let book = book_of(
-        "divergent",
-        "```ridl\npackage zz.clean\n\ntype Ok : integer [0..1]\n```\n",
-    );
+fn a_diagnostic_owned_by_no_block_is_never_allowed() {
+    let permissive: BTreeSet<String> = ["TYPL-104", "MANI-001"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
 
-    assert_eq!(
-        verify_book(book.path()).expect("the book is clean under the real renderer"),
-        1,
-    );
-
-    // One more example rendered than the walk accounted for: what a version
-    // skew between the two parsers would look like from here.
-    let report = verify_book_with(book.path(), |markdown| renders_as_examples(markdown) + 1)
-        .expect_err("a disagreement must fail the book");
     assert!(
-        report.contains("going unverified"),
-        "the report must say a block is going unverified, got:\n{report}"
+        is_named(Some(&permissive), Some("TYPL-104")),
+        "a block that named the code allows it"
+    );
+    assert!(
+        !is_named(None, Some("MANI-001")),
+        "a diagnostic owned by no block is never allowed, whatever its code"
+    );
+    assert!(
+        !is_named(None, None),
+        "nor when it is uncoded as well as unowned"
+    );
+}
+
+/// The report a failure prints points into the book, not into the staging
+/// directory.
+///
+/// "Paths below are `<book file>:<line>:<column>` — open them directly" is only
+/// true because `check` rewrites the staged paths. Without it the report names
+/// a temp directory that is deleted before the reader sees the message.
+#[test]
+fn a_failure_report_names_the_book_not_the_staging_directory() {
+    let book = book_of(
+        "paths",
+        "```ridl\npackage zz.paths\n\ntype Bad : integer [10..0]\n```\n",
+    );
+
+    let report = verify_book(book.path()).expect_err("the broken block must be rejected");
+    assert!(
+        report.contains("chapter.md:"),
+        "the report must name the Markdown file, got:\n{report}"
+    );
+    assert!(
+        !report.contains("ridl-book-staging"),
+        "the report must not leak the staging directory, got:\n{report}"
+    );
+    assert!(
+        !report.contains(".ridl:"),
+        "no staged source path should survive the rewrite, got:\n{report}"
     );
 }

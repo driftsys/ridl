@@ -42,8 +42,8 @@ contract means, which is the thing you are designing against. They do not
 describe behaviour you can observe today. What you can observe today is the
 toolchain: it checks your declarations, generates data types, samples your
 `require` clauses, and classifies changes between versions. Where a comment
-inside a listing says "discarded after 2 s", read it as what the contract
-demands of a binding, not as something running.
+inside a listing says a binding "must discard" an occurrence, read it as what
+the contract demands of a binding, not as something running.
 
 ### ridl is one language of five
 
