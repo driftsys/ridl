@@ -27,6 +27,24 @@ layer is an extension, not a rewrite. E2.12 writes the expr-core specification
 that fixes the family grammar this subset is verified against — it lands before
 or with E2.4.
 
+**What E5.1 and E7.3 inherit, and the hole in it (recorded at E2 close,
+2026-07-26).** E2 carries a contract clause in the IR as canonical source text
+(`Contract.source`, ADR-0008 decision 14). E5.1 replaces that with an expression
+tree, and E7.3 discharges the same terms deductively; both inherit
+`crates/ridlc/tests/corpus/` as the regression set that says a restructured
+representation still means what the text meant. **That set does not exercise the
+whole subset.** The subset grammar admits thirteen binary operators and two
+prefix operators. Of the thirteen binary, four — `<`, `-`, `/`, `%` — appear in
+no contract clause that reaches a snapshotted IR; of the two prefix, `!` appears
+in none, and `-` appears only on numeric literals (`-10.0`, `-40.0`), never on a
+reference. All five are implemented and unit-tested in
+`crates/ridl-sem/src/expr.rs` and `crates/ridl-sem/src/expr_eval.rs` — this is a
+coverage hole, not a correctness one. `<` is the near miss: the diagnostic
+showcase writes it, but that package compiles with errors, so its IR, Rust, and
+TypeScript snapshots are one-line placeholders and nothing pins a lowered form.
+Widen the corpus before restructuring, so the restructuring has something to
+regress against.
+
 ---
 
 # V1 — The Contract Platform
@@ -97,6 +115,23 @@ evolution gate. **Value:** real interface contracts, a second backend,
 breaking-change detection in CI. The IR is proven language-neutral. **Exit
 criteria:** ridl interfaces compile to Rust _and_ a second backend from one IR;
 `ridl diff` gates breaking changes in CI.
+
+**Status:** landed — all thirteen stories (E2.1–E2.13) shipped as PRs #136–#181.
+`.ridl` packages carrying the five interaction kinds, timing, inline `T | E`
+returns, `require`/`ensure` contracts, streams, interfaces and services compile
+to IR v2, and that one IR drives both the Rust and the TypeScript backend; the
+facade gained `ridl diff`, `ridl baseline`, and `ridl test`. Deferred per
+ADR-0008: `persist` (d3), the `final` → `fixed`/`provisioned` reconsideration
+(d5, still open), the general-form §4.7 promotion of `labels`/`deprecated` to
+attributes, and diagnostic codes RIDL-111 and RIDL-142 — reserved by d21 and
+still unminted. `ridlc build` emits Rust, the extern-C header, and IR JSON;
+TypeScript is produced through the backend library and pinned by the corpus
+snapshots, with no CLI emit path. E2 also paid three codes of the E1 debt
+ADR-0007 d10 recorded: TYPL-301, TYPL-303, and TYPL-304 ship, emitted by the
+parser once the family grammar made the constructs they reject parseable, each
+with a showcase entry. E2.10's "alias-not-required" row needed no new work —
+TYPL-008 has covered it from the resolver since E1. The consolidated E2 debt
+roll-up is **#172**, on the E1 (#135) pattern.
 
 | ID    | Story                                                                                                                                                   | Done when                                                               | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---- |
