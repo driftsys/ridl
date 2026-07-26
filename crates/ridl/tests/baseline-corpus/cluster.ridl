@@ -3,20 +3,26 @@
 // The published shape — snapshotted into `.ridl/baseline/` beside this file and
 // committed — declared its interactions in this order:
 //
-//   interface VehicleStatus        service corpus.baseline.hvac (inline shape)
-//     1  currentSpeed                1  cabinTemp
-//     2  doorOpened                  2  filterClogged
-//     3  doorClosed                  3  setEcoMode
+//   interface VehicleStatus            service corpus.baseline.hvac (inline shape)
+//     1  currentSpeed                    1  cabinTemp
+//     2  doorOpened                      2  filterClogged
+//     3  doorClosed                      3  setEcoMode
 //     4  setGear
+//     5  reserved legacyWheelPhase
 //
-// This source drifts from it in three ways, each of which looks like tidying in
-// a review diff and each of which moves a wire identity:
+// This source drifts from it in five ways, each of which looks like tidying in
+// a review diff and each of which moves a wire identity. The five are one per
+// change category the desk check reports, so no category's message is left
+// without a living example:
 //
-//   - the two events are alphabetised (a reorder);
+//   - the two events are alphabetised (a reorder — two of them);
+//   - `tyrePressure` is declared above them (an insertion);
 //   - `setGear` is retired with no tombstone (a removal);
+//   - `legacyWheelPhase` is declared again although the baseline retires the
+//     name (a reserved name redeclared);
 //   - `setEcoMode` is retired from the *inline shape* with no tombstone.
 //
-// The third one is the point of the inline shape being here at all. A named
+// The last one is the point of the inline shape being here at all. A named
 // interface and a service's inline shape are two separate stores of
 // interactions, and a consumer that reads only `Package.interfaces` misses the
 // second — see `crates/ridlc/tests/corpus/veh-cluster/NOTES`. The desk check
@@ -31,8 +37,10 @@ type GearIndex : integer [0..6]
 
 interface VehicleStatus {
   signal currentSpeed : Speed @10ms
+  event tyrePressure : DoorState @[100ms..1s]
   event doorClosed : DoorState @[100ms..1s]
   event doorOpened : DoorState @[100ms..1s]
+  signal legacyWheelPhase : Speed @10ms
 }
 
 service corpus.baseline.hvac {

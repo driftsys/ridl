@@ -3,7 +3,7 @@ source: crates/ridl-syntax/tests/parser_err_corpus.rs
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/err/rejected_return_type.ridl
 ---
-SourceFile@0..136
+SourceFile@0..289
   PackageDecl@0..15
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -12,7 +12,7 @@ SourceFile@0..136
       Dot@11..12 "."
       Ident@12..15 "err"
   Whitespace@15..17 "\n\n"
-  InterfaceDef@17..135
+  InterfaceDef@17..255
     InterfaceKw@17..26 "interface"
     Whitespace@26..27 " "
     Name@27..33
@@ -59,24 +59,79 @@ SourceFile@0..136
         At@99..100 "@"
         Duration@100..104 "10ms"
     Whitespace@104..107 "\n  "
-    SignalDef@107..133
-      SignalKw@107..113 "signal"
-      Whitespace@113..114 " "
-      Name@114..119
-        Ident@114..119 "speed"
-      Whitespace@119..120 " "
-      Colon@120..121 ":"
-      Whitespace@121..122 " "
-      PathType@122..127
-        QualifiedName@122..127
-          Ident@122..127 "Speed"
-      Whitespace@127..128 " "
-      Timing@128..133
-        At@128..129 "@"
-        Duration@129..133 "10ms"
-    Whitespace@133..134 "\n"
-    RBrace@134..135 "}"
-  Whitespace@135..136 "\n"
+    QueryDef@107..139
+      QueryKw@107..112 "query"
+      Whitespace@112..113 " "
+      Name@113..132
+        Ident@113..132 "syncIsAnInteraction"
+      ParamList@132..134
+        LParen@132..133 "("
+        RParen@133..134 ")"
+      Whitespace@134..135 " "
+      Colon@135..136 ":"
+      Whitespace@136..139 "\n  "
+    SignalDef@139..165
+      SignalKw@139..145 "signal"
+      Whitespace@145..146 " "
+      Name@146..151
+        Ident@146..151 "speed"
+      Whitespace@151..152 " "
+      Colon@152..153 ":"
+      Whitespace@153..154 " "
+      PathType@154..159
+        QualifiedName@154..159
+          Ident@154..159 "Speed"
+      Whitespace@159..160 " "
+      Timing@160..165
+        At@160..161 "@"
+        Duration@161..165 "10ms"
+    Whitespace@165..168 "\n  "
+    QueryDef@168..191
+      QueryKw@168..173 "query"
+      Whitespace@173..174 " "
+      Name@174..186
+        Ident@174..186 "syncIsAComma"
+      ParamList@186..188
+        LParen@186..187 "("
+        RParen@187..188 ")"
+      Whitespace@188..189 " "
+      Colon@189..190 ":"
+      Whitespace@190..191 " "
+    Comma@191..192 ","
+    Whitespace@192..195 "\n  "
+    ReservedEntry@195..219
+      ReservedKw@195..203 "reserved"
+      Whitespace@203..204 " "
+      Name@204..219
+        Ident@204..219 "syncIsAReserved"
+    Whitespace@219..222 "\n  "
+    QueryDef@222..254
+      QueryKw@222..227 "query"
+      Whitespace@227..228 " "
+      Name@228..249
+        Ident@228..249 "syncIsTheClosingBrace"
+      ParamList@249..251
+        LParen@249..250 "("
+        RParen@250..251 ")"
+      Whitespace@251..252 " "
+      Colon@252..253 ":"
+      Whitespace@253..254 "\n"
+    RBrace@254..255 "}"
+  Whitespace@255..257 "\n\n"
+  TypeDef@257..288
+    TypeKw@257..261 "type"
+    Whitespace@261..262 " "
+    Name@262..284
+      Ident@262..284 "SyncIsATopLevelKeyword"
+    Whitespace@284..285 " "
+    Colon@285..286 ":"
+    Whitespace@286..287 " "
+    UnitExpr@287..288
+      Ident@287..288 "m"
+  Whitespace@288..289 "\n"
 errors:
   FORM-101 59..60 a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)
   FORM-101 96..98 a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)
+  FORM-101 139..145 a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)
+  FORM-101 191..192 a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)
+  FORM-101 254..255 a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)

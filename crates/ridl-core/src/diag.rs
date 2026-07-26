@@ -172,9 +172,12 @@ diag_codes! {
         FORM_005 = "FORM-005", Error,
             "leading zeros in integer literal";
 
-        /// Expected a specific token.
+        /// Expected a specific token, or a construct the grammar admits here.
+        /// Most call sites name a token (`` expected `]` ``); the interaction
+        /// positions name the shapes instead — a return type is one of four,
+        /// and saying which is the point of the message.
         FORM_101 = "FORM-101", Error,
-            "expected a specific token";
+            "expected a specific token, or a construct the grammar admits here";
 
         /// Unexpected token.
         FORM_102 = "FORM-102", Error,
@@ -593,11 +596,12 @@ diag_codes! {
         RIDL_401 = "RIDL-401", Error,
             "interaction re-declared under a `reserved` name";
 
-        /// Duplicate interaction name within an interface (ridl §14.1, §16.4).
-        /// Emitted by the checker (E2 task 5); lowering keeps the first
-        /// declaration only.
+        /// Duplicate interaction name in one interaction body — an `interface`
+        /// or a service's inline shape (ridl §14.1, §16.4). Emitted by the
+        /// checker (E2 task 5); lowering keeps the first declaration only, and
+        /// the diagnostic's secondary label points at it.
         RIDL_402 = "RIDL-402", Error,
-            "duplicate interaction name within an interface";
+            "duplicate interaction name in one interaction body";
 
         /// Behaviour, user-interaction, or architecture declaration in a ridl
         /// context (ridl §16.4): a reserved word of the uxdl/rmdl/rsdl profiles at

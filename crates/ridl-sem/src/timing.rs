@@ -460,9 +460,9 @@ fn render_bounds(spec: &TimingSpec) -> String {
 /// an untimed signal or event (RIDL-100), which comes from `[defaults].timing`
 /// or from the built-in fallback. The units are the ones a `.ridl` file and a
 /// manifest are written in, so the message never answers in the canonical
-/// microseconds only the IR carries. A value no unit divides exactly (a
-/// fractional microsecond, which only a rejected literal produces) falls back
-/// to `us`.
+/// microseconds only the IR carries. A value no larger unit divides exactly
+/// renders in `us`: a whole count such as `1500` (`1500us`, since `1.5ms` is
+/// not a legal duration under ridl §2.1) and a fractional microsecond alike.
 fn render_duration(value: &ExactValue) -> String {
     for (suffix, factor) in [
         ("h", 3_600_000_000u64),
@@ -638,13 +638,16 @@ mod tests {
                 "the message must quote the written duration `{text}`: {message}",
             );
         }
-        // A digit immediately followed by `us` is a microsecond count. Looking
-        // for the bare substring `us` would match `because`.
+        // A digit followed by `us`, with or without a space between them, is a
+        // microsecond count. Looking for the bare substring `us` would match
+        // `because`; requiring the digit to be adjacent would miss `500000 us`.
+        let micros = message.match_indices("us").any(|(at, _)| {
+            message[..at]
+                .trim_end_matches(' ')
+                .ends_with(|c: char| c.is_ascii_digit())
+        });
         assert!(
-            !message
-                .as_bytes()
-                .windows(3)
-                .any(|window| window[0].is_ascii_digit() && &window[1..] == b"us"),
+            !micros,
             "the message must not answer in canonical microseconds: {message}",
         );
     }

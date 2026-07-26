@@ -3,5 +3,11 @@ package veh.err
 interface Broken {
   query listLevels() : [Level; 0..8]
   query alsoBroken() : 42 @10ms
+  query syncIsAnInteraction() :
   signal speed : Speed @10ms
+  query syncIsAComma() : ,
+  reserved syncIsAReserved
+  query syncIsTheClosingBrace() :
 }
+
+type SyncIsATopLevelKeyword : m

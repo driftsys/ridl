@@ -204,6 +204,22 @@
               "contracts": []
             }
           }
+        },
+        {
+          "name": "",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 5,
+          "kind": {
+            "ReservedSlot": {
+              "ordinal": 5,
+              "name": "legacyWheelPhase",
+              "value": null
+            }
+          }
         }
       ]
     }

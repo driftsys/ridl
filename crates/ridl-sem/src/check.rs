@@ -2831,7 +2831,13 @@ impl Checker<'_> {
             if let ast::InterfaceMember::Reserved(entry) = &member
                 && let Some(name) = member_name(entry.name())
             {
-                reserved.insert(name, member_name_range(entry.name(), entry.syntax()));
+                // `or_insert_with`, not `insert`: `HashSet::insert` kept the
+                // existing entry and `HashMap::insert` overwrites it, so a
+                // second tombstone for one name would move RIDL-401's label
+                // onto the later `reserved` line for no reason.
+                reserved
+                    .entry(name)
+                    .or_insert_with(|| member_name_range(entry.name(), entry.syntax()));
             }
         }
 
@@ -2875,13 +2881,21 @@ impl Checker<'_> {
                 if let Some(tombstone) = reserved.get(&name).copied() {
                     self.redeclared_reserved(&name, range, tombstone);
                 }
-                if let Some(first) = seen.insert(name.clone(), range) {
-                    // RIDL-402: first wins; the loser is excluded from the
-                    // lowering, is not re-checked, and holds no ordinal slot
-                    // — the same rule `lower_service_inline` applies below.
+                // RIDL-402: first wins; the loser is excluded from the
+                // lowering, is not re-checked, and holds no ordinal slot — the
+                // same rule `lower_service_inline` applies below.
+                //
+                // The map is read and only then written. `HashMap::insert`
+                // returns the previous value *and replaces it*, where the
+                // `HashSet` this map grew out of kept the existing entry, so
+                // writing unconditionally would make the third declaration of
+                // one name point its label at the second — which is itself
+                // dropped, while the label says it is the one that is kept.
+                if let Some(first) = seen.get(&name).copied() {
                     self.duplicate_interaction(&name, range, first);
                     continue;
                 }
+                seen.insert(name, range);
             }
             ordinal += 1;
             interactions.push(self.lower_interaction(&member, ordinal));
@@ -3092,7 +3106,13 @@ impl Checker<'_> {
             if let ast::InterfaceMember::Reserved(entry) = &member
                 && let Some(name) = member_name(entry.name())
             {
-                reserved.insert(name, member_name_range(entry.name(), entry.syntax()));
+                // `or_insert_with`, not `insert`: `HashSet::insert` kept the
+                // existing entry and `HashMap::insert` overwrites it, so a
+                // second tombstone for one name would move RIDL-401's label
+                // onto the later `reserved` line for no reason.
+                reserved
+                    .entry(name)
+                    .or_insert_with(|| member_name_range(entry.name(), entry.syntax()));
             }
         }
 
@@ -3113,10 +3133,12 @@ impl Checker<'_> {
                 if let Some(tombstone) = reserved.get(&name).copied() {
                     self.redeclared_reserved(&name, range, tombstone);
                 }
-                if let Some(first) = seen.insert(name.clone(), range) {
+                // First-wins, read-then-write — see [`Checker::lower_interface`].
+                if let Some(first) = seen.get(&name).copied() {
                     self.duplicate_interaction(&name, range, first);
                     continue;
                 }
+                seen.insert(name, range);
             }
             ordinal += 1;
             interactions.push(self.lower_interaction(&member, ordinal));
@@ -6638,28 +6660,114 @@ mod tests {
                 ),
                 "`legacyTemp` is retired here",
             ),
+            // Three declarations, not two. Two cannot distinguish "the label
+            // points at the first" from "the label points at the previous
+            // one": the map this reads was a `HashSet`, whose `insert` keeps
+            // the existing entry, and `HashMap::insert` replaces it — so the
+            // third declaration's label pointed at the *second*, which is
+            // itself dropped, while the label claimed it was the one kept.
+            (
+                "RIDL-402, three declarations",
+                format!(
+                    "{PRELUDE}interface I {{\n  signal speed : Speed @10ms\n  \
+                     signal speed : Speed @20ms\n  signal speed : Speed @30ms\n}}\n"
+                ),
+                "`speed` is declared here, and this is the one that is kept",
+            ),
+            // Two tombstones for one name: RIDL-401's label must stay on the
+            // first, for the same reason.
+            (
+                "RIDL-401, two tombstones",
+                format!(
+                    "{PRELUDE}interface I {{\n  reserved legacyTemp\n  \
+                     reserved legacyTemp\n  signal legacyTemp : Speed @10ms\n}}\n"
+                ),
+                "`legacyTemp` is retired here",
+            ),
         ] {
             let checked = check_ridl("app", &source);
-            let diagnostic = &checked.diagnostics[0];
-            assert_eq!(
-                diagnostic.labels.len(),
-                1,
-                "{name} must carry one secondary label: {diagnostic:?}",
-            );
-            assert_eq!(diagnostic.labels[0].message, label, "{name}");
-            // The label points at the *other* declaration, not back at the
-            // primary span — a label on the same range tells the reader nothing.
-            assert_ne!(
-                diagnostic.labels[0].span.range, diagnostic.primary.range,
-                "{name}: the label must point somewhere else",
-            );
-            let earlier = &source[usize::from(diagnostic.labels[0].span.range.start())..];
             assert!(
-                earlier.starts_with("legacyTemp") || earlier.starts_with("speed"),
-                "{name}: the label lands on the name it talks about, got `{}`",
-                &earlier[..earlier.len().min(20)],
+                !checked.diagnostics.is_empty(),
+                "{name} must draw a diagnostic",
             );
+            // *Every* diagnostic of the run is checked, not the first: with
+            // three declarations of one name there are two RIDL-402s, and it
+            // was the second one whose label was wrong.
+            for diagnostic in &checked.diagnostics {
+                assert_eq!(
+                    diagnostic.labels.len(),
+                    1,
+                    "{name} must carry one secondary label: {diagnostic:?}",
+                );
+                assert_eq!(diagnostic.labels[0].message, label, "{name}");
+                // The label points at the *other* declaration, not back at the
+                // primary span — a label on the same range says nothing.
+                assert_ne!(
+                    diagnostic.labels[0].span.range, diagnostic.primary.range,
+                    "{name}: the label must point somewhere else",
+                );
+                let at = usize::from(diagnostic.labels[0].span.range.start());
+                let earlier = &source[at..];
+                assert!(
+                    earlier.starts_with("legacyTemp") || earlier.starts_with("speed"),
+                    "{name}: the label lands on the name it talks about, got `{}`",
+                    &earlier[..earlier.len().min(20)],
+                );
+                // And it lands on the FIRST declaration of that name — the one
+                // lowering keeps — so the name must not appear as a whole word
+                // anywhere before it. Whole-word, not `contains`: a `reserved`
+                // entry ends its line, so a space-delimited probe would miss
+                // the two-tombstone case and the assertion would be vacuous
+                // there.
+                let bare: String = earlier
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_')
+                    .collect();
+                let earlier_mentions = source[..at]
+                    .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+                    .filter(|word| *word == bare)
+                    .count();
+                assert_eq!(
+                    earlier_mentions, 0,
+                    "{name}: the label must point at the first declaration of `{bare}`, \
+                     and {earlier_mentions} mention(s) already stand before it",
+                );
+            }
         }
+    }
+
+    /// The three-duplicate probe, kept as its own test because it is the shape
+    /// the two-duplicate fixture cannot see: the label must name the
+    /// declaration that survives lowering, and with three `signal speed` the
+    /// survivor is the first while the previous-declaration answer is the
+    /// second — itself dropped.
+    #[test]
+    fn a_third_duplicate_still_points_at_the_declaration_that_is_kept() {
+        let source = format!(
+            "{PRELUDE}interface I {{\n  signal speed : Speed @10ms\n  \
+             signal speed : Speed @20ms\n  signal speed : Speed @30ms\n}}\n"
+        );
+        let checked = check_ridl("app", &source);
+        assert_eq!(codes(&checked), vec!["RIDL-402", "RIDL-402"]);
+
+        // One interaction survives, at ordinal 1 — the first declaration.
+        assert_eq!(interface_walk(&checked), [("speed", 1)]);
+
+        // Both labels point at that same first declaration, which is the only
+        // `signal speed` with no earlier one.
+        let first = checked.diagnostics[0].labels[0].span.range;
+        assert_eq!(checked.diagnostics[1].labels[0].span.range, first);
+        assert_eq!(
+            source[..usize::from(first.start())]
+                .matches("signal speed")
+                .count(),
+            0,
+            "the label is on the first `signal speed`",
+        );
+        assert!(
+            checked.diagnostics[1].primary.range.start() > first.start(),
+            "the second RIDL-402 is raised after it",
+        );
     }
 
     /// RIDL-107 is raised once, by the parser, and the checker adds nothing on

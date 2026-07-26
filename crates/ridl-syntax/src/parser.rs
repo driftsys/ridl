@@ -2315,6 +2315,68 @@ mod tests {
         assert_eq!(def_names_in(Profile::Ridl, input), vec!["Fine"]);
     }
 
+    /// Recovery from a rejected return type stops *before* a sync token — it
+    /// never consumes the construct that follows.
+    ///
+    /// `return_type` reports and then recovers, and `recover` always bumps the
+    /// current token, so without the `!is_return_sync(current)` guard a
+    /// `query a() :` written immediately before a `}` eats the interface's own
+    /// closing brace and the file then reports an unclosed `{`. Each row here
+    /// is one member of the sync set, and each asserts on what *survived* — a
+    /// diagnostic-count assertion cannot see over-consumption, because
+    /// swallowing the `}` produces one extra diagnostic and swallowing an
+    /// interaction produces none at all.
+    #[test]
+    fn a_rejected_return_type_never_consumes_the_construct_after_it() {
+        for (sync, body, survivor) in [
+            (
+                "the next interaction keyword",
+                "  query broken() :
+  signal speed : Speed @10ms
+",
+                SyntaxKind::SignalDef,
+            ),
+            (
+                "a `reserved` tombstone",
+                "  query broken() :
+  reserved legacyTemp
+",
+                SyntaxKind::ReservedEntry,
+            ),
+            (
+                "the body's own closing brace",
+                "  query broken() :
+",
+                SyntaxKind::InterfaceDef,
+            ),
+        ] {
+            let input = format!(
+                "package p
+interface I {{
+{body}}}
+"
+            );
+            let parsed = parse(&input, Profile::Ridl);
+            assert_eq!(
+                parsed.syntax().text().to_string(),
+                input,
+                "{sync}: recovery must stay lossless",
+            );
+            assert_eq!(
+                parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+                vec!["FORM-101"],
+                "{sync}: the broken return type is the only diagnostic — an                  unclosed `{{` here means the `}}` was consumed",
+            );
+            assert!(
+                parsed
+                    .syntax()
+                    .descendants()
+                    .any(|node| node.kind() == survivor),
+                "{sync}: the {survivor:?} after the broken return type is gone",
+            );
+        }
+    }
+
     #[test]
     fn pathological_type_nesting_does_not_panic_or_drop_text() {
         let input = format!("package p\nstruct S {{ f : {} }}\n", "[".repeat(300));

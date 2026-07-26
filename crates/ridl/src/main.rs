@@ -560,11 +560,12 @@ fn drift_message(change: &ridl_diff::Change) -> String {
         ),
         // `ORDINAL_CATEGORIES` is the caller's filter and holds exactly the four
         // arms above. A fifth category reaching here would be a filter that
-        // grew without its messages, so it says only what it can defend.
-        other => format!(
+        // grew without its messages, so this says only what it can defend — and
+        // says it without the raw category token, which is the vocabulary this
+        // code exists to keep out of the message.
+        _ => format!(
             "`{name}`{in_shape} changed against the published baseline in a way that moves an \
-             interaction's wire identity ({})",
-            ridl_diff::category_word(other),
+             interaction's wire identity (ridl §11)"
         ),
     }
 }
@@ -581,12 +582,20 @@ fn shape_and_name(path: &str) -> (Option<&str>, &str) {
     }
 }
 
-/// ` (position 2 there, position 4 here)` for a reorder whose two sides both
-/// carry a position, and the empty string otherwise.
+/// ` (position 2 there, position 4 here)` for a reorder whose two sides carry
+/// two *different* positions, and the empty string otherwise.
 ///
 /// The walk renders a live reorder's sides as bare ordinals (`"2"`) and a
 /// tombstone's as `"reserved at ordinal 2"`, so the trailing integer is what
 /// the two spellings share.
+///
+/// The equal case is dropped rather than printed. A reorder is detected on
+/// *relative* order among the survivors, so an interaction can change rank
+/// while its absolute ordinal stays put — an insertion above it shifts the
+/// others past it — and "`doorClosed` has moved (position 3 there, position 3
+/// here)" contradicts itself in the same breath. The sentence about relative
+/// order stands on its own; the numbers are a convenience that only helps when
+/// they differ.
 fn baseline_position(change: &ridl_diff::Change) -> String {
     let position = |side: &Option<String>| -> Option<u32> {
         side.as_ref()?
@@ -597,7 +606,9 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
             .filter(|slot| *slot > 0)
     };
     match (position(&change.before), position(&change.after)) {
-        (Some(was), Some(now)) => format!(" (position {was} there, position {now} here)"),
+        (Some(was), Some(now)) if was != now => {
+            format!(" (position {was} there, position {now} here)")
+        }
         _ => String::new(),
     }
 }

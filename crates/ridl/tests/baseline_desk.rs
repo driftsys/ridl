@@ -645,6 +645,16 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
             "interface VehicleStatus {",
         ),
         (
+            "tyrePressure",
+            "declare it at the end of the body instead",
+            "event tyrePressure : DoorState @[100ms..1s]",
+        ),
+        (
+            "legacyWheelPhase",
+            "give this interaction a different name",
+            "signal legacyWheelPhase : Speed @10ms",
+        ),
+        (
             "doorOpened",
             "put the declarations back in the baseline's order",
             "event doorOpened : DoorState @[100ms..1s]",
@@ -677,8 +687,16 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
     // A reorder states where the interaction was and where it is now, so the
     // reader can count the declarations rather than diff the file by eye.
     assert!(
-        ridl_407_block(&stderr, "doorClosed").contains("(position 3 there, position 2 here)"),
+        ridl_407_block(&stderr, "doorOpened").contains("(position 2 there, position 4 here)"),
         "a reorder names both positions in:\n{stderr}"
+    );
+    // …and drops the parenthetical when the two coincide. A reorder is detected
+    // on relative order, so `doorClosed` changed rank while keeping ordinal 3 —
+    // the insertion above it shifted the others past it. "has moved (position 3
+    // there, position 3 here)" contradicts itself, so the numbers are omitted.
+    assert!(
+        !ridl_407_block(&stderr, "doorClosed").contains("position"),
+        "a reorder whose absolute ordinal is unchanged must not print it:\n{stderr}"
     );
 
     // No message answers in the vocabulary of the IR or of the diff report.
@@ -688,13 +706,14 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
         .lines()
         .filter(|line| line.starts_with("warning[RIDL-407]:"))
         .collect();
-    assert_eq!(message_lines.len(), 4, "one line per diagnostic:\n{stderr}");
+    assert_eq!(message_lines.len(), 6, "one line per diagnostic:\n{stderr}");
     for line in &message_lines {
         for internal in [
             "ordinal",
             "interaction_reordered",
             "interaction_removed",
-            "corpus.baseline/",
+            "interaction_inserted",
+            "reserved_name_redeclared",
         ] {
             assert!(
                 !line.contains(internal),
@@ -702,14 +721,22 @@ fn check_reports_ordinal_drift_against_the_committed_baseline() {
                  vocabulary, not the reader's:\n{line}"
             );
         }
+        // A diff path, in general and not just this fixture's: the message
+        // names the interaction and the shape, never `pkg/Shape/member`. No
+        // RIDL-407 message has a legitimate `/` in it, so the character is the
+        // check.
+        assert!(
+            !line.contains('/'),
+            "RIDL-407 must not print a diff path — the reader wrote no `/`:\n{line}"
+        );
     }
 
-    // The four above are the whole report: a fifth RIDL-407 would mean the desk
+    // The six above are the whole report: a seventh RIDL-407 would mean the desk
     // check flagged an interaction whose ordinal did not move.
     assert_eq!(
         stderr.matches("RIDL-407").count(),
-        4,
-        "exactly four ordinal-affecting changes, no more:\n{stderr}"
+        6,
+        "exactly six ordinal-affecting changes, no more:\n{stderr}"
     );
 }
 
@@ -758,7 +785,7 @@ fn inline_shape_removal_spans_the_service_name() {
     // still pass on a span widened leftwards to the keyword, because the
     // widened run is longer and `contains` matches any prefix of it.
     assert!(
-        inline.contains("cluster.ridl:38:9"),
+        inline.contains("cluster.ridl:46:9"),
         "the span starts at the dotted name, column 9 — not column 1, where \
          the `service` keyword is:\n{inline}"
     );
