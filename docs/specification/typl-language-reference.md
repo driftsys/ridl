@@ -242,8 +242,9 @@ Forward slashes inside the pattern are escaped `\/`.
 
 ### 2.8 Tokens recognised but not used by typl
 
-Duration literals (`500us`, `10ms`, `1s`) and the `@` timing sigil are lexed
-family-wide but rejected by the `.typl` profile (TYPL-302).
+Duration literals (`500us`, `10ms`, `1s`, `5min`, `1h` — the five suffixes ridl
+§2.1 tabulates) and the `@` timing sigil are lexed family-wide but rejected by
+the `.typl` profile (TYPL-302).
 
 ---
 
@@ -837,8 +838,9 @@ second channel anywhere in the family.
 ## 11. Tuples
 
 A tuple is an anonymous composite of **named** fields used inline — as struct
-fields at the typl layer; higher profiles additionally use tuples as interaction
-parameters and query returns.
+fields at the typl layer; higher profiles additionally use tuples as query
+returns (ridl §7.1). A tuple is not an interaction parameter type: a parameter
+is a named type or a stream (ridl §6.1, §7.1).
 
 ```ridl
 struct SensorBounds {
@@ -973,6 +975,11 @@ typl catalogue (Appendix F). Codes are namespaced `TYPL-` and grouped by
 hundreds: 0xx module, 1xx scalars & constants, 2xx composites, 3xx profile
 boundary, 4xx documentation. Codes are never renumbered; retired codes are
 marked deprecated and never reused.
+
+The tables below are the `TYPL-` codes only. A `.typl` file also draws the two
+namespaces no profile owns — `FORM-` (surface syntax: lexical, parse, and the
+attribute-block rules) and `MANI-` (the manifest). Both are tabulated once in
+the family overview §7 and are not restated here.
 
 ### 16.1 Module (TYPL-0xx)
 

@@ -14,6 +14,15 @@ Version: 0.2.0 — Draft
 > semicolons, float width inference is count-based (typl §4.3). New in v0.2,
 > from the prior-art review (Appendix F): the error model (§10), the last-value
 > subscription guarantee (§4.4), and interaction identity & evolution (§11).
+>
+> **Reconciled with the shipped toolchain at the epic E2 close-out** (ADR-0008
+> decisions 1 and 16 to 21). Four supersessions from general form §6 are now
+> absorbed rather than pending: inline `T | E` returns (§7, §10.1, Appendix A,
+> Appendix C), generic `min`/`max` timing with the per-kind table as a
+> derivation (§4.3, §5.2, §9), ordinal drift reported at the desk (RIDL-407),
+> and the Stratum-3 wording "infrastructure failure — detected, undeclared"
+> (§10.3). §2.1's duration table, §9.2's `@[X..X]` rule, §16.1's RIDL-108 and
+> RIDL-110 rows, and Appendix C's grammar are corrected to the compiler.
 
 ---
 
@@ -96,16 +105,23 @@ classes typl rejects:
 ### 2.1 Duration Literals
 
 A positive integer followed by a time-unit suffix. Used exclusively in timing
-annotations and time-typed contract expressions.
+annotations and time-typed contract expressions. The five suffixes below are the
+complete set:
 
-| Suffix | Unit         | Example |
-| ------ | ------------ | ------- |
-| `us`   | microseconds | `500us` |
-| `ms`   | milliseconds | `10ms`  |
-| `s`    | seconds      | `1s`    |
+| Suffix | Unit         | Example | Microseconds  |
+| ------ | ------------ | ------- | ------------- |
+| `us`   | microseconds | `500us` | 1             |
+| `ms`   | milliseconds | `10ms`  | 1 000         |
+| `s`    | seconds      | `1s`    | 1 000 000     |
+| `min`  | minutes      | `5min`  | 60 000 000    |
+| `h`    | hours        | `1h`    | 3 600 000 000 |
+
+The suffixes are UCUM time atoms, but they are a **proper subset** of the UCUM
+atom table typl uses for unit types (typl §5.1): `d` is a unit atom there and is
+not a duration suffix here, so `@[1min..1d]` is a parse error.
 
 Zero duration is not permitted (RIDL-102). Fractions are not supported — use a
-smaller unit (`500us`, not `0.5ms`).
+smaller unit (`500us`, not `0.5ms`); a fractional literal is FORM-102.
 
 ### 2.2 The `@` Sigil
 
@@ -253,8 +269,10 @@ exactly one owning provider.)
 ### 4.3 Publication Semantics
 
 With `@Xms`, the provider publishes every X ms regardless of change. With
-`@[min..max]`, the provider publishes on change, no faster than `min` (debounce)
-and at least every `max` even unchanged (refresh ceiling) — see §9.
+`@[min..max]`, the provider publishes on change, no faster than the rate floor
+`min` and at least every staleness bound `max` even unchanged. On a signal those
+two generic bounds derive as debounce and refresh ceiling, because state may be
+coalesced and survives being unchanged — see §9.
 
 ### 4.4 The Channel Is Never Empty — Init Value and Last-Value
 
@@ -340,9 +358,11 @@ event speedLimitExceeded : SpeedLimitPayload @[100ms..2000ms]
 
 ### 5.2 Timing Semantics
 
-`min` is a **throttle** (minimum interval between occurrences — the provider
-must not raise faster); `max` is a **TTL** (an occurrence processed later than
-`max` after being raised is stale and must be discarded by the binding). See §9.
+`min` is the rate floor and `max` the staleness bound, as everywhere (§9). On an
+event they derive as a **throttle** (the provider must not raise occurrences
+faster than `min`) and a **TTL** (an occurrence processed later than `max` after
+being raised is stale and is discarded by the binding), because an occurrence is
+individually meaningful and cannot be coalesced into its successor.
 
 ---
 
@@ -361,13 +381,14 @@ command uploadFirmware(data: <FwBlock>)
 
 ### 6.1 Rules
 
-- Parameters are named typl types; tuples of parameters as in typl §11; stream
-  `<T>` permitted on parameters
+- Parameters are named typl types; stream `<T>` permitted on parameters. A tuple
+  is not a parameter type — pass a named `struct` (a tuple _is_ a query return
+  type, §7.1)
 - Always returns `()` — writing a return type is an error (RIDL-104); if the
   caller needs a result or a completion signal, use `query`
 - **No functional-error channel, by construction**: a command has no return, so
-  there is nowhere for a result union. A command whose _outcome_ the caller must
-  know about is a `query` returning a result union — the language forces that
+  there is nowhere for a fallible return. A command whose _outcome_ the caller
+  must know about is a `query` returning `T | E` — the language forces that
   honesty
 - `require` permitted (§13); `ensure` not (nothing to observe)
 - **Fire-and-forget describes the contract, not the wire.** The runtime protocol
@@ -409,17 +430,17 @@ query getAverageSpeed(window: Duration): Speed [
 ]
 query getMinMax(window: Duration): (min: Speed, max: Speed)
 query streamFaults(filter: DiagFilter): <FaultEvent>
-query calibrate(target: Axle): CalOutcome            // result union — fallible query, §10.1
+query calibrate(axle: Axle): CalReport | CalError     // inline T | E — fallible query, §10.1
 ```
 
 ### 7.1 Rules
 
 - Must return non-void — `()` return is an error, use `command` (RIDL-105)
-- Return type: named type, named-field tuple, or stream `<T>`; streams also
-  permitted on parameters (bidirectional streaming supported)
+- Return type: named type, named-field tuple, inline `T | E`, or stream `<T>`;
+  streams also permitted on parameters (bidirectional streaming supported)
 - `require` and `ensure` permitted (§13); `ensure` constrains `result`
-- Functional failure is expressed **in the return type**: a result union (typl
-  §10.2) makes the query fallible — §10.1. There is no `throws` clause in ridl
+- Functional failure is expressed **in the return type**: the inline `T | E`
+  form makes the query fallible — §10.1. There is no `throws` clause in ridl
 
 ### 7.2 Concurrency and Idempotence
 
@@ -476,19 +497,38 @@ signal currentSpeed : Speed @10ms
 @[..100ms]        // upper bound only
 ```
 
-Semantics by construct:
+**The bounds have one generic meaning**, whatever the declaring keyword (general
+form §6.2):
 
-| Bound       | Signal                                             | Event                                                              |
-| ----------- | -------------------------------------------------- | ------------------------------------------------------------------ |
-| lower `min` | **debounce** — suppress updates faster than `min`  | **throttle** — minimum interval between occurrences                |
-| upper `max` | **refresh ceiling** — re-publish even if unchanged | **TTL** — discard if processed later than `max` after being raised |
+> **`min` = rate floor** — the minimum interval between publications. **`max` =
+> staleness bound** — the maximum age, measured on envelope sender timestamps
+> (§3.1), before the value or occurrence is stale.
+
+So the naive reading of `@[20ms..500ms]` — "not faster than 20ms, not staler
+than 500ms" — is the correct one, and it is the same reading on a signal and on
+an event.
+
+What differs per kind is **what the runtime does** at each bound, and that is
+_derived_ from the state-versus-occurrence semantics of the declaring keyword
+(§3), not from the annotation. The familiar four names are the derivation, not
+the definition:
+
+| Bound                   | On a `signal` (state)                                            | On an `event` (occurrence)                                    |
+| ----------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- |
+| `min` — rate floor      | **debounce** — a faster update is coalesced into the next sample | **throttle** — the provider must not raise occurrences faster |
+| `max` — staleness bound | **refresh ceiling** — re-publish even if unchanged               | **TTL** — an occurrence older than `max` is discarded         |
+
+A state value that is stale is refreshed and a fast one coalesced, because state
+survives being unchanged and only the latest sample matters; an occurrence that
+is stale is discarded and a fast one throttled, because every occurrence is
+individually meaningful and cannot be merged into its successor. Editor hover
+expands the per-kind consequence from the declaring keyword.
 
 ### 9.1 Default Timing
 
 A signal or event with no `@` annotation receives the default range
-**`@[100ms..1000ms]`** — with signal semantics (debounce 100ms, refresh ceiling
-1s) or event semantics (throttle 100ms, TTL 1s) per the table below. The default
-is configurable at compile time in `ridl.toml`:
+**`@[100ms..1000ms]`** — a 100ms rate floor and a 1s staleness bound, derived
+per kind as above. The default is configurable at compile time in `ridl.toml`:
 
 ```toml
 [defaults]
@@ -518,13 +558,19 @@ explicit engineering decision (it drives rmdl base clocks).
 ### 9.2 Validity Rules
 
 Rules: `@0ms` is an error (RIDL-102); `@[X..Y]` with `X > Y` is an error
-(RIDL-101); `@[X..X]` draws a warning (equivalent to `@Xms`, and invalid on
-events). A signal's `@Xms` or `@[..max]` is an alertable **freshness SLO**: a
-subscriber that has not seen a publication within the bound may treat the value
-as stale — generated bindings expose staleness, and the observability
-conventions map the bound to an OTel attribute. All timing semantics — debounce,
-refresh, throttle, TTL, staleness — are evaluated on **envelope timestamps**
-(§3.1), never on payload content.
+(RIDL-101); `@[X..X]` draws a warning (RIDL-108) on a signal and on an event
+alike — it is a degenerate range, a rate floor equal to its staleness bound,
+which is almost always a mistake. It is **not** a spelling of the strict period
+`@Xms`: a strict period is a separate mode, admitted on signals only, never
+defaulted (§9.1), recorded in the IR beside the bounds, and a change between the
+two modes is breaking whatever the bounds do.
+
+A signal's `@Xms` or `@[..max]` is an alertable **freshness SLO**: a subscriber
+that has not seen a publication within the bound may treat the value as stale —
+generated bindings expose staleness, and the observability conventions map the
+bound to an OTel attribute. Every timing bound — the rate floor, the staleness
+bound, and the derived debounce, refresh, throttle and TTL behaviour — is
+evaluated on **envelope timestamps** (§3.1), never on payload content.
 
 _DDS students will recognise `max` as the DEADLINE QoS and staleness as
 LIVELINESS — ridl puts them in the contract instead of a QoS profile; see
@@ -551,28 +597,31 @@ error enum CalError {            // typl §10.1 — failure vocabulary
   OUT_OF_RANGE       = 2
 }
 
-union CalOutcome {               // typl §10.2 — result union: Result<CalReport, CalError>
-  ok  : CalReport
-  err : CalError
-}
-
-query calibrate(target: Axle): CalOutcome
+query calibrate(axle: Axle): CalReport | CalError    // inline T | E — the canonical spelling
 ```
 
 Rules:
 
-- A **result union** in query-return position makes a **fallible query**.
-  Bindings split it mechanically: the success arm is the reply payload; the
+- An **inline `T | E`** in query-return position makes a **fallible query** —
+  the canonical spelling (general form §6.1). The left arm is any non-error
+  named type (success); the right arm is exactly one **error type**. Both arms
+  stay named typl types; only the union _container_ is structural, and its
+  transport identity is synthesized from the interface, the interaction ordinal,
+  and the ordered arm types (ADR-0008 decision 4)
+- Bindings split it mechanically: the success arm is the reply payload; the
   error arm maps to the transport's _native_ error channel — SOME/IP return
   code, gRPC rich status, AIDL exception — and to `Result<T, E>` (Rust) / sealed
   result (Kotlin) in language targets, with exhaustive handling enforced
   wherever the target can express it
-- Several failure kinds compose into one `error union` _before_ entering the
-  result union (typl §10.2) — one query still carries one closed failure set
-- A query returning a **bare error type** is an error (RIDL-303): a query with
-  no success path is not a query
+- Several failure kinds compose into one `error union` _before_ appearing as the
+  error arm (typl §10.2) — one query still carries one closed failure set
+- A **named result union** (typl §10.2) remains legal typl data — for storing an
+  outcome in a struct or a log — but in return position it draws RIDL-308, a
+  lint steering to the inline spelling
+- A query with no success path is an error (RIDL-303): a bare error type in
+  return position, or an `error`-typed left arm of an inline `T | E`
 - `command` remains failure-free **by construction**: it has no return, so there
-  is nowhere to put a result union — nothing to ban. A command's observable
+  is nowhere for a fallible return — nothing to ban. A command's observable
   failure is state, like every other command outcome: publish a fault signal
   (§6.1)
 - Because errors are ordinary vocabulary, **pub/sub can carry them**:
@@ -584,9 +633,10 @@ Rules:
 instead of two: failure shapes are typl types like every other shape — nominally
 typed, importable, reusable across interfaces, evolvable under the same ordinal
 rules. ridl adds zero error surface; the runtime keeps its own stratum below
-without the contract pretending to model it. The cost — declaring a small union
-per fallible query — is exactly the honesty wanted: the failure set is part of
-the signature, as data.
+without the contract pretending to model it. The cost — naming the failure type
+on the signature — is exactly the honesty wanted: the failure set is part of the
+signature, as data. The inline spelling (general form §6.1) puts it _at_ the
+signature rather than one hop away in a named union.
 
 ### 10.2 Stratum 2 — Contract Errors: implicit, standardized, derived
 
@@ -607,15 +657,22 @@ runs, and `ensure` after; application code never sees a contract-violating
 input, and callers can always distinguish "the service said no" (Stratum 1) from
 "the call was ill-formed" (Stratum 2).
 
-### 10.3 Stratum 3 — Transport Errors: invisible to the language
+### 10.3 Stratum 3 — Transport Errors: infrastructure failure — detected, undeclared
 
 Timeouts, broker loss, serialization failures, connection resets, and a
 command's **missing delivery acknowledgment** (§6.1): these exist for every
 interaction identically and say nothing about the contract, so the language
-never mentions them. Generated caller-side types carry a transport-error variant
-supplied by the runtime (`ridl-rt`), not by the `.ridl` source — including
-command delivery status for callers that choose to supervise it. The freshness
-machinery (§9) is the contract-level view of transport health for pub/sub.
+never declares them. The normative phrasing is **"infrastructure failure —
+detected, undeclared"** (general form §6.4), and both halves are load-bearing.
+_Detected_: the runtime observes every one of them — acks, timeouts, staleness —
+and nothing fails silently (§10.4). _Undeclared_: the contract language has no
+vocabulary for them, because a contract author has no knowledge to express. This
+is the opposite of undefined behaviour, where a system may do anything; the
+generated code names the stratum in exactly these words. Generated caller-side
+types carry a transport-error variant supplied by the runtime (`ridl-rt`), not
+by the `.ridl` source — including command delivery status for callers that
+choose to supervise it. The freshness machinery (§9) is the contract-level view
+of transport health for pub/sub.
 
 **The invariant across all three strata:** what the contract _declares_ is
 exactly the failure knowledge a domain engineer possesses (Stratum 1); what the
@@ -630,7 +687,8 @@ degraded modes, health monitoring, halt management — is a
 **safety/quality-management concern**, specified separately and never expressed
 in ridl syntax. The division of labour:
 
-- **ridl declares** the functional failure vocabulary (result unions) and the
+- **ridl declares** which failures a fallible query can answer with (the error
+  arm of its `T | E` return — the vocabulary itself is typl's, §10.1) and the
   bounds whose violation _defines_ failure (typl constraints,
   `require`/`ensure`, freshness)
 - **the runtime detects** every failure across all three strata — quarantines,
@@ -684,7 +742,7 @@ interface VehicleStatus {
   that drifts. Major-version coexistence is a deployment topology question
   (rsdl), not a contract question
 - Changing an interaction's **kind** (e.g. event → signal), payload type, timing
-  bound, or a result union's error arm in a breaking direction is detected by
+  bound, or a fallible return's error arm in a breaking direction is detected by
   `ridl-diff` per its category rules; the diff exit-code contract (concept note
   §9.1) applies
 
@@ -699,7 +757,7 @@ returns.
 ```ridl
 query streamFaults(filter: DiagFilter): <FaultEvent>     // server produces
 command uploadFirmware(data: <FwBlock>)                  // client produces
-query pipe(input: <SensorSample>): <ProcessedSample>     // bidirectional
+query pipe(samples: <SensorSample>): <ProcessedSample>   // bidirectional
 ```
 
 ### 12.1 Direction by Position
@@ -763,12 +821,14 @@ query getAverageSpeed(window: Duration): Speed [
 - Expressions are type-checked, unquoted, side-effect-free; they reference
   parameters, `result`, constants, enum values, and the interface's own signals
   (a `require` may read `currentSpeed` — the provider's latest published state)
-- Violations are Stratum 2 errors (§10.2) — never arms of a result union
-- The full expression grammar is the **expr core specification** (pending —
-  concept note open question 6); until it lands, v0.2 fixes the _positions_ and
-  the _checking discipline_, and the expression forms shown in this document
-  (comparison, boolean connectives, arithmetic, enum access, tuple-field access,
-  duration comparison) are the guaranteed-supported subset
+- Violations are Stratum 2 errors (§10.2) — never the error arm of a `T | E`
+- The full expression grammar is the **expr-core specification**. This document
+  fixes the _positions_ and the _checking discipline_; the expr-core
+  specification §3.1 fixes the grammar of the **guaranteed subset** —
+  comparison, boolean connectives, arithmetic, enum access, tuple-field access,
+  and duration comparison, over parameters, `result`, constants, enum values and
+  the interface's own signals — and §8 fixes the RIDL-306 boundary that rejects
+  everything outside it
 - One assertion, four executions (concept note §9.2): static where decidable,
   property test in CI, online observer on live flows, synchronous observer in
   the rmdl reference oracle. `require`/`ensure` written here are the _source_
@@ -924,7 +984,11 @@ rmdl computes, rsdl connects.
 ## 16. Diagnostics
 
 Coded `RIDL-`, grouped by hundreds, same lifecycle rules as typl §16 (codes
-never renumbered or reused).
+never renumbered or reused). The tables below are the `RIDL-` profile codes
+only. A `.ridl` file also draws the two namespaces no profile owns — `FORM-`
+(surface syntax: lexical, parse, and the attribute-block rules) and `MANI-` (the
+manifest). Both are tabulated once in the family overview §7 and are not
+restated here.
 
 ### 16.1 Timing (RIDL-1xx)
 
@@ -938,9 +1002,22 @@ never renumbered or reused).
 | RIDL-105 | `query` returning `()`                                                                                                | error                                                     |
 | RIDL-106 | timing annotation or attribute block on `final`                                                                       | error                                                     |
 | RIDL-107 | type declaration inside an `interface` body                                                                           | error                                                     |
-| RIDL-108 | `@[X..X]` — equivalent to `@Xms`                                                                                      | warning                                                   |
+| RIDL-108 | `@[X..X]` — a degenerate range, the rate floor equal to its staleness bound (§9.2); `signal` and `event` alike        | warning                                                   |
 | RIDL-109 | signal payload type has no derivable init value and no `= value` override (§4.4)                                      | error                                                     |
-| RIDL-110 | signal `= value` init override violates the payload type's constraints                                                | error                                                     |
+| RIDL-110 | signal `= value` init override violates a scalar payload's range, string length bound, or `match` pattern             | error                                                     |
+
+**Known gap — RIDL-110.** The check runs only where the payload names a scalar
+`type` declaration, and covers exactly the three violations the row names: a
+numeric literal (or a constant reference resolving to a numeric value) outside
+the declared range, a string literal outside the declared length bound, and a
+string literal that does not match the type's `match` pattern. Three cases are
+accepted in silence: a literal of the wrong kind (`= true` on an integer-backed
+payload), a value off the declared `step` grid, and an override on a `struct`,
+`enum`, or `union` payload, which has no scalar bounds to violate. The leniency
+is inherited from the typl layer — a struct field's declared init is treated the
+same way — so widening it is one change across both, recorded on the
+consolidated `debt(E2)` issue (driftsys/ridl#172) rather than closed here in
+either direction.
 
 ### 16.2 Streams (RIDL-2xx)
 
@@ -951,15 +1028,16 @@ never renumbered or reused).
 
 ### 16.3 Contracts and Errors (RIDL-3xx)
 
-| Code     | Rule                                                                                                 | Severity |
-| -------- | ---------------------------------------------------------------------------------------------------- | -------- |
-| RIDL-301 | `require` or `ensure` on `signal`, `event`, or `final`                                               | error    |
-| RIDL-302 | `ensure` on `command`                                                                                | error    |
-| RIDL-303 | query returning a bare `error` type — no success path                                                | error    |
-| RIDL-304 | `error`-typed or result-union **parameter** on `command`/`query` — failure flowing toward a provider | warning  |
-| RIDL-305 | `ensure` references no `result`                                                                      | warning  |
-| RIDL-306 | `require`/`ensure` expression outside the guaranteed subset (pending expr core)                      | error    |
-| RIDL-307 | contract-error category name (`INVALID_VALUE`, …) declared in an `error` enum                        | warning  |
+| Code     | Rule                                                                                                                    | Severity |
+| -------- | ----------------------------------------------------------------------------------------------------------------------- | -------- |
+| RIDL-301 | `require` or `ensure` on `signal`, `event`, or `final`                                                                  | error    |
+| RIDL-302 | `ensure` on `command`                                                                                                   | error    |
+| RIDL-303 | query with no success path — a bare `error` type in return position, or an `error`-typed left arm of an inline `T \| E` | error    |
+| RIDL-304 | `error`-typed or result-union **parameter** on `command`/`query` — failure flowing toward a provider                    | warning  |
+| RIDL-305 | `ensure` references no `result`                                                                                         | warning  |
+| RIDL-306 | `require`/`ensure` expression outside the guaranteed subset (expr-core specification §8)                                | error    |
+| RIDL-307 | contract-error category name (`INVALID_VALUE`, …) declared in an `error` enum                                           | warning  |
+| RIDL-308 | named result union in query-return position — the inline `T \| E` spelling is canonical there (§10.1)                   | warning  |
 
 ### 16.4 Evolution and Profile (RIDL-4xx)
 
@@ -971,12 +1049,16 @@ never renumbered or reused).
 | RIDL-404 | query named like a mutation (`set…`, `reset…`)                                                                                                 | warning  |
 | RIDL-405 | one `error` type shared across unrelated failure domains (heuristic)                                                                           | info     |
 | RIDL-406 | payload field duplicating envelope metadata — publication time or frame counter (§3.1); domain time distinct from transport time is legitimate | info     |
+| RIDL-407 | interaction ordinal changed against the published baseline (§11) — the desk-time drift check, emitted by `ridl check`, never by `ridlc`        | warning  |
 | RIDL-140 | duplicate `service` name across the system — the service catalog is a flat global namespace                                                    | error    |
 | RIDL-141 | `service` names a type that is not an `interface`, and has no inline shape                                                                     | error    |
 | RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                      | error    |
 
-(Reorder/insert/delete detection is `ridl-diff`'s jurisdiction, not the
-compiler's — typl §7.4 discussion applies.)
+(Classifying a reorder, insert, or delete as breaking or compatible is
+`ridl-diff`'s jurisdiction, not the compiler's — typl §7.4 discussion applies.
+RIDL-407 is the desk-time warning that an ordinal moved at all: it is emitted by
+the `ridl check` facade against a workspace-local baseline, which is outside
+`ridlc`'s source-to-IR function, and it neither classifies nor gates.)
 
 A public `interface` exposing an `internal` typl declaration is **TYPL-005**
 (typl §3.3), not a RIDL code: it is the same rule the vocabulary layer states,
@@ -1080,11 +1162,6 @@ struct FaultPage {
   faults : [FaultEvent; 0..64]
 }
 
-union FaultPageResult {          // result union — Result<FaultPage, DiagError>
-  page : FaultPage
-  err  : DiagError
-}
-
 // --- the contract ---
 
 /**
@@ -1121,8 +1198,8 @@ interface VehicleStatus {
   /// Fault history as a finite stream
   query streamFaults(filter: DiagFilter): <FaultEvent>
 
-  /// Paged fault snapshot — fallible query via result union (§10.1)
-  query getFaultPage(filter: DiagFilter): FaultPageResult
+  /// Paged fault snapshot — fallible query via inline `T | E` (§10.1)
+  query getFaultPage(filter: DiagFilter): FaultPage | DiagError
 
   final softwareVersion : Version
   final capabilities    : [Label; 0..32]
@@ -1164,12 +1241,19 @@ WASM component target maps `query` streams to WIT `stream<T>` (native in WASI
 ## Appendix C — Formal Grammar (EBNF)
 
 The ridl profile adds to the typl grammar (typl Appendix E — `definition` gains
-`interface_def`; everything else inherited):
+`interface_def` and `service_def`; everything else inherited):
 
 ```ebnf
-definition    = [ "internal" ] ( typl_definition | interface_def ) ;
+definition    = [ "internal" ] ( typl_definition | interface_def )
+              | service_def ;                        (* a service takes no `internal` — §14.5 *)
 
 interface_def = doc_comment? "interface" CamelCase_id "{" { interaction sep? } "}" ;
+
+service_def   = doc_comment? "service" dotted_name
+                ( ":" type_ref                       (* named shape — §14.5 *)
+                | "{" { interaction sep? } "}" ) ;   (* inline shape — §14.5 *)
+dotted_name   = camelCase_id { "." camelCase_id } ; (* reverse-domain global name,
+                                                       every segment lowercase — §14.5 *)
 
 interaction   = signal_def | event_def | command_def | query_def | final_def | reserved ;
 
@@ -1182,12 +1266,15 @@ command_def   = doc_comment? "command" camelCase_id "(" param_list ")" attr_bloc
 query_def     = doc_comment? "query"   camelCase_id "(" param_list ")" ":" return_type
                 attr_block? ;
 final_def     = doc_comment? "final"   camelCase_id ":" final_type ;
-              (* no error syntax — a result-union return_type makes a query fallible, §10.1 *)
+              (* no error syntax — a fallible_type return makes a query fallible, §10.1 *)
 
 param_list    = "" | param { "," param } ;
 param         = camelCase_id ":" param_type ;
 param_type    = type_ref | stream_type ;
-return_type   = type_ref | tuple_type | stream_type ;
+return_type   = type_ref | tuple_type | fallible_type | stream_type ;
+fallible_type = type_ref "|" type_ref ;             (* inline T | E — §10.1, gf §6.1;
+                                                       both arms are named types, the
+                                                       right one an `error` type *)
 final_type    = type_ref | array_type ;             (* array_type per typl grammar *)
 stream_type   = "<" ( type_ref | "string" | "bytes" ) ">" ;
 
@@ -1196,13 +1283,13 @@ stream_type   = "<" ( type_ref | "string" | "bytes" ) ">" ;
 timing        = "@" duration
               | "@" "[" timing_range "]" ;
 timing_range  = duration ".." duration | duration ".." | ".." duration ;
-duration      = int_lit ( "us" | "ms" | "s" ) ;
+duration      = int_lit ( "us" | "ms" | "s" | "min" | "h" ) ;   (* §2.1 *)
 
 (* ---------- Attribute Block ---------- *)
 
 attr_block    = "[" { attribute sep? } "]" ;
 attribute     = "require" expr | "ensure" expr ;
-expr          = (* expr-core grammar, pending; guaranteed subset per §13 *) ;
+expr          = (* expr-core specification §3.1 — the guaranteed subset; §13 *) ;
 
 (* reserved, sep, type_ref, tuple_type, identifiers, literals: typl Appendix E *)
 ```
@@ -1307,56 +1394,58 @@ uniform from struct fields to interface methods.
 
 ## Appendix G — Glossary
 
-| Term                              | Definition                                                                                                                                                                                                                      |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **RIDL** (capitals)               | the platform and family name; **ridl** (lowercase) is this language, the family's interaction layer and flagship member                                                                                                         |
-| **family**                        | the five languages — typl, ridl, uxdl, rmdl, rsdl — sharing one grammar, one toolchain, one IR                                                                                                                                  |
-| **profile**                       | the restriction of the family grammar accepted by a file extension; `.ridl` accepts interactions + typl declarations; `.rxdl` is the total profile accepting every layer                                                        |
-| **core**                          | a reusable semantic unit beneath the surface languages: `ns` (namespacing), `typl-core` (types), `expr` (predicates), `time` (timing), `interact` (interaction primitives)                                                      |
-| **interaction**                   | a named, typed, directed exchange on a contract boundary; ridl defines five kinds                                                                                                                                               |
-| **signal**                        | pub/sub interaction carrying a continuous **state** value — latest sample matters, intermediate samples may be missed                                                                                                           |
-| **event**                         | pub/sub interaction carrying a discrete **occurrence** — every occurrence matters, queued not coalesced                                                                                                                         |
-| **command**                       | fire-and-forget RPC at the contract level — no functional reply; the runtime carries a delivery acknowledgment beneath it                                                                                                       |
-| **delivery acknowledgment (ack)** | runtime-level confirmation that a command was received and accepted (validated, precondition passed) — or negatively acknowledged with a Stratum 2 category; enables retries and supervision, never visible in the contract     |
-| **query**                         | request/response RPC — reply mandatory; a result-union return makes it fallible                                                                                                                                                 |
-| **final**                         | a value provisioned externally (build/factory/FOTA), immutable for the software-instance lifetime, safe to cache                                                                                                                |
-| **provider**                      | the component that owns an interface: publishes its signals/events, executes its commands/queries                                                                                                                               |
-| **consumer**                      | any component bound to an interface it does not own: subscribes, calls                                                                                                                                                          |
-| **state vs occurrence**           | the load-bearing distinction behind signal/event: state exists while unchanged and may be cached; an occurrence happens once and is meaningful individually                                                                     |
-| **timing annotation**             | the `@` clause making publication timing part of the contract: `@Xms` strict periodic or `@[min..max]`                                                                                                                          |
-| **debounce / refresh ceiling**    | signal range semantics: suppress updates faster than `min` / re-publish at least every `max` even unchanged                                                                                                                     |
-| **throttle / TTL**                | event range semantics: minimum interval between occurrences / staleness deadline after which an occurrence is discarded                                                                                                         |
-| **default timing**                | the compile-time-configurable range (`[100ms..1000ms]`, `ridl.toml [defaults].timing`) applied to untimed signals and events; always resolved to concrete bounds in the IR                                                      |
-| **freshness SLO**                 | the alertable staleness bound derived from a signal's timing — the contract's definition of "late"                                                                                                                              |
-| **last-value guarantee**          | §4.4: a signal channel is never empty — subscribing delivers a value immediately (init before first publication, latest published value after); the normative demand behind broker caches, MQTT retained, DDS `TRANSIENT_LOCAL` |
-| **late joiner**                   | a subscriber that binds after publication began; served by the last-value guarantee on signals, receives nothing retroactive on events                                                                                          |
-| **quarantine**                    | binding behaviour for an invalid _stream element_ (§12.4): withheld from application code, observability recorded. Signals do not quarantine — invalidity propagates as channel state (§4.5)                                    |
-| **functional error (Stratum 1)**  | a domain-level failure expressed as data — an error-typed arm of a result union return; the provider _answered_: no                                                                                                             |
-| **contract error (Stratum 2)**    | an implicit, standardized violation derived from the contract itself: `INVALID_VALUE`, `PRECONDITION_FAILED`, `CONTRACT_BROKEN`, `UNKNOWN_INTERACTION` — never declared, never an error-type value                              |
-| **transport error (Stratum 3)**   | infrastructure failure (timeout, broker loss); invisible to the language, carried by runtime types                                                                                                                              |
-| **error type**                    | a typl `enum`/`struct`/`union` carrying the `error` modifier — failure vocabulary, ordinary data (typl §10.1)                                                                                                                   |
-| **result union / fallible query** | a two-arm union (success + error arm) / a query returning one — the family's `Result<T, E>`; bindings map the error arm to native transport error channels, exhaustively handled in every codegen target                        |
-| **`require` / `ensure`**          | pre-/postcondition contract clauses (expr core); violations are Stratum 2, and each assertion also runs as CI property test, online observer, and rmdl oracle check                                                             |
-| **stream**                        | the `<T>` container: an unbounded element sequence, valid only in interaction position; direction determined by position (parameter = consumer produces, return = provider produces)                                            |
-| **ordinal**                       | an interaction's implicit 1-based declaration-order identity within its interface; source of transport IDs (typl §7.4 model)                                                                                                    |
-| **`reserved`**                    | tombstone keeping a retired interaction's ordinal slot occupied so wire identities are never reused                                                                                                                             |
-| **append-only**                   | the evolution discipline implied by ordinals: new interactions at the end, deletions by tombstone, reorder = wire break                                                                                                         |
-| **interface**                     | the abstract contract _shape_ — a reusable, identity-less group of interactions; a contract type, realized by services (`interface : service :: type : instance`)                                                               |
-| **service**                       | a global, named, published declaration of an interface — the SSOT catalog entry, addressed `service.member`; posture-neutral (deploys static or discovered); what components provide                                            |
-| **service catalog**               | the flat global namespace of all `service` declarations — the system-wide SSOT of contracts                                                                                                                                     |
-| **posture**                       | how a service is realized on the wire — static (bus signals/events, Classic) or discovered (SOME/IP/DDS/uProtocol, Adaptive); chosen at deployment, not in the contract                                                         |
-| **binding**                       | generated per-transport code realising a contract: validation, caching, error mapping, (de)serialization                                                                                                                        |
-| **envelope**                      | runtime-supplied metadata on every interaction instance — timestamp + per-channel sequence number — never declared, never in payloads; powers timing evaluation, dedup, loss detection, E2E counters, and replay (§3.1)         |
-| **system time**                   | the platform's one synchronized time base (gPTP/PTP or shared realtime clock) — an assumed platform property; envelope timestamps live in it and are comparable system-wide (§3.1)                                              |
-| **epoch (platform)**              | 1970-01-01 00:00:00 TAI (the PTP epoch); platform time = `int64` microseconds since it — continuous, leap-second-free; civil datetime is presentation only                                                                      |
-| **init value**                    | the value a signal channel holds before the provider's first publication — the payload type's init (typl §5.8) or the signal's bare `= value` override (§4.4); no keyword — `init` is rmdl's alone                              |
-| **invalid state**                 | the propagated channel state entered when a received payload violates typl constraints — visible to all subscribers with last-good value retained; realised as SNA sentinels on CAN (§4.5)                                      |
-| **provenance (channel)**          | the subscriber-visible origin of a signal's current value: `init` / `live` / `invalid`                                                                                                                                          |
-| **broker**                        | the asynchronous message plane between components; ridl contracts cross it, rmdl models never do (the sync/async wall)                                                                                                          |
-| **IR**                            | the stable serialized intermediate representation — resolved names, types, timings, ordinals — consumed by every backend and tool                                                                                               |
-| **`ridl-diff`**                   | the IR-comparison tool classifying contract changes as breaking/compatible; plumbing-grade CI gate enforcing the evolution rules                                                                                                |
-| **profile (assurance)**           | an external plug-in validating `@labels` vocabulary and escalating optional rules (explicit timing, explicit bounds) to errors — distinct from _grammar_ profile                                                                |
-| **SSOT**                          | single source of truth — the design goal: one contract file from which bindings, docs, tests, and topologies derive                                                                                                             |
+| Term                                 | Definition                                                                                                                                                                                                                                                   |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **RIDL** (capitals)                  | the platform and family name; **ridl** (lowercase) is this language, the family's interaction layer and flagship member                                                                                                                                      |
+| **family**                           | the five languages — typl, ridl, uxdl, rmdl, rsdl — sharing one grammar, one toolchain, one IR                                                                                                                                                               |
+| **profile**                          | the restriction of the family grammar accepted by a file extension; `.ridl` accepts interactions + typl declarations; `.rxdl` is the total profile accepting every layer                                                                                     |
+| **core**                             | a reusable semantic unit beneath the surface languages: `ns` (namespacing), `typl-core` (types), `expr` (predicates), `time` (timing), `interact` (interaction primitives)                                                                                   |
+| **interaction**                      | a named, typed, directed exchange on a contract boundary; ridl defines five kinds                                                                                                                                                                            |
+| **signal**                           | pub/sub interaction carrying a continuous **state** value — latest sample matters, intermediate samples may be missed                                                                                                                                        |
+| **event**                            | pub/sub interaction carrying a discrete **occurrence** — every occurrence matters, queued not coalesced                                                                                                                                                      |
+| **command**                          | fire-and-forget RPC at the contract level — no functional reply; the runtime carries a delivery acknowledgment beneath it                                                                                                                                    |
+| **delivery acknowledgment (ack)**    | runtime-level confirmation that a command was received and accepted (validated, precondition passed) — or negatively acknowledged with a Stratum 2 category; enables retries and supervision, never visible in the contract                                  |
+| **query**                            | request/response RPC — reply mandatory; an inline `T \| E` return makes it fallible                                                                                                                                                                          |
+| **final**                            | a value provisioned externally (build/factory/FOTA), immutable for the software-instance lifetime, safe to cache                                                                                                                                             |
+| **provider**                         | the component that owns an interface: publishes its signals/events, executes its commands/queries                                                                                                                                                            |
+| **consumer**                         | any component bound to an interface it does not own: subscribes, calls                                                                                                                                                                                       |
+| **state vs occurrence**              | the load-bearing distinction behind signal/event: state exists while unchanged and may be cached; an occurrence happens once and is meaningful individually                                                                                                  |
+| **timing annotation**                | the `@` clause making publication timing part of the contract: `@Xms` strict periodic or `@[min..max]`                                                                                                                                                       |
+| **rate floor / staleness bound**     | the one generic meaning of `min` / `max` on any timing range (§9): minimum interval between publications / maximum age on envelope timestamps before the value or occurrence is stale                                                                        |
+| **debounce / refresh ceiling**       | the signal _derivation_ of rate floor / staleness bound (§9): coalesce updates faster than `min` / re-publish at least every `max` even unchanged                                                                                                            |
+| **throttle / TTL**                   | the event _derivation_ of rate floor / staleness bound (§9): the provider must not raise faster than `min` / an occurrence older than `max` is discarded                                                                                                     |
+| **default timing**                   | the compile-time-configurable range (`[100ms..1000ms]`, `ridl.toml [defaults].timing`) applied to untimed signals and events; always resolved to concrete bounds in the IR                                                                                   |
+| **freshness SLO**                    | the alertable staleness bound derived from a signal's timing — the contract's definition of "late"                                                                                                                                                           |
+| **last-value guarantee**             | §4.4: a signal channel is never empty — subscribing delivers a value immediately (init before first publication, latest published value after); the normative demand behind broker caches, MQTT retained, DDS `TRANSIENT_LOCAL`                              |
+| **late joiner**                      | a subscriber that binds after publication began; served by the last-value guarantee on signals, receives nothing retroactive on events                                                                                                                       |
+| **quarantine**                       | binding behaviour for an invalid _stream element_ (§12.4): withheld from application code, observability recorded. Signals do not quarantine — invalidity propagates as channel state (§4.5)                                                                 |
+| **functional error (Stratum 1)**     | a domain-level failure expressed as data — the error arm of a fallible query's return; the provider _answered_: no                                                                                                                                           |
+| **contract error (Stratum 2)**       | an implicit, standardized violation derived from the contract itself: `INVALID_VALUE`, `PRECONDITION_FAILED`, `CONTRACT_BROKEN`, `UNKNOWN_INTERACTION` — never declared, never an error-type value                                                           |
+| **transport error (Stratum 3)**      | **infrastructure failure — detected, undeclared** (general form §6.4): a timeout, broker loss or reset, observed by the runtime and carried by runtime types, with no vocabulary in the contract language                                                    |
+| **error type**                       | a typl `enum`/`struct`/`union` carrying the `error` modifier — failure vocabulary, ordinary data (typl §10.1)                                                                                                                                                |
+| **fallible query / inline `T \| E`** | a query whose return names a success type and one error type — the family's `Result<T, E>`, written at the signature (§10.1, general form §6.1); bindings map the error arm to native transport error channels, exhaustively handled in every codegen target |
+| **result union**                     | the two-arm named union (one success arm, one error arm) of typl §10.2 — legal data anywhere, but in query-return position it draws RIDL-308 steering to the inline spelling                                                                                 |
+| **`require` / `ensure`**             | pre-/postcondition contract clauses (expr core); violations are Stratum 2, and each assertion also runs as CI property test, online observer, and rmdl oracle check                                                                                          |
+| **stream**                           | the `<T>` container: an unbounded element sequence, valid only in interaction position; direction determined by position (parameter = consumer produces, return = provider produces)                                                                         |
+| **ordinal**                          | an interaction's implicit 1-based declaration-order identity within its interface; source of transport IDs (typl §7.4 model)                                                                                                                                 |
+| **`reserved`**                       | tombstone keeping a retired interaction's ordinal slot occupied so wire identities are never reused                                                                                                                                                          |
+| **append-only**                      | the evolution discipline implied by ordinals: new interactions at the end, deletions by tombstone, reorder = wire break                                                                                                                                      |
+| **interface**                        | the abstract contract _shape_ — a reusable, identity-less group of interactions; a contract type, realized by services (`interface : service :: type : instance`)                                                                                            |
+| **service**                          | a global, named, published declaration of an interface — the SSOT catalog entry, addressed `service.member`; posture-neutral (deploys static or discovered); what components provide                                                                         |
+| **service catalog**                  | the flat global namespace of all `service` declarations — the system-wide SSOT of contracts                                                                                                                                                                  |
+| **posture**                          | how a service is realized on the wire — static (bus signals/events, Classic) or discovered (SOME/IP/DDS/uProtocol, Adaptive); chosen at deployment, not in the contract                                                                                      |
+| **binding**                          | generated per-transport code realising a contract: validation, caching, error mapping, (de)serialization                                                                                                                                                     |
+| **envelope**                         | runtime-supplied metadata on every interaction instance — timestamp + per-channel sequence number — never declared, never in payloads; powers timing evaluation, dedup, loss detection, E2E counters, and replay (§3.1)                                      |
+| **system time**                      | the platform's one synchronized time base (gPTP/PTP or shared realtime clock) — an assumed platform property; envelope timestamps live in it and are comparable system-wide (§3.1)                                                                           |
+| **epoch (platform)**                 | 1970-01-01 00:00:00 TAI (the PTP epoch); platform time = `int64` microseconds since it — continuous, leap-second-free; civil datetime is presentation only                                                                                                   |
+| **init value**                       | the value a signal channel holds before the provider's first publication — the payload type's init (typl §5.8) or the signal's bare `= value` override (§4.4); no keyword — `init` is rmdl's alone                                                           |
+| **invalid state**                    | the propagated channel state entered when a received payload violates typl constraints — visible to all subscribers with last-good value retained; realised as SNA sentinels on CAN (§4.5)                                                                   |
+| **provenance (channel)**             | the subscriber-visible origin of a signal's current value: `init` / `live` / `invalid`                                                                                                                                                                       |
+| **broker**                           | the asynchronous message plane between components; ridl contracts cross it, rmdl models never do (the sync/async wall)                                                                                                                                       |
+| **IR**                               | the stable serialized intermediate representation — resolved names, types, timings, ordinals — consumed by every backend and tool                                                                                                                            |
+| **`ridl-diff`**                      | the IR-comparison tool classifying contract changes as breaking/compatible; plumbing-grade CI gate enforcing the evolution rules                                                                                                                             |
+| **profile (assurance)**              | an external plug-in validating `@labels` vocabulary and escalating optional rules (explicit timing, explicit bounds) to errors — distinct from _grammar_ profile                                                                                             |
+| **SSOT**                             | single source of truth — the design goal: one contract file from which bindings, docs, tests, and topologies derive                                                                                                                                          |
 
 ---
 

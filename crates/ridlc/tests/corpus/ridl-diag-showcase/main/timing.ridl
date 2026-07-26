@@ -15,7 +15,7 @@ interface Timing {
   /// Zero duration.
   signal zero : Speed @0ms
 
-  /// Equal bounds — the same thing as `@250ms`.
+  /// Equal bounds — a degenerate range, not a strict period (ridl §9.2).
   signal degenerate : Speed @[250ms..250ms]
 
   /// Strict periodic on an event: an isochronous rate is meaningless for

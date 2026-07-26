@@ -249,14 +249,6 @@ export function initFaultPage(): FaultPage {
   };
 }
 
-export type FaultPageResult =
-  | { kind: 'page'; value: FaultPage }
-  | { kind: 'err'; value: DiagError };
-
-export function initFaultPageResult(): FaultPageResult {
-  return { kind: 'page', value: initFaultPage() };
-}
-
 /**
  * A package-private payload type, so the interaction layer's legal
  * `internal`-over-`internal` case is exercised inside one package. The
@@ -431,12 +423,13 @@ export interface VehicleStatusConsumer {
    */
   streamFaults(filter: DiagFilter): AsyncIterable<FaultEvent>;
   /**
-   * Paged fault snapshot — fallible query via result union (§10.1)
+   * Paged fault snapshot — fallible query via inline `T | E` (§10.1)
    *
    * @ordinal 9
+   * @transportIdentity VehicleStatus#9:FaultPage|DiagError
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
-  getFaultPage(filter: DiagFilter): Promise<FaultPageResult>;
+  getFaultPage(filter: DiagFilter): Promise<Result<FaultPage, DiagError>>;
   /**
    * @ordinal 10
    */
@@ -511,12 +504,13 @@ export interface VehicleStatusProvider {
    */
   streamFaults(filter: DiagFilter): AsyncIterable<FaultEvent>;
   /**
-   * Paged fault snapshot — fallible query via result union (§10.1)
+   * Paged fault snapshot — fallible query via inline `T | E` (§10.1)
    *
    * @ordinal 9
+   * @transportIdentity VehicleStatus#9:FaultPage|DiagError
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
-  getFaultPage(filter: DiagFilter): Promise<FaultPageResult>;
+  getFaultPage(filter: DiagFilter): Promise<Result<FaultPage, DiagError>>;
 }
 
 /**

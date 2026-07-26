@@ -9,12 +9,6 @@ warning[TYPL-007]: unused import `MAX_SPEED`
 9 │ import veh.common.MAX_SPEED
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-warning[RIDL-308]: query returns the named result union `FaultPageResult` — in return position the inline spelling is canonical: write `FaultPage | DiagError` (general form §6.1)
-   ┌─ tests/corpus/veh-cluster/cluster/appendix-a.ridl:83:43
-   │
-83 │   query getFaultPage(filter: DiagFilter): FaultPageResult
-   │                                           ^^^^^^^^^^^^^^^
-
 warning[RIDL-100]: event without a timing annotation — the default [200000us..2000000us] is applied
    ┌─ tests/corpus/veh-cluster/cluster/services.ridl:83:9
    │

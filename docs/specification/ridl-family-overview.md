@@ -66,9 +66,10 @@ Each doctrine is normative **where cited**; this list is the index.
    floats as scaled integers on CAN. An explicit width **floor** (a `wire`
    clause) is deferred; the `ridl-diff` gate guards width flips meanwhile. _typl
    §4–§5, §17.11_
-6. **Errors are data** — `error` types + result unions; no `throws`, no
+6. **Errors are data** — `error` types + inline `T | E` returns; no `throws`, no
    exceptions anywhere; three strata: declared functional / derived contract /
-   invisible transport. _typl §10, ridl §10_
+   transport ("infrastructure failure — detected, undeclared"). _typl §10, ridl
+   §10_
 7. **The channel is never empty** — init values (declared or derived) seed every
    signal channel and every model memory; invalidity propagates as state, never
    silent quarantine. _typl §5.8, ridl §4.4–4.5, rmdl §5.3_
@@ -190,7 +191,73 @@ By home; see each reference for full statements.
   and plugin protocol) · UCUM→AUTOSAR unit mapping table · bridge authentication
   (concept note)
 
-## 7. What "Consolidated" Means Here
+## 7. Shared Diagnostic Namespaces — `FORM-` and `MANI-`
+
+Diagnostic codes are namespaced and grouped by hundreds, never renumbered and
+never reused (typl §16). **One namespace per profile**, tabulated in that
+profile's own reference: `TYPL-` (typl §16), `RIDL-` (ridl §16), `UXDL-` (uxdl
+§15), `RMDL-` (rmdl §11), `RSDL-` (rsdl §12). Of those five, `TYPL-` and `RIDL-`
+are implemented in the shipped toolchain; the other three are specified ahead of
+their layers.
+
+The two namespaces below belong to no profile. `FORM-` is the **shared family
+grammar** — surface syntax, plus the attribute-block rules of general form §4.3
+— and `MANI-` is the **manifest and distribution layer** (ADR-0002). Both are
+tabulated once here and cited from each reference rather than restated: a
+per-language copy would be five copies of one list, drifting apart as codes are
+added.
+
+`crates/ridl-core/src/diag.rs` is the single source of truth these two tables
+mirror; `FORM_CATALOG` and `MANI_CATALOG` there carry the same codes and
+severities.
+
+### 7.1 Surface grammar (`FORM-`)
+
+Lexical errors are `0xx`, parse errors `1xx`, and the attribute-block rules
+`106`–`108`. Every code is an error.
+
+| Code     | Rule                                                                                                                           | Severity |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------ | -------- |
+| FORM-001 | invalid character                                                                                                              | error    |
+| FORM-002 | unterminated string literal                                                                                                    | error    |
+| FORM-003 | unterminated regex literal                                                                                                     | error    |
+| FORM-004 | unterminated block comment                                                                                                     | error    |
+| FORM-005 | leading zeros in an integer literal                                                                                            | error    |
+| FORM-101 | expected a specific token                                                                                                      | error    |
+| FORM-102 | unexpected token — also the code for a literal the reference grammar does not admit, such as a fractional duration (ridl §2.1) | error    |
+| FORM-103 | unclosed delimiter                                                                                                             | error    |
+| FORM-104 | missing `package` declaration                                                                                                  | error    |
+| FORM-105 | reserved word used as an identifier                                                                                            | error    |
+| FORM-106 | unknown attribute key — not a key the general form §4.3 table defines                                                          | error    |
+| FORM-107 | attribute key not allowed on this declaration kind (general form §4.3)                                                         | error    |
+| FORM-108 | duplicate attribute key in one `[ ]` block (general form §4.3)                                                                 | error    |
+
+### 7.2 Manifest and distribution (`MANI-`)
+
+The manifest codes are `0xx`; the distribution codes — lockfile, cache, fetch —
+are `1xx`.
+
+| Code     | Rule                                                        | Severity |
+| -------- | ----------------------------------------------------------- | -------- |
+| MANI-001 | invalid manifest TOML                                       | error    |
+| MANI-002 | manifest declares both `[package]` and `[workspace]`        | error    |
+| MANI-003 | manifest declares neither `[package]` nor `[workspace]`     | error    |
+| MANI-004 | nested workspace — a member manifest declares `[workspace]` | error    |
+| MANI-005 | unknown manifest key                                        | warning  |
+| MANI-006 | invalid package name — not lowercase dot-separated segments | error    |
+| MANI-007 | invalid import URL                                          | error    |
+| MANI-008 | workspace member directory is missing or has no `ridl.toml` | error    |
+| MANI-009 | invalid `[defaults].timing` value (ridl §9.1)               | error    |
+| MANI-101 | remote import fetch failed                                  | error    |
+| MANI-102 | fetched content hash does not match the lockfile            | error    |
+| MANI-103 | `--frozen`: no lockfile entry for a remote import           | error    |
+| MANI-104 | `--frozen`: a lockfile-pinned import is not cached          | error    |
+
+MANI-009 is the one manifest code the manifest layer does not raise: `ridl-core`
+cannot depend on `ridl-sem`, so the manifest parser stores `[defaults].timing`
+as an unparsed string and the checker validates it.
+
+## 8. What "Consolidated" Means Here
 
 The references stay separate **by design** — five audiences, five learnable
 wholes, independent versioning, citable sections (the family's own §4 rationale;
@@ -202,5 +269,5 @@ authoring structure.
 
 ---
 
-_Maintained alongside the references; update §2, §5, §6 whenever a reference
+_Maintained alongside the references; update §2, §5, §6, §7 whenever a reference
 changes._

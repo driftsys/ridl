@@ -1309,35 +1309,6 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
-      "name": "FaultPageResult",
-      "visibility": 1,
-      "is_error": false,
-      "doc": "",
-      "labels": [],
-      "deprecated": null,
-      "ordinal": 0,
-      "kind": {
-        "UnionDef": {
-          "arms": [
-            {
-              "name": "page",
-              "ordinal": 1,
-              "type_ref": "FaultPage",
-              "doc": ""
-            },
-            {
-              "name": "err",
-              "ordinal": 2,
-              "type_ref": "DiagError",
-              "doc": ""
-            }
-          ],
-          "is_result": true,
-          "reserved": []
-        }
-      }
-    },
-    {
       "name": "RawTickCount",
       "visibility": 2,
       "is_error": false,
@@ -1870,7 +1841,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "name": "getFaultPage",
           "visibility": 0,
           "is_error": false,
-          "doc": "Paged fault snapshot — fallible query via result union (§10.1)",
+          "doc": "Paged fault snapshot — fallible query via inline `T | E` (§10.1)",
           "labels": [],
           "deprecated": null,
           "ordinal": 9,
@@ -1889,11 +1860,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               ],
               "return_type": {
                 "kind": {
-                  "Value": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "FaultPageResult"
-                    }
+                  "Fallible": {
+                    "ok": "FaultPage",
+                    "err": "DiagError"
                   }
                 }
               },
