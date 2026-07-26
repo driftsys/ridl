@@ -845,17 +845,26 @@ pub mod ridl {
 /// `veh-cluster` is the entry that exercises the whole interaction surface,
 /// including the consumer and provider faces of a service's inline shape, the
 /// synthesized tuple-return struct, and the `#[deprecated]` attribute.
+///
+/// It also carries a **tuple under an `internal` declaration**, in both layers
+/// (`internal-shape.ridl`). That is the shape issue #167 was about, and the two
+/// markers for it below are what keep this proof from going quiet on it again:
+/// the entry deliberately held no such tuple while the defect was open, so the
+/// `-D private-interfaces` deny in [`rustc_accepts`] had nothing to bite on.
 #[test]
 fn veh_cluster_generated_rust_compiles_with_rustc() {
     let source = composed_source(Path::new("tests/corpus/veh-cluster"));
     // Anti-vacuity: rustc accepts an empty crate, so the proof is only worth
     // something if the interaction layer is actually in the source it sees —
-    // both faces of a named interface and both faces of an inline shape.
+    // both faces of a named interface, both faces of an inline shape, and the
+    // package-private struct each layer's `internal` tuple induces.
     for marker in [
         "pub trait VehicleStatusConsumer",
         "pub trait VehicleStatusProvider",
         "pub trait ServiceVehHvacCabinConsumer",
         "pub trait ServiceVehHvacCabinProvider",
+        "pub(crate) struct WheelDiagnosticsReadSpanResult",
+        "pub(crate) struct RawWheelSpanSpan",
     ] {
         assert!(
             source.contains(marker),
@@ -1131,13 +1140,19 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "control: an `internal` typl declaration must stay unexported in TypeScript",
     );
 
-    // Rust. `WheelDiagnostics` is declared `internal`, so all four of the names
-    // it generates are `pub(crate)`.
+    // Rust. `WheelDiagnostics` is declared `internal`, so all **five** of the
+    // names it generates are `pub(crate)` — the two faces, the two metadata
+    // constants, and the struct its tuple return induces (issue #167). The
+    // typl-layer tuple beside it (`RawWheelSpan.span`) is in the same list: a
+    // tuple has no visibility of its own, so it takes the one of the
+    // declaration that induced it, whichever layer that declaration is in.
     for item in [
         "pub(crate) trait WheelDiagnosticsConsumer",
         "pub(crate) trait WheelDiagnosticsProvider",
         "pub(crate) const WHEEL_DIAGNOSTICS_TIMING",
         "pub(crate) const WHEEL_DIAGNOSTICS_CONTRACTS",
+        "pub(crate) struct WheelDiagnosticsReadSpanResult",
+        "pub(crate) struct RawWheelSpanSpan",
     ] {
         assert!(
             compiled.rust.contains(item),
@@ -1152,11 +1167,27 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
         "pub trait WheelDiagnosticsProvider",
         "pub const WHEEL_DIAGNOSTICS_TIMING",
         "pub const WHEEL_DIAGNOSTICS_CONTRACTS",
+        "pub struct WheelDiagnosticsReadSpanResult",
+        "pub struct RawWheelSpanSpan",
     ] {
         assert!(
             !compiled.rust.contains(leaked),
             "an `internal` interface must not generate `{leaked}` — that is the \
              pre-#160 defect this entry was added to catch",
+        );
+    }
+    // The regression direction for the induced struct: a PUBLIC declaration's
+    // tuple still generates a `pub` struct. `veh.hvac.cabin` is a public
+    // service whose inline shape returns a tuple, and `SensorBounds.range` is a
+    // public typl struct's tuple field — one per layer, matching the two
+    // package-private ones above.
+    for item in [
+        "pub struct ServiceVehHvacCabinGetBoundsResult",
+        "pub struct SensorBoundsRange",
+    ] {
+        assert!(
+            compiled.rust.contains(item),
+            "a public declaration's tuple must still generate `{item}`",
         );
     }
 

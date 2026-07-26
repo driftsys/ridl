@@ -1344,6 +1344,65 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       }
     },
     {
+      "name": "RawWheelSpan",
+      "visibility": 2,
+      "is_error": false,
+      "doc": "The window of raw tick counts a wheel diagnostic covers.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "StructDef": {
+          "members": [
+            {
+              "member": {
+                "Field": {
+                  "name": "span",
+                  "ordinal": 1,
+                  "type": {
+                    "optional": false,
+                    "kind": {
+                      "Tuple": {
+                        "fields": [
+                          {
+                            "name": "first",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "RawTickCount"
+                              }
+                            }
+                          },
+                          {
+                            "name": "latest",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "RawTickCount"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "declared_init": null,
+                  "init": {
+                    "derivable": true,
+                    "value": null
+                  },
+                  "doc": "",
+                  "labels": [],
+                  "deprecated": null
+                }
+              }
+            }
+          ],
+          "fixed_layout": true
+        }
+      }
+    },
+    {
       "name": "FanLevel",
       "visibility": 1,
       "is_error": false,
@@ -2133,6 +2192,52 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               ],
+              "contracts": []
+            }
+          }
+        },
+        {
+          "name": "readSpan",
+          "visibility": 0,
+          "is_error": false,
+          "doc": "",
+          "labels": [],
+          "deprecated": null,
+          "ordinal": 5,
+          "kind": {
+            "QueryDef": {
+              "params": [],
+              "return_type": {
+                "kind": {
+                  "Value": {
+                    "optional": false,
+                    "kind": {
+                      "Tuple": {
+                        "fields": [
+                          {
+                            "name": "min",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "RawTickCount"
+                              }
+                            }
+                          },
+                          {
+                            "name": "max",
+                            "type": {
+                              "optional": false,
+                              "kind": {
+                                "Named": "RawTickCount"
+                              }
+                            }
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
               "contracts": []
             }
           }

@@ -423,6 +423,215 @@ fn tuple_field_generates_named_struct() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
+/// A struct field whose type is `kind`, at `ordinal`.
+fn shaped_field(name: &str, ordinal: u32, kind: v2::field_type::Kind) -> v2::Field {
+    v2::Field {
+        ordinal,
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(kind),
+        }),
+        ..named_field(name, ordinal, "", false, init_value(true, None))
+    }
+}
+
+/// A tuple type whose fields are the given `(name, type_ref)` pairs.
+fn tuple_of(fields: &[(&str, &str)]) -> v2::field_type::Kind {
+    v2::field_type::Kind::Tuple(v2::TupleType {
+        fields: fields
+            .iter()
+            .map(|(name, type_ref)| tuple_field(name, type_ref))
+            .collect(),
+    })
+}
+
+/// A tuple under an `internal` declaration generates a **`pub(crate)`** struct,
+/// in every typl position that can reach one, and the struct compiles under
+/// `-D private-interfaces` (issue #167).
+///
+/// A tuple is anonymous in source, so the struct it generates has no visibility
+/// of its own to declare; before this fix it was fixed at `pub`, which put a
+/// `pub(crate)` payload type into a `pub` struct's field. `ridlc check` accepts
+/// that source — an `internal` declaration may name `internal` declarations
+/// freely (typl §3.3) — so the generated module was the only thing wrong with
+/// it, and only rustc could say so.
+///
+/// **All five typl positions are exercised, not one.** Issue #161 was reported
+/// as two positions and turned out to be twenty; a fix verified on the direct
+/// field alone would leave the array element, the optional, the map value and
+/// the nested tuple emitting `pub`, and every one of them reaches
+/// `field_type_tokens` by its own branch. The nested tuple is the one that
+/// cannot be found during the declaration walk at all: it is discovered only
+/// while emitting the outer tuple's fields, from the flat worklist, which is
+/// exactly where the inducing declaration is out of reach.
+///
+/// The `rustc` run is the proof rather than the string assertions: a snapshot
+/// records what was emitted, not that it is valid Rust, and this defect
+/// produced output that a plain `rustc` invocation accepts with a warning.
+#[test]
+fn a_tuple_under_an_internal_declaration_is_package_private() {
+    let hidden = v2::Decl {
+        visibility: v2::Visibility::Internal as i32,
+        ..public_decl(
+            "Hidden",
+            primitive_type(
+                v2::PrimitiveType::Integer,
+                init_value(true, Some("0")),
+                Some(v2::type_def::Width::IntWidth(v2::IntWidth::U16 as i32)),
+            ),
+        )
+    };
+    let holder = v2::StructDef {
+        members: vec![
+            // 1. a direct tuple field
+            field_member(shaped_field("direct", 1, tuple_of(&[("a", "Hidden")]))),
+            // 2. a tuple as an array element
+            field_member(shaped_field(
+                "arr",
+                2,
+                v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(tuple_of(&[("b", "Hidden")])),
+                    })),
+                    min: 3,
+                    max: 3,
+                })),
+            )),
+            // 3. an optional tuple field
+            field_member(v2::Field {
+                r#type: Some(v2::FieldType {
+                    optional: true,
+                    kind: Some(tuple_of(&[("c", "Hidden")])),
+                }),
+                ..shaped_field("opt", 3, tuple_of(&[("c", "Hidden")]))
+            }),
+            // 4. a tuple as a map value
+            field_member(shaped_field(
+                "mp",
+                4,
+                v2::field_type::Kind::Map(Box::new(v2::MapType {
+                    key: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::String as i32,
+                        )),
+                    })),
+                    value: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(tuple_of(&[("d", "Hidden")])),
+                    })),
+                    min: 0,
+                    max: 4,
+                })),
+            )),
+            // 5. a tuple nested inside a tuple — reached only by draining the
+            //    worklist, after the declaration walk has finished.
+            field_member(shaped_field(
+                "nested",
+                5,
+                v2::field_type::Kind::Tuple(v2::TupleType {
+                    fields: vec![v2::TupleField {
+                        name: "e".to_string(),
+                        r#type: Some(v2::FieldType {
+                            optional: false,
+                            kind: Some(tuple_of(&[("f", "Hidden")])),
+                        }),
+                    }],
+                }),
+            )),
+        ],
+        fixed_layout: false,
+    };
+    // The regression direction, in the same module: a public struct's tuple
+    // stays `pub`. Its payload is the public `Counter`, because a public
+    // declaration naming an `internal` one is TYPL-005 and never reaches a
+    // backend.
+    let shown = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "direct",
+            1,
+            tuple_of(&[("g", "Counter")]),
+        ))],
+        fixed_layout: false,
+    };
+
+    let rust_source = rust_for(vec![
+        counter_decl(),
+        hidden,
+        v2::Decl {
+            visibility: v2::Visibility::Internal as i32,
+            ..public_decl("Holder", v2::decl::Kind::StructDef(holder))
+        },
+        public_decl("Shown", v2::decl::Kind::StructDef(shown)),
+    ]);
+
+    for item in [
+        "pub(crate) struct HolderDirect",
+        "pub(crate) struct HolderArrElement",
+        "pub(crate) struct HolderOpt",
+        "pub(crate) struct HolderMpValue",
+        "pub(crate) struct HolderNested",
+        "pub(crate) struct HolderNestedE",
+    ] {
+        assert!(
+            rust_source.contains(item),
+            "a tuple under an `internal` declaration must emit `{item}`, got:\n{rust_source}"
+        );
+    }
+    // `pub(crate) struct X` does not contain `pub struct X`, so these are
+    // genuine negatives rather than restatements of the loop above.
+    for leaked in [
+        "pub struct HolderDirect",
+        "pub struct HolderArrElement",
+        "pub struct HolderOpt",
+        "pub struct HolderMpValue",
+        "pub struct HolderNested",
+        "pub struct HolderNestedE",
+    ] {
+        assert!(
+            !rust_source.contains(leaked),
+            "a tuple under an `internal` declaration must not emit `{leaked}`, \
+             got:\n{rust_source}"
+        );
+    }
+    assert!(
+        rust_source.contains("pub struct ShownDirect"),
+        "a public declaration's tuple must still be `pub`, got:\n{rust_source}"
+    );
+
+    // The proof. `private-interfaces` and `private-bounds` are denied by name
+    // rather than with a blanket `-D warnings`, matching `rustc_accepts` in
+    // `crates/ridlc/tests/corpus.rs`: the generated code carries by-design
+    // naming and dead-code lints that say nothing about visibility.
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("internal_tuple.rs");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+            "-D",
+            "private-interfaces",
+            "-D",
+            "private-bounds",
+        ])
+        .arg("-o")
+        .arg(dir.path().join("internal_tuple.rmeta"))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "a tuple under an `internal` declaration must compile under \
+         `-D private-interfaces`, source:\n{rust_source}"
+    );
+}
+
 fn array_field(name: &str, element: &str, min: u64, max: u64) -> v2::Field {
     v2::Field {
         r#type: Some(v2::FieldType {
@@ -3231,8 +3440,12 @@ fn visibility_package() -> v2::Package {
             ],
         )
     };
-    // A signal and a contract-bearing query, so both metadata constants of the
-    // interface built from them are non-empty.
+    // A signal, a contract-bearing query, and a tuple-returning query, so both
+    // metadata constants of the interface built from them are non-empty AND the
+    // shape induces a tuple struct of its own. The tuple return is what makes
+    // the public direction of issue #167 observable: without it, `Shown` and
+    // the inline shape generate no induced struct at all and an emitter that
+    // made every one of them `pub(crate)` would go unnoticed.
     let pair = |owner: &str, ensure_id: &str| {
         vec![
             interaction(
@@ -3263,6 +3476,26 @@ fn visibility_package() -> v2::Package {
                         true,
                         ensure_id,
                     )],
+                }),
+            ),
+            interaction(
+                "getBounds",
+                3,
+                "",
+                v2::decl::Kind::QueryDef(v2::QueryDef {
+                    params: Vec::new(),
+                    return_type: Some(v2::ReturnType {
+                        kind: Some(v2::return_type::Kind::Value(v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                                fields: vec![
+                                    tuple_field("min", "Counter"),
+                                    tuple_field("max", "Counter"),
+                                ],
+                            })),
+                        })),
+                    }),
+                    contracts: Vec::new(),
                 }),
             ),
         ]
@@ -3336,11 +3569,17 @@ fn an_internal_services_inline_shape_is_package_private() {
 
     let Generated { rust_source, .. } = generate(&package).expect("the package generates");
 
+    // The struct the inline shape's tuple return induces is in this list on
+    // purpose: it is the one name whose visibility can only be derived from the
+    // owning `Service`, since a tuple carries no visibility field of its own AND
+    // the shape's is UNSPECIFIED. It is where `InterfaceShape::visibility()` and
+    // the field it replaced disagree twice over.
     for item in [
         "pub(crate) trait ServiceVehClusterDiagConsumer",
         "pub(crate) trait ServiceVehClusterDiagProvider",
         "pub(crate) const SERVICE_VEH_CLUSTER_DIAG_TIMING",
         "pub(crate) const SERVICE_VEH_CLUSTER_DIAG_CONTRACTS",
+        "pub(crate) struct ServiceVehClusterDiagGetBoundsResult",
     ] {
         assert!(
             rust_source.contains(item),
@@ -3354,6 +3593,7 @@ fn an_internal_services_inline_shape_is_package_private() {
         "pub trait ServiceVehClusterDiagProvider",
         "pub const SERVICE_VEH_CLUSTER_DIAG_TIMING",
         "pub const SERVICE_VEH_CLUSTER_DIAG_CONTRACTS",
+        "pub struct ServiceVehClusterDiagGetBoundsResult",
     ] {
         assert!(
             !rust_source.contains(leaked),
@@ -3371,11 +3611,13 @@ fn an_internal_services_inline_shape_is_package_private() {
     }
 }
 
-/// Every name an `internal interface` generates is `pub(crate)`; every name a
-/// public interface generates stays `pub`; every name an **inline service
-/// shape** generates stays `pub`; and the package-level names — the
-/// interaction vocabulary, the service table, and the tuple struct an
-/// interaction position induces — stay `pub` regardless.
+/// Every name an `internal interface` generates is `pub(crate)` — **five**
+/// names, not four: the two faces, the two metadata constants, and the struct
+/// a query's tuple return induces (issue #167). Every name a public interface
+/// generates stays `pub`; every name an **inline service shape** generates
+/// stays `pub`; and the genuinely package-level names — the interaction
+/// vocabulary and the service table — stay `pub` regardless, because they are
+/// emitted once per module and belong to no single declaration.
 ///
 /// The three shapes sit in one package on purpose: `internal` is a property of
 /// the declaration, so a module holding all three must generate all three
@@ -3385,12 +3627,16 @@ fn internal_interface_generates_package_private_items() {
     let Generated { rust_source, .. } =
         generate(&visibility_package()).expect("the package generates");
 
-    // The four names `Hidden` generates, all package-private.
+    // The five names `Hidden` generates, all package-private. The tuple struct
+    // is the fifth: `getBounds` returns `(min : Counter, max : Counter)`, and
+    // the struct that return induces belongs to the same `internal`
+    // declaration as the four names above it.
     for item in [
         "pub(crate) trait HiddenConsumer",
         "pub(crate) trait HiddenProvider",
         "pub(crate) const HIDDEN_TIMING",
         "pub(crate) const HIDDEN_CONTRACTS",
+        "pub(crate) struct HiddenGetBoundsResult",
     ] {
         assert!(
             rust_source.contains(item),
@@ -3404,6 +3650,7 @@ fn internal_interface_generates_package_private_items() {
         "pub trait HiddenProvider",
         "pub const HIDDEN_TIMING",
         "pub const HIDDEN_CONTRACTS",
+        "pub struct HiddenGetBoundsResult",
     ] {
         assert!(
             !rust_source.contains(leaked),
@@ -3436,6 +3683,7 @@ fn internal_interface_generates_package_private_items() {
         "pub trait ServiceVehClusterDiagProvider",
         "pub const SERVICE_VEH_CLUSTER_DIAG_TIMING",
         "pub const SERVICE_VEH_CLUSTER_DIAG_CONTRACTS",
+        "pub struct ServiceVehClusterDiagGetBoundsResult",
     ] {
         assert!(
             rust_source.contains(item),
@@ -3443,24 +3691,35 @@ fn internal_interface_generates_package_private_items() {
         );
     }
 
-    // The names that are deliberately NOT affected. The vocabulary is emitted
-    // once per module and is shared by every interface in it; the service
-    // table is the package's published deployment surface, and a service takes
-    // no `internal` modifier (ridl §14.5); the tuple struct follows the typl
-    // rule for a tuple under an `internal` declaration.
+    // The names that are deliberately NOT affected, and the reason is the same
+    // for all of them: they belong to no single declaration. The vocabulary is
+    // emitted once per module and is shared by every interface in it; the
+    // service table is the package's published deployment surface, and a
+    // service takes no `internal` modifier (ridl §14.5). A tuple struct is not
+    // in this list — it is named after, and induced by, exactly one
+    // declaration, which is what issue #167 turned on.
     for item in [
         "pub enum Provenance",
         "pub trait SignalHandle<T>",
         "pub struct TimingConst",
         "pub struct ContractStub",
         "pub const SERVICES",
-        "pub struct HiddenGetBoundsResult",
     ] {
         assert!(
             rust_source.contains(item),
             "`{item}` is package-level and stays public, got:\n{rust_source}"
         );
     }
+
+    // The regression direction for the tuple struct itself: the same shape
+    // under the PUBLIC interface still generates a `pub` struct. Without this,
+    // an emitter that made every induced struct `pub(crate)` would pass the
+    // assertions above.
+    assert!(
+        rust_source.contains("pub struct ShownGetBoundsResult"),
+        "a public interface's tuple return must still induce a `pub` struct, \
+         got:\n{rust_source}"
+    );
 
     insta::assert_snapshot!(rust_source);
 }
@@ -3472,12 +3731,13 @@ fn internal_interface_generates_package_private_items() {
 /// A snapshot alone cannot show this — it records the spelling, not what the
 /// spelling means to rustc. So the module is compiled as a real library crate
 /// and dependent crates are compiled against it, one per generated name:
-/// **all four** of `Hidden` must fail with E0603 (`private`), and all four of
-/// `Shown` plus all four of the inline shape must build. Every name is probed
+/// **all five** of `Hidden` must fail with E0603 (`private`), and all five of
+/// `Shown` plus all five of the inline shape must build. Every name is probed
 /// rather than a representative one, because a partial fix leaves exactly the
-/// unprobed name public. Both directions are asserted, because a test that
-/// only checked the failures would also pass if the whole module failed to
-/// build.
+/// unprobed name public — which is what issue #167 was: four of the five names
+/// were probed here and the fifth, the struct a tuple return induces, was not.
+/// Both directions are asserted, because a test that only checked the failures
+/// would also pass if the whole module failed to build.
 #[test]
 fn internal_interface_items_are_unreachable_from_another_crate() {
     let Generated { rust_source, .. } =
@@ -3532,11 +3792,12 @@ fn internal_interface_items_are_unreachable_from_another_crate() {
         )
     };
 
-    // A trait is named in a bound and a const in an expression, so each name
-    // is used the only way its namespace admits.
+    // A trait is named in a bound, a const in an expression, and a struct in a
+    // parameter type, so each name is used the only way its namespace admits.
     let names_trait = |item: &str| format!("pub fn probe<T: veh_cluster::{item}>(_: T) {{}}\n");
     let names_const =
         |item: &str| format!("pub fn probe() -> usize {{ veh_cluster::{item}.len() }}\n");
+    let names_type = |item: &str| format!("pub fn probe(_: veh_cluster::{item}) {{}}\n");
 
     // Reachable: the public interface, and the inline service shape — whose
     // `Interface.visibility` is UNSPECIFIED, the value the checker actually
@@ -3582,6 +3843,16 @@ fn internal_interface_items_are_unreachable_from_another_crate() {
             "an inline service shape's contract const",
             names_const("SERVICE_VEH_CLUSTER_DIAG_CONTRACTS"),
         ),
+        (
+            "reaches_shown_tuple",
+            "a public interface's induced tuple struct",
+            names_type("ShownGetBoundsResult"),
+        ),
+        (
+            "reaches_inline_tuple",
+            "an inline service shape's induced tuple struct",
+            names_type("ServiceVehClusterDiagGetBoundsResult"),
+        ),
     ] {
         let (ok, err) = probe(probe_name, &source);
         assert!(
@@ -3590,7 +3861,7 @@ fn internal_interface_items_are_unreachable_from_another_crate() {
         );
     }
 
-    // Unreachable: every one of the four names the internal interface
+    // Unreachable: every one of the five names the internal interface
     // generates, each refused specifically as a privacy error rather than as
     // any error at all.
     for (probe_name, what, source) in [
@@ -3609,6 +3880,11 @@ fn internal_interface_items_are_unreachable_from_another_crate() {
             "hides_contracts",
             "contract const",
             names_const("HIDDEN_CONTRACTS"),
+        ),
+        (
+            "hides_tuple",
+            "induced tuple struct",
+            names_type("HiddenGetBoundsResult"),
         ),
     ] {
         let (ok, err) = probe(probe_name, &source);

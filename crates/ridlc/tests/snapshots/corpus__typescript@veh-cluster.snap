@@ -264,6 +264,19 @@ function initRawTickCount(): RawTickCount {
 }
 
 /**
+ * The window of raw tick counts a wheel diagnostic covers.
+ */
+interface RawWheelSpan {
+  span: { first: RawTickCount; latest: RawTickCount };
+}
+
+function initRawWheelSpan(): RawWheelSpan {
+  return {
+    span: { first: initRawTickCount(), latest: initRawTickCount() },
+  };
+}
+
+/**
  * @range [0..7]
  */
 export type FanLevel = number & { readonly __ridl: 'veh.cluster.FanLevel' };
@@ -661,6 +674,11 @@ interface WheelDiagnosticsConsumer {
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   resetTicks(seed: RawTickCount): Promise<void>;
+  /**
+   * @ordinal 5
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readSpan(): Promise<{ min: RawTickCount; max: RawTickCount }>;
 }
 
 /**
@@ -699,6 +717,11 @@ interface WheelDiagnosticsProvider {
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
   resetTicks(seed: RawTickCount): Promise<void>;
+  /**
+   * @ordinal 5
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  readSpan(): Promise<{ min: RawTickCount; max: RawTickCount }>;
 }
 
 /**

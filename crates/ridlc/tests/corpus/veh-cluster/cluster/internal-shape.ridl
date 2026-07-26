@@ -12,6 +12,15 @@
 // checker leaves it alone and the generated Rust is `pub(crate)` on both sides,
 // so `veh_cluster_generated_rust_compiles_with_rustc` — which denies
 // `private_interfaces` — is the proof rather than a snapshot comparison.
+//
+// A **tuple** under an `internal` declaration is here for the same reason
+// (issue #167). Until that fix the file deliberately held none: a tuple
+// generates a named struct of its own, that struct was emitted `pub` whatever
+// induced it, and the compile proof would have failed on a program the checker
+// correctly accepts. So "an `internal` interface over an `internal` payload
+// compiles" was proven for the tuple-free subset only, while
+// `internal_interface_may_name_internal_types_in_every_position` in `ridl-sem`
+// asserted the tuple position legal. Both halves now say the same thing.
 
 package veh.cluster
 
@@ -20,6 +29,15 @@ package veh.cluster
 /// cross-package counterpart is impossible by construction: a foreign
 /// `internal` name never resolves (typl §3.3).
 internal type RawTickCount : integer [0..65535]
+
+// A package-private struct holding a tuple, so the **typl** half of issue #167
+// is in the corpus too: the struct `span` induces is named after `RawWheelSpan`
+// and belongs to it, so it is package-private with it.
+
+/// The window of raw tick counts a wheel diagnostic covers.
+internal struct RawWheelSpan {
+  span : (first : RawTickCount, latest : RawTickCount)
+}
 
 /// A package-private contract shape: realized inside this package, never part
 /// of the cross-package surface.
@@ -31,6 +49,10 @@ internal interface WheelDiagnostics {
   // own exposure position: it is one of the positions rustc reported when a
   // public interface carried an `internal` payload.
   command resetTicks(seed: RawTickCount)
+  // The tuple return — the interaction-layer half of issue #167. A query's
+  // return is the only interaction position a tuple can reach: a payload, a
+  // parameter and a `final` are narrowed to a named type (FORM-102).
+  query readSpan(): (min : RawTickCount, max : RawTickCount)
 }
 
 /// A public shape beside it, so the generated output shows the two side by
