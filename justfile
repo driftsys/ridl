@@ -228,6 +228,14 @@ book-check:
 # five steps in that workflow already use the `name:` + `run:` form, so
 # requiring gate steps to stay unnamed would have been a rule nothing announced,
 # enforced by a check whose remedy degrades the Actions UI.
+#
+# What does make it go red while CI genuinely runs the member: a block scalar
+# (`run: |`), a folded scalar (`run: >-`), a quoted `"just check"`, `just
+# $RECIPE` with the name in `env:`, a trailing argument (`just check --quiet`),
+# and a backslash continuation. All seven fail closed, so none can hide a
+# divergence — but five install steps in that workflow already use `run: |`, so
+# wrapping a gate step is a plausible edit, and the message will name the member
+# rather than the form that defeated the pattern.
 gate-parity:
     #!/usr/bin/env bash
     set -euo pipefail

@@ -168,13 +168,20 @@ prediction.
    form is unreliable. With CI invoking `just check`, the flags have no place
    left to live.
 
-10. **A tool the gate shells out to is guarded, and a missing tool fails the
-    gate — it never skips a member.** `book-check` checks for `mdbook`,
-    `toolchain-check` checks for `rustc`, and `wasm-check` already checked for
-    `rustup` (PR #184). Each exits 1 with a message naming the tool and the
-    command that installs it, rather than the bare exit 127 a missing binary
-    produces. A gate that quietly weakens itself when a tool is absent is the
-    defect this ADR is about, so no guard downgrades to a warning or a skip.
+10. **The three tools this ADR puts on the default path are guarded, and a
+    missing one fails the gate — it never skips a member.** `book-check` checks
+    for `mdbook`, `toolchain-check` checks for `rustc`, and `wasm-check` already
+    checked for `rustup` (PR #184). Each exits 1 with a message naming the tool
+    and the command that installs it, rather than the bare exit 127 a missing
+    binary produces. This is a property of those three recipes and not of the
+    gate as a whole: `check` shells out to `prim` and to `markdownlint`
+    unguarded — with `prim` off `PATH` it exits 127 on
+    `bash: prim: command not found`, the exact failure the guards replace — and
+    `lint-commits` shells out to `git std` the same way, through the invocation
+    it inherits from `verify`. Both predate this ADR and are left as they are;
+    what is decided here is that a recipe this ADR adds does not join them. A
+    gate that quietly weakens itself when a tool is absent is the defect this
+    ADR is about, so no guard downgrades to a warning or a skip.
 
 11. **`just toolchain-check` compares versions.** It reads the `channel` from
     `rust-toolchain.toml` and fails when `rustc --version` reports a different
