@@ -262,4 +262,3 @@ deliberately. All are closed:
 - `docs/archive/2026-07-18-e1-typl-tooling-spine-plan.md` and
   `docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` — the archived
   execution plans.
-  </content>

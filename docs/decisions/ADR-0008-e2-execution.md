@@ -11,14 +11,14 @@ before a later epic builds on it. This ADR follows the pattern of ADR-0006 (E0)
 and ADR-0007 (E1).
 
 **Editing note.** Revisions to this document have repeatedly left behind a
-sentence describing the state they replaced — seventeen found and corrected so
-far. They were scattered rather than clustered: a decision's lead contradicting
-its own body, the Status line above, a scoping claim in `## Consequences`, and a
-closed enumeration in an earlier decision that a later one silently extended.
-Several sat in sections the revision that falsified them never opened, so
-reading the diff does not find them. **Sweeping the whole document for sentences
-the edit has falsified is a precondition for editing it here, not optional
-diligence.**
+sentence describing the state they replaced, or written a new one that was false
+on the day it was written — eighteen found and corrected so far. They were
+scattered rather than clustered: a decision's lead contradicting its own body,
+the Status line above, a scoping claim in `## Consequences`, and a closed
+enumeration in an earlier decision that a later one silently extended. Several
+sat in sections the revision that falsified them never opened, so reading the
+diff does not find them. **Sweeping the whole document for sentences the edit
+has falsified is a precondition for editing it here, not optional diligence.**
 
 _Extended (2026-07-26)._ The count above stood at six until this sweep, and the
 sixth was found during review of the note that said five. The whole-document
@@ -102,6 +102,54 @@ Decision 11's gate enumeration is a rule, and it holds as a rule — but
 `cargo fmt --all --check` sits in no `just` recipe, so `just verify` does not
 enforce one of the five things this decision names (issue #182), and "CI is
 still stuck" is a claim the repository cannot confirm or refute either way.
+
+_Extended (2026-07-26) — the fourth sweep, and the eighteenth._ Review of the
+gardening pass above returned request-changes, and the correction round ran the
+sweep again, against the repository at `fa11ace`. It found **one** stale
+sentence, and the pass immediately above is what wrote it: decision 20's third
+extension claimed that every key in `GF_ATTRIBUTE_KEYS` raises FORM-107
+unconditionally, which was false for `init` on the day it was written. It is
+corrected at decision 20 rather than left as dated evidence, because the
+dated-evidence rule below protects a sentence that was true about the state at
+its own date, and this one was not.
+
+That makes eighteen, and it is the fourth found by reviewing a correction rather
+than by making one. It also falsifies the paragraph above on its own terms: the
+third sweep reported "no pre-existing stale sentence" and called itself the
+first revision to find its own stranding before shipping it rather than after,
+and it shipped this one unfound — the same mechanism one turn later, with the
+falsifying evidence again sitting inside the correcting commit, in
+`crates/ridl-syntax/src/keywords.rs`. Those two sentences were what that sweep
+believed at its own date and are left as written; so is its "the count above
+therefore stands at seventeen", which was true then. The running total in the
+editing note is what moves.
+
+Everything else was re-derived from the source and held: the four catalogue
+counts (`FORM` 13, `TYPL` 39, `RIDL` 31, `MANI` 13) and decision 21's `RIDL-`
+free-code enumeration — 100 to 110, 140, 141, 143, 201, 202, 301 to 308, and 401
+to 407 — both counted inside the `diag_codes!` invocation; decision 13's
+seven-in-source figure; decision 6's three shipped service codes; decision 15's
+two `WorkspaceOutput` fields; decision 16's two messages, both reading
+"us/ms/s/min/h", and `timing.rs`'s module comment citing ridl §2.1; decision
+17's retired characterisation, which now appears nowhere outside this ADR's own
+quotations of it; decision 19's six-file Appendix A extent; and decision 9's
+boundary, where `ridl-diff` is a dependency of `crates/ridl`'s manifest and of
+no other crate in the workspace. Decision 20's M1 and M2 were re-reproduced
+against a `ridlc` built from this branch rather than read off the pass that
+wrote them: M1's two `reserved oldOne` tombstones lower at ordinals 1 and 2 with
+the signal at ordinal 3 and no diagnostic, and M2's cases each lower a
+`declared_init` — `"true"`, `"15"`, `"5"`, `"42"` — with the compile exiting 0.
+
+_The "CI is still stuck" premise is now confirmable, from outside the
+repository._ The sentence above — that the repository can neither confirm nor
+refute it — stays true of the repository. `gh run list` settles the question
+from outside: every workflow run on `main` and on every pull request, this one
+included, completes as a failure in five to eight seconds, and every job carries
+the annotation "The job was not started because recent account payments have
+failed or your spending limit needs to be increased". No job starts, which is
+how `.github/workflows/ci.yml` can be complete while CI runs nothing. Decision
+11's premise therefore holds on external evidence, and its ruling is unchanged:
+the local gate is the merge gate.
 
 _Which sentences are dated, and which are live._ Every sentence here is one of
 two kinds, and **the split does not follow the paragraph headings**. A sentence
@@ -725,9 +773,32 @@ disagreeing sources is the correct one.
     signal after them lowers at ordinal 3. M2: all three silent cases still
     compile clean and lower a `declared_init` — `= true` on an integer-backed
     payload, `= 15.0` off a `step 10.0` grid, and `= 5` on a struct or `= 42` on
-    an enum with no such member. M3: every key in `GF_ATTRIBUTE_KEYS` raises
-    FORM-107 unconditionally, so no key is consumable and the flat list still
+    an enum with no such member. M3: five of the six keys in `GF_ATTRIBUTE_KEYS`
+    — `default`, `persist`, `invariant`, `labels`, and `deprecated` — raise
+    FORM-107 wherever they are written, and the sixth, `init`, never reaches
+    that branch at all, because it is a family reserved word and is rejected as
+    an identifier first. No key is consumable either way, so the flat list still
     suffices.
+
+    _Corrected (2026-07-26)._ The M3 sentence above read "every key in
+    `GF_ATTRIBUTE_KEYS` raises FORM-107 unconditionally" when this extension was
+    written, and it was false for `init` on that date rather than overtaken
+    later. `init` is in `FAMILY_RESERVED` in
+    `crates/ridl-syntax/src/keywords.rs` — an rmdl keyword, reserved in every
+    profile — so under the ridl profile it lexes to `ReservedWord` rather than
+    to an identifier, and the attribute check never runs
+    `GF_ATTRIBUTE_KEYS.contains(...)` on it. Reproduced against a `ridlc` built
+    from this branch, with one package writing all six keys as flag attributes
+    on a `command`: five FORM-107 and one FORM-105, "reserved word `init` used
+    as identifier". The assignment spelling `init = 3` and `init` on a signal
+    each draw FORM-105 as well, so no spelling of the key reaches the
+    allow-list. The same claim was written into issue #172's M3 note in the same
+    pass and is corrected there too. What the correction does not touch is the
+    ruling: `init` is not consumable either, so "no key is consumable, and a
+    flat list suffices" stands, and so does the reason a later task must replace
+    the flat list with the general form §4.3 key-by-kind allow-list.
+    `check.rs`'s comment at the constant claims only what the branch does with a
+    key that reaches it, which is accurate, and is left as written.
 
 21. **Amendment (2026-07-25) — RIDL-142 and RIDL-111 are allocated for the two
     uncoded E2 errors, and `ridl-core` gains a `RIDL_CATALOG` and a
