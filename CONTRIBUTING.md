@@ -52,6 +52,32 @@ repairs the new release wants in the same commit.
    there is one definition of each command rather than two that drift
    (ADR-0009).
 
+## Writing examples in the book
+
+Every fenced block in `docs/book/` whose info string starts with `ridl` or
+`typl` is **compiled by `crates/ridl/tests/book_examples.rs`**, which runs under
+`cargo test --workspace`. A verified block must be a complete, self-contained
+package file — it declares its own `package`, and blocks sharing a package name
+are staged side by side so a later one can `import` from an earlier one.
+
+Mark a block that is deliberately not compilable — a fragment quoted out of its
+file, a counter-example, a shape the language rejects — with `ignore`:
+
+````markdown
+```ridl,ignore
+signal currentSpeed : Speed @10ms      // a fragment, not a whole file
+```
+````
+
+mdBook renders `ridl,ignore` and `ridl` the same way, so the marker costs no
+syntax highlighting. The harness is fail-closed: a verified block with no
+`package`, an unrecognised marker, or a book with no verified blocks at all is
+an error rather than a silent skip. Warnings fail the run alongside errors,
+because an example that draws a warning teaches the warned-about thing.
+
+Failures name the Markdown file and the exact line, because each block is staged
+with the line offset it has in its source file.
+
 ## Recipes
 
 Run `just --list` for the full set. The common ones:

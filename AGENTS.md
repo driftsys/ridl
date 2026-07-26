@@ -100,6 +100,10 @@ apart unnoticed — check those two by reading when you touch either file.
   `.editorconfig` only, no per-tool config. `.primignore` is the escape hatch
   for files that must stay byte-exact.
 - **markdownlint** enforces Markdown style (`.markdownlint.json`).
+- **Every `ridl`/`typl` fenced block in `docs/book/` is compiled** by
+  `crates/ridl/tests/book_examples.rs`. A verified block declares its own
+  `package` and is a whole file; a fragment is marked `` ```ridl,ignore ``. See
+  `CONTRIBUTING.md`, "Writing examples in the book".
 - **Prose — comments, commit messages, docs, PR descriptions — is plain and
   literal**: no idioms, no figures of speech. Technical terms and acronyms stay
   as they are.

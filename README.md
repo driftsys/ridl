@@ -48,8 +48,8 @@ Cargo.toml                      Cargo workspace root
 rust-toolchain.toml             The pinned Rust toolchain (ADR-0009)
 docs/
 ├── ROADMAP.md                  Implementation backlog — epics, stories, V1/V2 release plan
-├── getting-started.md          Getting started with RIDL
-├── book/                       mdBook source (just book)
+├── book/                       mdBook source (just book) — introduction, reading guide, getting started
+│                               Its `ridl` examples are compiled by crates/ridl/tests/book_examples.rs
 ├── specification/              The normative language references + the family overview
 │   ├── ridl-family-overview.md     Entry point: the map, shared doctrines, decision ledger, open questions
 │   ├── typl-language-reference.md
@@ -81,6 +81,9 @@ docs/
 
 ## Where to start
 
+- Writing your first `.ridl` file?
+  [`docs/book/getting-started.md`](docs/book/getting-started.md) — a tutorial
+  over the built toolchain, whose every example is compiled by the test suite.
 - New to RIDL? Read
   [`docs/specification/ridl-family-overview.md`](docs/specification/ridl-family-overview.md)
   — the map and reading-path guide.
