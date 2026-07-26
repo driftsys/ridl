@@ -423,11 +423,12 @@ diag_codes! {
     /// `RIDL_PROFILE_CODES` in `crates/ridlc/tests/corpus.rs` — the list that
     /// gives every ridl code a living example — is a list of code *strings*
     /// with no link to these constants, so a code minted here and omitted there
-    /// compiles and passes the suite. Decision 21 asks the declare-once
-    /// mechanism to cover that list as well, and it does not: the list carries a
-    /// `Provoked` discriminator this catalogue has no equivalent of. Stated
-    /// here as decision 21 requires; the gap is separate work, tracked in issue
-    /// #172.
+    /// is caught by a string-set equality standing beside the declaration
+    /// (`ridl_profile_codes_match_the_catalogue`) rather than by the declaration
+    /// itself. Decision 21 asks the declare-once mechanism to cover that list as
+    /// well, and it does not: the list carries a `Provoked` discriminator this
+    /// catalogue has no equivalent of. Stated here as decision 21 requires; the
+    /// gap is separate work, tracked in issue #172.
     RIDL_CATALOG {
         /// `signal` or `event` without a timing annotation — the default
         /// `[100ms..1000ms]` (or the configured `[defaults].timing`) is applied
