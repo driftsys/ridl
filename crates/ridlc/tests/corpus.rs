@@ -1454,6 +1454,94 @@ fn contract_clauses_cover_the_guaranteed_expression_subset() {
     }
 }
 
+/// **Issue #170.** A constant whose value is another constant reaches both
+/// backends as a **value**, never as the referenced name.
+///
+/// The compile proofs above are not enough on their own, and the two halves
+/// asserted here say why:
+///
+/// - `FAN_LIMIT`, a two-hop chain at a named integer backing, used to emit
+///   `FanLevel(MAX_FAN)` in Rust — `error[E0308]`, caught by compilation.
+/// - `FAN_LABEL`, the same shape at a string backing, used to emit
+///   `"FAN_TAG"` — the *reference's own name* as the string value. That
+///   compiles. A compile proof, a `tsc --strict` run and a snapshot review all
+///   pass on it, which is why the value is asserted directly.
+///
+/// Both backends are checked from one lowering, which is the point of fixing it
+/// there: `ConstDef.value` carries no discriminator between a value and a
+/// reference, so no backend could have told them apart, and each one failed
+/// differently — Rust would not compile, TypeScript refused the package
+/// outright with a message about `Number.MAX_SAFE_INTEGER`.
+#[test]
+fn const_chains_lower_as_values_not_names() {
+    let compiled = compile_entry(Path::new("tests/corpus/veh-cluster"));
+
+    // The IR: the value at the end of the chain, not the name of the next hop.
+    let ir = checked_ir(Path::new("tests/corpus/veh-cluster"), "veh.cluster");
+    let const_value = |name: &str| -> String {
+        let decl = ir
+            .decls
+            .iter()
+            .find(|decl| decl.name == name)
+            .unwrap_or_else(|| panic!("the corpus declares `{name}`"));
+        let Some(ridl_ir::v2::decl::Kind::ConstDef(def)) = &decl.kind else {
+            panic!("`{name}` is not a constant");
+        };
+        def.value.clone()
+    };
+    assert_eq!(const_value("FAN_CEILING"), "7", "one hop");
+    assert_eq!(const_value("FAN_LIMIT"), "7", "two hops");
+    assert_eq!(const_value("FAN_LABEL"), "cabin-fan");
+
+    for (backend, source, expected) in [
+        (
+            "Rust",
+            &compiled.rust,
+            "pub const FAN_LIMIT: FanLevel = FanLevel(7);",
+        ),
+        (
+            "Rust",
+            &compiled.rust,
+            "pub const FAN_LABEL: &str = \"cabin-fan\";",
+        ),
+        (
+            "TypeScript",
+            &compiled.typescript,
+            "export const FAN_LIMIT = 7;",
+        ),
+        (
+            "TypeScript",
+            &compiled.typescript,
+            "export const FAN_LABEL = 'cabin-fan' as const;",
+        ),
+    ] {
+        assert!(
+            source.contains(expected),
+            "the {backend} backend must emit `{expected}`",
+        );
+    }
+
+    // The negatives: the referenced NAME must not be the emitted value. Each is
+    // an INITIALIZER rather than a bare name, because `FAN_CEILING` and
+    // `FAN_TAG` are still declared names in both outputs, and because the
+    // source doc comment quoting the old wrong output rides into the generated
+    // one.
+    for (backend, source, leaked) in [
+        ("Rust", &compiled.rust, "= FanLevel(FAN_CEILING);"),
+        ("Rust", &compiled.rust, "= \"FAN_TAG\";"),
+        ("TypeScript", &compiled.typescript, "= FAN_CEILING;"),
+        ("TypeScript", &compiled.typescript, "= 'FAN_TAG' as const;"),
+    ] {
+        assert!(
+            !source.contains(leaked),
+            "the {backend} backend must not emit `{leaked}` — that is the \
+             unresolved reference issue #170 reported",
+        );
+    }
+}
+
+/// **This test pins a defect, deliberately.**
+///
 /// typl Appendix E defines `reserved = "reserved" ( camelCase_id | int_lit )`,
 /// and the parser holds that line: every other literal shape draws FORM-102.
 ///

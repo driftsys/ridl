@@ -1640,6 +1640,103 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "regex": null
         }
       }
+    },
+    {
+      "name": "FAN_CEILING",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The ceiling a fan request is clamped to.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanLevel",
+          "value": "7",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "FAN_LIMIT",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The same ceiling, one hop further along the chain.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanLevel",
+          "value": "7",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "FanTag",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The label a cabin fan reports itself under.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "TypeDef": {
+          "backing": {
+            "kind": {
+              "Primitive": 4
+            }
+          },
+          "constraint": {
+            "min": null,
+            "max": null,
+            "step": null,
+            "len_min": 1,
+            "len_max": 32,
+            "pattern": null,
+            "pattern_const": null
+          },
+          "declared_init": "unset",
+          "init": {
+            "derivable": true,
+            "value": "unset"
+          },
+          "width": null
+        }
+      }
+    },
+    {
+      "name": "FAN_TAG",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The cabin fan's label.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanTag",
+          "value": "cabin-fan",
+          "regex": null
+        }
+      }
+    },
+    {
+      "name": "FAN_LABEL",
+      "visibility": 1,
+      "is_error": false,
+      "doc": "The same label, reached through the constant above.",
+      "labels": [],
+      "deprecated": null,
+      "ordinal": 0,
+      "kind": {
+        "ConstDef": {
+          "type_ref": "FanTag",
+          "value": "cabin-fan",
+          "regex": null
+        }
+      }
     }
   ],
   "interfaces": [

@@ -282,6 +282,22 @@ impl Default for HvacError {
 /// expression subset admits constants (ridl §13) and nothing in the corpus
 /// exercised that until these members were added.
 pub const MAX_FAN: FanLevel = FanLevel(7);
+/// The ceiling a fan request is clamped to.
+pub const FAN_CEILING: FanLevel = FanLevel(7);
+/// The same ceiling, one hop further along the chain.
+pub const FAN_LIMIT: FanLevel = FanLevel(7);
+/// The label a cabin fan reports itself under.
+#[repr(transparent)]
+pub struct FanTag(pub String);
+impl Default for FanTag {
+    fn default() -> Self {
+        FanTag("unset".to_string())
+    }
+}
+/// The cabin fan's label.
+pub const FAN_TAG: &str = "cabin-fan";
+/// The same label, reached through the constant above.
+pub const FAN_LABEL: &str = "cabin-fan";
 /// Where a signal's current value came from (ridl §4.4, §4.5).
 ///
 /// `Init` is the channel's seeded value, before the provider's first

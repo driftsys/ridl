@@ -10,7 +10,7 @@ warning[TYPL-007]: unused import `MAX_SPEED`
   │ ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 warning[RIDL-100]: event without a timing annotation — the default [200000us..2000000us] is applied
-   ┌─ tests/corpus/veh-cluster/cluster/services.ridl:87:9
-   │
-87 │   event filterClogged : FilterState
-   │         ^^^^^^^^^^^^^
+    ┌─ tests/corpus/veh-cluster/cluster/services.ridl:116:9
+    │
+116 │   event filterClogged : FilterState
+    │         ^^^^^^^^^^^^^

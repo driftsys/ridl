@@ -1105,6 +1105,34 @@ impl Checker<'_> {
             self.validate_regex(text, value_range);
         }
 
+        // `ConstDef.value` is a VALUE, never a reference: the IR carries no
+        // discriminator between the two, so a reference left in it is
+        // indistinguishable from a string constant that happens to spell the
+        // same name (`const A : string = "B"` and `const A : string = B` lower
+        // identically). A consumer therefore cannot resolve one, and every one
+        // of them got it wrong differently — the Rust backend emitted
+        // `Tick(SECRET)`, which does not compile, and `"SECRET"`, which
+        // compiles and is the wrong value; the TypeScript backend refused the
+        // package outright with a message about `Number.MAX_SAFE_INTEGER`
+        // (issue #170).
+        //
+        // So the chain is followed here, through the same [`const_value`] the
+        // range bounds, the `match` patterns and [`Self::declared_type_init`]
+        // already use — one resolution, cycle-guarded, and correct across
+        // packages, which a backend holding one package's IR could not be.
+        // A reference that does not resolve keeps the written text, exactly as
+        // before: the diagnostic for it belongs to the resolver.
+        let value_kind = match value_kind {
+            Some(LitKind::ConstRef(name)) => match self.const_value_in(self.pkg, &name) {
+                Some(ConstValue::Number(value)) => Some(LitKind::Number { value }),
+                Some(ConstValue::Bool(flag)) => Some(LitKind::Bool(flag)),
+                Some(ConstValue::Text(text)) => Some(LitKind::Str(text)),
+                Some(ConstValue::Regex(text)) => Some(LitKind::Regex(text)),
+                None => Some(LitKind::ConstRef(name)),
+            },
+            other => other,
+        };
+
         let (value, regex) = match value_kind {
             Some(LitKind::Number { value }) => (value.to_decimal_string(), None),
             Some(LitKind::Bool(flag)) => (flag.to_string(), None),
@@ -1582,8 +1610,15 @@ impl Checker<'_> {
                 self.check_string_init(&text, parts, literal.syntax().text_range(), violation);
                 text
             }
-            LitKind::ConstRef(name) => match self.const_numeric_value_in(self.pkg, &name) {
-                Some(value) => {
+            // A constant is reusable in an init (§6), so the value that lowers
+            // is the constant's, not its name. Every kind resolves, not only
+            // the numeric one: `= SOME_TEXT` used to lower as the literal text
+            // `"SOME_TEXT"` and `= SOME_FLAG` as the unparseable `"YES"`, which
+            // both backends then emitted as a wrong value with no diagnostic
+            // anywhere (issue #170). The resolved value is checked against the
+            // declared bounds exactly as a direct literal of the same kind is.
+            LitKind::ConstRef(name) => match self.const_value_in(self.pkg, &name) {
+                Some(ConstValue::Number(value)) => {
                     if out_of_bounds(&value, parts.min.as_ref(), parts.max.as_ref()) {
                         self.error(
                             violation,
@@ -1598,6 +1633,12 @@ impl Checker<'_> {
                     }
                     value.to_decimal_string()
                 }
+                Some(ConstValue::Bool(flag)) => flag.to_string(),
+                Some(ConstValue::Text(text)) => {
+                    self.check_string_init(&text, parts, literal.syntax().text_range(), violation);
+                    text
+                }
+                Some(ConstValue::Regex(text)) => text,
                 None => significant_text(literal.syntax()),
             },
             LitKind::Regex(text) => text,
@@ -5422,6 +5463,189 @@ mod tests {
              const CRUISE    : Speed = MAX_SPEED\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        // The clean verdict was the whole of this assertion until issue #170,
+        // and it is the half that hid the defect: `CRUISE` lowered as the text
+        // `"MAX_SPEED"`, which the Rust backend emitted as `Speed(MAX_SPEED)`
+        // and rustc rejected. A `const = const` that checks clean must also
+        // *lower* to something a backend can emit.
+        assert_eq!(const_def(&checked, "CRUISE").value, "250");
+    }
+
+    /// The `ConstDef` named `name`, or a panic naming what is there.
+    fn const_def<'a>(checked: &'a CheckedPackage, name: &str) -> &'a v2::ConstDef {
+        let Some(v2::decl::Kind::ConstDef(def)) = &decl(checked, name).kind else {
+            panic!("`{name}` is not a const def");
+        };
+        def
+    }
+
+    /// **Issue #170.** A constant whose value is a constant reference lowers as
+    /// the referenced **value**, in every kind a constant can hold.
+    ///
+    /// `ConstDef.value` is a bare string with no discriminator, so a reference
+    /// left unresolved in it is indistinguishable from a text value spelling
+    /// the same name: `const A : string = "B"` and `const A : string = B`
+    /// lowered to the identical IR. That is why the repair belongs here and not
+    /// in a backend — and why the backends each got it wrong differently, one
+    /// emitting uncompilable Rust, one emitting a silently wrong value, one
+    /// refusing the package with a message about integer width.
+    ///
+    /// **Every kind is asserted, not the reported one.** The report named a
+    /// named-scalar constant. Bool and text were *silently wrong* rather than
+    /// uncompilable, which is worse and would have survived a fix verified by
+    /// compiling.
+    #[test]
+    fn a_constant_reference_lowers_as_the_referenced_value() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             type Tick : integer [0..100]\n\
+             const SECRET   : Tick    = 7\n\
+             const NAMED    : Tick    = SECRET\n\
+             const WHOLE    : integer = 7\n\
+             const INT      : integer = WHOLE\n\
+             const RATIO    : float   = 3.5\n\
+             const FLOAT    : float   = RATIO\n\
+             const FLAG     : boolean = true\n\
+             const BOOL     : boolean = FLAG\n\
+             const GREETING : string  = \"hello\"\n\
+             const TEXT     : string  = GREETING\n\
+             const VIN_PATTERN = /^[A-Z0-9]{17}$/\n\
+             const ALIAS       = VIN_PATTERN\n\
+             const HOP      : integer = INT\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+
+        for (name, expected) in [
+            ("NAMED", "7"),
+            ("INT", "7"),
+            ("FLOAT", "3.5"),
+            ("BOOL", "true"),
+            ("TEXT", "hello"),
+            // Two hops: the chain is followed to the literal, not one step.
+            ("HOP", "7"),
+        ] {
+            assert_eq!(
+                const_def(&checked, name).value,
+                expected,
+                "`{name}` must lower as the referenced value, not its name",
+            );
+            assert_eq!(const_def(&checked, name).regex, None);
+        }
+
+        // A reference to a regex constant becomes a regex constant, with the
+        // `/…/` delimiters the direct form carries.
+        assert_eq!(
+            const_def(&checked, "ALIAS").regex.as_deref(),
+            Some("/^[A-Z0-9]{17}$/"),
+        );
+        assert_eq!(const_def(&checked, "ALIAS").value, "");
+    }
+
+    /// A cross-package constant reference resolves in the package that declares
+    /// the constant holding it (typl §3.2), so an imported constant lowers as a
+    /// value too. A backend sees one package's IR at a time and could not have
+    /// resolved this at all, whichever way it tried.
+    #[test]
+    fn a_cross_package_constant_reference_lowers_as_the_referenced_value() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = package(
+            &db,
+            "veh.common",
+            "package veh.common\ntype Speed : km/h [0.0..250.0 step 0.5]\nconst MAX_SPEED : Speed = 250.0\n",
+        );
+        let cluster = package(
+            &db,
+            "veh.cluster",
+            "package veh.cluster\nimport veh.common.Speed\nimport veh.common.MAX_SPEED\nconst CRUISE : Speed = MAX_SPEED\n",
+        );
+        let ws = Workspace::new(&db, vec![common, cluster], BTreeMap::new());
+
+        let checked = check_package(&db, ws, cluster, std);
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(const_def(&checked, "CRUISE").value, "250");
+    }
+
+    /// A constant reference that does not resolve keeps the written text, which
+    /// is what it did before issue #170 and must keep doing: the resolver owns
+    /// the diagnostic for an unknown name, and lowering must not invent a value
+    /// for a name it cannot follow. A self-referential constant is the same
+    /// case — the cycle guard in [`const_value`] returns `None`.
+    #[test]
+    fn an_unresolvable_constant_reference_keeps_the_written_text() {
+        let cyclic = check_source("app", "package app\nconst LOOP : integer = LOOP\n");
+        assert_eq!(
+            const_def(&cyclic, "LOOP").value,
+            "LOOP",
+            "a cycle-guarded reference lowers as the written text, not as a guessed value",
+        );
+
+        let unknown = check_source("app", "package app\nconst GHOST : integer = MISSING\n");
+        assert_eq!(const_def(&unknown, "GHOST").value, "MISSING");
+    }
+
+    /// **Issue #170, the declared-init half.** A constant reference in a
+    /// declared init (`= value`, typl §5.8, §6) lowers as the referenced value
+    /// for every kind, not only the numeric one.
+    ///
+    /// The numeric case already resolved, which is exactly what made this hard
+    /// to see: `type T : integer [0..100] = SEVEN` was right and
+    /// `type T : string [1..20] = GREETING` lowered the *name* as the string
+    /// value, so the generated `Default` returned `"GREETING"`. One rule, two
+    /// implementations, agreeing on the case anyone would test.
+    #[test]
+    fn a_constant_reference_in_a_declared_init_lowers_as_the_referenced_value() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             const SEVEN    : integer = 7\n\
+             const GREETING : string  = \"hello\"\n\
+             const FLAG     : boolean = true\n\
+             type Counted : integer [0..100]  = SEVEN\n\
+             type Labelled : string [1..20]   = GREETING\n\
+             type Enabled : boolean           = FLAG\n\
+             struct Holder {\n\
+             \x20 count : integer [0..100] = SEVEN\n\
+             \x20 label : string [1..20]   = GREETING\n\
+             \x20 enabled : boolean        = FLAG\n\
+             }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+
+        for (name, expected) in [("Counted", "7"), ("Labelled", "hello"), ("Enabled", "true")] {
+            let td = type_def(&checked, name);
+            assert_eq!(
+                td.declared_init.as_deref(),
+                Some(expected),
+                "`type {name}`'s declared init must lower as the referenced value",
+            );
+            assert_eq!(
+                td.init.as_ref().and_then(|init| init.value.as_deref()),
+                Some(expected),
+            );
+        }
+
+        let holder = struct_def(&checked, "Holder");
+        let fields: Vec<(&str, Option<&str>)> = holder
+            .members
+            .iter()
+            .filter_map(|member| match &member.member {
+                Some(v2::struct_member::Member::Field(field)) => {
+                    Some((field.name.as_str(), field.declared_init.as_deref()))
+                }
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            fields,
+            [
+                ("count", Some("7")),
+                ("label", Some("hello")),
+                ("enabled", Some("true")),
+            ],
+            "a struct field's declared init resolves the same way a type's does",
+        );
     }
 
     // --- TYPL-106: regex validation (regress) -----------------------------

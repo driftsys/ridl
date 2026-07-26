@@ -331,6 +331,35 @@ export function initHvacError(): HvacError {
 export const MAX_FAN = 7;
 
 /**
+ * The ceiling a fan request is clamped to.
+ */
+export const FAN_CEILING = 7;
+
+/**
+ * The same ceiling, one hop further along the chain.
+ */
+export const FAN_LIMIT = 7;
+
+/**
+ * The label a cabin fan reports itself under.
+ */
+export type FanTag = string & { readonly __ridl: 'veh.cluster.FanTag' };
+
+export function initFanTag(): FanTag {
+  return 'unset' as FanTag;
+}
+
+/**
+ * The cabin fan's label.
+ */
+export const FAN_TAG = 'cabin-fan' as const;
+
+/**
+ * The same label, reached through the constant above.
+ */
+export const FAN_LABEL = 'cabin-fan' as const;
+
+/**
  * What a signal read is standing on (ridl §4.5). `'init'` — the provider has
  * not published yet and the value is the channel init (ridl §4.4); `'live'` —
  * a published value; `'invalid'` — the channel is in the invalid state
