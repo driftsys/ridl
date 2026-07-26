@@ -268,11 +268,16 @@ function initRawTickCount(): RawTickCount {
  */
 interface RawWheelSpan {
   span: { first: RawTickCount; latest: RawTickCount };
+  /**
+   * @bounds 2
+   */
+  bursts: readonly { first: RawTickCount; latest: RawTickCount }[];
 }
 
 function initRawWheelSpan(): RawWheelSpan {
   return {
     span: { first: initRawTickCount(), latest: initRawTickCount() },
+    bursts: Array.from({ length: 2 }, () => ({ first: initRawTickCount(), latest: initRawTickCount() })),
   };
 }
 

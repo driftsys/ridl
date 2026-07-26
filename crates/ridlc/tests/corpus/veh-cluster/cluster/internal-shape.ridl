@@ -33,10 +33,21 @@ internal type RawTickCount : integer [0..65535]
 // A package-private struct holding a tuple, so the **typl** half of issue #167
 // is in the corpus too: the struct `span` induces is named after `RawWheelSpan`
 // and belongs to it, so it is package-private with it.
+//
+// `bursts` is the second half, and it is here for issue #177: an array **whose
+// element is a tuple**. No corpus entry held that combination — `veh-common`
+// has an array of a named type (`readings : [Speed; 8]`) and a bare tuple field
+// (`range : (min, max)`) but never the two nested — so no generated init ever
+// put an object literal in a concise arrow body, and the TypeScript backend
+// emitted `() => { first: … }`, which parses as a block and returns
+// `undefined`. `span` beside it is the control: a tuple in direct field
+// position was correct throughout, and the two now sit in one generated init
+// function, so the snapshot shows both forms next to each other.
 
 /// The window of raw tick counts a wheel diagnostic covers.
 internal struct RawWheelSpan {
-  span : (first : RawTickCount, latest : RawTickCount)
+  span   : (first : RawTickCount, latest : RawTickCount)
+  bursts : [(first : RawTickCount, latest : RawTickCount); 2]
 }
 
 /// A package-private contract shape: realized inside this package, never part

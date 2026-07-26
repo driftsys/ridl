@@ -225,11 +225,13 @@ impl Default for RawTickCount {
 #[repr(C)]
 pub(crate) struct RawWheelSpan {
     pub span: RawWheelSpanSpan,
+    pub bursts: [RawWheelSpanBurstsElement; 2],
 }
 impl Default for RawWheelSpan {
     fn default() -> Self {
         RawWheelSpan {
             span: RawWheelSpanSpan::default(),
+            bursts: ::core::array::from_fn(|_| RawWheelSpanBurstsElement::default()),
         }
     }
 }
@@ -1053,6 +1055,18 @@ pub(crate) struct RawWheelSpanSpan {
 impl Default for RawWheelSpanSpan {
     fn default() -> Self {
         RawWheelSpanSpan {
+            first: RawTickCount::default(),
+            latest: RawTickCount::default(),
+        }
+    }
+}
+pub(crate) struct RawWheelSpanBurstsElement {
+    pub first: RawTickCount,
+    pub latest: RawTickCount,
+}
+impl Default for RawWheelSpanBurstsElement {
+    fn default() -> Self {
+        RawWheelSpanBurstsElement {
             first: RawTickCount::default(),
             latest: RawTickCount::default(),
         }
