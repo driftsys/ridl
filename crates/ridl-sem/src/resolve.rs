@@ -260,20 +260,22 @@ fn apply_imports(
     symbols: &mut HashMap<String, Symbol>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let mut local_name_counts: HashMap<&str, usize> = HashMap::new();
     let mut base_name_counts: HashMap<&str, usize> = HashMap::new();
     for record in records {
-        *local_name_counts
-            .entry(record.local_name.as_str())
-            .or_default() += 1;
         *base_name_counts
             .entry(record.base_name.as_str())
             .or_default() += 1;
     }
 
-    let mut seen_local: HashSet<&str> = HashSet::new();
+    // The first import to claim each local name, and the target it binds it
+    // to — `(package_path, base_name)`, the declaration the name resolves to.
+    // A later import claiming the same local name for the *same* target is an
+    // identical repeat: it binds precisely what is already bound, so nothing
+    // conflicts. Only a later import naming a *different* target is TYPL-006.
+    let mut first_target: HashMap<&str, (&str, &str)> = HashMap::new();
     for record in records {
-        let first_for_name = !seen_local.contains(record.local_name.as_str());
+        let target = (record.package_path.as_str(), record.base_name.as_str());
+        let first_for_name = !first_target.contains_key(record.local_name.as_str());
 
         if let Some(url) = &record.remote_url {
             // The import itself is valid; remote materialization is not yet
@@ -304,12 +306,22 @@ fn apply_imports(
             ));
         }
 
-        // TYPL-006: two imports bind the same local name and neither is aliased
-        // to a distinct one. The first keeps the name; each later one is flagged.
-        let colliding = local_name_counts
+        // TYPL-006: two imports bind the same local name to *different*
+        // declarations and neither is aliased to a distinct one. The first
+        // keeps the name; each later one naming something else is flagged, and
+        // aliasing one of them is the remedy the message gives.
+        //
+        // An identical repeat is deliberately silent. Imports bind at package
+        // scope and files within a package are purely organisational
+        // (ADR-0002 §1), so a package's imports are a set: repeating one adds
+        // nothing to it and removes nothing from it. Flagging a repeat only
+        // when the two lines share a file would make the file boundary
+        // significant, which §1 denies; flagging it across files would report
+        // the ordinary habit of writing each file's imports at its head.
+        let colliding = first_target
             .get(record.local_name.as_str())
-            .is_some_and(|count| *count >= 2);
-        if colliding && !first_for_name {
+            .is_some_and(|first| *first != target);
+        if colliding {
             diagnostics.push(diagnostic(
                 DiagCode::TYPL_006,
                 Severity::Error,
@@ -362,7 +374,9 @@ fn apply_imports(
             symbols.insert(record.local_name.clone(), symbol.clone());
         }
 
-        seen_local.insert(record.local_name.as_str());
+        first_target
+            .entry(record.local_name.as_str())
+            .or_insert(target);
     }
 }
 
@@ -1161,6 +1175,125 @@ mod package_tests {
             resolution.symbols["Timestamp"].package.as_str(),
             "app",
             "the local declaration wins over the implicit `ridl.std` name",
+        );
+    }
+
+    /// A multi-file workspace-member package, files named `<name>0.typl`,
+    /// `<name>1.typl`, … in the order given.
+    fn multi_file_package(db: &RidlDatabase, name: &str, texts: &[&str]) -> Package {
+        Package::new(
+            db,
+            name.to_string(),
+            texts
+                .iter()
+                .enumerate()
+                .map(|(index, text)| input(db, &format!("{name}{index}.typl"), text))
+                .collect(),
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            None,
+        )
+    }
+
+    #[test]
+    fn an_identical_repeated_import_is_not_a_collision() {
+        // TYPL-006 counted local-name collisions without comparing the target,
+        // so two identical import lines collided with each other. Nothing
+        // conflicts: both bind `x.Speed` to `Speed`, and the fix-it TYPL-006
+        // carries ("alias one of the colliding imports") only trades the error
+        // for TYPL-007 or forks one symbol into two local names.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let a = package(
+            &db,
+            "a",
+            "package a\nimport x.Speed\nimport x.Speed\nstruct S { p: Speed }\n",
+        );
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let ws = Workspace::new(&db, vec![a, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert!(
+            codes(&resolution).is_empty(),
+            "an identical repeat binds what is already bound, got: {:?}",
+            resolution.diagnostics,
+        );
+        assert_eq!(resolution.symbols["Speed"].package.as_str(), "x");
+    }
+
+    #[test]
+    fn an_identical_import_repeated_across_files_of_a_package_is_not_a_collision() {
+        // Imports bind at package scope and files within a package are purely
+        // organisational (ADR-0002 §1), so writing each file's imports at its
+        // own head is ordinary practice, not a conflict.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let a = multi_file_package(
+            &db,
+            "a",
+            &[
+                "package a\nimport x.Speed\nstruct S { p: Speed }\n",
+                "package a\nimport x.Speed\nstruct T { q: Speed }\n",
+            ],
+        );
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let ws = Workspace::new(&db, vec![a, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert!(
+            codes(&resolution).is_empty(),
+            "per-file imports of one package must not collide, got: {:?}",
+            resolution.diagnostics,
+        );
+    }
+
+    #[test]
+    fn a_repeated_import_under_one_alias_is_not_a_collision() {
+        // The same target reached under the same alias twice is still one
+        // binding — the local name and the target both match.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let a = package(
+            &db,
+            "a",
+            "package a\nimport x.Speed as VehSpeed\nimport x.Speed as VehSpeed\nstruct S { p: VehSpeed }\n",
+        );
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let ws = Workspace::new(&db, vec![a, x], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert!(
+            codes(&resolution).is_empty(),
+            "one target under one alias is one binding, got: {:?}",
+            resolution.diagnostics,
+        );
+    }
+
+    #[test]
+    fn a_repeat_between_two_genuine_collisions_still_flags_only_the_conflict() {
+        // Three imports of `Speed`: `x.Speed`, then `y.Speed`, then `x.Speed`
+        // again. Only the middle one names something the winner does not, so
+        // exactly one TYPL-006 fires, on that line.
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let text =
+            "package a\nimport x.Speed\nimport y.Speed\nimport x.Speed\nstruct S { p: Speed }\n";
+        let a = package(&db, "a", text);
+        let x = package(&db, "x", "package x\ntype Speed: km/h\n");
+        let y = package(&db, "y", "package y\ntype Speed: m/s\n");
+        let ws = Workspace::new(&db, vec![a, x, y], BTreeMap::new());
+
+        let resolution = resolve_package(&db, ws, a, std);
+        assert_eq!(codes(&resolution), vec!["TYPL-006"]);
+        assert_eq!(
+            u32::from(resolution.diagnostics[0].primary.range.start()),
+            text.find("import y.Speed").expect("the y import") as u32,
+            "the conflicting import is the one flagged, not the repeat",
+        );
+        assert_eq!(
+            resolution.symbols["Speed"].package.as_str(),
+            "x",
+            "the first import still wins the binding",
         );
     }
 }
