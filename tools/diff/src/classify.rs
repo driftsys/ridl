@@ -35,6 +35,16 @@ mod classify_tests;
 /// path is resolved against them to recover the typed IR the direction is read
 /// from. For a package present on only one side the caller passes that package
 /// as both arguments — those changes classify on their category alone.
+// A new variant must be given a real arm here, not swept into a
+// catch-all: rustc forces *an* arm, and the arm its `help:` text
+// proposes is `_ =>`, which classifies the new variant silently. The
+// two lints below reject a wildcard over `Category` — the first when
+// it covers several variants, the second when it covers exactly one,
+// which is the case a 21st variant creates.
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
 pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     match change.category {
         // Shifts or reuses a wire identity, or replaces a wire-carrying type.
@@ -731,35 +741,10 @@ fn reserved_values(reserved: &[v2::Reserved]) -> Vec<i64> {
 // `--explain` — the rule row for one category.
 // ==========================================================================
 
-/// Every category, in the order `--explain` lists them when asked for an unknown
-/// one.
-pub const CATEGORIES: [Category; 20] = [
-    Category::DeclAdded,
-    Category::DeclRemoved,
-    Category::InteractionAppended,
-    Category::InteractionInserted,
-    Category::InteractionReordered,
-    Category::InteractionRemoved,
-    Category::InteractionRetired,
-    Category::KindChanged,
-    Category::PayloadChanged,
-    Category::ReturnChanged,
-    Category::ParamsChanged,
-    Category::TimingChanged,
-    Category::ContractChanged,
-    Category::WidthChanged,
-    Category::ConstraintChanged,
-    Category::InitChanged,
-    Category::ReservedNameRedeclared,
-    Category::ServiceChanged,
-    Category::DocOnly,
-    Category::VisibilityChanged,
-];
-
 /// Parses the snake_case word a report prints back into its category, so
 /// `ridl diff --explain <category>` takes exactly what the report shows.
 pub fn category_from_word(word: &str) -> Option<Category> {
-    CATEGORIES
+    crate::CATEGORIES
         .into_iter()
         .find(|category| crate::category_word(*category) == word)
 }
@@ -767,6 +752,16 @@ pub fn category_from_word(word: &str) -> Option<Category> {
 /// The rule row for a category: the classification table of ADR-0008 decision
 /// 14 as text. This is the CI-facing documentation of record until the E4 error
 /// index publishes it.
+// A new variant must be given a real arm here, not swept into a
+// catch-all: rustc forces *an* arm, and the arm its `help:` text
+// proposes is `_ =>`, which classifies the new variant silently. The
+// two lints below reject a wildcard over `Category` — the first when
+// it covers several variants, the second when it covers exactly one,
+// which is the case a 21st variant creates.
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
 pub fn explain(category: Category) -> &'static str {
     match category {
         Category::DeclAdded => concat!(
