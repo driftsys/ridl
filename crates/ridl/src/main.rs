@@ -693,10 +693,15 @@ struct DeclIndex {
 }
 
 impl DeclIndex {
-    /// Indexes every `.typl` and `.ridl` file under `entry`. A file or
-    /// directory that cannot be read is skipped rather than reported: the
-    /// compile already ran clean over this tree, so anything unreadable here
-    /// is not the desk check's business.
+    /// Indexes every `.typl` and `.ridl` file under `entry`. A file that
+    /// cannot be read is skipped rather than reported: the compile already ran
+    /// clean over this tree, so anything unreadable here is not the desk
+    /// check's business. An unreadable *directory* is not skipped in the same
+    /// sense — `collect_source_files` fails on the first one it meets, and
+    /// `unwrap_or_default` turns that into an empty index rather than a
+    /// partial one — but the compile that already succeeded over this tree
+    /// makes the case unreachable in practice, which is why it is not
+    /// reported here either.
     fn build(entry: &Path) -> Self {
         let mut index = Self::default();
         for file in collect_source_files(entry).unwrap_or_default() {

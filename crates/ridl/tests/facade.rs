@@ -160,3 +160,97 @@ fn fmt_refuses_a_broken_file() {
     let unchanged = std::fs::read_to_string(&file).expect("the file is still readable");
     assert_eq!(unchanged, input, "a broken file must never be rewritten");
 }
+
+/// `ridl fmt` on a path that does not exist is a usage error, exit 2, naming
+/// the cause (driftsys/ridl#194). Before the fix, `collect_source_files`
+/// walked the missing path, found nothing, and `ridl fmt` reported success —
+/// the one subcommand that did not fail closed on a bad path.
+#[test]
+fn fmt_on_a_missing_path_exits_two() {
+    let dir = TempDir::new("fmt-missing");
+    let missing = dir.path().join("does-not-exist");
+
+    let (code, stderr) = ridl(&["fmt".as_ref(), missing.as_os_str()]);
+    assert_eq!(
+        code, 2,
+        "a missing path is a usage error, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("cannot read"),
+        "the message must name the cause, got:\n{stderr}"
+    );
+}
+
+/// `ridl fmt --check` does not treat an unreadable directory reached mid-walk
+/// as zero files (driftsys/ridl#194). Before the fix, `chmod 000` on a
+/// subdirectory made a would-reformat tree exit 0 with no output on either
+/// stream — the defect that matters, because it is what let a permissions
+/// change flip `ridl fmt --check` from failing the CI gate to passing it
+/// silently.
+#[cfg(unix)]
+#[test]
+fn fmt_on_an_unreadable_subdirectory_exits_two() {
+    use std::os::unix::fs::PermissionsExt;
+
+    // Restores the subdirectory's permissions on scope exit, panic or not, so
+    // a failed assertion below never leaves an unreadable directory behind for
+    // the `TempDir`'s own `Drop` to trip over.
+    struct RestorePermissions(PathBuf);
+    impl Drop for RestorePermissions {
+        fn drop(&mut self) {
+            let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+        }
+    }
+
+    let dir = TempDir::new("fmt-unreadable");
+    dir.write(
+        "a.typl",
+        "package p\n\ntype Speed: km/h [0.0..250.0 step 0.5]\n",
+    );
+    let sub = dir.path().join("sub");
+    std::fs::create_dir_all(&sub).expect("create the subdirectory");
+    dir.write("sub/b.typl", "package q\n\ntype Level: integer [0..10]\n");
+
+    std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o000))
+        .expect("chmod the subdirectory unreadable");
+    let _restore = RestorePermissions(sub);
+
+    let (code, stderr) = ridl(&["fmt".as_ref(), "--check".as_ref(), dir.path().as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "an unreadable directory reached mid-walk must not read as zero files, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("cannot read"),
+        "the message must name the cause, got:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("sub"),
+        "the message must name the unreadable directory itself, got:\n{stderr}"
+    );
+}
+
+/// `ridl --version` and its short form `-V` both report the binary's own name
+/// and version and exit 0 (driftsys/ridl#194); before the fix both flags were
+/// unrecognised arguments and exited 2.
+#[test]
+fn version_flag_and_short_form_both_exit_zero() {
+    for flag in ["--version", "-V"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_ridl"))
+            .arg(flag)
+            .output()
+            .expect("the ridl binary must run");
+        assert_eq!(
+            output.status.code(),
+            Some(0),
+            "`ridl {flag}` must exit 0, stderr:\n{}",
+            String::from_utf8_lossy(&output.stderr),
+        );
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.trim_start().starts_with("ridl "),
+            "`ridl {flag}` must report the binary's own name, got:\n{stdout}"
+        );
+    }
+}
