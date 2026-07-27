@@ -290,6 +290,64 @@ fn build_workspace_emits_every_member() {
     );
 }
 
+/// A workspace that names a standard type gets the standard artifact beside
+/// its packages, for each selected emit kind. The corpus entry is used rather
+/// than a fixture because it is the same input the compile proofs use.
+#[test]
+fn build_emits_the_standard_package_when_referenced() {
+    let out = TempDir::new("emits-std-out");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "tests/corpus/veh-cluster".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "typescript,rust".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the corpus entry must exit 0, stderr:\n{stderr}");
+    assert!(
+        out.path().join("ridl.std.rs").is_file(),
+        "the Rust standard artifact must be written beside the packages",
+    );
+    assert!(
+        out.path().join("ridl.std.ts").is_file(),
+        "the TypeScript standard artifact must be written beside the packages",
+    );
+}
+
+/// A workspace naming no standard type gets no standard artifact. This is the
+/// only guard against a detection rule that reports every package: without it,
+/// "always emit" would pass the test above.
+#[test]
+fn build_omits_the_standard_package_when_unreferenced() {
+    let dir = TempDir::new("omits-std");
+    dir.write("pkg/ridl.toml", PACKAGE_MANIFEST);
+    dir.write(
+        "pkg/counter.typl",
+        "package veh.common\ntype Counter : integer [0..65535]\n",
+    );
+    let out = TempDir::new("omits-std-out");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().join("pkg").as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "rust".as_ref(),
+    ]);
+    assert_eq!(code, 0, "a clean package must exit 0, stderr:\n{stderr}");
+    assert!(
+        out.path().join("veh.common.rs").is_file(),
+        "the package itself is still emitted",
+    );
+    assert!(
+        !out.path().join("ridl.std.rs").exists(),
+        "no standard artifact for a workspace that references none",
+    );
+}
+
 /// `check --frozen` on a package with a remote import but no `ridl.lock` fails
 /// with MANI-103 and never touches the network (a frozen build never fetches).
 #[test]

@@ -349,6 +349,7 @@ pub fn run_build(
     let mut db = RidlDatabase::default();
     let Compiled {
         workspace,
+        std,
         checked,
         mut diagnostics,
         sources,
@@ -383,6 +384,19 @@ pub fn run_build(
                 package.ir.name.clone()
             };
             write_emits(out_dir, &base, &package.ir, emits, &mut diagnostics)?;
+        }
+
+        // `ridl.std` is deliberately absent from `checked` (it is not a
+        // workspace member), so the loop above never reaches it. A
+        // consumer's generated code still references it, so the build
+        // writes it whenever the workspace names something from it —
+        // otherwise the raw output does not compile (issue #190).
+        let references_std = checked
+            .iter()
+            .any(|package| ridl_ir::v2::referenced_packages(&package.ir).contains("ridl.std"));
+        if references_std {
+            let std_ir = check_package(&db, workspace, std, std).ir;
+            write_emits(out_dir, "ridl.std", &std_ir, emits, &mut diagnostics)?;
         }
     }
 
