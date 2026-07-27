@@ -914,6 +914,143 @@ fn services_workspace_composed_compiles_with_rustc() {
 }
 
 // ==========================================================================
+// The emit decision.
+//
+// The compile proofs above generate the standard package in-process and prepend
+// it, so what they establish is that its *content* is sufficient to compile the
+// rest. None of them calls `run_build`, so none of them observes whether `ridlc
+// build` decides to write it. That decision is `referenced_packages` (issue
+// #190), and the test below is its guard.
+// ==========================================================================
+
+/// A line of `source` names a `crate::ridl::std::` path.
+///
+/// The Rust backend renders a token stream, so the spacing inside a path is not
+/// part of its contract — today it emits `crate::ridl::std::Timestamp`, and a
+/// change of renderer could emit `crate :: ridl :: std :: Timestamp` without
+/// changing anything this test is about. Whitespace is therefore dropped before
+/// the match, one line at a time: dropping it across the whole file would let
+/// the end of one line and the start of the next join into a match that is in
+/// neither.
+fn names_the_standard_package(source: &str) -> bool {
+    source.lines().any(|line| {
+        let dense: String = line.chars().filter(|ch| !ch.is_whitespace()).collect();
+        dense.contains("crate::ridl::std::")
+    })
+}
+
+/// Every corpus entry that compiles satisfies the biconditional: `ridlc build`
+/// writes `ridl.std.rs` **exactly when** the entry's own generated Rust names a
+/// `crate::ridl::std::` path.
+///
+/// Driven through the real [`ridlc::run_build`] into a temp directory rather
+/// than through this file's helpers, because the emit decision is what is under
+/// test and the helpers generate the standard package unconditionally.
+///
+/// Both directions are asserted from one equality, so the test fails on a
+/// detection rule that under-reports — generated code that references a module
+/// no artifact supplies, which is the defect issue #190 reported — and on one
+/// that over-reports, which writes a file into `--out-dir` that the workspace
+/// never asked for. The two counts at the end are what keep that meaningful: a
+/// corpus whose entries all fell on the same side would pass with detection
+/// hard-wired to that side.
+#[test]
+fn build_writes_the_standard_package_exactly_when_the_generated_rust_names_it() {
+    let mut entries: Vec<PathBuf> = std::fs::read_dir("tests/corpus")
+        .expect("the corpus directory is readable")
+        .map(|entry| entry.expect("a readable corpus entry").path())
+        .filter(|path| path.join("ridl.toml").is_file())
+        .collect();
+    entries.sort();
+    assert!(
+        !entries.is_empty(),
+        "the corpus glob found no entry — this proof would check nothing",
+    );
+
+    let mut referencing: Vec<String> = Vec::new();
+    let mut not_referencing: Vec<String> = Vec::new();
+
+    for entry in &entries {
+        let name = entry
+            .file_name()
+            .expect("a corpus entry has a directory name")
+            .to_string_lossy()
+            .into_owned();
+        let out = std::env::temp_dir().join(format!(
+            "ridlc_corpus_std_emit_{name}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock reads a time after the unix epoch")
+                .as_nanos()
+        ));
+
+        let run = ridlc::run_build(entry, &out, &[ridlc::Emit::Rust], ridl_core::Frozen::No)
+            .expect("a corpus entry loads");
+        if run.has_error() {
+            // A diagnostic showcase. `build` writes no artifact at all for an
+            // error-bearing workspace, so there is no emit decision to observe.
+            std::fs::remove_dir_all(&out).ok();
+            continue;
+        }
+
+        let standard = out.join("ridl.std.rs");
+        let mut names_std = false;
+        let mut artifacts: Vec<String> = Vec::new();
+        for artifact in std::fs::read_dir(&out).expect("a clean build created the out dir") {
+            let path = artifact.expect("a readable artifact").path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+                continue;
+            }
+            artifacts.push(
+                path.file_name()
+                    .expect("a file has a name")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            // The standard artifact names its own package throughout, so
+            // reading it would make the left side of the equality true whenever
+            // the right side is — the biconditional would hold vacuously.
+            if path == standard {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).expect("an artifact is readable");
+            names_std |= names_the_standard_package(&source);
+        }
+        let emitted = standard.is_file();
+        std::fs::remove_dir_all(&out).ok();
+
+        artifacts.sort();
+        assert_eq!(
+            names_std, emitted,
+            "`{name}`: the generated Rust names `crate::ridl::std::` = {names_std}, but \
+             `ridl.std.rs` was written = {emitted}. `ridlc build` must write the standard \
+             artifact exactly when the code it emits references it (issue #190). \
+             Artifacts: {artifacts:?}",
+        );
+
+        if names_std {
+            referencing.push(name);
+        } else {
+            not_referencing.push(name);
+        }
+    }
+
+    // Anti-vacuity, in both directions: the equality above discriminates only
+    // where the corpus supplies an entry on each side.
+    assert!(
+        !referencing.is_empty(),
+        "no compilable corpus entry references the standard package, so this proof \
+         cannot catch under-reporting. Entries checked: {not_referencing:?}",
+    );
+    assert!(
+        !not_referencing.is_empty(),
+        "every compilable corpus entry references the standard package, so this proof \
+         cannot catch over-reporting. Entries checked: {referencing:?}",
+    );
+}
+
+// ==========================================================================
 // The TypeScript half of the compile proof.
 //
 // The E2 exit criterion is IR neutrality demonstrated by two backends, so a
