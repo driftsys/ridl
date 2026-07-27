@@ -314,7 +314,18 @@ targets. `--frozen` is the same flag as on `ridl check`: it is
 `ridl.lock` at the workspace root when the manifest declares `[imports]`,
 non-frozen. `<base>` in the `--emit` list above is the package name when
 `PATH` is a package directory or a workspace root, and the input file's stem
-in single-file mode. Building a workspace of two packages with no `[imports]`:
+in single-file mode.
+
+When a package names a type from `ridl.std`, the standard package is written
+beside your own as one more file per `--emit` target — `ridl.std.rs`,
+`ridl.std.h`, `ridl.std.ts` — because generated code refers to standard types
+by package path and does not compile without it. `ir-json` is the one target
+that gets no such file: a snapshot records the packages the workspace
+declares, and `ridl.std` ships with the compiler rather than with the
+workspace ([ADR-0007][adr-0007] decision 15).
+
+Building a workspace of two packages that name no standard type, with no
+`[imports]`:
 
 ```sh
 ridl build --out-dir out && find out -type f | sort
