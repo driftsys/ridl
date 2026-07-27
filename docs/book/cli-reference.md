@@ -106,15 +106,15 @@ same input. It now carries this description word for word under `ridl` too —
 before [ADR-0010][adr-0010], `ridl check --help` rendered it with a blank line
 where the description belongs.
 
-**It writes `ridl.lock`, but only when the manifest declares `[imports]`.**
-`ridl check` loads, resolves, and checks the workspace, then — non-frozen, and
-only when the checked-out manifest (or a package in it) has an `[imports]`
-table — materializes every remote import and regenerates `ridl.lock` at the
-workspace root on a clean run. Every other fixture on this page has no
-`[imports]` and never triggers this, which is why "it writes nothing" was
-wrong rather than merely incomplete: it happened to be true of every example
-this page had shown until this one, over a manifest pointed at a package
-served from a local HTTP stub:
+**It writes `~/.ridl/cache` and `ridl.lock`, but only when the manifest
+declares `[imports]`.** `ridl check` loads, resolves, and checks the
+workspace, then — non-frozen, and only when the checked-out manifest (or a
+package in it) has an `[imports]` table — materializes every remote import
+into `~/.ridl/cache` (ADR-0002 §7, content-addressed by URL and by the
+fetched artifact's SHA-256) and regenerates `ridl.lock` at the workspace root
+on a clean run. Every other fixture on this page has no `[imports]`, so none
+of them reach either write; over a manifest pointed at a package served from
+a local HTTP stub:
 
 ```sh
 ridl check && cat ridl.lock
@@ -294,7 +294,7 @@ Options:
           - c-header:   The extern-C header, written to `<base>.h`
           - ir-json:    The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
           - typescript: Idiomatic TypeScript source, written to `<base>.ts`
-
+          
           [default: rust]
 
       --frozen
@@ -908,7 +908,7 @@ Options:
           - c-header:   The extern-C header, written to `<base>.h`
           - ir-json:    The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
           - typescript: Idiomatic TypeScript source, written to `<base>.ts`
-
+          
           [default: rust]
 
       --frozen
@@ -958,7 +958,7 @@ compiler directly and want its stable, default-free flags.
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
 | `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error; the existing baseline is left untouched | the workspace cannot be found |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
-| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike five of the other seven |
+| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike five of the other seven, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
 
 This table is this repository's own taxonomy, recorded in
