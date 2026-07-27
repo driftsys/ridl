@@ -23,5 +23,12 @@
   the fail-closed rule `ridl fmt` was brought into line with. Not epic-scoped:
   it binds the CLI contract for every future subcommand.
 
+- **ADR-0011 — The provisioned-constant keyword.** ridl's `final` renamed to
+  `fixed`, so both ridl and uxdl spell one concept one way; `final` removed from
+  the reserved-word registry. Records the rejected candidates, the IR
+  field-number invariant, and the diagnostic-code invariant. Not epic-scoped: it
+  binds the language surface until superseded, and it supersedes ADR-0008
+  decision 5.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview.

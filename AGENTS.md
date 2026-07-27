@@ -29,7 +29,9 @@ built; `uxdl`, `rmdl`, and `rsdl` are sequenced in the roadmap. See
 - `docs/decisions/` — ADR-0002 (module system), ADR-0004 (sequencing and stack),
   ADR-0005 (agent enablement), ADR-0006 (E0 execution), ADR-0007 (E1 execution),
   ADR-0008 (E2 execution — read its `## Status` before editing it), ADR-0009
-  (toolchain pin and gate parity — binds every contributor, not one epic).
+  (toolchain pin and gate parity — binds every contributor, not one epic),
+  ADR-0010 (CLI conventions — binds every subcommand), ADR-0011 (the
+  provisioned-constant keyword is `fixed` — supersedes ADR-0008 decision 5).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 
