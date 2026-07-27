@@ -75,7 +75,7 @@ and §14.5 needs both service forms exercised.
   `veh_cluster_generated_rust_compiles_with_rustc` composes the two packages as
   sibling modules and runs `rustc` over the result;
   `veh_cluster_generated_typescript_type_checks` runs the emitted modules
-  through `tsc --noEmit --strict` against the `tests/tsc/ridl.std.ts` stand-in.
+  through `tsc --noEmit --strict` alongside the generated `ridl.std` module.
   Both snapshots are therefore proofs rather than transcripts, which is what the
   E2 exit criterion — IR neutrality demonstrated by two backends — actually
   asks for. The tsc proof skips with a printed notice when no tsc is
