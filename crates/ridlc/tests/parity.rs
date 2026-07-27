@@ -356,7 +356,7 @@ fn expected_interface(identity: &str, interface: &v2::Interface, kinds: &mut Kin
             // by neither side (ridl §3, §8), so it appears on the consumer face
             // and nowhere else. A guard expecting it on both would report a
             // defect on every interface that declares one.
-            Some(v2::decl::Kind::FinalDef(_)) => {
+            Some(v2::decl::Kind::FixedDef(_)) => {
                 expected.consumer.push((name, ordinal));
                 kinds.finals += 1;
             }

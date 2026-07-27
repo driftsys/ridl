@@ -166,8 +166,8 @@ fn fallible(ok: &str, err: &str) -> v2::return_type::Kind {
     })
 }
 
-fn final_def(payload: v2::FieldType) -> v2::decl::Kind {
-    v2::decl::Kind::FinalDef(v2::FinalDef {
+fn fixed_def(payload: v2::FieldType) -> v2::decl::Kind {
+    v2::decl::Kind::FixedDef(v2::FixedDef {
         payload: Some(payload),
     })
 }
@@ -391,7 +391,7 @@ fn final_with_array_type() {
             max: 32,
         }))),
     };
-    let package = one(interaction("capabilities", 1, final_def(capabilities)));
+    let package = one(interaction("capabilities", 1, fixed_def(capabilities)));
     insta::assert_snapshot!(render(&package));
 }
 
@@ -470,7 +470,7 @@ fn timing_modes_and_bounds() {
 /// the generated surface is the same shape for every interface.
 #[test]
 fn empty_timing_and_contract_consts() {
-    let package = one(interaction("vin", 1, final_def(named("Vin"))));
+    let package = one(interaction("vin", 1, fixed_def(named("Vin"))));
     let source = render(&package);
     assert!(source.contains("export const vehicleStatusTiming = {} as const;"));
     assert!(source.contains("export const vehicleStatusContracts = [] as const;"));
@@ -732,11 +732,11 @@ fn appendix_a() -> v2::Package {
                     Vec::new(),
                 ),
             ),
-            interaction("softwareVersion", 10, final_def(named("ridl.std.Version"))),
+            interaction("softwareVersion", 10, fixed_def(named("ridl.std.Version"))),
             interaction(
                 "capabilities",
                 11,
-                final_def(v2::FieldType {
+                fixed_def(v2::FieldType {
                     optional: false,
                     kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
                         element: Some(Box::new(named("ridl.std.Label"))),
@@ -1062,7 +1062,7 @@ fn deprecated_reaches_interactions_and_both_faces() {
                 ),
                 "use getAverageSpeed",
             ),
-            deprecate(interaction("oldVin", 5, final_def(named("Vin"))), "use vin"),
+            deprecate(interaction("oldVin", 5, fixed_def(named("Vin"))), "use vin"),
         ],
     );
     iface.deprecated = Some("superseded by VehicleStatus".to_string());
@@ -1125,7 +1125,7 @@ fn reserved_tombstone_is_recorded_with_its_ordinal() {
                     ),
                 ),
                 reserved(2, "resetCounters"),
-                interaction("vin", 3, final_def(named("Vin"))),
+                interaction("vin", 3, fixed_def(named("Vin"))),
             ],
         )],
         Vec::new(),
@@ -1203,7 +1203,7 @@ fn a_nameless_tombstone_states_its_ordinal_alone() {
                 ),
                 reserved_ordinal(2, None),
                 reserved_ordinal(3, Some("")),
-                interaction("vin", 4, final_def(named("Vin"))),
+                interaction("vin", 4, fixed_def(named("Vin"))),
             ],
         )],
         Vec::new(),
@@ -1239,7 +1239,7 @@ fn every_interaction_states_its_ordinal_on_every_face_that_carries_it() {
         vec![interface(
             "VehicleStatus",
             vec![
-                interaction("vin", 1, final_def(named("Vin"))),
+                interaction("vin", 1, fixed_def(named("Vin"))),
                 reserved(2, "legacyPing"),
                 interaction(
                     "speed",
@@ -1363,7 +1363,7 @@ fn final_appears_on_the_consumer_face_only() {
         vec![interface(
             "VehicleStatus",
             vec![
-                interaction("vin", 1, final_def(named("Vin"))),
+                interaction("vin", 1, fixed_def(named("Vin"))),
                 interaction(
                     "speed",
                     2,
@@ -1405,7 +1405,7 @@ fn final_appears_on_the_consumer_face_only() {
 /// do.
 #[test]
 fn finals_only_interface_emits_an_empty_provider_face() {
-    let package = one(interaction("vin", 1, final_def(named("Vin"))));
+    let package = one(interaction("vin", 1, fixed_def(named("Vin"))));
     let source = render(&package);
     assert!(
         source.contains("export interface VehicleStatusProvider {}"),
@@ -1471,13 +1471,13 @@ fn collision_package(decl_name: &str) -> v2::Package {
     let mut package = interact_package(
         vec![interface(
             "VehicleStatus",
-            vec![interaction("vin", 1, final_def(named("Vin")))],
+            vec![interaction("vin", 1, fixed_def(named("Vin")))],
         )],
         vec![service(
             "veh.adas.logs",
             v2::service::Shape::Inline(interface(
                 "",
-                vec![interaction("tailLogs", 1, final_def(named("Vin")))],
+                vec![interaction("tailLogs", 1, fixed_def(named("Vin")))],
             )),
         )],
     );
@@ -1552,13 +1552,13 @@ fn two_generated_names_claiming_one_identifier_are_refused() {
     let package = interact_package(
         vec![interface(
             "Service_veh_adas_logs",
-            vec![interaction("vin", 1, final_def(named("Vin")))],
+            vec![interaction("vin", 1, fixed_def(named("Vin")))],
         )],
         vec![service(
             "veh.adas.logs",
             v2::service::Shape::Inline(interface(
                 "",
-                vec![interaction("tailLogs", 1, final_def(named("Vin")))],
+                vec![interaction("tailLogs", 1, fixed_def(named("Vin")))],
             )),
         )],
     );

@@ -6,7 +6,7 @@ syntax = "proto3";
 // This schema extends IR v1 (the typl vocabulary layer, typl language
 // reference §3–§12) with the ridl interaction layer (ridl language
 // reference §3–§14): interfaces holding the five interaction kinds —
-// signal, event, command, query, final — plus services publishing them.
+// signal, event, command, query, fixed — plus services publishing them.
 // Every v1 message appears here verbatim with unchanged field numbers;
 // the E2 additions take exactly the numbers v1 earmarked for them
 // (ADR-0008 decision 8). The IR remains the centre of gravity between the
@@ -100,7 +100,7 @@ message Decl {
     EventDef event_def = 17;
     CommandDef command_def = 18;
     QueryDef query_def = 19;
-    FinalDef final_def = 20;
+    FixedDef fixed_def = 20;
     Reserved reserved_slot = 21;
   }
 }
@@ -485,7 +485,7 @@ message QueryDef {
 }
 
 // A provisioned-constant interaction (ridl §8).
-message FinalDef {
+message FixedDef {
   // Named type or array (ridl §8).
   FieldType payload = 1;
 }

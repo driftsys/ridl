@@ -309,7 +309,7 @@ fn emit_face(
 /// Something the checker cannot produce and that has no honest rendering is a
 /// [`GenerateError`] — an unresolved timing mode, a stream element that is
 /// neither string nor bytes, a typl declaration inside an interface. But an
-/// absent optional sub-message (`StreamType.element`, `FinalDef.payload`,
+/// absent optional sub-message (`StreamType.element`, `FixedDef.payload`,
 /// `Param.type`, `QueryDef.return_type`) falls back to `unknown` or
 /// `Promise<void>` instead. Every one of those is rejected upstream — a void
 /// query is RIDL-105, a payload-less final is RIDL-106 — so neither branch is
@@ -403,8 +403,8 @@ fn emit_member(
         // final as a SOME/IP getter, but a binding serves that from the
         // provisioning source, the same way it serves a signal getter from
         // its last-value cache — a transport detail, not an application API.
-        Some(v2::decl::Kind::FinalDef(final_def)) if face == Face::Consumer => {
-            let payload = match final_def.payload.as_ref() {
+        Some(v2::decl::Kind::FixedDef(fixed_def)) if face == Face::Consumer => {
+            let payload = match fixed_def.payload.as_ref() {
                 Some(ft) => kind_ts(ctx, ft.kind.as_ref())?,
                 None => "unknown".to_string(),
             };
@@ -413,7 +413,7 @@ fn emit_member(
             let doc = jsdoc("  ", &decl.doc, &tags);
             Ok(format!("{doc}  readonly {name}: {payload};\n"))
         }
-        Some(v2::decl::Kind::FinalDef(_)) => Ok(String::new()),
+        Some(v2::decl::Kind::FixedDef(_)) => Ok(String::new()),
         // A reserved tombstone holds an ordinal and declares no member, so it
         // has no member doc to carry it; it is recorded on the face instead,
         // by [`reserved_tags`] (ridl §11).

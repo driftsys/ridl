@@ -633,7 +633,7 @@ fn diff_interaction(
                 );
             }
         }
-        (Some(Kind::FinalDef(a)), Some(Kind::FinalDef(b))) => {
+        (Some(Kind::FixedDef(a)), Some(Kind::FixedDef(b))) => {
             if a.payload != b.payload {
                 emit(
                     changes,
@@ -859,7 +859,7 @@ fn kind_name_opt(kind: &Option<v2::decl::Kind>) -> &'static str {
         Some(Kind::EventDef(_)) => "event",
         Some(Kind::CommandDef(_)) => "command",
         Some(Kind::QueryDef(_)) => "query",
-        Some(Kind::FinalDef(_)) => "final",
+        Some(Kind::FixedDef(_)) => "final",
         Some(Kind::ReservedSlot(_)) => "reserved",
         None => "declaration",
     }
@@ -881,7 +881,7 @@ fn kind_discriminant(kind: &Option<v2::decl::Kind>) -> u8 {
         Some(Kind::EventDef(_)) => 8,
         Some(Kind::CommandDef(_)) => 9,
         Some(Kind::QueryDef(_)) => 10,
-        Some(Kind::FinalDef(_)) => 11,
+        Some(Kind::FixedDef(_)) => 11,
         Some(Kind::ReservedSlot(_)) => 12,
     }
 }

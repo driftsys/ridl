@@ -665,7 +665,7 @@ fn a_tuple_under_a_final_payload_is_package_private() {
             name,
             ordinal,
             "",
-            v2::decl::Kind::FinalDef(v2::FinalDef {
+            v2::decl::Kind::FixedDef(v2::FixedDef {
                 payload: Some(v2::FieldType {
                     optional: false,
                     kind: Some(payload),
@@ -2362,7 +2362,7 @@ fn final_with_an_array_is_a_read_only_accessor() {
         "capabilities",
         11,
         "",
-        v2::decl::Kind::FinalDef(v2::FinalDef {
+        v2::decl::Kind::FixedDef(v2::FixedDef {
             payload: Some(v2::FieldType {
                 optional: false,
                 kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
@@ -3128,7 +3128,7 @@ fn deprecated_reaches_interactions_and_both_faces() {
                 "oldVersion",
                 5,
                 "",
-                v2::decl::Kind::FinalDef(v2::FinalDef {
+                v2::decl::Kind::FixedDef(v2::FixedDef {
                     payload: Some(named_type("Version")),
                 }),
             ),

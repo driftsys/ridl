@@ -551,10 +551,10 @@ fn emit_interaction(
             push_contracts(interface, source_name, &query.contracts, &mut out.contracts)?;
         }
 
-        Some(v2::decl::Kind::FinalDef(final_def)) => {
+        Some(v2::decl::Kind::FixedDef(fixed_def)) => {
             let method = method();
             let hint = format!("{}{}", camel_case(type_name), camel_case(source_name));
-            let ty = final_def
+            let ty = fixed_def
                 .payload
                 .as_ref()
                 .map(|ft| field_type_tokens(ft, &hint, names.visibility, tuples))

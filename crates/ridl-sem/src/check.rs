@@ -2940,7 +2940,7 @@ impl Checker<'_> {
             ast::InterfaceMember::Query(query) => {
                 v2::decl::Kind::QueryDef(self.lower_query(query, &interaction_name))
             }
-            ast::InterfaceMember::Final(fin) => v2::decl::Kind::FinalDef(self.lower_final(fin)),
+            ast::InterfaceMember::Final(fin) => v2::decl::Kind::FixedDef(self.lower_final(fin)),
             // The tombstone stores its ordinal twice — on the `Decl`
             // envelope AND in `Reserved`. The schema cannot enforce the
             // agreement, so the lowering sets both from the one counter.
@@ -3906,7 +3906,7 @@ impl Checker<'_> {
 
     /// `final Name : (type_ref | array_type)` (ridl §8, Appendix C) — no
     /// init, no timing, no attribute block (RIDL-106).
-    fn lower_final(&mut self, fin: &ast::FinalDef) -> v2::FinalDef {
+    fn lower_final(&mut self, fin: &ast::FinalDef) -> v2::FixedDef {
         let payload = match fin.payload() {
             Some(ast::FieldType::Path(path)) => Some(v2::FieldType {
                 optional: false,
@@ -3948,7 +3948,7 @@ impl Checker<'_> {
             );
         }
         self.check_member_attrs(fin.syntax(), MemberKind::Final);
-        v2::FinalDef { payload }
+        v2::FixedDef { payload }
     }
 
     /// `param_type = type_ref | stream_type` (ridl Appendix C) — `noun`
@@ -8163,7 +8163,7 @@ interface VehicleStatus {
             "veh.common.WarningFlags"
         );
         // `final` payloads: an implicit `ridl.std` name is cross-package.
-        let Some(v2::decl::Kind::FinalDef(version)) =
+        let Some(v2::decl::Kind::FixedDef(version)) =
             &interaction(&checked, "softwareVersion").kind
         else {
             panic!("softwareVersion is not a final");
@@ -8172,7 +8172,7 @@ interface VehicleStatus {
             version.payload.as_ref().unwrap().kind,
             Some(v2::field_type::Kind::Named("ridl.std.Version".to_string())),
         );
-        let Some(v2::decl::Kind::FinalDef(caps)) = &interaction(&checked, "capabilities").kind
+        let Some(v2::decl::Kind::FixedDef(caps)) = &interaction(&checked, "capabilities").kind
         else {
             panic!("capabilities is not a final");
         };

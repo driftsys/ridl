@@ -246,7 +246,7 @@ mod v2_round_trip {
         };
 
         // final vin : Vin
-        let vin = v2::FinalDef {
+        let vin = v2::FixedDef {
             payload: Some(named_type("Vin")),
         };
 
@@ -272,7 +272,7 @@ mod v2_round_trip {
                 },
                 interaction("setTarget", 4, v2::decl::Kind::CommandDef(set_target)),
                 interaction("fetchFaults", 5, v2::decl::Kind::QueryDef(fetch_faults)),
-                interaction("vin", 6, v2::decl::Kind::FinalDef(vin)),
+                interaction("vin", 6, v2::decl::Kind::FixedDef(vin)),
             ],
         };
 
