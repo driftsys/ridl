@@ -74,7 +74,7 @@ primitives, aimed at different audiences:
 | fire-and-forget action | `command`              | `action` (+ refinements)          |
 | stateful mutation      | command-over-state     | `toggle` (an `action` refinement) |
 | request / response     | `query`                | `fetch`                           |
-| provisioned constant   | `final`                | `fixed`                           |
+| provisioned constant   | `fixed`                | `fixed` (the one shared spelling) |
 
 Everything the core defines is shared and **inherited verbatim from the ridl
 reference**: optional timing with the configurable `[100ms..1000ms]` default
@@ -282,7 +282,8 @@ Linters flag a fetch polled on a timer as a probable display (UXDL-206).
 
 ## 8. Fixed
 
-A **static capability** — the uxdl profile of `final`. All of ridl §8 applies.
+A **static capability** — the uxdl profile of `fixed`, the same keyword ridl
+uses (ADR-0011). All of ridl §8 applies.
 
 ```ridl
 fixed supportedLocales : [LanguageCode; 1..32]
@@ -439,13 +440,13 @@ are reported under their ridl/typl codes; the table below is uxdl-specific.
 
 ### 15.1 Structure (UXDL-1xx)
 
-| Code     | Rule                                                                                                        | Severity |
-| -------- | ----------------------------------------------------------------------------------------------------------- | -------- |
-| UXDL-101 | type declaration inside a `view` body                                                                       | error    |
-| UXDL-102 | duplicate interaction name within a view                                                                    | error    |
-| UXDL-103 | `states` reference is not a typl `enum`                                                                     | error    |
-| UXDL-104 | interaction named `state` colliding with the implicit state display                                         | error    |
-| UXDL-105 | system-interaction keyword (`signal`, `event`, `command`, `query`, `final`, `interface`) in `.uxdl` context | error    |
+| Code     | Rule                                                                                               | Severity |
+| -------- | -------------------------------------------------------------------------------------------------- | -------- |
+| UXDL-101 | type declaration inside a `view` body                                                              | error    |
+| UXDL-102 | duplicate interaction name within a view                                                           | error    |
+| UXDL-103 | `states` reference is not a typl `enum`                                                            | error    |
+| UXDL-104 | interaction named `state` colliding with the implicit state display                                | error    |
+| UXDL-105 | system-interaction keyword (`signal`, `event`, `command`, `query`, `interface`) in `.uxdl` context | error    |
 
 ### 15.2 Kinds and Refinements (UXDL-2xx)
 
@@ -595,7 +596,7 @@ declaration that sized the CAN signal sizes the slider.
 
 The uxdl profile adds to the typl grammar (typl Appendix E; shared productions —
 `timing`, `init_value`, `attr_block`, `reserved`, `param_list`, `stream_type`,
-`return_type` — as in the ridl grammar, Appendix C there):
+`return_type`, `fixed_type` — as in the ridl grammar, Appendix C there):
 
 ```ebnf
 definition    = [ "internal" ] ( typl_definition | view_def ) ;
@@ -615,7 +616,7 @@ action_kw     = "action" | "activate" | "toggle" | "select" | "adjust" | "dismis
 fetch_def     = doc_comment? "fetch" camelCase_id "(" param_list ")" ":" return_type
                 during_clause? attr_block? ;
 
-fixed_def     = doc_comment? "fixed" camelCase_id ":" final_type ;
+fixed_def     = doc_comment? "fixed" camelCase_id ":" fixed_type ;
 
 during_clause = "during" SCREAMING_SNAKE_ID { "," SCREAMING_SNAKE_ID } ;
 ```
@@ -690,7 +691,7 @@ glossaries and mean the same here. uxdl-specific:
 | **action**         | a fire-and-forget user operation (core command); acknowledged by the runtime, refused visibly, outcome observed via displays                    |
 | **refinement**     | one of `activate · toggle · select · adjust · dismiss` — an action with declared gesture semantics and payload rules; semantics, not a new kind |
 | **fetch**          | on-demand request/response (core query); fallible via result unions                                                                             |
-| **fixed**          | a static capability (core final) — cacheable for the software-instance lifetime                                                                 |
+| **fixed**          | a static capability (the shared core kind) — cacheable for the software-instance lifetime                                                       |
 | **view states**    | the coarse operating modes of a view — a typl enum inducing an implicit `state` display                                                         |
 | **`during`**       | availability gating of an interaction to named states; compiles to a `require` on the state display                                             |
 | **skeleton state** | the renderer's pre-live presentation — contractual in uxdl, because every display has an init value and `init` provenance                       |

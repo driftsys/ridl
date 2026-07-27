@@ -73,7 +73,7 @@ a restriction of that grammar selected by file extension. A `.typl` file accepts
 
 | Accepted in `.typl`                   | Rejected in `.typl` (belongs to)                                   |
 | ------------------------------------- | ------------------------------------------------------------------ |
-| `package`, `import`, `as`, `internal` | `interface`, `signal`, `event`, `command`, `query`, `final` (ridl) |
+| `package`, `import`, `as`, `internal` | `interface`, `signal`, `event`, `command`, `query`, `fixed` (ridl) |
 | `type`, `const`                       | user-interaction declarations (uxdl)                               |
 | `struct`, `enum`, `enumset`, `union`  | `model`, `node`, behaviour operators (rmdl)                        |
 | tuples, collections, `?` optionality  | instances, wiring, deployment (rsdl)                               |
@@ -105,9 +105,9 @@ accepts them. The stdlib `Duration` _type_ (a UCUM `ms` unit type) is unaffected
 **Interaction kinds are not typl kinds.** The markspec-typl precursor attached
 kinds (`signal`, `event`, `command`, `state`, `stream`, `config`, `document`) to
 type bindings. In the family these are split by layer:
-`signal`/`event`/`command`/`query`/`final` are ridl's interaction keywords over
+`signal`/`event`/`command`/`query`/`fixed` are ridl's interaction keywords over
 the `interact` core; `state` and stream processing are rmdl territory; `config`
-maps to ridl `final` (provisioned constants); `document` is just a `struct`.
+maps to ridl `fixed` (provisioned constants); `document` is just a `struct`.
 typl keeps only the pure vocabulary kinds: `type`, `const`, and the composites.
 See Appendix F.
 
@@ -139,22 +139,23 @@ width-pinning is a niche refinement not worth ten keywords in v0.1.
 
 Keywords **reserved family-wide** but rejected by `.typl` (current registry —
 grows with the other profiles): ridl's `interface`, `service`, `signal`,
-`event`, `command`, `query`, `final`; uxdl's `view`, `display`, `input`,
-`action`, `activate`, `toggle`, `select`, `adjust`, `dismiss`, `fetch`, `fixed`,
-`states`, `during`, plus its reserved set `navigate`, `scroll`, `drag`,
-`observe`, `surface`, `agent`; the expr-core words `require`, `ensure`; rmdl's
-`model`, `function`, `let`, `init`, `last`, `case`, `if`, `then`, `else`,
-`when`, `emit` (it also surfaces `signal`/`event` in signatures — same concepts,
-one registry entry each; `init` is rmdl's alone — the memory-seed keyword,
-needed because a flow has two equations; typl/ridl express init as bare
-`= value`; its ambient time values `now`/`dt` are _contextual identifiers, not
-keywords_; `pre`, `->`-as-followed-by, `node`, `returns`, `realizes`, and a
-surface `step` considered and rejected — models are contract-blind, so no
-`realizes`; `step` remains typl's quantization keyword alone), plus its reserved
-set `merge`, `current`, `state`, `transition`, `automaton`; and rsdl's
-`component`, `system`, `deployment`, `provides`, `requires`, `instance`, `for`,
-`assurance`, `target`, `place`, `on`, `transport`, `bundle`, `time`, `base` (it
-also reuses `model` from rmdl,
+`event`, `command`, `query`; the shared `fixed`, spelled the same by ridl and
+uxdl (ADR-0011) and holding one registry entry like every other shared concept;
+uxdl's `view`, `display`, `input`, `action`, `activate`, `toggle`, `select`,
+`adjust`, `dismiss`, `fetch`, `states`, `during`, plus its reserved set
+`navigate`, `scroll`, `drag`, `observe`, `surface`, `agent`; the expr-core words
+`require`, `ensure`; rmdl's `model`, `function`, `let`, `init`, `last`, `case`,
+`if`, `then`, `else`, `when`, `emit` (it also surfaces `signal`/`event` in
+signatures — same concepts, one registry entry each; `init` is rmdl's alone —
+the memory-seed keyword, needed because a flow has two equations; typl/ridl
+express init as bare `= value`; its ambient time values `now`/`dt` are
+_contextual identifiers, not keywords_; `pre`, `->`-as-followed-by, `node`,
+`returns`, `realizes`, and a surface `step` considered and rejected — models are
+contract-blind, so no `realizes`; `step` remains typl's quantization keyword
+alone), plus its reserved set `merge`, `current`, `state`, `transition`,
+`automaton`; and rsdl's `component`, `system`, `deployment`, `provides`,
+`requires`, `instance`, `for`, `assurance`, `target`, `place`, `on`,
+`transport`, `bundle`, `time`, `base` (it also reuses `model` from rmdl,
 `interface`/`service`/`signal`/`event`/`command`/`query` from ridl — same
 concepts, one registry entry each; `composition`, `binding`, `wire`, `delegate`,
 `publish`, `spk`, `apk` considered and rejected — components use application
@@ -450,12 +451,12 @@ type Frame   : bytes   [8]
 
 ### 5.3 String Constraint Syntax
 
-| Syntax                            | Meaning                 |
-| --------------------------------- | ----------------------- |
-| `string [N]`                      | fixed N characters      |
-| `string [min..max]`               | min to max characters   |
-| `string [N match PATTERN]`        | fixed N with validation |
-| `string [min..max match PATTERN]` | range with validation   |
+| Syntax                            | Meaning               |
+| --------------------------------- | --------------------- |
+| `string [N]`                      | exactly N characters  |
+| `string [min..max]`               | min to max characters |
+| `string [N match PATTERN]`        | exactly N, validated  |
+| `string [min..max match PATTERN]` | range with validation |
 
 `match` references a named regex constant or an inline regex literal.
 
@@ -463,7 +464,7 @@ type Frame   : bytes   [8]
 
 | Syntax             | Meaning          |
 | ------------------ | ---------------- |
-| `bytes [N]`        | fixed N bytes    |
+| `bytes [N]`        | exactly N bytes  |
 | `bytes [min..max]` | min to max bytes |
 
 No `match` — bytes are opaque.
@@ -879,11 +880,11 @@ sensors  : [Label : Speed; 1..8]
 
 ### 12.3 Bound Rules
 
-| Construct     | Syntax            | Bound                          |
-| ------------- | ----------------- | ------------------------------ |
-| Fixed array   | `[T; N]`          | exactly N — mandatory          |
-| Bounded array | `[T; min..max]`   | min to max — mandatory         |
-| Bounded map   | `[K:V; min..max]` | min to max entries — mandatory |
+| Construct          | Syntax            | Bound                          |
+| ------------------ | ----------------- | ------------------------------ |
+| Exact-length array | `[T; N]`          | exactly N — mandatory          |
+| Bounded array      | `[T; min..max]`   | min to max — mandatory         |
+| Bounded map        | `[K:V; min..max]` | min to max entries — mandatory |
 
 The stream container `<T>` is the deliberate exception to boundedness and lives
 in the ridl profile (§1.3).
@@ -1587,7 +1588,7 @@ This specification is the successor, not a superset. The mapping:
 | `$Name : kind shape` bindings with sigil                | named declarations in packages (`type`, `const`, `struct`, …)       | sigil dropped — names live in the module system, not in prose                                                                                                        |
 | kind vocabulary: `signal`, `event`, `command`, `stream` | **not typl** — ridl's interaction keywords over the `interact` core | moved up a layer                                                                                                                                                     |
 | kind `state`                                            | **not typl** — rmdl territory                                       | moved up a layer                                                                                                                                                     |
-| kind `config`                                           | ridl `final` (provisioned constant)                                 | moved up a layer — `final` confirmed over `config`: it names the consumer contract (immutable, cacheable), not the provider workflow; see concept-note naming ledger |
+| kind `config`                                           | ridl `fixed` (provisioned constant)                                 | moved up a layer — `fixed` confirmed over `config`: it names the consumer contract (immutable, cacheable), not the provider workflow; see concept-note naming ledger |
 | kind `const`                                            | `const`                                                             | kept                                                                                                                                                                 |
 | kind `value` (default)                                  | `type` / struct field                                               | kept, made explicit                                                                                                                                                  |
 | kind `document`                                         | `struct`                                                            | folded in                                                                                                                                                            |
@@ -1661,7 +1662,7 @@ stricter), ✗ not expressible (deliberate or open).
 | `default`                                                     | bare `= v` (init value, §5.8)                                                          | ✓ type-checked (JSON Schema does not validate `default`)                                                                                                                      |
 | `deprecated`                                                  | `@deprecated "reason"`                                                                 | ✓ reason mandatory in practice                                                                                                                                                |
 | `examples`                                                    | — (doc-comment code blocks)                                                            | ≈                                                                                                                                                                             |
-| `readOnly` / `writeOnly`                                      | not a type property — direction lives on interactions (ridl `final`, signal direction) | ≈ relocated by design                                                                                                                                                         |
+| `readOnly` / `writeOnly`                                      | not a type property — direction lives on interactions (ridl `fixed`, signal direction) | ≈ relocated by design                                                                                                                                                         |
 | vocabularies / meta-schemas / `$schema`                       | one closed grammar + label profiles                                                    | ✗ deliberate — no user-extensible validation vocabulary                                                                                                                       |
 
 **Verdict.** typl covers the JSON Schema constructs that describe _data shape_ —

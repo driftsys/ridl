@@ -136,7 +136,7 @@ union CalOutcome { ok: CalReport, err: CalError }   // Result<CalReport,CalError
 | `event`   | pub/sub     | discrete **occurrence**; every one matters, queued                  | provider publishes | `@[min..max]` only      | no                                |
 | `command` | RPC         | fire-and-forget **action**; no reply                                | consumer calls     | none                    | no (has no return)                |
 | `query`   | RPC         | **request/response**; reply mandatory                               | consumer calls     | none                    | yes — via result-union return     |
-| `final`   | provisioned | value fixed for software-instance lifetime, cacheable               | neither            | none                    | no                                |
+| `fixed`   | provisioned | value held for the software-instance lifetime, cacheable            | neither            | none                    | no                                |
 
 **The one distinction to get right:** state → `signal`; occurrence → `event`. If
 you are tempted to publish an "event" carrying full current state, it is a

@@ -9,7 +9,7 @@ documents in [`../archive/`](../archive/).
 - **typl-language-reference.md** — the vocabulary layer: types, ranges, units,
   constants, composites, packages.
 - **ridl-language-reference.md** — the system-interaction layer: `signal` /
-  `event` / `command` / `query` / `final`, timing, errors, evolution, interfaces
+  `event` / `command` / `query` / `fixed`, timing, errors, evolution, interfaces
   and services.
 - **uxdl-language-reference.md** — the user-interaction layer: `display` /
   `input` / `action` / `fetch` / `fixed`, view states.

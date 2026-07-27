@@ -2,7 +2,7 @@
 
 **Reactive Interface Description Language** — the system-interaction layer of
 the RIDL family: transport-neutral reactive contracts (`signal` · `event` ·
-`command` · `query` · `final`) over the typl vocabulary.
+`command` · `query` · `fixed`) over the typl vocabulary.
 
 Version: 0.2.0 — Draft
 
@@ -35,7 +35,7 @@ Version: 0.2.0 — Draft
 5. [Event](#5-event)
 6. [Command](#6-command)
 7. [Query](#7-query)
-8. [Final](#8-final)
+8. [Fixed](#8-fixed)
 9. [Timing Annotations](#9-timing-annotations)
 10. [Errors](#10-errors)
 11. [Interaction Identity and Evolution](#11-interaction-identity-and-evolution)
@@ -78,7 +78,7 @@ Exactly four things, each owned by a family core:
 
 | Addition          | Core           | Surface                                                     |
 | ----------------- | -------------- | ----------------------------------------------------------- |
-| interaction kinds | `interact`     | `interface`, `signal`, `event`, `command`, `query`, `final` |
+| interaction kinds | `interact`     | `interface`, `signal`, `event`, `command`, `query`, `fixed` |
 | timing            | `time`         | `@Xms`, `@[min..max]`, duration literals                    |
 | contracts         | `expr`         | `require`, `ensure` attribute clauses                       |
 | stream container  | — (ridl-owned) | `<T>` in interaction position                               |
@@ -132,7 +132,7 @@ smaller unit (`500us`, not `0.5ms`); a fractional literal is FORM-102.
 Keywords **used** by the ridl profile, beyond typl's set:
 
 ```
-interface  service  signal  event  command  query  final
+interface  service  signal  event  command  query  fixed
 ```
 
 `interface` names the abstract contract shape; `service` names a global
@@ -166,7 +166,7 @@ delivery mean":
 | `event`   | pub/sub     | discrete occurrence — every occurrence matters     | provider publishes    |
 | `command` | RPC         | fire-and-forget action — no reply channel          | consumer calls        |
 | `query`   | RPC         | request/response — reply mandatory                 | consumer calls        |
-| `final`   | provisioned | immutable for the software-instance lifetime       | neither (provisioned) |
+| `fixed`   | provisioned | immutable for the software-instance lifetime       | neither (provisioned) |
 
 The signal/event split is the load-bearing distinction, borrowed from the
 automotive tradition (AUTOSAR `isQueued`): **state** may be sampled, coalesced,
@@ -454,25 +454,28 @@ verbs RIDL-404 matches.
 
 ---
 
-## 8. Final
+## 8. Fixed
 
 A value **provisioned externally** — build, factory, FOTA — and **immutable for
 the lifetime of the running software instance**.
 
 ```ridl
-final vin             : Vin
-final softwareVersion : Version
-final capabilities    : [Label; 0..32]
+fixed vin             : Vin
+fixed softwareVersion : Version
+fixed capabilities    : [Label; 0..32]
 ```
 
 - Single named-type payload (collections permitted); no timing, no attribute
   block (RIDL-106)
 - Read-only: no interaction can mutate it; safe to cache unconditionally
-- Reading a `final` is free of the query machinery — bindings expose it as a
+- Reading a `fixed` is free of the query machinery — bindings expose it as a
   plain accessor, populated at binding initialization
-- Naming decision on record: `final`, not `config` — see the concept-note naming
-  ledger (immutability is the consumer-facing promise; `config` connotes
-  hot-reload and is reserved vocabulary space for rsdl)
+- Naming decision on record: `fixed`, not `final` and not `config` — one word
+  for one concept at both boundaries, so uxdl spells this kind the same way
+  (ADR-0011). `final` was the earlier spelling and misled: a Java or Kotlin
+  reader takes it for a compile-time constant, which this is not. `config`
+  connotes hot-reload and is reserved vocabulary space for rsdl. See the
+  concept-note naming ledger
 
 Maps to: Android `ro.*` properties, AUTOSAR `CalibrationParameter`, SOME/IP
 field with getter only.
@@ -568,7 +571,7 @@ defaulted (§9.1), recorded in the IR beside the bounds, and a change between th
 two modes is breaking whatever the bounds do.
 
 Timing belongs to `signal` and `event`. An `@` annotation on a `command`, a
-`query` or a `final` is RIDL-106 — one code for one rule, over all three kinds.
+`query` or a `fixed` is RIDL-106 — one code for one rule, over all three kinds.
 The grammar admits the annotation on every interaction kind so that the
 narrowing is a semantic rule with a semantic message; it is not a parse error.
 
@@ -889,7 +892,7 @@ interface VehicleStatus {
     ensure  result >= 0.0
   ]
 
-  final softwareVersion : Version
+  fixed softwareVersion : Version
 }
 ```
 
@@ -977,7 +980,7 @@ rmdl computes, rsdl connects.
   "event" carrying full current state, it is a signal
 - Commands mutate, queries read; observable command outcomes return as state
   (signals), not as return values
-- Name signals/finals as nouns (`currentSpeed`), events as past-tense
+- Name signals and fixed values as nouns (`currentSpeed`), events as past-tense
   occurrences (`doorOpened`), commands as imperatives (`setGear`), queries as
   `get…`/`stream…`
 - Reuse error types across queries whose failure domains genuinely coincide —
@@ -1007,7 +1010,7 @@ restated here.
 | RIDL-103 | strict periodic `@Xms` on `event`                                                                                                    | error                                                     |
 | RIDL-104 | explicit return type on `command`                                                                                                    | error                                                     |
 | RIDL-105 | `query` returning `()`                                                                                                               | error                                                     |
-| RIDL-106 | timing annotation on a kind that carries none — `command`, `query`, `final` (§9); attribute block on `final` (§8)                    | error                                                     |
+| RIDL-106 | timing annotation on a kind that carries none — `command`, `query`, `fixed` (§9); attribute block on `fixed` (§8)                    | error                                                     |
 | RIDL-107 | type declaration inside an `interface` or a `service` body — raised at parse time, where the declaration is recognised and recovered | error                                                     |
 | RIDL-108 | `@[X..X]` — a degenerate range, the rate floor equal to its staleness bound (§9.2); `signal` and `event` alike                       | warning                                                   |
 | RIDL-109 | signal payload type has no derivable init value and no `= value` override (§4.4)                                                     | error                                                     |
@@ -1037,7 +1040,7 @@ either direction.
 
 | Code     | Rule                                                                                                                    | Severity |
 | -------- | ----------------------------------------------------------------------------------------------------------------------- | -------- |
-| RIDL-301 | `require` or `ensure` on `signal`, `event`, or `final`                                                                  | error    |
+| RIDL-301 | `require` or `ensure` on `signal`, `event`, or `fixed`                                                                  | error    |
 | RIDL-302 | `ensure` on `command`                                                                                                   | error    |
 | RIDL-303 | query with no success path — a bare `error` type in return position, or an `error`-typed left arm of an inline `T \| E` | error    |
 | RIDL-304 | `error`-typed or result-union **parameter** on `command`/`query` — failure flowing toward a provider                    | warning  |
@@ -1069,7 +1072,7 @@ the `ridl check` facade against a workspace-local baseline, which is outside
 
 A public `interface` exposing an `internal` typl declaration is **TYPL-005**
 (typl §3.3), not a RIDL code: it is the same rule the vocabulary layer states,
-applied to the interaction positions — a signal, event or `final` payload, a
+applied to the interaction positions — a signal, event or `fixed` payload, a
 command or query parameter, a query return, a tuple-return field, an array or
 stream element, either arm of an inline `T | E`, a collection length bound, and
 a constant or enum type named by a `require`/`ensure` clause. A `service` is
@@ -1208,8 +1211,8 @@ interface VehicleStatus {
   /// Paged fault snapshot — fallible query via inline `T | E` (§10.1)
   query getFaultPage(filter: DiagFilter): FaultPage | DiagError
 
-  final softwareVersion : Version
-  final capabilities    : [Label; 0..32]
+  fixed softwareVersion : Version
+  fixed capabilities    : [Label; 0..32]
 }
 ```
 
@@ -1226,7 +1229,7 @@ compose.
 | `event`                        | event (eventgroup)                                                           | server-streaming RPC                                         | callback                           | topic, `VOLATILE` durability                          | non-retained publish          |
 | `command`                      | request w/ empty response (= ack, §6.1)                                      | unary RPC → `Empty` (= ack)                                  | `oneway` + runtime ack shim        | reliable-QoS request topic (DDS ack)                  | publish QoS 1 (puback = ack)  |
 | `query`                        | request/response method                                                      | unary/streaming RPC                                          | method                             | request/reply (RPC over DDS)                          | request/reply channel pair    |
-| `final`                        | field with getter only                                                       | unary getter RPC (cacheable)                                 | constant/property                  | —                                                     | retained provisioning channel |
+| `fixed`                        | field with getter only                                                       | unary getter RPC (cacheable)                                 | constant/property                  | —                                                     | retained provisioning channel |
 | result-union error arm (§10.1) | method return code table                                                     | `google.rpc.Status` + typed detail                           | `ServiceSpecificException` code    | reply union arm                                       | error payload schema          |
 | ordinals (§11)                 | method ID = ordinal; event ID = ordinal + event flag; eventgroup = interface | RPC name (identity is nominal)                               | transaction code = ordinal         | topic name suffix                                     | channel path segment          |
 | Stratum 2 (§10.2)              | `E_MALFORMED_MESSAGE` / `E_NOT_OK` / `E_UNKNOWN_METHOD`                      | `INVALID_ARGUMENT` / `FAILED_PRECONDITION` / `UNIMPLEMENTED` | `IllegalArgumentException` mapping | reply status                                          | error topic convention        |
@@ -1262,7 +1265,7 @@ service_def   = doc_comment? "service" dotted_name
 dotted_name   = camelCase_id { "." camelCase_id } ; (* reverse-domain global name,
                                                        every segment lowercase — §14.5 *)
 
-interaction   = signal_def | event_def | command_def | query_def | final_def | reserved ;
+interaction   = signal_def | event_def | command_def | query_def | fixed_def | reserved ;
 
 signal_def    = doc_comment? "signal"  camelCase_id ":" type_ref init_value? timing? ;
 event_def     = doc_comment? "event"   camelCase_id ":" type_ref timing? ;
@@ -1272,7 +1275,7 @@ init_value    = "=" ( literal | SCREAMING_SNAKE_ID ) ;   (* bare init override �
 command_def   = doc_comment? "command" camelCase_id "(" param_list ")" attr_block? ;
 query_def     = doc_comment? "query"   camelCase_id "(" param_list ")" ":" return_type
                 attr_block? ;
-final_def     = doc_comment? "final"   camelCase_id ":" final_type ;
+fixed_def     = doc_comment? "fixed"   camelCase_id ":" fixed_type ;
               (* no error syntax — a fallible_type return makes a query fallible, §10.1 *)
 
 param_list    = "" | param { "," param } ;
@@ -1282,7 +1285,7 @@ return_type   = type_ref | tuple_type | fallible_type | stream_type ;
 fallible_type = type_ref "|" type_ref ;             (* inline T | E — §10.1, gf §6.1;
                                                        both arms are named types, the
                                                        right one an `error` type *)
-final_type    = type_ref | array_type ;             (* array_type per typl grammar *)
+fixed_type    = type_ref | array_type ;             (* array_type per typl grammar *)
 stream_type   = "<" ( type_ref | "string" | "bytes" ) ">" ;
 
 (* ---------- Timing ---------- *)
@@ -1332,7 +1335,7 @@ What each interface language contributed to, or was rejected from, this design:
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **CORBA IDL**                    | the `interface` grouping and the cautionary tale: `inout` params, exceptions as control flow, and interface inheritance all rejected here as evolution and codegen hazards — data-carrying failures are `error struct`s in result unions instead                                                                                                                |
 | **Franca IDL**                   | closest European-automotive ancestor: attributes ≈ signals, broadcasts ≈ events, `fireAndForget` ≈ command, error enums → typl `error` types. Rejected: `extends`, in-language `version`, `selective` broadcasts (→ §17.1), deployment `.fdepl` files (rsdl + `ridl.toml` instead)                                                                              |
-| **AUTOSAR Classic**              | the signal/event split (`isQueued`), CalibrationParameter → `final`, signal groups → §17.3. ridl exists partly to be the legible source ARXML is generated _from_                                                                                                                                                                                               |
+| **AUTOSAR Classic**              | the signal/event split (`isQueued`), CalibrationParameter → `fixed`, signal groups → §17.3. ridl exists partly to be the legible source ARXML is generated _from_                                                                                                                                                                                               |
 | **SOME/IP**                      | field triple (getter derivable from §4.4, setter as explicit command, notifier = signal), return codes → Stratum 2 mapping, method/event IDs → ordinal derivation                                                                                                                                                                                               |
 | **DDS**                          | the QoS lesson: DEADLINE/durability/liveliness are _contract-relevant_ — ridl promotes exactly the state-vs-occurrence and freshness subset into the language (`@`, §4.4) and leaves reliability/history to deployment (§17.5). DDS proves both that QoS matters and that 22 orthogonal QoS policies on one topic is too many degrees of freedom for a contract |
 | **gRPC / proto**                 | streaming model (§12 direction-by-position), `google.rpc.Status` → Stratum 2 categories, `Empty`-returning unary → command mapping. Rejected: errors as open-ended status strings — ridl functional errors are closed typl types, and errors are data, not a status channel                                                                                     |
@@ -1413,7 +1416,7 @@ uniform from struct fields to interface methods.
 | **command**                          | fire-and-forget RPC at the contract level — no functional reply; the runtime carries a delivery acknowledgment beneath it                                                                                                                                    |
 | **delivery acknowledgment (ack)**    | runtime-level confirmation that a command was received and accepted (validated, precondition passed) — or negatively acknowledged with a Stratum 2 category; enables retries and supervision, never visible in the contract                                  |
 | **query**                            | request/response RPC — reply mandatory; an inline `T \| E` return makes it fallible                                                                                                                                                                          |
-| **final**                            | a value provisioned externally (build/factory/FOTA), immutable for the software-instance lifetime, safe to cache                                                                                                                                             |
+| **fixed**                            | a value provisioned externally (build/factory/FOTA), immutable for the software-instance lifetime, safe to cache                                                                                                                                             |
 | **provider**                         | the component that owns an interface: publishes its signals/events, executes its commands/queries                                                                                                                                                            |
 | **consumer**                         | any component bound to an interface it does not own: subscribes, calls                                                                                                                                                                                       |
 | **state vs occurrence**              | the load-bearing distinction behind signal/event: state exists while unchanged and may be cached; an occurrence happens once and is meaningful individually                                                                                                  |

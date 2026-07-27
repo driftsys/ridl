@@ -121,13 +121,12 @@ criteria:** ridl interfaces compile to Rust _and_ a second backend from one IR;
 returns, `require`/`ensure` contracts, streams, interfaces and services compile
 to IR v2, and that one IR drives both the Rust and the TypeScript backend; the
 facade gained `ridl diff`, `ridl baseline`, and `ridl test`. Deferred per
-ADR-0008: `persist` (d3), the `final` → `fixed`/`provisioned` reconsideration
-(d5, still open), the general-form §4.7 promotion of `labels`/`deprecated` to
-attributes, and diagnostic codes RIDL-111 and RIDL-142 — reserved by d21 and
-still unminted. `ridlc build` emits Rust, the extern-C header, IR JSON, and
-TypeScript. The epic itself shipped the TypeScript backend as a library only,
-pinned by the corpus snapshots and reachable from no command; the
-`--emit typescript` path landed afterwards, as a prerequisite for E3.3
+ADR-0008: `persist` (d3) and the general-form §4.7 promotion of
+`labels`/`deprecated` to attributes, and diagnostic codes RIDL-111 and RIDL-142
+— reserved by d21 and still unminted. `ridlc build` emits Rust, the extern-C
+header, IR JSON, and TypeScript. The epic itself shipped the TypeScript backend
+as a library only, pinned by the corpus snapshots and reachable from no command;
+the `--emit typescript` path landed afterwards, as a prerequisite for E3.3
 (driftsys/ridl#172). E2 also paid three codes of the E1 debt ADR-0007 d10
 recorded: TYPL-301, TYPL-303, and TYPL-304 ship, emitted by the parser once the
 family grammar made the constructs they reject parseable, each with a showcase
@@ -137,7 +136,7 @@ covered it from the resolver since E1. The consolidated E2 debt roll-up is
 
 | ID    | Story                                                                                                                                                   | Done when                                                               | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---- |
-| E2.1  | `interact` core surface + semantics: `signal`/`event`/`command`/`query`/`final`                                                                         | all five kinds parse, check, resolve payloads                           | L    |
+| E2.1  | `interact` core surface + semantics: `signal`/`event`/`command`/`query`/`fixed`                                                                         | all five kinds parse, check, resolve payloads                           | L    |
 | E2.2  | Envelope + timing: `@Xms`, `@[min..max]` as generic rate-floor/staleness-bound                                                                          | timing attached to interactions; defaults applied                       | M    |
 | E2.3  | Errors-as-data: `error` types, result unions, inline `T \| E` returns (general-form §6.1)                                                               | fallible query/fetch checks; three-strata respected                     | M    |
 | E2.4  | `expr` **guaranteed subset** for `require`/`ensure` — forward-compatible with the E5.1 function layer                                                   | contract clauses parse + type-check; subset documented as V2-extensible | M    |

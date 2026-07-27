@@ -41,7 +41,7 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   E2 made lexing and parsing take a `Profile` (`keywords.rs`): `Profile::Typl`
   behaves exactly as the E1 toolchain did, and `Profile::Ridl` additionally
   activates nine keywords — `interface`, `service`, `signal`, `event`,
-  `command`, `query`, `final`, `require`, `ensure`. The grammar grew the
+  `command`, `query`, `fixed`, `require`, `ensure`. The grammar grew the
   interaction productions, the single general-form attribute block, and the
   guaranteed-subset expression grammar, all in the same `family.ungram` (renamed
   from `typl.ungram`) and all reaching the typed AST through the same generator.
