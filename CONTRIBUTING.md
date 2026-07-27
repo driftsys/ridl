@@ -137,6 +137,12 @@ Two consequences worth knowing:
 - the info string's language word must be exactly `ridl` or `typl`. `RIDL` and
   `ridl{.class}` render as examples but are refused, because nothing would have
   compiled them.
+- an `{{#include}}` line is mdBook's own preprocessor directive. This harness
+  never runs that preprocessor — it reads a file's raw text, so `{{#include}}`
+  is ordinary text to it, and a fence inside the included file is never
+  extracted or compiled. An example that must be verified belongs in a file
+  under `docs/book/` directly, not in a file reached only through
+  `{{#include}}`.
 
 Earlier versions of this harness scanned lines by hand and failed _open_ three
 times over — each time on a fence that mdBook rendered and the harness never

@@ -55,7 +55,9 @@ standalone member; rsdl is the apex.
     just gate-parity     CI invokes every member of just build
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just book-check      mdbook build on a copy — catches a SUMMARY.md mdBook
-                         cannot parse (it does not prove the book is whole)
+                         cannot parse and a {{#include}} that does not resolve
+                         (mdBook exits 0 on the second, so two checks read the
+                         log and the rendered output)
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
@@ -106,9 +108,13 @@ apart unnoticed — check those two by reading when you touch either file.
   own `package` and is a whole file; a fragment is marked `` ```ridl,ignore ``;
   a deliberate diagnostic is marked `` ```ridl,allow=<CODE> ``. Package names
   are book-wide. Extraction uses `pulldown-cmark` with mdBook's exact option set
-  (`MDBOOK_OPTIONS`), so a fence anywhere mdBook reads one is verified — do not
-  replace it with pattern matching, and do not widen the options. See
-  `CONTRIBUTING.md`, "Writing examples in the book".
+  (`MDBOOK_OPTIONS`), so a fence anywhere mdBook reads one _in that file_ is
+  verified — do not replace it with pattern matching, and do not widen the
+  options. **The one exception is `{{#include}}`**, which the harness does not
+  expand: fences inside an included file are not compiled. That is what keeps
+  the six Language reference chapters — thin wrappers over `docs/specification/`
+  — out of the harness. A fence you want verified must sit in a `docs/book/`
+  file directly. See `CONTRIBUTING.md`, "Writing examples in the book".
 - **Diagnostic codes written in Markdown are unguarded.** The catalogue drift
   check (issue #189) scans `.rs` sources only, so a `TYPL-`/`RIDL-` code cited
   in `docs/` — including an `allow=<CODE>` fence marker — is not checked against
