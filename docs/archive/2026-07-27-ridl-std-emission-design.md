@@ -1,7 +1,8 @@
 # Design — emit `ridl.std` from `ridlc build`
 
 - Date: 2026-07-27
-- Status: design approved, not yet implemented
+- Status: implemented on branch `fix/emit-ridl-std`; archived at that branch's
+  PR
 - Closes: driftsys/ridl#190
 
 ## 1. The question

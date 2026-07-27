@@ -690,3 +690,33 @@ compiling.
 
 This design and plan are working memory. When the PR lands, move both from
 `docs/wip/` to `docs/archive/` verbatim, as the `fixed` rename did.
+
+---
+
+## Execution outcome
+
+The plan was executed task by task, each with its own review. Four things it did
+not anticipate, recorded because they are what the next plan should expect:
+
+- **Task 1's test, as written in this plan, could not fail.** Both fixture
+  declarations resolved to the same qualifier `ridl.std`, so the length
+  assertion held even with the array-recursion arm gutted. The fix gave every
+  recursive path its own distinct qualifier and asserted the exact set. A test
+  written in a plan gets no compiler to check it; state the discrimination
+  requirement in the step, as Task 1 step 5 did for the exhaustive match.
+- **A repo guard fired that no per-crate test could see.** `xtask`'s
+  `every_direct_interfaces_read_is_justified` counts direct `.interfaces` reads
+  and requires each to be justified in a table. The walk added one. Per-task
+  subagents ran only their own crate's tests, so this surfaced at the first full
+  `just build`. Run the whole gate earlier when a task adds a read of a guarded
+  shape.
+- **The emit re-opened a defect in a different command.** Passing the caller's
+  whole `emits` slice meant `ridl baseline` published `ridl.std.ir.json`, which
+  `ridl diff`'s compiled side excludes, so diffing an unedited workspace
+  reported `breaking`. `ridl check --baseline` masked it. The standard package
+  belongs in the code emits, not in a contract snapshot.
+- **The design overstated its own defence.** It claimed the corpus proofs turn a
+  detection miss into a compile failure. They did not: they generated the
+  standard package unconditionally in process and never exercised the emit
+  decision. The guard the design described now exists, driven through the real
+  `run_build`.
