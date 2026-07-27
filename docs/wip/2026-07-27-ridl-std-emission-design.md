@@ -81,11 +81,23 @@ It belongs in that crate because it depends on an invariant that crate defines.
 `ir.proto` states the canonical form directly: every resolved type-reference
 string is the fully qualified `pkg.Name` for a cross-package reference and the
 bare `Name` for a same-package reference, never an import alias — and it
-enumerates the eleven fields that carry one (`FieldType.named`,
-`UnionArm.type_ref`, `ConstDef.type_ref`, `EnumSetDef.backing_enum`,
-`Constraint.pattern_const`, `SignalDef.payload`, `EventDef.payload`,
-`StreamType.named`, `FallibleType.ok`, `FallibleType.err`,
-`Service.interface_ref`).
+enumerates the fields that carry one (`FieldType.named`, `UnionArm.type_ref`,
+`ConstDef.type_ref`, `EnumSetDef.backing_enum`, `Constraint.pattern_const`,
+`SignalDef.payload`, `EventDef.payload`, `StreamType.named`, `FallibleType.ok`,
+`FallibleType.err`, `Service.interface_ref`).
+
+That enumeration names the fields, not the shape. A reference is reachable at
+arbitrary depth, because `FieldType` nests into itself through
+`TupleType.fields`, `ArrayType.element`, `MapType.key`, `MapType.value`,
+`FieldType.inline_scalar` and `FieldType.stream`. The walk is therefore
+recursive over the type tree, not a read of eleven flat fields.
+
+**The walk matches every `oneof` exhaustively, with no wildcard arm.** `prost`
+lowers each `oneof` to a Rust enum, so a variant added later — E3 will add
+several — stops the walk compiling instead of silently going unread. This is the
+mechanism that makes the detection rule fail closed, and it is a requirement of
+this design, not an implementation preference. A wildcard arm added later would
+disarm it silently.
 
 Placing the walk anywhere else separates it from the rule that makes it correct.
 Placing it beside the schema means the enumeration and its consumer are edited
@@ -212,14 +224,17 @@ not be settled as a side effect of a defect fix.
 
 ## 7. Risks
 
-- **Detection under-reports.** A reference-bearing IR field added later — E3
-  will add several — that `referenced_packages` does not read makes the emit
-  silently stop happening for workspaces that only reach the standard package
-  through that field. Mitigation: the corpus proofs consume the emitted artifact
-  (§3.4), so a missed field becomes a compile failure rather than silence, for
-  every construct the corpus exercises. Residual: constructs the corpus does not
-  exercise. The doc comment naming the `ir.proto` paragraph is what makes the
-  pairing visible to whoever adds the field.
+- **Detection under-reports.** A reference the walk does not read makes the emit
+  silently stop happening for a workspace that reaches the standard package only
+  that way. Three defences, in order of strength. A new `oneof` **variant**
+  cannot slip through at all: the exhaustive match without a wildcard arm (§3.3)
+  turns it into a compile error. A new **field on an existing message** — a
+  second `type_ref` beside one already read — does compile, and is caught only
+  by the corpus proofs consuming the emitted artifact (§3.4), which turn a miss
+  into a compile failure for every construct the corpus exercises. Residual: a
+  new field, on an existing message, reached only by a construct the corpus does
+  not exercise. The doc comment naming the `ir.proto` paragraph is what makes
+  the pairing visible to whoever adds that field.
 - **The negative-case test is the only guard on over-reporting.** If detection
   returned every package unconditionally the positive proofs would still pass.
   §4.4's negative test is what discriminates.
