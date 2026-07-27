@@ -613,9 +613,10 @@ fn showcase_pins_every_severity() {
 }
 
 /// The generated Rust for the clean `veh-common` entry compiles end to end
-/// through the whole pipeline. A minimal prelude stands in for the `ridl.std`
-/// types the package imports, declared in the module path the cross-package
-/// references resolve to (`ridl::std::…`).
+/// through the whole pipeline, composed with the standard package's own
+/// generated Rust — the same artifact `ridlc build` writes beside it (issue
+/// #190) — under the module path the cross-package references resolve to
+/// (`ridl::std::…`).
 ///
 /// The assertion is on the rustc **exit status**, not on empty stderr: the
 /// generated code is valid but carries non-fatal lints (for example
@@ -623,23 +624,7 @@ fn showcase_pins_every_severity() {
 /// not errors.
 #[test]
 fn veh_common_generated_rust_compiles_with_rustc() {
-    const PRELUDE: &str = "\
-pub mod ridl {
-    pub mod std {
-        pub struct Name(pub String);
-        pub struct Message(pub String);
-        pub struct Label(pub String);
-        pub struct Timestamp(pub i64);
-        impl Default for Timestamp {
-            fn default() -> Self {
-                Timestamp(0)
-            }
-        }
-    }
-}
-";
-    let compiled = compile_entry(Path::new("tests/corpus/veh-common"));
-    let source = format!("{PRELUDE}\n{}", compiled.rust);
+    let source = composed_source(Path::new("tests/corpus/veh-common"));
 
     // A unique temp directory (removed at the end), mirroring the golden CLI
     // test rather than adding a `tempfile` dev-dependency.
@@ -680,7 +665,11 @@ pub mod ridl {
 }
 
 /// The generated Rust of every package in the entry rooted at `entry`, as
-/// `(package-name, rust-source)` pairs, in workspace order.
+/// `(package-name, rust-source)` pairs, in workspace order, with the standard
+/// package's own generated Rust first. The standard package is not a workspace
+/// member, so it is generated separately and prepended — the same artifact
+/// `run_build` writes beside a workspace's own packages when one of them
+/// references it (issue #190).
 fn generated_packages(entry: &Path) -> Vec<(String, String)> {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
@@ -688,16 +677,20 @@ fn generated_packages(entry: &Path) -> Vec<(String, String)> {
         .expect("a corpus entry loads")
         .workspace;
     let packages: Vec<Package> = workspace.packages(&db).clone();
-    packages
-        .iter()
-        .map(|pkg| {
-            let name = pkg.name(&db).clone();
-            let checked = check_package(&db, workspace, *pkg, std);
-            let generated = ridl_backend_rust::generate(&checked.ir)
-                .expect("a clean entry's IR generates Rust");
-            (name, generated.rust_source)
-        })
-        .collect()
+
+    let std_checked = check_package(&db, workspace, std, std);
+    let std_generated =
+        ridl_backend_rust::generate(&std_checked.ir).expect("the standard package generates Rust");
+    let mut generated = vec![("ridl.std".to_string(), std_generated.rust_source)];
+
+    generated.extend(packages.iter().map(|pkg| {
+        let name = pkg.name(&db).clone();
+        let checked = check_package(&db, workspace, *pkg, std);
+        let pkg_generated =
+            ridl_backend_rust::generate(&checked.ir).expect("a clean entry's IR generates Rust");
+        (name, pkg_generated.rust_source)
+    }));
+    generated
 }
 
 /// A tree of Rust modules keyed by dotted package name, so several generated
@@ -742,25 +735,14 @@ impl ModuleTree {
 /// hand-injecting `use` items (I4).
 #[test]
 fn workspace_two_members_composed_compiles_with_rustc() {
-    const PRELUDE: &str = "\
-pub mod ridl {
-    pub mod std {
-        pub struct Name(pub String);
-        pub struct Message(pub String);
-        pub struct Label(pub String);
-        pub struct Timestamp(pub i64);
-    }
-}
-";
     let packages = generated_packages(Path::new("tests/corpus/workspace-two-members"));
     let mut tree = ModuleTree::default();
     for (name, body) in &packages {
         let segments: Vec<&str> = name.split('.').collect();
         tree.insert(&segments, body.clone());
     }
-    let mut composed = String::new();
-    tree.render(&mut composed);
-    let source = format!("{PRELUDE}\n{composed}");
+    let mut source = String::new();
+    tree.render(&mut source);
 
     let dir = std::env::temp_dir().join(format!(
         "ridlc_corpus_composed_{}_{}",
@@ -850,24 +832,10 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
     succeeded
 }
 
-/// The generated packages of `entry`, nested under their dotted module paths
-/// and prefixed with a `ridl::std` stand-in, as one compilable crate root.
+/// The generated packages of `entry`, including the standard package's own
+/// generated Rust, nested under their dotted module paths as one compilable
+/// crate root.
 fn composed_source(entry: &Path) -> String {
-    // The `ridl.std` types the interaction-layer entries reference. Newtypes
-    // rather than aliases, so a wrong path in the generated code cannot
-    // accidentally type-check against a primitive.
-    const PRELUDE: &str = "\
-pub mod ridl {
-    pub mod std {
-        #[derive(Default)] pub struct Name(pub String);
-        #[derive(Default)] pub struct Message(pub String);
-        #[derive(Default)] pub struct Label(pub String);
-        #[derive(Default)] pub struct Timestamp(pub i64);
-        #[derive(Default)] pub struct Version(pub String);
-        #[derive(Default)] pub struct Duration(pub f64);
-    }
-}
-";
     let mut tree = ModuleTree::default();
     for (name, body) in &generated_packages(entry) {
         let segments: Vec<&str> = name.split('.').collect();
@@ -875,7 +843,7 @@ pub mod ridl {
     }
     let mut composed = String::new();
     tree.render(&mut composed);
-    format!("{PRELUDE}\n{composed}")
+    composed
 }
 
 /// The generated Rust for `veh-cluster` compiles.
@@ -946,6 +914,146 @@ fn services_workspace_composed_compiles_with_rustc() {
 }
 
 // ==========================================================================
+// The emit decision.
+//
+// The compile proofs above generate the standard package in-process and prepend
+// it, so what they establish is that its *content* is sufficient to compile the
+// rest. None of them calls `run_build`, so none of them observes whether `ridlc
+// build` decides to write it. That decision is `referenced_packages` (issue
+// #190), and the test below is its guard.
+// ==========================================================================
+
+/// A line of `source` names a `crate::ridl::std::` path.
+///
+/// The Rust backend renders a token stream, so the spacing inside a path is not
+/// part of its contract — today it emits `crate::ridl::std::Timestamp`, and a
+/// change of renderer could emit `crate :: ridl :: std :: Timestamp` without
+/// changing anything this test is about. Whitespace is therefore dropped before
+/// the match, one line at a time: dropping it across the whole file would let
+/// the end of one line and the start of the next join into a match that is in
+/// neither.
+fn names_the_standard_package(source: &str) -> bool {
+    source.lines().any(|line| {
+        let dense: String = line.chars().filter(|ch| !ch.is_whitespace()).collect();
+        dense.contains("crate::ridl::std::")
+    })
+}
+
+/// Every corpus entry that compiles satisfies the biconditional: `ridlc build`
+/// writes `ridl.std.rs` **exactly when** the entry's own generated Rust names a
+/// `crate::ridl::std::` path.
+///
+/// Driven through the real [`ridlc::run_build`] into a temp directory rather
+/// than through this file's helpers, because the emit decision is what is under
+/// test and the helpers generate the standard package unconditionally.
+///
+/// Both directions are asserted from one equality, so the test fails on a
+/// detection rule that under-reports — generated code that references a module
+/// no artifact supplies, which is the defect issue #190 reported — and on one
+/// that over-reports, which writes a file into `--out-dir` that the workspace
+/// never asked for. The two counts at the end are what keep that meaningful: a
+/// corpus whose entries all fell on the same side would pass with detection
+/// hard-wired to that side.
+#[test]
+fn build_writes_the_standard_package_exactly_when_the_generated_rust_names_it() {
+    let mut entries: Vec<PathBuf> = std::fs::read_dir("tests/corpus")
+        .expect("the corpus directory is readable")
+        .map(|entry| entry.expect("a readable corpus entry").path())
+        .filter(|path| path.join("ridl.toml").is_file())
+        .collect();
+    entries.sort();
+    assert!(
+        !entries.is_empty(),
+        "the corpus glob found no entry — this proof would check nothing",
+    );
+
+    let mut referencing: Vec<String> = Vec::new();
+    let mut not_referencing: Vec<String> = Vec::new();
+
+    for entry in &entries {
+        let name = entry
+            .file_name()
+            .expect("a corpus entry has a directory name")
+            .to_string_lossy()
+            .into_owned();
+        let out = std::env::temp_dir().join(format!(
+            "ridlc_corpus_std_emit_{name}_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .expect("system clock reads a time after the unix epoch")
+                .as_nanos()
+        ));
+
+        let run = ridlc::run_build(entry, &out, &[ridlc::Emit::Rust], ridl_core::Frozen::No)
+            .expect("a corpus entry loads");
+        if run.has_error() {
+            // A diagnostic showcase. `build` writes no artifact at all for an
+            // error-bearing workspace, so there is no emit decision to observe.
+            std::fs::remove_dir_all(&out).ok();
+            continue;
+        }
+
+        let standard = out.join("ridl.std.rs");
+        let mut names_std = false;
+        let mut artifacts: Vec<String> = Vec::new();
+        for artifact in std::fs::read_dir(&out).expect("a clean build created the out dir") {
+            let path = artifact.expect("a readable artifact").path();
+            if path.extension().and_then(|ext| ext.to_str()) != Some("rs") {
+                continue;
+            }
+            artifacts.push(
+                path.file_name()
+                    .expect("a file has a name")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            // Defensive, not corrective: a same-package reference renders as a
+            // bare name, not a `crate::ridl::std::`-anchored path, so the
+            // standard artifact does not name itself today and this guard
+            // changes nothing it emits. It stays in place so the left side
+            // keeps meaning "a package OTHER than the standard one names it",
+            // which remains true even if same-package rendering changes later.
+            if path == standard {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).expect("an artifact is readable");
+            names_std |= names_the_standard_package(&source);
+        }
+        let emitted = standard.is_file();
+        std::fs::remove_dir_all(&out).ok();
+
+        artifacts.sort();
+        assert_eq!(
+            names_std, emitted,
+            "`{name}`: the generated Rust names `crate::ridl::std::` = {names_std}, but \
+             `ridl.std.rs` was written = {emitted}. `ridlc build` must write the standard \
+             artifact exactly when the code it emits references it (issue #190). \
+             Artifacts: {artifacts:?}",
+        );
+
+        if names_std {
+            referencing.push(name);
+        } else {
+            not_referencing.push(name);
+        }
+    }
+
+    // Anti-vacuity, in both directions: the equality above discriminates only
+    // where the corpus supplies an entry on each side.
+    assert!(
+        !referencing.is_empty(),
+        "no compilable corpus entry references the standard package, so this proof \
+         cannot catch under-reporting. Entries checked: {not_referencing:?}",
+    );
+    assert!(
+        !not_referencing.is_empty(),
+        "every compilable corpus entry references the standard package, so this proof \
+         cannot catch over-reporting. Entries checked: {referencing:?}",
+    );
+}
+
+// ==========================================================================
 // The TypeScript half of the compile proof.
 //
 // The E2 exit criterion is IR neutrality demonstrated by two backends, so a
@@ -971,9 +1079,10 @@ fn checked_ir(entry: &Path, package: &str) -> ridl_ir::v2::Package {
 }
 
 /// The generated TypeScript of every package in the entry rooted at `entry`, as
-/// `(package-name, typescript-source)` pairs, in workspace order — the
-/// TypeScript counterpart of [`generated_packages`]. One file per package,
-/// because the emitted cross-package imports are module specifiers
+/// `(package-name, typescript-source)` pairs, in workspace order, with the
+/// standard package's own generated TypeScript first — the TypeScript
+/// counterpart of [`generated_packages`]. One file per package, because the
+/// emitted cross-package imports are module specifiers
 /// (`import * as fleet_contracts from './fleet.contracts'`) that only resolve
 /// against a file of that name.
 fn generated_typescript_packages(entry: &Path) -> Vec<(String, String)> {
@@ -983,16 +1092,20 @@ fn generated_typescript_packages(entry: &Path) -> Vec<(String, String)> {
         .expect("a corpus entry loads")
         .workspace;
     let packages: Vec<Package> = workspace.packages(&db).clone();
-    packages
-        .iter()
-        .map(|pkg| {
-            let name = pkg.name(&db).clone();
-            let checked = check_package(&db, workspace, *pkg, std);
-            let generated = ridl_backend_ts::generate(&checked.ir)
-                .expect("a clean entry's IR generates TypeScript");
-            (name, generated.source)
-        })
-        .collect()
+
+    let std_checked = check_package(&db, workspace, std, std);
+    let std_generated = ridl_backend_ts::generate(&std_checked.ir)
+        .expect("the standard package generates TypeScript");
+    let mut generated = vec![("ridl.std".to_string(), std_generated.source)];
+
+    generated.extend(packages.iter().map(|pkg| {
+        let name = pkg.name(&db).clone();
+        let checked = check_package(&db, workspace, *pkg, std);
+        let pkg_generated = ridl_backend_ts::generate(&checked.ir)
+            .expect("a clean entry's IR generates TypeScript");
+        (name, pkg_generated.source)
+    }));
+    generated
 }
 
 /// Finds a runnable tsc: the `tsc` binary on PATH first, then
@@ -1070,13 +1183,6 @@ fn type_check_entry(label: &str, entry: &Path, markers: &[&str]) {
             .as_nanos()
     ));
     std::fs::create_dir_all(&dir).expect("the temp dir is created");
-
-    // The hand-written stand-in for the generated `ridl.std` module, committed
-    // beside this test rather than inlined, because it is shared by every entry
-    // and is long enough that a reader should be able to open it.
-    let prelude = std::fs::read_to_string("tests/tsc/ridl.std.ts")
-        .expect("the ridl.std test stand-in is readable");
-    std::fs::write(dir.join("ridl.std.ts"), prelude).expect("the stand-in is written");
 
     let mut module_paths = Vec::new();
     for (name, source) in &packages {

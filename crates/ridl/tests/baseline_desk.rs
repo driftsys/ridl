@@ -118,6 +118,20 @@ interface VehicleStatus {
 }
 ";
 
+/// A shape whose field names a type from the standard package. Every other
+/// fixture in this file names only its own declarations, so this is the only
+/// one whose compile reaches `ridl.std`.
+const NAMES_A_STANDARD_TYPE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+struct DoorReport {
+  observedAt: Timestamp
+  door: DoorState
+}
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+}
+";
+
 /// Lays out a one-package workspace holding `source` and returns its root.
 fn package_workspace(dir: &TempDir, source: &str) -> PathBuf {
     dir.write("ridl.toml", MANIFEST);
@@ -485,6 +499,45 @@ fn diff_of_an_unchanged_workspace_against_its_baseline_is_clean() {
     let root = package_workspace(&dir, BASE);
     ridl(&["baseline".as_ref(), root.as_os_str()]);
     let baseline = root.join(".ridl/baseline");
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), baseline.as_os_str(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "nothing changed:\n{stdout}{stderr}");
+    assert!(stdout.contains("identical"), "and it says so:\n{stdout}");
+}
+
+/// The same comparison is clean for a workspace that names a **standard** type,
+/// and the published baseline holds no `ridl.std` snapshot.
+///
+/// `ridl baseline` runs the build driver with `--emit ir-json`, and that driver
+/// also writes the standard package whenever the workspace references it (issue
+/// #190). `ridl diff` compiles its current side without `ridl.std` — the
+/// standard package is not a workspace member — so a `ridl.std.ir.json` in the
+/// baseline has nothing to match on the other side, and the diff of an untouched
+/// workspace reported `ridl.std` as a removed package and exited 1. A baseline
+/// holds the packages the workspace *declares*; the standard package is
+/// version-locked to the compiler binary and is not one of them.
+///
+/// Every other baseline and diff fixture here names only its own declarations,
+/// which is why none of them saw it. `ridl check --baseline` did not either: the
+/// desk check reports ordinal drift only, and a whole removed package carries no
+/// ordinal change.
+#[test]
+fn diff_of_an_unchanged_workspace_naming_a_standard_type_is_clean() {
+    let dir = TempDir::new("diffstd");
+    let root = package_workspace(&dir, NAMES_A_STANDARD_TYPE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the workspace snapshots cleanly:\n{stderr}");
+
+    let baseline = root.join(".ridl/baseline");
+    assert!(
+        baseline.join("veh.cluster.ir.json").is_file(),
+        "the declared package is published",
+    );
+    assert!(
+        !baseline.join("ridl.std.ir.json").exists(),
+        "the standard package is not part of the workspace's contract snapshot",
+    );
 
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), baseline.as_os_str(), root.as_os_str()]);
 

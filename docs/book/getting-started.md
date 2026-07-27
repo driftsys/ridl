@@ -759,6 +759,14 @@ emit targets exist today:
 | `ir-json`    | `<package>.ir.json` | the lowered IR v2 as exact-decimal JSON |
 | `typescript` | `<package>.ts`      | idiomatic TypeScript source             |
 
+One more artifact joins them when a package names a type from `ridl.std` —
+`Duration` above does — because generated code refers to standard types by
+package path and does not compile without the standard package beside it.
+The command above therefore writes `out/ridl.std.rs` as well, and
+`--emit c-header` and `--emit typescript` write `ridl.std.h` and
+`ridl.std.ts` the same way. `ir-json` is the exception: a snapshot records the
+packages the workspace declares, and `ridl.std` ships with the compiler.
+
 There is no transport binding and no code generator for SOME/IP, gRPC, DDS,
 MQTT or AIDL yet. Those mappings are specified in the ridl language reference,
 Appendix B, and are the work of later epics.

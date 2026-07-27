@@ -90,9 +90,14 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",
-        lines: 4,
-        why: "the IR-side helper itself, plus three test lines reaching into \
-              the named-interface store it builds from",
+        lines: 5,
+        why: "the IR-side `shapes()` helper itself; `referenced_packages`, \
+              which reads `Service.shape` directly because it must record \
+              the qualifier of a cross-package `interface_ref` — a value \
+              `shapes()` yields nothing for — and reaches an inline \
+              shape's interactions through that same match; plus three \
+              test lines reaching into the named-interface store \
+              `shapes()` builds from",
     },
     Allowed {
         path: "crates/ridl-sem/src/check.rs",

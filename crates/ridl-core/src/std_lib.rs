@@ -84,4 +84,34 @@ mod tests {
         let second = std_package(&mut db);
         assert_eq!(first, second, "the same database returns the same package");
     }
+
+    /// The asset is the normative Appendix A, committed verbatim. Nothing
+    /// enforced that until this test: both were edited by hand in #198, and
+    /// every gate would have passed had only one been.
+    ///
+    /// This matters more since the standard package became a shipped artifact
+    /// (issue #190). An asset that has drifted from the appendix now generates
+    /// code that disagrees with the specification.
+    #[test]
+    fn the_asset_is_appendix_a_verbatim() {
+        let reference = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../docs/specification/typl-language-reference.md"
+        ))
+        .expect("the typl reference is readable");
+
+        let block = reference
+            .split("```ridl\n")
+            .find(|block| block.starts_with("package ridl.std\n"))
+            .and_then(|block| block.split("\n```").next())
+            .expect("Appendix A carries a `ridl.std` fenced block");
+
+        assert_eq!(
+            format!("{block}\n"),
+            RIDL_STD_SOURCE,
+            "`crates/ridl-core/assets/ridl_std.typl` and Appendix A of \
+             `docs/specification/typl-language-reference.md` have drifted apart. \
+             They are the same normative text and are edited together.",
+        );
+    }
 }
