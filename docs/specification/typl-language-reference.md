@@ -1140,8 +1140,22 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
 ## Appendix A — Standard Library
 
 `ridl.std` is a **pure typl package** — the proof that typl stands alone. It is
-implicitly imported in every file of every profile. Contents (normative,
-unchanged from RIDL Language Reference Appendix A):
+implicitly imported in every file of every profile.
+
+**Inclusion criterion.** `ridl.std` holds only definitions whose form is fixed
+by a cross-industry standard and whose meaning does not depend on the domain the
+system models. A definition that is meaningful in one industry and inert in the
+others belongs in a domain package. The criterion follows from the implicit
+import: every file of every profile carries whatever this package holds, so a
+domain type here is a cost paid by every user who does not work in that domain,
+and admitting one leaves no principled place to stop.
+
+Applying that criterion removed the ISO 3779 `Vin` type and its `VIN_PATTERN`
+constant, which this appendix had inherited unexamined from the RIDL Language
+Reference v0.1. A vehicle program declares both in two lines of its own package,
+and no other member of `ridl.std` is bound to a single industry.
+
+Contents (normative):
 
 ```ridl
 package ridl.std
@@ -1150,7 +1164,6 @@ package ridl.std
 
 const UUID_PATTERN  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const ULID_PATTERN  = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
-const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
 const URI_PATTERN   = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/.+$/
 const URL_PATTERN   = /^https?:\/\/.+$/
 const EMAIL_PATTERN = /^[^@]+@[^@]+\.[^@]+$/
@@ -1165,9 +1178,6 @@ type Uuid : string [36 match UUID_PATTERN]
 
 /// ULID — 26 characters, lexicographically sortable
 type Ulid : string [26 match ULID_PATTERN]
-
-/// ISO 3779 Vehicle Identification Number — exactly 17 characters
-type Vin  : string [17 match VIN_PATTERN]
 
 // ---------- Network Types ----------
 
