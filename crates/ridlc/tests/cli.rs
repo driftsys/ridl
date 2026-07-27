@@ -410,3 +410,25 @@ fn missing_entry_is_io_error() {
     ]);
     assert_eq!(code, 2, "a missing entry is an I/O error, exit 2");
 }
+
+/// `ridlc --version` reports the binary's own name and version and exits 0
+/// (driftsys/ridl#194); before the fix it was an unrecognised argument and
+/// exited 2.
+#[test]
+fn version_flag_exits_zero() {
+    let output = Command::new(env!("CARGO_BIN_EXE_ridlc"))
+        .arg("--version")
+        .output()
+        .expect("the ridlc binary must run");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "`ridlc --version` must exit 0, stderr:\n{}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.trim_start().starts_with("ridlc "),
+        "`ridlc --version` must report the binary's own name, got:\n{stdout}"
+    );
+}
