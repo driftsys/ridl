@@ -1008,9 +1008,12 @@ fn build_writes_the_standard_package_exactly_when_the_generated_rust_names_it() 
                     .to_string_lossy()
                     .into_owned(),
             );
-            // The standard artifact names its own package throughout, so
-            // reading it would make the left side of the equality true whenever
-            // the right side is — the biconditional would hold vacuously.
+            // Defensive, not corrective: a same-package reference renders as a
+            // bare name, not a `crate::ridl::std::`-anchored path, so the
+            // standard artifact does not name itself today and this guard
+            // changes nothing it emits. It stays in place so the left side
+            // keeps meaning "a package OTHER than the standard one names it",
+            // which remains true even if same-package rendering changes later.
             if path == standard {
                 continue;
             }
