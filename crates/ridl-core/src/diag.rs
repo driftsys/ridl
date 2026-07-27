@@ -462,7 +462,7 @@ diag_codes! {
             "`query` returning `()`";
 
         /// A timing annotation on an interaction kind that carries none —
-        /// `command`, `query`, or `final` — or an attribute block on `final`
+        /// `command`, `query`, or `fixed` — or an attribute block on `fixed`
         /// (ridl §8, §9, §16.1). Emitted by the checker (E2 task 5).
         ///
         /// The callables drew FORM-102 until the E2 close-out, so one rule sat
@@ -471,7 +471,7 @@ diag_codes! {
         /// purpose, precisely so the narrowing can be a semantic rule with a
         /// semantic message.
         RIDL_106 = "RIDL-106", Error,
-            "timing annotation on a kind that carries none, or attribute block on `final`";
+            "timing annotation on a kind that carries none, or attribute block on `fixed`";
 
         /// Type declaration inside an `interface` or `service` body — typl
         /// declarations live at package level (ridl §14.1, §16.1).
@@ -542,10 +542,10 @@ diag_codes! {
         RIDL_202 = "RIDL-202", Error,
             "stream element type not a named type, `string`, or `bytes`";
 
-        /// `require` or `ensure` on `signal`, `event`, or `final` (ridl §13,
+        /// `require` or `ensure` on `signal`, `event`, or `fixed` (ridl §13,
         /// §16.3). Emitted by the checker (E2 task 5).
         RIDL_301 = "RIDL-301", Error,
-            "`require` or `ensure` on `signal`, `event`, or `final`";
+            "`require` or `ensure` on `signal`, `event`, or `fixed`";
 
         /// `ensure` on `command` — a command has no result to observe (ridl §6.1,
         /// §16.3). Emitted by the checker (E2 task 5).

@@ -138,7 +138,7 @@ declare_categories! {
         InteractionRetired,
         /// A surviving interaction whose kind changed (signal ↔ event, etc.).
         KindChanged,
-        /// A signal/event/final payload type changed.
+        /// A signal/event/fixed payload type changed.
         PayloadChanged,
         /// A query return type changed.
         ReturnChanged,

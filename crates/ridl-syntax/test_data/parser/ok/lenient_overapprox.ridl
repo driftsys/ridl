@@ -12,19 +12,19 @@ interface LenientShapes {
   // RIDL-104 territory: a return type on a command parses.
   command setMode(mode: DriveMode): AckState
 
-  // RIDL-106 territory and friends: timing parses on command, query, final.
+  // RIDL-106 territory and friends: timing parses on command, query, fixed.
   command reset() @50ms
   query getState(): DriveState @[10ms..100ms]
-  final buildId : BuildId @1s
+  fixed buildId : BuildId @1s
 
-  // RIDL-301/-106 territory: attr blocks parse on signal, event, final.
+  // RIDL-301/-106 territory: attr blocks parse on signal, event, fixed.
   signal speed : Speed [ persist ]
   event doorOpened : DoorPayload [ someKey = 3 ]
-  final vin : Vin [ cached ]
+  fixed vin : Vin [ cached ]
 
-  // Init values parse on event and final.
+  // Init values parse on event and fixed.
   event calibrated : CalPayload = DEFAULT_CAL
-  final region : Region = REGION_EU
+  fixed region : Region = REGION_EU
 
   // Timing and attr block in either order.
   query ordered(): DriveState [ flagged ] @10ms

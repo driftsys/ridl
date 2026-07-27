@@ -15,7 +15,7 @@ interface Shape {
   event model : Speed @[1s..2s]
   command act(component: Speed)
   query fetch(): Speed
-  final during : Speed
+  fixed during : Speed
   reserved transport
   signal survivor : Speed @10ms
 }

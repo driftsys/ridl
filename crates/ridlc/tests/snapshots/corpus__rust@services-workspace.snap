@@ -159,12 +159,12 @@ pub trait DoorControlConsumer {
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     /// transport identity: DoorControl#4:DoorReport|DoorFault
     async fn read_door(&self, door: DoorId) -> Result<DoorReport, DoorFault>;
-    /// final `doorCount` — ordinal 5 (ridl §8).
+    /// fixed `doorCount` — ordinal 5 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn door_count(&self) -> &DoorId;
 }
 /// Door control — realized by one service per vehicle variant.
-/// The provider face of `DoorControl` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `DoorControl` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait DoorControlProvider {
     /// Publishes `lockState` — signal ordinal 1 (ridl §4).
@@ -214,7 +214,7 @@ pub trait TelemetryConsumer {
 }
 /// Odometer readout — a second shape, so the cross-package member has more
 /// than one interface to reference.
-/// The provider face of `Telemetry` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `Telemetry` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait TelemetryProvider {
     /// Publishes `distance` — signal ordinal 1 (ridl §4).
@@ -363,7 +363,7 @@ pub trait ServiceFleetVehicleMirrorsConsumer {
         &self,
         door: crate::fleet::contracts::DoorId,
     ) -> crate::fleet::contracts::Percent;
-    /// final `mirrorCount` — ordinal 4 (ridl §8).
+    /// fixed `mirrorCount` — ordinal 4 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn mirror_count(&self) -> &crate::fleet::contracts::DoorId;
     /// Cross-package `T | E`: both arms live in `fleet.contracts`, so the
@@ -389,7 +389,7 @@ pub trait ServiceFleetVehicleMirrorsConsumer {
         door: crate::fleet::contracts::DoorId,
     ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::legacy::DoorFault>;
 }
-/// The provider face of `ServiceFleetVehicleMirrors` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `ServiceFleetVehicleMirrors` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait ServiceFleetVehicleMirrorsProvider {
     /// Publishes `foldAngle` — signal ordinal 1 (ridl §4).

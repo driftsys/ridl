@@ -94,7 +94,7 @@ pub trait CruiseControlConsumer {
     fn engaged(&mut self) -> &mut dyn SignalHandle<Engagement>;
 }
 /// Adaptive cruise
-/// The provider face of `CruiseControl` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `CruiseControl` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait CruiseControlProvider {
     /// Publishes `engaged` — signal ordinal 1 (ridl §4).
@@ -124,7 +124,7 @@ pub trait ServiceVehHvacCabinConsumer {
     async fn set_target(&self, target: Temperature);
 }
 /// Cabin climate
-/// The provider face of `ServiceVehHvacCabin` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `ServiceVehHvacCabin` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait ServiceVehHvacCabinProvider {
     /// Handles `setTarget` — command ordinal 1 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).

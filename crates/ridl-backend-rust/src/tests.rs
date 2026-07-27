@@ -632,12 +632,12 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     );
 }
 
-/// A tuple reached through a `final` payload is package-private with the
+/// A tuple reached through a `fixed` payload is package-private with the
 /// `internal interface` that declares it.
 ///
 /// **This position was argued away and had no coverage.** FORM-102 narrows a
-/// `final` payload to "a named type **or an array**" and does not descend into
-/// the element, so `final bounds : [(lo : Hidden, hi : Hidden); 2]` is accepted
+/// `fixed` payload to "a named type **or an array**" and does not descend into
+/// the element, so `fixed bounds : [(lo : Hidden, hi : Hidden); 2]` is accepted
 /// — `ridlc check` exits 0 — and once inside the array element the whole of
 /// `field_type_tokens` is reachable again. A query's return is therefore not
 /// the only interaction position a tuple can reach, and this was the one
@@ -648,7 +648,7 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
 /// nested in the element (which induces two structs). A map is admitted inside
 /// the element too, though not as the payload itself.
 #[test]
-fn a_tuple_under_a_final_payload_is_package_private() {
+fn a_tuple_under_a_fixed_payload_is_package_private() {
     // `[element; 2]`, with `element` supplied by the caller.
     fn array_of(element: v2::field_type::Kind) -> v2::field_type::Kind {
         v2::field_type::Kind::Array(Box::new(v2::ArrayType {
@@ -660,7 +660,7 @@ fn a_tuple_under_a_final_payload_is_package_private() {
             max: 2,
         }))
     }
-    let final_of = |name: &str, ordinal: u32, payload: v2::field_type::Kind| {
+    let fixed_of = |name: &str, ordinal: u32, payload: v2::field_type::Kind| {
         interaction(
             name,
             ordinal,
@@ -692,15 +692,15 @@ fn a_tuple_under_a_final_payload_is_package_private() {
             "",
             vec![
                 // 1. the array element is a tuple
-                final_of("bounds", 1, array_of(tuple_of(&[("lo", "Hidden")]))),
+                fixed_of("bounds", 1, array_of(tuple_of(&[("lo", "Hidden")]))),
                 // 2. an array of arrays of tuples
-                final_of(
+                fixed_of(
                     "nested",
                     2,
                     array_of(array_of(tuple_of(&[("a", "Hidden")]))),
                 ),
                 // 3. the element is an OPTIONAL tuple
-                final_of(
+                fixed_of(
                     "opt",
                     3,
                     v2::field_type::Kind::Array(Box::new(v2::ArrayType {
@@ -713,7 +713,7 @@ fn a_tuple_under_a_final_payload_is_package_private() {
                     })),
                 ),
                 // 4. a tuple nested inside the element tuple — two structs
-                final_of(
+                fixed_of(
                     "deep",
                     4,
                     array_of(v2::field_type::Kind::Tuple(v2::TupleType {
@@ -735,7 +735,7 @@ fn a_tuple_under_a_final_payload_is_package_private() {
     let shown = interface(
         "Shown",
         "",
-        vec![final_of(
+        vec![fixed_of(
             "bounds",
             1,
             array_of(tuple_of(&[("g", "Counter")])),
@@ -758,7 +758,7 @@ fn a_tuple_under_a_final_payload_is_package_private() {
     ] {
         assert!(
             rust_source.contains(item),
-            "a tuple under an `internal` final must emit `{item}`, got:\n{rust_source}"
+            "a tuple under an `internal` fixed must emit `{item}`, got:\n{rust_source}"
         );
     }
     // `pub(crate) struct X` does not contain `pub struct X`, so these are
@@ -772,18 +772,18 @@ fn a_tuple_under_a_final_payload_is_package_private() {
     ] {
         assert!(
             !rust_source.contains(leaked),
-            "a tuple under an `internal` final must not emit `{leaked}`, got:\n{rust_source}"
+            "a tuple under an `internal` fixed must not emit `{leaked}`, got:\n{rust_source}"
         );
     }
     assert!(
         rust_source.contains("pub struct ShownBoundsElement"),
-        "a public interface's final tuple must still be `pub`, got:\n{rust_source}"
+        "a public interface's fixed tuple must still be `pub`, got:\n{rust_source}"
     );
 
     // The proof, denying the two lints by name for the reason `rustc_accepts`
     // records: the generated code carries by-design naming and dead-code lints.
     let dir = tempfile::tempdir().expect("a temp dir is created");
-    let source_path = dir.path().join("final_tuple.rs");
+    let source_path = dir.path().join("fixed_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
     let status = std::process::Command::new("rustc")
         .args([
@@ -799,13 +799,13 @@ fn a_tuple_under_a_final_payload_is_package_private() {
             "private-bounds",
         ])
         .arg("-o")
-        .arg(dir.path().join("final_tuple.rmeta"))
+        .arg(dir.path().join("fixed_tuple.rmeta"))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
     assert!(
         status.success(),
-        "a tuple under an `internal` final must compile under \
+        "a tuple under an `internal` fixed must compile under \
          `-D private-interfaces`, source:\n{rust_source}"
     );
 }
@@ -2357,7 +2357,7 @@ fn bidirectional_stream_query_uses_ridl_stream_on_both_sides() {
 }
 
 #[test]
-fn final_with_an_array_is_a_read_only_accessor() {
+fn fixed_with_an_array_is_a_read_only_accessor() {
     let source = rust_for_interaction(vec![interaction(
         "capabilities",
         11,
@@ -2379,7 +2379,7 @@ fn final_with_an_array_is_a_read_only_accessor() {
         .expect("a provider face is emitted");
     assert!(
         !provider.contains("capabilities"),
-        "a final has no provider entry — it is provisioned externally (ridl §8), got:\n{source}"
+        "a fixed has no provider entry — it is provisioned externally (ridl §8), got:\n{source}"
     );
     insta::assert_snapshot!(source);
 }
@@ -3148,7 +3148,7 @@ fn deprecated_reaches_interactions_and_both_faces() {
             "the deprecation reason must reach the generated item, got:\n{source}"
         );
     }
-    // Four of the five have a provider-side counterpart (a `final` does not),
+    // Four of the five have a provider-side counterpart (a `fixed` does not),
     // so each of those reasons appears twice.
     assert_eq!(
         source.matches("note = \"use currentSpeed\"").count(),
@@ -3158,7 +3158,7 @@ fn deprecated_reaches_interactions_and_both_faces() {
     assert_eq!(
         source.matches("note = \"use softwareVersion\"").count(),
         1,
-        "a final has no provider entry, got:\n{source}"
+        "a fixed has no provider entry, got:\n{source}"
     );
 }
 

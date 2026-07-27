@@ -25,8 +25,8 @@ interface Narrowing {
   /// Optional parameter on a command.
   command takeMaybe(level: Level?)
 
-  /// Optional payload on a final.
-  final maybeSerial : Serial?
+  /// Optional payload on a fixed.
+  fixed maybeSerial : Serial?
 
   /// Map parameter on a command — a map is not a named type.
   command takeMap(table: [Level : Sample; 0..8])

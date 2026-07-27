@@ -575,7 +575,7 @@ fn interaction_signature(owner: &str, decl: &v2::Decl) -> String {
                 .unwrap_or_else(|| "?".to_string()),
         ),
         Some(v2::decl::Kind::FixedDef(fixed_def)) => format!(
-            "final {name} : {}",
+            "fixed {name} : {}",
             fixed_def
                 .payload
                 .as_ref()

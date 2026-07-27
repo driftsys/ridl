@@ -96,7 +96,7 @@ pub trait VehicleStatusConsumer {
     /// require: position != GearPosition.PARK || currentSpeed == 0.0
     async fn set_gear(&self, position: crate::veh::common::GearPosition);
 }
-/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {
     /// Handles `setGear` — command ordinal 5 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).

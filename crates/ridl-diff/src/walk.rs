@@ -859,7 +859,7 @@ fn kind_name_opt(kind: &Option<v2::decl::Kind>) -> &'static str {
         Some(Kind::EventDef(_)) => "event",
         Some(Kind::CommandDef(_)) => "command",
         Some(Kind::QueryDef(_)) => "query",
-        Some(Kind::FixedDef(_)) => "final",
+        Some(Kind::FixedDef(_)) => "fixed",
         Some(Kind::ReservedSlot(_)) => "reserved",
         None => "declaration",
     }

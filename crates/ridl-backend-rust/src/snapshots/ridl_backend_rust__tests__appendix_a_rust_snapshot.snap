@@ -188,15 +188,15 @@ pub trait VehicleStatusConsumer {
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     /// transport identity: VehicleStatus#9:FaultPage|DiagError
     async fn get_fault_page(&self, filter: DiagFilter) -> Result<FaultPage, DiagError>;
-    /// final `softwareVersion` — ordinal 10 (ridl §8).
+    /// fixed `softwareVersion` — ordinal 10 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn software_version(&self) -> &crate::ridl::std::Version;
-    /// final `capabilities` — ordinal 11 (ridl §8).
+    /// fixed `capabilities` — ordinal 11 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn capabilities(&self) -> &Vec<crate::ridl::std::Label>;
 }
 /// Main vehicle status interface.
-/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {
     /// Publishes `currentSpeed` — signal ordinal 1 (ridl §4).

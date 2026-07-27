@@ -245,7 +245,7 @@ mod v2_round_trip {
             }],
         };
 
-        // final vin : Vin
+        // fixed vin : Vin
         let vin = v2::FixedDef {
             payload: Some(named_type("Vin")),
         };

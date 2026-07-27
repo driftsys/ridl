@@ -533,8 +533,8 @@ SourceFile@0..1976
             QualifiedName@1888..1897
               Ident@1888..1897 "DiagError"
     Whitespace@1897..1901 "\n\n  "
-    FinalDef@1901..1932
-      FinalKw@1901..1906 "final"
+    FixedDef@1901..1932
+      FixedKw@1901..1906 "fixed"
       Whitespace@1906..1907 " "
       Name@1907..1922
         Ident@1907..1922 "softwareVersion"
@@ -545,8 +545,8 @@ SourceFile@0..1976
         QualifiedName@1925..1932
           Ident@1925..1932 "Version"
     Whitespace@1932..1935 "\n  "
-    FinalDef@1935..1973
-      FinalKw@1935..1940 "final"
+    FixedDef@1935..1973
+      FixedKw@1935..1940 "fixed"
       Whitespace@1940..1941 " "
       Name@1941..1953
         Ident@1941..1953 "capabilities"

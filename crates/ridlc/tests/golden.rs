@@ -81,7 +81,7 @@ const NAMELESS_INTERACTIONS: &[&str] = &[
     "interface I {\n  event : Speed\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  command (g: Speed)\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  query (): Speed\n  signal after : Speed @10ms\n}\n",
-    "interface I {\n  final : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
+    "interface I {\n  fixed : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
     "interface I {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
     "service veh.a.b {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
     "service veh.a.b {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",

@@ -55,7 +55,7 @@ declarations.
 | Language | Describes                                                                | Status in this repository |
 | -------- | ------------------------------------------------------------------------ | ------------------------- |
 | **typl** | data — types, ranges, units, constants                                   | built                     |
-| **ridl** | system interactions — `signal`, `event`, `command`, `query`, `final`     | built                     |
+| **ridl** | system interactions — `signal`, `event`, `command`, `query`, `fixed`     | built                     |
 | **uxdl** | user interactions — `display`, `input`, `action`, `fetch`, `fixed`       | specified, not built      |
 | **rmdl** | behaviour — functions and reactive models                                | specified, not built      |
 | **rsdl** | architecture — components, wiring, deployment                            | specified, not built      |
@@ -197,8 +197,8 @@ one — so do not assume a code is always there to search for.
 typl has five primitives: `boolean`, `integer`, `float`, `string`, `bytes`.
 
 **In an interaction, a primitive is never written directly.** A signal payload,
-an event payload, a command or query parameter, and a `final` value must each
-name a type. Writing `final doorCount : integer [1..8]` is a `FORM-102` error;
+an event payload, a command or query parameter, and a `fixed` value must each
+name a type. Writing `fixed doorCount : integer [1..8]` is a `FORM-102` error;
 declare `type DoorCount : integer [1..8]` and use the name. This is the single
 rule that most often surprises newcomers, and it is what gives every value on
 the boundary a domain meaning rather than a width.
@@ -446,9 +446,9 @@ interface Warnings {
 }
 ```
 
-## Provisioned values — final
+## Provisioned values — fixed
 
-A `final` is a value set at build, factory, or over-the-air update, and
+A `fixed` is a value set at build, factory, or over-the-air update, and
 immutable for the lifetime of the running software instance:
 
 ```ridl
@@ -459,20 +459,20 @@ import veh.common.Enabled
 import veh.common.Vin
 
 interface VehicleIdentityBasics {
-  final vin             : Vin
-  final softwareVersion : Version
-  final marketRegion    : Label
-  final ecuSerial       : Uuid
-  final capabilities    : [Label; 0..32]
-  final doorCount       : DoorCount
-  final hasCruise       : Enabled
+  fixed vin             : Vin
+  fixed softwareVersion : Version
+  fixed marketRegion    : Label
+  fixed ecuSerial       : Uuid
+  fixed capabilities    : [Label; 0..32]
+  fixed doorCount       : DoorCount
+  fixed hasCruise       : Enabled
 }
 ```
 
-Declaring a value `final` is a promise that it never changes while the software
+Declaring a value `fixed` is a promise that it never changes while the software
 runs, which is what makes it safe for a consumer to cache unconditionally — a
 promise to a future binding, like the rest of the delivery semantics. What the
-compiler enforces today is the shape: a `final` takes no timing annotation and
+compiler enforces today is the shape: a `fixed` takes no timing annotation and
 no contract block, and both are `RIDL-106` errors. Note `hasCruise : Enabled`
 rather than `hasCruise : boolean`: a boundary value names a type.
 
@@ -857,7 +857,7 @@ that a base change can never renumber a derived contract's wire identity.
 | Enum values, enumset bits, constants          | `SCREAMING_SNAKE` | `PARK`, `MAX_SPEED`            |
 | Packages and service names                    | `lowercase.dot`   | `veh.common`                   |
 
-Beyond spelling: name signals and finals as nouns (`currentSpeed`), events as
+Beyond spelling: name signals and fixed values as nouns (`currentSpeed`), events as
 past-tense occurrences (`doorOpened`), commands as imperatives (`setGear`), and
 queries as `get…` or `stream…`. A query named like a mutation draws a
 `RIDL-404` warning, because it probably wanted to be a command.
@@ -888,7 +888,7 @@ typl language reference §1.4 lists the whole set.
 
 ## Annex 1 — Vehicle identity
 
-A pure `final` interface: everything provisioned at the factory or over the
+A pure `fixed` interface: everything provisioned at the factory or over the
 air. Note that every capability flag names a type rather than writing
 `boolean`, and that `ModelYear` and `Speed` are declared types, not inline
 ranges.
@@ -914,24 +914,24 @@ enum DriveLayout { FWD = 0, RWD = 1, AWD = 2, FOUR_WD = 3 }
 interface VehicleIdentity {
 
   // vehicle identity — factory provisioned
-  final vin          : Vin
-  final modelYear    : ModelYear
-  final marketRegion : Label
-  final fuelType     : FuelType
-  final driveLayout  : DriveLayout
+  fixed vin          : Vin
+  fixed modelYear    : ModelYear
+  fixed marketRegion : Label
+  fixed fuelType     : FuelType
+  fixed driveLayout  : DriveLayout
 
   // software identity — updated over the air
-  final softwareVersion   : Version
-  final bootloaderVersion : Version
-  final hardwareVersion   : Version
+  fixed softwareVersion   : Version
+  fixed bootloaderVersion : Version
+  fixed hardwareVersion   : Version
 
   // capability flags — build time
-  final hasAdaptiveCruise   : Capability
-  final hasEmergencyBraking : Capability
-  final hasLaneKeepAssist   : Capability
-  final hasParkingAssist    : Capability
-  final hasDriverMonitoring : Capability
-  final maxSupportedSpeed   : Speed
+  fixed hasAdaptiveCruise   : Capability
+  fixed hasEmergencyBraking : Capability
+  fixed hasLaneKeepAssist   : Capability
+  fixed hasParkingAssist    : Capability
+  fixed hasDriverMonitoring : Capability
+  fixed maxSupportedSpeed   : Speed
 }
 ```
 
@@ -1028,10 +1028,10 @@ interface PowertrainManager {
 
   query streamFaults(severity: Severity): <FaultPayload>
 
-  final softwareVersion    : Version
-  final calibrationVersion : Version
-  final ecuSerial          : Uuid
-  final supportedGears     : [GearPosition; 1..8]
+  fixed softwareVersion    : Version
+  fixed calibrationVersion : Version
+  fixed ecuSerial          : Uuid
+  fixed supportedGears     : [GearPosition; 1..8]
 }
 ```
 
@@ -1127,9 +1127,9 @@ interface BodyControl {
   query getLockStatus(): (allLocked: AllLocked, unlockedCount: UnlockCount)
   query getBodyStatus(): (doors: DoorSet, windows: WindowSet)
 
-  final doorCount          : DoorCount
-  final windowCount        : WindowCount
-  final hasElectricWindows : HasWindows
+  fixed doorCount          : DoorCount
+  fixed windowCount        : WindowCount
+  fixed hasElectricWindows : HasWindows
 }
 ```
 
@@ -1224,8 +1224,8 @@ interface DriverMonitoring {
 
   query streamAttention(interval: SampleInterval): <AttentionMetrics>
 
-  final modelVersion  : Version
-  final sensorType    : Label
-  final gazeZoneCount : ZoneCount
+  fixed modelVersion  : Version
+  fixed sensorType    : Label
+  fixed gazeZoneCount : ZoneCount
 }
 ```

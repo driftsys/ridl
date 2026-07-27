@@ -437,15 +437,15 @@ pub trait VehicleStatusConsumer {
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     /// transport identity: VehicleStatus#9:FaultPage|DiagError
     async fn get_fault_page(&self, filter: DiagFilter) -> Result<FaultPage, DiagError>;
-    /// final `softwareVersion` — ordinal 10 (ridl §8).
+    /// fixed `softwareVersion` — ordinal 10 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn software_version(&self) -> &crate::ridl::std::Version;
-    /// final `capabilities` — ordinal 11 (ridl §8).
+    /// fixed `capabilities` — ordinal 11 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn capabilities(&self) -> &Vec<crate::ridl::std::Label>;
 }
 /// Main vehicle status interface.
-/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {
     /// Publishes `currentSpeed` — signal ordinal 1 (ridl §4).
@@ -559,7 +559,7 @@ pub trait WheelHistoryConsumer {
 }
 /// Retired members in a named interface. Ordinals 2 and 4 can never be
 /// reissued; `wheelSlipRate` is ordinal 5, not ordinal 3.
-/// The provider face of `WheelHistory` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `WheelHistory` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait WheelHistoryProvider {
     /// Publishes `wheelTicks` — signal ordinal 1 (ridl §4).
@@ -622,13 +622,13 @@ pub(crate) trait WheelDiagnosticsConsumer {
     /// query `readSpan` — ordinal 5 (ridl §7).
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     async fn read_span(&self) -> WheelDiagnosticsReadSpanResult;
-    /// final `tickBounds` — ordinal 6 (ridl §8).
+    /// fixed `tickBounds` — ordinal 6 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn tick_bounds(&self) -> &[WheelDiagnosticsTickBoundsElement; 2];
 }
 /// A package-private contract shape: realized inside this package, never part
 /// of the cross-package surface.
-/// The provider face of `WheelDiagnostics` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `WheelDiagnostics` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub(crate) trait WheelDiagnosticsProvider {
     /// Publishes `wheelTicks` — signal ordinal 1 (ridl §4).
@@ -676,7 +676,7 @@ pub trait WheelSummaryConsumer {
 }
 /// A public shape beside it, so the generated output shows the two side by
 /// side and the difference is readable in one snapshot.
-/// The provider face of `WheelSummary` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `WheelSummary` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait WheelSummaryProvider {
     /// Publishes `wheelHealth` — signal ordinal 1 (ridl §4).
@@ -708,7 +708,7 @@ pub trait ServiceVehClusterWheelsConsumer {
     /// An occurrence is not state: there is no last-value cache and no provenance.
     fn slipped(&mut self) -> &mut dyn EventHandle<FilterState>;
 }
-/// The provider face of `ServiceVehClusterWheels` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `ServiceVehClusterWheels` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait ServiceVehClusterWheelsProvider {
     /// Publishes `ticks` — signal ordinal 1 (ridl §4).
@@ -836,12 +836,12 @@ pub trait ServiceVehHvacCabinConsumer {
     async fn get_cabin_temp(&self) -> crate::veh::common::Temperature;
     /// Provisioned, immutable for the software-instance lifetime (ridl §8).
     ///
-    /// final `unitSerial` — ordinal 16 (ridl §8).
+    /// fixed `unitSerial` — ordinal 16 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn unit_serial(&self) -> &crate::ridl::std::Label;
-    /// A collection-typed final.
+    /// A collection-typed fixed.
     ///
-    /// final `supportedModes` — ordinal 17 (ridl §8).
+    /// fixed `supportedModes` — ordinal 17 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn supported_modes(&self) -> &Vec<crate::ridl::std::Label>;
     /// Boolean conjunction.
@@ -866,7 +866,7 @@ pub trait ServiceVehHvacCabinConsumer {
     /// ensure: result * 2 >= 0
     async fn scaled_fan(&self) -> FanLevel;
 }
-/// The provider face of `ServiceVehHvacCabin` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `ServiceVehHvacCabin` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait ServiceVehHvacCabinProvider {
     /// Publishes `cabinTemp` — signal ordinal 1 (ridl §4).

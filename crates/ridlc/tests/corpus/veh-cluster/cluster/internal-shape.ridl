@@ -65,11 +65,11 @@ internal interface WheelDiagnostics {
   // (FORM-102), and a collection return is FORM-101.
   query readSpan(): (min : RawTickCount, max : RawTickCount)
   // The other one, and the position that had no corpus entry at all: FORM-102
-  // narrows a `final` payload to "a named type OR AN ARRAY" and does not
+  // narrows a `fixed` payload to "a named type OR AN ARRAY" and does not
   // descend into the element, so a tuple reaches an interaction through the
   // array and induces `WheelDiagnosticsTickBoundsElement`. Everything
   // `field_type_tokens` can build is reachable below that element.
-  final tickBounds : [(low : RawTickCount, high : RawTickCount); 2]
+  fixed tickBounds : [(low : RawTickCount, high : RawTickCount); 2]
 }
 
 /// A public shape beside it, so the generated output shows the two side by

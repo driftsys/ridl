@@ -95,7 +95,7 @@ pub trait VehicleStatusConsumer {
     /// The channel overrides the type's init with `MAX_SPEED`.
     fn current_speed(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Speed>;
 }
-/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {
     /// Publishes `currentSpeed` — signal ordinal 1 (ridl §4).

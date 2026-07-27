@@ -12,7 +12,7 @@
 //! | `event`        | `EventHandle<T>`    | `raise_x(occurrence)`        |
 //! | `command`      | `async fn x() `     | `async fn on_x()`            |
 //! | `query`        | `async fn x() -> R` | `async fn on_x() -> R`       |
-//! | `final`        | `fn x() -> &T`      | none — provisioned externally |
+//! | `fixed`        | `fn x() -> &T`      | none — provisioned externally |
 //!
 //! The emitted vocabulary (`Provenance`, `SignalHandle`, `EventHandle`,
 //! `RidlStream`, and the metadata structs) is **dependency-free**: it names only
@@ -338,7 +338,7 @@ fn emit_interface(
     ));
     let provider_doc = doc_attrs(&format!(
         "The provider face of `{name}` — what a component that implements this \
-         interface fulfils (ridl §10.1). A `final` has no entry here: it is \
+         interface fulfils (ridl §10.1). A `fixed` has no entry here: it is \
          provisioned externally and populated at binding initialization \
          (ridl §8)."
     ));
@@ -562,7 +562,7 @@ fn emit_interaction(
             let doc = doc_attrs(&doc_body(
                 &decl.doc,
                 &format!(
-                    "final `{source_name}` — ordinal {ordinal} (ridl §8).\n\
+                    "fixed `{source_name}` — ordinal {ordinal} (ridl §8).\n\
                      Provisioned externally and immutable for the lifetime of the \
                      running software instance: read-only, free of the query \
                      machinery, and safe to cache unconditionally."

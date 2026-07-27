@@ -715,7 +715,7 @@ ridl diff --explain payload_changed
 
 ```text
 payload_changed
-A signal, event, or final payload type changed.
+A signal, event, or fixed payload type changed.
   breaking    any direction, a stream added or removed included
 ```
 

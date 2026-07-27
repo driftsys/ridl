@@ -48,7 +48,7 @@ service fleet.vehicle.mirrors {
     require door <= 7
     ensure result >= 0.0
   ]
-  final mirrorCount : DoorId
+  fixed mirrorCount : DoorId
 
   /// Cross-package `T | E`: both arms live in `fleet.contracts`, so the
   /// synthesized transport identity carries their fully qualified names.

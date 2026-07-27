@@ -186,11 +186,11 @@ UnionArm =
 //
 // The parser is deliberately more lenient than the reference — the checker
 // narrows (RIDL-1xx/2xx/3xx, E2 task 5): a `: return_type` after a
-// command's params parses; timing parses on command, query, and final;
-// an attr block parses on signal, event, and final; an init value parses
-// on event and final. The rules below name a child only where the typed
+// command's params parses; timing parses on command, query, and fixed;
+// an attr block parses on signal, event, and fixed; an init value parses
+// on event and fixed. The rules below name a child only where the typed
 // AST exposes an accessor for it; the extra lenient children (an attr
-// block on a signal or event, an init value on an event or final) still
+// block on a signal or event, an init value on an event or fixed) still
 // land inside the definition node and are reached through the CST.
 
 InterfaceDef =
@@ -201,7 +201,7 @@ InterfaceMember =
 | EventDef
 | CommandDef
 | QueryDef
-| FinalDef
+| FixedDef
 | ReservedEntry
 
 SignalDef =
@@ -216,8 +216,8 @@ CommandDef =
 QueryDef =
   'query' Name params:ParamList ':' return_type:ReturnType AttrBlock? Timing?
 
-FinalDef =
-  'final' Name ':' payload:FieldType Timing? AttrBlock?
+FixedDef =
+  'fixed' Name ':' payload:FieldType Timing? AttrBlock?
 
 ParamList =
   '(' (params:Param ','?)* ')'

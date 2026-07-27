@@ -107,8 +107,8 @@ SourceFile@0..1081
           Duration@586..591 "100ms"
         RBracket@591..592 "]"
     Whitespace@592..595 "\n  "
-    FinalDef@595..622
-      FinalKw@595..600 "final"
+    FixedDef@595..622
+      FixedKw@595..600 "fixed"
       Whitespace@600..601 " "
       Name@601..608
         Ident@601..608 "buildId"
@@ -173,8 +173,8 @@ SourceFile@0..1081
         Whitespace@778..779 " "
         RBracket@779..780 "]"
     Whitespace@780..783 "\n  "
-    FinalDef@783..809
-      FinalKw@783..788 "final"
+    FixedDef@783..809
+      FixedKw@783..788 "fixed"
       Whitespace@788..789 " "
       Name@789..792
         Ident@789..792 "vin"
@@ -214,8 +214,8 @@ SourceFile@0..1081
         Literal@888..899
           Ident@888..899 "DEFAULT_CAL"
     Whitespace@899..902 "\n  "
-    FinalDef@902..935
-      FinalKw@902..907 "final"
+    FixedDef@902..935
+      FixedKw@902..907 "fixed"
       Whitespace@907..908 " "
       Name@908..914
         Ident@908..914 "region"

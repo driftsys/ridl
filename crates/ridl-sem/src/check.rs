@@ -849,7 +849,7 @@ impl Checker<'_> {
     ///
     /// - a named-type reference ([`ast::PathType`]) — a typl field, arm, map
     ///   key or value, or enumset backing, and every ridl type position: a
-    ///   signal, event or final payload, a command or query parameter, a query
+    ///   signal, event or fixed payload, a command or query parameter, a query
     ///   return, a tuple-return field, an array element, a stream element, and
     ///   either arm of an inline `T | E`;
     /// - the same node in a service's shape position, where the resolved symbol
@@ -2742,20 +2742,20 @@ impl Checker<'_> {
     // over-approximation is narrowed here so none leaks to IR lowering:
     //
     // - payloads and params parse as any `FieldType` → narrowed to the
-    //   Appendix C shapes (named type; `final` also arrays; params also
+    //   Appendix C shapes (named type; `fixed` also arrays; params also
     //   streams) with pointed FORM-102 messages;
     // - the `error` modifier parses on `interface` → TYPL-212;
     // - a return type parses on `command` → RIDL-104;
-    // - timing parses on `command`/`query`/`final` → RIDL-106 on all three:
+    // - timing parses on `command`/`query`/`fixed` → RIDL-106 on all three:
     //   one rule (timing belongs to `signal` and `event`, §9), one code;
-    // - an attr block parses on `signal`/`event`/`final` → RIDL-106 on
-    //   `final`; predicates draw RIDL-301/-302, keys the gf §4.3 allow-list
+    // - an attr block parses on `signal`/`event`/`fixed` → RIDL-106 on
+    //   `fixed`; predicates draw RIDL-301/-302, keys the gf §4.3 allow-list
     //   (FORM-106/-107/-108);
-    // - an init value parses on `event` and `final` → FORM-102;
+    // - an init value parses on `event` and `fixed` → FORM-102;
     // - a typl declaration parses inside an interface or service body →
     //   RIDL-107, raised by the parser where the keyword is recognised;
     // - a stream `<T>` parses in every type position → RIDL-201 on
-    //   signal/event payloads, FORM-102 on `final`, TYPL-301 elsewhere
+    //   signal/event payloads, FORM-102 on `fixed`, TYPL-301 elsewhere
     //   (struct fields and collections, ridl §12.3), via
     //   [`Checker::check_stream_positions`];
     // - timing and attrs parse in either order → no separate order rule:
@@ -2940,7 +2940,7 @@ impl Checker<'_> {
             ast::InterfaceMember::Query(query) => {
                 v2::decl::Kind::QueryDef(self.lower_query(query, &interaction_name))
             }
-            ast::InterfaceMember::Final(fin) => v2::decl::Kind::FixedDef(self.lower_final(fin)),
+            ast::InterfaceMember::Fixed(fin) => v2::decl::Kind::FixedDef(self.lower_fixed(fin)),
             // The tombstone stores its ordinal twice — on the `Decl`
             // envelope AND in `Reserved`. The schema cannot enforce the
             // agreement, so the lowering sets both from the one counter.
@@ -3876,7 +3876,7 @@ impl Checker<'_> {
     /// `@` on all five kinds so that the narrowing is a semantic rule with a
     /// semantic message, and this is that rule for the three kinds that carry
     /// no timing. `command` and `query` used to draw FORM-102 here while
-    /// `final` drew RIDL-106 — one rule under two codes, one of them a parse
+    /// `fixed` drew RIDL-106 — one rule under two codes, one of them a parse
     /// code whose catalogue meaning is "unexpected token", for a token the
     /// parser deliberately accepts.
     fn reject_timing(&mut self, timing: &ast::Timing, kind: &str) {
@@ -3890,7 +3890,7 @@ impl Checker<'_> {
                  not a publication"
             }
             _ => {
-                "a `final` is provisioned externally and never republished, so it has no rate \
+                "a `fixed` is provisioned externally and never republished, so it has no rate \
                  floor and no staleness bound"
             }
         };
@@ -3904,9 +3904,9 @@ impl Checker<'_> {
         );
     }
 
-    /// `final Name : (type_ref | array_type)` (ridl §8, Appendix C) — no
+    /// `fixed Name : (type_ref | array_type)` (ridl §8, Appendix C) — no
     /// init, no timing, no attribute block (RIDL-106).
-    fn lower_final(&mut self, fin: &ast::FinalDef) -> v2::FixedDef {
+    fn lower_fixed(&mut self, fin: &ast::FixedDef) -> v2::FixedDef {
         let payload = match fin.payload() {
             Some(ast::FieldType::Path(path)) => Some(v2::FieldType {
                 optional: false,
@@ -3919,7 +3919,7 @@ impl Checker<'_> {
                 self.error(
                     DiagCode::FORM_102,
                     other.syntax().text_range(),
-                    "final payload must be a named type or an array".to_string(),
+                    "fixed payload must be a named type or an array".to_string(),
                 );
                 None
             }
@@ -3931,23 +3931,23 @@ impl Checker<'_> {
             self.error(
                 DiagCode::FORM_102,
                 init.syntax().text_range(),
-                "init value not valid on final".to_string(),
+                "init value not valid on fixed".to_string(),
             );
         }
         if let Some(timing) = fin.timing() {
-            self.reject_timing(&timing, "final");
+            self.reject_timing(&timing, "fixed");
         }
         if let Some(block) = fin.attr_block() {
             self.error(
                 DiagCode::RIDL_106,
                 block.syntax().text_range(),
-                "an attribute block is not valid on `final` — a `final` has no timing to \
+                "an attribute block is not valid on `fixed` — a `fixed` has no timing to \
                  override and no contract to state, because it is provisioned externally and \
                  never changes while the software runs (ridl §8)"
                     .to_string(),
             );
         }
-        self.check_member_attrs(fin.syntax(), MemberKind::Final);
+        self.check_member_attrs(fin.syntax(), MemberKind::Fixed);
         v2::FixedDef { payload }
     }
 
@@ -4129,7 +4129,7 @@ impl Checker<'_> {
     /// Classifies every stream `<T>` in a ridl-profile file by position
     /// (ridl §12.3): legal in interaction position (params and returns —
     /// a command return is already RIDL-104 wholesale), RIDL-201 on
-    /// signal/event payloads, FORM-102 on `final`, TYPL-301 anywhere else
+    /// signal/event payloads, FORM-102 on `fixed`, TYPL-301 anywhere else
     /// (struct fields and collections — the task 3 parser hand-off).
     fn check_stream_positions(&mut self, source: &ast::SourceFile) {
         for node in source.syntax().descendants() {
@@ -4157,10 +4157,10 @@ impl Checker<'_> {
                      parameter or a `query` return (ridl §12.3)"
                         .to_string(),
                 ),
-                Some(SyntaxKind::FinalDef) => self.error(
+                Some(SyntaxKind::FixedDef) => self.error(
                     DiagCode::FORM_102,
                     range,
-                    "stream `<T>` not valid on final".to_string(),
+                    "stream `<T>` not valid on fixed".to_string(),
                 ),
                 _ => self.error(
                     DiagCode::TYPL_301,
@@ -4487,7 +4487,7 @@ enum MemberKind {
     Event,
     Command,
     Query,
-    Final,
+    Fixed,
 }
 
 impl MemberKind {
@@ -4497,7 +4497,7 @@ impl MemberKind {
             Self::Event => "event",
             Self::Command => "command",
             Self::Query => "query",
-            Self::Final => "final",
+            Self::Fixed => "fixed",
         }
     }
 }
@@ -4527,7 +4527,7 @@ const STRATUM_2_CATEGORIES: &[&str] = &[
     "UNKNOWN_INTERACTION",
 ];
 
-/// The `InitValue` child of an interaction node. `EventDef` and `FinalDef`
+/// The `InitValue` child of an interaction node. `EventDef` and `FixedDef`
 /// admit no init in the reference grammar, so the generated AST carries no
 /// accessor — the lenient parse still holds the node as a direct child.
 fn init_value_child(node: &ridl_syntax::SyntaxNode) -> Option<ast::InitValue> {
@@ -5807,7 +5807,7 @@ mod tests {
     // rejecting `internal` over `internal` would be the worse failure.
 
     /// Every ridl type position is an exposure position. The fixture names one
-    /// `internal` type from each of them at once — a signal, event and final
+    /// `internal` type from each of them at once — a signal, event and fixed
     /// payload, an array element, a command and query parameter, a stream
     /// element in both positions, a query return, a tuple-return field, and
     /// both arms of an inline `T | E` — so that a position quietly dropping out
@@ -5824,8 +5824,8 @@ mod tests {
              interface Panel {\n\
              \x20 signal a : Hidden @1s\n\
              \x20 event b : Hidden @[1s..2s]\n\
-             \x20 final c : Hidden\n\
-             \x20 final d : [Hidden; 1..4]\n\
+             \x20 fixed c : Hidden\n\
+             \x20 fixed d : [Hidden; 1..4]\n\
              \x20 command e(p : Hidden)\n\
              \x20 command f(p : <Hidden>)\n\
              \x20 query g() : Hidden\n\
@@ -5867,8 +5867,8 @@ mod tests {
              internal interface Panel {\n\
              \x20 signal a : Hidden @1s\n\
              \x20 event b : Hidden @[1s..2s]\n\
-             \x20 final c : Hidden\n\
-             \x20 final d : [Hidden; 1..MAXLEN]\n\
+             \x20 fixed c : Hidden\n\
+             \x20 fixed d : [Hidden; 1..MAXLEN]\n\
              \x20 command e(p : Hidden)\n\
              \x20 command f(p : <Hidden>)\n\
              \x20 query g() : Hidden\n\
@@ -6099,7 +6099,7 @@ mod tests {
              type Tick : integer [0..100]\n\
              internal const MAXLEN = 4\n\
              interface Panel {\n\
-             \x20 final d : [Tick; 1..MAXLEN]\n\
+             \x20 fixed d : [Tick; 1..MAXLEN]\n\
              }\n",
         );
         assert_eq!(codes(&ridl), vec!["TYPL-005"], "got: {:?}", messages(&ridl));
@@ -6110,7 +6110,7 @@ mod tests {
              type Tick : integer [0..100]\n\
              internal const MAXLEN = 4\n\
              internal interface Panel {\n\
-             \x20 final d : [Tick; 1..MAXLEN]\n\
+             \x20 fixed d : [Tick; 1..MAXLEN]\n\
              }\n",
         );
         assert!(codes(&legal).is_empty(), "got: {:?}", messages(&legal));
@@ -6600,26 +6600,26 @@ mod tests {
     }
 
     #[test]
-    fn ridl_106_timing_or_attr_block_on_final() {
+    fn ridl_106_timing_or_attr_block_on_fixed() {
         // The timing half is `ridl_106_timing_on_every_kind_that_carries_none`;
-        // this is the attribute-block half, which stays `final`-only because a
+        // this is the attribute-block half, which stays `fixed`-only because a
         // command and a query do take an attribute block (their contracts).
         let attributed = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  final v : Version [ persist ]\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  fixed v : Version [ persist ]\n}}\n"),
         );
         assert_eq!(codes(&attributed), vec!["RIDL-106", "FORM-107"]);
         assert!(
             attributed.diagnostics[0]
                 .message
-                .starts_with("an attribute block is not valid on `final`"),
+                .starts_with("an attribute block is not valid on `fixed`"),
             "got: {}",
             attributed.diagnostics[0].message,
         );
 
         let good = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  final v : Version\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  fixed v : Version\n}}\n"),
         );
         assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
     }
@@ -6993,7 +6993,7 @@ mod tests {
     }
 
     #[test]
-    fn ridl_301_contracts_on_signal_event_final() {
+    fn ridl_301_contracts_on_signal_event_fixed() {
         let on_signal = check_ridl(
             "app",
             &format!("{PRELUDE}interface I {{\n  signal s : Speed @10ms [ require s > 0.0 ]\n}}\n"),
@@ -7007,13 +7007,13 @@ mod tests {
         // The untimed event also draws RIDL-100 (default applied, E2 task 9).
         assert_eq!(codes(&on_event), vec!["RIDL-301", "RIDL-100"]);
 
-        // On a `final` the block itself is already RIDL-106; the predicate
-        // additionally draws RIDL-301 (ridl §16.3 lists `final`).
-        let on_final = check_ridl(
+        // On a `fixed` the block itself is already RIDL-106; the predicate
+        // additionally draws RIDL-301 (ridl §16.3 lists `fixed`).
+        let on_fixed = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  final v : Version [ require x > 0.0 ]\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  fixed v : Version [ require x > 0.0 ]\n}}\n"),
         );
-        assert_eq!(codes(&on_final), vec!["RIDL-106", "RIDL-301"]);
+        assert_eq!(codes(&on_fixed), vec!["RIDL-106", "RIDL-301"]);
 
         // `require` on command/query and `ensure` on query are the legal
         // homes (ridl §13).
@@ -7645,7 +7645,7 @@ interface I {\n\
     /// One rule, one code: a timing annotation on any kind that carries none is
     /// RIDL-106, and each message says why *that* kind carries none.
     ///
-    /// `command` and `query` used to draw FORM-102 while `final` drew RIDL-106.
+    /// `command` and `query` used to draw FORM-102 while `fixed` drew RIDL-106.
     /// FORM-102's catalogue meaning is "unexpected token", and the grammar
     /// accepts `@` on all five kinds on purpose, so the token was never
     /// unexpected — the rejection is semantic and now wears a semantic code.
@@ -7654,7 +7654,7 @@ interface I {\n\
         for (kind, member, because) in [
             ("command", "command c() @10ms", "invoked on demand"),
             ("query", "query q(): Speed @10ms", "answered on demand"),
-            ("final", "final v : Version @10ms", "provisioned externally"),
+            ("fixed", "fixed v : Version @10ms", "provisioned externally"),
         ] {
             let checked = check_ridl("app", &format!("{PRELUDE}interface I {{\n  {member}\n}}\n"));
             assert_eq!(codes(&checked), vec!["RIDL-106"], "{kind}");
@@ -7675,7 +7675,7 @@ interface I {\n\
     }
 
     #[test]
-    fn form_102_init_on_event_and_final() {
+    fn form_102_init_on_event_and_fixed() {
         let on_event = check_ridl(
             "app",
             &format!("{PRELUDE}interface I {{\n  event e : Speed = 3.0\n}}\n"),
@@ -7688,14 +7688,14 @@ interface I {\n\
             "init value not valid on event",
         );
 
-        let on_final = check_ridl(
+        let on_fixed = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  final v : Version = \"1.0.0\"\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  fixed v : Version = \"1.0.0\"\n}}\n"),
         );
-        assert_eq!(codes(&on_final), vec!["FORM-102"]);
+        assert_eq!(codes(&on_fixed), vec!["FORM-102"]);
         assert_eq!(
-            on_final.diagnostics[0].message,
-            "init value not valid on final",
+            on_fixed.diagnostics[0].message,
+            "init value not valid on fixed",
         );
     }
 
@@ -7725,24 +7725,24 @@ interface I {\n\
             "event payload must be a named type",
         );
 
-        let map_final = check_ridl(
+        let map_fixed = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  final f : [Version: Speed; 0..3]\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  fixed f : [Version: Speed; 0..3]\n}}\n"),
         );
-        assert_eq!(codes(&map_final), vec!["FORM-102"]);
+        assert_eq!(codes(&map_fixed), vec!["FORM-102"]);
         assert_eq!(
-            map_final.diagnostics[0].message,
-            "final payload must be a named type or an array",
+            map_fixed.diagnostics[0].message,
+            "fixed payload must be a named type or an array",
         );
 
-        let stream_final = check_ridl(
+        let stream_fixed = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  final f : <Speed>\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  fixed f : <Speed>\n}}\n"),
         );
-        assert_eq!(codes(&stream_final), vec!["FORM-102"]);
+        assert_eq!(codes(&stream_fixed), vec!["FORM-102"]);
         assert_eq!(
-            stream_final.diagnostics[0].message,
-            "stream `<T>` not valid on final",
+            stream_fixed.diagnostics[0].message,
+            "stream `<T>` not valid on fixed",
         );
 
         let tuple_param = check_ridl(
@@ -7755,15 +7755,15 @@ interface I {\n\
             "command parameter must be a named type or a stream",
         );
 
-        // The Appendix C `final_type` admits arrays (`[Label; 0..32]`).
-        let array_final = check_ridl(
+        // The Appendix C `fixed_type` admits arrays (`[Label; 0..32]`).
+        let array_fixed = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  final caps : [Label; 0..32]\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  fixed caps : [Label; 0..32]\n}}\n"),
         );
         assert!(
-            codes(&array_final).is_empty(),
+            codes(&array_fixed).is_empty(),
             "got: {:?}",
-            array_final.diagnostics
+            array_fixed.diagnostics
         );
     }
 
@@ -7982,8 +7982,8 @@ interface VehicleStatus {
   /// Paged fault snapshot
   query getFaultPage(filter: DiagFilter): FaultPage | DiagError
 
-  final softwareVersion : Version
-  final capabilities    : [Label; 0..32]
+  fixed softwareVersion : Version
+  fixed capabilities    : [Label; 0..32]
 }
 ";
 
@@ -8150,7 +8150,7 @@ interface VehicleStatus {
     }
 
     #[test]
-    fn appendix_a_payloads_and_finals_lower_canonical_references() {
+    fn appendix_a_payloads_and_fixeds_lower_canonical_references() {
         let checked = check_appendix_a();
         // Imported payloads are fully qualified `pkg.Name` — never an alias,
         // never the bare imported spelling.
@@ -8162,11 +8162,11 @@ interface VehicleStatus {
             signal_def(&checked, "warnings").payload,
             "veh.common.WarningFlags"
         );
-        // `final` payloads: an implicit `ridl.std` name is cross-package.
+        // `fixed` payloads: an implicit `ridl.std` name is cross-package.
         let Some(v2::decl::Kind::FixedDef(version)) =
             &interaction(&checked, "softwareVersion").kind
         else {
-            panic!("softwareVersion is not a final");
+            panic!("softwareVersion is not a fixed");
         };
         assert_eq!(
             version.payload.as_ref().unwrap().kind,
@@ -8174,7 +8174,7 @@ interface VehicleStatus {
         );
         let Some(v2::decl::Kind::FixedDef(caps)) = &interaction(&checked, "capabilities").kind
         else {
-            panic!("capabilities is not a final");
+            panic!("capabilities is not a fixed");
         };
         let Some(v2::field_type::Kind::Array(array)) = &caps.payload.as_ref().unwrap().kind else {
             panic!("capabilities is not an array");
@@ -8475,7 +8475,7 @@ interface VehicleStatus {
     #[test]
     fn command_carries_no_timing_in_ir() {
         // A command has no `Timing` field at all — timing is absent from the IR
-        // for command/query/final (ridl §9).
+        // for command/query/fixed (ridl §9).
         let checked = check_ridl(
             "app",
             &format!("{PRELUDE}interface I {{\n  command c(p: Speed)\n}}\n"),
@@ -8958,7 +8958,7 @@ interface VehicleStatus {
             "interface I {\n  event : Speed\n  signal after : Speed @10ms\n}\n",
             "interface I {\n  command (g: Speed)\n  signal after : Speed @10ms\n}\n",
             "interface I {\n  query (): Speed\n  signal after : Speed @10ms\n}\n",
-            "interface I {\n  final : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
+            "interface I {\n  fixed : Speed = 1.0\n  signal after : Speed @10ms\n}\n",
             "interface I {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",
             "service veh.a.b {\n  signal : Speed @10ms\n  signal after : Speed @10ms\n}\n",
             "service veh.a.b {\n  signal view : Speed @10ms\n  signal after : Speed @10ms\n}\n",

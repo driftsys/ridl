@@ -15,10 +15,10 @@ error[RIDL-105]: query returning `()` — a query must return a value; use `comm
 12 │   query nothingBack(): ()
    │                        ^^
 
-error[RIDL-106]: a timing annotation is not valid on `final` — a `final` is provisioned externally and never republished, so it has no rate floor and no staleness bound. Timing belongs to `signal` and `event` (ridl §9)
+error[RIDL-106]: a timing annotation is not valid on `fixed` — a `fixed` is provisioned externally and never republished, so it has no rate floor and no staleness bound. Timing belongs to `signal` and `event` (ridl §9)
    ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:15:28
    │
-15 │   final timedFinal : Level @1s
+15 │   fixed timedFixed : Level @1s
    │                            ^^^
 
 error[RIDL-106]: a timing annotation is not valid on `command` — a command is invoked on demand, not published on a schedule, and its acknowledgement is not a publication. Timing belongs to `signal` and `event` (ridl §9)
@@ -33,16 +33,16 @@ error[RIDL-106]: a timing annotation is not valid on `query` — a query is answ
 23 │   query timedQuery(): Level @1s
    │                             ^^^
 
-error[RIDL-106]: an attribute block is not valid on `final` — a `final` has no timing to override and no contract to state, because it is provisioned externally and never changes while the software runs (ridl §8)
+error[RIDL-106]: an attribute block is not valid on `fixed` — a `fixed` has no timing to override and no contract to state, because it is provisioned externally and never changes while the software runs (ridl §8)
    ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:26:34
    │  
-26 │     final constrainedFinal : Level [
+26 │     fixed constrainedFixed : Level [
    │ ╭──────────────────────────────────^
 27 │ │     require true
 28 │ │   ]
    │ ╰───^
 
-error[RIDL-301]: `require` not valid on final — contracts belong to `command` and `query`
+error[RIDL-301]: `require` not valid on fixed — contracts belong to `command` and `query`
    ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:27:5
    │
 27 │     require true
@@ -189,7 +189,7 @@ error[TYPL-005]: public `Exposed` exposes internal type `Handle` — a public de
 error[TYPL-005]: public `Exposed` exposes internal constant `HANDLE_SLOTS` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
    ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:59:28
    │
-59 │   final slots : [Level; 1..HANDLE_SLOTS]
+59 │   fixed slots : [Level; 1..HANDLE_SLOTS]
    │                            ^^^^^^^^^^^^
 
 error[TYPL-005]: public `Exposed` exposes internal type `Handle` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
@@ -270,10 +270,10 @@ error[FORM-102]: command parameter must be a named type or a stream
 26 │   command takeMaybe(level: Level?)
    │                            ^^^^^^
 
-error[FORM-102]: final payload must be a named type or an array
+error[FORM-102]: fixed payload must be a named type or an array
    ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:29:23
    │
-29 │   final maybeSerial : Serial?
+29 │   fixed maybeSerial : Serial?
    │                       ^^^^^^^
 
 error[FORM-102]: command parameter must be a named type or a stream

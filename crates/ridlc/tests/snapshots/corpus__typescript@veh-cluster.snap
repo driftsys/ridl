@@ -408,7 +408,7 @@ export type Result<T, E> =
  *
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
- * subscribed, commands and queries are called, finals are read.
+ * subscribed, commands and queries are called, fixed values are read.
  *
  * @reserved ordinal 6 (`resetCounters`) — retired, never reused.
  */
@@ -492,8 +492,8 @@ export interface VehicleStatusConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled. Finals are absent here — they are provisioned externally (ridl
- * §8) and initiated by neither side (ridl §3), so they appear on the
+ * handled. Fixed values are absent here — they are provisioned externally
+ * (ridl §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
 export interface VehicleStatusProvider {
@@ -595,7 +595,7 @@ export const vehicleStatusContracts = [
  *
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
- * subscribed, commands and queries are called, finals are read.
+ * subscribed, commands and queries are called, fixed values are read.
  *
  * @reserved ordinal 2 (`legacyWheelPhase`) — retired, never reused.
  * @reserved ordinal 4 — retired, never reused.
@@ -627,8 +627,8 @@ export interface WheelHistoryConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled. Finals are absent here — they are provisioned externally (ridl
- * §8) and initiated by neither side (ridl §3), so they appear on the
+ * handled. Fixed values are absent here — they are provisioned externally
+ * (ridl §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
 export interface WheelHistoryProvider {
@@ -679,7 +679,7 @@ export const wheelHistoryContracts = [] as const;
  *
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
- * subscribed, commands and queries are called, finals are read.
+ * subscribed, commands and queries are called, fixed values are read.
  */
 interface WheelDiagnosticsConsumer {
   /**
@@ -725,8 +725,8 @@ interface WheelDiagnosticsConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled. Finals are absent here — they are provisioned externally (ridl
- * §8) and initiated by neither side (ridl §3), so they appear on the
+ * handled. Fixed values are absent here — they are provisioned externally
+ * (ridl §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
 interface WheelDiagnosticsProvider {
@@ -791,7 +791,7 @@ const wheelDiagnosticsContracts = [] as const;
  *
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
- * subscribed, commands and queries are called, finals are read.
+ * subscribed, commands and queries are called, fixed values are read.
  */
 export interface WheelSummaryConsumer {
   /**
@@ -808,8 +808,8 @@ export interface WheelSummaryConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled. Finals are absent here — they are provisioned externally (ridl
- * §8) and initiated by neither side (ridl §3), so they appear on the
+ * handled. Fixed values are absent here — they are provisioned externally
+ * (ridl §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
 export interface WheelSummaryProvider {
@@ -855,7 +855,7 @@ export const wheelSummaryContracts = [] as const;
  *
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
- * subscribed, commands and queries are called, finals are read.
+ * subscribed, commands and queries are called, fixed values are read.
  *
  * @reserved ordinal 2 (`legacyTicks`) — retired, never reused.
  * @reserved ordinal 3 — retired, never reused.
@@ -886,8 +886,8 @@ export interface Service_veh_cluster_wheelsConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled. Finals are absent here — they are provisioned externally (ridl
- * §8) and initiated by neither side (ridl §3), so they appear on the
+ * handled. Fixed values are absent here — they are provisioned externally
+ * (ridl §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
 export interface Service_veh_cluster_wheelsProvider {
@@ -938,7 +938,7 @@ export const service_veh_cluster_wheelsContracts = [] as const;
  *
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
- * subscribed, commands and queries are called, finals are read.
+ * subscribed, commands and queries are called, fixed values are read.
  *
  * @reserved ordinal 8 (`setEcoMode`) — retired, never reused.
  */
@@ -1072,7 +1072,7 @@ export interface Service_veh_hvac_cabinConsumer {
    */
   readonly unitSerial: ridl_std.Label;
   /**
-   * A collection-typed final.
+   * A collection-typed fixed.
    *
    * @ordinal 17
    */
@@ -1125,8 +1125,8 @@ export interface Service_veh_hvac_cabinConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled. Finals are absent here — they are provisioned externally (ridl
- * §8) and initiated by neither side (ridl §3), so they appear on the
+ * handled. Fixed values are absent here — they are provisioned externally
+ * (ridl §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
 export interface Service_veh_hvac_cabinProvider {
