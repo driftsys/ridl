@@ -691,10 +691,26 @@ mod v2_round_trip {
     }
 
     /// A dotted reference contributes its qualifier; a bare one contributes
-    /// nothing. The nested case is the one that matters: a reference reachable
-    /// only through an array element is still a reference.
+    /// nothing. Every recursive path through `walk_field_type` — array
+    /// element, tuple field, map key, map value, stream element — carries a
+    /// distinct qualifier, so no path's absence can hide behind another
+    /// path's presence: deleting any one arm's body changes the expected set
+    /// this test compares against, rather than leaving it unchanged.
     #[test]
     fn referenced_packages_finds_qualifiers_at_depth() {
+        fn named(reference: &str) -> v2::FieldType {
+            v2::FieldType {
+                kind: Some(v2::field_type::Kind::Named(reference.to_string())),
+                ..Default::default()
+            }
+        }
+
+        fn fixed(payload: v2::FieldType) -> v2::decl::Kind {
+            v2::decl::Kind::FixedDef(v2::FixedDef {
+                payload: Some(payload),
+            })
+        }
+
         let package = v2::Package {
             name: "veh.cluster".to_string(),
             decls: vec![
@@ -715,21 +731,52 @@ mod v2_round_trip {
                     ..Default::default()
                 },
                 v2::Decl {
-                    name: "Labels".to_string(),
-                    kind: Some(v2::decl::Kind::FixedDef(v2::FixedDef {
-                        payload: Some(v2::FieldType {
-                            kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
-                                element: Some(Box::new(v2::FieldType {
-                                    kind: Some(v2::field_type::Kind::Named(
-                                        "ridl.std.Label".to_string(),
-                                    )),
-                                    ..Default::default()
-                                })),
-                                min: 0,
-                                max: 32,
-                            }))),
-                            ..Default::default()
-                        }),
+                    name: "ArrLabels".to_string(),
+                    kind: Some(fixed(v2::FieldType {
+                        kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                            element: Some(Box::new(named("veh.arr.Label"))),
+                            min: 0,
+                            max: 32,
+                        }))),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                v2::Decl {
+                    name: "TupThing".to_string(),
+                    kind: Some(fixed(v2::FieldType {
+                        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                            fields: vec![v2::TupleField {
+                                name: "x".to_string(),
+                                r#type: Some(named("veh.tup.X")),
+                            }],
+                        })),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                v2::Decl {
+                    name: "MapThing".to_string(),
+                    kind: Some(fixed(v2::FieldType {
+                        kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                            key: Some(Box::new(named("veh.key.X"))),
+                            value: Some(Box::new(named("veh.val.X"))),
+                            min: 0,
+                            max: 8,
+                        }))),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                v2::Decl {
+                    name: "StreamThing".to_string(),
+                    kind: Some(fixed(v2::FieldType {
+                        kind: Some(v2::field_type::Kind::Stream(v2::StreamType {
+                            element: Some(v2::stream_type::Element::Named(
+                                "veh.strm.X".to_string(),
+                            )),
+                        })),
+                        ..Default::default()
                     })),
                     ..Default::default()
                 },
@@ -738,12 +785,20 @@ mod v2_round_trip {
         };
 
         let found = v2::referenced_packages(&package);
-        assert!(found.contains("ridl.std"), "got {found:?}");
+        let expected: std::collections::BTreeSet<String> = [
+            "ridl.std", "veh.arr", "veh.tup", "veh.key", "veh.val", "veh.strm",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+        assert_eq!(
+            found, expected,
+            "each recursive path must contribute its own distinct qualifier"
+        );
         assert!(
             !found.contains("Speed") && !found.contains("veh.cluster"),
             "a bare reference contributes no package: {found:?}",
         );
-        assert_eq!(found.len(), 1, "only the qualifier is reported: {found:?}");
     }
 
     /// An empty package references nothing — the negative case the emit rule in
