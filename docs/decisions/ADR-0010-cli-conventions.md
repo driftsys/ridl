@@ -57,8 +57,10 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
 ## Decision
 
 1. **The exit-code taxonomy is 0 / 1 / 2. Every subcommand fits it today; before
-   this PR, `ridl fmt`'s missing-path case was the one exception (issue
-   driftsys/ridl#194's own framing) — this ADR names the taxonomy, it does not
+   this PR, `ridl fmt` had two exceptions to it — a missing path, and an
+   unreadable directory reached mid-walk, which issue driftsys/ridl#194 itself
+   calls "the serious one," because it is what let `ridl fmt --check` in CI flip
+   from failing to passing silently — this ADR names the taxonomy, it does not
    invent it.**
 
    - **0** — succeeded, or the verdict is affirmative.
@@ -95,16 +97,18 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      scripts determine whether a program succeeded or failed, so you should
      report this correctly. Map the non-zero exit codes to the most important
      failure modes." Met exactly by the rows where non-zero really does mean the
-     run failed: every subcommand's exit-2 column, and the diagnostic-error
-     exit-1 cells of `check`, `build`, `baseline`, `ridlc check`, and
-     `ridlc build`. It is not met, and is not meant to be, by `ridl diff`'s
-     breaking-change exit 1, `ridl fmt --check`'s would-reformat exit 1, or
-     `ridl test`'s evaluation-fault exit 1 — those three ran to completion and
-     answered a question correctly; Decision 4 is where that distinction is
-     made, and this bullet does not repeat it. Decision 1's two-way split of
-     non-zero (1 = a real negative answer, 2 = the tool could not answer) is
-     this repository's answer to the instruction to map non-zero exit codes to
-     failure modes.
+     run failed: every subcommand's exit-2 column, the diagnostic-error exit-1
+     cells of `check`, `build`, `baseline`, `ridlc check`, and `ridlc build`,
+     and `ridl fmt`'s parse-error exit 1 (D1's table: "a file under `--check`
+     would change, **or has a parse error**") — a file that does not parse is a
+     failure in the ordinary sense, not a verdict. It is not met, and is not
+     meant to be, by `ridl diff`'s breaking-change exit 1, `ridl fmt --check`'s
+     would-reformat exit 1 specifically, or `ridl test`'s evaluation-fault exit
+     1 — those three ran to completion and answered a question correctly;
+     Decision 4 is where that distinction is made, and this bullet does not
+     repeat it. Decision 1's two-way split of non-zero (1 = a real negative
+     answer, 2 = the tool could not answer) is this repository's answer to the
+     instruction to map non-zero exit codes to failure modes.
    - "Display help when passed `-h` or `--help` flags." Already true on both
      binaries before this PR (clap's derived default). The version guidance is
      two separate entries in clig's flag table: "`--version`: Version." and
@@ -219,10 +223,13 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    that cannot be read — holds across all eight. The stronger property this
    decision set out to describe, a message naming the actual cause, holds fully
    only for `ridl fmt`, holds for `ridl diff` only on its own top-level
-   argument, and is wrong (scenario a) or absent (scenario b) for the other six.
-   Those two message defects are real product defects the review of this ADR's
-   first draft surfaced, not documentation scope, and are not closed by this PR:
-   tracked as issue driftsys/ridl#196.
+   argument, is wrong for the other six in scenario (a), and in scenario (b) is
+   either absent (`ridl check`, `ridlc check`, `ridl build`, `ridlc build`,
+   `ridl baseline`) or present but pointing at the wrong path (`ridl test`,
+   which names the workspace root rather than the subdirectory that actually
+   failed). Those two message defects are real product defects the review of
+   this ADR's first draft surfaced, not documentation scope, and are not closed
+   by this PR: tracked as issue driftsys/ridl#196.
 
    `ridl fmt` itself is fixed here. `collect_source_files`'s walk stack popped a
    directory, called `std::fs::read_dir`, and on failure — a missing top-level
@@ -247,12 +254,12 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    rather than a silent skip" (naming, among other cases, an unrecognised marker
    and a missing `package` declaration); and for `./bootstrap`'s tool detection,
    "Nothing is skipped when a tool is missing — the recipe that needs it fails
-   and says which one," which `CONTRIBUTING.md` itself attributes to ADR-0009
-   (decisions 10 and 12, which guard `book-check`, `toolchain-check`, and
-   `wasm-check` the same way and state "no guard downgrades to a warning or a
-   skip"). `ridl fmt`'s two fail-open paths were a CLI-surface instance of the
-   same defect shape those two statements already rule out elsewhere in this
-   toolchain.
+   and says which one (ADR-0009)." That parenthetical is `CONTRIBUTING.md`'s own
+   citation, pointing at decisions 10 and 12, which guard `book-check`,
+   `toolchain-check`, and `wasm-check` the same way and state "no guard
+   downgrades to a warning or a skip." `ridl fmt`'s two fail-open paths were a
+   CLI-surface instance of the same defect shape those two statements already
+   rule out elsewhere in this toolchain.
 
    Pre-existing and out of scope: `collect_source_files`'s walk decides whether
    to descend into a child with a bare `child.is_dir()`, which follows a
@@ -293,12 +300,16 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    #[command(version = concat!(env!("CARGO_PKG_VERSION"), "+", env!("RIDL_BUILD")))]
    ```
 
-   giving `ridl 0.0.0+g310ecf7` today and `ridl 0.1.0` (no suffix needed) at a
-   tagged release, with `RIDL_BUILD` set by a small `build.rs` (a git-describe
-   short hash, say) added to each binary crate. That is a build-system change to
-   two crates, and deserves its own PR and its own run of the full gate —
-   `just wasm-check` included — rather than riding in on this one. Recorded here
-   as the concrete deferred option, not implemented.
+   giving `ridl 0.0.0+g310ecf7` today, with `RIDL_BUILD` set by a small
+   `build.rs` (a git-describe short hash, say) added to each binary crate. The
+   snippet as shown always appends a `+` suffix, on a tagged release included —
+   dropping it there cleanly would need the `build.rs` to leave `RIDL_BUILD`
+   empty on a tagged commit and the version expression to omit the `+` when it
+   is, a real detail left for whoever implements this rather than solved by the
+   snippet above. That is a build-system change to two crates, and deserves its
+   own PR and its own run of the full gate — `just wasm-check` included — rather
+   than riding in on this one. Recorded here as the concrete deferred option,
+   not implemented.
 
 ## Consequences
 
@@ -308,11 +319,11 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
   subcommands, and at least as strong as the seventh (`ridl diff`, whose own
   reader matches it only for its own top-level argument, not a nested failure —
   Decision 6). Closes the gap issue driftsys/ridl#194 found, on a repository
-  whose own CI cannot currently confirm the fix: CI runs on every push —
-  confirmed on this branch (2026-07-27T07:16:17Z) and on `main` the day before —
-  but every job fails to start, before running a single check, because of a
-  billing issue on the GitHub account, not because CI has stopped producing
-  runs.
+  whose own CI cannot currently confirm the fix: `ci.yml` triggers on every push
+  to `main` and on every pull request, and does produce a run there — confirmed
+  on this branch (2026-07-27T07:16:17Z) and on `main` the day before — but every
+  job fails to start, before running a single check, because of a billing issue
+  on the GitHub account, not because CI has stopped producing runs.
 - Positive: `ridl --version`, `ridl -V`, and `ridlc --version` all work, so a
   reader of the CLI reference (PR driftsys/ridl#193) has a way to ask what they
   are running, even though the answer is not yet informative (see the next
