@@ -7,7 +7,7 @@
     "A .ridl file is a typl file plus the ridl interaction layer, so this grammar",
     "includes the typl patterns by reference (source.typl#...) rather than copying",
     "them — the typl half never drifts. What it adds is the nine ridl keywords",
-    "(interface service signal event command query final require ensure), the `@`",
+    "(interface service signal event command query fixed require ensure), the `@`",
     "timing annotation of ridl §9, the duration literals of ridl §2.1, and the",
     "inline fallible return `T | E` of family general form §6.1.",
     "Update this grammar and keywords.rs together when the registry changes."
@@ -73,7 +73,7 @@
     },
     "keywords-interaction": {
       "comment": "ridl §4–§8 — the five interaction kinds.",
-      "match": "\\b(signal|event|command|query|final)\\b",
+      "match": "\\b(signal|event|command|query|fixed)\\b",
       "name": "keyword.declaration.interaction.ridl"
     },
     "keywords-contract": {
