@@ -345,7 +345,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           "deprecated": null,
           "ordinal": 5,
           "kind": {
-            "FinalDef": {
+            "FixedDef": {
               "payload": {
                 "optional": false,
                 "kind": {
@@ -627,7 +627,7 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
               "deprecated": null,
               "ordinal": 4,
               "kind": {
-                "FinalDef": {
+                "FixedDef": {
                   "payload": {
                     "optional": false,
                     "kind": {

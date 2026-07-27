@@ -94,7 +94,7 @@ pub trait VehicleStatusConsumer {
     /// An occurrence is not state: there is no last-value cache and no provenance.
     fn door_opened(&mut self) -> &mut dyn EventHandle<DoorPayload>;
 }
-/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {
     /// Raises `doorOpened` — event ordinal 4 (ridl §5).

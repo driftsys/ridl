@@ -1,7 +1,7 @@
 // Words reserved family-wide but not used by typl (typl reference §1.4). The
 // lexer maps every one to ReservedWord, so they can never be identifiers in a
 // .typl file even though .typl rejects the declarations they belong to.
-interface service signal event command query final
+interface service signal event command query
 view display input action activate toggle select adjust dismiss fetch fixed
 states during navigate scroll drag observe surface agent
 require ensure

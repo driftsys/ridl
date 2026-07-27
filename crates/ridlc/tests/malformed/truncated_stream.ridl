@@ -1,5 +1,5 @@
 // Stream brackets with no element, an unterminated element, and a stream in
-// the one position `final` never takes.
+// the one position `fixed` never takes.
 
 package app
 
@@ -10,5 +10,5 @@ interface Streams {
   query b(): <
   command c(x: <)
   command d(x: <>)
-  final e : <Speed>
+  fixed e : <Speed>
 }

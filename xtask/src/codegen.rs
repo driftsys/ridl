@@ -88,7 +88,7 @@ fn token_info(name: &str) -> (&'static str, &'static str) {
         "event" => ("EventKw", "event"),
         "command" => ("CommandKw", "command"),
         "query" => ("QueryKw", "query"),
-        "final" => ("FinalKw", "final"),
+        "fixed" => ("FixedKw", "fixed"),
         "require" => ("RequireKw", "require"),
         "ensure" => ("EnsureKw", "ensure"),
         "ident" => ("Ident", "ident"),

@@ -104,7 +104,7 @@ export type Result<T, E> =
  *
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
- * subscribed, commands and queries are called, finals are read.
+ * subscribed, commands and queries are called, fixed values are read.
  *
  * @reserved ordinal 6 (`resetCounters`) — retired, never reused.
  */
@@ -189,8 +189,8 @@ export interface VehicleStatusConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled. Finals are absent here — they are provisioned externally (ridl
- * §8) and initiated by neither side (ridl §3), so they appear on the
+ * handled. Fixed values are absent here — they are provisioned externally
+ * (ridl §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
 export interface VehicleStatusProvider {
@@ -300,7 +300,7 @@ export const vehicleStatusContracts = [
  *
  * The consumer face of this interface (ridl §14): what code holding a
  * binding to it sees. Signals are read and subscribed, events are
- * subscribed, commands and queries are called, finals are read.
+ * subscribed, commands and queries are called, fixed values are read.
  */
 export interface Service_veh_cluster_logsConsumer {
   /**
@@ -323,8 +323,8 @@ export interface Service_veh_cluster_logsConsumer {
  *
  * The provider face of this interface (ridl §14): what code realizing it
  * implements. Signals and events are published, commands and queries are
- * handled. Finals are absent here — they are provisioned externally (ridl
- * §8) and initiated by neither side (ridl §3), so they appear on the
+ * handled. Fixed values are absent here — they are provisioned externally
+ * (ridl §8) and initiated by neither side (ridl §3), so they appear on the
  * consumer face only.
  */
 export interface Service_veh_cluster_logsProvider {

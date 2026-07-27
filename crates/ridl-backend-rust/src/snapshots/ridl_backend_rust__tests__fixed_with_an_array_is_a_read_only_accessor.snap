@@ -88,11 +88,11 @@ pub struct ContractStub {
 /// The consumer face of `VehicleStatus` — what a component that uses this interface calls (ridl §10.1).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusConsumer {
-    /// final `capabilities` — ordinal 11 (ridl §8).
+    /// fixed `capabilities` — ordinal 11 (ridl §8).
     /// Provisioned externally and immutable for the lifetime of the running software instance: read-only, free of the query machinery, and safe to cache unconditionally.
     fn capabilities(&self) -> &Vec<crate::ridl::std::Label>;
 }
-/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {}
 /// Resolved timing for every signal and event of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9).

@@ -430,7 +430,7 @@ mod tests {
             ("event", SyntaxKind::EventKw),
             ("command", SyntaxKind::CommandKw),
             ("query", SyntaxKind::QueryKw),
-            ("final", SyntaxKind::FinalKw),
+            ("fixed", SyntaxKind::FixedKw),
             ("require", SyntaxKind::RequireKw),
             ("ensure", SyntaxKind::EnsureKw),
         ] {

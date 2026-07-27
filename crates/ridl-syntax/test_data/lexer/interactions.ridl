@@ -12,7 +12,7 @@ signal speed: Speed = 0.0 @ 10ms
 event overTemp: Temperature @ [1ms..100ms]
 command setTarget(goal: Speed)
 query currentGear(): Gear
-final vin: string [17]
+fixed vin: string [17]
 
 require goal >= 0.0 && goal <= 250.0
 ensure result != CURRENT_GEAR || !stale

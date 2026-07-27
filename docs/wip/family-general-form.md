@@ -52,7 +52,7 @@ kw name: Backing [shape]? clauses? @timing? [ attrs ]?   ( "=" value )?
 | Profile        | Instances                                                                   |
 | -------------- | --------------------------------------------------------------------------- |
 | typl           | `type`, `const` (with `= value` tail), struct field, union arm, tuple field |
-| ridl           | `signal`, `event`, `final`                                                  |
+| ridl           | `signal`, `event`, `fixed`                                                  |
 | uxdl           | `display`, `input`, `fixed`                                                 |
 | rmdl (planned) | flow declarations                                                           |
 
@@ -63,7 +63,7 @@ const   MAX_SPEED: Speed = 250.0
 signal  targetSpeed: Speed @[20ms..500ms] [ init = SPEED_LIMIT_EU, persist ]
 display muted: boolean [ init = false ]
 input   searchText: SearchQuery @[100ms..2s]
-final   softwareVersion: Version
+fixed   softwareVersion: Version
 ```
 
 ### Shape 2 — callable declaration
@@ -286,8 +286,8 @@ Semantics:
 - **What the contract does _not_ say:** storage medium, write cadence, wear
   policy — runtime (`ridl-rt`) and deployment (rsdl) concerns. The contract's
   promise is exactly "survives software restarts."
-- **Validity:** `signal` and `display` only. Events are not state;
-  `final`/`fixed` are provisioned, not persisted; callables have no channel.
+- **Validity:** `signal` and `display` only. Events are not state; `fixed` is
+  provisioned, not persisted; callables have no channel.
 - **Evolution:** adding or removing `persist` is a behavioral contract change;
   `ridl-diff` category to be defined with the diff spec.
 
@@ -346,7 +346,7 @@ interface VehicleStatus [ labels = (SIL_B, CAL_2, PRIVATE) ] {
     ensure  result >= 0.0
   ]
 
-  final softwareVersion: Version
+  fixed softwareVersion: Version
 }
 ```
 
@@ -461,14 +461,19 @@ calling?_ Observable via a signal or a `during`/`require` gate → **Stratum 2**
 the provider can know (battery actually empty) → **Stratum 1** (an explicit
 `error` value in the inline return). One question decides the home.
 
-### 6.5 `final` naming — reopened, undecided
+### 6.5 `final` naming — decided: `fixed`
 
 A Java/Kotlin reader may confidently misread `final` as a compile-time constant
 rather than _provisioned, immutable per software instance, FOTA-updatable
-between instances_. Options on the table: keep `final` + doc-hover mitigation;
-unify both siblings on **`fixed`** (uxdl's word — no compile-time-constant
-prior, shortens the interact-core table); rename to `provisioned` (unambiguous,
-long). The naming-ledger entry is formally reopened; no decision yet.
+between instances_. Three options were weighed: keep `final` with doc-hover
+mitigation; unify both siblings on **`fixed`** (uxdl's word — no
+compile-time-constant prior); rename to `provisioned` (unambiguous, long).
+
+**Decided (2026-07-27, ADR-0011): both siblings spell it `fixed`.** ridl's
+`final` is renamed and leaves the reserved-word registry. Per-profile vocabulary
+remains the rule for every other interact-core primitive — the provisioned
+constant is the single exception, because uxdl §8 delegates wholesale to ridl §8
+and adds no profile-specific semantics, which no other uxdl section does.
 
 ---
 
@@ -524,7 +529,7 @@ long). The naming-ledger entry is formally reopened; no decision yet.
 | Timing semantics              | **Generic min/max** (rate floor / staleness bound); per-kind behavior derived from signal-vs-event (§6.2)                                       |
 | Ordinal safety                | **Tooling**: LSP ordinal inlays + baseline-aware `ridlc` (§6.3)                                                                                 |
 | Stratum 3 wording             | **"Infrastructure failure — detected, undeclared"**; never "UB" (§6.4)                                                                          |
-| `final` naming                | **Reopened**, undecided (§6.5)                                                                                                                  |
+| `final` naming                | **Decided** — both siblings spell it `fixed` (§6.5, ADR-0011)                                                                                   |
 
 ## 9. Open Questions
 
@@ -544,8 +549,7 @@ long). The naming-ledger entry is formally reopened; no decision yet.
    availability, at-most-once, drives scaffolding). Revisit only if per-state
    attribute needs (uxdl §16.6 per-state timing) force a more general gating
    syntax.
-6. **`final` vs `fixed` vs `provisioned`** — the reopened §6.5 naming question.
-7. **Synthesized identity of inline fallible unions** — exact derivation rule
+6. **Synthesized identity of inline fallible unions** — exact derivation rule
    (interface + ordinal + arms?) to be fixed in the IR spec so transport IDs are
    stable under compatible evolution.
 

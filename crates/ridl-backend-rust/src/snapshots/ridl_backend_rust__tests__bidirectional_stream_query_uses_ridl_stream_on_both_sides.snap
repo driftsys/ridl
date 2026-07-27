@@ -97,7 +97,7 @@ pub trait VehicleStatusConsumer {
         window: impl RidlStream<Item = FaultWindow>,
     ) -> impl RidlStream<Item = FaultEvent>;
 }
-/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {
     /// Handles `replayFaults` — query ordinal 8 (ridl §7).

@@ -94,7 +94,7 @@ pub trait VehicleStatusConsumer {
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     async fn get_bounds(&self) -> VehicleStatusGetBoundsResult;
 }
-/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {
     /// Handles `getBounds` — query ordinal 3 (ridl §7).

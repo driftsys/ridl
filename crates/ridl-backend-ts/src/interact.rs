@@ -14,7 +14,7 @@
 //!   same operations — a consumer reads and subscribes to a signal while a
 //!   provider publishes it — so the shape is realized as two types rather
 //!   than one type nobody can implement. Commands and queries keep one shape
-//!   on both sides. A `final` appears on the consumer face only: it is
+//!   on both sides. A `fixed` appears on the consumer face only: it is
 //!   provisioned externally and initiated by neither side (ridl §3, §8).
 //! - **Fallible queries split mechanically** (ridl §10.1): the success arm is
 //!   the reply payload and the error arm is declared vocabulary, so an inline
@@ -248,12 +248,12 @@ impl Face {
                 "The consumer face of this interface (ridl §14): what code \
                  holding a binding to it sees. Signals are read and \
                  subscribed, events are subscribed, commands and queries are \
-                 called, finals are read."
+                 called, fixed values are read."
             }
             Face::Provider => {
                 "The provider face of this interface (ridl §14): what code \
                  realizing it implements. Signals and events are published, \
-                 commands and queries are handled. Finals are absent here — \
+                 commands and queries are handled. Fixed values are absent here — \
                  they are provisioned externally (ridl §8) and initiated by \
                  neither side (ridl §3), so they appear on the consumer face \
                  only."
@@ -309,10 +309,10 @@ fn emit_face(
 /// Something the checker cannot produce and that has no honest rendering is a
 /// [`GenerateError`] — an unresolved timing mode, a stream element that is
 /// neither string nor bytes, a typl declaration inside an interface. But an
-/// absent optional sub-message (`StreamType.element`, `FinalDef.payload`,
+/// absent optional sub-message (`StreamType.element`, `FixedDef.payload`,
 /// `Param.type`, `QueryDef.return_type`) falls back to `unknown` or
 /// `Promise<void>` instead. Every one of those is rejected upstream — a void
-/// query is RIDL-105, a payload-less final is RIDL-106 — so neither branch is
+/// query is RIDL-105, a payload-less fixed is RIDL-106 — so neither branch is
 /// reachable from a compiled package. The split is about what a hand-built or
 /// truncated IR deserves: `unknown` is honest about missing information and
 /// keeps the emitter total, while a guessed *type* would be a silent lie that
@@ -382,17 +382,17 @@ fn emit_member(
             let doc = jsdoc("  ", &decl.doc, &tags);
             Ok(format!("{doc}  {name}({params}): {ret};\n"))
         }
-        // A final is provisioned externally — build, factory, FOTA — and is
+        // A fixed is provisioned externally — build, factory, FOTA — and is
         // immutable for the software-instance lifetime (ridl §8). It appears
         // on the CONSUMER face only, as a plain readonly accessor.
         //
         // The provider face omits it because a provider has no role in it.
         // The §3 interaction-model table gives every kind an initiator —
         // "provider publishes" for signal and event, "consumer calls" for
-        // command and query — and gives `final` "neither (provisioned)", the
+        // command and query — and gives `fixed` "neither (provisioned)", the
         // one kind that names no side. §14.6 says what providing a service
         // means ("produces its signals/events, accepts its commands/queries")
-        // and lists four kinds, not five. A provider cannot publish a final
+        // and lists four kinds, not five. A provider cannot publish a fixed
         // (there is no channel), cannot answer a call for one (§8: reading it
         // is "free of the query machinery"), and cannot write one (it is
         // written once, elsewhere). Emitting `readonly vin: Vin` on the
@@ -400,11 +400,11 @@ fn emit_member(
         // which is an obligation §8 places on the provisioning plane instead.
         //
         // The wire mapping does not contradict this: Appendix B realizes a
-        // final as a SOME/IP getter, but a binding serves that from the
+        // fixed as a SOME/IP getter, but a binding serves that from the
         // provisioning source, the same way it serves a signal getter from
         // its last-value cache — a transport detail, not an application API.
-        Some(v2::decl::Kind::FinalDef(final_def)) if face == Face::Consumer => {
-            let payload = match final_def.payload.as_ref() {
+        Some(v2::decl::Kind::FixedDef(fixed_def)) if face == Face::Consumer => {
+            let payload = match fixed_def.payload.as_ref() {
                 Some(ft) => kind_ts(ctx, ft.kind.as_ref())?,
                 None => "unknown".to_string(),
             };
@@ -413,7 +413,7 @@ fn emit_member(
             let doc = jsdoc("  ", &decl.doc, &tags);
             Ok(format!("{doc}  readonly {name}: {payload};\n"))
         }
-        Some(v2::decl::Kind::FinalDef(_)) => Ok(String::new()),
+        Some(v2::decl::Kind::FixedDef(_)) => Ok(String::new()),
         // A reserved tombstone holds an ordinal and declares no member, so it
         // has no member doc to carry it; it is recorded on the face instead,
         // by [`reserved_tags`] (ridl §11).
@@ -444,7 +444,7 @@ fn transport_tag() -> String {
 /// It is emitted on **every** interaction, on every face that carries the
 /// interaction, rather than only where a reader could not count it out. A
 /// member's position in a generated face is not its ordinal, in three
-/// independent ways: the provider face omits `final` members (ridl §3, §8), so
+/// independent ways: the provider face omits `fixed` members (ridl §3, §8), so
 /// the two faces of one interface number differently; a `reserved` tombstone
 /// declares no member at all, so every ordinal after one is displaced; and the
 /// consumer face is the only place the tombstones are recorded, so the

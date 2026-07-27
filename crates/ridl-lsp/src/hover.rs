@@ -516,8 +516,8 @@ fn render_interaction(
                 out.push_str(&timing_line(timing, Reading::Occurrence));
             }
         }
-        Some(v2::decl::Kind::FinalDef(final_def)) => {
-            if let Some(named) = final_def.payload.as_ref().and_then(named_ref) {
+        Some(v2::decl::Kind::FixedDef(fixed_def)) => {
+            if let Some(named) = fixed_def.payload.as_ref().and_then(named_ref) {
                 out.push_str(&payload_line(db, ws, std, pkg, named));
             }
         }
@@ -574,9 +574,9 @@ fn interaction_signature(owner: &str, decl: &v2::Decl) -> String {
                 .map(return_text)
                 .unwrap_or_else(|| "?".to_string()),
         ),
-        Some(v2::decl::Kind::FinalDef(final_def)) => format!(
-            "final {name} : {}",
-            final_def
+        Some(v2::decl::Kind::FixedDef(fixed_def)) => format!(
+            "fixed {name} : {}",
+            fixed_def
                 .payload
                 .as_ref()
                 .map(field_type_text)

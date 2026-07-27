@@ -29,7 +29,7 @@ internal const HANDLE_SLOTS = 4
 internal interface Backdoor {
   signal handle : Handle @10ms
   signal HANDLE_MAX : Level @10ms
-  final slots : [Level; 1..HANDLE_SLOTS]
+  fixed slots : [Level; 1..HANDLE_SLOTS]
   command trim(level: Level) [
     require level < HANDLE_MAX
   ]
@@ -56,7 +56,7 @@ internal interface Backdoor {
 interface Exposed {
   signal handle : Handle @10ms
   signal HANDLE_MAX : Level @10ms
-  final slots : [Level; 1..HANDLE_SLOTS]
+  fixed slots : [Level; 1..HANDLE_SLOTS]
   command bind(h: Handle)
   query readHandle(): Handle
   command trim(level: Level) [

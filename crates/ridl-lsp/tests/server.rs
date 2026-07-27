@@ -1567,7 +1567,7 @@ interface VehicleStatus {\n\
 \x20 command setGear(position: Speed)\n\
 \x20 reserved resetCounters\n\
 \x20 query calibrate(axle: Speed): CalReport | CalError\n\
-\x20 final softwareVersion : Version\n\
+\x20 fixed softwareVersion : Version\n\
 }\n\
 \n\
 service veh.adas.cruise : VehicleStatus\n\
@@ -1736,11 +1736,11 @@ fn hover_on_a_command_shows_its_ordinal_and_parameters() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
-/// Hover on a `final` renders its kind, payload, and ordinal — the tombstone
+/// Hover on a `fixed` renders its kind, payload, and ordinal — the tombstone
 /// before it is counted, so it is `#8`, not `#7`.
 #[test]
-fn hover_on_a_final_shows_its_payload_and_tombstone_counted_ordinal() {
-    let dir = TempDir::new("ridl-hover-final");
+fn hover_on_a_fixed_shows_its_payload_and_tombstone_counted_ordinal() {
+    let dir = TempDir::new("ridl-hover-fixed");
     let (_vocab, contract) = write_ridl_workspace(&dir);
     let root = uri_of(dir.path());
     let (client, server) = start(root);
@@ -1751,7 +1751,7 @@ fn hover_on_a_final_shows_its_payload_and_tombstone_counted_ordinal() {
         contract,
         find_pos(RIDL_CONTRACT, "softwareVersion", 0),
     );
-    assert!(value.contains("final"), "kind: {value}");
+    assert!(value.contains("fixed"), "kind: {value}");
     assert!(value.contains("veh.common.Version"), "payload: {value}");
     assert!(
         value.contains("#8"),
@@ -2106,7 +2106,7 @@ fn completion_inside_an_interface_body_covers_both_contexts() {
     let start = find_pos(RIDL_CONTRACT, "reserved resetCounters", 0);
     let items = complete_at(&client, 12, contract, pos(start.line, start.character));
     let keywords = labels(&items);
-    for keyword in ["signal", "event", "command", "query", "final", "reserved"] {
+    for keyword in ["signal", "event", "command", "query", "fixed", "reserved"] {
         assert!(
             keywords.contains(&keyword),
             "`{keyword}` offered at an interaction start: {keywords:?}",

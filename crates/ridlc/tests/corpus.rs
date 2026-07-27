@@ -1190,7 +1190,7 @@ fn internal_on_an_interface_is_package_private_in_both_backends() {
     // Rust. `WheelDiagnostics` is declared `internal`, so all **six** of the
     // names it generates are `pub(crate)` — the two faces, the two metadata
     // constants, and the structs induced by its two tuple positions: a query's
-    // tuple return and a `final` payload's array element (issue #167). The
+    // tuple return and a `fixed` payload's array element (issue #167). The
     // typl-layer tuples beside it (`RawWheelSpan.span` and the element of
     // `RawWheelSpan.bursts`) are in the same list: a tuple has no visibility of
     // its own, so it takes the one of the declaration that induced it,
@@ -1319,8 +1319,8 @@ fn showcase_pins_the_interaction_boundary_narrowings() {
             "error[FORM-102]: command parameter must be a named type or a stream",
         ),
         (
-            "optional final payload",
-            "error[FORM-102]: final payload must be a named type or an array",
+            "optional fixed payload",
+            "error[FORM-102]: fixed payload must be a named type or an array",
         ),
         // The map parameter shares the command-parameter message; the count
         // assertion below is what distinguishes the two occurrences.

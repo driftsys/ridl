@@ -13,7 +13,7 @@ interface Bare {
   event
   command
   query
-  final
+  fixed
   reserved
   interface
   service

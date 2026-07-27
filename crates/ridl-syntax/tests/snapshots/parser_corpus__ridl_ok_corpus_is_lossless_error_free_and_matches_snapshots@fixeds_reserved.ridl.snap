@@ -1,0 +1,90 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/fixeds_reserved.ridl
+---
+SourceFile@0..361
+  PackageDecl@0..18
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..18
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..18 "fixeds"
+  Whitespace@18..20 "\n\n"
+  DocComment@20..85 "/// Fixed values and  ..."
+  Whitespace@85..86 "\n"
+  InterfaceDef@86..360
+    InterfaceKw@86..95 "interface"
+    Whitespace@95..96 " "
+    Name@96..107
+      Ident@96..107 "FixedShapes"
+    Whitespace@107..108 " "
+    LBrace@108..109 "{"
+    Whitespace@109..113 "\n\n  "
+    FixedDef@113..128
+      FixedKw@113..118 "fixed"
+      Whitespace@118..119 " "
+      Name@119..122
+        Ident@119..122 "vin"
+      Whitespace@122..123 " "
+      Colon@123..124 ":"
+      Whitespace@124..125 " "
+      PathType@125..128
+        QualifiedName@125..128
+          Ident@125..128 "Vin"
+    Whitespace@128..132 "\n\n  "
+    ReservedEntry@132..154
+      ReservedKw@132..140 "reserved"
+      Whitespace@140..141 " "
+      Name@141..154
+        Ident@141..154 "resetCounters"
+    Whitespace@154..158 "\n\n  "
+    DocComment@158..209 "/// Retired ordinals  ..."
+    Whitespace@209..212 "\n  "
+    FixedDef@212..243
+      FixedKw@212..217 "fixed"
+      Whitespace@217..218 " "
+      Name@218..233
+        Ident@218..233 "softwareVersion"
+      Whitespace@233..234 " "
+      Colon@234..235 ":"
+      Whitespace@235..236 " "
+      PathType@236..243
+        QualifiedName@236..243
+          Ident@236..243 "Version"
+    Whitespace@243..247 "\n\n  "
+    ReservedEntry@247..270
+      ReservedKw@247..255 "reserved"
+      Whitespace@255..256 " "
+      Name@256..270
+        Ident@256..270 "legacyChecksum"
+    Whitespace@270..274 "\n\n  "
+    DocComment@274..320 "/// A collection payl ..."
+    Whitespace@320..323 "\n  "
+    FixedDef@323..358
+      FixedKw@323..328 "fixed"
+      Whitespace@328..329 " "
+      Name@329..341
+        Ident@329..341 "capabilities"
+      Whitespace@341..342 " "
+      Colon@342..343 ":"
+      Whitespace@343..344 " "
+      ArrayType@344..358
+        LBracket@344..345 "["
+        PathType@345..350
+          QualifiedName@345..350
+            Ident@345..350 "Label"
+        Semicolon@350..351 ";"
+        Whitespace@351..352 " "
+        Bound@352..357
+          Literal@352..353
+            IntNumber@352..353 "0"
+          DotDot@353..355 ".."
+          Literal@355..357
+            IntNumber@355..357 "32"
+        RBracket@357..358 "]"
+    Whitespace@358..359 "\n"
+    RBrace@359..360 "}"
+  Whitespace@360..361 "\n"
+errors: none

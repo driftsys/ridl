@@ -77,6 +77,6 @@ interface VehicleStatus {
   /// Paged fault snapshot — fallible query via inline `T | E` (§10.1)
   query getFaultPage(filter: DiagFilter): FaultPage | DiagError
 
-  final softwareVersion : Version
-  final capabilities    : [Label; 0..32]
+  fixed softwareVersion : Version
+  fixed capabilities    : [Label; 0..32]
 }

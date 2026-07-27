@@ -37,8 +37,8 @@
 //!
 //! The interaction grammar (E2 task 3) follows the same discipline: a
 //! `: return_type` after a command's params parses; timing parses on
-//! command, query, and final; an attr block parses on signal, event, and
-//! final; an init value parses on event and final; a stream `<T>` parses in
+//! command, query, and fixed; an attr block parses on signal, event, and
+//! fixed; an init value parses on event and fixed; a stream `<T>` parses in
 //! every type position, including signal/event payloads and struct fields;
 //! a typl definition inside an interface body whose `}` still lies ahead
 //! recovers into one body-local `ErrorNode` and draws **RIDL-107** here,
@@ -216,7 +216,7 @@ fn is_interaction_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::EventKw
             | SyntaxKind::CommandKw
             | SyntaxKind::QueryKw
-            | SyntaxKind::FinalKw
+            | SyntaxKind::FixedKw
     )
 }
 
@@ -808,7 +808,7 @@ impl<'a> Parser<'a> {
                 Some(SyntaxKind::EventKw) => self.value_interaction(SyntaxKind::EventDef),
                 Some(SyntaxKind::CommandKw) => self.callable_interaction(SyntaxKind::CommandDef),
                 Some(SyntaxKind::QueryKw) => self.callable_interaction(SyntaxKind::QueryDef),
-                Some(SyntaxKind::FinalKw) => self.value_interaction(SyntaxKind::FinalDef),
+                Some(SyntaxKind::FixedKw) => self.value_interaction(SyntaxKind::FixedDef),
                 // A typl definition keyword inside the body: the body holds
                 // interactions and tombstones only (ridl §14.1). When the
                 // body's `}` still lies ahead, the declaration recovers into
@@ -979,14 +979,14 @@ impl<'a> Parser<'a> {
     }
 
     /// The shared `kw Name ':' payload InitValue? annotations` shape of the
-    /// three value interactions — `SignalDef`, `EventDef`, and `FinalDef`.
+    /// three value interactions — `SignalDef`, `EventDef`, and `FixedDef`.
     /// The bare `= value` init comes before the timing (ADR-0008 decision
     /// 2). The reference allows the init on signals only and timing on
     /// signals and events; here all three kinds accept an init, a timing,
     /// and an attr block, and the checker narrows (RIDL-106/-301, task 5).
     fn value_interaction(&mut self, kind: SyntaxKind) {
         self.start(kind);
-        self.bump(); // 'signal' | 'event' | 'final'
+        self.bump(); // 'signal' | 'event' | 'fixed'
         self.name();
         self.expect(SyntaxKind::Colon);
         self.field_type();

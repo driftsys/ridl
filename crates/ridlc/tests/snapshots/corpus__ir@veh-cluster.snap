@@ -2087,7 +2087,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "deprecated": null,
           "ordinal": 10,
           "kind": {
-            "FinalDef": {
+            "FixedDef": {
               "payload": {
                 "optional": false,
                 "kind": {
@@ -2106,7 +2106,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "deprecated": null,
           "ordinal": 11,
           "kind": {
-            "FinalDef": {
+            "FixedDef": {
               "payload": {
                 "optional": false,
                 "kind": {
@@ -2400,7 +2400,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "deprecated": null,
           "ordinal": 6,
           "kind": {
-            "FinalDef": {
+            "FixedDef": {
               "payload": {
                 "optional": false,
                 "kind": {
@@ -3083,7 +3083,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "deprecated": null,
               "ordinal": 16,
               "kind": {
-                "FinalDef": {
+                "FixedDef": {
                   "payload": {
                     "optional": false,
                     "kind": {
@@ -3097,12 +3097,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
               "name": "supportedModes",
               "visibility": 0,
               "is_error": false,
-              "doc": "A collection-typed final.",
+              "doc": "A collection-typed fixed.",
               "labels": [],
               "deprecated": null,
               "ordinal": 17,
               "kind": {
-                "FinalDef": {
+                "FixedDef": {
                   "payload": {
                     "optional": false,
                     "kind": {

@@ -42,7 +42,7 @@ const DEFINITION_KEYWORDS: &[&str] = &[
 /// The interaction keywords offered at an interaction-start position: the five
 /// ridl kinds (ridl §4–§8) plus the `reserved` tombstone (ridl §11). Nothing
 /// else may appear in an interface body — a typl declaration there is RIDL-107.
-const INTERACTION_KEYWORDS: &[&str] = &["signal", "event", "command", "query", "final", "reserved"];
+const INTERACTION_KEYWORDS: &[&str] = &["signal", "event", "command", "query", "fixed", "reserved"];
 
 /// The completion items for the cursor at `offset` in `file` (a file of `pkg`).
 ///
@@ -131,7 +131,7 @@ fn context(root: &SyntaxNode, offset: TextSize) -> Option<Context> {
             | SyntaxKind::EventKw
             | SyntaxKind::CommandKw
             | SyntaxKind::QueryKw
-            | SyntaxKind::FinalKw
+            | SyntaxKind::FixedKw
             | SyntaxKind::ReservedKw => return None,
             _ => {}
         }

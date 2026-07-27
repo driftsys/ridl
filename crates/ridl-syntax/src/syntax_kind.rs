@@ -48,7 +48,7 @@ pub enum SyntaxKind {
     EventKw,
     CommandKw,
     QueryKw,
-    FinalKw,
+    FixedKw,
     RequireKw,
     EnsureKw,
     /// A family-registry word that the active profile does not use (typl
@@ -138,7 +138,7 @@ pub enum SyntaxKind {
     EventDef,
     CommandDef,
     QueryDef,
-    FinalDef,
+    FixedDef,
     Param,
     ParamList,
     ReturnType,

@@ -61,7 +61,7 @@ pub enum InteractionKind {
     Event,
     Command,
     Query,
-    Final,
+    Fixed,
 }
 
 /// The built-in default timing `[100ms..1000ms]` (ridl §9.1) — the fallback
@@ -124,7 +124,7 @@ pub fn parse_default_timing(text: &str) -> Result<TimingSpec, String> {
 ///
 /// For a `signal` or `event` the result is always `Some`: an explicit `@`
 /// annotation is parsed and validated, and an untimed one resolves to `default`
-/// (RIDL-100). For `command`/`query`/`final` the result is always `None` and no
+/// (RIDL-100). For `command`/`query`/`fixed` the result is always `None` and no
 /// diagnostic is produced — those kinds carry no timing, and the structural
 /// checker already reports any annotation written on them (FORM-102 / RIDL-106).
 ///
@@ -430,7 +430,7 @@ fn kind_noun(kind: InteractionKind) -> &'static str {
         InteractionKind::Event => "event",
         InteractionKind::Command => "command",
         InteractionKind::Query => "query",
-        InteractionKind::Final => "final",
+        InteractionKind::Fixed => "fixed",
     }
 }
 
@@ -814,11 +814,11 @@ mod tests {
     }
 
     #[test]
-    fn command_query_final_carry_no_timing() {
+    fn command_query_fixed_carry_no_timing() {
         for kind in [
             InteractionKind::Command,
             InteractionKind::Query,
-            InteractionKind::Final,
+            InteractionKind::Fixed,
         ] {
             let (spec, diags) = resolve(None, kind, &builtin_default_timing());
             assert_eq!(spec, None, "{kind:?} carries no timing");

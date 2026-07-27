@@ -21,7 +21,7 @@ and §14.5 needs both service forms exercised.
   shape of five separate E2 defects. `veh.hvac.cabin` therefore holds all five
   interaction kinds, every timing mode, contracts including one that reads
   `result`, an inline `T | E` fallible return, streams in both positions, a
-  `reserved` tombstone, a deprecated member, and both `final` forms. The IR,
+  `reserved` tombstone, a deprecated member, and both `fixed` forms. The IR,
   Rust and TypeScript snapshots record what each consumer made of them.
 - **Every timing mode.** Strict periodic (`@1s`, `@500us`), a range with both
   bounds, lower-bound-only, upper-bound-only, and one untimed interaction whose
@@ -130,7 +130,7 @@ rather than about the backend.
 added, no corpus entry held that combination: `veh-common` has an array of a
 named type (`readings : [Speed; 8]`) and a bare tuple field
 (`range : (min, max)`), and the interaction layer has an array of tuples in a
-`final` payload, which generates a type but no init. So no generated init ever
+`fixed` payload, which generates a type but no init. So no generated init ever
 placed an object literal in a concise arrow body, and the TypeScript backend
 emitted the `Array.from` callback as
 `() => { first: initRawTickCount(), latest: initRawTickCount() }`, with no

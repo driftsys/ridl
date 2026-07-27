@@ -225,7 +225,7 @@ pub enum InterfaceMember {
     Event(EventDef),
     Command(CommandDef),
     Query(QueryDef),
-    Final(FinalDef),
+    Fixed(FixedDef),
     Reserved(ReservedEntry),
 }
 
@@ -236,7 +236,7 @@ impl AstNode for InterfaceMember {
             SyntaxKind::EventDef => EventDef::cast(syntax).map(Self::Event),
             SyntaxKind::CommandDef => CommandDef::cast(syntax).map(Self::Command),
             SyntaxKind::QueryDef => QueryDef::cast(syntax).map(Self::Query),
-            SyntaxKind::FinalDef => FinalDef::cast(syntax).map(Self::Final),
+            SyntaxKind::FixedDef => FixedDef::cast(syntax).map(Self::Fixed),
             SyntaxKind::ReservedEntry => ReservedEntry::cast(syntax).map(Self::Reserved),
             _ => None,
         }
@@ -248,7 +248,7 @@ impl AstNode for InterfaceMember {
             Self::Event(it) => it.syntax(),
             Self::Command(it) => it.syntax(),
             Self::Query(it) => it.syntax(),
-            Self::Final(it) => it.syntax(),
+            Self::Fixed(it) => it.syntax(),
             Self::Reserved(it) => it.syntax(),
         }
     }
@@ -374,7 +374,7 @@ impl HasName for SignalDef {}
 impl HasName for EventDef {}
 impl HasName for CommandDef {}
 impl HasName for QueryDef {}
-impl HasName for FinalDef {}
+impl HasName for FixedDef {}
 impl HasName for InterfaceMember {}
 
 impl HasModifiers for TypeDef {}
@@ -398,7 +398,7 @@ impl HasDocComments for SignalDef {}
 impl HasDocComments for EventDef {}
 impl HasDocComments for CommandDef {}
 impl HasDocComments for QueryDef {}
-impl HasDocComments for FinalDef {}
+impl HasDocComments for FixedDef {}
 impl HasDocComments for InterfaceMember {}
 impl HasDocComments for ServiceDef {}
 

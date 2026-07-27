@@ -642,7 +642,7 @@ expression: "v2::to_json_pretty(&checked.ir)"
           "deprecated": null,
           "ordinal": 10,
           "kind": {
-            "FinalDef": {
+            "FixedDef": {
               "payload": {
                 "optional": false,
                 "kind": {
@@ -661,7 +661,7 @@ expression: "v2::to_json_pretty(&checked.ir)"
           "deprecated": null,
           "ordinal": 11,
           "kind": {
-            "FinalDef": {
+            "FixedDef": {
               "payload": {
                 "optional": false,
                 "kind": {

@@ -61,8 +61,8 @@
 //!
 //! The **face rule** is encoded rather than tripped over, because all three
 //! parts of it are deliberate, verified decisions: a consumer face carries every
-//! interaction; a provider face carries every interaction except `final`
-//! (ridl §3, §8 — a `final` is provisioned externally and initiated by neither
+//! interaction; a provider face carries every interaction except `fixed`
+//! (ridl §3, §8 — a `fixed` is provisioned externally and initiated by neither
 //! side); and a tombstone is recorded on the consumer face only (it generates no
 //! member, so it rides on the interface's own doc). A guard that expected
 //! symmetry here would report a defect on every corpus entry.
@@ -352,13 +352,13 @@ fn expected_interface(identity: &str, interface: &v2::Interface, kinds: &mut Kin
                 }
                 expected.contracts.extend(stubs_of(&query.contracts));
             }
-            // The face rule: a `final` is provisioned externally and initiated
+            // The face rule: a `fixed` is provisioned externally and initiated
             // by neither side (ridl §3, §8), so it appears on the consumer face
             // and nowhere else. A guard expecting it on both would report a
             // defect on every interface that declares one.
-            Some(v2::decl::Kind::FinalDef(_)) => {
+            Some(v2::decl::Kind::FixedDef(_)) => {
                 expected.consumer.push((name, ordinal));
-                kinds.finals += 1;
+                kinds.fixed += 1;
             }
             // A tombstone generates no member, so it is recorded on the
             // interface's own doc — on the consumer face only, in both backends.
@@ -481,7 +481,7 @@ fn rust_ordinal(line: &str) -> Option<(String, u32)> {
         "event ",
         "command ",
         "query ",
-        "final ",
+        "fixed ",
         "Publishes ",
         "Raises ",
         "Handles ",
@@ -1077,7 +1077,7 @@ struct Counts {
 /// keyword from `internal-shape.ridl` and every total is unchanged, so the guard
 /// stays green over a corpus that no longer contains the construct that
 /// motivated #160. The same holds for the nameless `reserved <n>` form, a
-/// `default_applied` bound, a half-open range, a `final`, and an inline service
+/// `default_applied` bound, a half-open range, a `fixed`, and an inline service
 /// shape — several of which have exactly one carrier today, so one edit retires
 /// them.
 ///
@@ -1121,7 +1121,7 @@ struct Kinds {
     inline_service_shapes: usize,
     named_tombstones: usize,
     nameless_tombstones: usize,
-    finals: usize,
+    fixed: usize,
     fallible_queries: usize,
     strict_periodic_timings: usize,
     half_open_timings: usize,
@@ -1363,9 +1363,9 @@ fn both_backends_carry_every_ir_fact_the_corpus_fixes() {
              half a backend is likelier to drop",
         ),
         (
-            kinds.finals,
-            "a `final` interaction",
-            "the one kind the face rule treats asymmetrically. Without a `final` the consumer \
+            kinds.fixed,
+            "a `fixed` interaction",
+            "the one kind the face rule treats asymmetrically. Without a `fixed` the consumer \
              and provider ordinal lists are identical, and the face rule is asserted over two \
              copies of the same list",
         ),

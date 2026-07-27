@@ -12,7 +12,7 @@ interface Nameless {
   event : Speed @[1s..2s]
   command (g: Speed)
   query (): Speed
-  final : Speed
+  fixed : Speed
   reserved
   signal survivor : Speed @10ms
 }

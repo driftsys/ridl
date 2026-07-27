@@ -19,7 +19,7 @@ roadmap.
 | Language | Expands to                              | Describes                                                                | Audience                      |
 | -------- | --------------------------------------- | ------------------------------------------------------------------------ | ----------------------------- |
 | **typl** | type language                           | data — types, ranges, units, constants                                   | data architects               |
-| **ridl** | reactive interface description language | system interactions (`signal` / `event` / `command` / `query` / `final`) | service teams                 |
+| **ridl** | reactive interface description language | system interactions (`signal` / `event` / `command` / `query` / `fixed`) | service teams                 |
 | **uxdl** | user-experience description language    | user interactions (`display` / `input` / `action` / `fetch` / `fixed`)   | UX / frontend engineers       |
 | **rmdl** | reactive model description language     | behaviour — synchronous / functional compute                             | control / algorithm engineers |
 | **rsdl** | reactive system description language    | architecture — components, wiring, deployment                            | integrators                   |

@@ -69,7 +69,7 @@ const RIDL_KEYWORDS: &[(&str, SyntaxKind)] = &[
     ("event", SyntaxKind::EventKw),
     ("command", SyntaxKind::CommandKw),
     ("query", SyntaxKind::QueryKw),
-    ("final", SyntaxKind::FinalKw),
+    ("fixed", SyntaxKind::FixedKw),
     ("require", SyntaxKind::RequireKw),
     ("ensure", SyntaxKind::EnsureKw),
 ];
@@ -113,7 +113,8 @@ pub const FAMILY_RESERVED: &[&str] = &[
     "event",
     "command",
     "query",
-    "final",
+    // Shared by ridl and uxdl — one registry entry per concept (typl §1.4).
+    "fixed",
     // uxdl.
     "view",
     "display",
@@ -125,7 +126,6 @@ pub const FAMILY_RESERVED: &[&str] = &[
     "adjust",
     "dismiss",
     "fetch",
-    "fixed",
     "states",
     "during",
     "navigate",
@@ -282,5 +282,18 @@ mod tests {
         assert!(is_reserved("model")); // reserved for rmdl
         assert!(!is_reserved("Speed")); // ordinary identifier
         assert!(!is_reserved("node")); // considered and rejected — never reserved
+    }
+
+    #[test]
+    fn fixed_is_an_active_ridl_keyword_and_final_is_not_reserved() {
+        assert_eq!(
+            keyword_in(Profile::Ridl, "fixed"),
+            Some(SyntaxKind::FixedKw),
+            "`fixed` is the provisioned-constant keyword in the ridl profile"
+        );
+        assert!(
+            !FAMILY_RESERVED.contains(&"final"),
+            "`final` was retired from the registry, the way `default` was"
+        );
     }
 }

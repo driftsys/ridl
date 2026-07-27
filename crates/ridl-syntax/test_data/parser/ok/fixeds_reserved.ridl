@@ -1,0 +1,17 @@
+package veh.fixeds
+
+/// Fixed values and tombstones (ridl reference §8; typl §7.4).
+interface FixedShapes {
+
+  fixed vin : Vin
+
+  reserved resetCounters
+
+  /// Retired ordinals sit between live interactions.
+  fixed softwareVersion : Version
+
+  reserved legacyChecksum
+
+  /// A collection payload — array fixed type.
+  fixed capabilities : [Label; 0..32]
+}

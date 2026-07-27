@@ -30,7 +30,7 @@ interface DoorControl {
   event doorMoved : DoorReport @[50ms..500ms]
   command lock(door: DoorId)
   query readDoor(door: DoorId): DoorReport | DoorFault
-  final doorCount : DoorId
+  fixed doorCount : DoorId
 }
 
 /// Odometer readout — a second shape, so the cross-package member has more

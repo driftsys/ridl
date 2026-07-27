@@ -814,11 +814,11 @@ pub fn explain(category: Category) -> &'static str {
             "              and every later ordinal holds (ridl 11)"
         ),
         Category::KindChanged => concat!(
-            "An interaction whose kind changed (signal, event, command, query, final).\n",
+            "An interaction whose kind changed (signal, event, command, query, fixed).\n",
             "  breaking    any direction — the kind selects the transport shape"
         ),
         Category::PayloadChanged => concat!(
-            "A signal, event, or final payload type changed.\n",
+            "A signal, event, or fixed payload type changed.\n",
             "  breaking    any direction, a stream added or removed included"
         ),
         Category::ReturnChanged => concat!(

@@ -1,6 +1,6 @@
 ---
 source: crates/ridl-syntax/tests/lexer_corpus.rs
-expression: dump(&tokens)
+expression: "lex_corpus_file(path, Profile::Typl)"
 input_file: crates/ridl-syntax/test_data/lexer/reserved_words.typl
 ---
 LineComment "// Words reserved family-wide but not used by typl (typl reference §1.4). The"
@@ -20,8 +20,6 @@ Whitespace " "
 ReservedWord "command"
 Whitespace " "
 ReservedWord "query"
-Whitespace " "
-ReservedWord "final"
 Whitespace "\n"
 ReservedWord "view"
 Whitespace " "

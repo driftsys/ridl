@@ -11,8 +11,8 @@ interface Kinds {
   /// A query must return something; an empty return belongs to `command`.
   query nothingBack(): ()
 
-  /// `final` takes no timing annotation.
-  final timedFinal : Level @1s
+  /// `fixed` takes no timing annotation.
+  fixed timedFixed : Level @1s
 
   /// Neither does a command: timing belongs to `signal` and `event` (ridl §9),
   /// and one rule is one code — this drew FORM-102 ("unexpected token") until
@@ -22,8 +22,8 @@ interface Kinds {
   /// Nor a query.
   query timedQuery(): Level @1s
 
-  /// `final` takes no attribute block either.
-  final constrainedFinal : Level [
+  /// `fixed` takes no attribute block either.
+  fixed constrainedFixed : Level [
     require true
   ]
 

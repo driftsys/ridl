@@ -98,7 +98,7 @@ lines.
 the normative spec. Agents underperform on 40-page specs and excel with dense
 decision tables plus worked examples. Its shape is stubbed in the companion
 outline (see References). It carries the kind-selection tables (signal vs event
-vs command vs query vs final; `case`/`when`/`match`), the doctrines as rules, a
+vs command vs query vs fixed; `case`/`when`/`match`), the doctrines as rules, a
 **common-mistakes table keyed to diagnostic codes**, and three to four complete
 `.rxdl` worked examples (cruise-control is the canonical seed).
 

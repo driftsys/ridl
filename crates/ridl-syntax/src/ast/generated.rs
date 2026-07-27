@@ -1062,20 +1062,20 @@ impl QueryDef {
         support::token(&self.syntax, SyntaxKind::Colon)
     }
 }
-/// A `FinalDef` node (`family.ungram` rule `FinalDef`).
+/// A `FixedDef` node (`family.ungram` rule `FixedDef`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct FinalDef {
+pub struct FixedDef {
     syntax: SyntaxNode,
 }
-impl AstNode for FinalDef {
+impl AstNode for FixedDef {
     fn cast(syntax: SyntaxNode) -> Option<Self> {
-        (syntax.kind() == SyntaxKind::FinalDef).then_some(Self { syntax })
+        (syntax.kind() == SyntaxKind::FixedDef).then_some(Self { syntax })
     }
     fn syntax(&self) -> &SyntaxNode {
         &self.syntax
     }
 }
-impl FinalDef {
+impl FixedDef {
     pub fn name(&self) -> Option<Name> {
         support::child(&self.syntax)
     }
@@ -1088,8 +1088,8 @@ impl FinalDef {
     pub fn attr_block(&self) -> Option<AttrBlock> {
         support::child(&self.syntax)
     }
-    pub fn final_token(&self) -> Option<SyntaxToken> {
-        support::token(&self.syntax, SyntaxKind::FinalKw)
+    pub fn fixed_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::FixedKw)
     }
     pub fn colon_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::Colon)

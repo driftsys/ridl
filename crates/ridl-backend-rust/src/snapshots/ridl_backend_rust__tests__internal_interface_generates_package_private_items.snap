@@ -103,7 +103,7 @@ pub(crate) trait HiddenConsumer {
     /// ensure: result.min <= result.max
     async fn get_bounds(&self) -> HiddenGetBoundsResult;
 }
-/// The provider face of `Hidden` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `Hidden` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub(crate) trait HiddenProvider {
     /// Publishes `rawTicks` — signal ordinal 1 (ridl §4).
@@ -148,7 +148,7 @@ pub trait ShownConsumer {
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     async fn get_bounds(&self) -> ShownGetBoundsResult;
 }
-/// The provider face of `Shown` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `Shown` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait ShownProvider {
     /// Publishes `cabinTemp` — signal ordinal 1 (ridl §4).
@@ -195,7 +195,7 @@ pub trait ServiceVehClusterDiagConsumer {
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     async fn get_bounds(&self) -> ServiceVehClusterDiagGetBoundsResult;
 }
-/// The provider face of `ServiceVehClusterDiag` — what a component that implements this interface fulfils (ridl §10.1). A `final` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
+/// The provider face of `ServiceVehClusterDiag` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait ServiceVehClusterDiagProvider {
     /// Publishes `cabinTemp` — signal ordinal 1 (ridl §4).

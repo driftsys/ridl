@@ -158,10 +158,10 @@ service veh.hvac.cabin {
   query getCabinTemp(): Temperature
 
   /// Provisioned, immutable for the software-instance lifetime (ridl §8).
-  final unitSerial : Label
+  fixed unitSerial : Label
 
-  /// A collection-typed final.
-  final supportedModes : [Label; 0..8]
+  /// A collection-typed fixed.
+  fixed supportedModes : [Label; 0..8]
 
   // The rest of the guaranteed expression subset (ridl §13). One property per
   // clause, so a regression names itself. Appended at the end so the ordinals

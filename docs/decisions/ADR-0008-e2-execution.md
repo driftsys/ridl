@@ -451,6 +451,12 @@ disagreeing sources is the correct one.
    general form for the surface, decision 1). The reconsideration stays open and
    is revisited only with evidence, not re-litigated inside E2.
 
+   _Superseded (2026-07-27) by ADR-0011._ E2 is closed and the reconsideration
+   is decided: both ridl and uxdl spell the kind `fixed`, and `final` is removed
+   from the reserved-word registry. This decision's account of what E2 built
+   stands as written; only its closing sentence, which held the question open,
+   no longer describes the present.
+
 6. **Service diagnostics keep the reference's codes RIDL-140 and RIDL-141.** The
    reference numbers them in the 1xx band while listing them under the §16.4
    evolution/profile table — a documented anomaly. E2 keeps 140/141 as written
@@ -1302,6 +1308,21 @@ disagreeing sources is the correct one.
   agent-taken derivation, `WorkspaceOutput` still carries `resolutions` and
   `std_ir`, and five of the six close-out amendments still bind changes under
   `crates/` with decision 18 the only documentation-only one.
+- **Extended (2026-07-27):** ADR-0011 overtakes one clause of each of the two
+  bullets above. The keyword spelling no longer "ships under an open
+  reconsideration" and `final` is no longer "still" anything: general-form §6.5
+  is decided, both profiles spell the kind `fixed`, and `final` has left the
+  reserved-word registry. Everything else in both bullets holds — `persist` is
+  still deferred, the inline `T|E` transport-identity rule is still an
+  agent-taken derivation, `WorkspaceOutput` still carries `resolutions` and
+  `std_ir`, and decision 18 is still the only documentation-only close-out
+  amendment. The whole-document sweep this ADR's editing note requires was run
+  against the file for this change and found three sentences it falsified: the
+  closing sentence of decision 5, and the one clause in each of the two bullets
+  above. The mentions of `final` in `## Context` are deliberately left as
+  written — they record the name the kind had while E2 built it, which is what a
+  record of E2 is for.
+
 - Review hook: each numbered decision is reversible at the cost of a small
   refactor before a later epic builds on it; the maintainer can veto any of them
   by reopening this ADR.
