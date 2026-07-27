@@ -131,6 +131,171 @@ pub mod v2 {
             named.chain(inline)
         }
     }
+
+    /// Every package named by a type reference in `package`.
+    ///
+    /// A resolved type-reference string is the fully qualified `pkg.Name` for
+    /// a cross-package reference and the bare `Name` for a same-package one,
+    /// never an import alias — the canonical form stated in
+    /// `proto/ridl/ir/v2/ir.proto`, which also enumerates the fields carrying
+    /// one. **That enumeration and this walk are edited together.** A
+    /// reference-bearing field added there and not read here makes the package
+    /// it names invisible to every caller asking what a package depends on.
+    ///
+    /// Every `oneof` below is matched exhaustively with no wildcard arm, so a
+    /// variant added later fails to compile here rather than going unread.
+    pub fn referenced_packages(package: &Package) -> std::collections::BTreeSet<String> {
+        let mut found = std::collections::BTreeSet::new();
+        for decl in &package.decls {
+            walk_decl(decl, &mut found);
+        }
+        for interface in &package.interfaces {
+            for interaction in &interface.interactions {
+                walk_decl(interaction, &mut found);
+            }
+        }
+        for service in &package.services {
+            match &service.shape {
+                Some(service::Shape::InterfaceRef(reference)) => qualifier(reference, &mut found),
+                Some(service::Shape::Inline(interface)) => {
+                    for interaction in &interface.interactions {
+                        walk_decl(interaction, &mut found);
+                    }
+                }
+                None => {}
+            }
+        }
+        found
+    }
+
+    /// Records the package qualifier of a dotted reference. A bare reference
+    /// is same-package and contributes nothing.
+    fn qualifier(reference: &str, found: &mut std::collections::BTreeSet<String>) {
+        if let Some((package, _)) = reference.rsplit_once('.') {
+            found.insert(package.to_string());
+        }
+    }
+
+    /// Records every reference in one declaration — a package-level one or an
+    /// interaction inside an interface, which share the `Decl` envelope.
+    fn walk_decl(decl: &Decl, found: &mut std::collections::BTreeSet<String>) {
+        match &decl.kind {
+            Some(decl::Kind::TypeDef(type_def)) => walk_type_def(type_def, found),
+            Some(decl::Kind::ConstDef(const_def)) => {
+                if let Some(reference) = &const_def.type_ref {
+                    qualifier(reference, found);
+                }
+            }
+            Some(decl::Kind::StructDef(struct_def)) => {
+                for member in &struct_def.members {
+                    match &member.member {
+                        Some(struct_member::Member::Field(field)) => {
+                            if let Some(field_type) = &field.r#type {
+                                walk_field_type(field_type, found);
+                            }
+                        }
+                        // A tombstone occupies an ordinal and names no type.
+                        Some(struct_member::Member::Reserved(_)) | None => {}
+                    }
+                }
+            }
+            // An enum's variants are integers; it names no type.
+            Some(decl::Kind::EnumDef(_)) => {}
+            Some(decl::Kind::EnumSetDef(enum_set)) => {
+                if let Some(reference) = &enum_set.backing_enum {
+                    qualifier(reference, found);
+                }
+            }
+            Some(decl::Kind::UnionDef(union_def)) => {
+                for arm in &union_def.arms {
+                    qualifier(&arm.type_ref, found);
+                }
+            }
+            Some(decl::Kind::SignalDef(signal)) => qualifier(&signal.payload, found),
+            Some(decl::Kind::EventDef(event)) => qualifier(&event.payload, found),
+            Some(decl::Kind::CommandDef(command)) => {
+                for param in &command.params {
+                    if let Some(field_type) = &param.r#type {
+                        walk_field_type(field_type, found);
+                    }
+                }
+            }
+            Some(decl::Kind::QueryDef(query)) => {
+                for param in &query.params {
+                    if let Some(field_type) = &param.r#type {
+                        walk_field_type(field_type, found);
+                    }
+                }
+                if let Some(return_type) = &query.return_type {
+                    walk_return_type(return_type, found);
+                }
+            }
+            Some(decl::Kind::FixedDef(fixed)) => {
+                if let Some(field_type) = &fixed.payload {
+                    walk_field_type(field_type, found);
+                }
+            }
+            // A tombstone occupies an ordinal and names no type.
+            Some(decl::Kind::ReservedSlot(_)) | None => {}
+        }
+    }
+
+    /// The recursive half: a reference is reachable at arbitrary depth through
+    /// tuples, arrays, maps, inline scalars, and streams.
+    fn walk_field_type(field_type: &FieldType, found: &mut std::collections::BTreeSet<String>) {
+        match &field_type.kind {
+            Some(field_type::Kind::Named(reference)) => qualifier(reference, found),
+            // A primitive names no package.
+            Some(field_type::Kind::Primitive(_)) => {}
+            Some(field_type::Kind::InlineScalar(type_def)) => walk_type_def(type_def, found),
+            Some(field_type::Kind::Tuple(tuple)) => {
+                for field in &tuple.fields {
+                    if let Some(inner) = &field.r#type {
+                        walk_field_type(inner, found);
+                    }
+                }
+            }
+            Some(field_type::Kind::Array(array)) => {
+                if let Some(element) = &array.element {
+                    walk_field_type(element, found);
+                }
+            }
+            Some(field_type::Kind::Map(map)) => {
+                if let Some(key) = &map.key {
+                    walk_field_type(key, found);
+                }
+                if let Some(value) = &map.value {
+                    walk_field_type(value, found);
+                }
+            }
+            Some(field_type::Kind::Stream(stream)) => match &stream.element {
+                Some(stream_type::Element::Named(reference)) => qualifier(reference, found),
+                // STRING or BYTES only; names no package.
+                Some(stream_type::Element::Primitive(_)) | None => {}
+            },
+            None => {}
+        }
+    }
+
+    /// A `TypeDef`'s only reference is the constant a `match` bound names.
+    fn walk_type_def(type_def: &TypeDef, found: &mut std::collections::BTreeSet<String>) {
+        if let Some(constraint) = &type_def.constraint
+            && let Some(reference) = &constraint.pattern_const
+        {
+            qualifier(reference, found);
+        }
+    }
+
+    fn walk_return_type(return_type: &ReturnType, found: &mut std::collections::BTreeSet<String>) {
+        match &return_type.kind {
+            Some(return_type::Kind::Value(field_type)) => walk_field_type(field_type, found),
+            Some(return_type::Kind::Fallible(fallible)) => {
+                qualifier(&fallible.ok, found);
+                qualifier(&fallible.err, found);
+            }
+            None => {}
+        }
+    }
 }
 
 #[cfg(test)]
@@ -523,5 +688,72 @@ mod v2_round_trip {
 
         package.interfaces.clear();
         assert_eq!(package.shapes().count(), 0);
+    }
+
+    /// A dotted reference contributes its qualifier; a bare one contributes
+    /// nothing. The nested case is the one that matters: a reference reachable
+    /// only through an array element is still a reference.
+    #[test]
+    fn referenced_packages_finds_qualifiers_at_depth() {
+        let package = v2::Package {
+            name: "veh.cluster".to_string(),
+            decls: vec![
+                v2::Decl {
+                    name: "Local".to_string(),
+                    kind: Some(v2::decl::Kind::SignalDef(v2::SignalDef {
+                        payload: "Speed".to_string(),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                v2::Decl {
+                    name: "Stamped".to_string(),
+                    kind: Some(v2::decl::Kind::SignalDef(v2::SignalDef {
+                        payload: "ridl.std.Timestamp".to_string(),
+                        ..Default::default()
+                    })),
+                    ..Default::default()
+                },
+                v2::Decl {
+                    name: "Labels".to_string(),
+                    kind: Some(v2::decl::Kind::FixedDef(v2::FixedDef {
+                        payload: Some(v2::FieldType {
+                            kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                                element: Some(Box::new(v2::FieldType {
+                                    kind: Some(v2::field_type::Kind::Named(
+                                        "ridl.std.Label".to_string(),
+                                    )),
+                                    ..Default::default()
+                                })),
+                                min: 0,
+                                max: 32,
+                            }))),
+                            ..Default::default()
+                        }),
+                    })),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let found = v2::referenced_packages(&package);
+        assert!(found.contains("ridl.std"), "got {found:?}");
+        assert!(
+            !found.contains("Speed") && !found.contains("veh.cluster"),
+            "a bare reference contributes no package: {found:?}",
+        );
+        assert_eq!(found.len(), 1, "only the qualifier is reported: {found:?}");
+    }
+
+    /// An empty package references nothing — the negative case the emit rule in
+    /// `ridlc` depends on.
+    #[test]
+    fn referenced_packages_is_empty_without_references() {
+        let package = v2::Package {
+            name: "veh.solo".to_string(),
+            ..Default::default()
+        };
+        assert!(v2::referenced_packages(&package).is_empty());
     }
 }
