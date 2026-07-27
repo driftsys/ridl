@@ -177,10 +177,35 @@ lint:
 # It builds a copy, because `mdbook build` writes into its own source: a
 # SUMMARY.md naming a chapter file that does not exist makes mdBook **create
 # that file** in `docs/book/` and exit 0. A check that mutates the tree it is
-# checking is not a check. Copying `book.toml` plus `docs/book` into a temporary
-# directory keeps the repository read-only for the duration; the book has no
-# `{{#include}}` reaching outside `docs/book`, which is what makes the copy
-# faithful. `just book` still writes ./book, which is gitignored.
+# checking is not a check. Copying into a temporary directory keeps the
+# repository read-only for the duration. `just book` still writes ./book, which
+# is gitignored.
+#
+# The whole of `docs/` is copied, not `docs/book` alone. The six "Language
+# reference" chapters are thin wrappers that `{{#include}}` a normative document
+# from `docs/specification/`, so a copy holding only `docs/book` would break
+# every one of those includes and check a book no reader ever sees. `docs/` is
+# about a megabyte; copying it is cheaper than maintaining a list of the
+# directories includes are allowed to reach.
+#
+# **mdBook exits 0 on a broken `{{#include}}`.** It logs `ERROR Error updating
+# ...`, leaves the directive in the page as literal text, renders the rest, and
+# reports success. `mdbook build` alone therefore cannot see the failure this
+# recipe exists to catch, so two checks run after it, and either one fails the
+# recipe:
+#
+# 1. mdBook's stderr carries no `ERROR`. This catches every preprocessor
+#    failure, not only a missing include, and it is not anchored to the start of
+#    a line so a change to the log prefix does not silently disarm it.
+# 2. No mdBook directive (`{{#...}}`) survives into the rendered output. This one
+#    depends on no log format at all — it inspects the artifact — which matters
+#    because the mdBook version is not pinned (issue #191). A page that ever
+#    needs to show this syntax literally will trip it; that is a deliberate
+#    change, and the author can escape the directive as `\{{#...}}` and adjust
+#    this check with it.
+#
+# Both were verified by breaking an include on purpose and confirming each fails
+# on its own.
 #
 # The mdBook guard is deliberate. Making this a `build` dependency makes mdBook
 # a hard requirement for every local build, and a missing binary would otherwise
@@ -199,10 +224,23 @@ book-check:
     fi
     scratch="$(mktemp -d)"
     trap 'rm -rf "$scratch"' EXIT
-    mkdir -p "$scratch/docs"
     cp book.toml "$scratch/"
-    cp -R docs/book "$scratch/docs/book"
-    mdbook build "$scratch"
+    cp -R docs "$scratch/docs"
+    if ! mdbook build "$scratch" 2>"$scratch/mdbook.err"; then
+        cat "$scratch/mdbook.err" >&2
+        exit 1
+    fi
+    cat "$scratch/mdbook.err" >&2
+    if grep -q 'ERROR' "$scratch/mdbook.err"; then
+        echo "book-check: mdBook reported the error above and still exited 0." >&2
+        exit 1
+    fi
+    if grep -rq '{{{{#' "$scratch/book"; then
+        echo "book-check: an mdBook directive survived into the rendered output," >&2
+        echo "book-check: which means it was not resolved:" >&2
+        grep -rho '{{{{#[^}]*}}' "$scratch/book" | sort -u >&2
+        exit 1
+    fi
 
 # Check that CI still invokes every recipe the local gate is made of.
 #

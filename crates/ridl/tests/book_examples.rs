@@ -112,6 +112,28 @@
 //! in three flags that move fences, which produced a fourth fail-open one round
 //! after the parser fixed the first three. [`MDBOOK_OPTIONS`] pins the set, and
 //! two tests pin the constant.
+//!
+//! # `{{#include}}` is not expanded
+//!
+//! The reference chapters under `docs/book/reference/` are thin wrappers: a
+//! build-status note plus an mdBook `{{#include}}` directive pulling a
+//! normative specification document in from `docs/specification/`. mdBook's
+//! own preprocessor expands that directive when it builds the book, so a
+//! reader sees the specification's prose and fences rendered as part of the
+//! chapter.
+//!
+//! This harness never runs mdBook's preprocessor. It reads the wrapper file's
+//! raw text with [`pulldown_cmark`], which has no notion of `{{#include}}` and
+//! treats the line as an ordinary paragraph — so nothing in the included
+//! specification document is extracted, staged, or compiled. Those documents
+//! carry hundreds of illustrative fences quoted out of context and were never
+//! meant to be verified as book examples; going unchecked here is deliberate,
+//! not a gap this harness failed to close.
+//!
+//! What this means for an author: a fence that must be verified has to live in
+//! a file under `docs/book/` directly. Writing it into a file reached only
+//! through `{{#include}}` produces the same rendered block for a reader, with
+//! none of the guarantee — mdBook shows it; this harness never sees it.
 
 use pulldown_cmark::{CodeBlockKind, Event, Options, Parser, Tag, TagEnd};
 use std::collections::{BTreeMap, BTreeSet};
@@ -1194,6 +1216,45 @@ fn a_fence_quoted_inside_a_longer_fence_is_not_extracted() {
     assert_eq!(
         verify_book(book.path()).expect("only the real block is verified"),
         1
+    );
+}
+
+/// An `{{#include}}` line is mdBook's own preprocessor directive. This harness
+/// runs no preprocessor: it reads a book file's raw text with
+/// [`pulldown_cmark`], which has no notion of `{{#include}}` and treats the
+/// line as an ordinary paragraph. The fences inside the included file are
+/// therefore never extracted — and the included file sits outside the
+/// directory `verify_book` walks, exactly as `docs/specification/` sits
+/// outside `docs/book/`, so it is never even read.
+///
+/// The reference chapters rely on this: each pulls a normative specification
+/// document in wholesale, and that document's illustrative fences, quoted out
+/// of context, must never be compiled as book examples. Without this test, a
+/// future change that taught the harness to follow `{{#include}}` — even one
+/// meant only to make some other check more thorough — would start compiling
+/// hundreds of fragments that were never written as whole packages, and
+/// nothing here would say so.
+#[test]
+fn an_include_directive_is_not_expanded() {
+    let root = TempDir::new("include");
+    let book_dir = root.path().join("book");
+    std::fs::create_dir_all(&book_dir).expect("create the book directory");
+    std::fs::write(
+        book_dir.join("chapter.md"),
+        "```ridl\npackage zz.include\n\ntype Ok : integer [0..1]\n```\n\n\
+         {{#include ../specification.md}}\n",
+    )
+    .expect("write the book file");
+    std::fs::write(
+        root.path().join("specification.md"),
+        "```ridl\npackage zz.included\n\ntype Bad : integer [10..0]\n```\n",
+    )
+    .expect("write the included file, outside the book directory");
+
+    assert_eq!(
+        verify_book(&book_dir).expect("the included file's broken block must never surface"),
+        1,
+        "only the clean block written directly in the book is verified"
     );
 }
 
