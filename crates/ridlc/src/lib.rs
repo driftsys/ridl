@@ -395,8 +395,24 @@ pub fn run_build(
             .iter()
             .any(|package| ridl_ir::v2::referenced_packages(&package.ir).contains("ridl.std"));
         if references_std {
-            let std_ir = check_package(&db, workspace, std, std).ir;
-            write_emits(out_dir, "ridl.std", &std_ir, emits, &mut diagnostics)?;
+            // Every emit kind except `ir-json`. `ridl.std` is version-locked to
+            // the compiler binary (ADR-0007 decision 15), so it is not part of a
+            // workspace's contract snapshot — a baseline holds the packages the
+            // workspace *declares*. `ridl baseline` is `run_build` with
+            // `--emit ir-json`, and `ridl diff` compiles the other side without
+            // `ridl.std`, so writing `ridl.std.ir.json` here would make every
+            // diff of an unedited workspace against its own baseline report
+            // `ridl.std` as a removed package. Issue #190 is about generated
+            // *code* failing to compile, and `.ir.json` is not code.
+            let code_emits: Vec<Emit> = emits
+                .iter()
+                .copied()
+                .filter(|emit| !matches!(emit, Emit::IrJson))
+                .collect();
+            if !code_emits.is_empty() {
+                let std_ir = check_package(&db, workspace, std, std).ir;
+                write_emits(out_dir, "ridl.std", &std_ir, &code_emits, &mut diagnostics)?;
+            }
         }
     }
 
