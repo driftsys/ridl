@@ -760,10 +760,10 @@ emit targets exist today:
 | `typescript` | `<package>.ts`      | idiomatic TypeScript source             |
 
 One more artifact joins them when a package names a type from `ridl.std` —
-`Timestamp` and `Duration` above both do — because generated code refers to
-standard types by package path and does not compile without the standard
-package beside it. The command above therefore writes `out/ridl.std.rs` as
-well, and `--emit c-header` and `--emit typescript` write `ridl.std.h` and
+`Duration` above does — because generated code refers to standard types by
+package path and does not compile without the standard package beside it.
+The command above therefore writes `out/ridl.std.rs` as well, and
+`--emit c-header` and `--emit typescript` write `ridl.std.h` and
 `ridl.std.ts` the same way. `ir-json` is the exception: a snapshot records the
 packages the workspace declares, and `ridl.std` ships with the compiler.
 
