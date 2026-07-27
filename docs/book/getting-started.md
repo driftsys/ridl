@@ -234,6 +234,7 @@ type Enabled : boolean
 // string types — bounds are recommended everywhere and required on a boundary
 type ModelCode : string [3..6 match MODEL_PATTERN] = "ABC"
 type Notes     : string [1..256] = "-"
+type Vin       : string [17 match VIN_PATTERN] = "1HGCM82633A004352"
 ```
 
 Two details in that listing:
@@ -247,15 +248,20 @@ Two details in that listing:
   otherwise, and the empty value when a `string` or `bytes` bound allows length
   0. It cannot be derived for a `string` **or** `bytes` type carrying a `match`
   pattern or a non-zero minimum length, so those declare one — which is why
-  `ModelCode` and `Notes` above do. Without a declared init such a type draws a
-  `TYPL-115` note. That note stays informational, always; what turns a missing
+  `ModelCode`, `Notes` and `Vin` above do. Without a declared init such a type
+  draws a `TYPL-115` note. That note stays informational, always; what turns a missing
   init into an error is _using_ the type as a signal payload, and the error is
   `RIDL-109`, raised at the signal.
 
 Standard library types are always available without an import: `Uuid`, `Ulid`,
-`Vin`, `Uri`, `Url`, `Email`, `Label`, `Name`, `Message`, `Timestamp`,
-`Duration`, `Version`, `Date`, `CountryCode`, `Sha256Hash`, and others. They
-live in the implicitly imported `ridl.std` package.
+`Uri`, `Url`, `Email`, `Label`, `Name`, `Message`, `Timestamp`, `Duration`,
+`Version`, `Date`, `CountryCode`, `Sha256Hash`, and others. They live in the
+implicitly imported `ridl.std` package.
+
+`ridl.std` holds only what is fixed by a cross-industry standard and means the
+same in every domain, because it is in scope in every file you write. A type
+that belongs to your industry — `Vin` above — is declared in your own
+vocabulary package, like any other domain type.
 
 ## Constants
 
@@ -271,6 +277,7 @@ const MAX_GEAR       : integer = 6
 
 // regex constants
 const MODEL_PATTERN = /^[A-Z][A-Z0-9]{2,5}$/
+const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
 
 // reuse in a range bound
 type EngineSpeed : km/h [0.0..MAX_SPEED step 0.5]
@@ -449,6 +456,7 @@ package veh.cluster
 
 import veh.common.DoorCount
 import veh.common.Enabled
+import veh.common.Vin
 
 interface VehicleIdentityBasics {
   final vin             : Vin
@@ -889,6 +897,7 @@ ranges.
 package veh.identity
 
 import veh.common.Speed
+import veh.common.Vin
 
 type ModelYear  : integer [2000..2100]
 type Capability : boolean

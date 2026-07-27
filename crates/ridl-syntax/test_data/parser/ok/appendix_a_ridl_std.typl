@@ -4,7 +4,6 @@ package ridl.std
 
 const UUID_PATTERN  = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const ULID_PATTERN  = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
-const VIN_PATTERN   = /^[A-HJ-NPR-Z0-9]{17}$/
 const URI_PATTERN   = /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\/.+$/
 const URL_PATTERN   = /^https?:\/\/.+$/
 const EMAIL_PATTERN = /^[^@]+@[^@]+\.[^@]+$/
@@ -19,9 +18,6 @@ type Uuid : string [36 match UUID_PATTERN]
 
 /// ULID — 26 characters, lexicographically sortable
 type Ulid : string [26 match ULID_PATTERN]
-
-/// ISO 3779 Vehicle Identification Number — exactly 17 characters
-type Vin  : string [17 match VIN_PATTERN]
 
 // ---------- Network Types ----------
 
