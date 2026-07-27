@@ -45,6 +45,15 @@ for Markdown.
   - `crates/ridl-syntax/src/parser.rs:262` — "plus a final entry for the end"
 - Prose follows the repository rule: plain and literal, no idioms.
 - Every Markdown change is followed by `just fmt`, and `just check` must pass.
+- Commit scopes are an explicit list in `.git-std.toml`, not path-derived. The
+  crate scopes are `ridl-syntax`, `ridl-core`, `ridl-ir`, `ridlc`,
+  `ridl-backend-rust`, `ridl-backend-ts`, `ridl-diff`, `ridl-fmt`, `ridl-sem`,
+  `ridl-lsp`, `xtask`, and `editors`; the document scopes are `typl`, `ridl`,
+  `uxdl`, `rmdl`, `rsdl`, `family`, `roadmap`, `adr`, `docs`, and `repo`.
+  `git std lint` rejects anything else, in a pre-commit hook.
+- **The per-task file lists are a starting point, not the full set.** Task 1
+  found five consumers its list omitted. Before committing any task, grep for
+  the identifiers that task renames and confirm nothing is left behind.
 
 ---
 
@@ -216,7 +225,8 @@ compiled book examples must move together or the corpus stops parsing.
 - Modify: `crates/ridl-core/src/diag.rs:465,474,545,548`
 - Modify: `crates/ridl-lsp/src/complete.rs:45,134`
 - Modify: `crates/ridl-lsp/src/hover.rs:578`
-- Modify: `crates/ridl-diff/src/walk.rs:862`
+- Modify: `crates/ridl-diff/src/walk.rs:862` — task 1 already moved this line's
+  `Kind::FinalDef` pattern; only its `"final"` string literal remains
 - Modify: `crates/ridl-diff/src/classify.rs:817,821`
 - Modify: `crates/ridl-diff/src/lib.rs:141`
 - Modify: `crates/ridl-backend-rust/src/interact.rs:15,341,565`
@@ -488,7 +498,7 @@ before continuing.
 
 ```bash
 git add -A
-git commit -m "feat(syntax)!: rename the ridl final keyword to fixed
+git commit -m "feat(ridl-syntax)!: rename the ridl final keyword to fixed
 
 Rename the provisioned-constant keyword so ridl and uxdl use one word for
 one concept. A Java or Kotlin reader takes final for a compile-time
@@ -548,7 +558,7 @@ Run: `grep -rn "final" editors/vscode/` Expected: no output.
 
 ```bash
 git add editors/vscode
-git commit -m "fix(vscode): highlight fixed instead of final
+git commit -m "fix(editors): highlight fixed instead of final
 
 The TextMate grammar carries its own copy of the interaction keyword
 list, and no gate checks it against the lexer.
