@@ -41,7 +41,7 @@ These are living records. A decision that changes one is recorded there directly
 ## The family
 
     typl   type language                 — data: types, ranges, units, constants
-    ridl   interface description         — system interactions (signal/event/command/query/final)
+    ridl   interface description         — system interactions (signal/event/command/query/fixed)
     uxdl   user-experience description   — user interactions (display/input/action/fetch/fixed)
     rmdl   model description             — behaviour: functions + reactive models
     rsdl   system description            — architecture: components, wiring, deployment

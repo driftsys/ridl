@@ -52,12 +52,25 @@ the row that does not need profile-specific words.
 
 2. **`final` is removed from the family reserved-word registry entirely.** It is
    not retained as a retired-but-reserved word, and no alias, deprecation shim,
-   or migration diagnostic is added. Two reasons. typl set the precedent when it
-   retired `default` without reserving it (typl §1.4). The registry admission
-   test requires every entry to name a describable property, and a retired
-   keyword names nothing. The migration population is empty: the workspace
-   version is `0.0.0`, the repository has no release tags, and the binaries are
-   `publish = false`, so no source outside this repository uses the old word.
+   or migration diagnostic is added.
+
+   **This is the first retraction of an implemented keyword from the registry,
+   and it has no true precedent.** typl §1.4 records that `default` was retired
+   without being reserved, but `default` was never in the implemented registry —
+   a pickaxe search of the whole history for `DefaultKw`, and of
+   `crates/ridl-syntax/src/keywords.rs` for the string, both come back empty. It
+   was a design-time rejection. `final` spent two epics as an active keyword
+   with three diagnostics, an IR field, and corpus coverage, so the analogy is
+   directional only: it shows the registry does not keep retired words, not that
+   retracting a shipped one is routine.
+
+   The removal is taken on the narrower ground that the migration population is
+   empty: the workspace version is `0.0.0`, the repository has no release tags,
+   and the binaries are `publish = false`, so no source outside this repository
+   uses the old word and a reserved `final` would produce a better error message
+   for nobody. A future retraction of a keyword that has shipped to real
+   consumers should not cite this decision as precedent without re-examining
+   that ground.
 
 3. **IR field number 20 is unchanged; only the message and field names move.**
    `FinalDef` becomes `FixedDef` and `final_def` becomes `fixed_def`. The number
@@ -96,7 +109,8 @@ the row that does not need profile-specific words.
 ## Consequences
 
 - Positive: one word for one concept across both boundaries, and the misreading
-  that prompted general-form §6.5 is gone. General-form open question 6 is
+  that prompted general-form §6.5 is gone from keyword position — the last
+  bullet below records where it survives. General-form open question 6 is
   closed; the open-question list renumbers.
 - Positive: uxdl Appendix C's `fixed_def` production had referenced
   `final_type`, a nonterminal that only ridl's appendix defined and that uxdl's
@@ -114,6 +128,14 @@ the row that does not need profile-specific words.
   "exactly N" and "exact-length". The collision is not fully eliminated — it is
   moved out of the places where a reader could take the adjective for the
   keyword.
+- Negative: because decision 2 removes `final` from the registry rather than
+  retaining it as reserved, `final` is now a legal identifier: a signal may be
+  named `final`, and so may a struct field. The misreading this ADR exists to
+  eliminate is therefore not gone — it is moved from keyword position to
+  identifier position, where no diagnostic flags it. Accepted knowingly: an
+  author who names a signal `final` has written a confusing name, which is a
+  naming-guidance matter (ridl §15), not a language-surface one, and reserving a
+  word forever to prevent one bad identifier is a worse trade.
 - Neutral: nothing outside this repository consumed the old keyword or the old
   IR key, so no migration path exists and none is owed.
 
