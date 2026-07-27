@@ -17,6 +17,11 @@
 - **ADR-0009 — Toolchain pin and gate parity.** The pinned Rust toolchain, the
   justfile as the single definition of every gate command, and what happens when
   a tool the gate needs is absent. Not epic-scoped: it binds every contributor.
+- **ADR-0010 — CLI conventions.** The exit-code taxonomy (0/1/2) across
+  `ridl`/`ridlc`, which clig.dev guidance applies and which does not (the
+  `diff(1)`/`grep(1)` precedent for a verdict-carrying exit 1, not clig), and
+  the fail-closed rule `ridl fmt` was brought into line with. Not epic-scoped:
+  it binds the CLI contract for every future subcommand.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview.

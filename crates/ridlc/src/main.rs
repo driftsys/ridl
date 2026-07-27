@@ -17,7 +17,7 @@ use ridl_core::diag::render;
 use ridlc::{CliRun, Emit};
 
 #[derive(Parser)]
-#[command(name = "ridlc", about = "The RIDL family compiler (plumbing)")]
+#[command(name = "ridlc", about = "The RIDL family compiler (plumbing)", version)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

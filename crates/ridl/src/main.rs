@@ -39,7 +39,7 @@ use ridlc::{CliRun, Emit};
 use rowan::{TextRange, TextSize};
 
 #[derive(Parser)]
-#[command(name = "ridl", about = "The RIDL toolchain")]
+#[command(name = "ridl", about = "The RIDL toolchain", version)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -52,6 +52,8 @@ enum Command {
     Check {
         #[arg(default_value = ".")]
         path: PathBuf,
+        /// Verify remote imports against `ridl.lock` without fetching or
+        /// regenerating it (CI mode, ADR-0002 §7).
         #[arg(long)]
         frozen: bool,
         /// Compare the checked workspace against a published baseline — a
@@ -80,6 +82,8 @@ enum Command {
         out_dir: PathBuf,
         #[arg(long, value_delimiter = ',', default_value = "rust")]
         emit: Vec<Emit>,
+        /// Verify remote imports against `ridl.lock` without fetching or
+        /// regenerating it (CI mode, ADR-0002 §7).
         #[arg(long)]
         frozen: bool,
     },
@@ -689,13 +693,13 @@ struct DeclIndex {
 }
 
 impl DeclIndex {
-    /// Indexes every `.typl` and `.ridl` file under `entry`. A file that cannot
-    /// be read is skipped rather than reported: the compile already ran clean
-    /// over this tree, so anything unreadable here is not the desk check's
-    /// business.
+    /// Indexes every `.typl` and `.ridl` file under `entry`. A file or
+    /// directory that cannot be read is skipped rather than reported: the
+    /// compile already ran clean over this tree, so anything unreadable here
+    /// is not the desk check's business.
     fn build(entry: &Path) -> Self {
         let mut index = Self::default();
-        for file in collect_source_files(entry) {
+        for file in collect_source_files(entry).unwrap_or_default() {
             let Ok(text) = std::fs::read_to_string(&file) else {
                 continue;
             };
@@ -858,7 +862,15 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
     let mut any_would_change = false;
     let mut any_broken = false;
 
-    for file in collect_source_files(path) {
+    let files = match collect_source_files(path) {
+        Ok(files) => files,
+        Err((dir, err)) => {
+            eprintln!("error: cannot read {}: {err}", dir.display());
+            return ExitCode::from(2);
+        }
+    };
+
+    for file in files {
         let text = match std::fs::read_to_string(&file) {
             Ok(text) => text,
             Err(err) => {
@@ -897,16 +909,21 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
 
 /// Every `.typl` and `.ridl` file under `path`: `path` itself when it is a
 /// file, otherwise a recursive walk that skips hidden directories.
-fn collect_source_files(path: &Path) -> Vec<PathBuf> {
+///
+/// A directory the walk cannot read — `path` itself, when it does not exist
+/// or is not readable, or a subdirectory the walk descends into — is an error
+/// rather than zero files: `Err` carries the directory `read_dir` failed on
+/// and the underlying `io::Error`. The walk cannot tell "empty" from
+/// "absent" or "unreadable" any other way, and treating those as zero files
+/// is what let `ridl fmt` report success over a tree it never read.
+fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::Error)> {
     if path.is_file() {
-        return vec![path.to_path_buf()];
+        return Ok(vec![path.to_path_buf()]);
     }
     let mut files = Vec::new();
     let mut stack = vec![path.to_path_buf()];
     while let Some(dir) = stack.pop() {
-        let Ok(entries) = std::fs::read_dir(&dir) else {
-            continue;
-        };
+        let entries = std::fs::read_dir(&dir).map_err(|err| (dir.clone(), err))?;
         for entry in entries.flatten() {
             let child = entry.path();
             if child.is_dir() {
@@ -926,5 +943,5 @@ fn collect_source_files(path: &Path) -> Vec<PathBuf> {
         }
     }
     files.sort();
-    files
+    Ok(files)
 }
