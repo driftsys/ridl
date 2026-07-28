@@ -29,3 +29,11 @@ E2 plan was archived by the E2 gardening pass on 2026-07-26.
 - **skill-ridl-authoring-outline.md** — outline for the agent-authoring skill
   (see ADR-0005). Forward-looking: the skill it outlines is roadmap story E8.2,
   which has not been built.
+- **ridl-boundary-model-review.md** — spike record from the uxdl design review
+  of 2026-07-28. Rejects uxdl's shape (a parallel language renaming ridl's
+  kinds) and proposes a boundary model in ridl instead, on the finding that
+  datum and referent come apart at every boundary with the non-software world.
+  Captures the findings, two positions reversed mid-session, and the evidence
+  that settles each open question. **Nothing here is ratified** — no existing
+  document has been changed, and `../specification/uxdl-language-reference.md`
+  stands as it was.
