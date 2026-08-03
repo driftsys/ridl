@@ -7,9 +7,10 @@ weeks, L ≈ 3–6 weeks) and relative, not a schedule.
 
 The release boundary is **descriptive vs executable**:
 
-- **V1 — the contract platform:** E0–E4 (typl · ridl · the boundary model ·
-  ecosystem). The SSOT for contracts at every boundary — system, person, and
-  world — with codegen, LSP, diff, docs.
+- **V1 — the contract platform:** E0–E4 plus E9 and E10 (typl · ridl · the
+  boundary model · wire projection · value objects · ecosystem). The SSOT for
+  contracts at every boundary — system, person, and world — with codegen, LSP,
+  diff, docs, and schemas a non-Rust runtime can consume.
 - **V2 — the system platform:** E5a · E6 · E7 (rmdl as a _language_ · rsdl ·
   rxdl). The whole architecture becomes describable and checkable — behaviour,
   assembly, deployment, and domain vocabulary — with **nothing executing yet**.
@@ -25,9 +26,15 @@ subagent.
 **Sequence:**
 
 ```text
-E0 → E1 → E2 → E3 → E5a → E6 → E7(rxdl) → E5b → E7(ecosystem)
-          ╰──── E4 (ecosystem) and E8 (agents) thread throughout ────╯
+E0 → E1 → E2 → E9 → E3 → E5a → E6 → E7(rxdl) → E5b → E7(ecosystem)
+          ╰──── E4 (ecosystem), E8 (agents), E10 (typl value objects) thread ────╯
 ```
+
+**E9 before E3** — both alter ridl's surface and IR, so they must not run
+concurrently, and E9 is the nearer-term product path: it is ridl used as the
+SSOT for a real system bus. **E10 threads** — it is typl backend work with no
+dependency on either, and it closes a promise the shipped documentation already
+makes.
 
 **Epic numbers are identifiers, not positions.** The sequence above changed
 after ADR-0012 and the rmdl phase split; the numbers did not. Renumbering would
@@ -218,6 +225,73 @@ versioned.
 | E4.5 | IR plugin protocol spec + versioning (IR stability policy)                                       | a third-party backend consumes the IR        | L    |
 | E4.6 | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                     | scaffolds a valid workspace; vendors deps    | S    |
 | E4.7 | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI   | colliding key across profiles fails CI       | S    |
+
+## Epic 9 — Wire SSOT: signal store and dispatcher from the IR
+
+**Milestone:** a `.ridl` package generates a working signal store and an
+event/command/query dispatcher for a target whose schema carries its own field
+numbering. **Value:** this is ridl used as the SSOT for a real system bus, and
+it is the first end-to-end demand on the IR from outside the workspace — the
+proving ground for whether the IR is a stable public artifact or a Rust
+implementation detail. **Exit criteria:** the cruise-control package emits
+canonical protobuf JSON that a non-Rust runtime parses, projects to proto3 and
+FlatBuffers schemas, and generates a store and dispatcher whose identity is
+stable under `ridl-diff`.
+
+**Design of record** — four notes in `docs/wip/`, all sharing one origin:
+`2026-08-03-ir-protobuf-encodings-design.md` · `-rpc-response-bound-design.md` ·
+`-multi-interface-services-design.md` · `-schema-projection-design.md`. Two ADRs
+fall out: **ADR-0014** (IR encodings, superseding ADR-0004 §4's rendering
+clause) and **ADR-0015** (the QoS absorption principle and RPC bounds).
+
+**Sequencing caution.** E9.4 to E9.6 alter ridl's surface and IR, as E3 does.
+The two epics must not run concurrently on the IR. E9 is the nearer-term product
+path; E3 is the larger, more speculative one.
+
+| ID    | Story                                                                                                                                                                                                                                           | Done when                                                                    | Size |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
+| E9.1  | `ridl-ir` serialization rewrite — the emitted `.ir.json` is a serde rendering of Rust structs, not protobuf JSON, so no non-Rust protobuf runtime can parse it (ADR-0014)                                                                       | a non-Rust protobuf runtime parses the emitted IR                            | L    |
+| E9.2  | Two new emit values — prototext and binary — alongside canonical protobuf JSON                                                                                                                                                                  | all three encodings round-trip to the same IR                                | M    |
+| E9.3  | The latent emit-filter defect the new emits expose (§5.1 of the encodings note)                                                                                                                                                                 | the filter is correct for every emit value                                   | S    |
+| E9.4  | **RPC bounds and the response bound** — ridl §9 gains its RPC column; RIDL-112 minted for a missing bound; RIDL-106 narrows to `fixed`; RIDL-103 widens (ADR-0015)                                                                              | an RPC declares a response bound; an undeclared one warns, profile-escalable | M    |
+| E9.5  | The **coherence rule** — coherence is implicit and the interface is the generation unit — as normative prose in ridl §14                                                                                                                        | the rule is stated where the service definition it keys on lives             | S    |
+| E9.6  | **Multi-interface services** — `ServiceDef` carries several interfaces; ordinals stay per-interface keyed by name; addressing stays flat; duplicate member is an error                                                                          | a service composes two interfaces; reordering the list is invisible to diff  | L    |
+| E9.7  | The **projection contract** and its pinned name transform — injective over the names ridl admits; the divergent `c_header.rs` implementation is deleted in favour of `interact.rs`'s; specified with E4.5's stability policy                    | one transform, two interactions never collide after it                       | M    |
+| E9.8  | **proto3 projection** — schemas from IR identity, per ADR-0013's shape-and-identity ceiling                                                                                                                                                     | the cruise-control package emits valid proto3                                | L    |
+| E9.9  | **FlatBuffers projection** — the column Appendix B was missing                                                                                                                                                                                  | the cruise-control package emits a valid FlatBuffers schema                  | L    |
+| E9.10 | The **schema hash over the IR**, not over the emitted schema                                                                                                                                                                                    | two targets of one IR agree on identity                                      | M    |
+| E9.11 | **Store and dispatcher generation** — the store a table of fields including `fixed`; the dispatcher a routing table keyed by ordinal, not a nested message                                                                                      | both generate and round-trip for the cruise-control package                  | L    |
+| E9.12 | Drift the design surfaced: general-form R5's postfix order contradicts the shipped grammar (`@timing` is last, not before attributes); `InterfaceDef`/`ServiceDef` gain the `AttrBlock` the deferred `labels`/`deprecated` promotion also needs | R5 matches `family.ungram`; one grammar edit serves both                     | S    |
+
+## Epic 10 — typl value objects
+
+**Milestone:** a typl package generates types that cannot hold an invalid value.
+**Value:** closes a promise the shipped documentation already makes — typl §1.1
+says a pure typl package "generates data types, **validators**, and
+documentation across every backend", and the glossary defines SSOT the same way,
+while **neither language backend emits a validator**. Until this lands, the
+constraint layer is documentation rather than a guarantee. **Exit criteria:** a
+constrained named scalar cannot be constructed out of range in Rust or
+TypeScript, and `--emit rust` writes a crate that compiles.
+
+**Design and plan of record:** `docs/wip/typl-value-objects-design.md` and
+`-plan.md`, the latter already task-decomposed. It amends **ADR-0013** rather
+than minting a record — that ADR is still Proposed and already classifies
+backends by what they may emit, and this settles its open item 1 (whether the
+wire-backend ceiling binds the language backends too).
+
+| ID     | Story                                                                             | Done when                                                         | Size |
+| ------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
+| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing" | both backends agree on which types need a fallible constructor    | M    |
+| E10.2  | The Rust `ConstraintError` vocabulary                                             | one error type carries every constraint failure                   | S    |
+| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                       | an out-of-range value is unconstructible                          | L    |
+| E10.4  | Vacuous named scalars — infallible construction                                   | a type that constrains nothing takes no fallible path             | M    |
+| E10.5  | `TryFrom<i64>` for enum and enum set                                              | an undefined discriminant is rejected                             | M    |
+| E10.6  | Sound derives — no derive that could reconstruct an invalid value                 | no path bypasses the validating seam                              | M    |
+| E10.7  | `--emit rust` writes a compiling crate                                            | the emitted crate builds standalone                               | M    |
+| E10.8  | Pattern validation behind a `validate-pattern` feature                            | regex constraints check without forcing the dependency            | M    |
+| E10.9  | TypeScript vocabulary and factories                                               | the TS backend refuses an invalid value at construction           | L    |
+| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
 
 ---
 

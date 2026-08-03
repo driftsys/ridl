@@ -29,6 +29,27 @@ E2 plan was archived by the E2 gardening pass on 2026-07-26.
 - **skill-ridl-authoring-outline.md** — outline for the agent-authoring skill
   (see ADR-0005). Forward-looking: the skill it outlines is roadmap story E8.2,
   which has not been built.
+- **2026-08-03-ir-protobuf-encodings-design.md** — the emitted `.ir.json` is a
+  serde rendering of Rust structs, not protobuf JSON, so no non-Rust protobuf
+  runtime can parse it. Proposes canonical protobuf JSON plus prototext and
+  binary emits, and **ADR-0014**, superseding ADR-0004 §4's rendering clause.
+  Roadmap: E9.1–E9.3.
+- **2026-08-03-rpc-response-bound-design.md** — the first pass at ridl §17.5
+  open question 5. Finds that ridl _absorbs_ QoS rather than excluding it, and
+  proposes RPC bounds with a response bound, the coherence rule, and
+  **ADR-0015**. Roadmap: E9.4, E9.5, E9.12. Its ADR was renumbered from 0013,
+  which was taken before it was written — see the note in §8.
+- **2026-08-03-multi-interface-services-design.md** — lifts the one-interface
+  restriction on `ServiceDef`, with per-interface ordinals keyed by name, flat
+  addressing preserved, three diagnostics, and five diff categories. The design
+  pass §11.1 of the RPC note called for. Roadmap: E9.6.
+- **2026-08-03-schema-projection-design.md** — the identity chain from ridl to
+  proto3 and FlatBuffers, the projection contract, and the generated store and
+  dispatcher shapes. Roadmap: E9.7–E9.11.
+- **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
+  §1.1 promises validators across every backend and neither language backend
+  emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
+  record. Roadmap: Epic 10.
 - **ridl-boundary-model-review.md** — spike record from the uxdl design review
   of 2026-08-03, on the finding that datum and referent come apart at every
   boundary with the non-software world. **Superseded by ADR-0012**, which was
