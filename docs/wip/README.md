@@ -56,8 +56,10 @@ was archived by the E2 gardening pass on 2026-07-26.
   restriction on `ServiceDef`, with per-interface ordinals keyed by name, flat
   addressing preserved, three diagnostics, and five diff categories. The design
   pass §11.1 of the RPC note called for. Roadmap: E9.6. **Ratified 2026-08-04**
-  as decisions 12 to 20 of
-  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md).
+  as decisions 12 to 19 of
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md). That
+  record's decision 20, retiring the `Service` message's `oneof` field numbers,
+  is new there rather than ratified from this note — see its Status.
 - **2026-08-03-schema-projection-design.md** — the identity chain from ridl to
   proto3 and FlatBuffers, the projection contract, and the generated store and
   dispatcher shapes. Roadmap: E9.7–E9.11.
