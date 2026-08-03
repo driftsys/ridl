@@ -69,12 +69,15 @@ member; rsdl is the apex.
                          cannot parse and a {{#include}} that does not resolve
                          (mdBook exits 0 on the second, so two checks read the
                          log and the rendered output)
+    just link-check      every relative Markdown link resolves, over every
+                         tracked .md — book-check cannot do this, because
+                         mdBook exits 0 on an unresolved relative link
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
     just wasm-check      cargo check for wasm32 with --no-default-features
     just build           toolchain-check + gate-parity + fmt-check + book-check +
-                         compile + test + lint + wasm-check + check — the full
+                         link-check + compile + test + lint + wasm-check + check — the full
                          local gate: every member ADR-0008 decision 11 names, plus
                          the four CI checks ADR-0009 brought back to this side
     just lint-commits    git std lint over the commits on top of a base branch
