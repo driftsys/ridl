@@ -1,5 +1,9 @@
 # RIDL
 
+[![ci](https://github.com/driftsys/ridl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/driftsys/ridl/actions/workflows/ci.yml)
+[![docs](https://img.shields.io/badge/docs-driftsys.github.io%2Fridl-1f6feb)](https://driftsys.github.io/ridl/)
+[![license](https://img.shields.io/badge/license-MIT-1f6feb)](LICENSE)
+
 **One platform, four languages, one grammar.** RIDL is a family of languages for
 modeling component-based reactive systems: a shared vocabulary layer and three
 description languages over it, sharing one grammar, one toolchain, and one
@@ -13,6 +17,9 @@ the ridl interface layer over it (epic E2) — the five interaction kinds, timin
 contracts, interfaces and services, a TypeScript backend beside the Rust one,
 and `ridl diff`. The three remaining description languages are sequenced in the
 roadmap.
+
+The documentation is published as a book at <https://driftsys.github.io/ridl/>,
+rebuilt from `docs/book/` by CI on every push to `main`.
 
 ## The family
 
@@ -52,6 +59,7 @@ docs/
 ├── ROADMAP.md                  Implementation backlog — epics, stories, V1/V2 release plan
 ├── book/                       mdBook source (just book) — introduction, reading guide, getting started
 │                               Its `ridl` examples are compiled by crates/ridl/tests/book_examples.rs
+│                               Published to https://driftsys.github.io/ridl/ on every push to main
 ├── specification/              The normative language references + the family overview
 │   ├── ridl-family-overview.md     Entry point: the map, shared doctrines, decision ledger, open questions
 │   ├── typl-language-reference.md
@@ -129,6 +137,7 @@ The task runner is [`just`](https://github.com/casey/just):
 | `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                       |
 | `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                    |
 | `just book`            | serve the mdBook docs locally                                                                                                                                 |
+| `just book-build`      | render the book to `./book` — what CI publishes to Pages                                                                                                      |
 | `just release`         | `git std bump` — version, changelog, tag                                                                                                                      |
 
 CI (`.github/workflows/ci.yml`) invokes these recipes rather than restating
