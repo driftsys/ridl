@@ -193,11 +193,26 @@ rules that "the freshness machinery (§9) is the contract-level view of transpor
 health for pub/sub"; a response bound is that same view for RPC. What stays
 undeclared is outcome, exactly as §6.1 has it.
 
-**Never defaulted.** §9.1 defaults untimed signals and events but never defaults
-a strict period, on the grounds that an isochronous rate is always an explicit
-engineering decision. An RPC bound is the same: absent means undeclared, and no
-RIDL-100 analogue is minted. This also keeps the change clear of the "changing
-the configured default is a contract change" machinery.
+**Warned, but never defaulted.** An RPC without a declared response bound draws
+a **warning** (RIDL-112, §3.4 below), and an active profile may escalate that to
+an error — the same two-step §9.1 already gives an untimed signal or event, so a
+safety-graded package can require every RPC to state its obligation.
+
+What it does **not** get is a default. §9.1 defaults an untimed signal or event
+but never defaults a strict period, on the grounds that an isochronous rate is
+always an explicit engineering decision. A response bound is the stronger case
+of the same argument, for two reasons. There is no plausible generic value —
+`getAverageSpeed` and `calibrate` differ by orders of magnitude because what the
+provider does differs — so any default would be arbitrary. And a defaulted
+response bound is worse than none at all: it is a provider obligation callers
+size their own timeouts against, so inventing one manufactures a promise nobody
+made. Absent therefore means undeclared in the IR, and this change stays clear
+of the "changing the configured default is a contract change" machinery.
+
+The warning is about `max` specifically, not about the annotation. `@[20ms..]`
+declares a throttle and no response bound, so it warns exactly as a bare
+undecorated RPC does. A missing `min` draws nothing — an unbounded call rate is
+the sensible default and is what every RPC has today.
 
 **Strict periodic stays signal-only.** `@Xms` on a `command` or `query` is an
 error. A caller is not isochronous by contract, and §9 already admits the
@@ -205,7 +220,13 @@ strict-periodic mode on `signal` alone.
 
 ### 3.4 Diagnostics
 
-**No new code is minted.** Two existing rules move, one in each direction.
+One code is minted and two existing rules move, one in each direction.
+
+RIDL-112 is **minted**: _`command` or `query` with no declared response bound_ —
+severity warning, escalated to error where the active profile requires it. It is
+the RPC counterpart of RIDL-100, and it is deliberately not RIDL-100 itself,
+whose text turns on a default having been applied — which is exactly what an RPC
+does not get (§3.3 above).
 
 RIDL-106 **narrows**. Its current rule covers a timing annotation on `command`,
 `query`, and `fixed`, plus an attribute block on `fixed`. It keeps `fixed` in
@@ -219,11 +240,13 @@ excludes instead of one. Widening a rule to more kinds is neither a renumber nor
 a reuse, so it stays inside typl §16's lifecycle discipline, and it is the exact
 mirror of RIDL-106's narrowing.
 
-An earlier draft of this note proposed minting RIDL-112 to reject the range form
-on an RPC. Admitting both bounds removes the rejection that code was for. Worth
-recording either way that **RIDL-111 is not available**: ADR-0008 decision 21
-allocated it to the interface-used-as-a-type error, alongside RIDL-142 for the
-service-name-segment error, and decision 13's ledger counts both.
+**RIDL-111 is not available**, so RIDL-112 is the first free code in the band:
+ADR-0008 decision 21 allocated RIDL-111 to the interface-used-as-a-type error,
+alongside RIDL-142 for the service-name-segment error, and decision 13's ledger
+counts both. An earlier draft of this note proposed RIDL-112 for a different
+purpose — rejecting the range form on an RPC — which admitting both bounds
+removed the need for; the number is reused here for the missing-bound warning,
+not carried over.
 
 RIDL-101 (`X > Y`), RIDL-102 (zero or negative duration), and RIDL-108
 (`@[X..X]`, a degenerate range) all apply to an RPC unchanged.
@@ -260,8 +283,8 @@ of a timing bound in the IR rather than two.
 
 ### 3.6 diff
 
-`TimingChanged` is reused; no new category. But the **direction rule does not
-transfer**, and this is the one genuinely new decision in the change.
+A **new `Category::RpcBoundChanged`**, not a reuse of `TimingChanged`. The
+direction rule does not transfer, and that is what forces the separate category.
 
 `classify.rs` states the existing convention: a guarantee "strengthens when
 `min` rises or `max` falls and weakens when either moves the other way", and "a
@@ -280,15 +303,24 @@ the caller was entitled to use, so its direction inverts:
 | `max` lowered          | compatible         | compatible — a stronger provider promise              |
 | bound added or removed | breaking both ways | breaking both ways                                    |
 
-So `timing()` needs a kind-aware arm rather than the single rule it carries
-today. `find_interaction` already returns the declaration at the point the
-verdict is computed, so the kind is in hand.
+**Why a separate category rather than a kind-aware arm inside `timing()`.** An
+earlier draft of this note reused `TimingChanged` and added a branch on the
+interaction kind, noting as a risk that the three matches over `Category` which
+deny `clippy::wildcard_enum_match_arm` would not fire for a reused variant, so
+only tests would catch a missed branch.
 
-One risk worth naming: three matches over `Category` in `ridl-diff` deny
-`clippy::wildcard_enum_match_arm`, which is what stops a new variant being
-silently absorbed. Reusing `TimingChanged` means that safety net does **not**
-fire for this change, so the kind-aware arm needs its own tests on both sides.
-This is the one part of the change no compiler error will catch.
+ADR-0012 decision 9 settles that the other way. Its rule is that an unclassified
+change is "classified **breaking**, never compatible" — reporting compatible on
+something the classifier does not actually understand is the failure mode to
+design out. A missed branch inside `timing()` fails in exactly that direction:
+it silently inherits the signal rule and calls a raised RPC `min`
+**compatible**, when it is breaking. A distinct variant fails closed instead,
+because the deny lint turns a missing arm into a compile error rather than a
+wrong verdict.
+
+The cost is one more category in a surface that already carries twenty-one, and
+the benefit is that the one part of this change no compiler could catch becomes
+the one part no compiler can miss.
 
 ### 3.7 Backends
 
@@ -298,7 +330,7 @@ that is not a whole number of microseconds. An RPC's bounds are the same two
 constants they already emit for a signal or an event, now present on two more
 kinds, in both Rust and TypeScript.
 
-## 4. The normative rule — coherence is implicit, and is a demand on bindings
+## 4. The normative rule — coherence is implicit, and the interface is the unit
 
 ### 4.1 The rule
 
@@ -373,6 +405,32 @@ precedent: §14.5 already rules that "a service deployed statically realizes onl
 its `signal`/`event` members; its control API requires the discovered posture
 (enforced at deploy time, rsdl §8)." Coherence is the second instance of that
 pattern, and rsdl already owns transport feasibility (E6.8, RSDL-801/803).
+
+### 4.4 What follows — the interface is the generation unit
+
+Three rules converge on one boundary, and that convergence is what makes §1's
+question answerable at all:
+
+- **coherence** groups the signals of one provided interface (§4.1 above);
+- **ordinals** run in a single sequence across all the interactions of an
+  interface, regardless of kind (§11);
+- **identity** is the interface name, or the service name for an inline shape
+  (§4.1 above), and a binding keeps ordinal spaces apart by that name (§11.1
+  below).
+
+So a provided interface yields exactly two generated artifacts:
+
+| From one provided interface | What is generated                                                                                                                                                                                                                                        |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| one **store**               | its signals, laid out as one coherent block behind a single generation counter; each cell seeded with the payload's init value (§4.4) and carrying provenance and the envelope (§3.1), evaluated against its own `max` staleness bound                   |
+| one **dispatcher**          | its events, commands, and queries, routed by the interface's single ordinal sequence; per-event ring depth derived as `ceil(max / min)` (§5.1 below), typl constraints checked before the handler, and the response bound applied around it (§3.3 above) |
+
+The **service** is the addressing unit, not the generation unit: it names the
+interfaces and gives their members global addresses (§14.5). A service composing
+three interfaces therefore generates three stores and three dispatchers under
+one logical name — which is exactly what makes the composition worth having,
+since each interface keeps its own ordinal space, its own coherence guarantee,
+and its own wire identity, independent of what it is composed with.
 
 ## 5. Findings that need no syntax
 
@@ -482,14 +540,14 @@ against the contract (see §9 below).
 | --------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | ridl §9         | the per-kind bound table gains its RPC column; a subsection fixes the response bound and its per-kind derivation         |
 | ridl §9.2       | "Timing belongs to `signal` and `event`" widens to admit `command`/`query` in the range form; `fixed` still carries none |
-| ridl §16.1      | RIDL-106 row narrows to `fixed`; RIDL-103 row widens to every kind but `signal`; no code minted                          |
+| ridl §16.1      | RIDL-106 narrows to `fixed`; RIDL-103 widens to every kind but `signal`; RIDL-112 minted for the missing response bound  |
 | ridl §14        | the coherence rule (§4.1 above) as normative prose, beside the service definition it keys on                             |
 | ridl §17.3 q3   | closed — the struct idiom confirmed, with the reasoning                                                                  |
 | ridl §17.5 q5   | answered — replaced by the absorption principle and the coverage table                                                   |
 | ridl Appendix B | rows for the response bound and for coherence per transport                                                              |
 | ridl Appendix F | gRPC-deadline row flips from "≈ relocated" to in-contract, with the per-call override staying Stratum 3                  |
 | general form R5 | sentence order contradicts the shipped grammar — see §10 below                                                           |
-| ADR-0012 (new)  | the absorption principle, the RPC bounds, the coherence rule, and the kind-aware diff direction                          |
+| ADR-0013 (new)  | the absorption principle, the RPC bounds, the coherence rule, and the kind-aware diff direction                          |
 
 ## 9. What the response bound unlocks
 
@@ -519,45 +577,66 @@ Not blocking for this design — nothing here needs an interface-level attribute
 but it is the same grammar change the deferred `labels`/`deprecated` promotion
 needs, and it is worth recording that both wait on one edit.
 
-## 11. Open questions
+## 11. Decided here, and still open
 
-1. **Whether a service should be able to carry more than one interface.** §4.1
-   above states the coherence group as a _provided interface_, which is the
-   formulation that scales. Today it cannot be told apart from "the service",
-   because `ServiceDef` admits exactly one named shape or one inline shape — the
-   two grains coincide at 1:1.
+### 11.1 Decided — a service may carry more than one interface
 
-   Letting a service carry several interfaces would make the interface the
-   grouping construct §17.3 wanted, at no cost in new syntax, and it would be a
-   second candidate answer to §17.2's interaction-set-reuse question, where the
-   recorded candidate is compile-time mixins. It is not free: members are
-   addressed `service.member` (§14.5), which collides when two interfaces both
-   declare `status`; and ordinals are per-interface with transport identity
-   derived from them (§11, and Appendix B maps a SOME/IP eventgroup to an
-   interface), so identity would need scoping per interface. Its own design
-   pass, not a rider on this one.
+§4.1 above states the coherence group as a _provided interface_, which today
+cannot be told apart from "the service": `ServiceDef` admits exactly one named
+shape or one inline shape, so the two grains coincide at 1:1. **That restriction
+should be lifted**, and two consequences are settled with it.
 
-2. **Whether a package should be able to require a response bound.** When a
-   signal or event is written with no `@` annotation, ridl applies a default and
-   warns (RIDL-100), and §9.1 lets an active profile turn that warning into an
-   error so a safety-graded package cannot silently accept an untimed
-   interaction.
+The case for it is that it answers two recorded open questions at once. It makes
+the interface the grouping construct §17.3 wanted, at no cost in new syntax. And
+it is a better answer to §17.2's interaction-set-reuse question than the
+candidate recorded there: compile-time mixins _flatten_, so folding one shared
+block into three interfaces gives its interactions three different ordinal sets
+and editing it renumbers all three, whereas composition leaves each interface's
+ordinal space intact and independent of what it is composed with.
 
-   RPC bounds are never defaulted, so there is no warning to escalate — an RPC
-   without a bound simply has none. The question is only whether a profile
-   should be able to reject that, making an undeclared response bound an error
-   in packages that opt in. No code either way; the ADR either reserves the
-   behaviour or stays silent. If it is not worth a paragraph, delete the
-   question rather than carry it.
+**Addressing stays flat.** Members remain `service.member`, as §14.5 has it, and
+a member name duplicated across a service's interfaces is a new compile error.
+This keeps the flat global address the specification calls the point — what
+makes a dotted member name an unambiguous system-wide address — and leaves every
+address written today valid. The accepted cost is that two independently written
+interfaces sharing a member name cannot be composed without renaming one.
 
-3. **Which program checks that a retry schedule fits inside the bound.** §9
-   above notes the check the response bound makes possible: three attempts at 8
-   ms and 200 ms cannot fit inside a 50 ms bound, so the later attempts can
-   never run and the policy is lying about them.
+**Ordinals stay per-interface, and the binding separates the spaces by interface
+name.** Renumbering across a service was rejected: an interface's wire identity
+would then depend on what else the service happens to carry, which is the exact
+coupling §14.1 rejected inheritance to avoid. Appendix B already points the
+other way, mapping a SOME/IP eventgroup to an interface, so a multi-interface
+service maps to several transport-level groupings under one logical name. Keying
+on the interface **name** rather than on its position in the list also makes
+reordering the list cosmetic, so `ridl-diff` sees nothing — the property to
+want.
 
-   Running it means reading the contract's IR _and_ a deployment file together.
-   ADR-0008 decision 9 keeps `ridlc` a pure source-to-IR function precisely
-   because that is the smallest surface to qualify under ISO 26262, so putting
-   the check in `ridlc` grows what has to be qualified. Putting it in a
-   downstream tool keeps `ridlc` as it is. The trade is qualification surface
-   against having one fewer tool in the chain.
+This still needs its own design pass rather than riding on this one: the grammar
+change to `ServiceDef`, the duplicate-member diagnostic, how RIDL-141 and
+RIDL-143 apply per element, and the `ridl-diff` categories for adding and
+removing an interface are all unaddressed here.
+
+### 11.2 Decided — a package may require a response bound
+
+An RPC with no declared response bound warns, and an active profile may escalate
+the warning to an error. §3.3 and §3.4 above carry the decision; RIDL-112 is the
+code. What an RPC does not get is a default — see §3.3 above for why a
+manufactured provider obligation is worse than none.
+
+### 11.3 Decided — a downstream tool checks that a retry schedule fits the bound
+
+§9 above notes the check the response bound makes possible: three attempts at 8
+ms and 200 ms cannot fit inside a 50 ms bound, so the later attempts can never
+run and the policy is lying about them.
+
+Running it means reading the contract's IR _and_ a deployment file together.
+**The check belongs to a downstream tool, not to `ridlc`.** ADR-0008 decision 9
+keeps `ridlc` a pure source-to-IR function precisely because that is the
+smallest surface to qualify under ISO 26262, and a cross-artifact rule that
+reads a deployment file would enlarge it for the sake of one check.
+
+The family already resolves this shape the same way: §14.5 enforces at deploy
+time, not at compile time, that "a service deployed statically realizes only its
+`signal`/`event` members; its control API requires the discovered posture". A
+rule needing both the contract and the topology runs where both are in hand,
+which is one layer up.

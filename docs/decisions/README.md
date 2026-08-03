@@ -39,6 +39,15 @@
   precondition and requires fail-closed diff classification. Not epic-scoped: it
   binds the language surface until superseded.
 
+- **ADR-0013 — Codegen backend scope.** _Proposed._ Classifies a backend by what
+  its target can faithfully represent: a **wire** backend (proto3, FlatBuffers,
+  and the remaining typl Appendix D targets) emits the typl surface plus an
+  interaction identity table and no interaction face, because it cannot express
+  ridl §4.4 last-value, §4.5 provenance, or the §3.1 envelope; a **language**
+  backend emits source. Also fixes which width layer each class reads, rules
+  typl constants out of a wire schema, and makes typl §17.11 a precondition for
+  FlatBuffers. Not epic-scoped: it binds every backend the workspace grows.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.
