@@ -104,7 +104,8 @@ on `family`.
 | —      | dispatch (always spelled) |
 
 The four correspondence obligations each family carries, what they mean, and how
-they compose along a path are **ridl's**, not restated here.
+they compose along a path are **ridl §3.3**, not restated here. The families
+themselves, and which kinds each admits, are **ridl §3.2**.
 
 ## 4. The hmi Domain
 
@@ -129,7 +130,8 @@ dismiss  errorBanner
 
 Payload rules on the operation shapes — none for `activate`, `toggle`, and
 `dismiss`; exactly one key for `select`; exactly one ranged value for `adjust` —
-are ridl's, and are what earns those five their keywords under §7.
+are **ridl §3.2.1** (RIDL-502), and are what earns those five their keywords
+under §7.
 
 **The set is closed and has no generic.** A person performs one act at a time; a
 multi-parameter operation is a function call, not a gesture. Sending a message
@@ -242,9 +244,10 @@ failed.
 
 - **Not a language.** No grammar of its own. A `.rxdl` file is parsed by the one
   family grammar, with no profile restriction applied.
-- **Not semantics.** Families, the four obligations, availability and its five
-  sources, timing, init and invalid channels, errors, ordinals and evolution are
-  all ridl's. This document defines none of them and may not.
+- **Not semantics.** Families (ridl §3.2), the four obligations (§3.3),
+  availability and its five sources (§3.4), timing, init and invalid channels,
+  errors, ordinals and evolution are all ridl's. This document defines none of
+  them and may not.
 - **Not IR.** `family` and `shape` are ridl's IR fields. rxdl adds no node, no
   field, and no attribute key.
 - **Not layout, styling, navigation, or localisation.** A `toggle` may scaffold
@@ -269,6 +272,14 @@ This is where _"which files contain executable behaviour?"_ is answered once
 violate is a ridl rule, reported under `RIDL-`: a payload rule on `select`, an
 invalid (kind, family, shape) triple, an availability predicate a consumer
 cannot evaluate, an obligation missing where its family requires one.
+
+The rules a spelling can violate are allocated: **RIDL-501** (kind not admitted
+by its family), **RIDL-502** (shape parameter rule), **RIDL-503** (intent
+operation with no shape), **RIDL-504** (non-dispatch interaction with no
+obligation), **RIDL-505** (availability a consumer cannot evaluate),
+**RIDL-506** (obligation on a dispatch interaction), **RIDL-507** (`derives`
+across an impossible direction), **RIDL-508** (control with no paired
+acquisition).
 
 Two diagnostics are genuinely rxdl's, and both concern the profile rather than
 the spellings — a domain spelling used in a file whose profile does not permit
@@ -342,10 +353,10 @@ interface Cluster {
 }
 ```
 
-Obligation attributes are omitted above because their spellings are ridl's and
-are not yet fixed (E3.4). The point of the example is that four families sit in
-one interface, each declaring what it corresponds to, and that the first word of
-every line says which.
+Obligation attributes are omitted above; ridl §3.3 carries the working
+spellings, which settle with E3.4. The point of the example is that four
+families sit in one interface, each declaring what it corresponds to, and that
+the first word of every line says which.
 
 ## Appendix B — Prior Art: uxil and uxdl
 
