@@ -547,7 +547,13 @@ against the contract (see §9 below).
 | ridl Appendix B | rows for the response bound and for coherence per transport                                                              |
 | ridl Appendix F | gRPC-deadline row flips from "≈ relocated" to in-contract, with the per-call override staying Stratum 3                  |
 | general form R5 | sentence order contradicts the shipped grammar — see §10 below                                                           |
-| ADR-0013 (new)  | the absorption principle, the RPC bounds, the coherence rule, and the kind-aware diff direction                          |
+| ADR-0015 (new)  | the absorption principle, the RPC bounds, the coherence rule, and the kind-aware diff direction                          |
+
+> **Numbering.** This note originally claimed ADR-0013. That number was taken by
+> _Codegen backend scope_ before this ADR was written, and ADR-0014 is claimed
+> by `2026-08-03-ir-protobuf-encodings-design.md`, so this one is **ADR-0015**.
+> The three are distinct subjects: 0013 bounds what a backend may emit, 0014
+> fixes how the IR itself is encoded, 0015 is the contract-level timing surface.
 
 ## 9. What the response bound unlocks
 
