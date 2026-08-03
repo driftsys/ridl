@@ -1,8 +1,8 @@
 # RIDL
 
-**One platform, five languages, one grammar.** RIDL is a family of languages
+**One platform, four languages, one grammar.** RIDL is a family of languages
 for modeling component-based reactive systems: a shared vocabulary layer and
-four description languages over it, sharing one grammar, one toolchain, and one
+three description languages over it, sharing one grammar, one toolchain, and one
 intermediate representation (IR).
 
 ## The family
@@ -10,10 +10,9 @@ intermediate representation (IR).
 | Language | Expands to | Describes | Audience |
 | --- | --- | --- | --- |
 | **typl** | type language | data — types, ranges, units, constants | data architects |
-| **ridl** | reactive interface description language | system interactions (`signal` / `event` / `command` / `query` / `fixed`) | service teams |
+| **ridl** | reactive interface description language | interactions at every boundary — system, person, world (`signal` / `event` / `command` / `query` / `fixed`) | service, HMI, and sensor/actuator teams |
 | **rmdl** | reactive model description language | behaviour — synchronous / functional compute | control / algorithm engineers |
 | **rsdl** | reactive system description language | architecture — components, wiring, deployment | integrators |
-| **rxdl** | the unrestricted profile | readable spellings for the person and world boundaries; no semantics of its own | UX, HMI, and sensor/actuator engineers |
 
 The dependency lattice is `typl ← {ridl, rmdl} ← rsdl`: typl is the only
 standalone member, and rsdl is the apex that composes the others. rxdl is not a
