@@ -7,17 +7,41 @@ weeks, L ≈ 3–6 weeks) and relative, not a schedule.
 
 The release boundary is **descriptive vs executable**:
 
-- **V1 — the contract platform:** E0–E4 (typl · ridl · uxdl · ecosystem). The
-  SSOT for system and user contracts, with codegen, LSP, diff, docs.
-- **V2 — the executable platform:** E5–E7 (rmdl · rsdl · rxdl). The ambitious,
-  higher-risk half, built against a V1 IR and toolchain already hardened by
-  three profiles and multiple backends.
-- **E8 — agent enablement (ADR-0005):** threads V1→V2 alongside E1–E7 — the
-  skill/rules, the MCP over the compiler, evals, and (V2) the behaviour oracle
-  and subagent.
+- **V1 — the contract platform:** E0–E4 (typl · ridl · the boundary model ·
+  ecosystem). The SSOT for contracts at every boundary — system, person, and
+  world — with codegen, LSP, diff, docs.
+- **V2 — the system platform:** E5a · E6 · E7 (rmdl as a _language_ · rsdl ·
+  rxdl). The whole architecture becomes describable and checkable — behaviour,
+  assembly, deployment, and domain vocabulary — with **nothing executing yet**.
+  rmdl's expressions and equations reach the IR; no code is generated from them.
+- **V3 — the executable platform:** E5b and E7's ecosystem tail. The compute
+  runtime, codegen, oracle, replay, and deductive proof. The ambitious,
+  higher-risk half, deferred until the architecture above it is settled.
 
-Dependency spine: E0 → E1 → E2 → E3 → E4 ‖ E5 → E6 → E7. E4 (ecosystem) and E8
-(agents) thread through; their items ship as the layer they ride lands.
+**E8 — agent enablement (ADR-0005):** threads V1→V3 alongside E1–E7 — the
+skill/rules, the MCP over the compiler, evals, and (V3) the behaviour oracle and
+subagent.
+
+**Sequence:**
+
+```text
+E0 → E1 → E2 → E3 → E5a → E6 → E7(rxdl) → E5b → E7(ecosystem)
+          ╰──── E4 (ecosystem) and E8 (agents) thread throughout ────╯
+```
+
+**Epic numbers are identifiers, not positions.** The sequence above changed
+after ADR-0012 and the rmdl phase split; the numbers did not. Renumbering would
+have invalidated ninety-six references across seventeen files — including source
+comments, `ridl/ir/v2/ir.proto`, and the archived epic plans, which are verbatim
+historical records. This is the family's own evolution discipline (ordinals are
+identity, never reordered) applied one level up. **Read the sequence line, not
+the numbering, for what comes next.**
+
+**Amends ADR-0004**, which sequenced E5 (rmdl) before E6 (rsdl) and put both in
+a single V2. rsdl now runs first, because composition, deployment,
+transport/posture derivation, and the test plane are all reachable with rmdl as
+a language and no runtime — and rmdl's runtime is the highest-risk work in the
+programme, so it goes last.
 
 **Forward-compatibility constraint (V1 protects V2):** the `expr`/function core
 shipped in V1 for `require`/`ensure` (E2.4) must be a genuine forward-compatible
@@ -150,21 +174,31 @@ covered it from the resolver since E1. The consolidated E2 debt roll-up is
 | E2.12 | expr-core specification (document, not code): the full contract-term grammar (family overview §2, ADR-0004 open q) — precedes or accompanies E2.4       | spec drafted; the E2.4 subset is checked against it                     | M    |
 | E2.13 | `interface` vs `service` (ridl §14): abstract shape vs global published declaration, service catalog SSOT, `service.member` references, posture-neutral | services declare, resolve, and appear in the IR (E6 binds them)         | M    |
 
-## Epic 3 — uxdl (User Interface)
+## Epic 3 — ridl Boundary Model, core (ADR-0012)
 
-**Milestone:** viewmodel/view SSOT — the second contract profile. **Value:**
-user-interaction contracts reusing the Epic 2 machinery; near-free by design,
-and a third profile that further hardens the IR before V2. **Exit criteria:** a
-`view` binds a ridl contract, checks, and generates viewmodel bindings
-(TS/MVVM); the descriptive `.rxdl` slice compiles (E3.5).
+**Milestone:** ridl describes every boundary, not only system-to-system.
+**Value:** at the person and world boundaries the datum and the thing it stands
+for come apart, and the four correspondence obligations make that difference
+declarable — a cluster reading's derivation from true speed, a sensor's
+tolerance and sample lag, an actuator's authority and slew rate. **Exit
+criteria:** a cluster telltale, a wheel-speed sensor, and a steering actuator
+each compile with their obligations, classify correctly under `ridl diff`, and
+generate bindings from the dispatch-family spellings alone.
 
-| ID   | Story                                                                                                                                                             | Done when                                            | Size |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---- |
-| E3.1 | Surface: `view`/`display`/`input`/`action`/`fetch`/`fixed` refinements as an `interact` profile                                                                   | profile-maps onto E2 core                            | M    |
-| E3.2 | `states` + `during` gating                                                                                                                                        | state-scoped availability checks                     | M    |
-| E3.3 | Binding codegen: viewmodel/widget bindings (TS first)                                                                                                             | `display <- signal`, `activate -> command` generated | M    |
-| E3.4 | LSP + lint for uxdl                                                                                                                                               | hovers/lints on a real view                          | S    |
-| E3.5 | `.rxdl` descriptive slice: one file carrying typl + ridl + uxdl declarations — the canonical agent/eval unit (ADR-0005 §7); E7.1 extends it to behaviour + wiring | the cruise-control descriptive `.rxdl` compiles      | S    |
+**Core only.** ADR-0012 decision 7 makes a domain extension a spelling table
+plus backends, with no grammar, no IR nodes, and no semantics of its own. Those
+spellings are **descoped from this epic** and land in E7 (rxdl). What is here is
+what ridl must gain whether or not anyone ever writes `present` — and E3.1
+through E3.4 are hard preconditions for E7 under ADR-0012 decisions 8 and 9.
+
+| ID   | Story                                                                                                                                                                                                                                                                                                                                                                                                                                               | Done when                                                                                     | Size |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---- |
+| E3.1 | Attribute registry — name · owner · form · allow-list · consumer · diff category; namespacing outside core (ADR-0012 d8)                                                                                                                                                                                                                                                                                                                            | every key resolves to one owner; a colliding key fails the gate                               | M    |
+| E3.2 | Fail-closed classification: unregistered key is a compile error; uncategorised key diffs as **breaking** (d9)                                                                                                                                                                                                                                                                                                                                       | a typo'd key errors; an unclassified change never reports compatible                          | S    |
+| E3.3 | Core IR: `family` and `shape` closed enums on the interaction node; invalid-combination rejection (d2, d6)                                                                                                                                                                                                                                                                                                                                          | families round-trip; `(command, intent, no shape)` is rejected structurally                   | M    |
+| E3.4 | The four correspondence obligations as core attributes — relationship, uncertainty, latency of correspondence, failure to correspond — with their diff categories; the paired form (commanded vs achieved, raw vs indicated) and the chained form (d3). Latency needs an **instant** form and a **span** form (a swept frame corresponds over an interval). VIM is the naming reference; the **influence quantity** is unresolved (ADR-0012 open 6) | obligations parse, type-check, reach the IR, and classify; tightening a tolerance is breaking | L    |
+| E3.5 | Availability beyond `during`: the five sources, and consumer-evaluability at presentation boundaries (ADR-0012 open 4)                                                                                                                                                                                                                                                                                                                              | a predicate a consumer cannot evaluate is rejected at a presentation boundary                 | M    |
+| E3.6 | LSP + lint over families and obligations                                                                                                                                                                                                                                                                                                                                                                                                            | hovers show family and obligations on a real contract                                         | S    |
 
 ## Epic 4 — Ecosystem & Adoption (V1)
 
@@ -175,28 +209,37 @@ big-bang. **Exit criteria:** error-index site live, playground live,
 getting-started + contract tutorial published, IR plugin protocol documented and
 versioned.
 
-| ID   | Story                                                                                                    | Done when                                         | Size |
-| ---- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ---- |
-| E4.1 | `ridl doc`: interfaces/views rendered as tables/HTML                                                     | doc output for a real package                     | M    |
-| E4.2 | Error-index website: every `TYPL-`/`RIDL-`/`UXDL-` code with explanation + fix (rustc `--explain` style) | codes cross-link from diagnostics                 | M    |
-| E4.3 | `.typl`+`.ridl`+`.uxdl` getting-started + contract tutorial (types → interface → view)                   | a newcomer compiles it unaided                    | M    |
-| E4.4 | Browser playground: compiler-to-WASM, live edit→codegen                                                  | edit typl/ridl/uxdl, see generated output in-page | L    |
-| E4.5 | IR plugin protocol spec + versioning (IR stability policy)                                               | a third-party backend consumes the IR             | L    |
-| E4.6 | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                             | scaffolds a valid workspace; vendors deps         | S    |
-| E4.7 | Governance CI: keyword-registry + attribute-registry collision test                                      | colliding key across profiles fails CI            | S    |
+| ID   | Story                                                                                            | Done when                                    | Size |
+| ---- | ------------------------------------------------------------------------------------------------ | -------------------------------------------- | ---- |
+| E4.1 | `ridl doc`: interfaces rendered as tables/HTML, obligations included                             | doc output for a real package                | M    |
+| E4.2 | Error-index website: every `TYPL-`/`RIDL-` code with explanation + fix (rustc `--explain` style) | codes cross-link from diagnostics            | M    |
+| E4.3 | `.typl`+`.ridl` getting-started + contract tutorial (types → interface → boundaries)             | a newcomer compiles it unaided               | M    |
+| E4.4 | Browser playground: compiler-to-WASM, live edit→codegen                                          | edit typl/ridl, see generated output in-page | L    |
+| E4.5 | IR plugin protocol spec + versioning (IR stability policy)                                       | a third-party backend consumes the IR        | L    |
+| E4.6 | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                     | scaffolds a valid workspace; vendors deps    | S    |
+| E4.7 | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI   | colliding key across profiles fails CI       | S    |
 
 ---
 
 # V2 — The Executable Platform
 
-## Epic 5 — rmdl (Behaviour)
+## Epic 5 — rmdl (Behaviour) — split into two phases
 
-**Milestone:** executable behaviour with a working reference oracle. **Value:**
-generated processing code for contract-blind models — pure reactions that rsdl
-components bind to contracts in E6 (rmdl §7); deterministic replay/oracle
-machinery. The novel, hard core — built on a proven IR. **Exit criteria:** the
+**This epic runs in two separated phases.** The language half is a V2
+prerequisite for rsdl; the runtime half is V3 and runs last.
+
+**E5a — the language (E5.1–E5.7), before E6.** Expressions, equations, memory,
+time, and signature checking, all the way to the IR. **No code is generated from
+a model.** This is what E6 needs in order to bind a reaction to a contract: rsdl
+requires the model's _shape and semantics_, not its execution. **Exit
+criteria:** the cruise-control model parses, type-checks, passes causality and
+completeness analysis, and reaches the IR with its equations intact.
+
+**E5b — the compute runtime (E5.8–E5.13), last.** Rust and WASM codegen, the
+scheduler, the reference oracle, replay, and the flow stdlib. The novel, hard
+core, deferred until every layer above it is settled. **Exit criteria:** the
 cruise-control model computes its reaction, runs native and as a WASM component
-with identical step traces, and the oracle diffs tick-by-tick against an
+with identical step traces, and the oracle diffs step-by-step against an
 implementation.
 
 | ID    | Story                                                                                                                                                                                                | Done when                                                          | Size |
@@ -211,17 +254,21 @@ implementation.
 | E5.8  | Rust-native codegen: state struct + `step()` fn, IEEE-754-strict                                                                                                                                     | model runs natively, deterministic                                 | L    |
 | E5.9  | WASM-component codegen: `wit-bindgen` + `cargo-component`, WIT from contract                                                                                                                         | component builds and runs under wasmtime                           | L    |
 | E5.10 | Reference-oracle + replay harness (`wasmtime`); native vs WASM trace equality — needs a cross-target deterministic-math strategy (IEEE-754 ops only, or a shipped deterministic libm), fixed at E5.1 | traces bit-identical across targets                                | M    |
-| E5.11 | `jco` browser path for uxdl-side execution                                                                                                                                                           | component runs in a browser host                                   | M    |
+| E5.11 | `jco` browser path for person-boundary execution                                                                                                                                                     | component runs in a browser host                                   | M    |
 | E5.12 | Minimal `ridl-rt` scheduler/timeline (input + deadline activation, coalescing)                                                                                                                       | reactive stepping, quiescent when idle                             | L    |
 | E5.13 | `ridl.std.flow` / `std.control` Tier-1 adapters (rmdl-defined)                                                                                                                                       | Hold/Changes/Filter/Accumulate/Deadband/Latch compile              | M    |
 
 ## Epic 6 — rsdl (System Assembly)
 
+**Runs after E5a, before E7 and E5b.**
+
 **Milestone:** a system is assembled from components and its deployment
 artifacts generated. **Value:** components situate the contract-blind reactions
-E5 delivers — binding them to services, wiring event→command side effects, and
-deriving transport, posture, and deployment from the SSOT. **Exit criteria:**
-the cruise-control system (interface + model + view) assembles from `.rsdl`
+E5a describes — binding them to services, wiring event→command side effects, and
+deriving transport, posture, and deployment from the SSOT. Nothing here needs a
+model to _run_: E6.3, E6.4, and E6.5 need rmdl's IR, which E5a delivers, and the
+test plane (E6.11) is derivable from contracts alone. **Exit criteria:** the
+cruise-control system (interface + model + boundaries) assembles from `.rsdl`
 components — composition and deployment as two regions of one grammar (rsdl §2)
 — and emits topology + integration artifacts.
 
@@ -229,7 +276,7 @@ components — composition and deployment as two regions of one grammar (rsdl §
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
 | E6.1  | `component` declarations: `provides`/`requires` boundary at three grains (inline / interface / service), leaf vs composite (rsdl §3)                                                      | components parse and check; all three boundary grains resolve                | L    |
 | E6.2  | Application-notation wiring: applications as instances, fused `provides … = …`, destructuring, `let` intermediates; composite cycles legal, leaf sync cycles rejected (rsdl §4, RSDL-407) | cruise-control wiring compiles; a leaf-level sync cycle is rejected          | M    |
-| E6.3  | Cross-layer resolution (references to typl/ridl/uxdl/rmdl)                                                                                                                                | instance typing + binding resolve                                            | M    |
+| E6.3  | Cross-layer resolution (references to typl/ridl/rmdl)                                                                                                                                     | instance typing + binding resolve                                            | M    |
 | E6.4  | Contract binding: service member completeness (RSDL-303), timing transfer + init-consistency boundary checks (moved out of rmdl — rmdl §7), declared redundancy (RSDL-502) (rsdl §5)      | every provided member covered; an accidental second provider fails the build | M    |
 | E6.5  | Event→command wiring (rmdl §5.7, rsdl §4.2, RSDL-405)                                                                                                                                     | emitted event wires to a command                                             | S    |
 | E6.6  | `system` root: external boundary, assurance profile, one per workspace (rsdl §6)                                                                                                          | the system compiles as the root component                                    | S    |
@@ -239,23 +286,38 @@ components — composition and deployment as two regions of one grammar (rsdl §
 | E6.10 | Topology + integration-artifact emission                                                                                                                                                  | deployable manifest/topology generated                                       | M    |
 | E6.11 | Test topology as a `deployment`: injectors/oracle swapped in (rsdl §2)                                                                                                                    | rest-bus-style test deployment derived                                       | M    |
 
-## Epic 7 — rxdl & Executable-Platform Ecosystem
+## Epic 7 — rxdl & Executable-Platform Ecosystem — split into two phases
 
-**Milestone:** the total profile and the behaviour-dependent ecosystem —
-completing the public V2.0. **Value:** the single-file adoption gradient, the
-full four-/five-way verification story, and the registry. **Exit criteria:** an
-`.rxdl` file carries types + interface + model + wiring and compiles; the
-reference-oracle test plane and deductive-proof path work; registry publishes
-and resolves.
+**This epic runs in two separated phases.** The rxdl half is V2 and runs after
+E6; the ecosystem half is V3 and trails E5b, because it needs models to execute.
 
-| ID   | Story                                                                                                                                           | Done when                                                          | Size |
-| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ | ---- |
-| E7.1 | `.rxdl` total profile: extend the E3.5 descriptive slice with the behaviour + wiring layers; per-package profile purity enforced in `ridl.toml` | full mixed-layer file compiles; purity is a policy error where set | M    |
-| E7.2 | Reference-oracle test plane: spy/control bridge as a generated interface, online observers                                                      | live flows spied/asserted from contracts                           | L    |
-| E7.3 | Deductive-proof verification path (Creusot-compatible `expr` discharge)                                                                         | a provable contract discharged deductively                         | L    |
-| E7.4 | Package registry service (separate repo/lifecycle)                                                                                              | publish + resolve a remote package                                 | L    |
-| E7.5 | Full `.rxdl` getting-started + end-to-end tutorial (types → interface → model → wiring)                                                         | a newcomer builds the whole cruise-control system unaided          | M    |
-| E7.6 | Error-index website extended with `RMDL-`/`RSDL-` codes (completes E4.2)                                                                        | every V2 code has an explanation + fix entry                       | S    |
+**E7a — rxdl (E7.1, E7.7–E7.9), after E6.** The unrestricted profile and the
+domain extensions. `.rxdl` **absorbs both meanings of the wildcard**: a `.rxdl`
+file lifts the _layer_ restriction (any layer, the original total profile) and
+the _domain_ restriction (the person and world spellings). One rule — `.rxdl` is
+the profile with no restrictions — and per-package tightening in `ridl.toml` is
+how a production package gets strictness back.
+
+**E7b — the ecosystem (E7.2–E7.6), after E5b.** Oracle test plane, deductive
+proof, registry, tutorial, and the V3 error-index codes.
+
+**Exit criteria (E7a):** a person-boundary and a world-boundary contract compile
+from their domain spellings, generate bindings, and diff correctly; an `.rxdl`
+file carries mixed layers and compiles. **Exit criteria (E7b):** the
+reference-oracle test plane and deductive-proof path work; the registry
+publishes and resolves.
+
+| ID   | Story                                                                                                                                                                                                                   | Done when                                                                                           | Size |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | ---- |
+| E7.1 | `.rxdl` unrestricted profile: lifts both the layer restriction (types + interface + model + wiring in one file) and the domain restriction (person and world spellings); per-package tightening enforced in `ridl.toml` | full mixed-layer file compiles; a package that tightens rejects what it forbids                     | M    |
+| E7.2 | Reference-oracle test plane: spy/control bridge as a generated interface, online observers                                                                                                                              | live flows spied/asserted from contracts                                                            | L    |
+| E7.3 | Deductive-proof verification path (Creusot-compatible `expr` discharge)                                                                                                                                                 | a provable contract discharged deductively                                                          | L    |
+| E7.4 | Package registry service (separate repo/lifecycle)                                                                                                                                                                      | publish + resolve a remote package                                                                  | L    |
+| E7.5 | Full `.rxdl` getting-started + end-to-end tutorial (types → interface → model → wiring)                                                                                                                                 | a newcomer builds the whole cruise-control system unaided                                           | M    |
+| E7.6 | Error-index website extended with `RMDL-`/`RSDL-` codes (completes E4.2)                                                                                                                                                | every `RMDL-`/`RSDL-` code has an explanation + fix entry                                           | S    |
+| E7.7 | Domain spellings over the E3 core: `present` `notify` `measure` `detect` `actuate` `trigger`, the closed intent shapes, and the intent occurrence once named (ADR-0012 d4, d5)                                          | lowering to (kind, family, shape) is bijective; `ridl fmt` and IR rendering round-trip the spelling | M    |
+| E7.8 | **hmi domain** — spelling table + viewmodel bindings (TS first)                                                                                                                                                         | a person-boundary contract generates a viewmodel                                                    | M    |
+| E7.9 | **env domain** — spelling table + device/bus binding                                                                                                                                                                    | a world-boundary contract generates its binding                                                     | M    |
 
 ---
 
@@ -275,14 +337,15 @@ verify/evolve loop; the eval corpus runs in CI. **V2 slice:** behaviour skill +
 oracle eval; `ridl-architect` subagent.
 
 Sequencing note — ADR-0005 §8 maps agent work onto the old Phase 1–5; under the
-V1/V2 re-cut those become: typl→E1, ridl→E2, uxdl→E3, `ridl doc`→E4, rmdl→E5,
-rsdl→E6, family-whole→E7. Each story below carries the epic it rides.
+V1/V2 re-cut those become: typl→E1, ridl→E2, the boundary model→E3,
+`ridl doc`→E4, rmdl→E5, rsdl→E6, family-whole→E7. Each story below carries the
+epic it rides.
 
 **Preserve, don't build (ADR-0005 §7 invariants — constraints on other epics):**
 every diagnostic stays coded + fix-it (E1.10); `.rxdl` is the canonical agent
-target and eval unit (E3.5 descriptive slice in V1, E7.1 total in V2); sigil
-poverty is kept; IR + diagnostic-code + `ridl-diff` stability _is_ the
-agent-contract stability (E4.5 / IR-stability open question).
+target and eval unit (E7.1, the unrestricted profile); sigil poverty is kept;
+IR + diagnostic-code + `ridl-diff` stability _is_ the agent-contract stability
+(E4.5 / IR-stability open question).
 
 _Layer A — Knowledge (skill + rules; build first, no compiler dependency)_
 
@@ -291,7 +354,7 @@ _Layer A — Knowledge (skill + rules; build first, no compiler dependency)_
 | E8.1 | Rules file — 10–20 always-on "never/always" constraints, distilled from doctrines + the _error_ diagnostics (no semicolons, named-typl payloads, errors-as-data, command≠query, no inheritance, no upward refs, append-only + `reserved`) | E1 (may precede code) | every rule cites a diagnostic code or doctrine; loads in Claude Code/Cursor/Cowork                          | S    |
 | E8.2 | Skill v0 (typl) — dense decision tables + worked examples for types/ranges/units/evolution, per `skill-ridl-authoring-outline.md`                                                                                                         | E1                    | authors valid `.typl`; content traceable to the typl reference                                              | M    |
 | E8.3 | Skill extended to the ridl `interact` core — 5-kind selection table, timing, errors-as-data / `T\|E`, common-mistakes table keyed to codes                                                                                                | E2                    | covers ridl ref §3–§10; cruise-control example round-trips clean (`.rxdl` descriptive form once E3.5 lands) | M    |
-| E8.4 | Skill profile for uxdl — `view`/`display`/`action` over the interact core                                                                                                                                                                 | E3                    | authors a valid `.uxdl` view bound to a ridl contract                                                       | S    |
+| E8.4 | Skill profile for the boundary model — the five families and their obligations                                                                                                                                                            | E3                    | authors a valid person-boundary contract with its obligations                                               | S    |
 
 _Layer B — Capability (MCP over the compiler; build second, cheap given
 ADR-0004)_
@@ -336,7 +399,7 @@ _Layer extensions & packaging (V2)_
 | E0   | Walking skeleton        | internal — IR/query graph proven                                              |
 | E1   | typl schema language    | **v0.1 preview**                                                              |
 | E2   | ridl contract boundary  | v0.x — RIDL-as-today + diff gate                                              |
-| E3   | uxdl view SSOT          | v0.x — second contract profile                                                |
+| E3   | boundary model          | v0.x — person and world boundaries (ADR-0012)                                 |
 | E4   | V1 ecosystem            | **V1.0 — the contract platform**                                              |
 | E5   | rmdl behaviour + oracle | v2.0-alpha — executable models, replay                                        |
 | E6   | rsdl assembly           | v2.0-beta — deployable systems                                                |

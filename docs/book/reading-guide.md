@@ -6,7 +6,7 @@ family overview
 ([`docs/specification/ridl-family-overview.md`](https://github.com/driftsys/ridl/blob/main/docs/specification/ridl-family-overview.md))
 is the map that ties them together.
 
-Only typl and ridl have a toolchain. A path below that ends in uxdl, rmdl or
+Only typl and ridl have a toolchain. A path below that ends in rxdl, rmdl or
 rsdl ends in a specification you can design against but cannot compile — see
 [what is built](introduction.md#what-is-built).
 
@@ -15,7 +15,7 @@ rsdl ends in a specification you can design against but cannot compile — see
 - **Service / bus SSOT engineer** — typl §1–§10, then [ridl](reference/ridl.md)
   end to end.
 - **UX / frontend engineer** — typl §1–§10, ridl's core semantics, then
-  [uxdl](reference/uxdl.md) (specified, not built).
+  [rxdl](reference/rxdl.md) (specified, not built).
 - **Control / algorithm engineer** — typl §1–§10, ridl §3/§9, then
   [rmdl](reference/rmdl.md) (specified, not built).
 - **Integrator / architect** — everything above at survey depth, then

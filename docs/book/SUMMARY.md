@@ -9,7 +9,7 @@
 
 - [typl — types and vocabulary](reference/typl.md)
 - [ridl — system interactions](reference/ridl.md)
-- [uxdl — user interactions](reference/uxdl.md)
+- [rxdl — domains and the unrestricted profile](reference/rxdl.md)
 - [rmdl — behaviour](reference/rmdl.md)
 - [rsdl — architecture](reference/rsdl.md)
 - [expr-core — contract terms](reference/expr-core.md)

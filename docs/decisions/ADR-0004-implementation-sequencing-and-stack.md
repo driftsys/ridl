@@ -2,7 +2,22 @@
 
 ## Status
 
-Proposed.
+Proposed. **Amended 2026-08-03** — the sequencing of §1 is superseded in two
+places by ADR-0012 and by the rmdl phase split recorded in `docs/ROADMAP.md`:
+
+1. **uxdl is no longer an epic.** ADR-0012 decision 1 retires it as a family
+   member; E3 becomes ridl's boundary-model core and the domain spellings move
+   to E7.
+2. **rsdl runs before rmdl's runtime, and rmdl splits in two.** rmdl's language
+   half (expressions, equations, memory, time, checking, IR — no codegen) is a
+   prerequisite for rsdl's contract binding and runs before it. rmdl's compute
+   runtime (codegen, scheduler, oracle, replay) runs last, after rsdl and the
+   domain extensions, so the whole architecture is settled before the highest-
+   risk work begins. The V1/V2 split becomes V1/V2/V3 along the same
+   descriptive-versus-executable seam, drawn one layer lower.
+
+Epic and story numbers are unchanged; only their order is. The stack decisions
+(§2 onward) are unaffected.
 
 Assumes ADR-0002 (module system) as accepted and ADR-0003 (the family decision —
 profiles, cores, platform model) as the direction of record even though 0003 is

@@ -30,7 +30,8 @@ Version: 0.2.0 — Draft
 
 1. [Scope and Position in the Family](#1-scope-and-position-in-the-family)
 2. [Lexical Additions](#2-lexical-additions)
-3. [The Interaction Model](#3-the-interaction-model)
+3. [The Interaction Model](#3-the-interaction-model) — families (§3.2),
+   correspondence obligations (§3.3), availability (§3.4)
 4. [Signal](#4-signal)
 5. [Event](#5-event)
 6. [Command](#6-command)
@@ -70,7 +71,7 @@ ridl is a profile of the one family grammar. A `.ridl` file accepts
 **interaction declarations plus everything typl accepts** — types and their
 interfaces naturally travel together; profile purity per package remains a
 `ridl.toml` policy (typl §1.2). What `.ridl` rejects: behaviour declarations
-(rmdl), user-interaction declarations (uxdl), architecture declarations (rsdl).
+(rmdl), architecture declarations (rsdl).
 
 ### 1.2 What ridl adds to typl
 
@@ -86,14 +87,20 @@ Exactly four things, each owned by a family core:
 Everything else — types, units, ranges, constants, composites, packages,
 visibility, doc comments, diagnostic-code practice — is typl, unchanged.
 
-### 1.3 ridl and uxdl are siblings
+### 1.3 ridl describes every boundary
 
-The five interaction kinds are the **ridl profile of the shared `interact`
-core** (concept note §3): named, typed, directed interactions on a contract
-boundary. uxdl will expose the same core with user-facing vocabulary and
-view-framework bindings. Nothing in this document is ridl-private except the
-transport bindings; when a rule below says "interaction", it is a candidate
-`interact`-core rule.
+The five interaction kinds are named, typed, directed interactions on a contract
+boundary — **any** boundary. **ADR-0012** retired uxdl as a separate language
+and gave ridl an interaction **family** on every declaration: `dispatch` (system
+to system), `presentation` and `intent` (the person boundary), `acquisition` and
+`control` (the physical boundary). Only `dispatch` carries no correspondence
+obligation, because there the datum and its referent are the same thing.
+
+The kinds below are family-neutral: a `signal` is a continuous state value
+whoever reads it. What a non-dispatch family adds is the four correspondence
+obligations, not a different kind. Readable per-family spellings — `present`,
+`measure`, `actuate` and the rest — are the rxdl reference's, and add no
+semantics to what is defined here.
 
 ---
 
@@ -233,6 +240,282 @@ legitimate exception is _domain_ time distinct from transport time — a
 `FaultEvent.timestamp` recording when the fault _occurred_ belongs in the
 payload, because the envelope of a streamed history reply timestamps delivery,
 not occurrence.
+
+### 3.2 Interaction Families
+
+Every interaction declares a **family** — who is on the other side of the
+boundary. The counterparty set is closed, because there are only three kinds of
+thing a system can talk to: **another piece of software, a person, the physical
+world** (ADR-0012 decision 2).
+
+| Family           | Direction       | The provider's promise          |
+| ---------------- | --------------- | ------------------------------- |
+| **dispatch**     | system → system | _transfer, nothing interpreted_ |
+| **presentation** | system → person | _I offer this to be perceived_  |
+| **intent**       | person → system | _I capture what you meant_      |
+| **acquisition**  | world → system  | _I report what is_              |
+| **control**      | system → world  | _I cause this to happen_        |
+
+`dispatch` is the default and the baseline: an interaction that declares no
+family is `dispatch`, and everything in §4 through §14 reads unchanged for it.
+The other four are where the datum and the thing it stands for come apart, and
+they carry the obligations of §3.3.
+
+**The family is a property of the declaration**, not of the file, the package,
+or the deployment, and it is **selected by the declaring keyword** — there is no
+family clause. `signal`, `event`, `command`, and `query` are `dispatch`, so a
+`.ridl` file declares nothing else. The non-dispatch spellings belong to the
+rxdl reference and lower to these same kinds carrying a family; this document
+owns what a family _means_ and every rule one can violate, and rxdl owns only
+the words. The family reaches the IR as a closed enum alongside the kind.
+
+#### The agent asymmetry
+
+Two families are epistemic (presentation, acquisition) and two volitional
+(intent, control), and **the agent swaps sides**: at the person boundary the
+person is the agent and the system informs; at the world boundary the system is
+the agent and the world informs.
+
+Every structural rule below follows from that one fact, so it is worth stating
+plainly rather than deriving each rule separately.
+
+#### Which kinds each family admits
+
+| Family           | continuous (`signal`) | occurrence (`event`) | operation (`command`)    | request/response (`query`) |
+| ---------------- | --------------------- | -------------------- | ------------------------ | -------------------------- |
+| **dispatch**     | ✓                     | ✓                    | ✓                        | ✓                          |
+| **presentation** | ✓                     | ✓                    | —                        | —                          |
+| **intent**       | —                     | ✓                    | ✓ — a **shape** (§3.2.1) | —                          |
+| **acquisition**  | ✓                     | ✓                    | —                        | _reserved_                 |
+| **control**      | ✓                     | —                    | ✓                        | —                          |
+
+A combination outside this table is **RIDL-501**. Each absence is a consequence
+of the agent asymmetry, not an unfilled gap:
+
+- **presentation admits no operation.** Nothing can be invoked on an agent. A
+  provider may present, and the person may then act; it may not call them.
+- **intent admits no continuous value.** A person's continuous state is knowable
+  only by measuring a physical proxy, and measuring a physical proxy is
+  `acquisition`. An accelerator pedal is an acquisition signal, not an intent
+  one: there is no interpretation gap between a foot's position and its meaning,
+  and all four obligations instantiate exactly as they do for a wheel-speed
+  sensor. **A person therefore appears at two boundaries** — as an agent that
+  means things, and as a physical object that is measured.
+- **intent admits no query.** A provider cannot block on a human. A confirmation
+  is a presentation followed by an operation — two interactions, not a
+  request/response.
+- **acquisition admits no operation.** Commanding a device to recalibrate acts
+  on the world, so it is `control`.
+- **control admits no occurrence.** Nothing leaves a system uninvited.
+- **control admits no query.** Effect is never returned; it is observed by
+  measuring back, which is a separate acquisition interaction paired with the
+  control one (§3.3).
+
+The reserved acquisition query is the explicit one-time read — see §17.10.
+
+#### 3.2.1 Operation shapes
+
+An intent operation declares a **shape**, which constrains its parameters:
+
+| Shape      | Meaning                     | Parameters                       |
+| ---------- | --------------------------- | -------------------------------- |
+| `activate` | invoke                      | none                             |
+| `toggle`   | flip a binary state         | none                             |
+| `select`   | choose one from a set       | exactly one — the key            |
+| `adjust`   | set a value within a range  | exactly one — a ranged/unit type |
+| `dismiss`  | cancel or close a transient | none                             |
+
+Violating a shape's parameter rule is **RIDL-502**.
+
+**The set is closed and has no generic form.** A person performs one act at a
+time; a multi-parameter operation is a function call, not a gesture. Sending a
+message is an occurrence carrying the body, a `select` of the recipient, and an
+`activate` — three interactions, each separately observable and testable.
+Repositioning an item, stripped of modality, is `select` then `adjust`.
+
+An intent operation without a shape is **RIDL-503**. The world boundary has no
+such restriction: a `control` operation takes whatever parameters it needs,
+because nothing there is an agent constrained to single gestures.
+
+Shapes are machine-readable gesture semantics. They drive interface scaffolding,
+accessibility roles, and the test plane's parameter generation — which is what
+earns them keywords rather than an attribute, and what a generic escape hatch
+would quietly destroy.
+
+### 3.3 Correspondence Obligations
+
+Between two software peers **the datum is the truth**: both sides agree on a
+number and there is nothing behind it. At every boundary with the non-software
+world, **the datum and its referent come apart**.
+
+The canonical case is a speedometer. A vehicle's true speed and the number on
+its cluster are deliberately different quantities: the indication is legally
+constrained never to read below the true value, is quantised with hysteresis, is
+damped, and is unit-switched per market. Declaring both as a plain `signal`
+erases the distinction that matters, and the wrong one eventually reaches the
+cluster.
+
+**Direction rule.** In every non-dispatch family one side causes the other. The
+causally upstream side is the **reference**; the downstream side is the
+**realisation**; the obligation is that the realisation corresponds to the
+reference within declared bounds.
+
+| Family       | Reference             | Realisation               |
+| ------------ | --------------------- | ------------------------- |
+| presentation | the provider's value  | what the person perceives |
+| intent       | what the person meant | the captured value        |
+| acquisition  | the physical quantity | the reported value        |
+| control      | the commanded value   | the resulting world state |
+
+#### The four obligations
+
+| Obligation                    | Presentation                 | Acquisition                          | Control                     |
+| ----------------------------- | ---------------------------- | ------------------------------------ | --------------------------- |
+| **relationship**              | never under-reads; quantised | transfer function; calibration       | authority limits; slew rate |
+| **uncertainty**               | display resolution           | tolerance per reading                | positioning tolerance       |
+| **latency of correspondence** | perception delay             | sample instant ≠ publication instant | actuation lag               |
+| **failure to correspond**     | shown but not perceivable    | plausible but false                  | commanded but not achieved  |
+
+Two are load-bearing enough to state separately.
+
+**Latency of correspondence is not delivery latency.** The envelope is
+sender-stamped at publication (§3.1). For a transducer with a response time, the
+value describes the world as it was _before_ that stamp, so any model computing
+with the time of the cause is silently wrong by the transducer's lag unless the
+contract declares it. The obligation has **two forms**: an _instant_ offset, and
+a **span** for a value acquired over an interval rather than at a point — a
+swept sensor frame corresponds to the world across its sweep, which is why
+motion distortion exists in such frames.
+
+**Failure to correspond is not invalidity.** §4.5's invalid state detects a
+malformed or unavailable value. A sensor can report a well-formed, in-range,
+perfectly fresh value that is **false** — a wheel spinning on ice. Nothing in
+the datum reveals it, which is why plausibility must be declared rather than
+inferred.
+
+#### Obligations relate two declarations
+
+An obligation frequently qualifies a **pair** rather than a single declaration:
+raw against indicated speed, commanded against achieved angle, a toggle against
+the state it flips, a set value against the value shown back. The pair is where
+the obligation lives, and one mechanism serves every family.
+
+This is also a real failure mode with no other expression: a person acts, the
+indication does not follow, the person acts again — and both declarations were
+individually satisfied.
+
+#### Obligations compose along a path
+
+Correspondences chain, and the chain is the point:
+
+```text
+true wheel speed
+   │  acquisition — measurement error, sensor lag
+   ▼
+the provider's speed value
+   │  relationship — legal bias, quantisation, damping
+   ▼
+the indicated value
+   │  presentation — refresh rate, legibility, perception delay
+   ▼
+what the driver believes
+```
+
+The legal requirement is stated at the **end** of that chain, so it is
+verifiable only if every hop declares its own contribution. An end-to-end budget
+is computable exactly when the path is fully declared, and not otherwise.
+
+#### Metrology is the reference
+
+These are metrology's concepts, and the correspondence with **VIM** (JCGM 200 /
+ISO-IEC Guide 99) is term for term:
+
+| VIM term                                                                                                | Here                                  |
+| ------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **measurand**                                                                                           | what an acquisition interaction names |
+| **calibration** — the relation between quantity values and **indications**                              | the relationship obligation           |
+| **measurement uncertainty**                                                                             | the uncertainty obligation            |
+| **indication** — the value a measuring instrument provides                                              | a presentation-family value           |
+| **detector** — indicates presence when a threshold is exceeded                                          | an acquisition occurrence             |
+| **metrological traceability** — an unbroken chain of calibrations, each contributing to the uncertainty | the composition property above        |
+
+Where this layer needs to name something further, VIM is the reference to reach
+for before inventing a word. One VIM concept has no expression here yet — the
+**influence quantity**, which does not affect the measurand but does affect the
+relation between indication and result, such as ambient temperature shifting a
+pressure sensor's characteristic. It is neither uncertainty (which is
+dispersion) nor the relationship (it is what perturbs the relationship); see
+§17.11.
+
+#### Declaration
+
+Obligations are **attributes** in the tail block (general-form §4.2), because
+they are authored, heterogeneous, and mix the assignment and predicate forms.
+The working spellings are below; they are fixed with the obligation
+implementation and an author should expect them to settle rather than change in
+substance.
+
+The example below is written in the **rxdl spellings**, because a `.ridl` file
+spells only `dispatch` and these are non-dispatch interactions. `measure` is a
+`signal` in the `acquisition` family and `present` a `signal` in `presentation`;
+both lower to the kinds and attributes this section defines.
+
+```ridl
+interface Cluster {
+  measure wheelSpeed: Speed @10ms [
+    tolerance = 0.5 km/h,
+    lag       = 40ms,
+    plausible abs(delta) < 10.0
+  ]
+
+  present clusterSpeed: IndicatedSpeed @[50ms..200ms] [
+    derives    = wheelSpeed,
+    resolution = 1 km/h,
+    ensure clusterSpeed >= wheelSpeed
+  ]
+}
+```
+
+A non-dispatch interaction that declares **no** obligation at all draws
+**RIDL-504**: the family exists precisely to make these facts explicit, and a
+family tag with nothing behind it is a declaration wearing a label.
+
+### 3.4 Availability
+
+An interaction may be unavailable, and unavailability has **five distinct
+sources**. `during` (§13.3) covers the first; the rest are predicates.
+
+| Source           | Example                                    | Carried by                                  |
+| ---------------- | ------------------------------------------ | ------------------------------------------- |
+| **mode**         | only while the system is in `ERROR`        | `during` — a state gate                     |
+| **data**         | disabled until a value validates           | a predicate over declared state             |
+| **in progress**  | already running, cannot be re-invoked      | a predicate over a declared progress value  |
+| **policy**       | not permitted in this condition            | a predicate over declared policy state      |
+| **provisioning** | this variant does not have the interaction | `fixed` — and the interaction is **absent** |
+
+The first four render as _present but refused_; provisioning renders as _not
+there at all_. Those lead a consumer — and a person — to different conclusions,
+and they are different tests.
+
+#### The consumer-evaluability rule
+
+> At a **presentation-obligated** boundary, an availability condition must be
+> **evaluable by the consumer**.
+
+A person must perceive that something is unavailable _before_ attempting it, not
+discover it by rejection. A renderer cannot disable a control whose condition it
+cannot evaluate, so an availability predicate on an `intent` interaction may
+reference **only declared, consumer-visible state** — never provider-internal
+state. Violating this is **RIDL-505**.
+
+At the `dispatch` and `control` boundaries the rule does not apply: a software
+caller or an actuator may simply be rejected, and §13's ordinary `require`
+semantics hold unchanged.
+
+**Availability is general; pre-visibility is not.** Every family has all five
+sources — an actuator is mode-gated, derated, mid-stroke, policy-gated, and
+fitted or not. Only the person boundary requires that unavailability be
+perceivable in advance.
 
 ---
 
@@ -471,11 +754,11 @@ fixed capabilities    : [Label; 0..32]
 - Reading a `fixed` is free of the query machinery — bindings expose it as a
   plain accessor, populated at binding initialization
 - Naming decision on record: `fixed`, not `final` and not `config` — one word
-  for one concept at both boundaries, so uxdl spells this kind the same way
-  (ADR-0011). `final` was the earlier spelling and misled: a Java or Kotlin
-  reader takes it for a compile-time constant, which this is not. `config`
-  connotes hot-reload and is reserved vocabulary space for rsdl. See the
-  concept-note naming ledger
+  for one concept at every boundary (ADR-0011); `fixed` is family-neutral,
+  because a provisioned constant carries no correspondence anywhere. `final` was
+  the earlier spelling and misled: a Java or Kotlin reader takes it for a
+  compile-time constant, which this is not. `config` connotes hot-reload and is
+  reserved vocabulary space for rsdl. See the concept-note naming ledger
 
 Maps to: Android `ro.*` properties, AUTOSAR `CalibrationParameter`, SOME/IP
 field with getter only.
@@ -1084,6 +1367,19 @@ same names: a `require` reads the interface's own signals (§13), so a signal
 spelled like a package constant shadows it, while an `ensure` reads no signal
 and the same spelling is the constant.
 
+### 16.5 Families and Obligations (RIDL-5xx)
+
+| Code     | Rule                                                                                                                                                                        | Severity |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| RIDL-501 | interaction kind not admitted by its family (§3.2) — an operation on `presentation`, a continuous value on `intent`, an occurrence on `control`, and the rest of that table | error    |
+| RIDL-502 | operation shape's parameter rule violated (§3.2.1) — parameters on `activate`/`toggle`/`dismiss`, or not exactly one on `select`/`adjust`                                   | error    |
+| RIDL-503 | `intent` operation with no shape — the shape set is closed and has no generic form (§3.2.1)                                                                                 | error    |
+| RIDL-504 | non-`dispatch` interaction declaring no correspondence obligation (§3.3) — a family tag with nothing behind it                                                              | warning  |
+| RIDL-505 | availability predicate on an `intent` interaction referencing state the consumer cannot evaluate (§3.4)                                                                     | error    |
+| RIDL-506 | obligation attribute on a `dispatch` interaction — between software peers the datum is the truth, so there is nothing to correspond to                                      | error    |
+| RIDL-507 | `derives` names an interaction in a family that cannot be its reference (§3.3 direction rule)                                                                               | error    |
+| RIDL-508 | a `control` interaction with no paired acquisition observing its effect (heuristic, §3.3)                                                                                   | info     |
+
 ---
 
 ## 17. Open Questions
@@ -1104,9 +1400,9 @@ and the same spelling is the constant.
    counterexamples.
 4. **Actions (long-running operations).** ROS 2 actions = goal + feedback +
    result. Composable today as `command` + progress `signal` + completion
-   `event`/`query`, and uxdl will need the same triple for long user operations.
-   Decide whether the composition idiom is documented convention or deserves
-   sugar.
+   `event`/`query`, and the person boundary needs the same triple for long user
+   operations. Decide whether the composition idiom is documented convention or
+   deserves sugar.
 5. **QoS beyond timing.** DDS reliability (reliable/best-effort), history depth,
    liveliness: deliberately absent from the contract — timing bounds are the
    contract-level QoS, the rest is transport/deployment (rsdl). Confirm this
@@ -1126,10 +1422,25 @@ and the same spelling is the constant.
    requirements in rsdl — always properties (what must hold), never mechanisms
    (how). Needs its own document before any keyword lands; start via profile
    vocabulary, promote to syntax only when earned.
-9. **uxdl divergence budget.** Which rules in this document are `interact`-core
-   (shared with uxdl) vs ridl-only? Provisional: §3, §10, §11 core; §4.4, §9
-   semantics core with different bindings; transports ridl-only. Settle at the
-   uxdl workshop.
+9. ~~**uxdl divergence budget.**~~ **Closed by ADR-0012.** The question was
+   which rules here are shared with uxdl and which are ridl-only. The answer is
+   that none diverge: uxdl is retired, every rule in this document is
+   family-neutral, and what a non-dispatch family adds is the four
+   correspondence obligations rather than a different rule set. Transports
+   remain a binding concern, not a family one.
+10. **The explicit one-time read.** The `acquisition` request/response cell is
+    reserved (§3.2). What separates it from a continuous acquisition is
+    **maintenance**, not duration: a continuous acquisition obliges the provider
+    to hold a current value, and forcing an on-request read into it would make
+    the binding poll forever for something wanted only occasionally. Periodic
+    and on-change acquisition need no new cell — `@[min..max]` already
+    distinguishes rate floor from staleness bound (§9.2).
+11. **The influence quantity** (VIM). A quantity that does not affect the
+    measurand but does affect the relation between indication and result —
+    ambient temperature shifting a pressure sensor's characteristic. It is
+    neither uncertainty, which is dispersion, nor the relationship, because it
+    is what perturbs the relationship. Whether it becomes a fifth obligation or
+    a qualifier on the relationship is open (§3.3).
 
 ---
 
@@ -1267,9 +1578,18 @@ dotted_name   = camelCase_id { "." camelCase_id } ; (* reverse-domain global nam
 
 interaction   = signal_def | event_def | command_def | query_def | fixed_def | reserved ;
 
-signal_def    = doc_comment? "signal"  camelCase_id ":" type_ref init_value? timing? ;
-event_def     = doc_comment? "event"   camelCase_id ":" type_ref timing? ;
+signal_def    = doc_comment? "signal"  camelCase_id ":" type_ref init_value? timing?
+                attr_block? ;
+event_def     = doc_comment? "event"   camelCase_id ":" type_ref timing? attr_block? ;
               (* untimed → configurable default [100ms..1000ms], §9.1 *)
+
+              (* There is no family clause. The family (§3.2) is selected by the
+                 declaring keyword, and `.ridl` spells only `dispatch` — so every
+                 production here is a dispatch interaction. The non-dispatch
+                 spellings, and the operation shapes, are the rxdl reference's;
+                 they lower to these same kinds carrying a family and a shape.
+                 The rules they can violate are still this document's, reported
+                 as RIDL-501 through RIDL-508 (§16.5). *)
 
 init_value    = "=" ( literal | SCREAMING_SNAKE_ID ) ;   (* bare init override — §4.4 *)
 command_def   = doc_comment? "command" camelCase_id "(" param_list ")" attr_block? ;
@@ -1286,6 +1606,10 @@ fallible_type = type_ref "|" type_ref ;             (* inline T | E — §10.1, 
                                                        both arms are named types, the
                                                        right one an `error` type *)
 fixed_type    = type_ref | array_type ;             (* array_type per typl grammar *)
+              (* correspondence obligations (§3.3) are ordinary attributes in the tail
+                 `attr_block` — assignment form for tolerance, resolution, lag, span and
+                 `derives`; predicate form for `plausible` and `ensure`. They are legal
+                 only on a non-dispatch family — RIDL-506 *)
 stream_type   = "<" ( type_ref | "string" | "bytes" ) ">" ;
 
 (* ---------- Timing ---------- *)
@@ -1407,7 +1731,13 @@ uniform from struct fields to interface methods.
 | Term                                 | Definition                                                                                                                                                                                                                                                   |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **RIDL** (capitals)                  | the platform and family name; **ridl** (lowercase) is this language, the family's interaction layer and flagship member                                                                                                                                      |
-| **family**                           | the five languages — typl, ridl, uxdl, rmdl, rsdl — sharing one grammar, one toolchain, one IR                                                                                                                                                               |
+| **family**                           | the four languages — typl, ridl, rmdl, rsdl — sharing one grammar, one toolchain, one IR; rxdl is a profile and a spelling layer over ridl, not a fifth language                                                                                             |
+| **interaction family**               | who is on the other side of a boundary — `dispatch` · `presentation` · `intent` · `acquisition` · `control` (§3.2). A property of the declaration, a closed enum in the IR                                                                                   |
+| **correspondence obligation**        | what a non-dispatch contract must declare about the gap between a datum and its referent: relationship, uncertainty, latency of correspondence, failure to correspond (§3.3)                                                                                 |
+| **reference / realisation**          | in a non-dispatch family, the causally upstream and downstream sides; the realisation must correspond to the reference within declared bounds (§3.3)                                                                                                         |
+| **operation shape**                  | `activate` · `toggle` · `select` · `adjust` · `dismiss` — a closed set constraining an intent operation's parameters and carrying machine-readable gesture semantics (§3.2.1)                                                                                |
+| **indication**                       | metrology's term (VIM) for the value a measuring instrument provides; a presentation-family value is one (§3.3)                                                                                                                                              |
+| **acquisition span**                 | the interval over which a value acquired by sweeping corresponds to the world, as against an instant offset (§3.3)                                                                                                                                           |
 | **profile**                          | the restriction of the family grammar accepted by a file extension; `.ridl` accepts interactions + typl declarations; `.rxdl` is the total profile accepting every layer                                                                                     |
 | **core**                             | a reusable semantic unit beneath the surface languages: `ns` (namespacing), `typl-core` (types), `expr` (predicates), `time` (timing), `interact` (interaction primitives)                                                                                   |
 | **interaction**                      | a named, typed, directed exchange on a contract boundary; ridl defines five kinds                                                                                                                                                                            |

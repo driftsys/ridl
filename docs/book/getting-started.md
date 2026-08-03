@@ -56,7 +56,7 @@ declarations.
 | -------- | ------------------------------------------------------------------------ | ------------------------- |
 | **typl** | data — types, ranges, units, constants                                   | built                     |
 | **ridl** | system interactions — `signal`, `event`, `command`, `query`, `fixed`     | built                     |
-| **uxdl** | user interactions — `display`, `input`, `action`, `fetch`, `fixed`       | specified, not built      |
+| **rxdl** | domain spellings — `present`, `notify`, `measure`, `detect`, `actuate`  | specified, not built      |
 | **rmdl** | behaviour — functions and reactive models                                | specified, not built      |
 | **rsdl** | architecture — components, wiring, deployment                            | specified, not built      |
 

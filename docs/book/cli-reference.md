@@ -17,7 +17,7 @@ This page assumes `target/release/ridl` and `target/release/ridlc` are on your
 
 Only typl and ridl have a toolchain — see
 [What is built](introduction.md#what-is-built). Every command and transcript
-below runs against a workspace built from those two layers; uxdl, rmdl, and
+below runs against a workspace built from those two layers; rxdl, rmdl, and
 rsdl accept no command here.
 
 Every synopsis and transcript on this page is the literal output of the

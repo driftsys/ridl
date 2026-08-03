@@ -150,14 +150,14 @@ There is **one grammar** (one lexer, one AST, one toolchain, one IR). Each
 language is a **profile** of that grammar — a restriction to its layer —
 selected by file extension:
 
-| Extension   | Profile    | Accepts                                                                                |
-| ----------- | ---------- | -------------------------------------------------------------------------------------- |
-| `.typl`     | restricted | type declarations only                                                                 |
-| `.ridl`     | restricted | system-interaction declarations                                                        |
-| `.uxdl`     | restricted | user-interaction declarations                                                          |
-| `.rmdl`     | restricted | behaviour declarations                                                                 |
-| `.rsdl`     | restricted | architecture declarations                                                              |
-| **`.rxdl`** | **total**  | **any layer — the `x` is a wildcard over the family pattern (r·i·dl, r·m·dl, r·s·dl)** |
+| Extension   | Profile    | Accepts                                                                                                                                                     |
+| ----------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.typl`     | restricted | type declarations only                                                                                                                                      |
+| `.ridl`     | restricted | system-interaction declarations                                                                                                                             |
+| `.uxdl`     | restricted | user-interaction declarations                                                                                                                               |
+| `.rmdl`     | restricted | behaviour declarations                                                                                                                                      |
+| `.rsdl`     | restricted | architecture declarations                                                                                                                                   |
+| **`.rxdl`** | **total**  | **the unrestricted profile — any layer _and_ any interaction domain. Widened by ADR-0012's amendment; `x` reads as both the layer wildcard and "extended"** |
 
 **Rationale — why five named surfaces rather than one facade.** The five layers
 are written by five different professions — in a vehicle program, often
