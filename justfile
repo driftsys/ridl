@@ -4,7 +4,8 @@
 # holds the specifications, ADRs, roadmap, and the Cargo workspace
 # (docs/ROADMAP.md, epic E0). `check` gates the docs, `compile` and
 # `test` cover the Rust workspace, and `build` runs the whole gate. The
-# mdBook docs are served with `just book` and built by `just book-check`.
+# mdBook docs are served with `just book`, gated by `just book-check`, and
+# rendered for publishing by `just book-build`.
 #
 # This file is the single definition of every gate command. CI
 # (.github/workflows/ci.yml) installs the tools a runner needs and then invokes
@@ -357,6 +358,17 @@ build: toolchain-check gate-parity fmt-check book-check link-check compile test 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
     mdbook serve
+
+# Render the book to ./book. CI's Pages job runs this to produce what it
+# publishes; locally it renders the same output `just book` serves.
+#
+# Not a member of `build`, and not a gate. `book-check` is the gate, and it
+# builds a copy so that checking never writes into the tree — this one does
+# write, both ./book (gitignored) and, for a SUMMARY.md that names a file which
+# does not exist, that file in docs/book/. In CI the checkout is discarded after
+# the run, and `book-check` has already failed the gate before this job starts.
+book-build:
+    mdbook build
 
 # Commit-message lint over the commits this branch adds on top of a base.
 #

@@ -84,6 +84,7 @@ member; rsdl is the apex.
                          (BASE defaults to main; CI passes the PR base branch)
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
+    just book-build      render the book to ./book — what CI publishes to Pages
     just release         git std bump — version, changelog, tag
     just install         ./bootstrap — toolchain, git hooks, gate requirements
 
