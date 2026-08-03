@@ -1,0 +1,221 @@
+# ADR-0014 — IR encodings: canonical protobuf JSON, prototext, and binary
+
+## Status
+
+Accepted — 2026-08-04. Scope: how the IR itself is encoded on every surface that
+writes or reads it. It is not epic-scoped: it binds the artifact every future
+backend consumes, in the way ADR-0009 binds the gate and ADR-0010 binds the CLI
+contract.
+
+**Supersedes the rendering clause of
+[ADR-0004](ADR-0004-implementation-sequencing-and-stack.md) §4** — the sentence
+scoping the `serde`→JSON rendering to "debugging and golden tests". Everything
+else in ADR-0004 §4 stands: protobuf compiled with `prost` remains the canonical
+IR, and the rejected alternatives remain rejected.
+
+The reasoning trail is
+[`docs/wip/2026-08-03-ir-protobuf-encodings-design.md`](../wip/2026-08-03-ir-protobuf-encodings-design.md),
+which carries the measurements and the API confirmations this record summarises.
+This ADR was accepted under the delegated authority recorded in
+[ADR-0005](ADR-0005-agent-enablement.md)'s working model — the design note was
+written for review, and execution of roadmap stories E9.1 to E9.3 needs the
+decisions fixed rather than pending.
+
+## Context
+
+ADR-0004 §4 fixes the IR as a protobuf schema compiled with `prost` and calls
+the canonical stable form "the plugin-protocol wire format". Roadmap story E4.5
+makes the obligation concrete: a third-party backend consumes the IR.
+
+The JSON that ships today cannot serve that obligation. It is `serde`'s
+rendering of the generated Rust structs, which is a different encoding from the
+protobuf JSON mapping. It differs on four counts: enum values render as numbers
+rather than names, field names stay `snake_case` rather than `lowerCamelCase`,
+absent fields render as `null` rather than being omitted, and a `oneof` is
+wrapped in its Rust variant name rather than flattened to the field name. The
+variant names it emits — `TypeDef`, `FloatWidth` — do not exist in the protobuf
+JSON mapping at all. A Kotlin or TypeScript backend pointed at this file with a
+conformant protobuf JSON parser fails to parse it.
+
+The binary encoding has no such defect, because it is schema-faithful by
+construction, but no CLI path writes it. So the one interchange form that works
+is unreachable, and the one that is reachable does not work.
+
+Two facts about the toolchain shape the decision, both established against the
+published APIs. `prost` 0.14 has no JSON and no text format — it exposes binary
+encoding only, and documents that it carries no runtime reflection or message
+descriptors, which is precisely what the JSON mapping needs. And the descriptor
+set already exists: `protox::compile` returns a `FileDescriptorSet` in
+`crates/ridl-ir/build.rs`, which is dropped after codegen today.
+
+## Decision
+
+1. **Canonical protobuf JSON replaces the `serde` rendering on every surface.**
+   The `--emit ir-json` artifact, `.ridl/baseline/*.ir.json`, and the `insta`
+   goldens all carry one dialect. There is no migration path and none is needed:
+   the version is `0.0.0` with no tags, so no baseline exists outside this
+   repository.
+
+2. **Every field is emitted, defaults included** — `skip_default_fields(false)`,
+   in both JSON and prototext. This stays conformant on the read side, because a
+   conformant parser must accept explicitly present defaults. It keeps goldens
+   explicit: a reviewer reads `ordinal: 0` rather than inferring it from
+   absence, which matters where ordinals are semantically load-bearing (ridl
+   §11).
+
+3. **Goldens stay JSON.** Prototext is not used for `insta` snapshots. A golden
+   in a format no shipped artifact uses would test the renderer rather than the
+   artifact.
+
+4. **All three protobuf encodings are emittable**, with these flag values and
+   extensions:
+
+   | Flag value  | Artifact          | Encoding                |
+   | ----------- | ----------------- | ----------------------- |
+   | `ir-json`   | `<base>.ir.json`  | canonical protobuf JSON |
+   | `ir-text`   | `<base>.ir.txtpb` | prototext               |
+   | `ir-binary` | `<base>.ir.binpb` | protobuf binary         |
+
+   `ir-json` keeps its name rather than becoming `ir-pbjson`. The `.ir.json`
+   suffix is load-bearing — it drives snapshot detection in
+   `crates/ridl/src/main.rs` and is cited across ADRs, documents, and tests.
+   Flag values stay plain English while extensions follow the `buf` convention,
+   which is the existing repository precedent: `c-header` writes `.h`,
+   `typescript` writes `.ts`.
+
+5. **`ridl diff` and `ridl check --baseline` stay JSON-only.** Baselines remain
+   `.ir.json`. A committed baseline must be reviewable in a pull request, which
+   binary is not.
+
+6. **The `serde` derives come off the generated types.** The `type_attribute` in
+   `build.rs` is removed. `serde` and `serde_json` remain underneath
+   `prost-reflect` as the JSON writer, but no longer determine the shape.
+
+7. **The mechanism is `prost-reflect` with a build-time descriptor pool.**
+   `build.rs` writes the `FileDescriptorSet` it already holds to `OUT_DIR`, and
+   `lib.rs` holds a `LazyLock<DescriptorPool>` over an `include_bytes!` of that
+   file. No new build step, no system `protoc`, and no vendored blob in the tree
+   — the pool is derived from the same schema compilation that generates the
+   types, so the two cannot disagree.
+
+   Six functions in `ridl_ir::v2` where there is one today. `to_json_pretty`
+   keeps its name and its current signature, including its infallible return, so
+   no call site is renamed:
+
+   | Function                              | Mechanism                      |
+   | ------------------------------------- | ------------------------------ |
+   | `to_json_pretty` / `from_json`        | `prost-reflect`, `serde`       |
+   | `to_text_format` / `from_text_format` | `prost-reflect`, `text-format` |
+   | `to_binary` / `from_binary`           | `prost`, no descriptors        |
+
+   `from_text_format` is required rather than speculative: without it the
+   prototext emit has no round-trip test, and a write path with no read path is
+   untested by construction.
+
+8. **Canonical 64-bit stringification is kept, not overridden.**
+   `stringify_64_bit_integers` stays at its default of `true`, so a timing bound
+   emits as `"10000"` rather than `10000`. JavaScript loses integer precision
+   above 2^53 and the TypeScript backend already models timing as `bigint`;
+   overriding the canonical behaviour would break the consumers this change
+   exists to serve. Prototext is set to `pretty`, `skip_default_fields(false)`,
+   and `print_message_fields_in_index_order`, so its output ordering is
+   deterministic rather than incidental.
+
+9. **The canonical-form policy, for E4.5 to cite: binary is canonical, JSON is
+   derived and conformance-obliged, prototext is for inspection.** Prototext is
+   emittable but is not a recommended interchange form. ADR-0004 targets Rust,
+   Kotlin, and TypeScript backends; C++, Java, Python, and Go have solid
+   text-format parsers, and TypeScript has essentially none — neither
+   protobuf.js nor ts-proto implements it.
+
+10. **The `ridl.std` emit filter becomes a predicate over "is this an IR dump",
+    not an enumeration of one variant.** `crates/ridlc/src/lib.rs` filters
+    `ridl.std` out of `Emit::IrJson` today, because a direct IR dump is not code
+    and `ridl diff` compiles the other side without `ridl.std`. Binary and
+    prototext are direct IR dumps by the identical argument, so both must fall
+    on the same side of that filter, and the `is_code` check in the same file
+    must widen with it. The classification must be exhaustive over `Emit` — a
+    new encoding that is left unclassified is a compile error, not a spurious
+    `ridl.std.ir.binpb` on every build.
+
+11. **The conformance claim is tested by re-reading, not by asserting on output
+    text.** The emitted JSON is re-read with `DeserializeOptions` configured to
+    reject unknown fields. Asserting on the rendered text would only restate the
+    serializer's behaviour back to itself; re-reading tests the claim the change
+    actually makes, which is that a conformant parser accepts this output.
+
+## Alternatives considered
+
+| Candidate                                             | Verdict  | Reason                                                                                                                                                                                                                    |
+| ----------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pbjson-build` instead of `prost-reflect`             | rejected | generates canonical JSON at build time with no runtime pool, and was the recommendation until prototext entered scope. It is JSON only, and prototext needs a runtime descriptor pool, so its single advantage disappears |
+| Prototext for goldens                                 | rejected | it reads better — `snake_case` names, bare enum names, no 64-bit stringification — but a golden in a format no shipped artifact uses tests the renderer rather than the artifact                                          |
+| Prototext as the recommended interchange format       | rejected | TypeScript has no usable text-format parser, and TypeScript is a named target of ADR-0004                                                                                                                                 |
+| Additive only — keep `serde` JSON, add new emits      | rejected | zero churn, but it leaves the misleading artifact shipped under the name every consumer reaches for first, and raises the dialect count instead of lowering it                                                            |
+| A compatibility shim for existing baselines           | rejected | the version is `0.0.0` with no tags and nothing published, so no baseline exists outside this repository                                                                                                                  |
+| Reuse `TimingChanged`-style enumeration in the filter | rejected | see decision 10 — an enumeration of variants is what allowed the defect to be latent, and the next encoding would reintroduce it                                                                                          |
+
+The `prost-reflect` cost is real and small, and is recorded rather than hidden.
+It renders JSON by transcoding the typed message and then walking that tree with
+a descriptor lookup per field, where `pbjson` emits straight-line field writes —
+estimated at three to five times on the serialization step, **reasoned from what
+transcoding does rather than measured**. Measured baselines put it in
+proportion: on a two-package workspace with a debug binary, `--emit ir-json`
+runs in about 39 ms and `--emit rust` in about 48 ms, and an IR package is 15 to
+18 kB. Serializing 18 kB costs on the order of 100 to 200 µs, so five times that
+moves a 39 ms command by well under a millisecond. This is a compiler writing a
+few files once per build, not a serving path. The choice is also reversible
+without disturbing consumers, because the JSON mechanism sits behind
+`to_json_pretty` and `from_json`; any such change should follow a measurement
+rather than this estimate.
+
+## Consequences
+
+- **Positive — the IR becomes consumable by a non-Rust backend.** This is the
+  E4.5 obligation, and it was unmet by the artifact that carried its name.
+- **Positive — one dialect in the tree.** Artifacts, baselines, and goldens all
+  read the same way, so a reviewer comparing a golden against an emitted file is
+  comparing like with like.
+- **Positive — the descriptor pool is paid for once and serves both text
+  encodings**, and it cannot drift from the generated types because both come
+  from one schema compilation.
+- **Negative — every IR golden is regenerated.** Two IR `.snap` files in
+  `ridl-sem`, the `ridlc` `ir_package` golden, and the corpus snapshots. The
+  diff is large and mechanical, which makes it a poor place to hide a semantic
+  change; the round-trip and conformance tests are what guard it.
+- **Negative — `ridl-ir` gains a dependency** (`prost-reflect`, with its `serde`
+  and `text-format` features) and a `LazyLock` descriptor pool at run time.
+- **Neutral — 64-bit fields render as strings.** Correct per the mapping and
+  required by JavaScript consumers, but it is a visible change in every golden
+  that carries a timing bound, a length bound, or an enum discriminant.
+
+## Open
+
+1. **How `skip_default_fields(false)` treats proto3 `optional` fields that are
+   unset** — omitted, or emitted as `null`. The schema uses `optional` for
+   `deprecated`, `len_min`, `pattern`, and others, so this decides real golden
+   shape. To be answered by writing one test against the library before the
+   rewrite, not by reading its documentation.
+2. **Whether the `.boxed()` oneof member configured in `build.rs`
+   (`FieldType.kind.inline_scalar`) needs special handling on the reflection
+   path.** Same method: one test before the rewrite.
+3. **No cross-language conformance test.** It would be the strongest available
+   evidence and it needs a non-Rust protobuf runtime in CI. That belongs to
+   E4.5's "a third-party backend consumes the IR" criterion. Recorded as a known
+   limit rather than left implicit.
+
+## References
+
+- [`docs/wip/2026-08-03-ir-protobuf-encodings-design.md`](../wip/2026-08-03-ir-protobuf-encodings-design.md)
+  — the design note this record ratifies
+- [ADR-0004](ADR-0004-implementation-sequencing-and-stack.md) §4 — the IR
+  serialization decision whose rendering clause this supersedes
+- [ADR-0013](ADR-0013-codegen-backend-scope.md) — a different subject that does
+  not conflict: it governs what a wire backend emits _from_ the IR, while this
+  record governs how the IR itself is encoded
+- [`docs/ROADMAP.md`](../ROADMAP.md) — E9.1, E9.2, E9.3 (the stories this record
+  binds) and E4.5 (the IR stability policy that cites the canonical-form policy
+  of decision 9)
+- `crates/ridl-ir/build.rs`, `crates/ridl-ir/src/lib.rs` — the descriptor set
+  and the serialization surface
+- `crates/ridlc/src/lib.rs` — the emit filter of decision 10

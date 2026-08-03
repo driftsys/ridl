@@ -194,6 +194,13 @@ for debugging and golden tests; an internal binary cache format
 (`postcard`/`bincode`) is permitted as a Rust-only fast path but is never the
 canonical artifact.
 
+_The rendering clause is superseded (2026-08-04) by
+[ADR-0014](ADR-0014-ir-encodings.md)._ The `serde` rendering is replaced by
+canonical protobuf JSON, which carries an interchange obligation rather than
+serving debugging and golden tests alone. The rest of this decision stands:
+protobuf compiled with `prost` remains the canonical IR, and the alternatives
+rejected below remain rejected.
+
 | Alternative                           | Why rejected                                                                                                                       |
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | `bincode` / `postcard` / serde-native | Rust-only; Kotlin/TS backends cannot read it without reimplementing the format                                                     |
