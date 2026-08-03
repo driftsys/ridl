@@ -18,6 +18,15 @@ members rather than five.
 Not implemented. Epic E3 is re-cut against it as the boundary-model **core**,
 and the domain spellings are descoped to E7 (`docs/ROADMAP.md`).
 
+**Amendment, 2026-08-03 — metrology anchoring.** No decision changes. The
+acquisition family and the four obligations were derived from a speedometer and
+generalised by argument; they were afterwards checked against the
+**International Vocabulary of Metrology** (VIM — JCGM 200 / ISO/IEC Guide 99)
+and found to correspond term for term. The mapping is recorded under decision 3,
+the consequence for decision 4's spellings under decision 4, and one concept VIM
+has that this ADR does not — the **influence quantity** — in Open item 6. Treat
+VIM as the external reference for anything the obligation layer needs to name.
+
 **Amendment, 2026-08-03 — where the extensions live.** Decision 7 leaves an
 extension grammar-less and says nothing about file kinds. The `.rxdl` profile
 now carries them: it **absorbs both readings of the wildcard**, lifting the
@@ -171,6 +180,24 @@ review and retracted for exactly this reason (decision 10).
    parked this as "two-way binding sugar"; it is not sugar, it is where the
    obligation lives, and one mechanism serves every boundary.
 
+   **These are metrology's terms.** Checked against VIM after the fact, the
+   correspondence is term for term:
+
+   | VIM term                                                                                                    | Here                                                               |
+   | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+   | **measurand**                                                                                               | what a `measure` declaration names                                 |
+   | **calibration** — the relation between quantity values and corresponding **indications**                    | the **relationship** obligation                                    |
+   | **measurement uncertainty**                                                                                 | the **uncertainty** obligation                                     |
+   | **indication** — the value provided by a measuring instrument                                               | the presentation-family value; "indicated speed" is VIM's own term |
+   | **detector** — indicates presence when a **threshold is exceeded**                                          | the `detect` spelling, exactly                                     |
+   | **metrological traceability** — an unbroken chain of calibrations, **each contributing to the uncertainty** | the **composes along a path** property above                       |
+
+   The last row is the significant one: the chaining property was derived here
+   from a four-hop speedometer argument, and metrology had already formalised it
+   — including how the contributions combine. Where this ADR needs to name
+   something in the obligation layer, VIM is the reference to reach for before
+   inventing a word.
+
 4. **Keyword spellings per family, admitted by two tests.** The surface is a
    keyword per (kind, family) combination, not a generic kind plus a boundary
    clause, because the keyword places the discriminating classifier in R1
@@ -195,10 +222,27 @@ review and retracted for exactly this reason (decision 10).
      `drag`, `scan`, `display` — is rejected. `display` is rejected on this
      ground specifically: a speaker does not display, and the family's own
      non-visual surfaces question (uxdl §16.5) was unanswerable only because the
-     vocabulary was visual.
+     vocabulary was visual. The decisive case for `scan` is a mechanical lidar
+     swapped for a solid-state one: same capability, no sweep, and a contract
+     must not change.
    - **Constraint bundling.** A keyword is warranted if and only if it bundles
      constraints that would otherwise be re-declared by hand at every use. A
      spelling adding nothing over its core kind is rejected.
+
+   `measure` and `detect` are **VIM's own terms** — the process term for
+   measurement, and _detector_ for threshold-crossing presence. `acquire` (data
+   acquisition, which is engineering practice rather than metrology) and `sense`
+   (VIM defines _sensor_ as an **element** of a measuring system, so it names a
+   component) were both weighed and rejected: only `measure` carries measurand,
+   indication, uncertainty, calibration, and traceability with it as one
+   coherent body.
+
+   Each rejected mechanism word turned out to name a real fact one layer down,
+   in the obligation layer rather than the kind layer: `sample` names the
+   **sample instant**, and `scan` the **acquisition span** — a swept frame
+   corresponds to the world over an interval, not an instant, which is why lidar
+   motion distortion exists. The latency obligation therefore needs both an
+   instant form and a span form.
 
    The empty cells are consequences, not gaps: **presentation has no
    operations** because nothing can be invoked on an agent; **intent has no
@@ -372,22 +416,34 @@ Recorded rather than decided; none blocks the core work.
    and `tell` remain live. `enter` and `submit` were rejected in review — the
    first for modality, the second for implying a commit and an acknowledgment
    that an occurrence does not have.
-2. **The acquisition/query cell** — a polled or diagnostic sensor read. Possibly
-   `measure` under different timing, possibly `query` crossing a non-software
-   boundary unchanged, possibly its own word.
-3. **Interaction citation paths** — the projection from a declaration to the
+2. **The acquisition/query cell** — an explicit one-time read. The test that
+   separates it from `measure` is **maintenance**, not duration: does the
+   provider carry a standing obligation to hold a current value? `measure` says
+   yes, and forcing an explicit read into it would oblige the binding to poll
+   forever for a value wanted only on request. Periodic and on-change
+   acquisition need no new cell — the existing `@[min..max]` annotation already
+   distinguishes them (rate floor versus staleness bound). `read` is the
+   candidate spelling.
+3. **Influence quantity** (VIM) — a quantity that does not affect the measurand
+   but does affect the relation between indication and result; ambient
+   temperature shifting a pressure sensor's characteristic is the canonical
+   case. The four obligations do not express it: it is not uncertainty, which is
+   dispersion, and it is not the relationship, because it is what _perturbs_ the
+   relationship. Whether it becomes a fifth obligation or a qualifier on the
+   relationship is open.
+4. **Interaction citation paths** — the projection from a declaration to the
    stable identifier that specifications, journeys, tests, and telemetry cite.
    This is uxil's founding problem, and it is not user-boundary-specific: the
    observability semantic conventions need it for every interaction. Deferred to
    the citation-grammar design, not to an extension.
-4. **Availability has five sources and `during` covers one** — mode is covered;
+5. **Availability has five sources and `during` covers one** — mode is covered;
    data, in-progress, policy, and provisioning are not. At a
    presentation-obligated boundary an availability condition must be **evaluable
    by the consumer**, because a person must perceive unavailability before
    attempting rather than discovering it by rejection — which means such a
    predicate may reference only declared, consumer-visible state. Absent versus
    disabled is a further open distinction.
-5. **Journeys** — a sequence of interactions across surfaces. Neither ridl nor
+6. **Journeys** — a sequence of interactions across surfaces. Neither ridl nor
    rsdl expresses a graph over interfaces. Likely a
    requirements-and-traceability artifact rather than a language, but
    unconfirmed.
@@ -408,6 +464,10 @@ Recorded rather than decided; none blocks the core work.
   extend
 - `crates/ridl-diff/src/walk.rs`, `crates/ridl-diff/src/lib.rs` — the
   name-pairing and category vocabulary decisions 9 and 12 rest on
+- **VIM — International Vocabulary of Metrology** (JCGM 200 / ISO/IEC Guide 99)
+  — measurand, indication, detector, measurement uncertainty, calibration,
+  metrological traceability, influence quantity; the external anchor for
+  decision 3's obligations and decision 4's acquisition spellings
 - markspec ADR-034 — uxil, its eleven verbs, its citation grammar, and the
   parked payload bridge
 - ADR-0002 — package-level profile purity, reused by decision 7

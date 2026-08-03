@@ -160,6 +160,15 @@ actuate targetAngle: Angle
 trigger airbagDeploy(zone: Zone)
 ```
 
+**Both words are metrology's**, not this document's choice: VIM (JCGM 200 /
+ISO-IEC Guide 99) gives _measurement_ as the process term, and defines a
+**detector** as a device indicating the presence of a phenomenon when a
+threshold is exceeded — which is `detect` exactly. `acquire` and `sense` were
+weighed and rejected; ADR-0012 decision 4 records why. The obligations those
+words carry — measurand, calibration, measurement uncertainty, metrological
+traceability — are ridl's, and VIM is the reference for naming anything further
+in that layer.
+
 Note `pedalPosition`. A pedal is measured, not intended: there is no
 interpretation gap between a foot's position and its meaning, and all four
 obligations instantiate exactly as they do for a wheel-speed sensor. **A person
@@ -214,9 +223,15 @@ Two tests bind every future spelling. Both are ADR-0012 decision 4.
 **Modality independence.** If two realisations afford the same capability they
 must produce the same declaration. A word naming _how_ is rejected. This is what
 rules out `scroll` and `drag` (gestures — one of several ways to express "show
-me more" or "put this elsewhere"), `scan` (a sensing mechanism — a lidar scans,
-a staring infrared array does not, and both measure the same quantity), and
-`display` (visual — a speaker does not display, and a haptic seat has no view).
+me more" or "put this elsewhere"), `scan` (a sensing mechanism — the decisive
+case being a mechanical lidar swapped for a solid-state one: same capability, no
+sweep, and the contract must not change), and `display` (visual — a speaker does
+not display, and a haptic seat has no view).
+
+Each rejected mechanism word named something real one layer down, in the
+obligation layer rather than here: `sample` names the sample instant, and `scan`
+the acquisition span — a swept frame corresponds to the world over an interval,
+not an instant. Both are ridl's to carry (ADR-0012 decision 3), not spellings.
 
 **Constraint bundling.** A spelling is warranted if and only if it bundles
 constraints that would otherwise be re-declared by hand at every use. A word
@@ -267,9 +282,13 @@ allocated with E7a.
    `supply` is the working candidate; `provide` and `tell` remain live. `enter`
    was rejected for modality, `submit` for implying a commit and an
    acknowledgment an occurrence does not have.
-2. **The acquisition/query cell.** A polled or diagnostic sensor read. Possibly
-   `measure` under different timing, possibly `query` crossing a non-software
-   boundary unchanged, possibly its own word.
+2. **The acquisition/query cell.** An explicit one-time read. What separates it
+   from `measure` is **maintenance**, not duration: `measure` obliges the
+   provider to hold a current value, and forcing an explicit read into it would
+   make the binding poll forever for something wanted only on request. Periodic
+   and on-change acquisition need no new cell — `@[min..max]` already
+   distinguishes them, rate floor against staleness bound. `read` is the
+   candidate spelling.
 3. **Interaction citation paths.** The projection from a declaration to the
    stable identifier that specifications, journeys, tests, and telemetry cite —
    uxil's founding problem. **Not rxdl's**: the observability semantic
