@@ -23,10 +23,17 @@ kind-aware diff direction", and leaves the composition to a design pass. That
 pass produced no independent subject: the coherence rule is stated at the
 _interface_ grain, and at the one-interface-per-service restriction the
 interface grain and the service grain pick out the same set, so the rule cannot
-be exercised until the restriction is lifted. Composition is what makes decision
-7 mean anything. Splitting them would put a decision in one record and its
-precondition in another. `docs/ROADMAP.md` records two ADRs falling out of the
-four design notes, and this is the second of the two.
+be exercised until the restriction is lifted. Composition is what makes
+decisions 9 and 11 — the coherence rule and the generation unit — mean anything.
+Splitting them would put a decision in one record and its precondition in
+another. `docs/ROADMAP.md` records two ADRs falling out of the four design
+notes, and this is the second of the two.
+
+**Decision 20 is new here, not ratified from a note.** Neither note carries an
+IR section for the `Service` message; the multi-interface note's §2.4 lists the
+typed-AST, checker, lowering, backend, and diff costs and stops there. The
+retirement of the `oneof` field numbers follows from the grammar change and is
+recorded so the implementer does not have to decide it mid-story.
 
 This ADR was accepted under the delegated authority recorded in
 [ADR-0005](ADR-0005-agent-enablement.md)'s working model — the notes were
@@ -53,8 +60,8 @@ transient-local durability, §9's `max` is DEADLINE and LIFESPAN, §9's `min` is
 TIME_BASED_FILTER, §4.2 is OWNERSHIP by construction, §3.1's envelope is
 DESTINATION_ORDER, and typl's bounded collections are RESOURCE_LIMITS. Of the
 remaining three, history is deliberately out of scope (§4, §5.1), persistent
-durability is reserved by ADR-0008 decision 3, and LATENCY_BUDGET wants no
-analogue because the DDS specification declines to make it a commitment.
+durability is deferred as debt by ADR-0008 decision 3, and LATENCY_BUDGET wants
+no analogue because the DDS specification declines to make it a commitment.
 
 Exactly one row is a genuine gap, and it is not a DDS QoS policy at all: the
 **RPC reply timeout**, which lives in DDS-RPC, and whose relatives are gRPC's
@@ -185,22 +192,34 @@ indistinguishable, so no claim about any of the three can be exercised.
    | `max` lowered          | compatible         | compatible — a stronger provider promise              |
    | bound added or removed | breaking both ways | breaking both ways                                    |
 
-   ADR-0012 decision 9 settles the form. Its rule is that an unclassified change
-   is classified breaking, never compatible. A missed branch inside `timing()`
-   fails in exactly the wrong direction: it silently inherits the signal rule
-   and calls a raised RPC `min` compatible, when it is breaking. A distinct
-   variant fails closed instead, because the three matches over `Category` that
-   deny `clippy::wildcard_enum_match_arm` turn a missing arm into a compile
-   error rather than a wrong verdict. The cost is one more category in a surface
-   that already carries twenty-one; the benefit is that the one part of this
-   change no compiler could catch becomes the one part no compiler can miss.
+   ADR-0012 decision 9 settles the form. Its rule is stated for attribute keys —
+   a key with no diff category is classified breaking, never compatible — and
+   the principle behind it is that reporting compatible on something the
+   classifier does not actually understand is the failure mode to design out. A
+   missed branch inside `timing()` fails in exactly that direction: it silently
+   inherits the signal rule and calls a raised RPC `min` compatible, when it is
+   breaking. A distinct variant fails closed instead, because the three matches
+   over `Category` that deny `clippy::wildcard_enum_match_arm` turn a missing
+   arm into a compile error rather than a wrong verdict. The cost is one more
+   category in a surface that already carries twenty; the benefit is that the
+   one part of this change no compiler could catch becomes the one part no
+   compiler can miss.
 
 9. **The coherence rule, as normative prose in ridl §14:**
 
-   > The signals of one **provided interface** are published coherently: a
-   > consumer reading two or more of them observes values the provider held
-   > simultaneously. The group's identity is the **interface name** where a
-   > service names a shape, and the **service name** where the shape is inline.
+   > The signals of one **provided interface** are published coherently: the set
+   > a provider publishes in one step is a set of values it held simultaneously.
+   > A consumer reading two or more of them observes such a set wherever the
+   > binding preserves the grouping; where a binding cannot, that is a
+   > deploy-time constraint, not a weaker contract (decision 10). The group's
+   > identity is the **interface name** where a service names a shape, and the
+   > **service name** where the shape is inline.
+
+   The rule is about **production**, and the second sentence is what keeps it
+   honest: the three rules below establish that the provider's published set is
+   simultaneous, and they establish nothing about what survives an arbitrary
+   transport. Stating only the consumer half would promise delivery coherence
+   that decision 10 immediately withdraws.
 
    It is **implicit, not declared.** Three rules the family already states
    produce it: §4.2 gives every flow exactly one owning provider; a provider
@@ -260,14 +279,15 @@ indistinguishable, so no claim about any of the three can be exercised.
     no new syntax at all**.
 
 13. **Commas are required between shapes**, diverging from the family's optional
-    comma convention, and the reason is structural: every other list is
-    terminated by a closing brace, and this one is not — it ends where the next
-    declaration begins. It still parses without them, because every top-level
-    declaration starts with a keyword and a bare `CamelCase` identifier never
-    does. But it parses greedily, so a mistyped declaration on a following line
-    (`Struct Foo {` for `struct Foo {`) is absorbed as another shape and the
-    error surfaces at the `{` with no connection to the mistake. A trailing
-    comma stays optional.
+    comma convention, and the reason is structural: every other list in the
+    grammar is terminated by a closing token — `}` for a body, `)` for a
+    parameter list, `]` for an attribute block — and this one is not, because it
+    ends where the next declaration begins. It still parses without them,
+    because every top-level declaration starts with a keyword and a bare
+    `CamelCase` identifier never does. But it parses greedily, so a mistyped
+    declaration on a following line (`Struct Foo {` for `struct Foo {`) is
+    absorbed as another shape and the error surfaces at the `{` with no
+    connection to the mistake. A trailing comma stays optional.
 
 14. **Named shapes or one inline shape, never both.** Mixing raises "which slot
     holds the inline shape" for no gain, and the either/or keeps `ServiceDef` a
@@ -353,19 +373,23 @@ indistinguishable, so no claim about any of the three can be exercised.
 20. **IR: the `Service` message reserves its retired field numbers.** The
     current `oneof shape { string interface_ref = 10; Interface inline = 11; }`
     does not survive the change, because a `oneof` member cannot be `repeated`.
-    Field numbers 10 and 11 are **reserved** rather than reused, per ADR-0008
-    decision 8, and the shape list takes fresh numbers. Nothing is published at
-    version `0.0.0`, so the change costs no migration; reserving is the cheap
-    move that keeps the field-number invariant true rather than true-by-luck.
+    Field numbers 10 and 11 are **reserved** rather than reused, and the shape
+    list takes fresh numbers. Nothing is published at version `0.0.0`, so the
+    change costs no migration; reserving is the cheap move that keeps a field
+    number's meaning permanent by construction rather than by the accident of
+    nothing having consumed it yet. This is the treatment ADR-0008 decision 8
+    applied when IR v2 took over v1's numbering, generalised into a rule; it is
+    new in this record rather than ratified from a note.
 
-21. **Event ring depth is derivable, not declarable.** An event's `min` is the
-    throttle and its `max` is the TTL, so the number of occurrences alive at
-    once is bounded by `depth = ceil(max / min)`: `@[50ms..500ms]` can never
-    have more than ten live occurrences, because the eleventh cannot exist
-    before the first has expired. This is a derived IR fact, the same move ridl
-    already makes for wire widths from ranges. It fails only on a half-open
-    range, where one bound is unset — and §9.1's defaults mean both bounds are
-    present whenever timing was not written explicitly.
+21. **Event ring depth is derivable wherever both bounds are present, so it is
+    not declarable.** An event's `min` is the throttle and its `max` is the TTL,
+    so the number of occurrences alive at once is bounded by
+    `depth = ceil(max / min)`: `@[50ms..500ms]` can never have more than ten
+    live occurrences, because the eleventh cannot exist before the first has
+    expired. This is a derived IR fact, the same move ridl already makes for
+    wire widths from ranges. It fails only on a half-open range, where one bound
+    is unset — and §9.1's defaults mean both bounds are present whenever timing
+    was not written explicitly.
 
 22. **History and replay stay out of the contract.** §4 makes a signal
     latest-value only and §5.1 rules out event replay. The strongest case put
@@ -382,31 +406,32 @@ indistinguishable, so no claim about any of the three can be exercised.
 23. **The retry-schedule check belongs to a downstream tool, not to `ridlc`.**
     The response bound makes it checkable that a worst-case retry schedule fits
     inside the bound — three attempts at 8 ms and 200 ms cannot fit inside a 50
-    ms bound, so the later attempts can never run and the policy is lying about
-    them. Running that check means reading the contract's IR and a deployment
-    file together. ADR-0008 decision 9 keeps `ridlc` a pure source-to-IR
-    function precisely because that is the smallest surface to qualify under ISO
-    26262, and a cross-artifact rule that reads a deployment file would enlarge
-    it for one check. The family already resolves this shape the same way at
-    §14.5, enforcing at deploy time rather than compile time.
+    ms bound, so the later attempts can never run and the policy states a
+    schedule it cannot execute. Running that check means reading the contract's
+    IR and a deployment file together. ADR-0008 decision 9 keeps `ridlc` a pure
+    source-to-IR function precisely because that is the smallest surface to
+    qualify under ISO 26262, and a cross-artifact rule that reads a deployment
+    file would enlarge it for one check. The family already resolves this shape
+    the same way at §14.5, enforcing at deploy time rather than compile time.
 
 ## Alternatives considered
 
-| Candidate                                                 | Verdict  | Reason                                                                                                                                                                                            |
-| --------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A QoS block on the interaction                            | rejected | imports transport vocabulary into a contract that must also bind to transports lacking it; Appendix F records that 22 orthogonal policies on one topic is too many degrees of freedom             |
-| The bound as an attribute — `[ deadline = 50ms ]`         | rejected | `@` is the family's timing sigil (general form R4), a response bound is a timing bound, and the grammar already admits `@` there; two spellings for one concept                                   |
-| A budget on `query` only                                  | rejected | leaves a command's acceptance unbounded for no reason other than squeamishness about Stratum 3, which §10.3 already crosses for pub/sub                                                           |
-| A sidecar policy file keyed by `service.member`           | rejected | correct for what decision 23 moves out and it is what rsdl replaces at E6, but wrong for the response bound specifically, which is the one value a cross-check needs against the contract         |
-| A dedicated scalar `budget_us` IR field                   | rejected | with both bounds admitted all four `Timing` fields carry meaning, so a second representation of a timing bound buys nothing                                                                       |
-| `idempotent` as a contract term                           | rejected | reaches no generated store, dispatcher, or handler; §6.1's ack and sequence numbers already give duplicate suppression, and `@labels` carries review metadata                                     |
-| `history N` on `signal`                                   | rejected | contradicts §4's latest-value definition; the lookback query of decision 22 expresses the same requirement with existing vocabulary                                                               |
-| `coherent` as an attribute                                | rejected | implicit — decision 9                                                                                                                                                                             |
-| An ordering key                                           | deferred | needs a grammar widening (`AttrValue` admits no camelCase name) and has no consumer yet; revisit with evidence                                                                                    |
-| Window, permits, retry sizing in the contract             | rejected | per-deployment sizing, invisible to any peer; rsdl's territory at E6. A call throttle is a two-sided rate obligation; an in-flight window is per-consumer concurrency sizing — not the same thing |
-| Compile-time mixins for interaction-set reuse (§17.2)     | rejected | mixins flatten, so one shared block folded into three interfaces gets three unrelated ordinal sets and editing it renumbers all three; composition leaves each ordinal space intact               |
-| Renumbering interactions across a multi-interface service | rejected | an interface's wire identity would depend on what else the service carries — the coupling §14.1 rejected inheritance to avoid                                                                     |
-| Growing the address to `service.Interface.member`         | rejected | composes unconditionally, but changes the shape of every existing address and abandons the flat namespace the catalog is built on                                                                 |
+| Candidate                                                 | Verdict  | Reason                                                                                                                                                                                                                                                                                                          |
+| --------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A QoS block on the interaction                            | rejected | imports transport vocabulary into a contract that must also bind to transports lacking it; Appendix F records that 22 orthogonal policies on one topic is too many degrees of freedom                                                                                                                           |
+| The bound as an attribute — `[ deadline = 50ms ]`         | rejected | `@` is the family's timing sigil (general form R4), a response bound is a timing bound, and the grammar already admits `@` there; two spellings for one concept                                                                                                                                                 |
+| A budget on `query` only                                  | rejected | leaves a command's acceptance unbounded for no reason other than reluctance to touch Stratum 3, which §10.3 already crosses for pub/sub                                                                                                                                                                         |
+| A sidecar policy file keyed by `service.member`           | rejected | correct for the per-deployment sizing of the row below and it is what rsdl replaces at E6, but wrong for the response bound specifically, which is the one value a cross-check needs against the contract                                                                                                       |
+| A dedicated scalar `budget_us` IR field                   | rejected | with both bounds admitted all four `Timing` fields carry meaning, so a second representation of a timing bound adds nothing                                                                                                                                                                                     |
+| `idempotent` as a contract term                           | rejected | reaches no generated store, dispatcher, or handler; §6.1's ack and sequence numbers already give duplicate suppression, and `@labels` carries review metadata                                                                                                                                                   |
+| `history N` on `signal`                                   | rejected | contradicts §4's latest-value definition; the lookback query of decision 22 expresses the same requirement with existing vocabulary                                                                                                                                                                             |
+| `coherent` as an attribute                                | rejected | implicit — decision 9                                                                                                                                                                                                                                                                                           |
+| An ordering key                                           | deferred | needs a grammar widening (`AttrValue` admits no camelCase name) and has no consumer yet; revisit with evidence                                                                                                                                                                                                  |
+| Window, permits, retry sizing in the contract             | rejected | per-deployment sizing, invisible to any peer; rsdl's territory at E6. A call throttle is a two-sided rate obligation; an in-flight window is per-consumer concurrency sizing — not the same thing                                                                                                               |
+| Compile-time mixins for interaction-set reuse (§17.2)     | rejected | mixins flatten, so one shared block folded into three interfaces gets three unrelated ordinal sets and editing it renumbers all three; composition leaves each ordinal space intact                                                                                                                             |
+| Renumbering interactions across a multi-interface service | rejected | an interface's wire identity would depend on what else the service carries — the coupling §14.1 rejected inheritance to avoid                                                                                                                                                                                   |
+| Serializing the contract expression tree into the IR      | rejected | E5.1 owns that restructuring, and `docs/ROADMAP.md` records that the corpus does not yet exercise five of the subset's operators, so it would restructure ahead of its regression set. `parse_contract_expr` is already public in `ridl-sem`, so a generator can recover the tree from the canonical text today |
+| Growing the address to `service.Interface.member`         | rejected | composes unconditionally, but changes the shape of every existing address and abandons the flat namespace the catalog is built on                                                                                                                                                                               |
 
 ## Consequences
 
@@ -436,17 +461,18 @@ indistinguishable, so no claim about any of the three can be exercised.
 
 ## Documents to amend
 
-| Document                       | Change                                                                                                                     |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| ridl §9                        | the per-kind bound table gains its RPC column; a subsection fixes the response bound and its per-kind derivation           |
-| ridl §9.2                      | "Timing belongs to `signal` and `event`" widens to admit `command`/`query` in the range form; `fixed` still carries none   |
-| ridl §11                       | interface ids within a service (decision 15)                                                                               |
-| ridl §14                       | the coherence rule as normative prose; the shape list, flat addressing, and the composition rules                          |
-| ridl §16.1                     | RIDL-106 narrows; RIDL-103 widens; RIDL-112, RIDL-144, RIDL-145, RIDL-146 minted; RIDL-141 and RIDL-143 become per-element |
-| ridl §17.2, §17.3 q3, §17.5 q5 | answered or closed, with the reasoning                                                                                     |
-| ridl Appendix B                | rows for the response bound and for coherence per transport                                                                |
-| ridl Appendix F                | the gRPC-deadline row moves from "≈ relocated" to in-contract, with the per-call override staying Stratum 3                |
-| general form R5                | the postfix order contradicts the shipped grammar — recorded as roadmap story E9.12, outside the scope of E9.4 to E9.6     |
+| Document                       | Change                                                                                                                                 |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| ridl §9                        | the per-kind bound table gains its RPC column; a subsection fixes the response bound and its per-kind derivation                       |
+| ridl §9.2                      | "Timing belongs to `signal` and `event`" widens to admit `command`/`query` in the range form; `fixed` still carries none               |
+| ridl §11                       | interface ids within a service (decision 15)                                                                                           |
+| ridl §14                       | the coherence rule as normative prose; the shape list, flat addressing, and the composition rules                                      |
+| ridl §16.1                     | RIDL-106 narrows; RIDL-103 widens; RIDL-112 minted                                                                                     |
+| ridl §16.4                     | RIDL-144 to RIDL-146 minted beside RIDL-140 to RIDL-143, where the service codes already sit; RIDL-141 and RIDL-143 become per-element |
+| ridl §17.2, §17.3 q3, §17.5 q5 | answered or closed, with the reasoning                                                                                                 |
+| ridl Appendix B                | rows for the response bound and for coherence per transport                                                                            |
+| ridl Appendix F                | the gRPC-deadline row moves from "≈ relocated" to in-contract, with the per-call override staying Stratum 3                            |
+| general form R5                | the postfix order contradicts the shipped grammar — recorded as roadmap story E9.12, outside the scope of E9.4 to E9.6                 |
 
 ## Open
 
@@ -480,7 +506,7 @@ indistinguishable, so no claim about any of the three can be exercised.
   subject that this record's IR changes ride on top of
 - [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md)
   — §3.1, §4.2, §4.4, §5.1, §5.2, §6.1, §9, §10.3, §11, §14.1, §14.5, §16.1,
-  §17.2, §17.3, §17.5, Appendix B, Appendix F
+  §16.4, §17.2, §17.3, §17.5, Appendix B, Appendix F
 - [`docs/ROADMAP.md`](../ROADMAP.md) — E9.4, E9.5, E9.6 (the stories this record
   binds), E9.12 (the general form R5 drift), E6.8 (rsdl owns transport
   feasibility)

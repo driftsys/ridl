@@ -17,14 +17,14 @@ for a later block, with the IR settled and no half-applied change in the tree.
 
 One story at a time, in roadmap order. Sequential rather than parallel: E9.4 and
 E9.6 both edit `ir.proto` and `classify.rs`, E9.1 rewrites every IR golden that
-E9.4 and E9.6 then extend, and every story in the block touches
+E9.4 and E9.6 then extend, and E9.2 and E9.3 both edit the emit surface in
 `crates/ridlc/src/lib.rs`. Parallel branches would each rebase onto a rewritten
 golden set.
 
 ```text
-E9.1 ──▶ E9.2 ──▶ E9.3 ──▶ E9.4 ──▶ E9.5 ──▶ E9.6
-encodings           filter   RPC bounds  prose   composition
-└── ADR-0014 ──────────────┘ └───────── ADR-0015 ──────────┘
+E9.1  ──▶  E9.2  ──▶  E9.3  ──▶  E9.4  ──▶  E9.5  ──▶  E9.6
+encodings  emits     filter    RPC bounds  prose     composition
+└──────── ADR-0014 ────────┘   └────────── ADR-0015 ──────────┘
 ```
 
 | Story | Depends on | Why                                                                            |
@@ -72,11 +72,13 @@ change only, which is the dialect.
 ### E9.2 — prototext and binary emits (M)
 
 `ir-text` writing `<base>.ir.txtpb` and `ir-binary` writing `<base>.ir.binpb`,
-alongside `ir-json`. Both join the `ridl.std` filter and the `is_code` check.
+alongside `ir-json`. Both join the one `ridl.std` filter — the closure building
+`code_emits` in `run_build`.
 
 _Verify:_ all three encodings round-trip to the same IR; no `ridl.std` artifact
-appears for any of the three; `ridl diff` and `ridl check --baseline` still
-refuse anything but `.ir.json`.
+appears for any of the three; a baseline or a diff pointed at an `.ir.txtpb` or
+an `.ir.binpb` is refused, since baselines stay `.ir.json` (ADR-0014 decision
+5).
 
 ### E9.3 — the emit-filter predicate (S)
 
@@ -94,7 +96,9 @@ ADR-0015 decisions 2 to 8. Checker: admit the range form on `command` and
 widen RIDL-103. IR: `CommandDef.timing = 3`, `QueryDef.timing = 4`. Diff:
 `Category::RpcBoundChanged` with the inverted `min` direction. Backends: the
 same two microsecond constants they already emit, on two more kinds.
-Specification: ridl §9, §9.2, §16.1, Appendix B, Appendix F.
+Specification: ridl §9, §9.2, §16.1, Appendix B, Appendix F, and §17.5 open
+question 5 — replaced by the absorption principle and its coverage table
+(ADR-0015 decision 1).
 
 _Verify:_ a showcase entry per new or moved code; a corpus package declaring
 both bounds on both kinds; diff cases for each row of the direction table,
@@ -106,6 +110,11 @@ ADR-0015 decisions 9 and 10 as normative prose in ridl §14, beside the service
 definition it keys on, plus the §17.3 open question 3 closure and the Appendix B
 coherence rows. Documentation only.
 
+The rule is stated as ADR-0015 decision 9 words it — production coherence, with
+consumer observation conditional on the binding. The shorter form that promises
+a consumer observes a simultaneous set unconditionally is what decision 10
+withdraws, and it must not reach the reference.
+
 _Verify:_ `just check`, `just book-check`, `just link-check`; no code change.
 
 ### E9.6 — multi-interface services (L)
@@ -115,7 +124,11 @@ regenerate the typed-AST layer with `cargo xtask codegen`; checker moves from
 one reference to a list; RIDL-144, RIDL-145, RIDL-146 minted; RIDL-141 and
 RIDL-143 become per-element; IR reserves field numbers 10 and 11 and takes fresh
 ones; five `ServiceShape*` diff categories and `ServiceChanged` narrowed; both
-backends and `ridl-diff`'s walk follow the list.
+backends and `ridl-diff`'s walk follow the list. Specification: ridl §11
+(interface ids within a service), §14 (the shape list, flat addressing, the
+composition rules), §16.4 (the three new codes beside RIDL-140 to RIDL-143, and
+RIDL-141 and RIDL-143 becoming per-element), and §17.2 — answered by composition
+rather than by the mixins recorded there.
 
 _Verify:_ a service composing two interfaces compiles, generates, and
 round-trips; reordering the shape list is invisible to transport identity and
@@ -147,9 +160,10 @@ test passes.
   the IR this block settles.
 - **E9.12** — general form R5's postfix order contradicts the shipped grammar,
   and `InterfaceDef`/`ServiceDef` take no `AttrBlock`. ADR-0015 records the
-  drift; the fix is one grammar edit that also serves the deferred
-  `labels`/`deprecated` promotion, and it is not needed by anything in this
-  block.
+  first half in its amend table; the second is recorded on the roadmap row and
+  in the response-bound note §10. The fix is one grammar edit that also serves
+  the deferred `labels`/`deprecated` promotion, and it is not needed by anything
+  in this block.
 - **Epic 10** — typl value objects. Backend-only, no IR dependency, threads
   independently.
 - **The cross-language conformance test** — ADR-0014 open item 3 places it at

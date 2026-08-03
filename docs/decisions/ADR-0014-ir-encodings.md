@@ -56,12 +56,14 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
    the version is `0.0.0` with no tags, so no baseline exists outside this
    repository.
 
-2. **Every field is emitted, defaults included** — `skip_default_fields(false)`,
-   in both JSON and prototext. This stays conformant on the read side, because a
-   conformant parser must accept explicitly present defaults. It keeps goldens
-   explicit: a reviewer reads `ordinal: 0` rather than inferring it from
-   absence, which matters where ordinals are semantically load-bearing (ridl
-   §11).
+2. **A field holding its default is emitted rather than skipped** —
+   `skip_default_fields(false)`, in both JSON and prototext. This stays
+   conformant on the read side, because a conformant parser must accept
+   explicitly present defaults. It keeps goldens explicit: a reviewer reads
+   `ordinal: 0` rather than inferring it from absence, which matters where
+   ordinals are semantically load-bearing (ridl §11). Whether an **unset proto3
+   `optional`** is also emitted is a separate question this option may not
+   settle — see Open item 1.
 
 3. **Goldens stay JSON.** Prototext is not used for `insta` snapshots. A golden
    in a format no shipped artifact uses would test the renderer rather than the
@@ -91,12 +93,13 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
    `build.rs` is removed. `serde` and `serde_json` remain underneath
    `prost-reflect` as the JSON writer, but no longer determine the shape.
 
-7. **The mechanism is `prost-reflect` with a build-time descriptor pool.**
-   `build.rs` writes the `FileDescriptorSet` it already holds to `OUT_DIR`, and
-   `lib.rs` holds a `LazyLock<DescriptorPool>` over an `include_bytes!` of that
-   file. No new build step, no system `protoc`, and no vendored blob in the tree
-   — the pool is derived from the same schema compilation that generates the
-   types, so the two cannot disagree.
+7. **The two text encodings go through `prost-reflect` and a build-time
+   descriptor pool; binary needs neither.** `build.rs` writes the
+   `FileDescriptorSet` it already holds to `OUT_DIR`, and `lib.rs` holds a
+   `LazyLock<DescriptorPool>` over an `include_bytes!` of that file. No new
+   build step, no system `protoc`, and no vendored blob in the tree — the pool
+   is derived from the same schema compilation that generates the types, so the
+   two cannot disagree.
 
    Six functions in `ridl_ir::v2` where there is one today. `to_json_pretty`
    keeps its name and its current signature, including its infallible return, so
@@ -133,9 +136,10 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     `ridl.std` out of `Emit::IrJson` today, because a direct IR dump is not code
     and `ridl diff` compiles the other side without `ridl.std`. Binary and
     prototext are direct IR dumps by the identical argument, so both must fall
-    on the same side of that filter, and the `is_code` check in the same file
-    must widen with it. The classification must be exhaustive over `Emit` — a
-    new encoding that is left unclassified is a compile error, not a spurious
+    on the same side of that filter. There is exactly one such site — the
+    closure that builds the local `code_emits` in `run_build` — and the
+    classification it applies must be exhaustive over `Emit`, so a new encoding
+    left unclassified is a compile error rather than a spurious
     `ridl.std.ir.binpb` on every build.
 
 11. **The conformance claim is tested by re-reading, not by asserting on output
@@ -174,8 +178,8 @@ rather than this estimate.
 - **Positive — the IR becomes consumable by a non-Rust backend.** This is the
   E4.5 obligation, and it was unmet by the artifact that carried its name.
 - **Positive — one dialect in the tree.** Artifacts, baselines, and goldens all
-  read the same way, so a reviewer comparing a golden against an emitted file is
-  comparing like with like.
+  read the same way, so a golden and an emitted file differ only where the IR
+  differs.
 - **Positive — the descriptor pool is paid for once and serves both text
   encodings**, and it cannot drift from the generated types because both come
   from one schema compilation.
