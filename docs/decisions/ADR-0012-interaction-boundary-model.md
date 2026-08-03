@@ -15,7 +15,19 @@ concept note §12 open question 3 (uxdl vocabulary) and general-form §9.4
 **constrains** the not-yet-written ADR-0003, which must now record four family
 members rather than five.
 
-Not implemented. Epic E3 is re-cut against it (`docs/ROADMAP.md`).
+Not implemented. Epic E3 is re-cut against it as the boundary-model **core**,
+and the domain spellings are descoped to E7 (`docs/ROADMAP.md`).
+
+**Amendment, 2026-08-03 — where the extensions live.** Decision 7 leaves an
+extension grammar-less and says nothing about file kinds. The `.rxdl` profile
+now carries them: it **absorbs both readings of the wildcard**, lifting the
+_layer_ restriction (any layer — its original total-profile meaning, concept
+note §4) and the _domain_ restriction (the person and world spellings). One
+rule: `.rxdl` is the profile with no restrictions, and a production package
+tightens it in `ridl.toml` rather than relying on the file extension. The cost
+is that `.rxdl` becomes a production file kind rather than only an adoption one,
+which weakens "which files contain executable behaviour?" as a filesystem query;
+per-package restriction is the mitigation the concept note already prescribes.
 
 The exploration that produced it is recorded in
 `docs/wip/ridl-boundary-model-review.md`; where that record and this ADR
