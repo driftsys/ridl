@@ -781,7 +781,7 @@ discovery-matching semantics — each reserved with its home fixed.
 
 ## Appendix F — Glossary
 
-Family terms are defined in the typl/ridl/uxdl/rmdl glossaries and mean the same
+Family terms are defined in the typl/ridl/rmdl glossaries and mean the same
 here. rsdl-specific:
 
 | Term                                          | Definition                                                                                                                                                                                                                 |

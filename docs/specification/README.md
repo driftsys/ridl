@@ -11,8 +11,10 @@ documents in [`../archive/`](../archive/).
 - **ridl-language-reference.md** — the system-interaction layer: `signal` /
   `event` / `command` / `query` / `fixed`, timing, errors, evolution, interfaces
   and services.
-- **uxdl-language-reference.md** — the user-interaction layer: `display` /
-  `input` / `action` / `fetch` / `fixed`, view states.
+- **rxdl-language-reference.md** — the unrestricted profile and the domain
+  spellings: `present` / `notify` / `measure` / `detect` / `actuate` / `trigger`
+  and the intent operation shapes, over ridl's families. Adds no semantics of
+  its own (ADR-0012). Replaces the uxdl reference, which is archived.
 - **rmdl-language-reference.md** — the behaviour layer: functions, models,
   steps/timeline, the flow stdlib.
 - **rsdl-language-reference.md** — the architecture layer: components, services,

@@ -145,7 +145,7 @@ the row that does not need profile-specific words.
 - ADR-0008 decision 5 — the E2 freeze this supersedes
 - ADR-0008 decision 8 — the IR field-numbering contract decision 3 preserves
 - `docs/specification/ridl-language-reference.md` §8 — the kind as specified
-- `docs/specification/uxdl-language-reference.md` §1.2, §8 — the interact core
+- `docs/archive/uxdl-language-reference-v0.1.md` §1.2, §8 — the interact core
   table and the uxdl profile of this kind
 - `docs/specification/typl-language-reference.md` §1.4 — the reserved-word
   registry

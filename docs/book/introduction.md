@@ -11,12 +11,14 @@ intermediate representation (IR).
 | --- | --- | --- | --- |
 | **typl** | type language | data — types, ranges, units, constants | data architects |
 | **ridl** | reactive interface description language | system interactions (`signal` / `event` / `command` / `query` / `fixed`) | service teams |
-| **uxdl** | user-experience description language | user interactions (`display` / `input` / `action` / `fetch` / `fixed`) | UX / frontend engineers |
 | **rmdl** | reactive model description language | behaviour — synchronous / functional compute | control / algorithm engineers |
 | **rsdl** | reactive system description language | architecture — components, wiring, deployment | integrators |
+| **rxdl** | the unrestricted profile | readable spellings for the person and world boundaries; no semantics of its own | UX, HMI, and sensor/actuator engineers |
 
-The dependency lattice is `typl ← {ridl, uxdl, rmdl} ← rsdl`: typl is the only
-standalone member, and rsdl is the apex that composes the others.
+The dependency lattice is `typl ← {ridl, rmdl} ← rsdl`: typl is the only
+standalone member, and rsdl is the apex that composes the others. rxdl is not a
+language — it is a file kind that lifts restrictions, plus spellings over ridl's
+interaction families (ADR-0012).
 
 ## What is built
 
@@ -31,7 +33,7 @@ Two layers of the family have a working toolchain in this repository:
 `ridl build --emit` writes Rust source, TypeScript source, an extern-C header,
 or the IR as JSON.
 
-**uxdl, rmdl, and rsdl are specified but not built.** Their language references
+**rxdl, rmdl, and rsdl are specified but not built.** Their language references
 are complete enough to design against, but no compiler accepts them and nothing
 in this book describes them as usable. They are sequenced in the roadmap.
 
@@ -51,7 +53,7 @@ repository:
   shared grammar of `require` / `ensure` clauses). Every one of them except the
   family overview is reproduced in this book's Language reference section —
   [typl](reference/typl.md), [ridl](reference/ridl.md),
-  [uxdl](reference/uxdl.md), [rmdl](reference/rmdl.md),
+  [rxdl](reference/rxdl.md), [rmdl](reference/rmdl.md),
   [rsdl](reference/rsdl.md), [expr-core](reference/expr-core.md).
 - **Work in progress** — `docs/wip/`: the pre-ADR concept note, the
   cross-profile general-form working spec, and the authoring-skill outline.
@@ -72,7 +74,7 @@ Browse them on GitHub:
 
 ## Status
 
-All specifications are working drafts: typl, uxdl, rmdl, rsdl and the
+All specifications are working drafts: typl, rxdl, rmdl, rsdl and the
 expr-core specification at v0.1.0, ridl at v0.2.0. The toolchain has no
 published release — build it from a clone, as
 [Getting started](getting-started.md) describes.

@@ -1,11 +1,12 @@
 # expr-core Specification
 
 **The contract-term language of the RIDL family** — one expression grammar,
-written once, surfacing in `require`/`ensure` contracts (ridl §13), in the uxdl
-contract positions (`action`/`fetch`), and as the expression layer of rmdl
-functions and models (rmdl §4, which shares this grammar verbatim). One grammar,
-two layers: the **guaranteed subset** shipped with the interface layer (V1, epic
-E2) and the **function layer** that extends it (V2, story E5.1).
+written once, surfacing in `require`/`ensure` contracts (ridl §13), in the
+availability and obligation positions of ridl's boundary model, and as the
+expression layer of rmdl functions and models (rmdl §4, which shares this
+grammar verbatim). One grammar, two layers: the **guaranteed subset** shipped
+with the interface layer (V1, epic E2) and the **function layer** that extends
+it (V2, story E5.1).
 
 Version: 0.1.0 — Draft
 
@@ -45,7 +46,8 @@ is a shared core that the profiles surface in their own positions:
   (ridl §13; carrier production `attribute = "require" expr | "ensure" expr`,
   ridl Appendix C; the three-form attribute model is the family general form
   working spec §4.2)
-- **uxdl** — the corresponding predicate attributes on `action` and `fetch`
+- **ridl boundary model** — availability predicates and the correspondence
+  obligations (ADR-0012)
 - **rmdl** — the expression layer of functions and models (rmdl §4 states: "The
   expression grammar below is shared verbatim with the `expr` core")
 - **typl** — future `invariant` predicates on structs, and the const-evaluable
@@ -328,9 +330,9 @@ carrier), the environment is, in resolution order:
 5. **Enum types** (`CamelCase_id`), for `Enum.MEMBER` access.
 
 Any other name is an unresolved reference (RIDL-306 in E2). Other carrier
-positions (uxdl `action`/`fetch`; rmdl function and model contracts, rmdl §9.2)
-define their own environments in their references, under the same
-closed-environment principle.
+positions (ridl's availability and obligation attributes; rmdl function and
+model contracts, rmdl §9.2) define their own environments in their references,
+under the same closed-environment principle.
 
 ---
 

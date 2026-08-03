@@ -8,6 +8,14 @@ provenance. Nothing here is normative — the current references live in
 - **ridl-language-reference-v0.1.md** — the original combined RIDL reference.
   Superseded when its vocabulary half (§1–§11) became the typl reference and its
   interaction half became ridl v0.2.
+- **uxdl-language-reference-v0.1.md** — the user-interaction layer as a separate
+  family member. Retired by
+  [ADR-0012](../decisions/ADR-0012-interaction-boundary-model.md): its semantics
+  moved into ridl as the boundary model, and its readable spellings into
+  [the rxdl reference](../specification/rxdl-language-reference.md). Kept for
+  provenance — its coverage analysis, its operation-shape taxonomy, and its
+  prior-art survey are the source material for both. Read it as prior work,
+  never as current design.
 - **2026-07-18-e0-walking-skeleton-plan.md** — the epic E0 (walking skeleton)
   implementation plan, archived verbatim from `docs/wip/` once the epic landed.
   There was no separate spec artifact for this session: the roadmap's Epic 0

@@ -14,7 +14,9 @@ scopes = [
   # per-language specifications
   "typl",
   "ridl",
-  "uxdl",
+  # `rxdl` replaced `uxdl` when ADR-0012 retired uxdl as a family member. The
+  # retired reference lives at docs/archive/ and takes the `docs` scope.
+  "rxdl",
   "rmdl",
   "rsdl",
   # cross-cutting spec (overview, concept note, general form)

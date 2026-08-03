@@ -27,8 +27,11 @@ map.
   the three declaration shapes, the nine surface invariants, the attribute model
   (pre-ADR working spec).
 - `docs/specification/{typl,ridl,rmdl,rsdl}-language-reference.md` — the four
-  language references. `uxdl-language-reference.md` is also present and is
-  **retired by ADR-0012** — read it as prior work, never as the current design.
+  language references, plus `rxdl-language-reference.md` for the unrestricted
+  profile and the domain spellings (a spelling layer, not a language — it adds
+  no semantics). The retired `uxdl` reference is at
+  `docs/archive/uxdl-language-reference-v0.1.md`; read it as prior work, never
+  as the current design.
 - `docs/decisions/` — ADR-0002 (module system), ADR-0004 (sequencing and stack),
   ADR-0005 (agent enablement), ADR-0006 (E0 execution), ADR-0007 (E1 execution),
   ADR-0008 (E2 execution — read its `## Status` before editing it), ADR-0009

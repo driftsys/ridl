@@ -13,8 +13,8 @@ Version: 0.1.0 — Draft
 > (Lustre/SCADE) with one deliberate departure — execution is **reactive, not
 > periodic**: steps are scheduled by the runtime on input arrival and timing
 > constraints, only when required (§6). Everything below the behaviour layer is
-> inherited: types/units/ranges (typl), contracts and their timing (ridl/uxdl),
-> the envelope and system time (ridl §3.1), errors-as-data (ridl §10), evolution
+> inherited: types/units/ranges (typl), contracts and their timing (ridl), the
+> envelope and system time (ridl §3.1), errors-as-data (ridl §10), evolution
 > (typl §7.4). This document specifies the two layers the user-facing design
 > settled: a **total function layer** shared with the family `expr` core, and
 > the **model** — the unified reactive construct (no separate `node`).
@@ -55,13 +55,12 @@ rmdl **model** is described behaviour — deterministic, analyzable, replayable 
 that the toolchain **generates into processing code** (Rust native, WASM
 component). A model is a **pure reaction** — it computes output flows from input
 flows and state, knowing nothing of any contract. A component (rsdl) is what
-binds a reaction to a _service_ (ridl) or _view_ (uxdl); the same model can back
+binds a reaction to a _service_ at any boundary (ridl); the same model can back
 either. This keeps the layers clean: ridl declares contracts, rmdl computes,
 rsdl connects.
 
 A `.rmdl` file accepts `function` and `model` declarations plus everything typl
-accepts. It rejects interaction declarations (ridl/uxdl) and architecture
-(rsdl).
+accepts. It rejects interaction declarations (ridl) and architecture (rsdl).
 
 ### 1.2 Two layers, one discipline
 
@@ -127,7 +126,7 @@ considered and dropped for `last`/`init` — §5.3 decision note; `->` survives
 only as the case/when arm arrow.)
 
 `signal` and `event` here are the **interact core's concept words** surfacing in
-model signatures (§5.1) — the same two concepts ridl and uxdl profile, marking
+model signatures (§5.1) — the same two concepts ridl's families profile, marking
 flow kinds at the model boundary. One keyword, one concept, three surfaces —
 registry-clean.
 
@@ -704,10 +703,10 @@ contracts_ rather than declared.)
 **Decision on record (this section replaces a former "Realization" section).** A
 model does **not** name, realize, or expose a contract. It is a pure reaction:
 `(O, S) = M(I, S)`, a signature of typed input and output flows with internal
-state. Binding that reaction to a ridl `service` or uxdl `view` is entirely an
-**rsdl component**'s job (rsdl §3–§4). This purifies the layer boundary: ridl
-declares contracts, rmdl computes, rsdl connects — and rmdl references ridl only
-for the _kinds_ (`signal`/`event`) and typl for _types_, never for contracts.
+state. Binding that reaction to a ridl `service` is entirely an **rsdl
+component**'s job (rsdl §3–§4). This purifies the layer boundary: ridl declares
+contracts, rmdl computes, rsdl connects — and rmdl references ridl only for the
+_kinds_ (`signal`/`event`) and typl for _types_, never for contracts.
 
 What used to be "realization" is now three things the component supplies from
 outside, none of them in the model:
@@ -1045,15 +1044,15 @@ refresh deadlines.
 Per the platform decision (concept note §8.3): **behaviour compiles twice — Rust
 native and WASM — bindings go everywhere.**
 
-| Aspect                 | Rust (native)                                                                     | WASM component                                                              |
-| ---------------------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| model                  | a struct (state) + `fn step(&mut self, inputs: &Inputs, ctx: StepCtx) -> Outputs` | same, behind the component model; WIT signature generated from the contract |
-| function               | `fn` — pure, `#[no_panic]`-style discipline                                       | core function                                                               |
-| `last` state (+ seeds) | struct fields, initialized at construction                                        | linear memory, initialized at instantiation                                 |
-| step scheduling        | `ridl-rt` scheduler: input arrival + deadline queue from contract bounds          | host runtime drives `step()` — wasmtime on ECU/edge, browser beside uxdl    |
-| step faults            | `Result`-shaped step return → invalid-state propagation via bindings              | trap-free: fault is a returned status, never a WASM trap                    |
-| determinism            | IEEE 754 strict, no fast-math, fixed evaluation order                             | identical — the reference-oracle guarantee (§6.4)                           |
-| observers              | compiled in for oracle/test builds, out for production (rsdl choice)              | always available in oracle builds                                           |
+| Aspect                 | Rust (native)                                                                     | WASM component                                                                      |
+| ---------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| model                  | a struct (state) + `fn step(&mut self, inputs: &Inputs, ctx: StepCtx) -> Outputs` | same, behind the component model; WIT signature generated from the contract         |
+| function               | `fn` — pure, `#[no_panic]`-style discipline                                       | core function                                                                       |
+| `last` state (+ seeds) | struct fields, initialized at construction                                        | linear memory, initialized at instantiation                                         |
+| step scheduling        | `ridl-rt` scheduler: input arrival + deadline queue from contract bounds          | host runtime drives `step()` — wasmtime on ECU/edge, browser at the person boundary |
+| step faults            | `Result`-shaped step return → invalid-state propagation via bindings              | trap-free: fault is a returned status, never a WASM trap                            |
+| determinism            | IEEE 754 strict, no fast-math, fixed evaluation order                             | identical — the reference-oracle guarantee (§6.4)                                   |
+| observers              | compiled in for oracle/test builds, out for production (rsdl choice)              | always available in oracle builds                                                   |
 
 Kotlin/TypeScript get **bindings** to models (call a WASM build, subscribe to
 its flows), never behaviour codegen — the matrix stays collapsed.
@@ -1191,8 +1190,8 @@ multi-activation and state-machine sugar, both reserved rather than improvised.
 
 ## Appendix F — Glossary
 
-Family terms are defined in the typl/ridl/uxdl glossaries and mean the same
-here. rmdl-specific:
+Family terms are defined in the typl/ridl glossaries and mean the same here.
+rmdl-specific:
 
 | Term                       | Definition                                                                                                                                                                                                                                                            |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

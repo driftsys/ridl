@@ -70,7 +70,7 @@ ridl is a profile of the one family grammar. A `.ridl` file accepts
 **interaction declarations plus everything typl accepts** — types and their
 interfaces naturally travel together; profile purity per package remains a
 `ridl.toml` policy (typl §1.2). What `.ridl` rejects: behaviour declarations
-(rmdl), user-interaction declarations (uxdl), architecture declarations (rsdl).
+(rmdl), architecture declarations (rsdl).
 
 ### 1.2 What ridl adds to typl
 
@@ -86,14 +86,20 @@ Exactly four things, each owned by a family core:
 Everything else — types, units, ranges, constants, composites, packages,
 visibility, doc comments, diagnostic-code practice — is typl, unchanged.
 
-### 1.3 ridl and uxdl are siblings
+### 1.3 ridl describes every boundary
 
-The five interaction kinds are the **ridl profile of the shared `interact`
-core** (concept note §3): named, typed, directed interactions on a contract
-boundary. uxdl will expose the same core with user-facing vocabulary and
-view-framework bindings. Nothing in this document is ridl-private except the
-transport bindings; when a rule below says "interaction", it is a candidate
-`interact`-core rule.
+The five interaction kinds are named, typed, directed interactions on a contract
+boundary — **any** boundary. **ADR-0012** retired uxdl as a separate language
+and gave ridl an interaction **family** on every declaration: `dispatch` (system
+to system), `presentation` and `intent` (the person boundary), `acquisition` and
+`control` (the physical boundary). Only `dispatch` carries no correspondence
+obligation, because there the datum and its referent are the same thing.
+
+The kinds below are family-neutral: a `signal` is a continuous state value
+whoever reads it. What a non-dispatch family adds is the four correspondence
+obligations, not a different kind. Readable per-family spellings — `present`,
+`measure`, `actuate` and the rest — are the rxdl reference's, and add no
+semantics to what is defined here.
 
 ---
 
@@ -471,11 +477,11 @@ fixed capabilities    : [Label; 0..32]
 - Reading a `fixed` is free of the query machinery — bindings expose it as a
   plain accessor, populated at binding initialization
 - Naming decision on record: `fixed`, not `final` and not `config` — one word
-  for one concept at both boundaries, so uxdl spells this kind the same way
-  (ADR-0011). `final` was the earlier spelling and misled: a Java or Kotlin
-  reader takes it for a compile-time constant, which this is not. `config`
-  connotes hot-reload and is reserved vocabulary space for rsdl. See the
-  concept-note naming ledger
+  for one concept at every boundary (ADR-0011); `fixed` is family-neutral,
+  because a provisioned constant carries no correspondence anywhere. `final` was
+  the earlier spelling and misled: a Java or Kotlin reader takes it for a
+  compile-time constant, which this is not. `config` connotes hot-reload and is
+  reserved vocabulary space for rsdl. See the concept-note naming ledger
 
 Maps to: Android `ro.*` properties, AUTOSAR `CalibrationParameter`, SOME/IP
 field with getter only.
@@ -1104,9 +1110,9 @@ and the same spelling is the constant.
    counterexamples.
 4. **Actions (long-running operations).** ROS 2 actions = goal + feedback +
    result. Composable today as `command` + progress `signal` + completion
-   `event`/`query`, and uxdl will need the same triple for long user operations.
-   Decide whether the composition idiom is documented convention or deserves
-   sugar.
+   `event`/`query`, and the person boundary needs the same triple for long user
+   operations. Decide whether the composition idiom is documented convention or
+   deserves sugar.
 5. **QoS beyond timing.** DDS reliability (reliable/best-effort), history depth,
    liveliness: deliberately absent from the contract — timing bounds are the
    contract-level QoS, the rest is transport/deployment (rsdl). Confirm this
@@ -1126,10 +1132,12 @@ and the same spelling is the constant.
    requirements in rsdl — always properties (what must hold), never mechanisms
    (how). Needs its own document before any keyword lands; start via profile
    vocabulary, promote to syntax only when earned.
-9. **uxdl divergence budget.** Which rules in this document are `interact`-core
-   (shared with uxdl) vs ridl-only? Provisional: §3, §10, §11 core; §4.4, §9
-   semantics core with different bindings; transports ridl-only. Settle at the
-   uxdl workshop.
+9. ~~**uxdl divergence budget.**~~ **Closed by ADR-0012.** The question was
+   which rules here are shared with uxdl and which are ridl-only. The answer is
+   that none diverge: uxdl is retired, every rule in this document is
+   family-neutral, and what a non-dispatch family adds is the four
+   correspondence obligations rather than a different rule set. Transports
+   remain a binding concern, not a family one.
 
 ---
 
@@ -1407,7 +1415,7 @@ uniform from struct fields to interface methods.
 | Term                                 | Definition                                                                                                                                                                                                                                                   |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **RIDL** (capitals)                  | the platform and family name; **ridl** (lowercase) is this language, the family's interaction layer and flagship member                                                                                                                                      |
-| **family**                           | the five languages — typl, ridl, uxdl, rmdl, rsdl — sharing one grammar, one toolchain, one IR                                                                                                                                                               |
+| **family**                           | the four languages — typl, ridl, rmdl, rsdl — sharing one grammar, one toolchain, one IR; rxdl is a profile and a spelling layer over ridl, not a fifth language                                                                                             |
 | **profile**                          | the restriction of the family grammar accepted by a file extension; `.ridl` accepts interactions + typl declarations; `.rxdl` is the total profile accepting every layer                                                                                     |
 | **core**                             | a reusable semantic unit beneath the surface languages: `ns` (namespacing), `typl-core` (types), `expr` (predicates), `time` (timing), `interact` (interaction primitives)                                                                                   |
 | **interaction**                      | a named, typed, directed exchange on a contract boundary; ridl defines five kinds                                                                                                                                                                            |

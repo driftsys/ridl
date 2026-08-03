@@ -7,9 +7,9 @@ languages describe it, and the mechanism by which boundary-specific vocabulary
 enters. It binds the language surface until superseded, the way ADR-0009 binds
 the gate and ADR-0010 binds the CLI contract.
 
-It **supersedes the uxdl language reference in shape but not in content** —
-`docs/specification/uxdl-language-reference.md` v0.1 is retired as a family
-member, and its content is absorbed by decisions 2 through 7. It **closes**
+It **supersedes the uxdl language reference in shape but not in content** — the
+uxdl reference v0.1 is retired as a family member and archived, and its content
+is absorbed by decisions 2 through 7 and by the rxdl reference. It **closes**
 concept note §12 open question 3 (uxdl vocabulary) and general-form §9.4
 (attribute-key governance, promoted from open question to precondition). It
 **constrains** the not-yet-written ADR-0003, which must now record four family
@@ -145,8 +145,8 @@ review and retracted for exactly this reason (decision 10).
 1. **uxdl ceases to be a family member.** The family is four languages — typl,
    ridl, rmdl, rsdl — and ridl gains the boundary model. uxdl's content survives
    in decisions 2 through 7; its shape, a parallel language renaming ridl's
-   kinds, does not. `docs/specification/uxdl-language-reference.md` is retired
-   rather than edited.
+   kinds, does not. The reference is archived verbatim at
+   `docs/archive/uxdl-language-reference-v0.1.md` rather than edited.
 
 2. **Five families, as tabulated in Context.** The family is a property of the
    declaration, not of the file, the package, or the deployment. `dispatch` is
@@ -395,7 +395,9 @@ Recorded rather than decided; none blocks the core work.
 ## References
 
 - `docs/wip/ridl-boundary-model-review.md` — the review this decision comes from
-- `docs/specification/uxdl-language-reference.md` — retired by decision 1
+- `docs/specification/rxdl-language-reference.md` — the spelling layer this
+  decision leaves over
+- `docs/archive/uxdl-language-reference-v0.1.md` — retired by decision 1
 - `docs/wip/ridl-family-concept.md` §1.2, §2, §3, §12.3 — the five-language
   proposal and the uxdl-vocabulary question this closes
 - `docs/wip/family-general-form.md` §4.1–§4.5, §4.8, §9.4 — the attribute model,

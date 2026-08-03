@@ -2,8 +2,8 @@
 
 **Type Language** — the vocabulary layer of the RIDL family: types, ranges,
 units, constants, and composites, with package namespacing. typl is the root of
-the family lattice — every other profile (`ridl`, `uxdl`, `rmdl`, `rsdl`) builds
-on the vocabulary typl declares.
+the family lattice — every other profile (`ridl`, `rmdl`, `rsdl`) builds on the
+vocabulary typl declares.
 
 Version: 0.1.0 — Draft
 
@@ -74,7 +74,7 @@ a restriction of that grammar selected by file extension. A `.typl` file accepts
 | Accepted in `.typl`                   | Rejected in `.typl` (belongs to)                                   |
 | ------------------------------------- | ------------------------------------------------------------------ |
 | `package`, `import`, `as`, `internal` | `interface`, `signal`, `event`, `command`, `query`, `fixed` (ridl) |
-| `type`, `const`                       | user-interaction declarations (uxdl)                               |
+| `type`, `const`                       | interaction declarations (ridl, and the rxdl spellings)            |
 | `struct`, `enum`, `enumset`, `union`  | `model`, `node`, behaviour operators (rmdl)                        |
 | tuples, collections, `?` optionality  | instances, wiring, deployment (rsdl)                               |
 | doc comments, `@labels`               | timing annotations `@Xms`, `@[min..max]` (time core)               |
@@ -97,7 +97,7 @@ type** (`type FwBlock : bytes [1..65536]`); ridl owns the `<T>` container. A
 `<T>` appearing in a `.typl` file is a profile error (TYPL-301).
 
 **Timing is not typl.** Duration literals (`10ms`, `@[20ms..1s]`) belong to the
-family's `time` core, consumed by ridl/uxdl/rmdl. The family lexer recognises
+family's `time` core, consumed by ridl/rmdl. The family lexer recognises
 duration tokens everywhere (one lexer, one registry), but no typl construct
 accepts them. The stdlib `Duration` _type_ (a UCUM `ms` unit type) is unaffected
 — it is an ordinary unit type.
@@ -140,31 +140,36 @@ width-pinning is a niche refinement not worth ten keywords in v0.1.
 Keywords **reserved family-wide** but rejected by `.typl` (current registry —
 grows with the other profiles): ridl's `interface`, `service`, `signal`,
 `event`, `command`, `query`; the shared `fixed`, spelled the same by ridl and
-uxdl (ADR-0011) and holding one registry entry like every other shared concept;
-uxdl's `view`, `display`, `input`, `action`, `activate`, `toggle`, `select`,
-`adjust`, `dismiss`, `fetch`, `states`, `during`, plus its reserved set
-`navigate`, `scroll`, `drag`, `observe`, `surface`, `agent`; the expr-core words
-`require`, `ensure`; rmdl's `model`, `function`, `let`, `init`, `last`, `case`,
-`if`, `then`, `else`, `when`, `emit` (it also surfaces `signal`/`event` in
-signatures — same concepts, one registry entry each; `init` is rmdl's alone —
-the memory-seed keyword, needed because a flow has two equations; typl/ridl
-express init as bare `= value`; its ambient time values `now`/`dt` are
-_contextual identifiers, not keywords_; `pre`, `->`-as-followed-by, `node`,
-`returns`, `realizes`, and a surface `step` considered and rejected — models are
-contract-blind, so no `realizes`; `step` remains typl's quantization keyword
-alone), plus its reserved set `merge`, `current`, `state`, `transition`,
-`automaton`; and rsdl's `component`, `system`, `deployment`, `provides`,
-`requires`, `instance`, `for`, `assurance`, `target`, `place`, `on`,
-`transport`, `bundle`, `time`, `base` (it also reuses `model` from rmdl,
-`interface`/`service`/`signal`/`event`/`command`/`query` from ridl — same
-concepts, one registry entry each; `composition`, `binding`, `wire`, `delegate`,
-`publish`, `spk`, `apk` considered and rejected — components use application
-notation and inline `provides`/`requires`), plus its reserved resilience set
-`redundant`, `supervise`, `degraded`. (`node` and `returns` were considered and
-rejected by rmdl — never reserved.) The per-profile keyword sections of each
-language reference enumerate their own additions; the union of those sections
-**is** the registry until the platform spec extracts it as a standalone
-normative list.
+rxdl (ADR-0011) and holding one registry entry like every other shared concept;
+the domain spellings `present`, `notify`, `measure`, `detect`, `actuate`,
+`trigger` and the intent operation shapes `activate`, `toggle`, `select`,
+`adjust`, `dismiss`, plus `states` and `during` (rxdl, and ridl's boundary model
+— ADR-0012). **Retired by ADR-0012 but still in the implemented registry until
+E7a executes the removal:** `view`, `display`, `input`, `action`, `fetch`, and
+the uxdl reserved set `navigate`, `scroll`, `drag`, `observe`, `surface`,
+`agent`. They are reserved words in the shipped toolchain today
+(`crates/ridl-syntax/src/keywords.rs`) and no longer name anything; the
+expr-core words `require`, `ensure`; rmdl's `model`, `function`, `let`, `init`,
+`last`, `case`, `if`, `then`, `else`, `when`, `emit` (it also surfaces
+`signal`/`event` in signatures — same concepts, one registry entry each; `init`
+is rmdl's alone — the memory-seed keyword, needed because a flow has two
+equations; typl/ridl express init as bare `= value`; its ambient time values
+`now`/`dt` are _contextual identifiers, not keywords_; `pre`,
+`->`-as-followed-by, `node`, `returns`, `realizes`, and a surface `step`
+considered and rejected — models are contract-blind, so no `realizes`; `step`
+remains typl's quantization keyword alone), plus its reserved set `merge`,
+`current`, `state`, `transition`, `automaton`; and rsdl's `component`, `system`,
+`deployment`, `provides`, `requires`, `instance`, `for`, `assurance`, `target`,
+`place`, `on`, `transport`, `bundle`, `time`, `base` (it also reuses `model`
+from rmdl, `interface`/`service`/`signal`/`event`/`command`/`query` from ridl —
+same concepts, one registry entry each; `composition`, `binding`, `wire`,
+`delegate`, `publish`, `spk`, `apk` considered and rejected — components use
+application notation and inline `provides`/`requires`), plus its reserved
+resilience set `redundant`, `supervise`, `degraded`. (`node` and `returns` were
+considered and rejected by rmdl — never reserved.) The per-profile keyword
+sections of each language reference enumerate their own additions; the union of
+those sections **is** the registry until the platform spec extracts it as a
+standalone normative list.
 
 **Registry admission test — language, never runtime** (family doctrine, audit
 passed). Every registry entry names a _describable property_ — a shape, an
@@ -1578,8 +1583,8 @@ binding `$Name` identifiers inside requirements entries to a kind and a shape
 That work validated the core idea (a small, closed, range-first shape grammar
 with a coded diagnostic catalogue) in a live toolchain (parser, LSP
 hover/completion, JSON compile output with a corpus-level `typeRegistry`).
-MarkSpec also carries **uxil**, the precursor of uxdl — relevant to the uxdl
-vocabulary workshop, not to this document.
+MarkSpec also carries **uxil**, the precursor of uxdl and rxdl — relevant to the
+rxdl vocabulary workshop, not to this document.
 
 This specification is the successor, not a superset. The mapping:
 
@@ -1698,7 +1703,7 @@ exclusive bounds, uniqueItems, and recursion.
 | Term                               | Definition                                                                                                                                                                                                                                                          |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **RIDL** (capitals)                | the platform and family name; **typl** is this language, the family's vocabulary layer and root of the lattice                                                                                                                                                      |
-| **family**                         | the five languages — typl, ridl, uxdl, rmdl, rsdl — sharing one grammar, one toolchain, one IR                                                                                                                                                                      |
+| **family**                         | the four languages — typl, ridl, rmdl, rsdl — sharing one grammar, one toolchain, one IR; rxdl is a profile and a spelling layer over ridl, not a fifth language                                                                                                    |
 | **profile**                        | the restriction of the family grammar accepted by a file extension; `.typl` accepts type declarations only; `.rxdl` is the total profile accepting every layer                                                                                                      |
 | **profile purity**                 | the `ridl.toml` policy restricting a package to one profile's declarations — enforced per package, not by the grammar                                                                                                                                               |
 | **core**                           | a reusable semantic unit beneath the surface languages: `ns` (namespacing), `typl-core` (types), `expr` (predicates), `time` (timing), `interact` (interactions)                                                                                                    |
