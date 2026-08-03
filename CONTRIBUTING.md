@@ -40,7 +40,7 @@ repairs the new release wants in the same commit.
    (`feat:`, `fix:`, `docs:`, `chore:`, …), with a scope when it aids clarity
    (e.g. `docs(rmdl): …`, `docs(adr): …`). `git-std` lints commit messages
    against `.git-std.toml` and drives changelog generation from them. The
-   configured scopes are the five languages (`typl`/`ridl`/`uxdl`/`rmdl`/
+   configured scopes are the language scopes (`typl`/`ridl`/`rxdl`/`rmdl`/
    `rsdl`), `family`, `roadmap`, `adr`, the compiler workspace scopes
    (`ridl-syntax`/`ridl-core`/`ridl-sem`/`ridl-ir`/`ridlc`/`ridl-lsp`/
    `ridl-backend-rust`/`ridl-backend-ts`/`ridl-diff`/`ridl-fmt`/`xtask`/

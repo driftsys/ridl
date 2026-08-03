@@ -1,7 +1,7 @@
 # RIDL
 
-**One platform, five languages, one grammar.** RIDL is a family of languages for
-modeling component-based reactive systems: a shared vocabulary layer and four
+**One platform, four languages, one grammar.** RIDL is a family of languages for
+modeling component-based reactive systems: a shared vocabulary layer and three
 description languages over it, sharing one grammar, one toolchain, and one
 intermediate representation (IR).
 
@@ -16,16 +16,18 @@ roadmap.
 
 ## The family
 
-| Language | Expands to                              | Describes                                                                | Audience                      |
-| -------- | --------------------------------------- | ------------------------------------------------------------------------ | ----------------------------- |
-| **typl** | type language                           | data — types, ranges, units, constants                                   | data architects               |
-| **ridl** | reactive interface description language | system interactions (`signal` / `event` / `command` / `query` / `fixed`) | service teams                 |
-| **uxdl** | user-experience description language    | user interactions (`display` / `input` / `action` / `fetch` / `fixed`)   | UX / frontend engineers       |
-| **rmdl** | reactive model description language     | behaviour — synchronous / functional compute                             | control / algorithm engineers |
-| **rsdl** | reactive system description language    | architecture — components, wiring, deployment                            | integrators                   |
+| Language | Expands to                              | Describes                                                                                                   | Audience                                |
+| -------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| **typl** | type language                           | data — types, ranges, units, constants                                                                      | data architects                         |
+| **ridl** | reactive interface description language | interactions at every boundary — system, person, world (`signal` / `event` / `command` / `query` / `fixed`) | service, HMI, and sensor/actuator teams |
+| **rmdl** | reactive model description language     | behaviour — synchronous / functional compute                                                                | control / algorithm engineers           |
+| **rsdl** | reactive system description language    | architecture — components, wiring, deployment                                                               | integrators                             |
 
-The dependency lattice is `typl ← {ridl, uxdl, rmdl} ← rsdl`: typl is the only
-standalone member, and rsdl is the apex that composes the others.
+The dependency lattice is `typl ← {ridl, rmdl} ← rsdl`: typl is the only
+standalone member, and rsdl is the apex that composes the others. **rxdl** is
+not a fifth language — it is the unrestricted file profile plus readable
+spellings for ridl's non-`dispatch` interaction families, and it adds no
+semantics of its own (ADR-0012).
 
 ## Repository layout
 
@@ -54,18 +56,19 @@ docs/
 │   ├── ridl-family-overview.md     Entry point: the map, shared doctrines, decision ledger, open questions
 │   ├── typl-language-reference.md
 │   ├── ridl-language-reference.md
-│   ├── uxdl-language-reference.md
+│   ├── rxdl-language-reference.md
 │   ├── rmdl-language-reference.md
 │   ├── rsdl-language-reference.md
 │   └── expr-core-specification.md  The shared contract-term grammar (require / ensure, and rmdl's function layer)
-├── wip/                        Pre-ADR drafts and working specs
+├── wip/                        Pre-ADR drafts and working specs — nothing here is ratified
 │   ├── ridl-family-concept.md      Concept note — the family direction (pre-ADR)
 │   ├── family-general-form.md      Cross-profile syntax, typing, and attribute rules
-│   └── skill-ridl-authoring-outline.md
+│   └── …                           Design notes feeding the roadmap; see wip/README.md
 ├── technotes/                  Informative architecture notes (bind nothing)
 │   └── walking-skeleton-architecture.md   The RIDL toolchain, as built
 ├── archive/                    Superseded documents + landed epic plans
 │   ├── ridl-language-reference-v0.1.md   Split into typl + ridl v0.2
+│   ├── uxdl-language-reference-v0.1.md   Retired by ADR-0012; its content moved into ridl and rxdl
 │   ├── 2026-07-18-e0-walking-skeleton-plan.md
 │   ├── 2026-07-18-e1-typl-tooling-spine-plan.md
 │   └── 2026-07-19-e2-ridl-interface-layer-plan.md
@@ -76,7 +79,11 @@ docs/
     ├── ADR-0006-walking-skeleton-execution.md
     ├── ADR-0007-e1-execution.md
     ├── ADR-0008-e2-execution.md
-    └── ADR-0009-toolchain-and-gate-parity.md
+    ├── ADR-0009-toolchain-and-gate-parity.md
+    ├── ADR-0010-cli-conventions.md
+    ├── ADR-0011-provisioned-constant-keyword.md
+    ├── ADR-0012-interaction-boundary-model.md
+    └── ADR-0013-codegen-backend-scope.md
 ```
 
 ## Where to start
@@ -133,17 +140,24 @@ against `.git-std.toml`. See [`CONTRIBUTING.md`](CONTRIBUTING.md) and
 
 ## Status
 
-All documents are working drafts (typl / ridl / uxdl / rmdl / rsdl at
+All documents are working drafts (typl / ridl / rxdl / rmdl / rsdl at
 v0.1–v0.2). The design is captured; the typl v0.1 preview toolchain (epic E1 —
 compiler, `ridl fmt`, LSP, and VS Code extension) is built over the shared
 grammar and IR, epic E2 added the ridl interface layer over the same grammar and
-IR v2, and uxdl, rmdl, and rsdl are sequenced in the roadmap.
+IR v2, and the boundary model, rxdl, rmdl, and rsdl are sequenced in the
+roadmap.
+
+**Continuous integration is paused**, so the checks on this repository read as
+failing. The gate itself is unchanged and runs locally: `just verify` is the
+same set of commands CI invokes, and `just gate-parity` fails if the two ever
+drift apart (ADR-0009).
 
 ## A note on ADR numbering
 
-The ADRs present here are 0002 and 0004–0008. ADR-0001 and ADR-0003 are not in
+The ADRs present here are 0002 and 0004–0013. ADR-0001 and ADR-0003 are not in
 this repository — ADR-0003 ("the family decision") is noted as not-yet-written
-in the family overview.
+in the family overview. ADR-0014 and ADR-0015 are claimed by design notes under
+`docs/wip/` and are not yet written.
 
 ## License
 
