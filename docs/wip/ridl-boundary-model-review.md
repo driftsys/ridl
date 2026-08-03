@@ -1,15 +1,35 @@
 # Boundary Model Review — uxdl Scope, and What Replaces It
 
-**Spike record — design session of 2026-07-28.** Not a decision, not a
+**Spike record — design session of 2026-08-03.** Not a decision, not a
 specification. This document captures a review of the uxdl language reference
 that ended by rejecting uxdl's shape and proposing a boundary model in ridl
-instead. It records the findings, the arguments that produced them, the two
+instead. It records the findings, the arguments that produced them, the
 positions that were reversed mid-session, and the tests that decide what remains
 open.
 
-Status: **spike — captured for review, nothing ratified.** No existing document
-has been changed. `docs/specification/uxdl-language-reference.md` remains as it
-was.
+Status: **superseded by ADR-0012** (the interaction boundary model), which was
+written from this review and is authoritative wherever the two disagree. This
+record is kept for the reasoning trail — the arguments, the retractions, and the
+falsification tests — not for its conclusions.
+
+**Three things below are known to be wrong**, and are left in place rather than
+edited because the reasoning that corrected them is the useful part:
+
+- **§5's "Truth versus Representation" table** uses "truth" in two incompatible
+  senses across its rows (physical fact for the sensor row, reference value for
+  the actuator row) and is missing the person-inbound case. The corrected form
+  is four rows on a reference/realisation axis, with one rule: _the causally
+  upstream side is the reference, the downstream side is the realisation._ See
+  ADR-0012 Context.
+- **§5.2** says the obligations sit on pairs. They also **compose along a path**
+  — a four-hop chain from wheel to driver's belief — and an end-to-end budget is
+  computable only if every hop declares its own. See ADR-0012 decision 3.
+- **§8's proposed shape** (fold uxdl into ridl, with the operation shapes
+  demoted to a `gesture` attribute) is superseded by ADR-0012 decisions 4 and 6.
+  The demotion was wrong: it moves the discriminating classifier out of R1
+  position. §4.5's claim that the operation shapes are boundary-agnostic is also
+  wrong in the sense that matters — their semantics generalise, but their
+  consumers do not, so they belong to the intent family.
 
 ---
 

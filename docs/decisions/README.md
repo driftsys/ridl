@@ -30,5 +30,15 @@
   binds the language surface until superseded, and it supersedes ADR-0008
   decision 5.
 
+- **ADR-0012 — The interaction boundary model.** Retires uxdl as a family member
+  and gives ridl a boundary model instead: five interaction families (`dispatch`
+  `presentation` `intent` `acquisition` `control`), the four correspondence
+  obligations they carry, keyword spellings per family, and extensions that are
+  spelling tables plus backends with no grammar, no IR nodes, and no semantics
+  of their own. Promotes the attribute registry from an open question to a
+  precondition and requires fail-closed diff classification. Not epic-scoped: it
+  binds the language surface until superseded.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
-decision") is noted as not-yet-written in the family overview.
+decision") is noted as not-yet-written in the family overview, and ADR-0012
+constrains it to four family members rather than five.

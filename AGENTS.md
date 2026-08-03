@@ -1,9 +1,10 @@
 # AGENTS.md — RIDL
 
 RIDL is a family of languages for modeling component-based reactive systems:
-**one platform, five languages, one grammar, one intermediate representation.**
-A shared vocabulary layer (`typl`) plus four description languages over it
-(`ridl`, `uxdl`, `rmdl`, `rsdl`), sharing one toolchain and one IR.
+**one platform, four languages, one grammar, one intermediate representation.**
+A shared vocabulary layer (`typl`) plus three description languages over it
+(`ridl`, `rmdl`, `rsdl`), sharing one toolchain and one IR. ADR-0012 retired
+`uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
 (ADRs), the implementation roadmap, and the compiler workspace: eleven crates
@@ -11,8 +12,9 @@ under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-backend-rust`, `ridl-backend-ts`, `ridl-diff`, and
 `ridl-fmt` — plus `xtask` at the root and the `editors/vscode` extension. The
 typl v0.1 toolchain (epic E1) and the ridl interface layer over it (epic E2) are
-built; `uxdl`, `rmdl`, and `rsdl` are sequenced in the roadmap. See
-`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
+built; the boundary model (epic E3), `rmdl`, and `rsdl` are sequenced in the
+roadmap. See `docs/technotes/walking-skeleton-architecture.md` for the as-built
+map.
 
 **Read these before doing anything else in this repo:**
 
@@ -24,14 +26,18 @@ built; `uxdl`, `rmdl`, and `rsdl` are sequenced in the roadmap. See
 - `docs/wip/family-general-form.md` — the surface rules shared by every profile:
   the three declaration shapes, the nine surface invariants, the attribute model
   (pre-ADR working spec).
-- `docs/specification/{typl,ridl,uxdl,rmdl,rsdl}-language-reference.md` — the
-  five language references.
+- `docs/specification/{typl,ridl,rmdl,rsdl}-language-reference.md` — the four
+  language references. `uxdl-language-reference.md` is also present and is
+  **retired by ADR-0012** — read it as prior work, never as the current design.
 - `docs/decisions/` — ADR-0002 (module system), ADR-0004 (sequencing and stack),
   ADR-0005 (agent enablement), ADR-0006 (E0 execution), ADR-0007 (E1 execution),
   ADR-0008 (E2 execution — read its `## Status` before editing it), ADR-0009
   (toolchain pin and gate parity — binds every contributor, not one epic),
   ADR-0010 (CLI conventions — binds every subcommand), ADR-0011 (the
-  provisioned-constant keyword is `fixed` — supersedes ADR-0008 decision 5).
+  provisioned-constant keyword is `fixed` — supersedes ADR-0008 decision 5),
+  ADR-0012 (the interaction boundary model — retires uxdl, gives ridl five
+  interaction families and their correspondence obligations; binds the language
+  surface).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 
@@ -41,13 +47,13 @@ These are living records. A decision that changes one is recorded there directly
 ## The family
 
     typl   type language                 — data: types, ranges, units, constants
-    ridl   interface description         — system interactions (signal/event/command/query/fixed)
-    uxdl   user-experience description   — user interactions (display/input/action/fetch/fixed)
+    ridl   interface description         — interactions at every boundary: system,
+                                           person, world (ADR-0012)
     rmdl   model description             — behaviour: functions + reactive models
     rsdl   system description            — architecture: components, wiring, deployment
 
-Dependency lattice: `typl ← {ridl, uxdl, rmdl} ← rsdl`. typl is the only
-standalone member; rsdl is the apex.
+Dependency lattice: `typl ← {ridl, rmdl} ← rsdl`. typl is the only standalone
+member; rsdl is the apex.
 
 ## Commands
 
