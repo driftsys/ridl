@@ -168,10 +168,28 @@ jobs:
   # the opposite reason: the workflow's group cancels in progress, which would
   # abandon a deploy partway through, and a half-published site is not a state
   # the next push repairs on its own.
+  #
+  # `!cancelled() && needs.ci.result == 'success'` rather than the event and ref
+  # tests alone. An `if:` holding no status check function gets an implicit
+  # `success()`, and that implicit test reads the whole ancestor chain rather
+  # than the named dependency: `convco` does not run on a push, `ci` survives its
+  # skip through `if: always()` and reports success, and the skip still reaches
+  # this job. The first merge of this workflow proved it — every gate job green,
+  # `ci` green, `pages` skipped, nothing published. Naming a status function is
+  # what replaces the implicit test, and `needs.ci.result` then has to be
+  # asserted here, because nothing else still checks that the gate passed.
+  #
+  # `workflow_dispatch` is accepted alongside `push` so the site can be
+  # republished without a commit — the same reason the workflow accepts a manual
+  # trigger at all. The ref test is what keeps it honest: a dispatch from a
+  # branch runs the gate and stops, because only `refs/heads/main` publishes.
   pages:
     name: pages
     needs: ci
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: >-
+      !cancelled() && needs.ci.result == 'success'
+      && github.ref == 'refs/heads/main'
+      && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     permissions:
       contents: read
