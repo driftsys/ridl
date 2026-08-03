@@ -242,6 +242,43 @@ book-check:
         exit 1
     fi
 
+# Check that every relative Markdown link resolves.
+#
+# `book-check` cannot do this. mdBook exits 0 on an unresolved relative link, so
+# two links to a reference that had been renamed survived in the book until they
+# were found by hand. This resolves each link against the directory of the file
+# that writes it, over every tracked `.md` — the book, the specifications, the
+# ADRs, and the repository's own front matter alike.
+#
+# Fenced blocks and inline code spans are stripped first: a code span such as
+# `element[](min..max)` is documentation of another language's syntax, not a
+# link. External schemes and bare anchors are skipped; an anchor on a real path
+# is trimmed, so the file is checked and the fragment is not.
+link-check:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    broken=0
+    while IFS= read -r file; do
+        dir="$(dirname "$file")"
+        while IFS= read -r target; do
+            [ -z "$target" ] && continue
+            [ -e "$dir/$target" ] && continue
+            echo "link-check: $file -> $target" >&2
+            broken=$((broken+1))
+        done < <(awk '/^```/{f=!f; next} !f' "$file" \
+            | sed -E 's/`[^`]*`//g' \
+            | grep -oE '\]\([^)]+\)' \
+            | sed -E 's/^\]\(//; s/\)$//' \
+            | grep -vE '^(https?:|mailto:|#)' \
+            | sed -E 's/#.*$//' \
+            | grep -v '^$' || true)
+    done < <(git ls-files '*.md')
+    if [ "$broken" -ne 0 ]; then
+        echo "link-check: $broken link(s) above do not resolve." >&2
+        exit 1
+    fi
+    echo "link-check: every relative Markdown link resolves."
+
 # Check that CI still invokes every recipe the local gate is made of.
 #
 # The other half of gate parity. CI runs these recipes rather than its own copy
@@ -315,7 +352,7 @@ gate-parity:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity fmt-check book-check compile test lint wasm-check check
+build: toolchain-check gate-parity fmt-check book-check link-check compile test lint wasm-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

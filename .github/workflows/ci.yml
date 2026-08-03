@@ -76,6 +76,7 @@ jobs:
             | tar -xz -C "$HOME/.local/bin"
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: just book-check
+      - run: just link-check
 
   rust:
     name: rust
