@@ -1,9 +1,11 @@
 # RIDL Implementation Backlog — Epics & Stories
 
-Companion to ADR-0004 (sequencing + stack) and ADR-0005 (agent enablement). Each
-**Epic is a milestone** with its own shippable value and exit criteria;
-**Stories** are the work items under it. Sizing is rough (S ≈ days, M ≈ 1–2
-weeks, L ≈ 3–6 weeks) and relative, not a schedule.
+Companion to
+[ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md)
+(sequencing + stack) and [ADR-0005](decisions/ADR-0005-agent-enablement.md)
+(agent enablement). Each **Epic is a milestone** with its own shippable value
+and exit criteria; **Stories** are the work items under it. Sizing is rough (S ≈
+days, M ≈ 1–2 weeks, L ≈ 3–6 weeks) and relative, not a schedule.
 
 The release boundary is **descriptive vs executable**:
 
@@ -19,9 +21,9 @@ The release boundary is **descriptive vs executable**:
   runtime, codegen, oracle, replay, and deductive proof. The ambitious,
   higher-risk half, deferred until the architecture above it is settled.
 
-**E8 — agent enablement (ADR-0005):** threads V1→V3 alongside E1–E7 — the
-skill/rules, the MCP over the compiler, evals, and (V3) the behaviour oracle and
-subagent.
+**E8 — agent enablement ([ADR-0005](decisions/ADR-0005-agent-enablement.md)):**
+threads V1→V3 alongside E1–E7 — the skill/rules, the MCP over the compiler,
+evals, and (V3) the behaviour oracle and subagent.
 
 **Sequence:**
 
@@ -37,18 +39,20 @@ dependency on either, and it closes a promise the shipped documentation already
 makes.
 
 **Epic numbers are identifiers, not positions.** The sequence above changed
-after ADR-0012 and the rmdl phase split; the numbers did not. Renumbering would
-have invalidated ninety-six references across seventeen files — including source
-comments, `ridl/ir/v2/ir.proto`, and the archived epic plans, which are verbatim
+after [ADR-0012](decisions/ADR-0012-interaction-boundary-model.md) and the rmdl
+phase split; the numbers did not. Renumbering would have invalidated ninety-six
+references across seventeen files — including source comments,
+`ridl/ir/v2/ir.proto`, and the archived epic plans, which are verbatim
 historical records. This is the family's own evolution discipline (ordinals are
 identity, never reordered) applied one level up. **Read the sequence line, not
 the numbering, for what comes next.**
 
-**Amends ADR-0004**, which sequenced E5 (rmdl) before E6 (rsdl) and put both in
-a single V2. rsdl now runs first, because composition, deployment,
-transport/posture derivation, and the test plane are all reachable with rmdl as
-a language and no runtime — and rmdl's runtime is the highest-risk work in the
-programme, so it goes last.
+**Amends
+[ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md)**, which
+sequenced E5 (rmdl) before E6 (rsdl) and put both in a single V2. rsdl now runs
+first, because composition, deployment, transport/posture derivation, and the
+test plane are all reachable with rmdl as a language and no runtime — and rmdl's
+runtime is the highest-risk work in the programme, so it goes last.
 
 **Forward-compatibility constraint (V1 protects V2):** the `expr`/function core
 shipped in V1 for `require`/`ensure` (E2.4) must be a genuine forward-compatible
@@ -60,21 +64,21 @@ or with E2.4.
 
 **What E5.1 and E7.3 inherit, and the hole in it (recorded at E2 close,
 2026-07-26).** E2 carries a contract clause in the IR as canonical source text
-(`Contract.source`, ADR-0008 decision 14). E5.1 replaces that with an expression
-tree, and E7.3 discharges the same terms deductively; both inherit
-`crates/ridlc/tests/corpus/` as the regression set that says a restructured
-representation still means what the text meant. **That set does not exercise the
-whole subset.** The subset grammar admits thirteen binary operators and two
-prefix operators. Of the thirteen binary, four — `<`, `-`, `/`, `%` — appear in
-no contract clause that reaches a snapshotted IR; of the two prefix, `!` appears
-in none, and `-` appears only on numeric literals (`-10.0`, `-40.0`), never on a
-reference. All five are implemented and unit-tested in
-`crates/ridl-sem/src/expr.rs` and `crates/ridl-sem/src/expr_eval.rs` — this is a
-coverage hole, not a correctness one. `<` is the near miss: the diagnostic
-showcase writes it, but that package compiles with errors, so its IR, Rust, and
-TypeScript snapshots are one-line placeholders and nothing pins a lowered form.
-Widen the corpus before restructuring, so the restructuring has something to
-regress against.
+(`Contract.source`, [ADR-0008](decisions/ADR-0008-e2-execution.md) decision 14).
+E5.1 replaces that with an expression tree, and E7.3 discharges the same terms
+deductively; both inherit `crates/ridlc/tests/corpus/` as the regression set
+that says a restructured representation still means what the text meant. **That
+set does not exercise the whole subset.** The subset grammar admits thirteen
+binary operators and two prefix operators. Of the thirteen binary, four — `<`,
+`-`, `/`, `%` — appear in no contract clause that reaches a snapshotted IR; of
+the two prefix, `!` appears in none, and `-` appears only on numeric literals
+(`-10.0`, `-40.0`), never on a reference. All five are implemented and
+unit-tested in `crates/ridl-sem/src/expr.rs` and
+`crates/ridl-sem/src/expr_eval.rs` — this is a coverage hole, not a correctness
+one. `<` is the near miss: the diagnostic showcase writes it, but that package
+compiles with errors, so its IR, Rust, and TypeScript snapshots are one-line
+placeholders and nothing pins a lowered form. Widen the corpus before
+restructuring, so the restructuring has something to regress against.
 
 ---
 
@@ -111,11 +115,13 @@ v1 for the typl subset (frozen only with the E4.5 stability policy).
 
 **Status:** landed — all nineteen stories (E1.1–E1.19) shipped as PRs #107–#133;
 the typl v0.1 preview toolchain (compiler, `ridl fmt`, LSP, VS Code extension)
-is complete over IR v1 (exact decimal). Deferred per ADR-0007: E1.8 ships no
-`wire` width floor yet (typl §17.11 / ADR-0007 d7) — nominal unit checking
-itself ships; of the profile-boundary and doc diagnostics only TYPL-302 ships —
-TYPL-301/303/304 and TYPL-107/205/401/402/403 are recorded debt (ADR-0007 d10).
-Cutting the v0.1 preview tag is a maintainer act (ADR-0007 d14).
+is complete over IR v1 (exact decimal). Deferred per
+[ADR-0007](decisions/ADR-0007-e1-execution.md): E1.8 ships no `wire` width floor
+yet (typl §17.11 / [ADR-0007](decisions/ADR-0007-e1-execution.md) d7) — nominal
+unit checking itself ships; of the profile-boundary and doc diagnostics only
+TYPL-302 ships — TYPL-301/303/304 and TYPL-107/205/401/402/403 are recorded debt
+([ADR-0007](decisions/ADR-0007-e1-execution.md) d10). Cutting the v0.1 preview
+tag is a maintainer act ([ADR-0007](decisions/ADR-0007-e1-execution.md) d14).
 
 | ID    | Story                                                                                                                    | Done when                                                    | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------ | ---- |
@@ -152,13 +158,14 @@ criteria:** ridl interfaces compile to Rust _and_ a second backend from one IR;
 returns, `require`/`ensure` contracts, streams, interfaces and services compile
 to IR v2, and that one IR drives both the Rust and the TypeScript backend; the
 facade gained `ridl diff`, `ridl baseline`, and `ridl test`. Deferred per
-ADR-0008: `persist` (d3) and the general-form §4.7 promotion of
-`labels`/`deprecated` to attributes, and diagnostic codes RIDL-111 and RIDL-142
-— reserved by d21 and still unminted. `ridlc build` emits Rust, the extern-C
-header, IR JSON, and TypeScript. The epic itself shipped the TypeScript backend
-as a library only, pinned by the corpus snapshots and reachable from no command;
-the `--emit typescript` path landed afterwards, as a prerequisite for E3.3
-(driftsys/ridl#172). E2 also paid three codes of the E1 debt ADR-0007 d10
+[ADR-0008](decisions/ADR-0008-e2-execution.md): `persist` (d3) and the
+general-form §4.7 promotion of `labels`/`deprecated` to attributes, and
+diagnostic codes RIDL-111 and RIDL-142 — reserved by d21 and still unminted.
+`ridlc build` emits Rust, the extern-C header, IR JSON, and TypeScript. The epic
+itself shipped the TypeScript backend as a library only, pinned by the corpus
+snapshots and reachable from no command; the `--emit typescript` path landed
+afterwards, as a prerequisite for E3.3 (driftsys/ridl#172). E2 also paid three
+codes of the E1 debt [ADR-0007](decisions/ADR-0007-e1-execution.md) d10
 recorded: TYPL-301, TYPL-303, and TYPL-304 ship, emitted by the parser once the
 family grammar made the constructs they reject parseable, each with a showcase
 entry. E2.10's "alias-not-required" row needed no new work — TYPL-008 has
@@ -181,7 +188,7 @@ covered it from the resolver since E1. The consolidated E2 debt roll-up is
 | E2.12 | expr-core specification (document, not code): the full contract-term grammar (family overview §2, ADR-0004 open q) — precedes or accompanies E2.4       | spec drafted; the E2.4 subset is checked against it                     | M    |
 | E2.13 | `interface` vs `service` (ridl §14): abstract shape vs global published declaration, service catalog SSOT, `service.member` references, posture-neutral | services declare, resolve, and appear in the IR (E6 binds them)         | M    |
 
-## Epic 3 — ridl Boundary Model, core (ADR-0012)
+## Epic 3 — ridl Boundary Model, core ([ADR-0012](decisions/ADR-0012-interaction-boundary-model.md))
 
 **Milestone:** ridl describes every boundary, not only system-to-system.
 **Value:** at the person and world boundaries the datum and the thing it stands
@@ -192,11 +199,13 @@ criteria:** a cluster telltale, a wheel-speed sensor, and a steering actuator
 each compile with their obligations, classify correctly under `ridl diff`, and
 generate bindings from the dispatch-family spellings alone.
 
-**Core only.** ADR-0012 decision 7 makes a domain extension a spelling table
-plus backends, with no grammar, no IR nodes, and no semantics of its own. Those
-spellings are **descoped from this epic** and land in E7 (rxdl). What is here is
-what ridl must gain whether or not anyone ever writes `present` — and E3.1
-through E3.4 are hard preconditions for E7 under ADR-0012 decisions 8 and 9.
+**Core only.** [ADR-0012](decisions/ADR-0012-interaction-boundary-model.md)
+decision 7 makes a domain extension a spelling table plus backends, with no
+grammar, no IR nodes, and no semantics of its own. Those spellings are
+**descoped from this epic** and land in E7 (rxdl). What is here is what ridl
+must gain whether or not anyone ever writes `present` — and E3.1 through E3.4
+are hard preconditions for E7 under
+[ADR-0012](decisions/ADR-0012-interaction-boundary-model.md) decisions 8 and 9.
 
 | ID   | Story                                                                                                                                                                                                                                                                                                                                                                                                                                               | Done when                                                                                     | Size |
 | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- | ---- |
@@ -239,10 +248,17 @@ FlatBuffers schemas, and generates a store and dispatcher whose identity is
 stable under `ridl-diff`.
 
 **Design of record** — four notes in `docs/wip/`, all sharing one origin:
-`2026-08-03-ir-protobuf-encodings-design.md` · `-rpc-response-bound-design.md` ·
-`-multi-interface-services-design.md` · `-schema-projection-design.md`. Two ADRs
-fall out: **ADR-0014** (IR encodings, superseding ADR-0004 §4's rendering
-clause) and **ADR-0015** (the QoS absorption principle and RPC bounds).
+[`2026-08-03-ir-protobuf-encodings-design.md`](wip/2026-08-03-ir-protobuf-encodings-design.md)
+·
+[`2026-08-03-rpc-response-bound-design.md`](wip/2026-08-03-rpc-response-bound-design.md)
+·
+[`2026-08-03-multi-interface-services-design.md`](wip/2026-08-03-multi-interface-services-design.md)
+·
+[`2026-08-03-schema-projection-design.md`](wip/2026-08-03-schema-projection-design.md).
+Two ADRs fall out: **ADR-0014** (IR encodings, superseding
+[ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md) §4's
+rendering clause) and **ADR-0015** (the QoS absorption principle and RPC
+bounds).
 
 **Sequencing caution.** E9.4 to E9.6 alter ridl's surface and IR, as E3 does.
 The two epics must not run concurrently on the IR. E9 is the nearer-term product
@@ -274,11 +290,14 @@ constraint layer is documentation rather than a guarantee. **Exit criteria:** a
 constrained named scalar cannot be constructed out of range in Rust or
 TypeScript, and `--emit rust` writes a crate that compiles.
 
-**Design and plan of record:** `docs/wip/typl-value-objects-design.md` and
-`-plan.md`, the latter already task-decomposed. It amends **ADR-0013** rather
-than minting a record — that ADR is still Proposed and already classifies
-backends by what they may emit, and this settles its open item 1 (whether the
-wire-backend ceiling binds the language backends too).
+**Design and plan of record:**
+[`typl-value-objects-design.md`](wip/typl-value-objects-design.md) and
+[`typl-value-objects-plan.md`](wip/typl-value-objects-plan.md), the latter
+already task-decomposed. It amends
+**[ADR-0013](decisions/ADR-0013-codegen-backend-scope.md)** rather than minting
+a record — that ADR is still Proposed and already classifies backends by what
+they may emit, and this settles its open item 1 (whether the wire-backend
+ceiling binds the language backends too).
 
 | ID     | Story                                                                             | Done when                                                         | Size |
 | ------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
@@ -397,29 +416,30 @@ publishes and resolves.
 
 # Cross-Cutting
 
-## Epic 8 — Agent Enablement (ADR-0005, threads V1→V2)
+## Epic 8 — Agent Enablement ([ADR-0005](decisions/ADR-0005-agent-enablement.md), threads V1→V2)
 
 **Milestone:** an AI agent turns a natural-language spec into correct, idiomatic
 RIDL and evolves it _provably_ (compiles clean, `ridl diff` compatible) — for
 types and interfaces in V1, behaviour in V2. **Value:** RIDL is niche, so a
 model has ~zero priors; the knowledge layer is the highest-leverage, cheapest
 piece and needs no compiler. The MCP is near-free because it reuses the IR,
-diagnostic SSOT, and `ridl-diff` built for other consumers (ADR-0005 "one
-engine, three faces"). **Exit criteria (V1 slice):** skill + rules author valid
-typl/ridl; MCP `ridl_check`/`ridl_explain`/`ridl_diff` + IR-query tools back a
-verify/evolve loop; the eval corpus runs in CI. **V2 slice:** behaviour skill +
-oracle eval; `ridl-architect` subagent.
+diagnostic SSOT, and `ridl-diff` built for other consumers
+([ADR-0005](decisions/ADR-0005-agent-enablement.md) "one engine, three faces").
+**Exit criteria (V1 slice):** skill + rules author valid typl/ridl; MCP
+`ridl_check`/`ridl_explain`/`ridl_diff` + IR-query tools back a verify/evolve
+loop; the eval corpus runs in CI. **V2 slice:** behaviour skill + oracle eval;
+`ridl-architect` subagent.
 
-Sequencing note — ADR-0005 §8 maps agent work onto the old Phase 1–5; under the
-V1/V2 re-cut those become: typl→E1, ridl→E2, the boundary model→E3,
-`ridl doc`→E4, rmdl→E5, rsdl→E6, family-whole→E7. Each story below carries the
-epic it rides.
+Sequencing note — [ADR-0005](decisions/ADR-0005-agent-enablement.md) §8 maps
+agent work onto the old Phase 1–5; under the V1/V2 re-cut those become: typl→E1,
+ridl→E2, the boundary model→E3, `ridl doc`→E4, rmdl→E5, rsdl→E6,
+family-whole→E7. Each story below carries the epic it rides.
 
-**Preserve, don't build (ADR-0005 §7 invariants — constraints on other epics):**
-every diagnostic stays coded + fix-it (E1.10); `.rxdl` is the canonical agent
-target and eval unit (E7.1, the unrestricted profile); sigil poverty is kept;
-IR + diagnostic-code + `ridl-diff` stability _is_ the agent-contract stability
-(E4.5 / IR-stability open question).
+**Preserve, don't build ([ADR-0005](decisions/ADR-0005-agent-enablement.md) §7
+invariants — constraints on other epics):** every diagnostic stays coded +
+fix-it (E1.10); `.rxdl` is the canonical agent target and eval unit (E7.1, the
+unrestricted profile); sigil poverty is kept; IR + diagnostic-code + `ridl-diff`
+stability _is_ the agent-contract stability (E4.5 / IR-stability open question).
 
 _Layer A — Knowledge (skill + rules; build first, no compiler dependency)_
 
@@ -431,7 +451,7 @@ _Layer A — Knowledge (skill + rules; build first, no compiler dependency)_
 | E8.4 | Skill profile for the boundary model — the five families and their obligations                                                                                                                                                            | E3                    | authors a valid person-boundary contract with its obligations                                               | S    |
 
 _Layer B — Capability (MCP over the compiler; build second, cheap given
-ADR-0004)_
+[ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md))_
 
 | ID   | Story                                                                                                                                            | Rides | Done when                                                                | Size |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----- | ------------------------------------------------------------------------ | ---- |
