@@ -153,6 +153,57 @@ jobs:
       - name: lint commit messages against the PR base branch
         run: just lint-commits ${{ github.base_ref }}
 
+  # Publish the rendered book to GitHub Pages: https://driftsys.github.io/ridl/
+  #
+  # Only on a push to main, and only behind the `ci` aggregate, so nothing is
+  # published from a branch or from a run whose gate is red. A pull request
+  # renders the book in the `book` job and stops there.
+  #
+  # `just book-build` rather than `mdbook build`: the workflow holds no copy of a
+  # command the justfile defines (ADR-0009). It is not a member of `just build`,
+  # so `gate-parity` neither requires this step nor is disturbed by it.
+  #
+  # The permissions are set here rather than at the top of the file so that the
+  # gate jobs keep `contents: read` alone. The concurrency group is set here for
+  # the opposite reason: the workflow's group cancels in progress, which would
+  # abandon a deploy partway through, and a half-published site is not a state
+  # the next push repairs on its own.
+  pages:
+    name: pages
+    needs: ci
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: install just
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: install mdbook
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/rust-lang/mdBook/releases/download/v${MDBOOK_VERSION}/mdbook-v${MDBOOK_VERSION}-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - run: just book-build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: book
+      - id: deploy
+        uses: actions/deploy-pages@v4
+
   ci:
     name: ci
     if: always()
