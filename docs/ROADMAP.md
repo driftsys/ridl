@@ -225,15 +225,26 @@ big-bang. **Exit criteria:** error-index site live, playground live,
 getting-started + contract tutorial published, IR plugin protocol documented and
 versioned.
 
-| ID   | Story                                                                                            | Done when                                    | Size |
-| ---- | ------------------------------------------------------------------------------------------------ | -------------------------------------------- | ---- |
-| E4.1 | `ridl doc`: interfaces rendered as tables/HTML, obligations included                             | doc output for a real package                | M    |
-| E4.2 | Error-index website: every `TYPL-`/`RIDL-` code with explanation + fix (rustc `--explain` style) | codes cross-link from diagnostics            | M    |
-| E4.3 | `.typl`+`.ridl` getting-started + contract tutorial (types → interface → boundaries)             | a newcomer compiles it unaided               | M    |
-| E4.4 | Browser playground: compiler-to-WASM, live edit→codegen                                          | edit typl/ridl, see generated output in-page | L    |
-| E4.5 | IR plugin protocol spec + versioning (IR stability policy)                                       | a third-party backend consumes the IR        | L    |
-| E4.6 | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                     | scaffolds a valid workspace; vendors deps    | S    |
-| E4.7 | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI   | colliding key across profiles fails CI       | S    |
+| ID   | Story                                                                                                                   | Done when                                    | Size |
+| ---- | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- | ---- |
+| E4.1 | `ridl doc`: interfaces rendered as tables/HTML, obligations included                                                    | doc output for a real package                | M    |
+| E4.2 | Error-index website: every `TYPL-`/`RIDL-` code with explanation + fix (rustc `--explain` style)                        | codes cross-link from diagnostics            | M    |
+| E4.3 | `.typl`+`.ridl` getting-started + contract tutorial (types → interface → boundaries)                                    | a newcomer compiles it unaided               | M    |
+| E4.4 | Browser playground: compiler-to-WASM, live edit→codegen                                                                 | edit typl/ridl, see generated output in-page | L    |
+| E4.5 | IR plugin protocol spec + versioning (IR stability policy) — settles which encoding is canonical, per driftsys/ridl#231 | a third-party backend consumes the IR        | L    |
+| E4.6 | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                                            | scaffolds a valid workspace; vendors deps    | S    |
+| E4.7 | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                          | colliding key across profiles fails CI       | S    |
+
+**E4.5 inherits an open question it must answer rather than inherit.**
+[ADR-0014](decisions/ADR-0014-ir-encodings.md) decision 9 makes binary the
+canonical encoding, JSON derived and conformance-obliged, prototext for
+inspection. Decision 14 records that binary cannot round-trip IR this toolchain
+produces — prost's decode limit refuses what its own encoder wrote, between
+roughly 50 and 128 nesting levels — while JSON now round-trips everything the
+front end admits. So the encoding named canonical is the one with the weaker
+guarantee, and no consumer reads it today. E4.5 is where stability is defined
+against something, so E4.5 is where that is settled, not before: deciding it in
+isolation means deciding it twice. Recorded on driftsys/ridl#231.
 
 ## Epic 9 — Wire SSOT: signal store and dispatcher from the IR
 
