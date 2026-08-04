@@ -316,10 +316,12 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
     report(changes)
 }
 
-/// Loads an `.ir.json` snapshot written by `ridl build --emit ir-json`.
+/// Loads an `.ir.json` snapshot written by `ridl build --emit ir-json` —
+/// canonical protobuf JSON, read through the one reader every surface shares
+/// (ADR-0014 decision 1).
 pub fn load_ir_json(path: &Path) -> Result<Package, LoadError> {
     let text = std::fs::read_to_string(path).map_err(LoadError::Io)?;
-    serde_json::from_str(&text).map_err(|err| LoadError::Parse(err.to_string()))
+    ridl_ir::v2::from_json(&text).map_err(|err| LoadError::Parse(err.to_string()))
 }
 
 /// The stable lowercase word for a verdict — used by both the text and JSON

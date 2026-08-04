@@ -16,6 +16,37 @@ pub mod v2 {
 
     include!(concat!(env!("OUT_DIR"), "/ridl.ir.v2.rs"));
 
+    /// The descriptor pool over the compiled IR schema — the reflection data
+    /// the canonical protobuf JSON surface needs (ADR-0014 decision 7).
+    /// `build.rs` writes the `FileDescriptorSet` to `OUT_DIR` from the same
+    /// `protox` compilation that generates the types above, so the pool and
+    /// the types cannot disagree; every `expect` on this path leans on that.
+    static DESCRIPTOR_POOL: std::sync::LazyLock<prost_reflect::DescriptorPool> =
+        std::sync::LazyLock::new(|| {
+            prost_reflect::DescriptorPool::decode(
+                include_bytes!(concat!(env!("OUT_DIR"), "/ir_descriptor.binpb")).as_slice(),
+            )
+            .expect("the embedded descriptor set decodes: build.rs wrote it from the schema compilation that generated these types")
+        });
+
+    /// The `Package` message descriptor — the entry point of every
+    /// reflection-path encoder and decoder in this module.
+    pub(crate) fn package_descriptor() -> prost_reflect::MessageDescriptor {
+        DESCRIPTOR_POOL
+            .get_message_by_name("ridl.ir.v2.Package")
+            .expect("ridl.ir.v2.Package is declared by the compiled schema")
+    }
+
+    /// Rebuilds a package as a `DynamicMessage` over the descriptor pool —
+    /// the step `prost-reflect` needs before rendering a text encoding.
+    fn transcode(package: &Package) -> prost_reflect::DynamicMessage {
+        let mut dynamic = prost_reflect::DynamicMessage::new(package_descriptor());
+        dynamic
+            .transcode_from(package)
+            .expect("transcoding into the dynamic message cannot fail: the descriptor pool and the generated types come from one schema compilation");
+        dynamic
+    }
+
     /// Derives the synthesized transport identity of an inline `T | E`
     /// result union (ADR-0008 decision 4): the enclosing interface name plus
     /// the interaction ordinal plus the ordered arm references. The single
@@ -33,11 +64,53 @@ pub mod v2 {
         )
     }
 
-    /// Renders a package as pretty-printed JSON — the debug rendering of the
-    /// IR (ADR-0004 §4), used by golden tests and diagnostic output.
+    /// Renders a package as pretty-printed canonical protobuf JSON — the one
+    /// dialect every IR surface carries: the `--emit ir-json` artifact, the
+    /// baselines, and the goldens (ADR-0014 decision 1).
+    ///
+    /// A field holding its default is emitted rather than skipped (decision
+    /// 2); an unset proto3 `optional` field is omitted entirely, never
+    /// rendered as `null` (the answer to that decision's open item). 64-bit
+    /// fields render as strings, the canonical mapping JavaScript consumers
+    /// need (decision 8).
     pub fn to_json_pretty(package: &Package) -> String {
-        serde_json::to_string_pretty(package)
-            .expect("IR serialization to JSON cannot fail: the generated types hold only JSON-representable values")
+        let mut buf = Vec::new();
+        let mut serializer = serde_json::Serializer::pretty(&mut buf);
+        transcode(package)
+            .serialize_with_options(
+                &mut serializer,
+                &prost_reflect::SerializeOptions::new().skip_default_fields(false),
+            )
+            .expect("IR serialization to JSON cannot fail: the descriptor pool and the generated types come from one schema compilation");
+        String::from_utf8(buf).expect("serde_json emits UTF-8")
+    }
+
+    /// Reads a package from canonical protobuf JSON — the inverse of
+    /// [`to_json_pretty`]. Unknown fields are rejected (the `prost-reflect`
+    /// default), so a snapshot written against a different schema fails
+    /// loudly rather than dropping fields silently.
+    pub fn from_json(text: &str) -> Result<Package, serde_json::Error> {
+        let mut deserializer = serde_json::Deserializer::from_str(text);
+        let dynamic =
+            prost_reflect::DynamicMessage::deserialize(package_descriptor(), &mut deserializer)?;
+        deserializer.end()?;
+        Ok(dynamic
+            .transcode_to()
+            .expect("transcoding out of the dynamic message cannot fail: the descriptor pool and the generated types come from one schema compilation"))
+    }
+
+    /// Encodes a package in the protobuf binary wire format — the canonical
+    /// interchange encoding (ADR-0014 decision 9). Binary needs no
+    /// descriptors: prost's generated encoding is schema-faithful by
+    /// construction.
+    pub fn to_binary(package: &Package) -> Vec<u8> {
+        prost::Message::encode_to_vec(package)
+    }
+
+    /// Decodes a package from the protobuf binary wire format — the inverse
+    /// of [`to_binary`].
+    pub fn from_binary(bytes: &[u8]) -> Result<Package, prost::DecodeError> {
+        prost::Message::decode(bytes)
     }
 
     /// One interface shape of a package (ridl §14.0): a declared `interface`,
@@ -301,7 +374,6 @@ pub mod v2 {
 #[cfg(test)]
 mod v2_round_trip {
     use crate::v2;
-    use prost::Message;
 
     /// Wraps an interaction kind in the shared `Decl` envelope. Visibility
     /// and `is_error` stay unset on interactions (ridl §14.1); the ordinal is
@@ -523,9 +595,8 @@ mod v2_round_trip {
     fn protobuf_round_trip_preserves_package() {
         let package = fixture();
 
-        let mut buf = Vec::new();
-        package.encode(&mut buf).expect("encode must succeed");
-        let decoded = v2::Package::decode(buf.as_slice()).expect("decode must succeed");
+        let buf = v2::to_binary(&package);
+        let decoded = v2::from_binary(buf.as_slice()).expect("decode must succeed");
 
         assert_eq!(package, decoded);
 
@@ -551,9 +622,31 @@ mod v2_round_trip {
         let package = fixture();
 
         let json = v2::to_json_pretty(&package);
-        let decoded: v2::Package =
-            serde_json::from_str(&json).expect("json deserialization must succeed");
+        let decoded = v2::from_json(&json).expect("json deserialization must succeed");
 
+        assert_eq!(package, decoded);
+    }
+
+    /// The conformance claim of ADR-0014 decision 11: a conformant protobuf
+    /// JSON parser configured to reject unknown fields accepts the emitted
+    /// JSON. Re-reading tests that claim itself; asserting on the rendered
+    /// text would only restate the serializer's behaviour back to itself.
+    #[test]
+    fn emitted_json_survives_a_strict_conformant_parse() {
+        let package = fixture();
+        let json = v2::to_json_pretty(&package);
+
+        let mut deserializer = serde_json::Deserializer::from_str(&json);
+        let dynamic = prost_reflect::DynamicMessage::deserialize_with_options(
+            v2::package_descriptor(),
+            &mut deserializer,
+            &prost_reflect::DeserializeOptions::new().deny_unknown_fields(true),
+        )
+        .expect("a strict conformant parser must accept the emitted JSON");
+        deserializer.end().expect("no trailing input");
+        let decoded: v2::Package = dynamic
+            .transcode_to()
+            .expect("the strictly parsed message transcodes into the generated types");
         assert_eq!(package, decoded);
     }
 
@@ -562,9 +655,10 @@ mod v2_round_trip {
         let json = v2::to_json_pretty(&fixture());
 
         // Exactness is visible: timing bounds are exact-decimal microsecond
-        // strings, never floating-point numbers (ADR-0008 decision 12).
+        // strings, never floating-point numbers (ADR-0008 decision 12) —
+        // under the canonical lowerCamelCase field name (ADR-0014 decision 1).
         assert!(
-            json.contains(r#""min_us": "10000""#),
+            json.contains(r#""minUs": "10000""#),
             "the timing bound must be a JSON string, got: {json}"
         );
         // Both arms of the inline T | E return are visible by name.
