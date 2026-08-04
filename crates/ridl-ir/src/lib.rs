@@ -220,7 +220,9 @@ pub mod v2 {
     ///   catch;
     /// - the parse runs on a thread of `JSON_PARSE_STACK` bytes, so the
     ///   ceiling behaves identically across build profiles and platforms
-    ///   instead of tracking the ambient stack.
+    ///   instead of tracking the ambient stack. On the wasm family there is
+    ///   no such thread — see the branch below — and the cap alone guards
+    ///   the parse.
     pub fn from_json(text: &str) -> Result<Package, serde_json::Error> {
         if max_json_nesting(text) > MAX_JSON_NESTING {
             return Err(<serde_json::Error as serde::de::Error>::custom(format!(
@@ -229,22 +231,40 @@ pub mod v2 {
                  shallower"
             )));
         }
-        std::thread::scope(|scope| {
-            let handle = std::thread::Builder::new()
-                .stack_size(JSON_PARSE_STACK)
-                .spawn_scoped(scope, || {
-                    let mut deserializer = serde_json::Deserializer::from_str(text);
-                    deserializer.disable_recursion_limit();
-                    let package: Package = serde::Deserialize::deserialize(&mut deserializer)?;
-                    deserializer.end()?;
-                    Ok(package)
-                })
-                .expect("the JSON parse thread spawns");
-            match handle.join() {
-                Ok(result) => result,
-                Err(payload) => std::panic::resume_unwind(payload),
-            }
-        })
+        if cfg!(target_family = "wasm") {
+            // The wasm family has no spawnable threads: `spawn_scoped`
+            // returns `Err(Unsupported)` at run time on
+            // `wasm32-unknown-unknown`, the `just wasm-check` target, so a
+            // spawn here would turn every call into a panic. The parse runs
+            // in line instead, on the caller's stack. What this path loses
+            // is the deterministic stack — the ceiling is the ambient stack
+            // — and the `MAX_JSON_NESTING` cap above is the guard that
+            // matters: it is what turns an abort into an error.
+            parse_json(text)
+        } else {
+            std::thread::scope(|scope| {
+                let handle = std::thread::Builder::new()
+                    .stack_size(JSON_PARSE_STACK)
+                    .spawn_scoped(scope, || parse_json(text))
+                    .expect("the JSON parse thread spawns");
+                match handle.join() {
+                    Ok(result) => result,
+                    Err(payload) => std::panic::resume_unwind(payload),
+                }
+            })
+        }
+    }
+
+    /// The parse both branches of [`from_json`] share; only the stack that
+    /// carries it differs. `serde_json`'s own recursion limit is disabled
+    /// here, so the caller must have applied the `MAX_JSON_NESTING` cap
+    /// first.
+    fn parse_json(text: &str) -> Result<Package, serde_json::Error> {
+        let mut deserializer = serde_json::Deserializer::from_str(text);
+        deserializer.disable_recursion_limit();
+        let package: Package = serde::Deserialize::deserialize(&mut deserializer)?;
+        deserializer.end()?;
+        Ok(package)
     }
 
     /// Renders a package in the protobuf text format — the inspection
