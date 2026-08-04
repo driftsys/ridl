@@ -51,12 +51,16 @@
 - **ADR-0014 — IR encodings.** Canonical protobuf JSON replaces the `serde`
   rendering on every surface — artifacts, baselines, and goldens — because the
   rendering that shipped is serde's view of the generated Rust structs and no
-  conformant protobuf parser can read it. Adds prototext and binary emits over a
-  build-time descriptor pool, fixes the canonical-form policy E4.5 cites (binary
-  is canonical, JSON is derived and conformance-obliged, prototext is for
-  inspection), and makes the `ridl.std` emit filter an exhaustive
-  classification. Supersedes the rendering clause of ADR-0004 §4. Not
-  epic-scoped: it binds the artifact every future backend consumes.
+  conformant protobuf parser can read it. Adds prototext and binary emits, fixes
+  the canonical-form policy E4.5 cites (binary is canonical, JSON is derived and
+  conformance-obliged, prototext is for inspection), and makes the `ridl.std`
+  emit filter an exhaustive classification. Supersedes the rendering clause of
+  ADR-0004 §4. Not epic-scoped: it binds the artifact every future backend
+  consumes. Three amendments came out of implementation: decision 12 retracts
+  the infallible serialization return, decision 13 contains the prototext
+  reader, and decision 14 moves JSON off `prost-reflect` onto `pbjson`-generated
+  impls so the interchange artifact carries no recursion ceiling. The descriptor
+  pool now serves prototext alone.
 
 - **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
   expresses QoS as semantic obligation, never as a transport knob, so it
