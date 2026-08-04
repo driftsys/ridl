@@ -136,46 +136,51 @@ fn non_json_ir_snapshots_are_refused() {
     }
 }
 
-/// A file that is neither `.typl`/`.ridl` source nor an IR artifact the
-/// suffix table names is refused by name, not compiled (issue #218 item 4).
-///
-/// The fixture reproduces the dangerous half of the escape: a prototext
-/// artifact renamed to a bare `old.txtpb` (losing the `.ir.` infix) inside a
-/// workspace. Before the refusal, the source compiler took the file, found
-/// the `ridl.toml` above it, and silently compiled that workspace — here
-/// identical to the other side, so a regression makes this diff exit 0
-/// instead of 2.
+/// A workspace whose root also holds IR artifacts — exactly what
+/// `ridl build ws --out-dir ws --emit ir-text` produces — is still a source
+/// tree: the directory refusal below must not fire when the directory
+/// directly holds a `ridl.toml` or a `.typl`/`.ridl` file, or a real
+/// workspace would be misreported as a snapshot directory and told to
+/// re-emit itself.
 #[test]
-fn a_renamed_ir_artifact_is_refused_not_compiled() {
-    let dir = TempDir::new("bare-suffix");
+fn a_source_tree_holding_stray_ir_artifacts_still_compiles() {
+    let dir = TempDir::new("stray");
     dir.write("ws/ridl.toml", MANIFEST);
     dir.write("ws/iface.ridl", BASE);
-    let artifact = dir.write("ws/old.txtpb", "name: \"veh.cluster\"\n");
-    let source = dir.write("new.ridl", BASE);
+    dir.write("ws/veh.cluster.ir.txtpb", "name: \"veh.cluster\"\n");
+    let old = dir.path().join("ws");
+    let new = dir.write("new.ridl", BASE);
 
-    let (code, stdout, stderr) = ridl(&["diff".as_ref(), artifact.as_os_str(), source.as_os_str()]);
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
 
-    assert_eq!(code, 2, "an unrecognised file is an input error:\n{stderr}");
-    assert!(
-        stdout.is_empty(),
-        "no report over a refused input:\n{stdout}"
-    );
-    assert_eq!(
-        stderr,
-        format!(
-            "error: {}: neither a `.typl`/`.ridl` source file nor an `.ir.json` snapshot; \
-             `ridl diff` compares source trees and `.ir.json` snapshots (ADR-0014 decision 5)\n",
-            artifact.display()
-        ),
-        "the refusal names what was expected"
-    );
+    assert_eq!(code, 0, "a source tree compiles as source:\n{stderr}");
+    assert_eq!(stdout, "identical\n", "stdout:\n{stdout:?}");
 }
 
-/// A directory holding IR artifacts and no `.ir.json` — `ridl diff out/ src/`
-/// after `--emit ir-text` — draws a message that describes it (issue #218
-/// item 4). Before the fix, the directory fell through to the source
-/// compiler, which reported `` no `ridl.toml` found at or above ... `` — a
-/// misdiagnosis of the actual mistake.
+/// A `ridl.toml` path designates its workspace, the same as handing the
+/// workspace root itself — only IR artifacts are recognised by name, and
+/// every other file reaches the source compiler ([`load_diff_side`]).
+#[test]
+fn a_manifest_path_designates_its_workspace() {
+    let dir = TempDir::new("manifest");
+    let manifest = dir.write("ws/ridl.toml", MANIFEST);
+    dir.write("ws/iface.ridl", BASE);
+    let new = dir.write("new.ridl", BASE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), manifest.as_os_str(), new.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "the manifest path compiles its workspace:\n{stderr}"
+    );
+    assert_eq!(stdout, "identical\n", "stdout:\n{stdout:?}");
+}
+
+/// A directory holding IR artifacts, no `.ir.json`, and no source — `ridl
+/// diff out/ src/` after `--emit ir-text` — draws a message that describes
+/// it (issue #218 item 4). Before the fix, the directory fell through to the
+/// source compiler, which reported `` no `ridl.toml` found at or above ... ``
+/// — a misdiagnosis of the actual mistake.
 #[test]
 fn a_directory_of_non_json_artifacts_is_described_not_compiled() {
     let dir = TempDir::new("txtpb-dir");

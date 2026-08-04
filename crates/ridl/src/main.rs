@@ -243,16 +243,19 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
 ///    whole directory. Falling through to a compile here would silently diff
 ///    the current source against itself and always report `identical`
 ///    (ADR-0008 decision 14: `ridl diff` reads the workspace-local baseline);
-/// 3. anything else — a `.typl`/`.ridl` file, a package directory, or a
-///    workspace root — compiled in process through `ridlc::compile_workspace`.
-///    A directory with no IR artifact in it is source, and takes this path.
+/// 3. anything else — a source file, a package directory, or a workspace
+///    root — compiled in process through `ridlc::compile_workspace`.
 ///
-/// A file that is none of these forms is refused by name rather than compiled
-/// (issue #218 item 4): handing it to the source compiler would report its
-/// content as source diagnostics — a prototext artifact renamed to a bare
-/// `.txtpb` drew FORM-104 into the artifact — and, with a `ridl.toml`
-/// anywhere above it, would silently compile that workspace without reading
-/// the file at all.
+/// Only IR artifacts are recognised by name — the suffix table (issue #218
+/// item 4). A file in a non-JSON IR encoding is refused rather than parsed
+/// as source, and so is a directory that holds IR artifacts but neither an
+/// `.ir.json` snapshot nor source: no `ridl.toml` and no `.typl`/`.ridl`
+/// file directly inside it. Everything else is source. Recognising *source*
+/// by extension was tried and reverted — it refused inputs the compiler
+/// accepts, such as a `ridl.toml` path designating its workspace, an
+/// extensionless source file, or a symlink — so a renamed artifact whose
+/// name lost the `.ir.` infix still falls through to the compiler (recorded
+/// on issue #218).
 ///
 /// A read, parse, or compile error renders to stderr and yields exit code 2 —
 /// `ridl diff` never emits a diff report over a snapshot it could not build.
@@ -273,20 +276,6 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
         return Err(ExitCode::from(2));
     }
 
-    // Any other file must be source by name — see the function comment. The
-    // refusal keeps ADR-0010's taxonomy (2: the tool could not answer) and
-    // names what was expected instead of compiling the file. A path that does
-    // not exist is not a file, so it still reaches the compiler below, which
-    // reports that it does not exist.
-    if entry.is_file() && !is_source_file(entry) {
-        eprintln!(
-            "error: {}: neither a `.typl`/`.ridl` source file nor an `.ir.json` snapshot; \
-             `ridl diff` compares source trees and `.ir.json` snapshots (ADR-0014 decision 5)",
-            entry.display()
-        );
-        return Err(ExitCode::from(2));
-    }
-
     if entry.is_dir() {
         let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
@@ -294,10 +283,15 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
         }
         // A directory holding IR artifacts and no `.ir.json` is a snapshot
         // directory in an encoding this surface refuses — `ridl diff out/
-        // src/` after `--emit ir-text` — not a source tree. Say that, rather
-        // than falling through to the compiler and reporting the directory's
-        // missing manifest (issue #218 item 4).
-        if let Some(witness) = first_non_json_ir_in(entry) {
+        // src/` after `--emit ir-text` — unless it is a source tree: a build
+        // can write its artifacts into the workspace itself (`--out-dir .`),
+        // and such a tree compiles below exactly as `ridl check` reads it,
+        // stray artifacts included. For the snapshot directory, say what it
+        // is rather than falling through to the compiler and reporting the
+        // directory's missing manifest (issue #218 item 4).
+        if !is_source_dir(entry)
+            && let Some(witness) = first_non_json_ir_in(entry)
+        {
             return Err(refuse_artifact_directory(
                 entry,
                 &witness,
@@ -368,11 +362,24 @@ fn is_non_json_ir(path: &Path) -> bool {
             })
 }
 
-/// Whether `path` is a source input by name: a `.typl` or `.ridl` file — the
-/// same two extensions the workspace loader collects.
+/// Whether `path` is a source file by the rule the workspace loader collects
+/// with: a file whose extension is `typl` or `ridl`. Used only to tell a
+/// source tree from a snapshot directory ([`is_source_dir`]) — a diff
+/// *argument* is never gated on this, because a source file's own name is
+/// unconstrained ([`load_diff_side`]).
 fn is_source_file(path: &Path) -> bool {
-    path.extension()
-        .is_some_and(|extension| extension == "typl" || extension == "ridl")
+    path.is_file()
+        && path
+            .extension()
+            .is_some_and(|extension| extension == "typl" || extension == "ridl")
+}
+
+/// Whether `dir` is a source tree by its direct contents: it holds a
+/// `ridl.toml` or at least one `.typl`/`.ridl` file. A snapshot directory —
+/// `.ridl/baseline/`, or a build `--out-dir` — holds neither.
+fn is_source_dir(dir: &Path) -> bool {
+    dir.join("ridl.toml").is_file()
+        || files_matching(dir, is_source_file).is_ok_and(|files| !files.is_empty())
 }
 
 // ==========================================================================
