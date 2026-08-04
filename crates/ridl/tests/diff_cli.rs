@@ -136,6 +136,97 @@ fn non_json_ir_snapshots_are_refused() {
     }
 }
 
+/// A file that is neither `.typl`/`.ridl` source nor an IR artifact the
+/// suffix table names is refused by name, not compiled (issue #218 item 4).
+///
+/// The fixture reproduces the dangerous half of the escape: a prototext
+/// artifact renamed to a bare `old.txtpb` (losing the `.ir.` infix) inside a
+/// workspace. Before the refusal, the source compiler took the file, found
+/// the `ridl.toml` above it, and silently compiled that workspace — here
+/// identical to the other side, so a regression makes this diff exit 0
+/// instead of 2.
+#[test]
+fn a_renamed_ir_artifact_is_refused_not_compiled() {
+    let dir = TempDir::new("bare-suffix");
+    dir.write("ws/ridl.toml", MANIFEST);
+    dir.write("ws/iface.ridl", BASE);
+    let artifact = dir.write("ws/old.txtpb", "name: \"veh.cluster\"\n");
+    let source = dir.write("new.ridl", BASE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), artifact.as_os_str(), source.as_os_str()]);
+
+    assert_eq!(code, 2, "an unrecognised file is an input error:\n{stderr}");
+    assert!(
+        stdout.is_empty(),
+        "no report over a refused input:\n{stdout}"
+    );
+    assert_eq!(
+        stderr,
+        format!(
+            "error: {}: neither a `.typl`/`.ridl` source file nor an `.ir.json` snapshot; \
+             `ridl diff` compares source trees and `.ir.json` snapshots (ADR-0014 decision 5)\n",
+            artifact.display()
+        ),
+        "the refusal names what was expected"
+    );
+}
+
+/// A directory holding IR artifacts and no `.ir.json` — `ridl diff out/ src/`
+/// after `--emit ir-text` — draws a message that describes it (issue #218
+/// item 4). Before the fix, the directory fell through to the source
+/// compiler, which reported `` no `ridl.toml` found at or above ... `` — a
+/// misdiagnosis of the actual mistake.
+#[test]
+fn a_directory_of_non_json_artifacts_is_described_not_compiled() {
+    let dir = TempDir::new("txtpb-dir");
+    dir.write("out/veh.cluster.ir.txtpb", "name: \"veh.cluster\"\n");
+    let out = dir.path().join("out");
+    let source = dir.write("new.ridl", BASE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), out.as_os_str(), source.as_os_str()]);
+
+    assert_eq!(code, 2, "the directory is an input error:\n{stderr}");
+    assert!(
+        stdout.is_empty(),
+        "no report over a refused input:\n{stdout}"
+    );
+    assert_eq!(
+        stderr,
+        format!(
+            "error: {}: the directory holds IR artifacts (`veh.cluster.ir.txtpb`) but no \
+             `.ir.json` snapshot; `ridl diff` compares `.ir.json` snapshots only (ADR-0014 \
+             decision 5); emit the packages with `--emit ir-json` to compare them\n",
+            out.display()
+        ),
+        "the message describes the directory, not a missing manifest"
+    );
+}
+
+/// `ridl diff` over a snapshot directory (the shape `.ridl/baseline/` takes)
+/// and a source tree keeps working: the directory's `.ir.json` files are the
+/// baseline side, the source tree is compiled, and an unchanged workspace is
+/// identical.
+#[test]
+fn snapshot_dir_vs_source_tree_identical_exits_zero() {
+    let dir = TempDir::new("snapdir");
+    let root = dir.path().join("ws");
+    dir.write("ws/ridl.toml", MANIFEST);
+    dir.write("ws/iface.ridl", BASE);
+    let published = dir.path().join("published");
+    let (baseline_code, _, baseline_err) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        published.as_os_str(),
+    ]);
+    assert_eq!(baseline_code, 0, "the baseline publishes:\n{baseline_err}");
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), published.as_os_str(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "an unchanged workspace exits 0:\n{stderr}");
+    assert_eq!(stdout, "identical\n", "stdout:\n{stdout:?}");
+}
+
 /// Retiring an interaction but writing its `reserved` tombstone at the end of
 /// the body frees the retired ordinal, so a surviving interaction slides down
 /// into it (ridl §11). Driven through real source so the compiler assigns the

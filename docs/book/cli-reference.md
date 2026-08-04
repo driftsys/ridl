@@ -651,13 +651,14 @@ Options:
 ```
 
 `OLD` and `NEW` each take one of three forms: an `.ir.json` snapshot, a
-directory of them (the shape `.ridl/baseline/` takes), or source — a file, a
-package directory, or a workspace root — compiled in process. The other two
-IR encodings `ridl build` can emit are refused by name: an `.ir.txtpb` or
-`.ir.binpb` input is an error (exit 2), because diffs and baselines read
-`.ir.json` only ([ADR-0014][adr-0014] decision 5). Omit both and
-pass `--explain <CATEGORY>` instead to print that category's classification
-rule without comparing anything.
+directory of them (the shape `.ridl/baseline/` takes), or source — a
+`.typl`/`.ridl` file, a package directory, or a workspace root — compiled in
+process. Anything else is refused by name rather than compiled (exit 2): an
+`.ir.txtpb` or `.ir.binpb` input, because diffs and baselines read `.ir.json`
+only ([ADR-0014][adr-0014] decision 5); any other file, which is neither
+source nor a snapshot; and a directory holding IR artifacts but no `.ir.json`
+snapshot. Omit both and pass `--explain <CATEGORY>` instead to print that
+category's classification rule without comparing anything.
 
 **It writes nothing.** The report goes to stdout; a compile error's
 diagnostics go to stderr instead and no report prints.
