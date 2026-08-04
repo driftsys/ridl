@@ -2170,14 +2170,17 @@ fn interface(name: &str, doc: &str, interactions: Vec<v2::Decl>) -> v2::Interfac
     }
 }
 
-fn service(name: &str, shape: v2::service::Shape) -> v2::Service {
+fn service(name: &str, shape: v2::service_shape::Kind) -> v2::Service {
     v2::Service {
         name: name.to_string(),
         visibility: v2::Visibility::Public as i32,
         doc: String::new(),
         labels: Vec::new(),
         deprecated: None,
-        shape: Some(shape),
+        shapes: vec![v2::ServiceShape {
+            id: 1,
+            kind: Some(shape),
+        }],
     }
 }
 
@@ -2470,11 +2473,11 @@ fn services_both_forms() {
         vec![
             service(
                 "veh.adas.cruise",
-                v2::service::Shape::InterfaceRef("CruiseControl".to_string()),
+                v2::service_shape::Kind::InterfaceRef("CruiseControl".to_string()),
             ),
             service(
                 "veh.hvac.cabin",
-                v2::service::Shape::Inline(interface(
+                v2::service_shape::Kind::Inline(interface(
                     "",
                     "Cabin climate",
                     vec![interaction(
@@ -2501,6 +2504,111 @@ fn services_both_forms() {
         "the service address maps to its interface, got:\n{source}"
     );
     insta::assert_snapshot!(source);
+}
+
+/// A service composing two interfaces generates one `SERVICES` row per
+/// composed interface (ADR-0015 decision 11: the interface is the generation
+/// unit, the service the addressing unit) — and reordering the shape list is
+/// invisible to everything a consumer compiles against: the generated module
+/// changes only in the order of the service's own rows (decision 17: a
+/// binding keys the ordinal spaces on the interface name, not the list
+/// position), while the same reorder is breaking to `ridl diff`, whose slot
+/// ids move (decision 19).
+#[test]
+fn reordering_a_composed_services_shapes_moves_only_its_service_rows() {
+    let interfaces = || {
+        vec![
+            interface(
+                "DoorControl",
+                "",
+                vec![interaction(
+                    "locked",
+                    1,
+                    "",
+                    v2::decl::Kind::SignalDef(v2::SignalDef {
+                        payload: "Engagement".to_string(),
+                        declared_init: None,
+                        init: Some(init_value(true, Some("0"))),
+                        timing: Some(timing(
+                            v2::TimingMode::Range,
+                            Some("100000"),
+                            Some("1000000"),
+                        )),
+                    }),
+                )],
+            ),
+            interface(
+                "HealthBlock",
+                "",
+                vec![interaction(
+                    "alive",
+                    1,
+                    "",
+                    v2::decl::Kind::SignalDef(v2::SignalDef {
+                        payload: "Engagement".to_string(),
+                        declared_init: None,
+                        init: Some(init_value(true, Some("0"))),
+                        timing: Some(timing(
+                            v2::TimingMode::Range,
+                            Some("100000"),
+                            Some("1000000"),
+                        )),
+                    }),
+                )],
+            ),
+        ]
+    };
+    let composed = |refs: [&str; 2]| {
+        interaction_package(
+            Vec::new(),
+            interfaces(),
+            vec![v2::Service {
+                shapes: refs
+                    .iter()
+                    .enumerate()
+                    .map(|(index, reference)| v2::ServiceShape {
+                        id: index as u32 + 1,
+                        kind: Some(v2::service_shape::Kind::InterfaceRef(
+                            (*reference).to_string(),
+                        )),
+                    })
+                    .collect(),
+                ..service(
+                    "veh.body.doors",
+                    v2::service_shape::Kind::InterfaceRef(String::new()),
+                )
+            }],
+        )
+    };
+
+    let declared = generate(&composed(["DoorControl", "HealthBlock"]))
+        .expect("generation succeeds")
+        .rust_source;
+    let reordered = generate(&composed(["HealthBlock", "DoorControl"]))
+        .expect("generation succeeds")
+        .rust_source;
+
+    assert!(
+        declared.contains(r#"("veh.body.doors", "DoorControl"),"#)
+            && declared.contains(r#"("veh.body.doors", "HealthBlock"),"#),
+        "one row per composed interface, got:\n{declared}"
+    );
+    // Erasing the service's own rows leaves the two modules byte-identical:
+    // no interface's generated surface — faces, timing, contracts, transport
+    // identity — moved with the list.
+    let erase = |source: &str| -> String {
+        source
+            .lines()
+            .filter(|line| !line.contains(r#"("veh.body.doors", "#))
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    assert_ne!(declared, reordered, "the rows themselves do reorder");
+    assert_eq!(
+        erase(&declared),
+        erase(&reordered),
+        "everything outside the service's own rows is untouched by the reorder"
+    );
 }
 
 #[test]
@@ -2739,7 +2847,7 @@ fn inline_service_fallible_query_uses_the_dotted_service_name() {
         Vec::new(),
         vec![service(
             "veh.adas.logs",
-            v2::service::Shape::Inline(interface("", "", vec![fetch])),
+            v2::service_shape::Kind::Inline(interface("", "", vec![fetch])),
         )],
     ))
     .expect("generation succeeds")
@@ -2809,7 +2917,7 @@ fn inline_service_observer_ids_and_identity_agree() {
         Vec::new(),
         vec![service(
             "veh.adas.logs",
-            v2::service::Shape::Inline(interface("", "", vec![fetch])),
+            v2::service_shape::Kind::Inline(interface("", "", vec![fetch])),
         )],
     ))
     .expect("generation succeeds")
@@ -3028,25 +3136,25 @@ fn a_stream_of_string_is_admitted() {
     );
 }
 
-/// A service with no shape names an address that nothing answers at, so it is
-/// refused rather than emitted with an empty interface column.
+/// A shape slot with no kind names nothing that answers at the address, so it
+/// is refused rather than emitted with an empty interface column.
 #[test]
-fn a_service_without_a_shape_is_a_generate_error() {
+fn a_service_shape_slot_without_a_kind_is_a_generate_error() {
     let error = generate(&interaction_package(
         Vec::new(),
         Vec::new(),
         vec![v2::Service {
-            shape: None,
+            shapes: vec![v2::ServiceShape { id: 1, kind: None }],
             ..service(
                 "veh.adas.cruise",
-                v2::service::Shape::InterfaceRef(String::new()),
+                v2::service_shape::Kind::InterfaceRef(String::new()),
             )
         }],
     ))
-    .expect_err("a shapeless service is refused");
+    .expect_err("a kindless shape slot is refused");
     assert!(
-        error.message.contains("no shape"),
-        "the refusal names the missing shape, got: {}",
+        error.message.contains("no kind"),
+        "the refusal names the missing kind, got: {}",
         error.message
     );
 }
@@ -3311,7 +3419,7 @@ fn tuples_inside_an_inline_service_use_the_generated_type_name() {
         Vec::new(),
         vec![service(
             "veh.adas.logs",
-            v2::service::Shape::Inline(interface("", "", vec![get_pair, send_pair, fetch])),
+            v2::service_shape::Kind::Inline(interface("", "", vec![get_pair, send_pair, fetch])),
         )],
     ))
     .expect("an inline shape carrying tuples generates")
@@ -3410,7 +3518,7 @@ fn a_const_colliding_with_the_service_table_is_refused() {
         Vec::new(),
         vec![service(
             "veh.adas.cruise",
-            v2::service::Shape::InterfaceRef("CruiseControl".to_string()),
+            v2::service_shape::Kind::InterfaceRef("CruiseControl".to_string()),
         )],
     ))
     .expect_err("a service-table collision is refused");
@@ -3435,7 +3543,7 @@ fn a_declaration_colliding_with_an_inline_shape_face_is_refused() {
             Vec::new(),
             vec![service(
                 "veh.adas.logs",
-                v2::service::Shape::Inline(interface(
+                v2::service_shape::Kind::Inline(interface(
                     "",
                     "",
                     vec![interaction(
@@ -3701,7 +3809,7 @@ fn an_interface_colliding_with_an_inline_shape_name_is_refused() {
         vec![interface("ServiceVehAdasLogs", "", Vec::new())],
         vec![service(
             "veh.adas.logs",
-            v2::service::Shape::Inline(interface(
+            v2::service_shape::Kind::Inline(interface(
                 "",
                 "",
                 vec![interaction(
@@ -3736,7 +3844,7 @@ fn two_inline_shapes_normalizing_to_one_type_name_are_refused() {
     let shape = |address: &str| {
         service(
             address,
-            v2::service::Shape::Inline(interface(
+            v2::service_shape::Kind::Inline(interface(
                 "",
                 "",
                 vec![interaction(
@@ -3948,11 +4056,11 @@ fn visibility_package() -> v2::Package {
         vec![
             service(
                 "veh.cluster.hidden",
-                v2::service::Shape::InterfaceRef("Hidden".to_string()),
+                v2::service_shape::Kind::InterfaceRef("Hidden".to_string()),
             ),
             service(
                 "veh.cluster.diag",
-                v2::service::Shape::Inline(inline_shape(pair(
+                v2::service_shape::Kind::Inline(inline_shape(pair(
                     "Diag",
                     "veh.cluster.diag.readSummary.ensure[0]",
                 ))),
@@ -3996,7 +4104,10 @@ fn an_internal_services_inline_shape_is_package_private() {
         .find(|service| service.name == "veh.cluster.diag")
         .expect("the shared fixture declares the inline-shape service");
     assert!(
-        matches!(diag.shape, Some(v2::service::Shape::Inline(_))),
+        matches!(
+            diag.shapes.first().and_then(|slot| slot.kind.as_ref()),
+            Some(v2::service_shape::Kind::Inline(_))
+        ),
         "this test is only meaningful on an INLINE shape",
     );
     diag.visibility = v2::Visibility::Internal as i32;

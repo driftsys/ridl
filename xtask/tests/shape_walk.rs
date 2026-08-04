@@ -101,11 +101,14 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-sem/src/check.rs",
-        lines: 10,
+        lines: 11,
         why: "the lowering that PRODUCES `Package.interfaces` (a service's \
-              inline shape is produced by `lower_service_inline` into \
-              `Service.shape`), plus nine test assertions over the named \
-              store",
+              inline shape is produced by `lower_service_inline` into its \
+              `Service.shapes` slot); `interface_member_names`, which walks \
+              `SourceFile::interfaces()` to find one interface a resolved \
+              symbol already points at — an inline shape has no symbol, so \
+              the RIDL-144 walk cannot need `shapes()`; plus nine test \
+              assertions over the named store",
     },
     Allowed {
         path: "crates/ridl-sem/src/timing.rs",

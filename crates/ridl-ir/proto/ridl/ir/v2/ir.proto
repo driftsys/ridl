@@ -410,7 +410,8 @@ message Interface {
   repeated Decl interactions = 6;
 }
 
-// A global published declaration of an interface (ridl §14.5).
+// A global published declaration of one or more interfaces (ridl §14.5,
+// ADR-0015 decision 12).
 message Service {
   // Dotted global service name, e.g. "veh.adas.cruise" (ridl §14.5).
   string name = 1;
@@ -421,11 +422,39 @@ message Service {
   repeated string labels = 4;
   // @deprecated reason string; absent when not deprecated (typl §14.2).
   optional string deprecated = 5;
-  oneof shape {
+  // 10 and 11 carried `oneof shape { string interface_ref = 10; Interface
+  // inline = 11; }` until ADR-0015 decision 12 made the shape a list — a
+  // `oneof` member cannot be `repeated`. Reserved rather than reused
+  // (ADR-0015 decision 20): nothing was published at version 0.0.0, but
+  // reserving keeps a field number's meaning permanent by construction, the
+  // treatment ADR-0008 decision 8 applied when IR v2 took over v1's
+  // numbering.
+  reserved 10, 11;
+  // The shape list, in slot order (ridl §11 one level up, ADR-0015
+  // decision 15): the named form carries one entry per shape or tombstone;
+  // the inline form carries exactly one INLINE entry in slot 1
+  // (ADR-0015 decision 14).
+  repeated ServiceShape shapes = 12;
+}
+
+// One slot of a service's shape list (ridl §14.5, ADR-0015 decisions 12
+// and 15): a composed interface, the service's inline shape, or a
+// service-level reserved tombstone holding a retired slot.
+message ServiceShape {
+  // 1-based interface id by declaration order — ridl §11's model one level
+  // up (ADR-0015 decision 15). Stored on the slot and, for a tombstone,
+  // inside Reserved too; the lowering sets both from one counter, as the
+  // interaction tombstones do.
+  uint32 id = 1;
+  oneof kind {
     // Canonical interface reference (ridl §14.5).
     string interface_ref = 10;
-    // Inline shape; Interface.name == "" (ridl §14.5).
+    // Inline shape; Interface.name == "" (ridl §14.5). Present only as the
+    // single slot of an inline-form service (ADR-0015 decision 14).
     Interface inline = 11;
+    // A service-level tombstone: the retired slot's interface name in
+    // Reserved.name (ADR-0015 decision 12 — the ReservedEntry reuse).
+    Reserved reserved = 12;
   }
 }
 

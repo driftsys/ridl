@@ -437,15 +437,6 @@ impl HasDocComments for FixedDef {}
 impl HasDocComments for InterfaceMember {}
 impl HasDocComments for ServiceDef {}
 
-impl ServiceDef {
-    /// The first named shape — a transitional accessor that keeps the
-    /// single-shape consumers compiling until each follows the whole list;
-    /// removed by the IR migration of this same story (E9.6).
-    pub fn interface_ref(&self) -> Option<PathType> {
-        support::child(self.syntax())
-    }
-}
-
 impl DottedName {
     /// The `lowercase_id` segments of the dotted name, in source order — the
     /// three `ident` tokens of `veh.adas.cruise` (ridl reference §14.5). The

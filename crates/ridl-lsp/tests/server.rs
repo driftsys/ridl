@@ -2158,6 +2158,82 @@ fn goto_definition_and_references_work_on_a_service_interface_reference() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// A contract composing two interfaces into one service (ADR-0015 decision
+/// 12), with a service-level `reserved` tombstone holding slot 2.
+const RIDL_COMPOSED: &str = "package veh.body\n\
+\n\
+type Flag : boolean\n\
+\n\
+interface DoorControl {\n\
+\x20 signal locked : Flag @[1s..10s]\n\
+}\n\
+\n\
+interface HealthBlock {\n\
+\x20 signal alive : Flag @[1s..10s]\n\
+}\n\
+\n\
+service veh.body.doors : DoorControl, reserved LegacyDoorDiag, HealthBlock\n";
+
+/// Writes the composed-service fixture as a one-member workspace.
+fn write_composed_workspace(dir: &TempDir) -> lt::Uri {
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.body\"\nversion = \"1.0.0\"\n",
+    );
+    uri_of(&dir.write("doors.ridl", RIDL_COMPOSED))
+}
+
+/// Hover on a composed service renders the whole shape list — both interface
+/// references and the tombstone, in slot order — and goto-definition on each
+/// shape reference jumps to its own interface declaration: the LSP follows
+/// the list, not one reference.
+#[test]
+fn hover_and_goto_follow_a_composed_services_shape_list() {
+    let dir = TempDir::new("ridl-composed-service");
+    let contract = write_composed_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract.clone(),
+        find_pos(RIDL_COMPOSED, "veh.body.doors", 0),
+    );
+    assert!(value.contains("DoorControl"), "slot 1: {value}");
+    assert!(value.contains("reserved LegacyDoorDiag"), "slot 2: {value}");
+    assert!(value.contains("HealthBlock"), "slot 3: {value}");
+    assert!(value.contains("Posture-neutral"), "the §14.5 note: {value}");
+
+    // Goto-definition on the SECOND interface reference: a walk that stopped
+    // at the first `PathType` child would land on `DoorControl`.
+    let reference = find_pos(RIDL_COMPOSED, "HealthBlock", 1);
+    let declaration = find_pos(RIDL_COMPOSED, "HealthBlock", 0);
+    let response = definition_at(
+        &client,
+        12,
+        contract.clone(),
+        pos(reference.line, reference.character + 2),
+    )
+    .expect("the second shape reference resolves");
+    let location = match response {
+        lt::GotoDefinitionResponse::Scalar(location) => location,
+        other => panic!("expected a single location, got {other:?}"),
+    };
+    assert_eq!(location.uri.as_str(), contract.as_str());
+    assert_eq!(
+        location.range,
+        range(
+            (declaration.line, declaration.character),
+            (declaration.line, declaration.character + 11),
+        ),
+        "the `HealthBlock` declaration's name span",
+    );
+
+    shut_down(&client, 13);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// Completion after a `:` in payload position offers the visible named types,
 /// and completion at an interaction-start position offers the five kind
 /// keywords plus `reserved`.

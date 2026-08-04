@@ -38,6 +38,13 @@ service fleet.vehicle.doors.rear : DoorControl
 /// A second imported shape.
 service fleet.vehicle.telemetry : Telemetry
 
+/// One address composing both shapes (ADR-0015 decision 12): the interface
+/// stays the generation unit, the service the addressing unit, so this
+/// declaration generates nothing new — it gives the two contracts one more
+/// global name. The tombstone holds interface id 2 permanently (ADR-0015
+/// decision 15), so `Telemetry` is id 3.
+service fleet.vehicle.cockpit : DoorControl, reserved LegacyCabin, Telemetry
+
 /// An inline shape in a package that owns none of its vocabulary: every
 /// payload, parameter and return type here is a cross-package reference
 /// resolved through the workspace members above.

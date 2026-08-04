@@ -413,11 +413,11 @@ diag_codes! {
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
     /// this module, with the severity the ridl reference §16 tables classify it
-    /// at. RIDL-140, RIDL-141, and RIDL-143 sit in the 1xx band while the
-    /// reference lists them under the §16.4 evolution table — a documented
-    /// anomaly kept as written (ADR-0008 decision 6). RIDL-111 and RIDL-142 are
-    /// reserved by ADR-0008 decision 21 and are not declared yet, so they are
-    /// absent here too.
+    /// at. RIDL-140, RIDL-141, and RIDL-143 to RIDL-146 sit in the 1xx band
+    /// while the reference lists them under the §16.4 evolution table — a
+    /// documented anomaly kept as written (ADR-0008 decision 6). RIDL-111 and
+    /// RIDL-142 are reserved by ADR-0008 decision 21 and are not declared yet,
+    /// so they are absent here too.
     ///
     /// Adding a code here does **not** make it show up in a corpus fixture.
     /// `RIDL_PROFILE_CODES` in `crates/ridlc/tests/corpus.rs` — the list that
@@ -536,6 +536,9 @@ diag_codes! {
         /// A `service` names a type that is not an `interface`, and has no inline
         /// shape (ridl §14.5, §16.4). Emitted per-package by the checker (E2 task
         /// 8). Kept in the 1xx band per ADR-0008 decision 6 (see RIDL-140).
+        /// Applies per shape in the service's shape list since ADR-0015
+        /// decision 18 (E9.6): the rule is unchanged, the span reports against
+        /// the offending list element.
         RIDL_141 = "RIDL-141", Error,
             "`service` names a type that is not an `interface`";
 
@@ -547,9 +550,39 @@ diag_codes! {
         /// 1xx band beside RIDL-140/-141 per ADR-0008 decision 6. RIDL-111 and
         /// RIDL-142 are reserved by decision 21 and not yet implemented, so 143 is
         /// the next free code; decision 13's allocation ledger needs the ninth
-        /// entry (issue #169).
+        /// entry (issue #169). Applies per shape in the service's shape list
+        /// since ADR-0015 decision 18 (E9.6): the rule is unchanged, the span
+        /// reports against the offending list element.
         RIDL_143 = "RIDL-143", Error,
             "`service` publishes an `internal` interface";
+
+        /// Duplicate member name across a service's interfaces (ridl §14.5,
+        /// §16.4; ADR-0015 decisions 16 and 18): two composed interfaces both
+        /// declaring `status` would give `service.status` two referents, which
+        /// flat addressing cannot express. Emitted per-package by the checker
+        /// (E9.6). The service codes sit in the 1xx band (see RIDL-140);
+        /// RIDL-112 is minted by ADR-0015 decision 6, so 144 is the first free
+        /// code.
+        RIDL_144 = "RIDL-144", Error,
+            "duplicate member name across a service's interfaces";
+
+        /// The same interface named twice in one service (ridl §14.5, §16.4;
+        /// ADR-0015 decision 18). Its own code rather than a fall-through to
+        /// RIDL-144: listing a shape twice makes every member collide, so
+        /// RIDL-144 alone would emit one diagnostic per member and bury the
+        /// actual mistake. Emitted per-package by the checker (E9.6); lowering
+        /// keeps the first listing only, which holds the slot, and the
+        /// diagnostic's secondary label points at it.
+        RIDL_145 = "RIDL-145", Error,
+            "the same interface named twice in one service";
+
+        /// An interface re-declared under a service-level `reserved` name
+        /// (ridl §14.5, §16.4; ADR-0015 decision 18) — the analogue of
+        /// RIDL-401 one level up: a tombstone retires a name permanently, at
+        /// the service level as inside an interface body. Emitted per-package
+        /// by the checker (E9.6).
+        RIDL_146 = "RIDL-146", Error,
+            "interface re-declared under a service-level `reserved` name";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker (E2 task 5).

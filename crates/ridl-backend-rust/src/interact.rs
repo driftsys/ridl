@@ -838,13 +838,18 @@ fn push_contracts(
 // Services.
 // ---------------------------------------------------------------------------
 
-/// The service table: every declared address mapped to the interface that
-/// answers at it (ridl §11).
+/// The service table: every declared address mapped to the interfaces that
+/// answer at it (ridl §11, §14.5).
 ///
 /// The address stays the raw dotted string the contract declares — it is the
 /// deployment identity, not a Rust name — while the interface column holds the
 /// generated type prefix. For an inline shape the two therefore differ on
-/// purpose: `("veh.hvac.cabin", "ServiceVehHvacCabin")`.
+/// purpose: `("veh.hvac.cabin", "ServiceVehHvacCabin")`. A service composing
+/// several interfaces (ADR-0015 decision 12) contributes one row per composed
+/// interface, in slot order, under its one address — the interface stays the
+/// generation unit and the service the addressing unit (ADR-0015 decision
+/// 11). A `reserved` slot holds a retired interface id and contributes no
+/// row.
 fn emit_services(package: &v2::Package) -> Result<TokenStream, GenerateError> {
     if package.services.is_empty() {
         return Ok(quote! {});
@@ -853,26 +858,32 @@ fn emit_services(package: &v2::Package) -> Result<TokenStream, GenerateError> {
     let mut entries = Vec::with_capacity(package.services.len());
     for service in &package.services {
         let address = service.name.as_str();
-        let interface = match &service.shape {
-            Some(v2::service::Shape::InterfaceRef(name)) => camel_case(name),
-            Some(v2::service::Shape::Inline(_)) => inline_interface_name(&service.name),
-            // An empty interface column would name no interface at all, so the
-            // table would claim an address answers and not say by what.
-            None => {
-                return Err(GenerateError {
-                    message: format!(
-                        "service {address}: no shape; a service publishes an interface reference \
-                         or an inline shape (ridl §11)"
-                    ),
-                });
-            }
-        };
-        entries.push(quote! { (#address, #interface) });
+        for slot in &service.shapes {
+            let interface = match &slot.kind {
+                Some(v2::service_shape::Kind::InterfaceRef(name)) => camel_case(name),
+                Some(v2::service_shape::Kind::Inline(_)) => inline_interface_name(&service.name),
+                Some(v2::service_shape::Kind::Reserved(_)) => continue,
+                // An empty interface column would name no interface at all, so
+                // the table would claim an address answers and not say by what.
+                None => {
+                    return Err(GenerateError {
+                        message: format!(
+                            "service {address}: shape slot {id} carries no kind; a slot is an \
+                             interface reference, an inline shape, or a tombstone (ridl §14.5)",
+                            id = slot.id
+                        ),
+                    });
+                }
+            };
+            entries.push(quote! { (#address, #interface) });
+        }
     }
 
     Ok(quote! {
         /// Every service this package declares: the deployment address and the
-        /// interface that answers at it (ridl §11).
+        /// interface that answers at it (ridl §11) — one row per composed
+        /// interface, in slot order, so a service composing several interfaces
+        /// repeats its address (ridl §14.5).
         ///
         /// The address is the contract's own dotted identity, carried verbatim;
         /// the interface name is the generated Rust type prefix. For an inline

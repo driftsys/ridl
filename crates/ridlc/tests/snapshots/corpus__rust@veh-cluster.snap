@@ -1202,7 +1202,9 @@ pub const SERVICE_VEH_HVAC_CABIN_CONTRACTS: &[ContractStub] = &[
     },
 ];
 /// Every service this package declares: the deployment address and the
-/// interface that answers at it (ridl §11).
+/// interface that answers at it (ridl §11) — one row per composed
+/// interface, in slot order, so a service composing several interfaces
+/// repeats its address (ridl §14.5).
 ///
 /// The address is the contract's own dotted identity, carried verbatim;
 /// the interface name is the generated Rust type prefix. For an inline

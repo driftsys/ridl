@@ -768,30 +768,57 @@ fn strata_note(fallible: &v2::FallibleType) -> String {
     )
 }
 
-/// Renders a service declaration: its shape, and the ridl §14.5 posture note.
+/// Renders a service declaration: its shape list, and the ridl §14.5 posture
+/// note. A named-form service renders every slot — references and `reserved`
+/// tombstones alike, in slot order (ADR-0015 decision 12) — so the hover
+/// shows the same list the source declares.
 fn render_service(service: &v2::Service) -> String {
+    let inline = service.shapes.iter().find_map(|slot| match &slot.kind {
+        Some(v2::service_shape::Kind::Inline(shape)) => Some(shape),
+        _ => None,
+    });
+    let slots: Vec<String> = service
+        .shapes
+        .iter()
+        .filter_map(|slot| match &slot.kind {
+            Some(v2::service_shape::Kind::InterfaceRef(interface)) => Some(interface.clone()),
+            Some(v2::service_shape::Kind::Reserved(reserved)) => Some(format!(
+                "reserved {}",
+                reserved.name.as_deref().unwrap_or("_")
+            )),
+            Some(v2::service_shape::Kind::Inline(_)) | None => None,
+        })
+        .collect();
+
     let mut out = String::new();
     out.push_str("```ridl\n");
-    match &service.shape {
-        Some(v2::service::Shape::InterfaceRef(interface)) => {
-            out.push_str(&format!("service {} : {interface}", service.name));
-        }
-        _ => out.push_str(&format!("service {} {{ … }}", service.name)),
+    if inline.is_some() {
+        out.push_str(&format!("service {} {{ … }}", service.name));
+    } else {
+        out.push_str(&format!("service {} : {}", service.name, slots.join(", ")));
     }
     out.push_str("\n```");
 
-    match &service.shape {
-        Some(v2::service::Shape::InterfaceRef(interface)) => {
-            out.push_str(&format!("\n\n**Interface:** `{interface}`"));
-        }
-        Some(v2::service::Shape::Inline(shape)) => {
+    match inline {
+        Some(shape) => {
             let count = shape.interactions.len();
             let plural = if count == 1 { "" } else { "s" };
             out.push_str(&format!(
                 "\n\n**Shape:** inline — {count} interaction{plural}"
             ));
         }
-        None => {}
+        None if slots.is_empty() => {}
+        None => {
+            let plural = if slots.len() == 1 { "" } else { "s" };
+            out.push_str(&format!(
+                "\n\n**Interface{plural}:** {}",
+                slots
+                    .iter()
+                    .map(|slot| format!("`{slot}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
     }
 
     out.push_str(&format!("\n\n{POSTURE_NOTE}"));

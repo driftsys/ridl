@@ -60,7 +60,10 @@ review caught and no single-clause fixture could have. Keep both clauses.
   positions: `fixed` timing and the `fixed` attribute block — `command` and
   `query` left this rule when ADR-0015 admitted the range form on them), 107,
   108, 109, 110, 112 (both spellings: a bare query, and `@[20ms..]` declaring
-  a throttle with no response bound), 140, 141, 143,
+  a throttle with no response bound), 140, 141, 143, 144 (a member name
+  duplicated across a service's composed interfaces), 145 (the same interface
+  listed twice in one shape list), 146 (a shape re-declared under a
+  service-level `reserved` name — RIDL-401 one level up),
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
   406.
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).

@@ -25,6 +25,12 @@ What the entry exercises that `veh-cluster` does not:
   the references from inside `Service.shape`, not only from inside
   `Package.interfaces`.
 - **Contracts inside an inline shape**, including an `ensure` over `result`.
+- **A service composing two interfaces** (ADR-0015 decision 12).
+  `fleet.vehicle.cockpit` lists `DoorControl`, a service-level `reserved`
+  tombstone holding interface id 2, and `Telemetry` at id 3 — the clean-compile
+  case of the shape list, with each reference canonicalized on its own and the
+  tombstone holding its slot. `a_composed_service_compiles_and_round_trips_through_the_ir`
+  in `corpus.rs` drives the same entry through both interchange encodings.
 - **Both shapes of a synthesized transport identity.** An inline `T | E` return
   derives its union's wire identity from the enclosing shape, the ordinal, and
   the two arm references (ADR-0008 decision 4), and the arm references are

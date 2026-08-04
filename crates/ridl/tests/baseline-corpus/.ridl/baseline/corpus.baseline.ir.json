@@ -172,72 +172,77 @@
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],
-      "inline": {
-        "name": "",
-        "visibility": "VISIBILITY_UNSPECIFIED",
-        "doc": "",
-        "labels": [],
-        "interactions": [
-          {
-            "name": "cabinTemp",
+      "shapes": [
+        {
+          "id": 1,
+          "inline": {
+            "name": "",
             "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
             "doc": "",
             "labels": [],
-            "ordinal": 1,
-            "signalDef": {
-              "payload": "Speed",
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": "TIMING_MODE_RANGE",
-                "minUs": "500000",
-                "maxUs": "5000000",
-                "defaultApplied": false
-              }
-            }
-          },
-          {
-            "name": "filterClogged",
-            "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
-            "doc": "",
-            "labels": [],
-            "ordinal": 2,
-            "eventDef": {
-              "payload": "DoorState",
-              "timing": {
-                "mode": "TIMING_MODE_RANGE",
-                "minUs": "100000",
-                "maxUs": "1000000",
-                "defaultApplied": false
-              }
-            }
-          },
-          {
-            "name": "setEcoMode",
-            "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
-            "doc": "",
-            "labels": [],
-            "ordinal": 3,
-            "commandDef": {
-              "params": [
-                {
-                  "name": "level",
-                  "type": {
-                    "optional": false,
-                    "named": "GearIndex"
+            "interactions": [
+              {
+                "name": "cabinTemp",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 1,
+                "signalDef": {
+                  "payload": "Speed",
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "minUs": "500000",
+                    "maxUs": "5000000",
+                    "defaultApplied": false
                   }
                 }
-              ],
-              "contracts": []
-            }
+              },
+              {
+                "name": "filterClogged",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 2,
+                "eventDef": {
+                  "payload": "DoorState",
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "minUs": "100000",
+                    "maxUs": "1000000",
+                    "defaultApplied": false
+                  }
+                }
+              },
+              {
+                "name": "setEcoMode",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 3,
+                "commandDef": {
+                  "params": [
+                    {
+                      "name": "level",
+                      "type": {
+                        "optional": false,
+                        "named": "GearIndex"
+                      }
+                    }
+                  ],
+                  "contracts": []
+                }
+              }
+            ]
           }
-        ]
-      }
+        }
+      ]
     }
   ]
 }

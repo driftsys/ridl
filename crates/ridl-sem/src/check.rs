@@ -2976,13 +2976,14 @@ impl Checker<'_> {
     // shared `lower_interaction`/`error` methods but add no shared code.
 
     /// Lowers one `service` declaration to its IR shape (ridl §14.5): a
-    /// global, published declaration of an interface — either by naming a
-    /// shared shape after `:` or with an inline body. A service is
-    /// posture-neutral by design (§14.5): providing and requiring it are rsdl
-    /// concerns (§14.6), so nothing beyond the shape lowers here. Its dotted
-    /// name lives in the workspace catalog namespace, not the type namespace,
-    /// so it is never a `SymbolKind`. Services always publish with public
-    /// visibility — a global contract takes no `internal` modifier.
+    /// global, published declaration of one or more interfaces — either by
+    /// naming shapes in a list after `:` (ADR-0015 decision 12) or with one
+    /// inline body; never both (decision 14). A service is posture-neutral by
+    /// design (§14.5): providing and requiring it are rsdl concerns (§14.6),
+    /// so nothing beyond the shapes lowers here. Its dotted name lives in the
+    /// workspace catalog namespace, not the type namespace, so it is never a
+    /// `SymbolKind`. Services always publish with public visibility — a
+    /// global contract takes no `internal` modifier.
     fn lower_service(&mut self, service: &ast::ServiceDef) -> v2::Service {
         let dotted = service.name();
         let name = dotted
@@ -2993,15 +2994,22 @@ impl Checker<'_> {
             self.check_service_name(dotted);
         }
         let doc_info = docs::scan(&service.doc_comments());
-        let shape = match service.interface_ref() {
-            // The named-shape form: the reference must name an interface.
-            Some(path) => Some(v2::service::Shape::InterfaceRef(
-                self.lower_service_ref(&path),
-            )),
-            // The inline-shape form: an anonymous interface (`name == ""`).
-            None => Some(v2::service::Shape::Inline(
-                self.lower_service_inline(service),
-            )),
+        // The `:` token discriminates the two forms, not the shape list: in
+        // the inline form `ServiceDef::shapes()` would also yield the body's
+        // tombstones (see `ridl_syntax::ast::ServiceShape`). A service the
+        // parser recovered with neither form reads as an empty inline shape,
+        // the reading `SourceFile::shapes` takes too.
+        let shapes = if service.colon_token().is_some() {
+            self.lower_service_shapes(service)
+        } else {
+            // The inline shape is slot 1 (ADR-0015 decision 15), which makes
+            // the inline form a degenerate case of the general one.
+            vec![v2::ServiceShape {
+                id: 1,
+                kind: Some(v2::service_shape::Kind::Inline(
+                    self.lower_service_inline(service),
+                )),
+            }]
         };
         v2::Service {
             name,
@@ -3009,8 +3017,194 @@ impl Checker<'_> {
             doc: doc_info.doc,
             labels: doc_info.labels,
             deprecated: doc_info.deprecated,
-            shape,
+            shapes,
         }
+    }
+
+    /// Lowers a service's named shape list (ADR-0015 decisions 12 to 18).
+    /// Interface ids are 1-based by declaration order and a tombstone holds
+    /// its slot (decision 15) — ridl §11's model one level up. Three rules
+    /// guard the list:
+    ///
+    /// - **RIDL-145** — the same interface named twice. The second listing is
+    ///   dropped and holds no slot, mirroring RIDL-402's first-wins rule; its
+    ///   own code rather than RIDL-144 per member, which would bury the
+    ///   mistake under one diagnostic per member.
+    /// - **RIDL-146** — a shape re-declaring a name a service-level
+    ///   `reserved` tombstone retired: RIDL-401 one level up. As there, the
+    ///   offender still lowers into its slot; the error blocks emission.
+    /// - **RIDL-144** — a member name duplicated across the composed
+    ///   interfaces. Flat addressing (decision 16) gives every member the
+    ///   address `service.member`, so two referents for one name cannot be
+    ///   expressed.
+    fn lower_service_shapes(&mut self, service: &ast::ServiceDef) -> Vec<v2::ServiceShape> {
+        // The tombstone pre-pass, as in an interface body: `reserved` retires
+        // its name wherever it sits in the list. `or_insert_with`, not
+        // `insert`, so a second tombstone for one name does not move
+        // RIDL-146's label onto the later `reserved` slot.
+        let mut reserved: HashMap<String, TextRange> = HashMap::new();
+        for shape in service.shapes() {
+            if let ast::ServiceShape::Reserved(entry) = &shape
+                && let Some(name) = member_name(entry.name())
+            {
+                reserved
+                    .entry(name)
+                    .or_insert_with(|| member_name_range(entry.name(), entry.syntax()));
+            }
+        }
+
+        // RIDL-145 keys on the canonical reference, so a bare local name and
+        // its qualified spelling collide as one interface. The winner's span
+        // is kept so the diagnostic can point at it.
+        let mut seen: HashMap<String, TextRange> = HashMap::new();
+        // RIDL-144: member name → the interface that first contributed it and
+        // the shape slot that listed the interface.
+        let mut member_owners: HashMap<String, (String, TextRange)> = HashMap::new();
+        let mut shapes = Vec::new();
+        let mut id = 0u32;
+        for shape in service.shapes() {
+            match shape {
+                ast::ServiceShape::Reserved(entry) => {
+                    id += 1;
+                    // The tombstone stores its slot twice — on the shape AND
+                    // in `Reserved` — set from the one counter, as the
+                    // interaction tombstones are.
+                    shapes.push(v2::ServiceShape {
+                        id,
+                        kind: Some(v2::service_shape::Kind::Reserved(lower_reserved(
+                            &entry, id,
+                        ))),
+                    });
+                }
+                ast::ServiceShape::Interface(path) => {
+                    let range = path.syntax().text_range();
+                    let (canonical, symbol) = self.lower_service_ref(&path);
+                    // RIDL-146 compares the interface's own name — the final
+                    // segment of the reference. A tombstone can only spell a
+                    // bare name, and the interface name is what a binding
+                    // keys the ordinal spaces on (ADR-0015 decision 17), so
+                    // it is the identity the tombstone retires.
+                    let shape_name = canonical.rsplit('.').next().unwrap_or(&canonical);
+                    if let Some(tombstone) = reserved.get(shape_name).copied() {
+                        self.redeclared_reserved_shape(shape_name, range, tombstone);
+                    }
+                    // First-wins, read-then-write — the RIDL-402 discipline.
+                    if let Some(first) = seen.get(&canonical).copied() {
+                        self.duplicate_service_shape(&canonical, range, first);
+                        continue;
+                    }
+                    seen.insert(canonical.clone(), range);
+                    if let Some(symbol) = &symbol
+                        && symbol.kind == SymbolKind::Interface
+                    {
+                        for member in self.interface_member_names(symbol) {
+                            match member_owners.get(&member) {
+                                Some((owner, owner_range)) => {
+                                    let (owner, owner_range) = (owner.clone(), *owner_range);
+                                    self.duplicate_service_member(
+                                        &member,
+                                        shape_name,
+                                        range,
+                                        &owner,
+                                        owner_range,
+                                    );
+                                }
+                                None => {
+                                    member_owners.insert(member, (shape_name.to_string(), range));
+                                }
+                            }
+                        }
+                    }
+                    id += 1;
+                    shapes.push(v2::ServiceShape {
+                        id,
+                        kind: Some(v2::service_shape::Kind::InterfaceRef(canonical)),
+                    });
+                }
+            }
+        }
+        shapes
+    }
+
+    /// RIDL-146: a shape re-declaring a name a service-level `reserved`
+    /// tombstone retired — the RIDL-401 rule one level up (ADR-0015
+    /// decision 18).
+    fn redeclared_reserved_shape(&mut self, name: &str, range: TextRange, tombstone: TextRange) {
+        self.error_with_label(
+            DiagCode::RIDL_146,
+            range,
+            format!(
+                "`{name}` is retired: this service reserves the name, and a retired interface \
+                 keeps its slot for ever, so a consumer still holding the old contract would \
+                 read this shape as the retired one. Publish it under a different interface \
+                 name (ridl §14.5, §11)"
+            ),
+            tombstone,
+            format!("`{name}` is retired here"),
+        );
+    }
+
+    /// RIDL-145: the same interface named twice in one service (ADR-0015
+    /// decision 18). The secondary label points at the listing that wins,
+    /// because which of the two survives is the part a reader cannot guess.
+    fn duplicate_service_shape(&mut self, canonical: &str, range: TextRange, first: TextRange) {
+        self.error_with_label(
+            DiagCode::RIDL_145,
+            range,
+            format!(
+                "`{canonical}` is already listed by this service — every member of the two \
+                 listings would collide, so this second listing is dropped and holds no slot \
+                 of its own (ridl §14.5)"
+            ),
+            first,
+            format!("`{canonical}` is listed here, and this is the listing that is kept"),
+        );
+    }
+
+    /// RIDL-144: a member name duplicated across a service's interfaces
+    /// (ADR-0015 decisions 16 and 18). Addressing is flat — `service.member`
+    /// — so one member name cannot have two referents; two independently
+    /// written interfaces that share a member name cannot be composed into
+    /// one service without renaming one of them.
+    fn duplicate_service_member(
+        &mut self,
+        member: &str,
+        shape: &str,
+        range: TextRange,
+        owner: &str,
+        owner_range: TextRange,
+    ) {
+        self.error_with_label(
+            DiagCode::RIDL_144,
+            range,
+            format!(
+                "`{shape}` declares `{member}`, which `{owner}` already contributes — members \
+                 are addressed `service.member`, so one name cannot have two referents. Rename \
+                 the member in one of the two interfaces (ridl §14.5)"
+            ),
+            owner_range,
+            format!("`{owner}`, listed here, contributes `{member}`"),
+        );
+    }
+
+    /// The live member names of the interface `symbol` points at, read from
+    /// its defining file — the checked package's own or an imported one.
+    /// `reserved` tombstones inside the body hold ordinals, not addresses, so
+    /// they do not count against flat addressing (ADR-0015 decision 16). A
+    /// symbol whose definition cannot be found reads as empty.
+    fn interface_member_names(&self, symbol: &Symbol) -> Vec<String> {
+        let source = source_file(self.db, symbol.file);
+        let Some(interface) = source
+            .interfaces()
+            .find(|def| name_range(def) == symbol.range)
+        else {
+            return Vec::new();
+        };
+        interface
+            .members()
+            .filter(|member| !matches!(member, ast::InterfaceMember::Reserved(_)))
+            .filter_map(|member| member_name(member.name()))
+            .collect()
     }
 
     /// A service's dotted global name is reverse-domain, like a package name:
@@ -3035,15 +3229,19 @@ impl Checker<'_> {
         }
     }
 
-    /// Resolves a service's named interface shape (ridl §14.5). The reference
+    /// Resolves one shape of a service's list (ridl §14.5). The reference
     /// must name an `interface`; a type, constant, or unknown name is RIDL-141
-    /// (§16.4). Returns the canonical reference for the IR — bare same-package,
-    /// fully qualified cross-package — resolved through the package's imports.
-    fn lower_service_ref(&mut self, path: &ast::PathType) -> String {
+    /// (§16.4), reported against this list element (ADR-0015 decision 18).
+    /// Returns the canonical reference for the IR — bare same-package, fully
+    /// qualified cross-package — resolved through the package's imports, plus
+    /// the resolved symbol where one exists, for the RIDL-144 member walk.
+    fn lower_service_ref(&mut self, path: &ast::PathType) -> (String, Option<Symbol>) {
         let written = significant_text(path.syntax());
         let range = path.syntax().text_range();
         match self.lookup_path(path) {
-            Some(symbol) if symbol.kind == SymbolKind::Interface => self.canonical_ref(&symbol),
+            Some(symbol) if symbol.kind == SymbolKind::Interface => {
+                (self.canonical_ref(&symbol), Some(symbol))
+            }
             Some(symbol) => {
                 self.error(
                     DiagCode::RIDL_141,
@@ -3054,7 +3252,7 @@ impl Checker<'_> {
                          an inline `{{ … }}` body of its own (ridl §14.5)"
                     ),
                 );
-                self.canonical_ref(&symbol)
+                (self.canonical_ref(&symbol), Some(symbol))
             }
             None => {
                 self.error(
@@ -3066,7 +3264,7 @@ impl Checker<'_> {
                          give the service an inline `{{ … }}` body of its own (ridl §14.5)"
                     ),
                 );
-                written
+                (written, None)
             }
         }
     }
@@ -8931,8 +9129,12 @@ interface VehicleStatus {
     /// The interaction `(name, ordinal)` walk of the first service's inline
     /// shape.
     fn inline_walk(checked: &CheckedPackage) -> Vec<(&str, u32)> {
-        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
-            panic!("the service must lower to an inline shape");
+        let Some(v2::service_shape::Kind::Inline(inline)) = checked.ir.services[0]
+            .shapes
+            .first()
+            .and_then(|slot| slot.kind.as_ref())
+        else {
+            panic!("the service must lower to an inline shape in slot 1");
         };
         inline
             .interactions
@@ -9019,8 +9221,10 @@ interface VehicleStatus {
                 .flat_map(|interface| interface.interactions.iter())
                 .collect();
             for service in &checked.ir.services {
-                if let Some(v2::service::Shape::Inline(inline)) = &service.shape {
-                    interactions.extend(inline.interactions.iter());
+                for slot in &service.shapes {
+                    if let Some(v2::service_shape::Kind::Inline(inline)) = &slot.kind {
+                        interactions.extend(inline.interactions.iter());
+                    }
                 }
             }
             for decl in interactions {
@@ -9092,10 +9296,13 @@ interface VehicleStatus {
         assert_eq!(service.name, "veh.adas.cruise");
         assert_eq!(service.visibility, v2::Visibility::Public as i32);
         assert_eq!(
-            service.shape,
-            Some(v2::service::Shape::InterfaceRef(
-                "CruiseControl".to_string()
-            )),
+            service.shapes,
+            [v2::ServiceShape {
+                id: 1,
+                kind: Some(v2::service_shape::Kind::InterfaceRef(
+                    "CruiseControl".to_string()
+                )),
+            }],
         );
     }
 
@@ -9110,8 +9317,172 @@ interface VehicleStatus {
         // The service still lowers — a diagnostic does not suppress the shape.
         assert_eq!(checked.ir.services.len(), 1);
         assert_eq!(
-            checked.ir.services[0].shape,
-            Some(v2::service::Shape::InterfaceRef("Speed".to_string())),
+            checked.ir.services[0].shapes,
+            [v2::ServiceShape {
+                id: 1,
+                kind: Some(v2::service_shape::Kind::InterfaceRef("Speed".to_string())),
+            }],
+        );
+    }
+
+    // --- the shape list (E9.6, ADR-0015 decisions 12 to 18) ---------------
+
+    /// RIDL-141 applies per shape in the list (ADR-0015 decision 18): two
+    /// non-interface references draw two diagnostics, each spanning its own
+    /// list element rather than one spanning the whole reference position.
+    #[test]
+    fn ridl_141_reports_per_shape_in_the_list() {
+        let checked = check_ridl(
+            "app",
+            &format!("{PRELUDE}service veh.adas.speed : Speed, Speed2\n"),
+        );
+        let ridl_141: Vec<&Diagnostic> = checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::RIDL_141)
+            .collect();
+        assert_eq!(ridl_141.len(), 2, "got: {:?}", checked.diagnostics);
+        assert_ne!(
+            ridl_141[0].primary.range, ridl_141[1].primary.range,
+            "each diagnostic spans its own list element",
+        );
+    }
+
+    /// A service composing two interfaces lowers with 1-based ids and a
+    /// tombstone holding its slot (ADR-0015 decisions 12 and 15).
+    #[test]
+    fn a_composed_service_lowers_with_slot_ids() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
+                 interface HealthBlock {{\n  signal uptime : Speed @10ms\n}}\n\
+                 service veh.body.doors : DoorControl, reserved LegacyDoorDiag, HealthBlock\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            checked.ir.services[0].shapes,
+            [
+                v2::ServiceShape {
+                    id: 1,
+                    kind: Some(v2::service_shape::Kind::InterfaceRef(
+                        "DoorControl".to_string()
+                    )),
+                },
+                v2::ServiceShape {
+                    id: 2,
+                    kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
+                        ordinal: 2,
+                        name: Some("LegacyDoorDiag".to_string()),
+                        value: None,
+                    })),
+                },
+                v2::ServiceShape {
+                    id: 3,
+                    kind: Some(v2::service_shape::Kind::InterfaceRef(
+                        "HealthBlock".to_string()
+                    )),
+                },
+            ],
+        );
+    }
+
+    /// RIDL-144: a member name duplicated across a service's interfaces
+    /// (ADR-0015 decisions 16 and 18), including across a package boundary —
+    /// the member walk reads the imported interface's defining file.
+    #[test]
+    fn ridl_144_duplicate_member_across_composed_interfaces() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = ridl_package(
+            &db,
+            "veh.common",
+            "package veh.common\ntype Flag: boolean\ninterface DiagBlock {\n  signal status : Flag @[1s..10s]\n}\n",
+        );
+        let body = ridl_package(
+            &db,
+            "veh.body",
+            "package veh.body\nimport veh.common.DiagBlock\ntype Flag: boolean\n\
+             interface DoorControl {\n  signal status : Flag @[1s..10s]\n}\n\
+             service veh.body.doors : DoorControl, DiagBlock\n",
+        );
+        let ws = Workspace::new(&db, vec![common, body], BTreeMap::new());
+
+        let checked = check_package(&db, ws, body, std);
+        assert_eq!(codes(&checked), vec!["RIDL-144"]);
+        assert!(
+            checked.diagnostics[0].message.contains("`status`"),
+            "the message names the colliding member, got: {}",
+            checked.diagnostics[0].message
+        );
+        // Both shapes still lower — the error blocks emission, not lowering.
+        assert_eq!(checked.ir.services[0].shapes.len(), 2);
+    }
+
+    /// RIDL-145: the same interface named twice in one service (ADR-0015
+    /// decision 18). The duplicate listing is dropped and holds no slot —
+    /// RIDL-402's first-wins rule one level up — and RIDL-144 stays silent,
+    /// so the mistake is one diagnostic rather than one per member.
+    #[test]
+    fn ridl_145_same_interface_twice_drops_the_duplicate_listing() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
+                 service veh.body.doors : DoorControl, DoorControl\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-145"]);
+        assert_eq!(
+            checked.ir.services[0].shapes,
+            [v2::ServiceShape {
+                id: 1,
+                kind: Some(v2::service_shape::Kind::InterfaceRef(
+                    "DoorControl".to_string()
+                )),
+            }],
+            "the duplicate holds no slot of its own",
+        );
+    }
+
+    /// RIDL-146: a shape re-declaring a service-level `reserved` name — the
+    /// tombstone retires the name wherever it sits in the list, so the
+    /// pre-pass finds a tombstone written after the offending shape too.
+    #[test]
+    fn ridl_146_reserved_name_redeclared_wherever_the_tombstone_sits() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
+                 service veh.body.doors : DoorControl, reserved DoorControl\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-146"]);
+    }
+
+    /// RIDL-143 applies per shape in the list (ADR-0015 decision 18): a
+    /// service publishing two `internal` interfaces draws one diagnostic per
+    /// offending element, each at its own span.
+    #[test]
+    fn ridl_143_reports_per_shape_in_the_list() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}internal interface Hidden {{\n  signal a : Speed @10ms\n}}\n\
+                 internal interface Secret {{\n  signal b : Speed @10ms\n}}\n\
+                 service veh.adas.leak : Hidden, Secret\n"
+            ),
+        );
+        let ridl_143: Vec<&Diagnostic> = checked
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.code == DiagCode::RIDL_143)
+            .collect();
+        assert_eq!(ridl_143.len(), 2, "got: {:?}", checked.diagnostics);
+        assert_ne!(
+            ridl_143[0].primary.range, ridl_143[1].primary.range,
+            "each diagnostic spans its own list element",
         );
     }
 
@@ -9125,8 +9496,12 @@ interface VehicleStatus {
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         assert_eq!(checked.ir.services.len(), 1);
-        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
-            panic!("inline service must lower to an inline shape");
+        let Some(v2::service_shape::Kind::Inline(inline)) = checked.ir.services[0]
+            .shapes
+            .first()
+            .and_then(|slot| slot.kind.as_ref())
+        else {
+            panic!("inline service must lower to an inline shape in slot 1");
         };
         // The inline interface is anonymous (ridl §14.5) with its own ordinal
         // sequence.
@@ -9151,8 +9526,12 @@ interface VehicleStatus {
         // The inline body runs the same duplicate-interaction check an
         // interface body does (RIDL-402, first-wins).
         assert_eq!(codes(&checked), vec!["RIDL-402"]);
-        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
-            panic!("inline service must lower to an inline shape");
+        let Some(v2::service_shape::Kind::Inline(inline)) = checked.ir.services[0]
+            .shapes
+            .first()
+            .and_then(|slot| slot.kind.as_ref())
+        else {
+            panic!("inline service must lower to an inline shape in slot 1");
         };
         assert_eq!(inline.interactions.len(), 1);
     }
@@ -9171,8 +9550,12 @@ interface VehicleStatus {
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
-        let Some(v2::service::Shape::Inline(inline)) = &checked.ir.services[0].shape else {
-            panic!("inline service must lower to an inline shape");
+        let Some(v2::service_shape::Kind::Inline(inline)) = checked.ir.services[0]
+            .shapes
+            .first()
+            .and_then(|slot| slot.kind.as_ref())
+        else {
+            panic!("inline service must lower to an inline shape in slot 1");
         };
         let Some(v2::decl::Kind::CommandDef(set_target)) = &inline
             .interactions
@@ -9197,9 +9580,9 @@ interface VehicleStatus {
 
     // --- catalog/IR parity on the canonical interface reference ----------
     //
-    // The catalog is the SSOT later tasks consume, so its `interface_ref` must
-    // agree with the IR's on every clean program. Both cases below are clean —
-    // no diagnostic on either side would reveal a divergence.
+    // The catalog is the SSOT later tasks consume, so its `interface_refs`
+    // must agree with the IR's on every clean program. Both cases below are
+    // clean — no diagnostic on either side would reveal a divergence.
 
     /// A workspace-member package whose files are all `.ridl`.
     fn ridl_package_files(db: &RidlDatabase, name: &str, files: &[(&str, &str)]) -> Package {
@@ -9225,7 +9608,10 @@ interface VehicleStatus {
 
     /// The named shape of the one service in a checked package.
     fn service_ref(checked: &CheckedPackage) -> &str {
-        let Some(v2::service::Shape::InterfaceRef(reference)) = &checked.ir.services[0].shape
+        let Some(v2::service_shape::Kind::InterfaceRef(reference)) = checked.ir.services[0]
+            .shapes
+            .first()
+            .and_then(|slot| slot.kind.as_ref())
         else {
             panic!("expected a named service shape");
         };
@@ -9268,8 +9654,8 @@ interface VehicleStatus {
         assert!(catalog.diagnostics.is_empty());
         assert_eq!(service_ref(&checked), "veh.common.CruiseControl");
         assert_eq!(
-            catalog.entries["veh.adas.cruise"].interface_ref,
-            service_ref(&checked),
+            catalog.entries["veh.adas.cruise"].interface_refs,
+            [service_ref(&checked)],
             "the catalog and the IR must agree on the canonical reference",
         );
     }
@@ -9299,8 +9685,8 @@ interface VehicleStatus {
         assert!(catalog.diagnostics.is_empty());
         assert_eq!(service_ref(&checked), "CruiseControl");
         assert_eq!(
-            catalog.entries["veh.adas.cruise"].interface_ref,
-            service_ref(&checked),
+            catalog.entries["veh.adas.cruise"].interface_refs,
+            [service_ref(&checked)],
             "the catalog and the IR must agree on the canonical reference",
         );
     }

@@ -1,5 +1,6 @@
-// Service diagnostics (ridl §14.5, §16.4): RIDL-141 here, RIDL-140 across the
-// workspace — the twin member republishes `diag.showcase.duplicate`.
+// Service diagnostics (ridl §14.5, §16.4): RIDL-141 and the composition
+// rules RIDL-144 to RIDL-146 here, RIDL-140 across the workspace — the twin
+// member republishes `diag.showcase.duplicate`.
 
 package diag.ridl
 
@@ -12,3 +13,24 @@ service diag.showcase.duplicate : Published
 
 /// `Sample` is a struct, not an interface, and no inline shape is given.
 service diag.showcase.mistyped : Sample
+
+/// Both declare `status`, so `diag.showcase.doors.status` would have two
+/// referents (RIDL-144) — flat addressing cannot express that.
+interface DoorBlock {
+  signal status : Speed @10ms
+}
+
+interface HealthBlock {
+  signal status : Speed @10ms
+}
+
+service diag.showcase.doors : DoorBlock, HealthBlock
+
+/// The same interface listed twice (RIDL-145) — its own code, so the mistake
+/// is one diagnostic rather than one RIDL-144 per member.
+service diag.showcase.twice : Published, Published
+
+/// A shape re-declared under a service-level `reserved` name (RIDL-146) —
+/// RIDL-401 one level up: the tombstone retires `Published` for this service
+/// wherever it sits in the list.
+service diag.showcase.retired : reserved Published, Published

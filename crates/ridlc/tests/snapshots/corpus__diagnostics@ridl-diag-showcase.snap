@@ -271,10 +271,34 @@ error[FORM-102]: command parameter must be a named type or a stream
    │                          ^^^^^^^^^^^^^^^^^^^^^^
 
 error[RIDL-141]: `Sample` is not an interface, and a service publishes an interface — name the interface that carries these interactions, or give the service an inline `{ … }` body of its own (ridl §14.5)
-   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:14:34
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:15:34
    │
-14 │ service diag.showcase.mistyped : Sample
+15 │ service diag.showcase.mistyped : Sample
    │                                  ^^^^^^
+
+error[RIDL-144]: `HealthBlock` declares `status`, which `DoorBlock` already contributes — members are addressed `service.member`, so one name cannot have two referents. Rename the member in one of the two interfaces (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:27:42
+   │
+27 │ service diag.showcase.doors : DoorBlock, HealthBlock
+   │                               ---------  ^^^^^^^^^^^
+   │                               │           
+   │                               `DoorBlock`, listed here, contributes `status`
+
+error[RIDL-145]: `Published` is already listed by this service — every member of the two listings would collide, so this second listing is dropped and holds no slot of its own (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:31:42
+   │
+31 │ service diag.showcase.twice : Published, Published
+   │                               ---------  ^^^^^^^^^
+   │                               │           
+   │                               `Published` is listed here, and this is the listing that is kept
+
+error[RIDL-146]: `Published` is retired: this service reserves the name, and a retired interface keeps its slot for ever, so a consumer still holding the old contract would read this shape as the retired one. Publish it under a different interface name (ridl §14.5, §11)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:36:53
+   │
+36 │ service diag.showcase.retired : reserved Published, Published
+   │                                          ---------  ^^^^^^^^^
+   │                                          │           
+   │                                          `Published` is retired here
 
 error[TYPL-301]: stream type `<T>` not valid on a struct field or collection — interaction parameters and query returns only
   ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:8:12
@@ -396,7 +420,7 @@ error[RIDL-140]: duplicate service name `diag.showcase.duplicate` — the servic
 14 │ service diag.showcase.duplicate : Twin
    │         ^^^^^^^^^^^^^^^^^^^^^^^
    │
-   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:11:9
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:12:9
    │
-11 │ service diag.showcase.duplicate : Published
+12 │ service diag.showcase.duplicate : Published
    │         ----------------------- `diag.showcase.duplicate` is first declared here

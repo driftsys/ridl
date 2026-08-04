@@ -15,7 +15,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use ridl_syntax::ast::{AstNode as _, ServiceDef, SourceFile};
+use ridl_syntax::ast::{AstNode as _, PathType, ServiceDef, ServiceShape, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::TextRange;
 
@@ -127,16 +127,19 @@ fn dotted_name(name: &ridl_syntax::ast::QualifiedName) -> String {
 // ==========================================================================
 
 /// One entry of the [`ServiceCatalog`]: the package that declared a service
-/// and the interface it names.
+/// and the interfaces it names.
 ///
-/// `interface_ref` is the canonical interface reference — a bare `Name` for a
+/// `interface_refs` holds the canonical interface references of the shape
+/// list, in slot order (ADR-0015 decision 12) — each a bare `Name` for a
 /// same-package or unresolved shape, a fully qualified `pkg.Name` when the
-/// name resolves through the declaring file's imports — or the empty string
-/// for a service with an inline shape (ridl §14.5).
+/// name resolves through the declaring package's imports. Service-level
+/// `reserved` tombstones hold a slot but name no interface, so they do not
+/// appear here; a service with an inline shape carries an empty list
+/// (ridl §14.5).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogEntry {
     pub package: String,
-    pub interface_ref: String,
+    pub interface_refs: Vec<String>,
 }
 
 /// The system-wide service catalog: every `service` declaration across the
@@ -224,7 +227,7 @@ pub fn service_catalog(db: &dyn salsa::Database, ws: Workspace, std: Package) ->
                     name,
                     CatalogEntry {
                         package: package_name.clone(),
-                        interface_ref: canonical_interface_ref(&names, &service),
+                        interface_refs: canonical_interface_refs(&names, &service),
                     },
                 );
             }
@@ -243,8 +246,11 @@ fn service_source(db: &dyn salsa::Database, file: InputFile) -> SourceFile {
     SourceFile::cast(parse.syntax()).expect("the parser roots every tree in a SourceFile")
 }
 
-/// The canonical interface reference a service names, or the empty string for
-/// an inline shape.
+/// The canonical interface references a service's shape list names, in slot
+/// order, or the empty list for an inline shape (ADR-0015 decision 12). The
+/// `:` token discriminates the two forms, not the shape list: in the inline
+/// form `ServiceDef::shapes` would also yield the body's tombstones (see
+/// `ridl_syntax::ast::ServiceShape`).
 ///
 /// A multi-segment reference is already package-qualified and is kept as
 /// written. A single-segment reference resolves against the **package-wide**
@@ -253,10 +259,22 @@ fn service_source(db: &dyn salsa::Database, file: InputFile) -> SourceFile {
 /// in any file of the package canonicalizes the name to its full `pkg.Name`
 /// path. An unresolved name stays bare. This is the same bare/qualified split
 /// the checker's IR lowering produces, so the catalog and the IR always agree.
-fn canonical_interface_ref(names: &PackageNames, service: &ServiceDef) -> String {
-    let Some(path) = service.interface_ref() else {
-        return String::new();
-    };
+fn canonical_interface_refs(names: &PackageNames, service: &ServiceDef) -> Vec<String> {
+    if service.colon_token().is_none() {
+        return Vec::new();
+    }
+    service
+        .shapes()
+        .filter_map(|shape| match shape {
+            ServiceShape::Interface(path) => Some(canonical_ref(names, &path)),
+            // A tombstone holds a slot but names no interface.
+            ServiceShape::Reserved(_) => None,
+        })
+        .collect()
+}
+
+/// One canonical reference — see [`canonical_interface_refs`] for the rule.
+fn canonical_ref(names: &PackageNames, path: &PathType) -> String {
     let written = significant_node_text(path.syntax());
     if written.is_empty() || written.contains('.') {
         return written;
@@ -455,7 +473,40 @@ mod tests {
         assert_eq!(entry.package, "veh.adas");
         // The bare `CruiseControl` reference canonicalizes to its full
         // `pkg.Name` path through the declaring file's import.
-        assert_eq!(entry.interface_ref, "veh.common.CruiseControl");
+        assert_eq!(entry.interface_refs, ["veh.common.CruiseControl"]);
+    }
+
+    /// A shape list (ADR-0015 decision 12) records every named reference in
+    /// slot order, each canonicalized on its own; a service-level `reserved`
+    /// tombstone holds a slot but contributes no reference.
+    #[test]
+    fn service_catalog_records_every_shape_of_a_composed_service() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let common = ridl_package(
+            &db,
+            "veh.common",
+            "package veh.common\ninterface DiagBlock {\n  query readFault(code: boolean): boolean\n}\n",
+        );
+        let body = ridl_package(
+            &db,
+            "veh.body",
+            "package veh.body\nimport veh.common.DiagBlock\n\
+             interface DoorControl {\n  signal locked : boolean\n}\n\
+             service veh.body.doors : DoorControl, reserved LegacyDoorDiag, DiagBlock\n",
+        );
+        let ws = Workspace::new(&db, vec![common, body], BTreeMap::new());
+
+        let catalog = service_catalog(&db, ws, std);
+
+        assert!(catalog.diagnostics.is_empty());
+        let entry = &catalog.entries["veh.body.doors"];
+        assert_eq!(
+            entry.interface_refs,
+            ["DoorControl", "veh.common.DiagBlock"],
+            "slot order, local bare, import canonicalized, tombstone skipped",
+        );
     }
 
     #[test]
@@ -475,6 +526,6 @@ mod tests {
         assert!(catalog.diagnostics.is_empty());
         let entry = &catalog.entries["veh.hvac.cabin"];
         assert_eq!(entry.package, "veh.hvac");
-        assert_eq!(entry.interface_ref, "");
+        assert_eq!(entry.interface_refs, Vec::<String>::new());
     }
 }

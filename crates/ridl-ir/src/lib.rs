@@ -238,11 +238,12 @@ pub mod v2 {
     ///
     /// **[`Package::interfaces`] is not the complete set.** A `service`
     /// declared with an inline body carries a full [`Interface`] inside its
-    /// own `shape` oneof, which lives outside `interfaces`; a consumer that
-    /// walks `interfaces` alone silently misses it. Six defects of exactly
-    /// that shape were found independently across E2 — observer-stub
-    /// lowering, both backends' transport identity, `ridl test`'s report, the
-    /// Rust backend's collision check, and the desk check's span index.
+    /// shape list (the single `INLINE` slot, ADR-0015 decision 14), which
+    /// lives outside `interfaces`; a consumer that walks `interfaces` alone
+    /// silently misses it. Six defects of exactly that shape were found
+    /// independently across E2 — observer-stub lowering, both backends'
+    /// transport identity, `ridl test`'s report, the Rust backend's collision
+    /// check, and the desk check's span index.
     /// [`Package::shapes`] is the one walk that sees both, the way
     /// [`fallible_transport_identity`] is the one transport-identity
     /// derivation.
@@ -301,26 +302,34 @@ pub mod v2 {
         ///
         /// The order is the one every consumer already walked: the declared
         /// interfaces in source order, then the services in source order. A
-        /// service that names an interface after `:` yields nothing — its
+        /// shape-list entry that names an interface yields nothing — its
         /// target is a declared interface and is already in the sequence, so
-        /// yielding it again would visit one shape twice.
+        /// yielding it again would visit one shape twice; a service composing
+        /// several interfaces (ADR-0015 decision 12) therefore contributes
+        /// nothing at all. A tombstone slot names no shape. Only the `INLINE`
+        /// slot of an inline-form service carries an interface of its own,
+        /// and that is what this walk yields.
         pub fn shapes(&self) -> impl Iterator<Item = InterfaceShape<'_>> {
             let named = self.interfaces.iter().map(|interface| InterfaceShape {
                 name: &interface.name,
                 interface,
                 service: None,
             });
-            let inline =
-                self.services
+            let inline = self.services.iter().flat_map(|service| {
+                service
+                    .shapes
                     .iter()
-                    .filter_map(|service| match service.shape.as_ref()? {
-                        service::Shape::Inline(interface) => Some(InterfaceShape {
+                    .filter_map(move |slot| match slot.kind.as_ref()? {
+                        service_shape::Kind::Inline(interface) => Some(InterfaceShape {
                             name: &service.name,
                             interface,
                             service: Some(service),
                         }),
-                        service::Shape::InterfaceRef(_) => None,
-                    });
+                        service_shape::Kind::InterfaceRef(_) | service_shape::Kind::Reserved(_) => {
+                            None
+                        }
+                    })
+            });
             named.chain(inline)
         }
     }
@@ -348,14 +357,19 @@ pub mod v2 {
             }
         }
         for service in &package.services {
-            match &service.shape {
-                Some(service::Shape::InterfaceRef(reference)) => qualifier(reference, &mut found),
-                Some(service::Shape::Inline(interface)) => {
-                    for interaction in &interface.interactions {
-                        walk_decl(interaction, &mut found);
+            for slot in &service.shapes {
+                match &slot.kind {
+                    Some(service_shape::Kind::InterfaceRef(reference)) => {
+                        qualifier(reference, &mut found);
                     }
+                    Some(service_shape::Kind::Inline(interface)) => {
+                        for interaction in &interface.interactions {
+                            walk_decl(interaction, &mut found);
+                        }
+                    }
+                    // A tombstone holds a retired slot and names no type.
+                    Some(service_shape::Kind::Reserved(_)) | None => {}
                 }
-                None => {}
             }
         }
         found
@@ -653,37 +667,58 @@ mod v2_round_trip {
             timing: None,
         };
 
-        // service veh.adas.status : VehicleStatus — named reference.
+        // service veh.adas.status : VehicleStatus, reserved LegacyDiag — a
+        // named reference in slot 1 and a service-level tombstone holding
+        // slot 2 (ADR-0015 decisions 12 and 15).
         let status_service = v2::Service {
             name: "veh.adas.status".to_string(),
             visibility: v2::Visibility::Public as i32,
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
-            shape: Some(v2::service::Shape::InterfaceRef(
-                "VehicleStatus".to_string(),
-            )),
+            shapes: vec![
+                v2::ServiceShape {
+                    id: 1,
+                    kind: Some(v2::service_shape::Kind::InterfaceRef(
+                        "VehicleStatus".to_string(),
+                    )),
+                },
+                // The tombstone stores its slot twice — on the shape AND in
+                // Reserved — set from one counter, as interaction tombstones
+                // are.
+                v2::ServiceShape {
+                    id: 2,
+                    kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
+                        ordinal: 2,
+                        name: Some("LegacyDiag".to_string()),
+                        value: None,
+                    })),
+                },
+            ],
         };
-        // service veh.adas.logs { … } — inline shape, Interface.name == ""
-        // (ridl §14.5).
+        // service veh.adas.logs { … } — inline shape in slot 1 (ADR-0015
+        // decision 15), Interface.name == "" (ridl §14.5).
         let logs_service = v2::Service {
             name: "veh.adas.logs".to_string(),
             visibility: v2::Visibility::Public as i32,
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
-            shape: Some(v2::service::Shape::Inline(v2::Interface {
-                name: String::new(),
-                visibility: v2::Visibility::Unspecified as i32,
-                doc: String::new(),
-                labels: Vec::new(),
-                deprecated: None,
-                interactions: vec![interaction(
-                    "tailLogs",
-                    1,
-                    v2::decl::Kind::QueryDef(tail_logs),
-                )],
-            })),
+            shapes: vec![v2::ServiceShape {
+                id: 1,
+                kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
+                    name: String::new(),
+                    visibility: v2::Visibility::Unspecified as i32,
+                    doc: String::new(),
+                    labels: Vec::new(),
+                    deprecated: None,
+                    interactions: vec![interaction(
+                        "tailLogs",
+                        1,
+                        v2::decl::Kind::QueryDef(tail_logs),
+                    )],
+                })),
+            }],
         };
 
         v2::Package {
@@ -988,10 +1023,25 @@ mod v2_round_trip {
             panic!("ordinal 3 must decode as a reserved tombstone");
         };
         assert_eq!(tombstone.name.as_deref(), Some("legacyMode"));
-        let Some(v2::service::Shape::Inline(inline)) = &decoded.services[1].shape else {
-            panic!("veh.adas.logs must decode as an inline shape");
+        let Some(v2::service_shape::Kind::Inline(inline)) = decoded.services[1]
+            .shapes
+            .first()
+            .and_then(|slot| slot.kind.as_ref())
+        else {
+            panic!("veh.adas.logs must decode as an inline shape in slot 1");
         };
         assert_eq!(inline.name, "", "an inline shape carries no name");
+        let slot_ids: Vec<u32> = decoded.services[0]
+            .shapes
+            .iter()
+            .map(|slot| slot.id)
+            .collect();
+        assert_eq!(
+            slot_ids,
+            [1, 2],
+            "interface ids are 1-based by declaration order, tombstone counted \
+             (ADR-0015 decision 15)"
+        );
     }
 
     #[test]

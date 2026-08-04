@@ -284,6 +284,86 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
     });
 }
 
+/// A service composing two interfaces (ADR-0015 decision 12) compiles clean,
+/// lowers with 1-based slot ids and its tombstone holding its slot (decision
+/// 15), and survives both interchange encodings unchanged — the shape list is
+/// package data the encodings must carry, not a lowering-only view. The
+/// generation halves of the same claim are the `services-workspace` Rust and
+/// TypeScript snapshots, which carry `fleet.vehicle.cockpit`'s rows.
+#[test]
+fn a_composed_service_compiles_and_round_trips_through_the_ir() {
+    let mut db = RidlDatabase::default();
+    let std = std_package(&mut db);
+    let loaded = load_workspace(&mut db, Path::new("tests/corpus/services-workspace"))
+        .expect("the services-workspace entry loads");
+    let workspace = loaded.workspace;
+    let vehicle = workspace
+        .packages(&db)
+        .iter()
+        .copied()
+        .find(|pkg| pkg.name(&db) == "fleet.vehicle")
+        .expect("the publishing member is in the workspace");
+
+    let checked = check_package(&db, workspace, vehicle, std);
+    assert!(
+        checked
+            .diagnostics
+            .iter()
+            .all(|diagnostic| diagnostic.severity != Severity::Error),
+        "the composed service compiles clean, got: {:?}",
+        checked.diagnostics
+    );
+
+    let cockpit = checked
+        .ir
+        .services
+        .iter()
+        .find(|service| service.name == "fleet.vehicle.cockpit")
+        .expect("the composed service lowers");
+    let slots: Vec<(u32, String)> = cockpit
+        .shapes
+        .iter()
+        .map(|slot| {
+            let kind = match &slot.kind {
+                Some(ridl_ir::v2::service_shape::Kind::InterfaceRef(reference)) => {
+                    reference.clone()
+                }
+                Some(ridl_ir::v2::service_shape::Kind::Reserved(reserved)) => format!(
+                    "reserved {} (ordinal {})",
+                    reserved.name.as_deref().unwrap_or("_"),
+                    reserved.ordinal
+                ),
+                other => panic!("unexpected slot kind: {other:?}"),
+            };
+            (slot.id, kind)
+        })
+        .collect();
+    assert_eq!(
+        slots,
+        [
+            (1, "fleet.contracts.DoorControl".to_string()),
+            (2, "reserved LegacyCabin (ordinal 2)".to_string()),
+            (3, "fleet.contracts.Telemetry".to_string()),
+        ],
+        "slot ids are 1-based by declaration order, each reference \
+         canonicalized on its own, the tombstone holding its slot",
+    );
+
+    // Both interchange encodings carry the shape list unchanged (the JSON
+    // dialect is the baseline format, the binary the canonical interchange —
+    // ADR-0014 decisions 5 and 9).
+    let json = ridl_ir::v2::to_json_pretty(&checked.ir).expect("the IR serializes as JSON");
+    assert_eq!(
+        ridl_ir::v2::from_json(&json).expect("the JSON parses back"),
+        checked.ir
+    );
+    let binary = ridl_ir::v2::to_binary(&checked.ir);
+    assert_eq!(
+        ridl_ir::v2::from_binary(binary.as_slice()).expect("the binary decodes"),
+        checked.ir
+    );
+}
+
 /// Every code the ridl profile defines (ridl reference §16, plus the shared
 /// FORM/MANI/TYPL codes E2 added or folded in), paired with where the corpus
 /// provokes it. `Showcase` means the `ridl-diag-showcase` entry emits it; every
@@ -343,6 +423,9 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-140", Showcase),
     ("RIDL-141", Showcase),
     ("RIDL-143", Showcase),
+    ("RIDL-144", Showcase),
+    ("RIDL-145", Showcase),
+    ("RIDL-146", Showcase),
     ("RIDL-201", Showcase),
     ("RIDL-202", Showcase),
     ("RIDL-301", Showcase),
@@ -566,6 +649,9 @@ fn showcase_pins_every_severity() {
         ("RIDL-140", Severity::Error),
         ("RIDL-141", Severity::Error),
         ("RIDL-143", Severity::Error),
+        ("RIDL-144", Severity::Error),
+        ("RIDL-145", Severity::Error),
+        ("RIDL-146", Severity::Error),
         ("RIDL-201", Severity::Error),
         ("RIDL-202", Severity::Error),
         ("RIDL-301", Severity::Error),

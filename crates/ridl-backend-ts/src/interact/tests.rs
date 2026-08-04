@@ -188,14 +188,17 @@ fn interface(name: &str, interactions: Vec<v2::Decl>) -> v2::Interface {
     }
 }
 
-fn service(name: &str, shape: v2::service::Shape) -> v2::Service {
+fn service(name: &str, shape: v2::service_shape::Kind) -> v2::Service {
     v2::Service {
         name: name.to_string(),
         visibility: v2::Visibility::Public as i32,
         doc: String::new(),
         labels: Vec::new(),
         deprecated: None,
-        shape: Some(shape),
+        shapes: vec![v2::ServiceShape {
+            id: 1,
+            kind: Some(shape),
+        }],
     }
 }
 
@@ -583,18 +586,18 @@ fn services_named_reference_and_inline_shape() {
         vec![
             service(
                 "veh.adas.cruise",
-                v2::service::Shape::InterfaceRef("CruiseControl".to_string()),
+                v2::service_shape::Kind::InterfaceRef("CruiseControl".to_string()),
             ),
             service(
                 "veh.adas.logs",
-                v2::service::Shape::Inline(interface("", vec![tail_logs])),
+                v2::service_shape::Kind::Inline(interface("", vec![tail_logs])),
             ),
         ],
     );
     let source = render(&package);
     assert!(
-        source.contains("'veh.adas.cruise': { interface: 'CruiseControl' },"),
-        "a named service maps to its interface, got:\n{source}"
+        source.contains("'veh.adas.cruise': { interfaces: ['CruiseControl'] },"),
+        "a named service maps to its interface list, got:\n{source}"
     );
     assert!(
         source.contains("export interface Service_veh_adas_logsConsumer {"),
@@ -816,11 +819,11 @@ fn appendix_a() -> v2::Package {
     let services = vec![
         service(
             "veh.cluster.status",
-            v2::service::Shape::InterfaceRef("VehicleStatus".to_string()),
+            v2::service_shape::Kind::InterfaceRef("VehicleStatus".to_string()),
         ),
         service(
             "veh.cluster.logs",
-            v2::service::Shape::Inline(interface(
+            v2::service_shape::Kind::Inline(interface(
                 "",
                 vec![interaction(
                     "tailLogs",
@@ -988,7 +991,7 @@ fn inline_service_fallible_query_uses_the_dotted_service_name() {
         Vec::new(),
         vec![service(
             "veh.adas.logs",
-            v2::service::Shape::Inline(interface("", vec![fetch])),
+            v2::service_shape::Kind::Inline(interface("", vec![fetch])),
         )],
     );
     let source = render(&package);
@@ -1539,7 +1542,7 @@ fn collision_package(decl_name: &str) -> v2::Package {
         )],
         vec![service(
             "veh.adas.logs",
-            v2::service::Shape::Inline(interface(
+            v2::service_shape::Kind::Inline(interface(
                 "",
                 vec![interaction("tailLogs", 1, fixed_def(named("Vin")))],
             )),
@@ -1620,7 +1623,7 @@ fn two_generated_names_claiming_one_identifier_are_refused() {
         )],
         vec![service(
             "veh.adas.logs",
-            v2::service::Shape::Inline(interface(
+            v2::service_shape::Kind::Inline(interface(
                 "",
                 vec![interaction("tailLogs", 1, fixed_def(named("Vin")))],
             )),
@@ -1718,22 +1721,22 @@ fn fractional_timing_bound_is_an_error() {
     ));
 }
 
-/// A service with no shape carries nothing to generate (ridl §14.5).
+/// A shape slot with no kind carries nothing to generate (ridl §14.5).
 #[test]
-fn service_without_a_shape_is_an_error() {
+fn service_shape_slot_without_a_kind_is_an_error() {
     let package = v2::Package {
         services: vec![v2::Service {
-            shape: None,
+            shapes: vec![v2::ServiceShape { id: 1, kind: None }],
             ..service(
                 "veh.cluster.status",
-                v2::service::Shape::InterfaceRef("VehicleStatus".to_string()),
+                v2::service_shape::Kind::InterfaceRef("VehicleStatus".to_string()),
             )
         }],
         ..appendix_a()
     };
     assert!(matches!(
         generate(&package),
-        Err(GenerateError::Unrepresentable(message)) if message.contains("no shape")
+        Err(GenerateError::Unrepresentable(message)) if message.contains("no kind")
     ));
 }
 
@@ -1931,11 +1934,11 @@ fn visibility_package() -> v2::Package {
         vec![
             service(
                 "veh.cluster.hidden",
-                v2::service::Shape::InterfaceRef("Hidden".to_string()),
+                v2::service_shape::Kind::InterfaceRef("Hidden".to_string()),
             ),
             service(
                 "veh.cluster.diag",
-                v2::service::Shape::Inline(inline_shape(pair(
+                v2::service_shape::Kind::Inline(inline_shape(pair(
                     "veh.cluster.diag.readSummary.ensure[0]",
                 ))),
             ),
@@ -1978,7 +1981,10 @@ fn an_internal_services_inline_shape_is_module_local() {
         .find(|service| service.name == "veh.cluster.diag")
         .expect("the shared fixture declares the inline-shape service");
     assert!(
-        matches!(diag.shape, Some(v2::service::Shape::Inline(_))),
+        matches!(
+            diag.shapes.first().and_then(|slot| slot.kind.as_ref()),
+            Some(v2::service_shape::Kind::Inline(_))
+        ),
         "this test is only meaningful on an INLINE shape",
     );
     diag.visibility = v2::Visibility::Internal as i32;
