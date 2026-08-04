@@ -372,6 +372,30 @@ fn check_reports_a_missing_explicit_baseline() {
     assert!(stderr.contains("baseline"), "the error says so:\n{stderr}");
 }
 
+/// `--baseline` refuses a prototext or binary IR artifact by name: a
+/// baseline stays `.ir.json` (ADR-0014 decision 5). Before the refusal the
+/// snapshot loader read the file as JSON and reported a parse error, which
+/// misdiagnoses the mistake.
+#[test]
+fn check_refuses_a_non_json_baseline() {
+    let dir = TempDir::new("refuse");
+    let root = package_workspace(&dir, BASE);
+    for name in ["published.ir.txtpb", "published.ir.binpb"] {
+        let artifact = dir.write(name, "name: \"veh.cluster\"\n");
+        let (code, _, stderr) = ridl(&[
+            "check".as_ref(),
+            root.as_os_str(),
+            "--baseline".as_ref(),
+            artifact.as_os_str(),
+        ]);
+        assert_eq!(code, 2, "`{name}` is an input error, stderr:\n{stderr}");
+        assert!(
+            stderr.contains(".ir.json"),
+            "the refusal must name the accepted encoding:\n{stderr}"
+        );
+    }
+}
+
 /// A workspace that does not compile keeps its error exit and draws no desk
 /// warning — the desk check runs only after a clean compile.
 #[test]

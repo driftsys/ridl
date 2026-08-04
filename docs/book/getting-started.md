@@ -749,23 +749,26 @@ validate a vocabulary and its combinations (diagnostics `TYPL-402` and
 ridl build --emit rust --out-dir out
 ```
 
-`ridl build` compiles a workspace and writes one artifact per package. Four
+`ridl build` compiles a workspace and writes one artifact per package. Six
 emit targets exist today:
 
-| `--emit`     | Output              | Contents                                |
-| ------------ | ------------------- | --------------------------------------- |
-| `rust`       | `<package>.rs`      | idiomatic Rust source (the default)     |
-| `c-header`   | `<package>.h`       | the extern-C header                     |
-| `ir-json`    | `<package>.ir.json` | the lowered IR v2 as exact-decimal JSON |
-| `typescript` | `<package>.ts`      | idiomatic TypeScript source             |
+| `--emit`     | Output               | Contents                                |
+| ------------ | -------------------- | --------------------------------------- |
+| `rust`       | `<package>.rs`       | idiomatic Rust source (the default)     |
+| `c-header`   | `<package>.h`        | the extern-C header                     |
+| `ir-json`    | `<package>.ir.json`  | the lowered IR v2 as exact-decimal JSON |
+| `ir-text`    | `<package>.ir.txtpb` | the lowered IR v2 as prototext          |
+| `ir-binary`  | `<package>.ir.binpb` | the lowered IR v2 as protobuf binary    |
+| `typescript` | `<package>.ts`       | idiomatic TypeScript source             |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by
 package path and does not compile without the standard package beside it.
 The command above therefore writes `out/ridl.std.rs` as well, and
 `--emit c-header` and `--emit typescript` write `ridl.std.h` and
-`ridl.std.ts` the same way. `ir-json` is the exception: a snapshot records the
-packages the workspace declares, and `ridl.std` ships with the compiler.
+`ridl.std.ts` the same way. The three IR targets are the exception: a direct
+IR dump records the packages the workspace declares, and `ridl.std` ships
+with the compiler.
 
 There is no transport binding and no code generator for SOME/IP, gRPC, DDS,
 MQTT or AIDL yet. Those mappings are specified in the ridl language reference,

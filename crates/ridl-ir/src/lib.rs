@@ -17,7 +17,8 @@ pub mod v2 {
     include!(concat!(env!("OUT_DIR"), "/ridl.ir.v2.rs"));
 
     /// The descriptor pool over the compiled IR schema — the reflection data
-    /// the canonical protobuf JSON surface needs (ADR-0014 decision 7).
+    /// both text encodings need, canonical protobuf JSON and prototext
+    /// (ADR-0014 decision 7). Binary needs none of it.
     /// `build.rs` writes the `FileDescriptorSet` to `OUT_DIR` from the same
     /// `protox` compilation that generates the types above, so the pool and
     /// the types cannot disagree; every `expect` on this path leans on that.
@@ -66,28 +67,34 @@ pub mod v2 {
         )
     }
 
-    /// The error [`to_json_pretty`] returns. The serialization surface is
-    /// fallible on purpose — ADR-0014 decision 12, which retracts decision
-    /// 7's infallible return: the reflection path transcodes through the
-    /// wire encoding, whose decoder enforces prost's fixed recursion limit,
-    /// and legal source can nest composites past it.
+    /// The error [`to_json_pretty`] and [`to_text_format`] return. The
+    /// serialization surface is fallible on purpose — ADR-0014 decision 12,
+    /// which retracts decision 7's infallible return: the reflection path
+    /// transcodes through the wire encoding, whose decoder enforces prost's
+    /// fixed recursion limit, and legal source can nest composites past it.
     #[derive(Debug)]
-    pub struct SerializeError(prost::DecodeError);
+    pub struct SerializeError {
+        /// The encoding being rendered when the transcode failed — named in
+        /// the message, so a build requesting several IR emits attributes
+        /// each failure to its own artifact.
+        encoding: &'static str,
+        source: prost::DecodeError,
+    }
 
     impl std::fmt::Display for SerializeError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             write!(
                 f,
-                "cannot render the package as canonical protobuf JSON: {}; the known cause \
+                "cannot render the package as {}: {}; the known cause \
                  is composite nesting deeper than the transcoding decoder's recursion limit",
-                self.0
+                self.encoding, self.source
             )
         }
     }
 
     impl std::error::Error for SerializeError {
         fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-            Some(&self.0)
+            Some(&self.source)
         }
     }
 
@@ -110,7 +117,10 @@ pub mod v2 {
         let mut buf = Vec::new();
         let mut serializer = serde_json::Serializer::pretty(&mut buf);
         transcode(package)
-            .map_err(SerializeError)?
+            .map_err(|source| SerializeError {
+                encoding: "canonical protobuf JSON",
+                source,
+            })?
             .serialize_with_options(
                 &mut serializer,
                 &prost_reflect::SerializeOptions::new().skip_default_fields(false),
@@ -132,6 +142,81 @@ pub mod v2 {
             prost_reflect::DynamicMessage::deserialize(package_descriptor(), &mut deserializer)?;
         deserializer.end()?;
         dynamic.transcode_to().map_err(serde::de::Error::custom)
+    }
+
+    /// Renders a package in the protobuf text format — the inspection
+    /// encoding (ADR-0014 decision 9): emittable, but not a recommended
+    /// interchange form. Rendered `pretty`, with a field holding its default
+    /// emitted rather than skipped (decision 2) and message fields printed
+    /// in schema index order, so the output ordering is deterministic rather
+    /// than incidental (decision 8).
+    ///
+    /// Fallible for the same reason [`to_json_pretty`] is (ADR-0014 decision
+    /// 12): the transcode into the dynamic message goes through the wire
+    /// encoding, and a package whose composite nesting crosses prost's
+    /// recursion limit fails there. That input is legal source, so the
+    /// failure is returned rather than panicked on.
+    pub fn to_text_format(package: &Package) -> Result<String, SerializeError> {
+        let dynamic = transcode(package).map_err(|source| SerializeError {
+            encoding: "prototext",
+            source,
+        })?;
+        Ok(dynamic.to_text_format_with_options(
+            &prost_reflect::text_format::FormatOptions::new()
+                .pretty(true)
+                .skip_default_fields(false)
+                .print_message_fields_in_index_order(true),
+        ))
+    }
+
+    /// The error [`from_text_format`] returns: the input does not parse as
+    /// prototext, or the parsed message does not transcode into the
+    /// generated types. The transcode failure is the read direction of the
+    /// recursion-limit failure mode (ADR-0014 decision 12) — input-dependent,
+    /// so it is mapped into this return rather than expected on.
+    #[derive(Debug)]
+    pub enum TextFormatError {
+        /// The input is not valid prototext for the `Package` schema.
+        Parse(prost_reflect::text_format::ParseError),
+        /// The parsed message cannot be rebuilt as a typed `Package`.
+        Transcode(prost::DecodeError),
+    }
+
+    impl std::fmt::Display for TextFormatError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                Self::Parse(source) => {
+                    write!(f, "cannot parse the text as an IR package: {source}")
+                }
+                Self::Transcode(source) => write!(
+                    f,
+                    "cannot rebuild the parsed prototext as a package: {source}; the known cause \
+                     is composite nesting deeper than the transcoding decoder's recursion limit"
+                ),
+            }
+        }
+    }
+
+    impl std::error::Error for TextFormatError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            match self {
+                Self::Parse(source) => Some(source),
+                Self::Transcode(source) => Some(source),
+            }
+        }
+    }
+
+    /// Reads a package from the protobuf text format — the inverse of
+    /// [`to_text_format`], required rather than speculative: without it the
+    /// prototext emit has no round-trip test, and a write path with no read
+    /// path is untested by construction (ADR-0014 decision 7). A package
+    /// whose composite nesting crosses prost's recursion limit fails in the
+    /// transcode out of the dynamic message; that failure is mapped into the
+    /// error return, not expected on (ADR-0014 decision 12).
+    pub fn from_text_format(text: &str) -> Result<Package, TextFormatError> {
+        let dynamic = prost_reflect::DynamicMessage::parse_text_format(package_descriptor(), text)
+            .map_err(TextFormatError::Parse)?;
+        dynamic.transcode_to().map_err(TextFormatError::Transcode)
     }
 
     /// Encodes a package in the protobuf binary wire format — the canonical
@@ -916,6 +1001,57 @@ mod v2_round_trip {
         }
     }
 
+    /// The prototext read path (ADR-0014 decision 7): both fixtures survive
+    /// `to_text_format` then `from_text_format` unchanged. With the binary
+    /// and JSON round trips above, this is what proves all three encodings
+    /// carry the same IR.
+    #[test]
+    fn text_format_round_trip_preserves_package() {
+        for package in [fixture(), vocabulary_fixture()] {
+            let text = v2::to_text_format(&package).expect("the fixture serializes as prototext");
+            let decoded = v2::from_text_format(&text).expect("prototext parsing must succeed");
+
+            assert_eq!(package, decoded);
+        }
+    }
+
+    /// The prototext options ADR-0014 decision 8 fixes — `pretty`,
+    /// `skip_default_fields(false)`, `print_message_fields_in_index_order`.
+    /// Any option set round-trips, which is why the round-trip test above
+    /// cannot guard them.
+    ///
+    /// The first two are asserted through a visible consequence. The third is
+    /// **not guarded here and cannot be on this schema**: every message in
+    /// `ir.proto` declares its fields in ascending field-number order, and
+    /// field-number order is also `prost-reflect`'s default, so index order
+    /// and default order coincide everywhere and dropping the option would
+    /// change no output. It is set because the schema's ordering is a
+    /// property of the schema rather than a guarantee, and a message whose
+    /// declaration order departs from its numbering would otherwise reorder
+    /// every artifact it appears in.
+    #[test]
+    fn text_format_is_pretty_with_defaults_in_index_order() {
+        let text = v2::to_text_format(&fixture()).expect("the fixture serializes as prototext");
+
+        // pretty: nested messages are indented, one field per line.
+        assert!(
+            text.contains("\n  "),
+            "pretty printing must indent nested fields, got: {text}"
+        );
+        // skip_default_fields(false): a field holding its default is present
+        // (decision 2 — `ordinal: 0` is read, not inferred from absence).
+        assert!(
+            text.contains("is_error: false"),
+            "a field holding its default must be emitted, got: {text}"
+        );
+        // print_message_fields_in_index_order: `name` is field 1 of
+        // `Package`, so it opens the output.
+        assert!(
+            text.starts_with("name:"),
+            "fields must print in schema index order, got: {text}"
+        );
+    }
+
     /// Parses emitted JSON the way ADR-0014 decision 11's conformance test
     /// requires: unknown fields rejected, trailing input rejected, and the
     /// result transcoded into the generated types.
@@ -1335,5 +1471,92 @@ mod v2_round_trip {
             .expect("below the recursion limit, serialization succeeds");
         let decoded = v2::from_json(&json).expect("below the recursion limit, parsing succeeds");
         assert_eq!(package, decoded);
+    }
+
+    /// The prototext form of [`nested_package`], built by hand for the same
+    /// reason [`nested_json`] is: past the limit the serializer rejects the
+    /// package, so its prototext cannot come from [`v2::to_text_format`].
+    fn nested_text(depth: usize) -> String {
+        let mut payload = "primitive: PRIMITIVE_TYPE_INTEGER".to_string();
+        for _ in 0..depth {
+            payload = format!("array {{ element {{ {payload} }} min: 1 max: 1 }}");
+        }
+        format!(
+            r#"name: "veh.deep" decls {{ name: "deep" fixed_def {{ payload {{ {payload} }} }} }}"#
+        )
+    }
+
+    /// The prototext write path carries the same recursion-limit failure mode
+    /// as JSON — both go through the one transcode (ADR-0014 decision 12) —
+    /// and reports it as an error naming its own encoding, never a panic.
+    #[test]
+    fn text_serialization_past_the_nesting_limit_returns_an_error() {
+        let err = v2::to_text_format(&nested_package(NESTING_PAST_LIMIT))
+            .expect_err("serialization past the recursion limit must fail, not panic");
+        let message = err.to_string();
+        assert!(
+            message.contains("recursion limit"),
+            "the error must name the nesting limit as the known cause, got: {message}"
+        );
+        assert!(
+            message.contains("prototext"),
+            "the error must name the encoding that failed, got: {message}"
+        );
+    }
+
+    /// Runs `test` on a thread whose stack fits the text-format parser at
+    /// these depths. `prost-reflect`'s text parser recurses once per message
+    /// level with debug-build frames large enough that the default 2 MiB
+    /// test-thread stack overflows near 45 array levels — under prost's own
+    /// recursion limit, so the depths [`NESTING_BELOW_LIMIT`] and
+    /// [`NESTING_PAST_LIMIT`] pin are unreachable on that stack. The
+    /// production paths are unaffected: the toolchain writes prototext and
+    /// never parses it (`ridl diff` and the baselines stay `.ir.json`,
+    /// ADR-0014 decision 5), and the writer is capped by the transcode
+    /// before it can recurse that deep.
+    fn with_parser_stack(test: impl FnOnce() + Send + 'static) {
+        let outcome = std::thread::Builder::new()
+            .stack_size(16 * 1024 * 1024)
+            .spawn(test)
+            .expect("spawn the large-stack test thread")
+            .join();
+        if let Err(payload) = outcome {
+            std::panic::resume_unwind(payload);
+        }
+    }
+
+    /// The read direction: the text-format parser itself has no depth limit,
+    /// so the failure is the transcode out of the dynamic message, mapped
+    /// into the error return instead of expected on (ADR-0014 decision 12).
+    #[test]
+    fn text_parse_past_the_nesting_limit_returns_an_error() {
+        with_parser_stack(|| {
+            let error = v2::from_text_format(&nested_text(NESTING_PAST_LIMIT))
+                .expect_err("parsing past the recursion limit must fail, not panic");
+
+            // Assert *which* stage failed: prost's transcoding decoder says
+            // "recursion limit reached", and a parse-stage failure would
+            // render through the `Parse` variant instead.
+            let message = error.to_string();
+            assert!(
+                message.contains("recursion limit reached"),
+                "the transcode out of the dynamic message must be the failing \
+                 stage, got: {message}"
+            );
+        });
+    }
+
+    /// The prototext bound must not tighten silently either: below the limit
+    /// the package still serializes and round-trips.
+    #[test]
+    fn text_round_trip_below_the_nesting_limit_succeeds() {
+        with_parser_stack(|| {
+            let package = nested_package(NESTING_BELOW_LIMIT);
+            let text = v2::to_text_format(&package)
+                .expect("below the recursion limit, serialization succeeds");
+            let decoded =
+                v2::from_text_format(&text).expect("below the recursion limit, parsing succeeds");
+            assert_eq!(package, decoded);
+        });
     }
 }

@@ -107,9 +107,12 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   8), so the pre-cut field reservations v1 carried are visible only in v2's
   numbering. Range bounds, steps, init values, and timing bounds are canonical
   decimal strings — the schema has no float or double field — and derived wire
-  widths ride alongside as enums (ADR-0007 decision 9). The prost types carry
-  `serde` for the exact-decimal JSON debug rendering, which is the same form
-  `ridl baseline` writes and `ridl diff` reads.
+  widths ride alongside as enums (ADR-0007 decision 9). The crate renders three
+  encodings of that schema — canonical protobuf JSON, prototext, and protobuf
+  binary — the two text ones over a descriptor pool that `build.rs` writes to
+  `OUT_DIR` and `lib.rs` embeds, from the same compilation that generates the
+  types (ADR-0014). JSON is the form `ridl baseline` writes and `ridl diff`
+  reads.
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source, c_header }`. Rust is built as a `quote` token stream
@@ -148,16 +151,18 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   package model (file, package directory, or workspace root) and is the library
   face the language server drives; `run_check` and `run_build` add the
   remote-import lockfile round trip (`--frozen` never fetches) and, for build,
-  write the selected artifacts: `<base>.rs`, `<base>.h`, `<base>.ir.json`, and
-  `<base>.ts`. The binary exposes `ridlc check` and `ridlc build`. E2 widened
-  `WorkspaceOutput` with the checker's `resolutions` and the lowered `std_ir`,
-  so a workflow crate does not have to restate the compiler's load-and-resolve
-  loop (ADR-0008 decision 15). Both backends are ordinary dependencies here:
-  `ridlc build --emit` offers `rust`, `c-header`, `ir-json`, and `typescript`,
-  so the second backend over one IR is reachable from the command line and not
-  only from the corpus runner's snapshots. The two language emits are
-  independent — each backend generates from the same IR on its own, and one that
-  cannot render a package skips only its own artifact.
+  write the selected artifacts: `<base>.rs`, `<base>.h`, `<base>.ir.json`,
+  `<base>.ir.txtpb`, `<base>.ir.binpb`, and `<base>.ts`. The binary exposes
+  `ridlc check` and `ridlc build`. E2 widened `WorkspaceOutput` with the
+  checker's `resolutions` and the lowered `std_ir`, so a workflow crate does not
+  have to restate the compiler's load-and-resolve loop (ADR-0008 decision 15).
+  Both backends are ordinary dependencies here: `ridlc build --emit` offers
+  `rust`, `c-header`, the three IR encodings of ADR-0014 decision 4 (`ir-json`,
+  `ir-text`, `ir-binary`), and `typescript`, so the second backend over one IR
+  is reachable from the command line and not only from the corpus runner's
+  snapshots. The two language emits are independent — each backend generates
+  from the same IR on its own, and one that cannot render a package skips only
+  its own artifact.
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
   `ridl build`, `ridl test`, `ridl fmt`, and `ridl diff`, driving the `ridlc`

@@ -274,6 +274,15 @@ pub enum Emit {
     CHeader,
     /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`.
     IrJson,
+    /// The lowered IR v2 as prototext, written to `<base>.ir.txtpb`.
+    ///
+    /// The inspection encoding (ADR-0014 decisions 4 and 9): emittable, but
+    /// not a recommended interchange form.
+    IrText,
+    /// The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`.
+    ///
+    /// The canonical interchange encoding (ADR-0014 decisions 4 and 9).
+    IrBinary,
     /// Idiomatic TypeScript source, written to `<base>.ts`.
     ///
     /// The flag value is spelled `typescript` rather than the derived
@@ -366,10 +375,9 @@ pub fn run_build(
     // A build must not emit artifacts for a workspace that failed: code
     // generation over error-bearing IR produces invalid or misleading output,
     // and a malformed IR could even crash a backend (C1). `check` never runs
-    // codegen; `build` matches that by skipping every emit — Rust, C header,
-    // ir-json, and TypeScript alike — when any error-severity diagnostic is
-    // present, from the compile or from materialization. Warnings and info do
-    // not gate.
+    // codegen; `build` matches that by skipping every emit — code and IR
+    // dumps alike — when any error-severity diagnostic is present, from the
+    // compile or from materialization. Warnings and info do not gate.
     let succeeded = !diagnostics
         .iter()
         .any(|diagnostic| diagnostic.severity == Severity::Error);
@@ -395,19 +403,24 @@ pub fn run_build(
             .iter()
             .any(|package| ridl_ir::v2::referenced_packages(&package.ir).contains("ridl.std"));
         if references_std {
-            // Every emit kind except `ir-json`. `ridl.std` is version-locked to
-            // the compiler binary (ADR-0007 decision 15), so it is not part of a
-            // workspace's contract snapshot — a baseline holds the packages the
-            // workspace *declares*. `ridl baseline` is `run_build` with
-            // `--emit ir-json`, and `ridl diff` compiles the other side without
-            // `ridl.std`, so writing `ridl.std.ir.json` here would make every
-            // diff of an unedited workspace against its own baseline report
-            // `ridl.std` as a removed package. Issue #190 is about generated
-            // *code* failing to compile, and `.ir.json` is not code.
+            // Every emit kind except the direct IR dumps. `ridl.std` is
+            // version-locked to the compiler binary (ADR-0007 decision 15), so
+            // it is not part of a workspace's contract snapshot — a baseline
+            // holds the packages the workspace *declares*. `ridl baseline` is
+            // `run_build` with `--emit ir-json`, and `ridl diff` compiles the
+            // other side without `ridl.std`, so writing `ridl.std.ir.json`
+            // here would make every diff of an unedited workspace against its
+            // own baseline report `ridl.std` as a removed package. Issue #190
+            // is about generated *code* failing to compile, and an IR dump is
+            // not code — prototext and binary are dumps by the identical
+            // argument (ADR-0014 decision 10). That decision requires this
+            // classification to be exhaustive over `Emit`; the roadmap
+            // sequences that rewrite as story E9.3, so it stays an
+            // enumeration for one more story.
             let code_emits: Vec<Emit> = emits
                 .iter()
                 .copied()
-                .filter(|emit| !matches!(emit, Emit::IrJson))
+                .filter(|emit| !matches!(emit, Emit::IrJson | Emit::IrText | Emit::IrBinary))
                 .collect();
             if !code_emits.is_empty() {
                 let std_ir = check_package(&db, workspace, std, std).ir;
@@ -587,10 +600,11 @@ fn materialize_and_lock(
 ///
 /// The Rust and C-header emits share one [`generate`](ridl_backend_rust::generate)
 /// call; a codegen failure is recorded as a diagnostic and those two emits are
-/// skipped. The `ir-json` emit (a direct IR dump) follows the same rule: when
-/// the package cannot be rendered as canonical protobuf JSON (ADR-0014
+/// skipped. The `ir-json` and `ir-text` emits (direct IR dumps) follow the
+/// same rule: when the package cannot be rendered in that encoding (ADR-0014
 /// decision 12), the failure is recorded as a diagnostic and no artifact is
-/// written. The TypeScript
+/// written. The `ir-binary` dump has no failure path — binary needs no
+/// descriptors and no transcode (ADR-0014 decision 7). The TypeScript
 /// emit is a second, independent backend
 /// ([`generate`](ridl_backend_ts::generate)) over the same IR, with its own
 /// result type and its own failure path — a backend that cannot render this
@@ -669,6 +683,30 @@ fn write_emits(
                     ));
                 }
             },
+            // Prototext goes through the same transcode as JSON and carries
+            // the same recursion-limit failure mode (ADR-0014 decision 12):
+            // the failure is a diagnostic and no artifact is written.
+            Emit::IrText => match ridl_ir::v2::to_text_format(ir) {
+                Ok(text) => {
+                    std::fs::write(out_dir.join(format!("{base}.ir.txtpb")), text)?;
+                }
+                Err(err) => {
+                    diagnostics.push(error_diagnostic(
+                        "",
+                        err.to_string(),
+                        FileId::DETACHED,
+                        TextRange::default(),
+                    ));
+                }
+            },
+            // Binary needs no descriptors and no transcode, so it has no
+            // recursion-limit failure path (ADR-0014 decision 7).
+            Emit::IrBinary => {
+                std::fs::write(
+                    out_dir.join(format!("{base}.ir.binpb")),
+                    ridl_ir::v2::to_binary(ir),
+                )?;
+            }
             Emit::TypeScript => {
                 if let Some(generated) = &generated_ts {
                     std::fs::write(out_dir.join(format!("{base}.ts")), &generated.source)?;
