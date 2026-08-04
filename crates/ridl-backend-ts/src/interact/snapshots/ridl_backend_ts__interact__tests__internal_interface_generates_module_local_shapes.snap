@@ -261,13 +261,14 @@ export const service_veh_cluster_diagContracts = [
 /**
  * The services this package publishes (ridl §14.5). Each key is the dotted
  * global service name — the address a runtime resolves and the prefix of the
- * observer-stub ids — and `interface` names the generated TypeScript
- * interface behind it. The two are deliberately different spellings of
- * different things: the dotted name is the service's identity, while the
- * generated name is a TypeScript identifier, which cannot contain dots. The
- * faces of an entry named `Foo` are `FooConsumer` and `FooProvider`.
+ * observer-stub ids — and `interfaces` names the generated TypeScript
+ * interfaces behind it, in shape-list slot order. The two are deliberately
+ * different spellings of different things: the dotted name is the service's
+ * identity, while a generated name is a TypeScript identifier, which cannot
+ * contain dots. The faces of an entry named `Foo` are `FooConsumer` and
+ * `FooProvider`.
  */
 export const services = {
-  'veh.cluster.hidden': { interface: 'Hidden' },
-  'veh.cluster.diag': { interface: 'Service_veh_cluster_diag' },
+  'veh.cluster.hidden': { interfaces: ['Hidden'] },
+  'veh.cluster.diag': { interfaces: ['Service_veh_cluster_diag'] },
 } as const;

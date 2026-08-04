@@ -11,9 +11,11 @@ Two members, because one package cannot provoke everything:
   error in one family never suppresses the checker in another. Its manifest
   carries an invalid `[defaults].timing`, which is MANI-009; the built-in
   `[100ms..1000ms]` is the fallback, so RIDL-100 still reports concrete bounds.
-- `twin/` — package `diag.twin`. It exists only to republish the service name
+- `twin/` — package `diag.twin`. It republishes the service name
   `diag.showcase.duplicate`, because the service catalog is a workspace-wide
-  namespace and RIDL-140 cannot be provoked from a single package.
+  namespace and RIDL-140 cannot be provoked from a single package, and it
+  declares its own `Published` so `main/services.ridl` can compose two
+  interfaces with one name (RIDL-147) — one package cannot declare two.
 
 `main/narrowing.ridl` and `main/narrowing_returns.ridl` cover what typl shapes
 may cross an interaction boundary — optional in any interaction position, a map
@@ -60,7 +62,10 @@ review caught and no single-clause fixture could have. Keep both clauses.
   positions: `fixed` timing and the `fixed` attribute block — `command` and
   `query` left this rule when ADR-0015 admitted the range form on them), 107,
   108, 109, 110, 112 (both spellings: a bare query, and `@[20ms..]` declaring
-  a throttle with no response bound), 140, 141, 143,
+  a throttle with no response bound), 140, 141, 143, 144 (a member name
+  duplicated across a service's composed interfaces), 145 (the same interface
+  listed twice in one shape list), 146 (a shape re-declared under a
+  service-level `reserved` name — RIDL-401 one level up),
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
   406.
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).

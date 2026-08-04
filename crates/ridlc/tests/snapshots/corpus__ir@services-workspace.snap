@@ -391,207 +391,250 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "Two services over one imported shape: the front and rear door controllers\nare separate system-wide addresses realizing the same contract.",
       "labels": [],
-      "interfaceRef": "fleet.contracts.DoorControl"
+      "shapes": [
+        {
+          "id": 1,
+          "interfaceRef": "fleet.contracts.DoorControl"
+        }
+      ]
     },
     {
       "name": "fleet.vehicle.doors.rear",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],
-      "interfaceRef": "fleet.contracts.DoorControl"
+      "shapes": [
+        {
+          "id": 1,
+          "interfaceRef": "fleet.contracts.DoorControl"
+        }
+      ]
     },
     {
       "name": "fleet.vehicle.telemetry",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "A second imported shape.",
       "labels": [],
-      "interfaceRef": "fleet.contracts.Telemetry"
+      "shapes": [
+        {
+          "id": 1,
+          "interfaceRef": "fleet.contracts.Telemetry"
+        }
+      ]
+    },
+    {
+      "name": "fleet.vehicle.cockpit",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "One address composing both shapes (ADR-0015 decision 12): the interface\nstays the generation unit, the service the addressing unit, so this\ndeclaration generates nothing new — it gives the two contracts one more\nglobal name. The tombstone holds interface id 2 permanently (ADR-0015\ndecision 15), so `Telemetry` is id 3.",
+      "labels": [],
+      "shapes": [
+        {
+          "id": 1,
+          "interfaceRef": "fleet.contracts.DoorControl"
+        },
+        {
+          "id": 2,
+          "reserved": {
+            "ordinal": 2,
+            "name": "LegacyCabin"
+          }
+        },
+        {
+          "id": 3,
+          "interfaceRef": "fleet.contracts.Telemetry"
+        }
+      ]
     },
     {
       "name": "fleet.vehicle.mirrors",
       "visibility": "VISIBILITY_PUBLIC",
       "doc": "An inline shape in a package that owns none of its vocabulary: every\npayload, parameter and return type here is a cross-package reference\nresolved through the workspace members above.",
       "labels": [],
-      "inline": {
-        "name": "",
-        "visibility": "VISIBILITY_UNSPECIFIED",
-        "doc": "",
-        "labels": [],
-        "interactions": [
-          {
-            "name": "foldAngle",
+      "shapes": [
+        {
+          "id": 1,
+          "inline": {
+            "name": "",
             "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
             "doc": "",
             "labels": [],
-            "ordinal": 1,
-            "signalDef": {
-              "payload": "fleet.contracts.Percent",
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": "TIMING_MODE_RANGE",
-                "minUs": "200000",
-                "maxUs": "2000000",
-                "defaultApplied": false
-              }
-            }
-          },
-          {
-            "name": "fold",
-            "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
-            "doc": "",
-            "labels": [],
-            "ordinal": 2,
-            "commandDef": {
-              "params": [
-                {
-                  "name": "door",
-                  "type": {
-                    "optional": false,
-                    "named": "fleet.contracts.DoorId"
+            "interactions": [
+              {
+                "name": "foldAngle",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 1,
+                "signalDef": {
+                  "payload": "fleet.contracts.Percent",
+                  "init": {
+                    "derivable": true,
+                    "value": "0"
+                  },
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "minUs": "200000",
+                    "maxUs": "2000000",
+                    "defaultApplied": false
                   }
                 }
-              ],
-              "contracts": [],
-              "timing": {
-                "mode": "TIMING_MODE_RANGE",
-                "maxUs": "50000",
-                "defaultApplied": false
-              }
-            }
-          },
-          {
-            "name": "readFold",
-            "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
-            "doc": "",
-            "labels": [],
-            "ordinal": 3,
-            "queryDef": {
-              "params": [
-                {
-                  "name": "door",
-                  "type": {
-                    "optional": false,
-                    "named": "fleet.contracts.DoorId"
-                  }
-                }
-              ],
-              "returnType": {
-                "value": {
-                  "optional": false,
-                  "named": "fleet.contracts.Percent"
-                }
               },
-              "contracts": [
-                {
-                  "kind": "CONTRACT_KIND_REQUIRE",
-                  "source": "door <= 7",
-                  "signalRefs": [],
-                  "paramRefs": [
-                    "door"
+              {
+                "name": "fold",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 2,
+                "commandDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "named": "fleet.contracts.DoorId"
+                      }
+                    }
                   ],
-                  "usesResult": false,
-                  "observerId": "fleet.vehicle.mirrors.readFold.require[0]"
-                },
-                {
-                  "kind": "CONTRACT_KIND_ENSURE",
-                  "source": "result >= 0.0",
-                  "signalRefs": [],
-                  "paramRefs": [],
-                  "usesResult": true,
-                  "observerId": "fleet.vehicle.mirrors.readFold.ensure[0]"
+                  "contracts": [],
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "maxUs": "50000",
+                    "defaultApplied": false
+                  }
                 }
-              ],
-              "timing": {
-                "mode": "TIMING_MODE_RANGE",
-                "maxUs": "50000",
-                "defaultApplied": false
-              }
-            }
-          },
-          {
-            "name": "mirrorCount",
-            "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
-            "doc": "",
-            "labels": [],
-            "ordinal": 4,
-            "fixedDef": {
-              "payload": {
-                "optional": false,
-                "named": "fleet.contracts.DoorId"
-              }
-            }
-          },
-          {
-            "name": "readDoor",
-            "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
-            "doc": "Cross-package `T | E`: both arms live in `fleet.contracts`, so the\nsynthesized transport identity carries their fully qualified names.",
-            "labels": [],
-            "ordinal": 5,
-            "queryDef": {
-              "params": [
-                {
-                  "name": "door",
-                  "type": {
+              },
+              {
+                "name": "readFold",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 3,
+                "queryDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "named": "fleet.contracts.DoorId"
+                      }
+                    }
+                  ],
+                  "returnType": {
+                    "value": {
+                      "optional": false,
+                      "named": "fleet.contracts.Percent"
+                    }
+                  },
+                  "contracts": [
+                    {
+                      "kind": "CONTRACT_KIND_REQUIRE",
+                      "source": "door <= 7",
+                      "signalRefs": [],
+                      "paramRefs": [
+                        "door"
+                      ],
+                      "usesResult": false,
+                      "observerId": "fleet.vehicle.mirrors.readFold.require[0]"
+                    },
+                    {
+                      "kind": "CONTRACT_KIND_ENSURE",
+                      "source": "result >= 0.0",
+                      "signalRefs": [],
+                      "paramRefs": [],
+                      "usesResult": true,
+                      "observerId": "fleet.vehicle.mirrors.readFold.ensure[0]"
+                    }
+                  ],
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "maxUs": "50000",
+                    "defaultApplied": false
+                  }
+                }
+              },
+              {
+                "name": "mirrorCount",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 4,
+                "fixedDef": {
+                  "payload": {
                     "optional": false,
                     "named": "fleet.contracts.DoorId"
                   }
                 }
-              ],
-              "returnType": {
-                "fallible": {
-                  "ok": "fleet.contracts.DoorReport",
-                  "err": "fleet.contracts.DoorFault"
-                }
               },
-              "contracts": [],
-              "timing": {
-                "mode": "TIMING_MODE_RANGE",
-                "maxUs": "50000",
-                "defaultApplied": false
-              }
-            }
-          },
-          {
-            "name": "readLegacyDoor",
-            "visibility": "VISIBILITY_UNSPECIFIED",
-            "isError": false,
-            "doc": "The same, with the error arm reached through an import alias. The alias\nis a source-level convenience; the transport identity must show the\ncanonical `fleet.legacy.DoorFault`, because a registry keying on it has\nto be stable against how a consumer chose to spell its imports.",
-            "labels": [],
-            "ordinal": 6,
-            "queryDef": {
-              "params": [
-                {
-                  "name": "door",
-                  "type": {
-                    "optional": false,
-                    "named": "fleet.contracts.DoorId"
+              {
+                "name": "readDoor",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "Cross-package `T | E`: both arms live in `fleet.contracts`, so the\nsynthesized transport identity carries their fully qualified names.",
+                "labels": [],
+                "ordinal": 5,
+                "queryDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "named": "fleet.contracts.DoorId"
+                      }
+                    }
+                  ],
+                  "returnType": {
+                    "fallible": {
+                      "ok": "fleet.contracts.DoorReport",
+                      "err": "fleet.contracts.DoorFault"
+                    }
+                  },
+                  "contracts": [],
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "maxUs": "50000",
+                    "defaultApplied": false
                   }
                 }
-              ],
-              "returnType": {
-                "fallible": {
-                  "ok": "fleet.contracts.DoorReport",
-                  "err": "fleet.legacy.DoorFault"
-                }
               },
-              "contracts": [],
-              "timing": {
-                "mode": "TIMING_MODE_RANGE",
-                "maxUs": "50000",
-                "defaultApplied": false
+              {
+                "name": "readLegacyDoor",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "The same, with the error arm reached through an import alias. The alias\nis a source-level convenience; the transport identity must show the\ncanonical `fleet.legacy.DoorFault`, because a registry keying on it has\nto be stable against how a consumer chose to spell its imports.",
+                "labels": [],
+                "ordinal": 6,
+                "queryDef": {
+                  "params": [
+                    {
+                      "name": "door",
+                      "type": {
+                        "optional": false,
+                        "named": "fleet.contracts.DoorId"
+                      }
+                    }
+                  ],
+                  "returnType": {
+                    "fallible": {
+                      "ok": "fleet.contracts.DoorReport",
+                      "err": "fleet.legacy.DoorFault"
+                    }
+                  },
+                  "contracts": [],
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "maxUs": "50000",
+                    "defaultApplied": false
+                  }
+                }
               }
-            }
+            ]
           }
-        ]
-      }
+        }
+      ]
     }
   ]
 }

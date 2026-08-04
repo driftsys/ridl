@@ -1362,13 +1362,49 @@ fn service_pkg(services: Vec<v2::Service>) -> v2::Package {
 }
 
 fn service_ref(name: &str, interface_ref: &str) -> v2::Service {
+    service_shapes(
+        name,
+        vec![v2::ServiceShape {
+            id: 1,
+            kind: Some(v2::service_shape::Kind::InterfaceRef(
+                interface_ref.to_string(),
+            )),
+        }],
+    )
+}
+
+/// A named-form service carrying an explicit shape list (ADR-0015
+/// decision 12).
+fn service_shapes(name: &str, shapes: Vec<v2::ServiceShape>) -> v2::Service {
     v2::Service {
         name: name.to_string(),
         visibility: v2::Visibility::Public as i32,
         doc: String::new(),
         labels: Vec::new(),
         deprecated: None,
-        shape: Some(v2::service::Shape::InterfaceRef(interface_ref.to_string())),
+        shapes,
+    }
+}
+
+/// One interface-reference slot of a shape list.
+fn ref_slot(id: u32, interface_ref: &str) -> v2::ServiceShape {
+    v2::ServiceShape {
+        id,
+        kind: Some(v2::service_shape::Kind::InterfaceRef(
+            interface_ref.to_string(),
+        )),
+    }
+}
+
+/// One service-level tombstone slot (ADR-0015 decision 12).
+fn reserved_slot(id: u32, name: &str) -> v2::ServiceShape {
+    v2::ServiceShape {
+        id,
+        kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
+            ordinal: id,
+            name: Some(name.to_string()),
+            value: None,
+        })),
     }
 }
 
@@ -1387,14 +1423,17 @@ fn service_inline(
         doc: String::new(),
         labels: Vec::new(),
         deprecated: None,
-        shape: Some(v2::service::Shape::Inline(v2::Interface {
-            name: String::new(),
-            visibility: v2::Visibility::Unspecified as i32,
-            doc: String::new(),
-            labels: Vec::new(),
-            deprecated: None,
-            interactions,
-        })),
+        shapes: vec![v2::ServiceShape {
+            id: 1,
+            kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
+                name: String::new(),
+                visibility: v2::Visibility::Unspecified as i32,
+                doc: String::new(),
+                labels: Vec::new(),
+                deprecated: None,
+                interactions,
+            })),
+        }],
     }
 }
 
@@ -1474,10 +1513,339 @@ fn a_service_appended_is_compatible() {
     assert_row(&old, &new, Category::DeclAdded, Verdict::Compatible);
 }
 
+/// A changed reference is no longer one `ServiceChanged` (ADR-0015 decision
+/// 19 narrows that category to the form switch): the old interface leaves the
+/// list with no tombstone, and the new one takes the slot it freed — two
+/// changes, both breaking.
 #[test]
-fn a_service_interface_ref_change_is_breaking() {
+fn a_service_interface_ref_change_is_a_removal_plus_a_reused_slot() {
     let old = service_pkg(vec![service_ref("Cluster", "I")]);
     let new = service_pkg(vec![service_ref("Cluster", "J")]);
+    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
+    assert_row(
+        &old,
+        &new,
+        Category::ServiceShapeAppended,
+        Verdict::Breaking,
+    );
+}
+
+// ==========================================================================
+// The service shape list (ADR-0015 decision 19).
+// ==========================================================================
+
+/// A shape appended into a slot that never existed is the sanctioned
+/// evolution — the interaction-append rule one level up.
+#[test]
+fn a_service_shape_appended_into_a_fresh_slot_is_compatible() {
+    let old = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
+    let new = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    assert_row(
+        &old,
+        &new,
+        Category::ServiceShapeAppended,
+        Verdict::Compatible,
+    );
+}
+
+/// The other reading of an append (ADR-0015 decision 19): the walk labels the
+/// new shape appended because it sits after every surviving slot, but the
+/// slot it takes was freed by an untombstoned removal, so the interface id is
+/// reused — visible only by looking back at what the old snapshot held there,
+/// which is why the check lives in the classifier.
+#[test]
+fn a_service_shape_appended_into_a_freed_slot_is_breaking() {
+    let old = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "K")],
+    )]);
+    assert_row(
+        &old,
+        &new,
+        Category::ServiceShapeAppended,
+        Verdict::Breaking,
+    );
+}
+
+#[test]
+fn a_service_shape_inserted_is_breaking() {
+    let old = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "K"), ref_slot(3, "J")],
+    )]);
+    assert_row(
+        &old,
+        &new,
+        Category::ServiceShapeInserted,
+        Verdict::Breaking,
+    );
+}
+
+/// Both moved shapes are flagged, and both classify breaking — the
+/// interaction-reorder behavior one level up.
+#[test]
+fn a_service_shape_reorder_is_breaking() {
+    let old = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "J"), ref_slot(2, "I")],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    let reordered: Vec<&Change> = report
+        .changes
+        .iter()
+        .filter(|change| change.category == Category::ServiceShapeReordered)
+        .collect();
+    assert_eq!(
+        reordered.len(),
+        2,
+        "both moved shapes are flagged, got {:?}",
+        report.changes
+    );
+    assert!(
+        reordered
+            .iter()
+            .all(|change| change.verdict == Verdict::Breaking),
+        "got {reordered:?}"
+    );
+    // A reorder is invisible to transport identity (ADR-0015 decision 17: a
+    // binding keys the ordinal spaces on the interface name, not the list
+    // position), so the two id moves are the WHOLE report — no payload,
+    // return, or identity change rides along.
+    assert_eq!(
+        report.changes.len(),
+        2,
+        "the reorder is the only change, got {:?}",
+        report.changes
+    );
+}
+
+#[test]
+fn a_service_shape_removed_without_a_tombstone_is_breaking() {
+    let old = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    let new = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
+    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
+}
+
+/// The sanctioned retirement: the tombstone holds the retired shape's own
+/// slot, so every later id holds and the identity model is intact.
+#[test]
+fn a_service_shape_retired_to_a_tombstone_in_its_slot_is_compatible() {
+    let old = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![reserved_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    assert_row(
+        &old,
+        &new,
+        Category::ServiceShapeRetired,
+        Verdict::Compatible,
+    );
+}
+
+/// A tombstone written out of the retired shape's slot is not a retirement:
+/// the freed slot is what the survivors slide into.
+#[test]
+fn a_service_shape_tombstone_out_of_its_slot_is_breaking() {
+    let old = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "Cluster",
+        vec![ref_slot(1, "J"), reserved_slot(2, "I")],
+    )]);
+    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
+}
+
+/// A name retired by a service-level tombstone coming back as a live shape is
+/// the redeclared-reserved rule one level up (RIDL-146's diff reading).
+#[test]
+fn a_service_shape_redeclaring_a_reserved_name_is_breaking() {
+    let old = service_pkg(vec![service_shapes("Cluster", vec![reserved_slot(1, "I")])]);
+    let new = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
+    assert_row(
+        &old,
+        &new,
+        Category::ReservedNameRedeclared,
+        Verdict::Breaking,
+    );
+}
+
+/// The E9.6 regression (ADR-0015 decision 24): a composed reference
+/// retargeted to a different interface with the same final name. The walk
+/// matches slots by interface name, so without the reference comparison the
+/// slot read as unchanged and the report came out `identical` — compatible
+/// by omission, where the superseded `ServiceChanged` comparison had
+/// reported it breaking. A matched slot whose reference differs is a removal
+/// and a reuse of the freed slot, and both classify breaking.
+#[test]
+fn a_retargeted_slot_with_the_same_interface_name_is_breaking() {
+    let old = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "fleet.c1.DiagBlock")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "fleet.c2.DiagBlock")],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "got {:?}",
+        report.changes
+    );
+    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
+    assert_row(
+        &old,
+        &new,
+        Category::ServiceShapeAppended,
+        Verdict::Breaking,
+    );
+}
+
+/// Fail closed (ADR-0015 decision 24, ADR-0012 decision 9): two live shapes
+/// with one interface name are IR the checker rejects (RIDL-147), and the
+/// name-keyed walk cannot compare them slot by slot — dropping the second
+/// slot used to collapse into its twin and report `identical`. The list is
+/// compared as a whole, and any difference is breaking.
+#[test]
+fn a_shape_list_with_colliding_names_fails_closed() {
+    let old = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![
+            ref_slot(1, "fleet.c1.DiagBlock"),
+            ref_slot(2, "fleet.c2.DiagBlock"),
+        ],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "fleet.c1.DiagBlock")],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "got {:?}",
+        report.changes
+    );
+}
+
+/// The guard fails closed on a difference, not on the shape of the IR alone:
+/// the same unkeyable list on both sides is no change at all.
+#[test]
+fn an_unchanged_colliding_shape_list_is_identical() {
+    let service = service_shapes(
+        "fleet.app.diag",
+        vec![
+            ref_slot(1, "fleet.c1.DiagBlock"),
+            ref_slot(2, "fleet.c2.DiagBlock"),
+        ],
+    );
+    let old = service_pkg(vec![service.clone()]);
+    let new = service_pkg(vec![service]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Identical,
+        "got {:?}",
+        report.changes
+    );
+}
+
+/// A nameless tombstone (RIDL-148 IR) makes the list unkeyable too: it is
+/// invisible to the name-keyed reserved map, so dropping it slid every later
+/// shape down a slot with nothing reported at all.
+#[test]
+fn dropping_a_nameless_tombstone_fails_closed() {
+    let nameless = v2::ServiceShape {
+        id: 2,
+        kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
+            ordinal: 2,
+            name: None,
+            value: Some(2),
+        })),
+    };
+    let old = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "I"), nameless, ref_slot(3, "J")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "got {:?}",
+        report.changes
+    );
+}
+
+/// The one-step retire-and-redeclare: the new side holds a tombstone and a
+/// live shape under one name — RIDL-146 IR — which used to report
+/// `identical`. The unkeyable side fails the walk closed.
+#[test]
+fn a_live_shape_beside_its_own_tombstone_fails_closed() {
+    let old = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "fleet.c1.DiagBlock")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![
+            reserved_slot(1, "DiagBlock"),
+            ref_slot(2, "fleet.c2.DiagBlock"),
+        ],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "got {:?}",
+        report.changes
+    );
+}
+
+/// The switch between the named list and the inline shape stays
+/// `ServiceChanged` — the half ADR-0015 decision 19 keeps: extraction
+/// rewrites the transport identity of every fallible query in the shape
+/// (decision 15).
+#[test]
+fn a_service_form_switch_stays_service_changed_and_breaking() {
+    let old = service_pkg(vec![service_inline(
+        "veh.hvac.cabin",
+        v2::Visibility::Public,
+        vec![signal("a", 1, "T")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "veh.hvac.cabin",
+        vec![ref_slot(1, "Cabin")],
+    )]);
     assert_row(&old, &new, Category::ServiceChanged, Verdict::Breaking);
 }
 

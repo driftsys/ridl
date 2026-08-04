@@ -118,6 +118,74 @@ interface VehicleStatus {
 }
 ";
 
+/// A named-form service composing two interfaces at slots 1 and 2 (ridl
+/// §14.5, ADR-0015 decision 15) — the container the shape-list drift
+/// fixtures below edit.
+const SVC_BASE: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+interface DoorBlock {
+  signal locked: Speed @10ms
+}
+interface HealthBlock {
+  signal uptime: Speed @10ms
+}
+service veh.cluster.doors : DoorBlock, HealthBlock
+";
+
+/// The two shapes swap places — the shape-list reading of the §6.3 tidying:
+/// both interface ids move.
+const SVC_REORDERED: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+interface DoorBlock {
+  signal locked: Speed @10ms
+}
+interface HealthBlock {
+  signal uptime: Speed @10ms
+}
+service veh.cluster.doors : HealthBlock, DoorBlock
+";
+
+/// A shape inserted ahead of the two the baseline numbers.
+const SVC_INSERTED: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+interface DoorBlock {
+  signal locked: Speed @10ms
+}
+interface HealthBlock {
+  signal uptime: Speed @10ms
+}
+interface NewBlock {
+  signal fresh: Speed @10ms
+}
+service veh.cluster.doors : NewBlock, DoorBlock, HealthBlock
+";
+
+/// `HealthBlock` dropped from the list without a tombstone. The interface
+/// declaration itself stays, so the removal is purely a shape-list edit.
+const SVC_REMOVED: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+interface DoorBlock {
+  signal locked: Speed @10ms
+}
+interface HealthBlock {
+  signal uptime: Speed @10ms
+}
+service veh.cluster.doors : DoorBlock
+";
+
+/// The baseline for the redeclaration case: `HealthBlock` retired to a
+/// service-level tombstone in its own slot.
+const SVC_TOMBSTONED: &str = "package veh.cluster
+type Speed: km/h [0.0..250.0 step 0.5]
+interface DoorBlock {
+  signal locked: Speed @10ms
+}
+interface HealthBlock {
+  signal uptime: Speed @10ms
+}
+service veh.cluster.doors : DoorBlock, reserved HealthBlock
+";
+
 /// A shape whose field names a type from the standard package. Every other
 /// fixture in this file names only its own declarations, so this is the only
 /// one whose compile reaches `ridl.std`.
@@ -286,6 +354,122 @@ fn check_flags_a_removal_against_the_baseline() {
             && stderr.contains("`reserved doorOpened`"),
         "the removal draws the desk warning, and it names the tombstone that \
          keeps the slot:\n{stderr}",
+    );
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
+/// A service shape-list reorder against the baseline draws RIDL-407 with the
+/// service-level wording — the subject is a shape, the moved identity an
+/// interface id — and the span points at the moved element of the list
+/// (E9.6 review finding I1: the shape-list drift produced no desk warning at
+/// all, and named-form services were never indexed for spans).
+#[test]
+fn check_flags_a_service_shape_reorder_against_the_baseline() {
+    let dir = TempDir::new("svcreorder");
+    let root = package_workspace(&dir, SVC_BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", SVC_REORDERED);
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    let block = ridl_407_block(&stderr, "DoorBlock");
+    assert!(
+        block.contains("has moved in `veh.cluster.doors`"),
+        "the message names the shape and the service:\n{stderr}",
+    );
+    assert!(
+        block.contains("interface id") && block.contains("put the shapes back"),
+        "the message states the consequence and the remedy in shape-list \
+         vocabulary:\n{stderr}",
+    );
+    assert!(
+        block.contains("service veh.cluster.doors : HealthBlock, DoorBlock"),
+        "the span underlines the moved element inside the list:\n{stderr}",
+    );
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
+/// A shape inserted ahead of the baseline's slots warns with the shape-list
+/// remedy and no reorder noise — the shift of the survivors is the insert's
+/// consequence, exactly as at the interaction level.
+#[test]
+fn check_flags_a_service_shape_insert_against_the_baseline() {
+    let dir = TempDir::new("svcinsert");
+    let root = package_workspace(&dir, SVC_BASE);
+    ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    dir.write("cluster.ridl", SVC_INSERTED);
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    let block = ridl_407_block(&stderr, "NewBlock");
+    assert!(
+        block.contains("ahead of shapes the published baseline already numbers")
+            && block.contains("list it at the end instead"),
+        "the insert draws the shape-list message:\n{stderr}",
+    );
+    assert_eq!(
+        stderr.matches("RIDL-407").count(),
+        1,
+        "the survivors' id shift is the insert's consequence, not extra \
+         warnings:\n{stderr}",
+    );
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
+/// A shape removed from the list warns and names the service-level tombstone
+/// remedy. The element is gone from the source, so the span falls back to
+/// the service's dotted name.
+#[test]
+fn check_flags_a_service_shape_removal_against_the_baseline() {
+    let dir = TempDir::new("svcremoval");
+    let root = package_workspace(&dir, SVC_BASE);
+    ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    dir.write("cluster.ridl", SVC_REMOVED);
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    let block = ridl_407_block(&stderr, "HealthBlock");
+    assert!(
+        block.contains("is gone in `veh.cluster.doors`")
+            && block.contains("retire it in place with `reserved HealthBlock`"),
+        "the removal names the tombstone that keeps the slot:\n{stderr}",
+    );
+    assert!(
+        block.contains("┌─") && block.contains("service veh.cluster.doors : DoorBlock"),
+        "the span falls back to the service's own declaration:\n{stderr}",
+    );
+    assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
+}
+
+/// A shape re-declaring a service-level tombstone's name gets the
+/// interface-flavored message and a span (E9.6 review finding I1: it used to
+/// read "give this interaction a different name" — the subject is an
+/// interface — and rendered detached, because named-form services were not
+/// in the span index).
+#[test]
+fn service_tombstone_redeclaration_names_an_interface_and_carries_a_span() {
+    let dir = TempDir::new("svcredeclare");
+    let root = package_workspace(&dir, SVC_TOMBSTONED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", SVC_BASE);
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    let block = ridl_407_block(&stderr, "HealthBlock");
+    assert!(
+        block.contains("publish it under a different interface name"),
+        "the remedy speaks about an interface:\n{stderr}",
+    );
+    assert!(
+        !block.contains("interaction"),
+        "the subject is an interface, not an interaction:\n{block}",
+    );
+    assert!(
+        block.contains("┌─")
+            && block.contains("service veh.cluster.doors : DoorBlock, HealthBlock"),
+        "the diagnostic carries a span into the shape list:\n{stderr}",
     );
     assert_eq!(code, 0, "the warning leaves the exit code alone:\n{stderr}");
 }

@@ -4,7 +4,7 @@ assertion_line: 72
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/ok/services.ridl
 ---
-SourceFile@0..459
+SourceFile@0..791
   PackageDecl@0..20
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -195,5 +195,61 @@ SourceFile@0..459
         RParen@455..456 ")"
     Whitespace@456..457 "\n"
     RBrace@457..458 "}"
-  Whitespace@458..459 "\n"
+  Whitespace@458..460 "\n\n"
+  LineComment@460..535 "// The shape list (AD ..."
+  Whitespace@535..536 "\n"
+  LineComment@536..606 "// service-level rese ..."
+  Whitespace@606..607 "\n"
+  LineComment@607..651 "// spelling with an o ..."
+  Whitespace@651..652 "\n"
+  ServiceDef@652..702
+    ServiceKw@652..659 "service"
+    Whitespace@659..660 " "
+    DottedName@660..673
+      Ident@660..663 "veh"
+      Dot@663..664 "."
+      Ident@664..668 "adas"
+      Dot@668..669 "."
+      Ident@669..673 "dash"
+    Whitespace@673..674 " "
+    Colon@674..675 ":"
+    Whitespace@675..676 " "
+    PathType@676..689
+      QualifiedName@676..689
+        Ident@676..689 "CruiseControl"
+    Comma@689..690 ","
+    Whitespace@690..691 " "
+    PathType@691..702
+      QualifiedName@691..702
+        Ident@691..702 "DoorControl"
+  Whitespace@702..704 "\n\n"
+  ServiceDef@704..790
+    ServiceKw@704..711 "service"
+    Whitespace@711..712 " "
+    DottedName@712..730
+      Ident@712..715 "veh"
+      Dot@715..716 "."
+      Ident@716..720 "body"
+      Dot@720..721 "."
+      Ident@721..730 "composite"
+    Whitespace@730..731 " "
+    Colon@731..732 ":"
+    Whitespace@732..735 "\n  "
+    PathType@735..746
+      QualifiedName@735..746
+        Ident@735..746 "DoorControl"
+    Comma@746..747 ","
+    Whitespace@747..750 "\n  "
+    ReservedEntry@750..773
+      ReservedKw@750..758 "reserved"
+      Whitespace@758..759 " "
+      Name@759..773
+        Ident@759..773 "LegacyDoorDiag"
+    Comma@773..774 ","
+    Whitespace@774..777 "\n  "
+    PathType@777..789
+      QualifiedName@777..789
+        Ident@777..789 "MotorControl"
+    Comma@789..790 ","
+  Whitespace@790..791 "\n"
 errors: none

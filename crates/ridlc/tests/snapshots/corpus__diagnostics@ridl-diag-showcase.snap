@@ -271,10 +271,48 @@ error[FORM-102]: command parameter must be a named type or a stream
    │                          ^^^^^^^^^^^^^^^^^^^^^^
 
 error[RIDL-141]: `Sample` is not an interface, and a service publishes an interface — name the interface that carries these interactions, or give the service an inline `{ … }` body of its own (ridl §14.5)
-   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:14:34
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:16:34
    │
-14 │ service diag.showcase.mistyped : Sample
+16 │ service diag.showcase.mistyped : Sample
    │                                  ^^^^^^
+
+error[RIDL-144]: `HealthBlock` declares `status`, which `DoorBlock` already contributes — members are addressed `service.member`, so one name cannot have two referents. Rename the member in one of the two interfaces (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:28:42
+   │
+28 │ service diag.showcase.doors : DoorBlock, HealthBlock
+   │                               ---------  ^^^^^^^^^^^
+   │                               │           
+   │                               `DoorBlock`, listed here, contributes `status`
+
+error[RIDL-145]: `Published` is already listed by this service — every member of the two listings would collide, so this second listing is dropped and holds no slot of its own (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:32:42
+   │
+32 │ service diag.showcase.twice : Published, Published
+   │                               ---------  ^^^^^^^^^
+   │                               │           
+   │                               `Published` is listed here, and this is the listing that is kept
+
+error[RIDL-146]: `Published` is retired: this service reserves the name, and a retired interface keeps its slot for ever, so a consumer still holding the old contract would read this shape as the retired one. Publish it under a different interface name (ridl §14.5, §11)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:37:53
+   │
+37 │ service diag.showcase.retired : reserved Published, Published
+   │                                          ---------  ^^^^^^^^^
+   │                                          │           
+   │                                          `Published` is retired here
+
+error[RIDL-147]: `diag.twin.Published` composes as `Published`, and this service already composes `Published` under the same name — a binding separates the ordinal spaces by interface name (ADR-0015 decision 17), so two shapes of one service cannot share one. An import alias cannot help: rename one of the two interfaces, or compose this one into a different service (ridl §14.5)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:43:44
+   │
+43 │ service diag.showcase.collide : Published, diag.twin.Published
+   │                                 ---------  ^^^^^^^^^^^^^^^^^^^
+   │                                 │           
+   │                                 `Published` composes as `Published` here
+
+error[RIDL-148]: a service-level `reserved` retires an interface name, and this tombstone spells none — the interface name is the identity a binding keys the ordinal spaces on (ADR-0015 decision 17), so a tombstone without one can never match a retired shape. Write `reserved` followed by the retired interface's name (ridl §14.5, §11)
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:47:45
+   │
+47 │ service diag.showcase.numbered : Published, reserved 2
+   │                                             ^^^^^^^^^^
 
 error[TYPL-301]: stream type `<T>` not valid on a struct field or collection — interaction parameters and query returns only
   ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:8:12
@@ -391,12 +429,12 @@ note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 inte
    │                                  ^^^^^^^^^^^^^^^^^^^^
 
 error[RIDL-140]: duplicate service name `diag.showcase.duplicate` — the service catalog is a flat global namespace
-   ┌─ tests/corpus/ridl-diag-showcase/twin/twin.ridl:14:9
+   ┌─ tests/corpus/ridl-diag-showcase/twin/twin.ridl:21:9
    │
-14 │ service diag.showcase.duplicate : Twin
+21 │ service diag.showcase.duplicate : Twin
    │         ^^^^^^^^^^^^^^^^^^^^^^^
    │
-   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:11:9
+   ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:13:9
    │
-11 │ service diag.showcase.duplicate : Published
+13 │ service diag.showcase.duplicate : Published
    │         ----------------------- `diag.showcase.duplicate` is first declared here

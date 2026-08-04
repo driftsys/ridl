@@ -263,16 +263,42 @@ TimingRange =
 //
 // `service_def` is absent from the ridl reference Appendix C; E2 task 8
 // authors it (recorded for the close-out doc sync). A `service` is the
-// global, published declaration of an interface — either naming a shared
-// interface shape after `:`, or carrying an inline body of interactions for
-// a one-off global contract (§14.5). The dotted global name is
+// global, published declaration of one or more interfaces (ADR-0015
+// decision 12) — either naming shapes in a comma-separated list after `:`,
+// or carrying one inline body of interactions for a one-off global contract
+// (§14.5); never both (ADR-0015 decision 14). The dotted global name is
 // reverse-domain, like a package (ADR-0002 §1). The inline body reuses the
 // `InterfaceMember` alternation, so an inline shape runs the same structural
-// pass as an interface. `ServiceDef::inline_members()` yields its members;
-// `ServiceDef::interface_ref()` is the named shape; `DottedName::segments()`
-// (hand-written in src/ast.rs) reads the name segments.
+// pass as an interface. `ServiceDef::shapes()` yields the named shape list;
+// `ServiceDef::inline_members()` yields the inline body's members;
+// `DottedName::segments()` (hand-written in src/ast.rs) reads the name
+// segments. The two generated accessors are form-specific — see the
+// `ServiceShape` enum in src/ast.rs for the discipline.
+//
+// Commas are REQUIRED between shapes, diverging from the family's
+// optional-comma convention, and the reason is structural (ADR-0015
+// decision 13): every other list in the grammar is terminated by a closing
+// token — `}` for a body, `)` for a parameter list, `]` for an attribute
+// block — and this one is not, because it ends where the next declaration
+// begins. It would still parse without them, since every top-level
+// declaration starts with a keyword and a bare `CamelCase` identifier never
+// does — but it would parse greedily, so a mistyped declaration on a
+// following line (`Struct Foo {` for `struct Foo {`) would be absorbed as
+// another shape and the error would surface at the `{` with no connection
+// to the mistake. A trailing comma stays optional.
 ServiceDef =
-  'service' name:DottedName (':' interface_ref:PathType | '{' (inline_members:InterfaceMember ','?)* '}')
+  'service' name:DottedName
+  ( ':' shapes:ServiceShape (',' shapes:ServiceShape)* ','?
+  | '{' (inline_members:InterfaceMember ','?)* '}' )
+
+// One slot of a service's shape list (ADR-0015 decisions 12 and 15): a
+// composed interface reference, or a service-level `reserved` tombstone.
+// Reusing `ReservedEntry` — already shared by typl's struct and union
+// tombstones and by interface bodies — means service-level `reserved`
+// needs no new syntax at all.
+ServiceShape =
+  PathType
+| ReservedEntry
 
 // A dotted global name — `veh.adas.cruise` (ADR-0002 §1). Consumers read the
 // segment tokens through `DottedName::segments()` in src/ast.rs.

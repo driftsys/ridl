@@ -513,7 +513,9 @@ pub const SERVICE_FLEET_VEHICLE_MIRRORS_CONTRACTS: &[ContractStub] = &[
     },
 ];
 /// Every service this package declares: the deployment address and the
-/// interface that answers at it (ridl §11).
+/// interface that answers at it (ridl §11) — one row per composed
+/// interface, in slot order, so a service composing several interfaces
+/// repeats its address (ridl §14.5).
 ///
 /// The address is the contract's own dotted identity, carried verbatim;
 /// the interface name is the generated Rust type prefix. For an inline
@@ -523,5 +525,7 @@ pub const SERVICES: &[(&str, &str)] = &[
     ("fleet.vehicle.doors.front", "Fleet.contracts.DoorControl"),
     ("fleet.vehicle.doors.rear", "Fleet.contracts.DoorControl"),
     ("fleet.vehicle.telemetry", "Fleet.contracts.Telemetry"),
+    ("fleet.vehicle.cockpit", "Fleet.contracts.DoorControl"),
+    ("fleet.vehicle.cockpit", "Fleet.contracts.Telemetry"),
     ("fleet.vehicle.mirrors", "ServiceFleetVehicleMirrors"),
 ];

@@ -785,26 +785,37 @@ fn string_list(values: &[String]) -> String {
 
 /// The published services of the package, as data (ridl §14.5). The key is
 /// the dotted global service name — the service's identity everywhere outside
-/// this module — and `interface` names the generated TypeScript interface
-/// behind it.
+/// this module — and `interfaces` names the generated TypeScript interfaces
+/// behind it, one entry per composed shape in slot order (ADR-0015 decision
+/// 12). A `reserved` slot holds a retired interface id and contributes no
+/// entry.
 fn emit_services(package: &v2::Package) -> Result<String, GenerateError> {
     let mut entries = String::new();
     for service in &package.services {
-        let interface = match &service.shape {
-            Some(v2::service::Shape::InterfaceRef(reference)) => reference.clone(),
-            Some(v2::service::Shape::Inline(_)) => inline_interface_name(&service.name),
-            None => {
-                return Err(GenerateError::Unrepresentable(format!(
-                    "service {name}: no shape; a service publishes an interface reference \
-                     or an inline shape (ridl §14.5)",
-                    name = service.name
-                )));
+        let mut interfaces = Vec::new();
+        for slot in &service.shapes {
+            match &slot.kind {
+                Some(v2::service_shape::Kind::InterfaceRef(reference)) => {
+                    interfaces.push(ts_string(reference));
+                }
+                Some(v2::service_shape::Kind::Inline(_)) => {
+                    interfaces.push(ts_string(&inline_interface_name(&service.name)));
+                }
+                Some(v2::service_shape::Kind::Reserved(_)) => {}
+                None => {
+                    return Err(GenerateError::Unrepresentable(format!(
+                        "service {name}: shape slot {id} carries no kind; a slot is an \
+                         interface reference, an inline shape, or a tombstone (ridl §14.5)",
+                        name = service.name,
+                        id = slot.id
+                    )));
+                }
             }
-        };
+        }
         entries.push_str(&format!(
-            "  {key}: {{ interface: {interface} }},\n",
+            "  {key}: {{ interfaces: [{interfaces}] }},\n",
             key = ts_string(&service.name),
-            interface = ts_string(&interface)
+            interfaces = interfaces.join(", ")
         ));
     }
 
@@ -812,11 +823,12 @@ fn emit_services(package: &v2::Package) -> Result<String, GenerateError> {
 /**
  * The services this package publishes (ridl §14.5). Each key is the dotted
  * global service name — the address a runtime resolves and the prefix of the
- * observer-stub ids — and `interface` names the generated TypeScript
- * interface behind it. The two are deliberately different spellings of
- * different things: the dotted name is the service's identity, while the
- * generated name is a TypeScript identifier, which cannot contain dots. The
- * faces of an entry named `Foo` are `FooConsumer` and `FooProvider`.
+ * observer-stub ids — and `interfaces` names the generated TypeScript
+ * interfaces behind it, in shape-list slot order. The two are deliberately
+ * different spellings of different things: the dotted name is the service's
+ * identity, while a generated name is a TypeScript identifier, which cannot
+ * contain dots. The faces of an entry named `Foo` are `FooConsumer` and
+ * `FooProvider`.
  */
 ";
     Ok(format!(

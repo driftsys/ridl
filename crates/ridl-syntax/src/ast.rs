@@ -254,6 +254,41 @@ impl AstNode for InterfaceMember {
     }
 }
 
+/// One slot of a service's shape list — the `ServiceShape` alternation
+/// (ridl reference §14.5, ADR-0015 decision 12): a composed interface
+/// reference, or a service-level `reserved` tombstone.
+///
+/// **Form discipline.** The shape list and the inline body are direct
+/// children of the same `ServiceDef` node, and `ReservedEntry` belongs to
+/// both alternations, so [`ServiceDef::shapes`] over an inline body would
+/// yield the body's tombstones and [`ServiceDef::inline_members`] over a
+/// shape list would yield the list's tombstones. Consumers therefore gate on
+/// the declared form first — the `:` token marks the named form
+/// ([`ServiceDef::colon_token`]) — and call only that form's accessor.
+/// [`SourceFile::shapes`] and the checker's `lower_service` both follow this.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ServiceShape {
+    Interface(PathType),
+    Reserved(ReservedEntry),
+}
+
+impl AstNode for ServiceShape {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        match syntax.kind() {
+            SyntaxKind::PathType => PathType::cast(syntax).map(Self::Interface),
+            SyntaxKind::ReservedEntry => ReservedEntry::cast(syntax).map(Self::Reserved),
+            _ => None,
+        }
+    }
+
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            Self::Interface(it) => it.syntax(),
+            Self::Reserved(it) => it.syntax(),
+        }
+    }
+}
+
 /// The type of a command or query parameter — the `ParamType` alternation
 /// (ridl reference §6.1, §7.1, §12): a field type or a stream `<T>`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -496,14 +531,17 @@ impl SourceFile {
     /// in source order. See [`InterfaceShape`] for why walking
     /// [`SourceFile::interfaces`] alone is a defect.
     ///
-    /// A service that names an interface after `:` yields nothing: its target
-    /// is a declared interface and is already in the sequence. The test is the
-    /// checker's own — a service with no `interface_ref` lowers to an inline
-    /// shape, whether or not that body turned out to hold any member.
+    /// A service that names shapes after `:` yields nothing: its targets are
+    /// declared interfaces and are already in the sequence. The test is the
+    /// checker's own — a service with no `:` lowers to an inline shape,
+    /// whether or not that body turned out to hold any member. The `:` token
+    /// is the form discriminator, not the shape list, because in the inline
+    /// form [`ServiceDef::shapes`] would also yield the body's tombstones
+    /// (see [`ServiceShape`]).
     pub fn shapes(&self) -> impl Iterator<Item = InterfaceShape> + '_ {
         self.interfaces().map(InterfaceShape::Interface).chain(
             self.services()
-                .filter(|service| service.interface_ref().is_none())
+                .filter(|service| service.colon_token().is_none())
                 .map(InterfaceShape::ServiceInline),
         )
     }

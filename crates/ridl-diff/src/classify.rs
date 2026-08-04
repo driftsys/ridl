@@ -48,10 +48,18 @@ mod classify_tests;
 pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     match change.category {
         // Shifts or reuses a wire identity, or replaces a wire-carrying type.
-        // Every one of these is breaking in either direction.
+        // Every one of these is breaking in either direction. The three
+        // `ServiceShape*` rows are the service-level reading of the
+        // interaction rows above them — inherited, not invented (ADR-0015
+        // decision 19): interface ids follow ridl §11's model one level up,
+        // so an insert or reorder shifts ids and an untombstoned removal
+        // frees a slot for reuse.
         Category::InteractionInserted
         | Category::InteractionReordered
         | Category::InteractionRemoved
+        | Category::ServiceShapeInserted
+        | Category::ServiceShapeReordered
+        | Category::ServiceShapeRemoved
         | Category::ReservedNameRedeclared
         | Category::KindChanged
         | Category::PayloadChanged
@@ -71,11 +79,18 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
         //
         // A tombstone in the retired interaction's own slot is the sanctioned
         // retirement (ridl §11); the walk only emits `InteractionRetired` when
-        // the slot is preserved.
-        Category::DocOnly | Category::InteractionRetired => Verdict::Compatible,
+        // the slot is preserved. `ServiceShapeRetired` is the same reading one
+        // level up (ADR-0015 decision 19): `ridl diff` judges wire identity,
+        // not source-level API surface — a consumer of the retired shape
+        // breaks at compile time, but the identity model is intact and every
+        // later id holds.
+        Category::DocOnly | Category::InteractionRetired | Category::ServiceShapeRetired => {
+            Verdict::Compatible
+        }
 
         Category::VisibilityChanged => visibility(change, old, new),
         Category::InteractionAppended => appended(change, old, new),
+        Category::ServiceShapeAppended => shape_appended(change, old, new),
         Category::DeclAdded => added(change, old, new),
         Category::ConstraintChanged => constraint(change, old, new),
         Category::TimingChanged => timing(change, old, new),
@@ -177,6 +192,41 @@ fn appended(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
 
     for (name, old_ordinal) in slots(old_iface) {
         if old_ordinal == ordinal && name != member {
+            return Verdict::Breaking;
+        }
+    }
+    Verdict::Compatible
+}
+
+/// A shape (or a freshly minted tombstone) added after every slot that
+/// existed before in a service's list — [`appended`]'s rule one level up
+/// (ADR-0015 decision 19). Appending is compatible, but only when the slot it
+/// takes was never occupied: an interface id freed by an untombstoned removal
+/// and handed to a new shape reuses an identity, exactly as at the
+/// interaction level. The old occupant is compared by name **and** by
+/// reference: a retargeted slot keeps its interface name while its reference
+/// changes, and ADR-0015 decision 24 reads that as a removal and a reuse of
+/// the freed slot — breaking, where a name-only comparison saw no occupant
+/// change at all.
+fn shape_appended(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
+    let Some((container, member)) = member_path(change) else {
+        return Verdict::Breaking;
+    };
+    let (Some(old_service), Some(new_service)) =
+        (find_service(old, container), find_service(new, container))
+    else {
+        return Verdict::Breaking;
+    };
+    let Some((id, new_ref)) = shape_slots(new_service)
+        .into_iter()
+        .find(|(name, ..)| *name == member)
+        .map(|(_, id, reference)| (id, reference))
+    else {
+        return Verdict::Breaking;
+    };
+
+    for (name, old_id, old_ref) in shape_slots(old_service) {
+        if old_id == id && (name != member || old_ref != new_ref) {
             return Verdict::Breaking;
         }
     }
@@ -773,6 +823,39 @@ fn slot_ordinal(interface: &v2::Interface, member: &str) -> Option<u32> {
         .map(|(_, ordinal)| ordinal)
 }
 
+fn find_service<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Service> {
+    package.services.iter().find(|service| service.name == name)
+}
+
+/// Every slot of a service's shape list as (interface name, id, reference),
+/// tombstones included — [`slots`]'s rule one level up (ADR-0015 decision
+/// 15): a tombstone occupies its slot exactly so the id is never reused. The
+/// name is the reference's final segment — the identity a binding keys the
+/// ordinal spaces on (ADR-0015 decision 17) and what a tombstone spells —
+/// matching the walk's `live_shapes`; the reference travels whole so
+/// [`shape_appended`] can tell a slot's old occupant from the same interface
+/// re-listed (ADR-0015 decision 24). An inline slot or a nameless tombstone
+/// reads as the empty name, which never equals a real interface name, so the
+/// slot is held against every reuse without matching anything.
+fn shape_slots(service: &v2::Service) -> Vec<(&str, u32, Option<&str>)> {
+    service
+        .shapes
+        .iter()
+        .filter_map(|slot| match &slot.kind {
+            Some(v2::service_shape::Kind::InterfaceRef(reference)) => Some((
+                reference.rsplit('.').next().unwrap_or(reference.as_str()),
+                slot.id,
+                Some(reference.as_str()),
+            )),
+            Some(v2::service_shape::Kind::Reserved(reserved)) => {
+                Some((reserved.name.as_deref().unwrap_or(""), slot.id, None))
+            }
+            Some(v2::service_shape::Kind::Inline(_)) => Some(("", slot.id, None)),
+            None => None,
+        })
+        .collect()
+}
+
 fn struct_slots(def: &v2::StructDef) -> Vec<(String, i64)> {
     def.members
         .iter()
@@ -986,15 +1069,61 @@ pub fn explain(category: Category) -> &'static str {
             "              the first publish, so it is part of the contract (ridl 9.1)"
         ),
         Category::ReservedNameRedeclared => concat!(
-            "A name retired by a `reserved` tombstone is a live interaction again.\n",
+            "A name retired by a `reserved` tombstone is live again — an interaction\n",
+            "inside a body, or a shape in a service's list.\n",
             "  breaking    always — a retired identity is never reused (ridl 11,\n",
-            "              RIDL-401)"
+            "              RIDL-401; the service level is RIDL-146)"
         ),
         Category::ServiceChanged => concat!(
-            "A service's published shape or interface reference changed.\n",
-            "  breaking    always — a changed interface_ref, or a switch between an\n",
-            "              interface reference and an inline shape, republishes a\n",
-            "              different contract at the same service name"
+            "A service switched between the named shape list and an inline shape.\n",
+            "  breaking    always — extraction rewrites the transport identity of every\n",
+            "              fallible query in the shape: an inline shape derives it from\n",
+            "              the service's dotted name, a named interface from its own name\n",
+            "              (ADR-0008 d4, ADR-0015 d15). A changed shape list is not this\n",
+            "              category: it is read per slot by the service_shape_* rows\n",
+            "              (ADR-0015 d19)\n",
+            "  note        also reported, breaking, over a changed shape list that cannot\n",
+            "              be keyed by interface name — a nameless tombstone, or one name\n",
+            "              on two slots: IR the checker rejects (RIDL-147, RIDL-148). The\n",
+            "              per-slot walk keys on the name, so such a list is compared as\n",
+            "              a whole and fails closed (ADR-0015 d24, ADR-0012 d9)"
+        ),
+        Category::ServiceShapeAppended => concat!(
+            "A shape added after every slot that existed before in a service's list.\n",
+            "  compatible  the slot it takes was never occupied\n",
+            "  breaking    the slot was freed by an untombstoned removal and is now\n",
+            "              reused by a new shape — a reused interface id (ADR-0015 d19).\n",
+            "              A retargeted slot — the same interface name bound to a\n",
+            "              different reference — is this reuse paired with a\n",
+            "              service_shape_removed of the old reference (ADR-0015 d24)"
+        ),
+        Category::ServiceShapeInserted => concat!(
+            "A shape added before the end of a service's list.\n",
+            "  breaking    always — every later interface id shifts, and ids follow\n",
+            "              ridl 11's model one level up (ADR-0015 d15, d19)"
+        ),
+        Category::ServiceShapeReordered => concat!(
+            "A surviving shape whose relative order in a service's list changed.\n",
+            "  breaking    always — ids move. A binding keys the ordinal spaces on the\n",
+            "              interface name (ADR-0015 d17), so a reorder is invisible to\n",
+            "              transport identity — the id is what moves, and the id is\n",
+            "              append-only (ADR-0015 d19)"
+        ),
+        Category::ServiceShapeRemoved => concat!(
+            "A shape removed from a service's list without a `reserved` tombstone\n",
+            "holding its slot.\n",
+            "  breaking    always — the freed slot becomes reusable, so the interface id\n",
+            "              is no longer permanent (ADR-0015 d19). A retargeted slot — the\n",
+            "              same interface name bound to a different reference — is this\n",
+            "              removal paired with the incoming reference's own change\n",
+            "              (ADR-0015 d24)"
+        ),
+        Category::ServiceShapeRetired => concat!(
+            "A shape removed and replaced by a `reserved` tombstone in its own slot.\n",
+            "  compatible  always — the sanctioned retirement: the slot stays occupied\n",
+            "              and every later id holds. As at the interaction level, diff\n",
+            "              judges wire identity, not source-level API surface: a consumer\n",
+            "              of the retired shape breaks at compile time (ADR-0015 d19)"
         ),
         Category::DocOnly => concat!(
             "Only doc comment, labels, or deprecation metadata changed.\n",

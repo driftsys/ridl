@@ -1,13 +1,20 @@
-// The second workspace member. Its only job is the cross-package half of the
-// service catalog: a service name is unique across the whole system, so
-// republishing `diag.showcase.duplicate` here collides with the `diag.ridl`
-// member (RIDL-140). A single package cannot provoke it.
+// The second workspace member. Its jobs are the two cross-package halves a
+// single package cannot provoke: republishing `diag.showcase.duplicate`
+// collides with the `diag.ridl` member (RIDL-140), and its own `Published`
+// gives `diag.ridl` a second interface with that name to compose (RIDL-147) —
+// one package cannot declare two interfaces with one name.
 
 package diag.twin
 
 type Heartbeat : integer [0..255]
 
 interface Twin {
+  signal alive : Heartbeat @[1s..10s]
+}
+
+/// The cross-package half of the interface-name collision (RIDL-147): the
+/// `diag.ridl` member composes this `Published` beside its own.
+interface Published {
   signal alive : Heartbeat @[1s..10s]
 }
 

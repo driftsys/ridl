@@ -12,6 +12,7 @@ use super::Expr;
 use super::FieldType;
 use super::InterfaceMember;
 use super::ParamType;
+use super::ServiceShape;
 use super::StructMember;
 use super::support;
 use crate::syntax_kind::{SyntaxKind, SyntaxNode, SyntaxToken};
@@ -149,8 +150,8 @@ impl ServiceDef {
     pub fn name(&self) -> Option<DottedName> {
         support::child(&self.syntax)
     }
-    pub fn interface_ref(&self) -> Option<PathType> {
-        support::child(&self.syntax)
+    pub fn shapes(&self) -> AstChildren<ServiceShape> {
+        support::children(&self.syntax)
     }
     pub fn inline_members(&self) -> AstChildren<InterfaceMember> {
         support::children(&self.syntax)
@@ -161,11 +162,11 @@ impl ServiceDef {
     pub fn colon_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::Colon)
     }
-    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
-        support::token(&self.syntax, SyntaxKind::LBrace)
-    }
     pub fn comma_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBrace)
     }
     pub fn r_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::RBrace)

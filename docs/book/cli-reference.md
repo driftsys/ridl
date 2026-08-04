@@ -793,12 +793,18 @@ the categories `ridl diff` reports are:
   return_changed
   params_changed
   timing_changed
+  rpc_bound_changed
   contract_changed
   width_changed
   constraint_changed
   init_changed
   reserved_name_redeclared
   service_changed
+  service_shape_appended
+  service_shape_inserted
+  service_shape_reordered
+  service_shape_removed
+  service_shape_retired
   doc_only
   visibility_changed
 ```

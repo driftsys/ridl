@@ -427,6 +427,62 @@ indistinguishable, so no claim about any of the three can be exercised.
     file would enlarge it for one check. The family already resolves this shape
     the same way at §14.5, enforcing at deploy time rather than compile time.
 
+24. **Amendment (2026-08-04) — an interface name must be unique within a
+    service, and a retargeted slot is breaking.** The E9.6 review found two
+    fail-open defects in the compatibility classifier, and both trace to a hole
+    in this record rather than to the implementation alone.
+
+    Decision 17 keys a binding's ordinal spaces on the interface **name**, and
+    decision 18 mints RIDL-145 for the same interface listed twice — keyed on
+    the canonical **reference**. Nothing in between requires the _names_ of a
+    service's shapes to differ. Two distinct interfaces from different packages
+    may share a final segment (`fleet.c1.DiagBlock` and `fleet.c2.DiagBlock`),
+    and decision 17 then makes them indistinguishable at the binding, while a
+    diff walk that matches slots by name collapses them.
+
+    Therefore:
+
+    - **RIDL-147 is minted** — two shapes of one service whose interface names
+      collide, even though their references differ. Error, because decision 17
+      leaves the binding no way to tell the two ordinal spaces apart. RIDL-145
+      keeps its own rule, which is the same reference listed twice; this is the
+      different-reference, same-name case, and it needs its own message because
+      the remedy differs — an alias cannot fix it, only a rename or a different
+      composition.
+    - **A slot whose reference changes is breaking.** Decision 19 says the five
+      `ServiceShape*` categories supersede the "changed `interface_ref`" half of
+      `ServiceChanged`. That means the categories must **cover** the retarget,
+      not that the comparison disappears. A matched slot whose reference differs
+      is a removal and a reuse of the freed slot, and it classifies breaking.
+
+    Both defects reported **compatible by omission** on a change the classifier
+    did not understand, which is the exact failure mode ADR-0012 decision 9
+    exists to design out — and the first of them was a regression, because the
+    superseded `ServiceChanged` comparison had reported it breaking.
+
+    **The uniqueness rule is over every shape, live or retired, and a tombstone
+    must spell a name.** Stating it only for live shapes leaves two ways to put
+    one name on two slots, and both make the list unkeyable:
+
+    - **RIDL-148 is minted** — a service-level tombstone that spells no
+      interface name. `ReservedEntry` is shared with typl's struct and union
+      tombstones, so the grammar admits the numeric spelling `reserved 2`, which
+      retires an _ordinal_. At the service level the identity a binding keys on
+      is the interface **name** (decision 17), so a nameless tombstone can never
+      match the shape it is meant to retire, and the one compatible retirement
+      move the model promises does not work for that spelling.
+    - **RIDL-147 covers a name repeated across tombstones**, not only across
+      live shapes. Two tombstones spelling one name compile clean otherwise, and
+      the service then loses its per-slot diff vocabulary for good: the walk
+      cannot key the list, so every later edit — including the sanctioned
+      compatible append — is compared as a whole and reports breaking. That
+      fails closed rather than shipping a wire break, but a clean-compiling
+      source should not be able to degrade a service permanently.
+
+    RIDL-146 already covers the third pairing, a live shape re-declared under a
+    retired name. With all three enforced, a checked package cannot produce a
+    shape list the walk is unable to key.
+
 ## Alternatives considered
 
 | Candidate                                                 | Verdict  | Reason                                                                                                                                                                                                                                                                                                                      |

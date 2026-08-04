@@ -21,3 +21,13 @@ service veh.hvac.cabin {
   signal  temperature : Temperature @[1s..10s]
   command setTarget(t: Temperature)
 }
+
+// The shape list (ADR-0015 decision 12): required commas between shapes, a
+// service-level reserved tombstone holding its slot, and a multi-line
+// spelling with an optional trailing comma.
+service veh.adas.dash : CruiseControl, DoorControl
+
+service veh.body.composite :
+  DoorControl,
+  reserved LegacyDoorDiag,
+  MotorControl,

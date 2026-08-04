@@ -160,10 +160,29 @@ declare_categories! {
         ConstraintChanged,
         /// A resolved or declared init value changed.
         InitChanged,
-        /// A name that was a `reserved` tombstone is a live interaction again.
+        /// A name that was a `reserved` tombstone is live again — an
+        /// interaction inside a body, or a shape in a service's list.
         ReservedNameRedeclared,
-        /// A service's published shape or interface reference changed.
+        /// A service switched between the named shape list and an inline
+        /// shape. Narrowed to the form switch by ADR-0015 decision 19: a
+        /// changed shape list is read by the five `ServiceShape*` categories
+        /// below.
         ServiceChanged,
+        /// A shape added after every slot that existed before in a service's
+        /// list (ADR-0015 decision 19).
+        ServiceShapeAppended,
+        /// A shape added before the end of a service's list — every later
+        /// interface id shifts (ADR-0015 decisions 15 and 19).
+        ServiceShapeInserted,
+        /// A surviving shape whose relative order in a service's list changed
+        /// (ADR-0015 decision 19).
+        ServiceShapeReordered,
+        /// A shape removed from a service's list without a `reserved`
+        /// tombstone holding its slot (ADR-0015 decision 19).
+        ServiceShapeRemoved,
+        /// A shape removed and replaced by a `reserved` tombstone in the same
+        /// slot of a service's list (ADR-0015 decision 19).
+        ServiceShapeRetired,
         /// Only doc comment, labels, or deprecation metadata changed.
         DocOnly,
         /// The visibility a declaration is published at changed. Separate from
@@ -373,6 +392,11 @@ pub fn category_word(category: Category) -> &'static str {
         Category::InitChanged => "init_changed",
         Category::ReservedNameRedeclared => "reserved_name_redeclared",
         Category::ServiceChanged => "service_changed",
+        Category::ServiceShapeAppended => "service_shape_appended",
+        Category::ServiceShapeInserted => "service_shape_inserted",
+        Category::ServiceShapeReordered => "service_shape_reordered",
+        Category::ServiceShapeRemoved => "service_shape_removed",
+        Category::ServiceShapeRetired => "service_shape_retired",
         Category::DocOnly => "doc_only",
         Category::VisibilityChanged => "visibility_changed",
     }
