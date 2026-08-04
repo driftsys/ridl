@@ -709,6 +709,14 @@ fn write_emits(
     };
 
     for emit in emits {
+        // The wildcard-free discipline of `Emit::ir_dump_suffix` applies here
+        // too: without it, a new emit could be classified in the table and
+        // wildcarded out of the writer, which no test catches before this
+        // crate's test targets build. Same lint pair, same reason.
+        #[deny(
+            clippy::wildcard_enum_match_arm,
+            clippy::match_wildcard_for_single_variants
+        )]
         match emit {
             Emit::Rust => {
                 if let Some(generated) = &generated {
