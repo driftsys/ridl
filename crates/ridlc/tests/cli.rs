@@ -293,14 +293,21 @@ fn build_ir_emits_round_trip_to_one_ir() {
             .expect("ir-binary writes <pkg-name>.ir.binpb");
 
         let from_json = ridl_ir::v2::from_json(&json).expect("the JSON artifact parses");
-        let from_text =
-            ridl_ir::v2::from_text_format(&text).expect("the prototext artifact parses");
         let from_binary =
             ridl_ir::v2::from_binary(binary.as_slice()).expect("the binary artifact decodes");
 
+        // The prototext leg is asserted through the writer rather than a
+        // reader: the artifact must be exactly what `to_text_format` renders
+        // for the IR the other two artifacts carry. That is the same property
+        // — this artifact holds that IR — and it is byte equality rather than
+        // parse-and-compare, so it also pins the decision-8 rendering options.
+        // `from_text_format` is not public (ADR-0014 decision 7, and
+        // driftsys/ridl#218 for why), so a reader is not available here.
+        let rendered =
+            ridl_ir::v2::to_text_format(&from_json).expect("the parsed IR renders as prototext");
         assert_eq!(
-            from_json, from_text,
-            "`{package}`: JSON and prototext must carry the same IR"
+            text, rendered,
+            "`{package}`: the prototext artifact must be what the writer renders for this IR"
         );
         assert_eq!(
             from_json, from_binary,

@@ -113,7 +113,7 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
 
    `from_text_format` is required rather than speculative: without it the
    prototext emit has no round-trip test, and a write path with no read path is
-   untested by construction.
+   untested by construction. **It is not public** — see decision 13.
 
 8. **Canonical 64-bit stringification is kept, not overridden.**
    `stringify_64_bit_integers` stays at its default of `true`, so a timing bound
@@ -191,6 +191,40 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     straight-line field writes with no transcode and therefore no recursion
     limit. That reversibility was recorded as a hypothetical; it is now a
     concrete contingency with a known trigger.
+
+13. **Amendment (2026-08-04) — the prototext reader is crate-private, and the
+    writer's ceiling is a documented limit rather than a defect.**
+    `prost-reflect`'s text parser recurses per message level with frames large
+    enough that a debug build exhausts a 2 MiB stack at roughly 45 levels of
+    nesting — **below** prost's recursion limit of 100. On that path the error
+    return decision 12 relies on is unreachable, and the process aborts. A stack
+    overflow cannot be caught in Rust, so this is not fixable the way decision
+    12's write-side panic was.
+
+    It is contained by **reach** instead. Nothing in the toolchain reads
+    prototext; `ridl diff` and `ridl check --baseline` refuse the encoding by
+    name (decision 5); and `from_text_format` is now compiled only for
+    `ridl-ir`'s own tests — `#[cfg(test)]` rather than merely `pub(crate)`,
+    because outside the tests it has no caller at all and the gate denies dead
+    code. No consumer can reach the hazard, and none can link it either. The
+    round-trip test decision 7 asked for survives, run on an explicitly sized
+    stack. The one test outside the crate that parsed a prototext artifact now
+    asserts the artifact is byte-identical to what the writer renders for the IR
+    its siblings carry — the same property, and a stricter assertion, because it
+    also pins the decision 8 rendering options.
+
+    **The writer is kept as it is.** It shares the transcode and therefore the
+    same recursion limit, but it fails closed: `to_text_format` returns an
+    error, and the CLI reports a diagnostic and writes no artifact. A ceiling on
+    an inspection format that fails cleanly is a documented limit, not a defect
+    — unlike the same ceiling on the interchange format, which is what decision
+    12 records.
+
+    Making the reader public again means giving it a stack strategy first —
+    running the parse on an explicitly sized thread is the obvious candidate,
+    because it makes prost's own limit the thing that bites and therefore makes
+    the error return reachable. Recorded as debt on driftsys/ridl#218 rather
+    than built for a consumer that does not exist.
 
 ## Alternatives considered
 

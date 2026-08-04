@@ -174,14 +174,16 @@ pub mod v2 {
     /// generated types. The transcode failure is the read direction of the
     /// recursion-limit failure mode (ADR-0014 decision 12) — input-dependent,
     /// so it is mapped into this return rather than expected on.
+    #[cfg(test)]
     #[derive(Debug)]
-    pub enum TextFormatError {
+    pub(crate) enum TextFormatError {
         /// The input is not valid prototext for the `Package` schema.
         Parse(prost_reflect::text_format::ParseError),
         /// The parsed message cannot be rebuilt as a typed `Package`.
         Transcode(prost::DecodeError),
     }
 
+    #[cfg(test)]
     impl std::fmt::Display for TextFormatError {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
@@ -197,6 +199,7 @@ pub mod v2 {
         }
     }
 
+    #[cfg(test)]
     impl std::error::Error for TextFormatError {
         fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
             match self {
@@ -207,13 +210,27 @@ pub mod v2 {
     }
 
     /// Reads a package from the protobuf text format — the inverse of
-    /// [`to_text_format`], required rather than speculative: without it the
-    /// prototext emit has no round-trip test, and a write path with no read
-    /// path is untested by construction (ADR-0014 decision 7). A package
-    /// whose composite nesting crosses prost's recursion limit fails in the
-    /// transcode out of the dynamic message; that failure is mapped into the
-    /// error return, not expected on (ADR-0014 decision 12).
-    pub fn from_text_format(text: &str) -> Result<Package, TextFormatError> {
+    /// [`to_text_format`], kept because without it the prototext emit has no
+    /// round-trip test, and a write path with no read path is untested by
+    /// construction (ADR-0014 decision 7).
+    ///
+    /// **Deliberately not public.** `prost-reflect`'s text parser recurses per
+    /// message level with frames large enough that a debug build exhausts a
+    /// 2 MiB stack at roughly 45 levels of nesting — *below* prost's recursion
+    /// limit of 100, so on that path the error return below is unreachable and
+    /// the process aborts instead. A stack overflow cannot be caught, so the
+    /// hazard is contained by reach rather than handled: nothing in the
+    /// toolchain reads prototext, `ridl diff` and `ridl check --baseline`
+    /// refuse the encoding by name (ADR-0014 decision 5), and this function is
+    /// compiled only for this crate's tests. The tests that exercise it run on an
+    /// explicitly sized stack (see `with_parser_stack`). Making it public again
+    /// means giving it a stack strategy first — driftsys/ridl#218.
+    ///
+    /// A package whose nesting crosses prost's limit *before* the stack runs
+    /// out fails in the transcode out of the dynamic message; that failure is
+    /// mapped into the error return, not expected on (ADR-0014 decision 12).
+    #[cfg(test)]
+    pub(crate) fn from_text_format(text: &str) -> Result<Package, TextFormatError> {
         let dynamic = prost_reflect::DynamicMessage::parse_text_format(package_descriptor(), text)
             .map_err(TextFormatError::Parse)?;
         dynamic.transcode_to().map_err(TextFormatError::Transcode)
