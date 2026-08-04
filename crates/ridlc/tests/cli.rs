@@ -356,6 +356,39 @@ fn build_ir_emits_write_no_standard_artifact() {
     );
 }
 
+/// [`ridlc::Emit::is_ir_dump`] gives every variant its intended answer
+/// (ADR-0014 decision 10): the three IR encodings are direct dumps, the three
+/// language emits are code. The classifier's own exhaustive `match` makes an
+/// unclassified new variant a compile error; this test writes the intended
+/// answer down per variant, so a variant classified on the *wrong* side —
+/// which compiles — fails here instead.
+///
+/// The variant list comes from `clap`'s derive rather than a hand-kept array,
+/// so no variant can be missing from the sweep, and the expectation is itself
+/// a wildcard-free `match`, so a new variant stops this test compiling until
+/// its intended answer is added. Neither `match` can check that the answer
+/// chosen for a new variant is correct — rustc forces *an* arm, not the right
+/// one.
+#[test]
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
+fn every_emit_variant_is_classified() {
+    for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
+        let expected = match emit {
+            ridlc::Emit::Rust | ridlc::Emit::CHeader | ridlc::Emit::TypeScript => false,
+            ridlc::Emit::IrJson | ridlc::Emit::IrText | ridlc::Emit::IrBinary => true,
+        };
+        assert_eq!(
+            emit.is_ir_dump(),
+            expected,
+            "`{emit:?}` must classify as {}",
+            if expected { "an IR dump" } else { "code" }
+        );
+    }
+}
+
 /// A package whose composite nesting crosses the transcoding decoder's
 /// recursion limit (ADR-0014 decision 12) is legal source; the reflection
 /// emits report it as a detached error diagnostic and write no artifact —

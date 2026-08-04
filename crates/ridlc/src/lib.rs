@@ -301,6 +301,41 @@ pub enum Emit {
     TypeScript,
 }
 
+impl Emit {
+    /// Whether this artifact is a direct dump of the lowered IR, as opposed to
+    /// code a backend generated from it.
+    ///
+    /// The distinction decides whether [`run_build`] writes the artifact for
+    /// `ridl.std`. `ridl.std` is version-locked to the compiler binary
+    /// (ADR-0007 decision 15), so it is not part of a workspace's contract
+    /// snapshot — a baseline holds the packages the workspace *declares*.
+    /// `ridl baseline` is `run_build` with `--emit ir-json`, and `ridl diff`
+    /// compiles the other side without `ridl.std`, so writing
+    /// `ridl.std.ir.json` would make every diff of an unedited workspace
+    /// against its own baseline report `ridl.std` as a removed package. Issue
+    /// #190 is about generated *code* failing to compile, and an IR dump is
+    /// not code — prototext and binary are dumps by the identical argument
+    /// (ADR-0014 decision 10).
+    ///
+    /// That decision requires this classification to be exhaustive over
+    /// [`Emit`] with no wildcard arm, so a new encoding left unclassified is a
+    /// compile error rather than a spurious `ridl.std` artifact on every
+    /// build. The two lints below reject the wildcard rustc's own `help:` text
+    /// proposes for that error — the first when it covers several variants,
+    /// the second when it covers exactly one, which is the case one
+    /// unclassified new variant creates.
+    #[deny(
+        clippy::wildcard_enum_match_arm,
+        clippy::match_wildcard_for_single_variants
+    )]
+    pub fn is_ir_dump(self) -> bool {
+        match self {
+            Emit::Rust | Emit::CHeader | Emit::TypeScript => false,
+            Emit::IrJson | Emit::IrText | Emit::IrBinary => true,
+        }
+    }
+}
+
 /// The render-ready result of a [`run_check`] or [`run_build`] command: the
 /// merged diagnostics and the source map they point into.
 pub struct CliRun {
@@ -403,24 +438,13 @@ pub fn run_build(
             .iter()
             .any(|package| ridl_ir::v2::referenced_packages(&package.ir).contains("ridl.std"));
         if references_std {
-            // Every emit kind except the direct IR dumps. `ridl.std` is
-            // version-locked to the compiler binary (ADR-0007 decision 15), so
-            // it is not part of a workspace's contract snapshot — a baseline
-            // holds the packages the workspace *declares*. `ridl baseline` is
-            // `run_build` with `--emit ir-json`, and `ridl diff` compiles the
-            // other side without `ridl.std`, so writing `ridl.std.ir.json`
-            // here would make every diff of an unedited workspace against its
-            // own baseline report `ridl.std` as a removed package. Issue #190
-            // is about generated *code* failing to compile, and an IR dump is
-            // not code — prototext and binary are dumps by the identical
-            // argument (ADR-0014 decision 10). That decision requires this
-            // classification to be exhaustive over `Emit`; the roadmap
-            // sequences that rewrite as story E9.3, so it stays an
-            // enumeration for one more story.
+            // Every emit kind except the direct IR dumps. The reasoning, and
+            // the exhaustive classification ADR-0014 decision 10 requires,
+            // live on `Emit::is_ir_dump`.
             let code_emits: Vec<Emit> = emits
                 .iter()
                 .copied()
-                .filter(|emit| !matches!(emit, Emit::IrJson | Emit::IrText | Emit::IrBinary))
+                .filter(|emit| !emit.is_ir_dump())
                 .collect();
             if !code_emits.is_empty() {
                 let std_ir = check_package(&db, workspace, std, std).ir;
