@@ -240,7 +240,14 @@ fn build_help_documents_every_emit_value() {
         .collect();
     assert_eq!(
         listed,
-        ["rust", "c-header", "ir-json", "typescript"],
+        [
+            "rust",
+            "c-header",
+            "ir-json",
+            "ir-text",
+            "ir-binary",
+            "typescript"
+        ],
         "`--emit` must offer exactly these artifacts, help:\n{help}"
     );
 
@@ -254,6 +261,156 @@ fn build_help_documents_every_emit_value() {
             "the --emit summary must name `{value}`, got:{summary}"
         );
     }
+}
+
+/// `build --emit ir-json,ir-text,ir-binary` writes all three IR encodings
+/// and they carry one IR (ADR-0014 decision 4): each package's three
+/// artifacts, read back through the matching `ridl-ir` readers, decode to
+/// the same package. Driven over the `veh-cluster` corpus workspace so the
+/// equality covers the full ridl surface — both service forms, all five
+/// interaction kinds, contracts, streams, tombstones — rather than a
+/// minimal fixture.
+#[test]
+fn build_ir_emits_round_trip_to_one_ir() {
+    let out = TempDir::new("ir-emits-out");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "tests/corpus/veh-cluster".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json,ir-text,ir-binary".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the corpus entry must exit 0, stderr:\n{stderr}");
+
+    for package in ["veh.common", "veh.cluster"] {
+        let json = std::fs::read_to_string(out.path().join(format!("{package}.ir.json")))
+            .expect("ir-json writes <pkg-name>.ir.json");
+        let text = std::fs::read_to_string(out.path().join(format!("{package}.ir.txtpb")))
+            .expect("ir-text writes <pkg-name>.ir.txtpb");
+        let binary = std::fs::read(out.path().join(format!("{package}.ir.binpb")))
+            .expect("ir-binary writes <pkg-name>.ir.binpb");
+
+        let from_json = ridl_ir::v2::from_json(&json).expect("the JSON artifact parses");
+        let from_text =
+            ridl_ir::v2::from_text_format(&text).expect("the prototext artifact parses");
+        let from_binary =
+            ridl_ir::v2::from_binary(binary.as_slice()).expect("the binary artifact decodes");
+
+        assert_eq!(
+            from_json, from_text,
+            "`{package}`: JSON and prototext must carry the same IR"
+        );
+        assert_eq!(
+            from_json, from_binary,
+            "`{package}`: JSON and binary must carry the same IR"
+        );
+    }
+}
+
+/// No `ridl.std` artifact appears for any of the three IR emits: a direct IR
+/// dump is not code, and `ridl.std` is not part of a workspace's contract
+/// snapshot (ADR-0014 decision 10). The corpus entry references `ridl.std`,
+/// so a code emit *does* write the standard artifact — which is exactly when
+/// a wrongly classified IR dump would write a spurious one.
+#[test]
+fn build_ir_emits_write_no_standard_artifact() {
+    let out = TempDir::new("ir-emits-no-std");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "tests/corpus/veh-cluster".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json,ir-text,ir-binary".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the corpus entry must exit 0, stderr:\n{stderr}");
+
+    // Read the artifact directory itself, not the filter's return value: the
+    // claim is about what a build leaves on disk.
+    let mut written: Vec<String> = std::fs::read_dir(out.path())
+        .expect("the artifact directory exists")
+        .flatten()
+        .map(|entry| entry.file_name().to_string_lossy().into_owned())
+        .collect();
+    written.sort();
+    assert!(
+        !written.iter().any(|name| name.starts_with("ridl.std.")),
+        "no `ridl.std` artifact for a direct IR dump, got: {written:?}"
+    );
+    // The absence proves nothing over an empty directory: the workspace's own
+    // dumps must all be present.
+    assert_eq!(
+        written,
+        [
+            "veh.cluster.ir.binpb",
+            "veh.cluster.ir.json",
+            "veh.cluster.ir.txtpb",
+            "veh.common.ir.binpb",
+            "veh.common.ir.json",
+            "veh.common.ir.txtpb",
+        ],
+        "one artifact per package per IR emit and nothing else"
+    );
+}
+
+/// A package whose composite nesting crosses the transcoding decoder's
+/// recursion limit (ADR-0014 decision 12) is legal source; the reflection
+/// emits report it as a detached error diagnostic and write no artifact —
+/// `ir-text` exactly as `ir-json`. The binary emit has no transcode and no
+/// limit, so the same build still writes `.ir.binpb`, the way `--emit rust`
+/// still writes code for that package.
+#[test]
+fn build_ir_emits_past_the_nesting_limit_report_and_skip_their_artifacts() {
+    let dir = TempDir::new("build-deep");
+    // 60 nested inline arrays — past the limit, which the transcode reaches
+    // at roughly 49 array levels (two message levels each, ADR-0014
+    // decision 12).
+    let mut element = String::from("N");
+    for _ in 0..60 {
+        element = format!("[{element}; 1]");
+    }
+    let file = dir.write(
+        "deep.typl",
+        &format!("package veh.deep\ntype N : integer [0..1]\nstruct S {{\n  f : {element}\n}}\n"),
+    );
+    let out = TempDir::new("build-deep-out");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        file.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json,ir-text,ir-binary".as_ref(),
+    ]);
+    assert_eq!(
+        code, 1,
+        "a failed serialization must exit 1, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("recursion limit"),
+        "the diagnostic must name the known cause, got:\n{stderr}"
+    );
+    // One diagnostic per failed encoding, each naming its own artifact.
+    assert!(
+        stderr.contains("canonical protobuf JSON") && stderr.contains("prototext"),
+        "both reflection emits must report their own failure, got:\n{stderr}"
+    );
+    assert!(
+        !out.path().join("deep.ir.json").exists(),
+        "a failed JSON serialization must write no artifact"
+    );
+    assert!(
+        !out.path().join("deep.ir.txtpb").exists(),
+        "a failed prototext serialization must write no artifact"
+    );
+    assert!(
+        out.path().join("deep.ir.binpb").is_file(),
+        "the binary emit has no recursion limit and still writes"
+    );
 }
 
 /// A workspace build emits every member package's artifacts.

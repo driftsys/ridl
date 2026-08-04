@@ -293,6 +293,8 @@ Options:
           - rust:       Idiomatic Rust source, written to `<base>.rs`
           - c-header:   The extern-C header, written to `<base>.h`
           - ir-json:    The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
+          - ir-text:    The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
+          - ir-binary:  The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
           - typescript: Idiomatic TypeScript source, written to `<base>.ts`
           
           [default: rust]
@@ -319,10 +321,10 @@ in single-file mode.
 When a package names a type from `ridl.std`, the standard package is written
 beside your own as one more file per `--emit` target — `ridl.std.rs`,
 `ridl.std.h`, `ridl.std.ts` — because generated code refers to standard types
-by package path and does not compile without it. `ir-json` is the one target
-that gets no such file: a snapshot records the packages the workspace
-declares, and `ridl.std` ships with the compiler rather than with the
-workspace ([ADR-0007][adr-0007] decision 15).
+by package path and does not compile without it. The three IR targets —
+`ir-json`, `ir-text`, `ir-binary` — get no such file: a direct IR dump
+records the packages the workspace declares, and `ridl.std` ships with the
+compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
 
 Building a workspace of two packages that name no standard type, with no
 `[imports]`:
@@ -912,12 +914,14 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `c-header`, `ir-json`, `typescript`
+          The artifacts to emit: `rust` (default), `c-header`, `ir-json`, `ir-text`, `ir-binary`, `typescript`
 
           Possible values:
           - rust:       Idiomatic Rust source, written to `<base>.rs`
           - c-header:   The extern-C header, written to `<base>.h`
           - ir-json:    The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
+          - ir-text:    The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
+          - ir-binary:  The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
           - typescript: Idiomatic TypeScript source, written to `<base>.ts`
           
           [default: rust]

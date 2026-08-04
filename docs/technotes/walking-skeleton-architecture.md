@@ -148,16 +148,18 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   package model (file, package directory, or workspace root) and is the library
   face the language server drives; `run_check` and `run_build` add the
   remote-import lockfile round trip (`--frozen` never fetches) and, for build,
-  write the selected artifacts: `<base>.rs`, `<base>.h`, `<base>.ir.json`, and
-  `<base>.ts`. The binary exposes `ridlc check` and `ridlc build`. E2 widened
-  `WorkspaceOutput` with the checker's `resolutions` and the lowered `std_ir`,
-  so a workflow crate does not have to restate the compiler's load-and-resolve
-  loop (ADR-0008 decision 15). Both backends are ordinary dependencies here:
-  `ridlc build --emit` offers `rust`, `c-header`, `ir-json`, and `typescript`,
-  so the second backend over one IR is reachable from the command line and not
-  only from the corpus runner's snapshots. The two language emits are
-  independent — each backend generates from the same IR on its own, and one that
-  cannot render a package skips only its own artifact.
+  write the selected artifacts: `<base>.rs`, `<base>.h`, `<base>.ir.json`,
+  `<base>.ir.txtpb`, `<base>.ir.binpb`, and `<base>.ts`. The binary exposes
+  `ridlc check` and `ridlc build`. E2 widened `WorkspaceOutput` with the
+  checker's `resolutions` and the lowered `std_ir`, so a workflow crate does not
+  have to restate the compiler's load-and-resolve loop (ADR-0008 decision 15).
+  Both backends are ordinary dependencies here: `ridlc build --emit` offers
+  `rust`, `c-header`, the three IR encodings of ADR-0014 decision 4 (`ir-json`,
+  `ir-text`, `ir-binary`), and `typescript`, so the second backend over one IR
+  is reachable from the command line and not only from the corpus runner's
+  snapshots. The two language emits are independent — each backend generates
+  from the same IR on its own, and one that cannot render a package skips only
+  its own artifact.
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
   `ridl build`, `ridl test`, `ridl fmt`, and `ridl diff`, driving the `ridlc`
