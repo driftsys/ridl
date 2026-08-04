@@ -243,13 +243,20 @@ pub fn resolve_timing(
         // value: an unreadable `max` already drew FORM-102 above and is a
         // written bound, not an undeclared one.
         //
-        // The warning is confined to that one well-formed spelling: `min`
-        // written, `max` absent, and the range parsed to its closing `]`. A
-        // range the parser could not read — no bound token on either side
-        // (recovery from `@[20xs..50ms]`, or `@[..]`), or no closing `]`
-        // (`@[20ms..50xs]`) — already drew FORM-101, and a bound that failed
-        // to parse is not a bound the author declined to declare:
-        // `@[20xs..50ms]` demonstrably writes a `50ms` response bound, so
+        // The warning requires the literal spelling `@[min..]`: a written
+        // `min`, an absent `max`, the `..` consumed into the range node, and
+        // the range parsed to its closing `]`. Tokens enter these nodes only
+        // where the grammar expects them, so the four legs together admit no
+        // other source text — a duration stood before a consumed `..`, no
+        // duration followed it, and the consumed `]` means the token after
+        // the `..` was the bracket itself — and on that path none of the
+        // parser's four FORM-101 sites in the annotation can have fired.
+        // Every other shape — no bound token on either side (recovery from
+        // `@[20xs..50ms]`, or `@[..]`), no closing `]` (`@[20ms..50xs]`), or
+        // both bounds written with no `..` between them (`@[20ms 50ms]`) —
+        // already drew FORM-101, and a bound that failed to parse is not a
+        // bound the author declined to declare: `@[20xs..50ms]` and
+        // `@[20ms 50ms]` each demonstrably write a `50ms` response bound, so
         // advising the author to declare one would advise on intent the
         // checker could not read. The package fails to compile on the
         // FORM-101 regardless, so no artifact or baseline can carry the
@@ -257,7 +264,7 @@ pub fn resolve_timing(
         if matches!(kind, InteractionKind::Command | InteractionKind::Query)
             && min_token.is_some()
             && max_token.is_none()
-            && range_closed(annot)
+            && range_parsed_whole(annot, &range)
         {
             diags.push(missing_response_bound(kind, file, anchor));
         }
@@ -536,17 +543,23 @@ fn is_zero(value: &ExactValue) -> bool {
     *value.0.numer() == BigInt::from(0)
 }
 
-/// Whether a range annotation's bracket was closed. The parser consumes the
-/// `]` into the `Timing` node exactly when the range parsed to its end, so a
-/// missing one marks a range whose parse failed midway (FORM-101): in
-/// `@[20ms..50xs]` the unreadable upper bound is no `Duration` token, so
-/// neither it nor the `]` behind it ever enters the node.
-fn range_closed(annot: &ast::Timing) -> bool {
-    annot
-        .syntax()
-        .children_with_tokens()
-        .filter_map(|element| element.into_token())
-        .any(|token| token.kind() == ridl_syntax::SyntaxKind::RBracket)
+/// Whether a range annotation parsed to its end: the `..` separator was
+/// consumed into the range node and the closing `]` into the `Timing` node.
+/// The parser consumes each exactly when it stands where the grammar expects
+/// it, so a missing one marks a range whose parse failed midway (FORM-101).
+/// In `@[20ms..50xs]` the unreadable upper bound is no `Duration` token, so
+/// neither it nor the `]` behind it ever enters the node; in `@[20ms 50ms]`
+/// the failed `..` leaves both written durations in the node with no
+/// separator, so `max()` — which anchors on the `..` token — reads the
+/// written `50ms` as absent.
+fn range_parsed_whole(annot: &ast::Timing, range: &ast::TimingRange) -> bool {
+    let has_token = |node: &ridl_syntax::SyntaxNode, kind: ridl_syntax::SyntaxKind| {
+        node.children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .any(|token| token.kind() == kind)
+    };
+    has_token(range.syntax(), ridl_syntax::SyntaxKind::DotDot)
+        && has_token(annot.syntax(), ridl_syntax::SyntaxKind::RBracket)
 }
 
 /// The declaring keyword's noun for a diagnostic message.
@@ -1045,7 +1058,7 @@ mod tests {
 
     /// RIDL-112 stops at what was written: an RPC with no annotation warns, a
     /// half-open `@[min..]` warns, and an annotation the parser could not read
-    /// warns nothing — all four boundaries pinned side by side.
+    /// warns nothing — the boundary pinned from both sides.
     ///
     /// The unreadable spellings each draw FORM-101 from the parser, and that
     /// is where their reporting ends. `@[20xs..50ms]` demonstrably writes a
@@ -1072,8 +1085,9 @@ mod tests {
 
         // An annotation that was written and could not be read: a `Timing`
         // node with neither duration nor range, a range with no bound token
-        // on either side, and a range whose parse stopped before the closing
-        // `]` — one spelling for each degenerate shape the parser leaves.
+        // on either side, a range whose parse stopped before the closing
+        // `]`, and a range with both bounds written and no `..` between them
+        // — one spelling for each degenerate shape the parser leaves.
         for (decl, kind) in [
             ("query getSpeed(): Speed @fast", InteractionKind::Query),
             (
@@ -1082,6 +1096,10 @@ mod tests {
             ),
             (
                 "query getSpeed(): Speed @[20ms..50xs]",
+                InteractionKind::Query,
+            ),
+            (
+                "query getSpeed(): Speed @[20ms 50ms]",
                 InteractionKind::Query,
             ),
         ] {
