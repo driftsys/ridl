@@ -227,12 +227,21 @@ indistinguishable, so no claim about any of the three can be exercised.
 
    It is **implicit, not declared.** Three rules the family already states
    produce it: §4.2 gives every flow exactly one owning provider; a provider
-   computes its outputs in one step (rmdl's topological schedule); and a service
-   is the published unit realized by one provider. So the values a provider
-   publishes in one tick are a simultaneous state by construction. Signals
-   publishing at different rates do not break this — in a given tick some cells
-   are written and others are not, but every value present came from the same
-   step, so the observed set remains a state that existed.
+   computes its outputs in one step (rmdl's topological schedule); and each
+   provider realizes the service it publishes as a whole (rsdl §5.3, RSDL-502).
+   So the values a provider publishes in one step are a simultaneous state by
+   construction. Signals publishing at different rates do not break this — in a
+   given step some cells are written and others are not, but every value present
+   is one that provider held at that step, so the observed set remains a state
+   that existed. Declared redundancy (rsdl §10) does not weaken this: the rule
+   holds of each provider's published set, which is what a consumer reads.
+
+   **Corrected during E9.5.** An earlier wording said "a service is the
+   published unit realized by one provider" and "every value present came from
+   the same step". The first is contradicted by ridl §14.5, where two components
+   providing one service is declared redundancy rather than a conflict; the
+   second is false for a cell not written in the step being read, whose value
+   the provider still held but computed earlier.
 
    Declaring `coherent` would declare a consequence of how the platform
    executes, which is what the general form §4.1 deletion test exists to reject.
