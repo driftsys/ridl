@@ -109,9 +109,10 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   decimal strings — the schema has no float or double field — and derived wire
   widths ride alongside as enums (ADR-0007 decision 9). The crate renders three
   encodings of that schema — canonical protobuf JSON, prototext, and protobuf
-  binary — the two text ones over a descriptor pool `build.rs` embeds from the
-  same compilation that generates the types (ADR-0014). JSON is the form
-  `ridl baseline` writes and `ridl diff` reads.
+  binary — the two text ones over a descriptor pool that `build.rs` writes to
+  `OUT_DIR` and `lib.rs` embeds, from the same compilation that generates the
+  types (ADR-0014). JSON is the form `ridl baseline` writes and `ridl diff`
+  reads.
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
   `Generated { rust_source, c_header }`. Rust is built as a `quote` token stream

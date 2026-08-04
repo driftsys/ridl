@@ -5,8 +5,8 @@
 //! the build needs no system `protoc` binary (ADR-0006 decision 3). The
 //! resulting descriptor set is handed to `prost-build`, which emits the Rust
 //! types, and is also written to `OUT_DIR`, where `lib.rs` embeds it as the
-//! `prost-reflect` descriptor pool behind the canonical protobuf JSON surface
-//! (ADR-0014 decision 7) — pool and types come from one schema compilation,
+//! `prost-reflect` descriptor pool behind both text encodings, canonical
+//! protobuf JSON and prototext (ADR-0014 decision 7) — pool and types come from one schema compilation,
 //! so the two cannot disagree. The v1 schema was removed when its last
 //! consumer moved to v2 (task 6 of the E2 plan), mirroring the E0 v0
 //! retirement.

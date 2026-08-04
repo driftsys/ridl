@@ -17,7 +17,8 @@ pub mod v2 {
     include!(concat!(env!("OUT_DIR"), "/ridl.ir.v2.rs"));
 
     /// The descriptor pool over the compiled IR schema — the reflection data
-    /// the canonical protobuf JSON surface needs (ADR-0014 decision 7).
+    /// both text encodings need, canonical protobuf JSON and prototext
+    /// (ADR-0014 decision 7). Binary needs none of it.
     /// `build.rs` writes the `FileDescriptorSet` to `OUT_DIR` from the same
     /// `protox` compilation that generates the types above, so the pool and
     /// the types cannot disagree; every `expect` on this path leans on that.
@@ -1015,11 +1016,19 @@ mod v2_round_trip {
     }
 
     /// The prototext options ADR-0014 decision 8 fixes — `pretty`,
-    /// `skip_default_fields(false)`, `print_message_fields_in_index_order` —
-    /// each asserted through a visible consequence, so silently dropping one
-    /// fails here rather than changing every artifact unremarked. Any option
-    /// set round-trips, which is why the round-trip test above cannot guard
-    /// them.
+    /// `skip_default_fields(false)`, `print_message_fields_in_index_order`.
+    /// Any option set round-trips, which is why the round-trip test above
+    /// cannot guard them.
+    ///
+    /// The first two are asserted through a visible consequence. The third is
+    /// **not guarded here and cannot be on this schema**: every message in
+    /// `ir.proto` declares its fields in ascending field-number order, and
+    /// field-number order is also `prost-reflect`'s default, so index order
+    /// and default order coincide everywhere and dropping the option would
+    /// change no output. It is set because the schema's ordering is a
+    /// property of the schema rather than a guarantee, and a message whose
+    /// declaration order departs from its numbering would otherwise reorder
+    /// every artifact it appears in.
     #[test]
     fn text_format_is_pretty_with_defaults_in_index_order() {
         let text = v2::to_text_format(&fixture()).expect("the fixture serializes as prototext");
