@@ -247,10 +247,13 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
 ///    root — compiled in process through `ridlc::compile_workspace`.
 ///
 /// Only IR artifacts are recognised by name — the suffix table (issue #218
-/// item 4). A file in a non-JSON IR encoding is refused rather than parsed
-/// as source, and so is a directory that holds IR artifacts but neither an
-/// `.ir.json` snapshot nor source: no `ridl.toml` and no `.typl`/`.ridl`
-/// file directly inside it. Everything else is source. Recognising *source*
+/// item 4). Three inputs are refused rather than parsed as source: a file in
+/// a non-JSON IR encoding; a directory that holds IR artifacts but neither an
+/// `.ir.json` snapshot nor source — no `ridl.toml` and no `.typl`/`.ridl`
+/// file directly inside it; and a directory with no source whose `.ir.json`
+/// snapshots sit one level below it rather than inside it, which is a path
+/// aimed one level too high (issue #230). Everything else is source.
+/// Recognising *source*
 /// by extension was tried and reverted — it refused inputs the compiler
 /// accepts, such as a `ridl.toml` path designating its workspace, an
 /// extensionless source file, or a symlink — so a renamed artifact whose
@@ -305,7 +308,7 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
                      the packages with `--emit ir-json` to compare them",
                 ));
             }
-            if let Some(nested) = first_nested_snapshot_dir(entry) {
+            if let Some(nested) = first_nested_snapshot_dir(entry)? {
                 return Err(refuse_nested_snapshot_directory(
                     entry,
                     &nested,
@@ -798,7 +801,7 @@ fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode>
                      `ridl baseline`",
                 ));
             }
-            if let Some(nested) = first_nested_snapshot_dir(location) {
+            if let Some(nested) = first_nested_snapshot_dir(location)? {
                 return Err(refuse_nested_snapshot_directory(
                     location,
                     &nested,
@@ -853,19 +856,36 @@ fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
 /// the one directory the author named, so a path aimed two or more levels
 /// high stays the silent pass it is today (issue #230).
 ///
-/// A read failure yields `None`: every caller has just listed `dir` through
-/// [`snapshot_files`], so its own fallback reports the cause.
-fn first_nested_snapshot_dir(dir: &Path) -> Option<PathBuf> {
+/// A subdirectory that cannot be listed is exit 2, not a silent `None`. This
+/// is the one scan in this file that reads a level *no caller has listed* —
+/// [`first_non_json_ir_in`] and [`snapshot_files`] both read only `dir`
+/// itself, which the caller has already been through — so the rule
+/// [`snapshot_files`] states has to be restated here rather than inherited:
+/// a directory that cannot be read must not quietly become a directory that
+/// holds nothing. Swallowing the error would let an unreadable
+/// `.ridl/baseline/` read as an unpublished baseline and skip the desk check
+/// in silence, which is the failure this whole refusal exists to close.
+fn first_nested_snapshot_dir(dir: &Path) -> Result<Option<PathBuf>, ExitCode> {
+    let unreadable = |path: &Path, err: &std::io::Error| {
+        eprintln!("error: cannot read {}: {err}", path.display());
+        ExitCode::from(2)
+    };
     let mut subdirectories: Vec<PathBuf> = std::fs::read_dir(dir)
-        .ok()?
+        .map_err(|err| unreadable(dir, &err))?
         .flatten()
         .map(|entry| entry.path())
         .filter(|path| path.is_dir())
         .collect();
     subdirectories.sort();
-    subdirectories
-        .into_iter()
-        .find(|subdirectory| ir_json_files(subdirectory).is_ok_and(|files| !files.is_empty()))
+    for subdirectory in subdirectories {
+        if !ir_json_files(&subdirectory)
+            .map_err(|err| unreadable(&subdirectory, &err))?
+            .is_empty()
+        {
+            return Ok(Some(subdirectory));
+        }
+    }
+    Ok(None)
 }
 
 /// Reports a directory whose `.ir.json` snapshots sit one level below it

@@ -658,6 +658,60 @@ fn check_refuses_a_baseline_directory_whose_snapshots_are_nested() {
     );
 }
 
+/// A published baseline that cannot be *listed* is exit 2, not an empty
+/// baseline.
+///
+/// The nesting scan reads a level no caller has listed, so it is the one
+/// place where a directory that cannot be read could quietly become a
+/// directory that holds nothing: `--baseline .ridl` over an unreadable
+/// `.ridl/baseline/` used to report `Ok(0 packages)`, and `desk_check`
+/// returns early on an empty baseline — a clean desk check that ran against a
+/// baseline it never opened. That is the same false assurance issue #230 is
+/// about, reached through permissions instead of a mistyped path, so the
+/// error is reported rather than swallowed.
+#[cfg(unix)]
+#[test]
+fn check_reports_a_baseline_subdirectory_it_cannot_read() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = TempDir::new("unreadable");
+    let root = package_workspace(&dir, BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is published: {stderr}");
+    dir.write("cluster.ridl", REORDERED);
+
+    let published = root.join(".ridl/baseline");
+    let restore = std::fs::metadata(&published)
+        .expect("the published directory exists")
+        .permissions();
+    std::fs::set_permissions(&published, std::fs::Permissions::from_mode(0o000))
+        .expect("make the published directory unreadable");
+    // A process that can read it anyway — root — cannot stage this case at
+    // all, so there is nothing to assert rather than something to fail on.
+    if std::fs::read_dir(&published).is_ok() {
+        std::fs::set_permissions(&published, restore).expect("restore the permissions");
+        return;
+    }
+
+    let nest = root.join(".ridl");
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        nest.as_os_str(),
+    ]);
+    std::fs::set_permissions(&published, restore).expect("restore the permissions");
+
+    assert_eq!(
+        code, 2,
+        "a baseline that cannot be read is not an absent one:\n{stderr}"
+    );
+    assert!(
+        stderr.starts_with(&format!("error: cannot read {}: ", published.display())),
+        "the message names the directory it could not list:\n{stderr}"
+    );
+}
+
 /// The control for both refusals above: a directory with no IR artifacts at
 /// all — directly inside or one level down — is the ordinary "no baseline
 /// published yet" state. An empty baseline, silently skipped, exactly as
