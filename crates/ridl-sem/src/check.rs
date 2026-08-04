@@ -3036,8 +3036,10 @@ impl Checker<'_> {
     /// - **RIDL-147** — two shapes whose interface names collide even though
     ///   their references differ (decision 24). A binding keys the ordinal
     ///   spaces on the interface name (decision 17), so the two shapes would
-    ///   be indistinguishable at every binding. The offender lowers into its
-    ///   slot, as with RIDL-146.
+    ///   be indistinguishable at every binding. The rule is over every shape,
+    ///   live or retired (decision 24): a name spelled by two tombstones
+    ///   draws the same code, from the pre-pass. The offender lowers into
+    ///   its slot, as with RIDL-146.
     /// - **RIDL-148** — a tombstone that spells no interface name (decision
     ///   24): the literal spellings the shared `reserved` grammar admits
     ///   lower to a nameless tombstone nothing can ever match, so the
@@ -3049,17 +3051,23 @@ impl Checker<'_> {
     ///   expressed.
     fn lower_service_shapes(&mut self, service: &ast::ServiceDef) -> Vec<v2::ServiceShape> {
         // The tombstone pre-pass, as in an interface body: `reserved` retires
-        // its name wherever it sits in the list. `or_insert_with`, not
-        // `insert`, so a second tombstone for one name does not move
-        // RIDL-146's label onto the later `reserved` slot.
+        // its name wherever it sits in the list. First-wins, read-then-write:
+        // the first tombstone keeps the name and RIDL-146's label, and a
+        // later tombstone spelling the same name is RIDL-147 — the
+        // uniqueness rule is over every shape, live or retired (ADR-0015
+        // decision 24), and two tombstones on one name would leave the
+        // shape list without a per-name key.
         let mut reserved: HashMap<String, TextRange> = HashMap::new();
         for shape in service.shapes() {
             if let ast::ServiceShape::Reserved(entry) = &shape
                 && let Some(name) = member_name(entry.name())
             {
-                reserved
-                    .entry(name)
-                    .or_insert_with(|| member_name_range(entry.name(), entry.syntax()));
+                let range = member_name_range(entry.name(), entry.syntax());
+                if let Some(first) = reserved.get(&name).copied() {
+                    self.colliding_reserved_shape(&name, range, first);
+                } else {
+                    reserved.insert(name, range);
+                }
             }
         }
 
@@ -3215,7 +3223,9 @@ impl Checker<'_> {
     /// two shapes would be indistinguishable at every binding. Its own code
     /// rather than RIDL-145 because the remedy differs: an import alias
     /// cannot fix a name collision — the name is the interface's own — only
-    /// a rename or a different composition can.
+    /// a rename or a different composition can. The retired pairing of the
+    /// same rule — one name on two tombstones — is
+    /// [`Self::colliding_reserved_shape`].
     fn colliding_service_shape(
         &mut self,
         name: &str,
@@ -3236,6 +3246,30 @@ impl Checker<'_> {
             ),
             owner_range,
             format!("`{owner}` composes as `{name}` here"),
+        );
+    }
+
+    /// RIDL-147, the retired pairing: one name spelled by two `reserved`
+    /// tombstones of one service (ADR-0015 decision 24). The uniqueness rule
+    /// is over every shape, live or retired — two tombstones on one name
+    /// leave the shape list without a per-name key, so every later diff of
+    /// the service would be compared as a whole. The same code as the live
+    /// pairing, because it is the same rule; its own message, because the
+    /// remedy differs — nothing is composed and nothing can be renamed
+    /// here, the second tombstone is deleted or corrected.
+    fn colliding_reserved_shape(&mut self, name: &str, range: TextRange, first: TextRange) {
+        self.error_with_label(
+            DiagCode::RIDL_147,
+            range,
+            format!(
+                "`{name}` is already retired by this service — a name is retired once, \
+                 because two shapes of one service cannot share an interface name, live or \
+                 retired (ADR-0015 decision 24). Delete this tombstone if it repeats the \
+                 retirement, or write the interface name it was meant to retire (ridl §14.5, \
+                 §11)"
+            ),
+            first,
+            format!("`{name}` is retired here"),
         );
     }
 
@@ -9604,6 +9638,51 @@ interface VehicleStatus {
             2,
             "both shapes still hold their slots",
         );
+    }
+
+    /// RIDL-147, the retired pairing: one name spelled by two `reserved`
+    /// tombstones of one service (ADR-0015 decision 24). Without the rule
+    /// the source compiles clean, and the shape list can never again be
+    /// keyed by interface name — every later edit, including the sanctioned
+    /// compatible append, would diff as a whole and classify breaking. The
+    /// message is the tombstone wording, not the live-shape one; both
+    /// tombstones still lower and hold their slots — the error blocks
+    /// emission.
+    #[test]
+    fn ridl_147_name_repeated_across_tombstones() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
+                 service veh.body.doors : DoorControl, reserved LegacyX, reserved LegacyX\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-147"]);
+        assert!(
+            checked.diagnostics[0].message.contains("already retired"),
+            "the retired pairing carries its own wording, got: {}",
+            checked.diagnostics[0].message
+        );
+        assert_eq!(
+            checked.ir.services[0].shapes.len(),
+            3,
+            "both tombstones still hold their slots",
+        );
+    }
+
+    /// Two tombstones spelling distinct names are clean: the uniqueness rule
+    /// (ADR-0015 decision 24) rejects a repeated name, not a second
+    /// retirement.
+    #[test]
+    fn ridl_147_distinct_tombstone_names_are_clean() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
+                 service veh.body.doors : DoorControl, reserved LegacyX, reserved LegacyY\n"
+            ),
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
     }
 
     /// RIDL-148: a service-level tombstone must spell an interface name. The

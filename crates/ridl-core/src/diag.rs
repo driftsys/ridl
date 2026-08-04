@@ -589,13 +589,16 @@ diag_codes! {
         /// A binding separates the ordinal spaces by interface name (decision
         /// 17), so a service carrying `fleet.c1.DiagBlock` and
         /// `fleet.c2.DiagBlock` leaves the binding no way to tell the two
-        /// apart. Its own code rather than RIDL-145 — that rule is the same
-        /// reference listed twice — because the remedy differs: an import
-        /// alias cannot fix a name collision, only renaming one interface or
-        /// composing it into a different service can. Emitted per-package by
-        /// the checker (E9.6).
+        /// apart. The rule is over every shape, live or retired: a name
+        /// spelled by two `reserved` tombstones draws the same code, because
+        /// two slots under one name leave the shape list without the
+        /// per-name key the diff walk matches slots by. Its own code rather
+        /// than RIDL-145 — that rule is the same reference listed twice —
+        /// because the remedy differs: an import alias cannot fix a name
+        /// collision, only renaming one interface or composing it into a
+        /// different service can. Emitted per-package by the checker (E9.6).
         RIDL_147 = "RIDL-147", Error,
-            "two interfaces with one name composed into one service";
+            "one interface name on two shapes of one service";
 
         /// A service-level `reserved` tombstone that spells no interface name
         /// (ridl §14.5, §16.4; ADR-0015 decision 24) — the literal spellings
