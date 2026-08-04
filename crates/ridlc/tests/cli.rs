@@ -400,6 +400,84 @@ fn every_emit_variant_is_classified() {
     }
 }
 
+/// [`ridlc::Emit::ir_dump_suffix`] gives every variant its intended suffix —
+/// the one table both the artifact writer and the snapshot-path recognition
+/// in `ridl` read (issue #218 item 4). Same construction as
+/// [`every_emit_variant_is_classified`]: the table's own `match` forces a new
+/// variant to be classified at all, and this test's wildcard-free `match`
+/// stops compiling until the intended suffix is written down here too — so a
+/// variant given the *wrong* suffix, which compiles, fails here instead.
+#[test]
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
+fn every_emit_variant_names_its_intended_suffix() {
+    for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
+        let expected = match emit {
+            ridlc::Emit::Rust | ridlc::Emit::CHeader | ridlc::Emit::TypeScript => None,
+            ridlc::Emit::IrJson => Some(".ir.json"),
+            ridlc::Emit::IrText => Some(".ir.txtpb"),
+            ridlc::Emit::IrBinary => Some(".ir.binpb"),
+        };
+        assert_eq!(
+            emit.ir_dump_suffix(),
+            expected,
+            "`{emit:?}` must name the suffix its artifact is written under"
+        );
+    }
+}
+
+/// Every IR dump emit writes its artifact under `<base><suffix>` with the
+/// suffix the table names, every suffix carries the `.ir.` infix that
+/// separates an artifact from a source file by name, and no two emits share
+/// a suffix. The emit list and the expected file names are both swept from
+/// [`ridlc::Emit::ir_dump_suffixes`], so a new encoding joins this test with
+/// no edit — it guards the writer against naming an artifact around the
+/// table rather than through it (issue #218 item 4).
+#[test]
+fn every_ir_dump_emit_writes_the_suffix_the_table_names() {
+    let dir = TempDir::new("suffix-sweep");
+    let file = dir.write("pkg.typl", "package veh.sweep\ntype N : integer [0..1]\n");
+    let out = TempDir::new("suffix-sweep-out");
+
+    let mut suffixes: Vec<&str> = Vec::new();
+    let mut flags: Vec<String> = Vec::new();
+    for (emit, suffix) in ridlc::Emit::ir_dump_suffixes() {
+        assert!(
+            suffix.starts_with(".ir."),
+            "`{emit:?}`: every IR dump suffix carries the `.ir.` infix, got `{suffix}`"
+        );
+        assert!(
+            !suffixes.contains(&suffix),
+            "`{emit:?}`: the suffix `{suffix}` is already taken"
+        );
+        suffixes.push(suffix);
+        flags.push(
+            clap::ValueEnum::to_possible_value(&emit)
+                .expect("no emit variant is skipped")
+                .get_name()
+                .to_owned(),
+        );
+    }
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        file.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        flags.join(",").as_ref(),
+    ]);
+    assert_eq!(code, 0, "the fixture builds, stderr:\n{stderr}");
+    for suffix in suffixes {
+        assert!(
+            out.path().join(format!("pkg{suffix}")).is_file(),
+            "the build must write `pkg{suffix}`"
+        );
+    }
+}
+
 /// A package whose composite nesting crosses the transcoding decoder's
 /// recursion limit (ADR-0014 decision 12) is legal source. Only prototext
 /// still transcodes (decision 14): `ir-text` reports a detached error

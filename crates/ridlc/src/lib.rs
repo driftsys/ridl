@@ -317,22 +317,53 @@ impl Emit {
     /// not code — prototext and binary are dumps by the identical argument
     /// (ADR-0014 decision 10).
     ///
-    /// That decision requires this classification to be exhaustive over
-    /// [`Emit`] with no wildcard arm, so a new encoding left unclassified is a
-    /// compile error rather than a spurious `ridl.std` artifact on every
-    /// build. The two lints below reject the wildcard rustc's own `help:` text
-    /// proposes for that error — the first when it covers several variants,
-    /// the second when it covers exactly one, which is the case one
-    /// unclassified new variant creates.
+    /// The classification itself is the `match` in [`Emit::ir_dump_suffix`]:
+    /// an IR dump is exactly an emit that names an artifact suffix there, so
+    /// this predicate and the suffix table cannot disagree.
+    pub fn is_ir_dump(self) -> bool {
+        self.ir_dump_suffix().is_some()
+    }
+
+    /// The artifact suffix of a direct IR dump — `Some(".ir.json")` for
+    /// [`Emit::IrJson`] — or `None` for a code emit.
+    ///
+    /// This `match` is the one table mapping each IR encoding to its artifact
+    /// suffix (ADR-0014 decision 4). [`write_emits`] names every IR artifact
+    /// through it, and the snapshot surface in `ridl` recognises IR artifacts
+    /// by iterating it ([`Emit::ir_dump_suffixes`]), so the writer and the
+    /// recognition read one list rather than two that can drift apart (issue
+    /// #218 item 4).
+    ///
+    /// ADR-0014 decision 10 requires the IR-dump classification to be
+    /// exhaustive over [`Emit`] with no wildcard arm, so a new encoding left
+    /// unclassified is a compile error rather than a spurious `ridl.std`
+    /// artifact on every build — or, now that the suffix rides on the same
+    /// `match`, an artifact the snapshot surface does not recognise. The two
+    /// lints below reject the wildcard rustc's own `help:` text proposes for
+    /// that error — the first when it covers several variants, the second
+    /// when it covers exactly one, which is the case one unclassified new
+    /// variant creates.
     #[deny(
         clippy::wildcard_enum_match_arm,
         clippy::match_wildcard_for_single_variants
     )]
-    pub fn is_ir_dump(self) -> bool {
+    pub const fn ir_dump_suffix(self) -> Option<&'static str> {
         match self {
-            Emit::Rust | Emit::CHeader | Emit::TypeScript => false,
-            Emit::IrJson | Emit::IrText | Emit::IrBinary => true,
+            Emit::Rust | Emit::CHeader | Emit::TypeScript => None,
+            Emit::IrJson => Some(".ir.json"),
+            Emit::IrText => Some(".ir.txtpb"),
+            Emit::IrBinary => Some(".ir.binpb"),
         }
+    }
+
+    /// Every IR dump emit paired with its artifact suffix, in declaration
+    /// order. The variant list comes from `clap`'s derive rather than a
+    /// hand-kept array, so an encoding classified in [`Emit::ir_dump_suffix`]
+    /// joins this iteration with no further wiring.
+    pub fn ir_dump_suffixes() -> impl Iterator<Item = (Emit, &'static str)> {
+        <Emit as clap::ValueEnum>::value_variants()
+            .iter()
+            .filter_map(|emit| emit.ir_dump_suffix().map(|suffix| (*emit, suffix)))
     }
 }
 
@@ -691,7 +722,7 @@ fn write_emits(
             }
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
                 Ok(json) => {
-                    std::fs::write(out_dir.join(format!("{base}.ir.json")), json)?;
+                    std::fs::write(ir_dump_path(out_dir, base, *emit), json)?;
                 }
                 // The pbjson-generated writer has no nesting limit (ADR-0014
                 // decision 14); its one remaining failure is an enum field
@@ -714,7 +745,7 @@ fn write_emits(
             // artifact is written.
             Emit::IrText => match ridl_ir::v2::to_text_format(ir) {
                 Ok(text) => {
-                    std::fs::write(out_dir.join(format!("{base}.ir.txtpb")), text)?;
+                    std::fs::write(ir_dump_path(out_dir, base, *emit), text)?;
                 }
                 Err(err) => {
                     diagnostics.push(error_diagnostic(
@@ -729,7 +760,7 @@ fn write_emits(
             // recursion-limit failure path (ADR-0014 decision 7).
             Emit::IrBinary => {
                 std::fs::write(
-                    out_dir.join(format!("{base}.ir.binpb")),
+                    ir_dump_path(out_dir, base, *emit),
                     ridl_ir::v2::to_binary(ir),
                 )?;
             }
@@ -741,6 +772,16 @@ fn write_emits(
         }
     }
     Ok(())
+}
+
+/// The artifact path of one IR dump: `<out_dir>/<base><suffix>`, with the
+/// suffix drawn from [`Emit::ir_dump_suffix`] so the writer never spells an
+/// extension the snapshot surface does not recognise (issue #218 item 4).
+fn ir_dump_path(out_dir: &Path, base: &str, emit: Emit) -> PathBuf {
+    let suffix = emit
+        .ir_dump_suffix()
+        .expect("only IR dump emits name an IR artifact");
+    out_dir.join(format!("{base}{suffix}"))
 }
 
 /// The manifest root governing `entry` — the nearest directory at or above it
