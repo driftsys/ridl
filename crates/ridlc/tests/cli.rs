@@ -401,13 +401,14 @@ fn every_emit_variant_is_classified() {
 }
 
 /// A package whose composite nesting crosses the transcoding decoder's
-/// recursion limit (ADR-0014 decision 12) is legal source; the reflection
-/// emits report it as a detached error diagnostic and write no artifact —
-/// `ir-text` exactly as `ir-json`. The binary emit has no transcode and no
-/// limit, so the same build still writes `.ir.binpb`, the way `--emit rust`
-/// still writes code for that package.
+/// recursion limit (ADR-0014 decision 12) is legal source. Only prototext
+/// still transcodes (decision 14): `ir-text` reports a detached error
+/// diagnostic and writes no artifact, while `ir-json` — the failure that
+/// triggered decision 14's contingency — now writes its artifact through the
+/// pbjson-generated impls, exactly as `ir-binary` and `--emit rust` always
+/// did for this package.
 #[test]
-fn build_ir_emits_past_the_nesting_limit_report_and_skip_their_artifacts() {
+fn build_ir_emits_past_the_nesting_limit_fail_only_for_prototext() {
     let dir = TempDir::new("build-deep");
     // 60 nested inline arrays — past the limit, which the transcode reaches
     // at roughly 49 array levels (two message levels each, ADR-0014
@@ -438,14 +439,15 @@ fn build_ir_emits_past_the_nesting_limit_report_and_skip_their_artifacts() {
         stderr.contains("recursion limit"),
         "the diagnostic must name the known cause, got:\n{stderr}"
     );
-    // One diagnostic per failed encoding, each naming its own artifact.
+    // Exactly one failed encoding, naming its own artifact: prototext keeps
+    // the transcode, JSON no longer has one (ADR-0014 decision 14).
     assert!(
-        stderr.contains("canonical protobuf JSON") && stderr.contains("prototext"),
-        "both reflection emits must report their own failure, got:\n{stderr}"
+        stderr.contains("prototext"),
+        "the prototext emit must report its own failure, got:\n{stderr}"
     );
     assert!(
-        !out.path().join("deep.ir.json").exists(),
-        "a failed JSON serialization must write no artifact"
+        !stderr.contains("canonical protobuf JSON"),
+        "the JSON emit has no nesting limit and must not report, got:\n{stderr}"
     );
     assert!(
         !out.path().join("deep.ir.txtpb").exists(),
@@ -455,6 +457,14 @@ fn build_ir_emits_past_the_nesting_limit_report_and_skip_their_artifacts() {
         out.path().join("deep.ir.binpb").is_file(),
         "the binary emit has no recursion limit and still writes"
     );
+    // The JSON artifact is written and reads back — the depth that used to
+    // fail this emit now round-trips. (The binary artifact is not the
+    // comparator here: prost's own decoder enforces its recursion limit, so
+    // `from_binary` refuses this depth even though the encoder wrote it.)
+    let json = std::fs::read_to_string(out.path().join("deep.ir.json"))
+        .expect("the JSON emit has no nesting limit and still writes");
+    let decoded = ridl_ir::v2::from_json(&json).expect("the deep JSON artifact parses");
+    assert_eq!(decoded.name, "veh.deep");
 }
 
 /// A workspace build emits every member package's artifacts.
