@@ -58,24 +58,25 @@ interface VehicleStatus {
   /// Raised on every door state change; stale after 500ms
   event doorOpened : DoorPayload @[50ms..500ms]
 
-  /// Request a gear change — outcome observed via currentGear, not returned
+  /// Request a gear change — outcome observed via currentGear, not returned;
+  /// callers throttle to one request per 20ms, acceptance within 200ms (§9)
   command setGear(position: GearPosition) [
     require position != GearPosition.PARK || currentSpeed == 0.0
-  ]
+  ] @[20ms..200ms]
 
   reserved resetCounters          // retired ordinal — never reused
 
-  /// Sliding-window average
+  /// Sliding-window average — replied within 50ms (§9)
   query getAverageSpeed(window: Duration): Speed [
     require window > 0ms
     ensure  result >= 0.0
-  ]
+  ] @[10ms..50ms]
 
   /// Fault history as a finite stream
-  query streamFaults(filter: DiagFilter): <FaultEvent>
+  query streamFaults(filter: DiagFilter): <FaultEvent> @[..1s]
 
   /// Paged fault snapshot — fallible query via inline `T | E` (§10.1)
-  query getFaultPage(filter: DiagFilter): FaultPage | DiagError
+  query getFaultPage(filter: DiagFilter): FaultPage | DiagError @[..100ms]
 
   fixed softwareVersion : Version
   fixed capabilities    : [Label; 0..32]

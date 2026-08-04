@@ -128,7 +128,11 @@ fn command(
     decl(
         name,
         ordinal,
-        v2::decl::Kind::CommandDef(v2::CommandDef { params, contracts }),
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params,
+            contracts,
+            timing: None,
+        }),
     )
 }
 
@@ -146,6 +150,7 @@ fn query(
             params,
             return_type: Some(return_type),
             contracts,
+            timing: None,
         }),
     )
 }
@@ -984,6 +989,173 @@ fn a_defaults_timing_edit_classifies_by_its_resolved_bounds() {
     let old = timed(defaulted("100000", "2000000"));
     let new = timed(defaulted("100000", "1000000"));
     assert_row(&old, &new, Category::TimingChanged, Verdict::Compatible);
+}
+
+// ==========================================================================
+// RPC bounds (ADR-0015 decision 8).
+//
+// The direction table these tests pin is the one no compiler can check: `min`
+// on an RPC constrains the caller, so its two directional rows are the exact
+// inverse of `TimingChanged`'s. Every row of the ADR-0015 decision 8 table has
+// a test here, the two inversions first.
+// ==========================================================================
+
+/// A command carrying the given declared RPC bounds — `None` is the
+/// undeclared state, never a default (ADR-0015 decision 4).
+fn bounded_command(timing: Option<v2::Timing>) -> v2::Package {
+    pkg(vec![decl(
+        "a",
+        1,
+        v2::decl::Kind::CommandDef(v2::CommandDef {
+            params: Vec::new(),
+            contracts: Vec::new(),
+            timing,
+        }),
+    )])
+}
+
+/// The query carrier of the same bounds, so the rules can be read on both RPC
+/// kinds.
+fn bounded_query(timing: Option<v2::Timing>) -> v2::Package {
+    pkg(vec![decl(
+        "a",
+        1,
+        v2::decl::Kind::QueryDef(v2::QueryDef {
+            params: Vec::new(),
+            return_type: Some(value_return("T")),
+            contracts: Vec::new(),
+            timing,
+        }),
+    )])
+}
+
+/// The first inversion: a raised `min` is compatible on a signal and breaking
+/// here — the caller may no longer call as often.
+#[test]
+fn a_raised_rpc_throttle_is_breaking() {
+    let old = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    let new = bounded_command(Some(range(Some("20000"), Some("100000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+/// The second inversion: a lowered `min` is breaking on a signal and
+/// compatible here — the caller is less constrained.
+#[test]
+fn a_lowered_rpc_throttle_is_compatible() {
+    let old = bounded_command(Some(range(Some("20000"), Some("100000"))));
+    let new = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
+}
+
+/// A raised response bound is a weaker provider promise — the same direction
+/// as a signal's staleness bound.
+#[test]
+fn a_raised_rpc_response_bound_is_breaking() {
+    let old = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    let new = bounded_command(Some(range(Some("10000"), Some("200000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+/// A lowered response bound is a stronger provider promise.
+#[test]
+fn a_lowered_rpc_response_bound_is_compatible() {
+    let old = bounded_command(Some(range(Some("10000"), Some("200000"))));
+    let new = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
+}
+
+#[test]
+fn an_rpc_bound_added_where_none_was_is_breaking() {
+    let old = bounded_command(Some(range(None, Some("100000"))));
+    let new = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+#[test]
+fn an_rpc_bound_removed_is_breaking() {
+    let old = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    let new = bounded_command(Some(range(Some("10000"), None)));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+/// The whole annotation appearing or disappearing is a bound added or removed
+/// — breaking in both directions. The absent side is the undeclared state,
+/// which the checker never defaults (ADR-0015 decision 4), so both directions
+/// arrive through ordinary compiles rather than only through a hand-edited
+/// snapshot.
+#[test]
+fn an_rpc_annotation_present_on_one_side_only_is_breaking() {
+    let declared = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    let undeclared = bounded_command(None);
+    assert_row(
+        &undeclared,
+        &declared,
+        Category::RpcBoundChanged,
+        Verdict::Breaking,
+    );
+    assert_row(
+        &declared,
+        &undeclared,
+        Category::RpcBoundChanged,
+        Verdict::Breaking,
+    );
+}
+
+/// RPC bounds ride two interaction kinds and every test above uses a command.
+/// The compatible direction is the one that proves the query arm is read: a
+/// kind the classifier cannot recognise falls through to breaking, so only a
+/// case that must come out compatible can tell the difference.
+#[test]
+fn a_lowered_rpc_throttle_on_a_query_is_compatible() {
+    let old = bounded_query(Some(range(Some("20000"), Some("100000"))));
+    let new = bounded_query(Some(range(Some("10000"), Some("100000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
+}
+
+/// The mode arm: the mode is always `Range` on an RPC (ADR-0015 decision 7),
+/// so a snapshot flipping it is erroneous IR and breaking regardless. The
+/// bounds are identical on both sides, so no other arm can decide this.
+#[test]
+fn an_rpc_timing_mode_flip_is_breaking() {
+    let old = bounded_command(Some(range(Some("10000"), Some("10000"))));
+    let new = bounded_command(Some(strict("10000")));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+/// The mirror of [`a_default_applied_flip_over_identical_bounds_is_compatible`]
+/// with the opposite verdict: `default_applied` is always false on an RPC,
+/// because an RPC bound is never defaulted (ADR-0015 decision 7), so a
+/// snapshot flipping it is erroneous IR and fails closed (ADR-0012
+/// decision 9) rather than reading as a default made explicit.
+#[test]
+fn an_rpc_default_applied_flip_over_identical_bounds_is_breaking() {
+    let mut defaulted = range(Some("10000"), Some("100000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(Some(defaulted));
+    let new = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+/// The category-mismatch fallback in `rpc_bound`, the mirror of
+/// [`a_timing_change_on_a_kind_that_carries_no_timing_is_breaking`]: the walk
+/// emits `RpcBoundChanged` only from its command and query arms, but
+/// [`classify`](super::classify) is public and takes any `Change`, so the arm
+/// is reachable and pinned. The input change carries `Compatible` so a verdict
+/// read back off the input rather than computed would fail this.
+#[test]
+fn an_rpc_bound_change_on_a_kind_that_carries_no_rpc_bound_is_breaking() {
+    let package = pkg(vec![signal("s", 1, "T")]);
+    let change = Change {
+        path: "veh.cluster/I/s".to_string(),
+        category: Category::RpcBoundChanged,
+        verdict: Verdict::Compatible,
+        before: None,
+        after: None,
+    };
+    assert_eq!(
+        super::classify(&change, &package, &package),
+        Verdict::Breaking
+    );
 }
 
 // ==========================================================================

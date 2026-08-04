@@ -336,8 +336,14 @@ fn expected_interface(identity: &str, interface: &v2::Interface, kinds: &mut Kin
             }
             Some(v2::decl::Kind::CommandDef(command)) => {
                 expected.consumer.push((name.clone(), ordinal));
-                expected.provider.push((name, ordinal));
+                expected.provider.push((name.clone(), ordinal));
                 expected.contracts.extend(stubs_of(&command.contracts));
+                // Declared RPC bounds ride the same timing table (ADR-0015);
+                // absent means undeclared, never defaulted.
+                if let Some(spec) = &command.timing {
+                    expected.timing.push((name, expected_timing(spec)));
+                    kinds.rpc_bound_timings += 1;
+                }
             }
             Some(v2::decl::Kind::QueryDef(query)) => {
                 expected.consumer.push((name.clone(), ordinal));
@@ -346,11 +352,15 @@ fn expected_interface(identity: &str, interface: &v2::Interface, kinds: &mut Kin
                     query.return_type.as_ref().and_then(|rt| rt.kind.as_ref())
                 {
                     expected.transport.push((
-                        name,
+                        name.clone(),
                         v2::fallible_transport_identity(identity, ordinal, fallible),
                     ));
                 }
                 expected.contracts.extend(stubs_of(&query.contracts));
+                if let Some(spec) = &query.timing {
+                    expected.timing.push((name, expected_timing(spec)));
+                    kinds.rpc_bound_timings += 1;
+                }
             }
             // The face rule: a `fixed` is provisioned externally and initiated
             // by neither side (ridl §3, §8), so it appears on the consumer face
@@ -1126,6 +1136,7 @@ struct Kinds {
     strict_periodic_timings: usize,
     half_open_timings: usize,
     defaulted_timings: usize,
+    rpc_bound_timings: usize,
     result_reading_clauses: usize,
 }
 
@@ -1391,6 +1402,13 @@ fn both_backends_carry_every_ir_fact_the_corpus_fixes() {
             "the only carrier of `default_applied: true`. \"Untimed\" does not exist beyond \
              the parser (ridl §9.1), so this flag is how a reader tells a written bound from \
              a resolved one — and exactly one interaction in the corpus carries it",
+        ),
+        (
+            kinds.rpc_bound_timings,
+            "a command or query with declared RPC bounds (ADR-0015)",
+            "the only carrier of a timing entry on an RPC kind. Without one, the timing \
+             comparison never reaches a command's or query's table row, and a backend that \
+             dropped the two RPC arms from its timing walk would stay green",
         ),
         (
             kinds.result_reading_clauses,

@@ -1564,9 +1564,9 @@ interface VehicleStatus {\n\
 \x20 signal cabinLoad : Speed\n\
 \x20 signal engineTemp : /* \u{b0}C */ Speed @[20ms..100ms]\n\
 \x20 event doorOpened : DoorPayload @[50ms..500ms]\n\
-\x20 command setGear(position: Speed)\n\
+\x20 command setGear(position: Speed) @[20ms..200ms]\n\
 \x20 reserved resetCounters\n\
-\x20 query calibrate(axle: Speed): CalReport | CalError\n\
+\x20 query calibrate(axle: Speed): CalReport | CalError @[..100ms]\n\
 \x20 fixed softwareVersion : Version\n\
 }\n\
 \n\
@@ -1731,6 +1731,88 @@ fn hover_on_a_command_shows_its_ordinal_and_parameters() {
         "parameter: {value}",
     );
     assert!(value.contains("#5"), "ordinal: {value}");
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on a bounded command renders the declared bounds in the signature and
+/// the RPC reading ridl §9.3 derives: the call throttle, and a response bound
+/// on acceptance — the §6.1 acknowledgment, not execution (ADR-0015
+/// decision 3).
+#[test]
+fn hover_on_a_bounded_command_shows_the_throttle_and_acceptance_reading() {
+    let dir = TempDir::new("ridl-hover-command-bounds");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(&client, 10, contract, find_pos(RIDL_CONTRACT, "setGear", 0));
+    assert!(
+        value.contains("@[20ms..200ms]"),
+        "signature suffix: {value}"
+    );
+    assert!(value.contains("range `[20ms..200ms]`"), "bounds: {value}");
+    assert!(
+        value.contains(
+            "min = call throttle (the caller must not call faster), \
+             max = response bound (acceptance: the §6.1 acknowledgment, not execution)"
+        ),
+        "the ridl §9.3 command reading: {value}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on a bounded query renders the same call-throttle reading with the
+/// response bound on the reply, over the half-open `@[..max]` spelling.
+#[test]
+fn hover_on_a_bounded_query_shows_the_reply_reading() {
+    let dir = TempDir::new("ridl-hover-query-bounds");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        find_pos(RIDL_CONTRACT, "calibrate", 0),
+    );
+    assert!(value.contains("@[..100ms]"), "signature suffix: {value}");
+    assert!(value.contains("range `[..100ms]`"), "bounds: {value}");
+    assert!(
+        value.contains(
+            "min = call throttle (the caller must not call faster), \
+             max = response bound (the reply)"
+        ),
+        "the ridl §9.3 query reading: {value}",
+    );
+
+    shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// An RPC with no declared bound renders no `@` suffix and no Timing line at
+/// all: absent means undeclared, never defaulted (ADR-0015 decision 4), so
+/// there is nothing to show.
+#[test]
+fn hover_on_an_rpc_with_no_declared_bound_renders_no_timing_line() {
+    let dir = TempDir::new("ridl-hover-rpc-unbounded");
+    let (_vocab, contract) = write_ridl_workspace(&dir);
+    let root = uri_of(dir.path());
+    let (client, server) = start(root);
+
+    let value = hover_markdown(
+        &client,
+        10,
+        contract,
+        find_pos(RIDL_CONTRACT, "setTarget", 0),
+    );
+    assert!(value.contains("command"), "kind: {value}");
+    assert!(!value.contains('@'), "no signature suffix: {value}");
+    assert!(!value.contains("**Timing:**"), "no Timing line: {value}");
 
     shut_down(&client, 11);
     server.join().expect("thread joins").expect("clean exit");

@@ -1396,7 +1396,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "name": "setGear",
           "visibility": "VISIBILITY_UNSPECIFIED",
           "isError": false,
-          "doc": "Request a gear change — outcome observed via currentGear, not returned",
+          "doc": "Request a gear change — outcome observed via currentGear, not returned;\ncallers throttle to one request per 20ms, acceptance within 200ms (§9)",
           "labels": [],
           "ordinal": 5,
           "commandDef": {
@@ -1422,7 +1422,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "usesResult": false,
                 "observerId": "VehicleStatus.setGear.require[0]"
               }
-            ]
+            ],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "20000",
+              "maxUs": "200000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -1441,7 +1447,7 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           "name": "getAverageSpeed",
           "visibility": "VISIBILITY_UNSPECIFIED",
           "isError": false,
-          "doc": "Sliding-window average",
+          "doc": "Sliding-window average — replied within 50ms (§9)",
           "labels": [],
           "ordinal": 7,
           "queryDef": {
@@ -1479,7 +1485,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "usesResult": true,
                 "observerId": "VehicleStatus.getAverageSpeed.ensure[0]"
               }
-            ]
+            ],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "10000",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -1507,7 +1519,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             },
-            "contracts": []
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -1533,7 +1550,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "err": "DiagError"
               }
             },
-            "contracts": []
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "100000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -1727,7 +1749,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 "named": "RawTickCount"
               }
             },
-            "contracts": []
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -1747,7 +1774,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
-            "contracts": []
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -1782,7 +1814,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             },
-            "contracts": []
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -2119,7 +2156,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "usesResult": false,
                   "observerId": "veh.hvac.cabin.setTarget.require[1]"
                 }
-              ]
+              ],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2153,7 +2195,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               ],
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2181,7 +2228,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               },
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2211,7 +2263,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               },
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2263,7 +2320,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "usesResult": true,
                   "observerId": "veh.hvac.cabin.getBounds.ensure[0]"
                 }
-              ]
+              ],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2289,7 +2351,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "err": "HvacError"
                 }
               },
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2307,7 +2374,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "named": "ClimateReport"
                 }
               },
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2326,7 +2398,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "named": "veh.common.Temperature"
                 }
               },
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2392,7 +2469,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "usesResult": false,
                   "observerId": "veh.hvac.cabin.setFan.require[0]"
                 }
-              ]
+              ],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2433,7 +2515,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "usesResult": false,
                   "observerId": "veh.hvac.cabin.trimFan.require[1]"
                 }
-              ]
+              ],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -2460,7 +2547,12 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   "usesResult": true,
                   "observerId": "veh.hvac.cabin.scaledFan.ensure[0]"
                 }
-              ]
+              ],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           }
         ]

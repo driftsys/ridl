@@ -18,16 +18,16 @@ interface Contracts {
   /// A command has no result to observe.
   command act(level: Level) [
     ensure true
-  ]
+  ] @[..50ms]
 
   /// Well-typed, but the postcondition never mentions `result`.
   query getLevel(limit: Level): Level [
     ensure limit >= 0
-  ]
+  ] @[..50ms]
 
   /// `result` is a struct here; the guaranteed expression subset covers
   /// boolean, numeric, duration, enum and tuple values only.
   query getSample(): Sample [
     ensure result.value >= 0.0
-  ]
+  ] @[..50ms]
 }

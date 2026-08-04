@@ -2746,8 +2746,10 @@ impl Checker<'_> {
     //   streams) with pointed FORM-102 messages;
     // - the `error` modifier parses on `interface` → TYPL-212;
     // - a return type parses on `command` → RIDL-104;
-    // - timing parses on `command`/`query`/`fixed` → RIDL-106 on all three:
-    //   one rule (timing belongs to `signal` and `event`, §9), one code;
+    // - timing parses on `fixed` → RIDL-106: `fixed` is the one kind that
+    //   carries none since ADR-0015 decision 2 admitted the range form on
+    //   `command` and `query` (E9.4); a strict period on those two is
+    //   RIDL-103, resolved in the timing pass rather than here;
     // - an attr block parses on `signal`/`event`/`fixed` → RIDL-106 on
     //   `fixed`; predicates draw RIDL-301/-302, keys the gf §4.3 allow-list
     //   (FORM-106/-107/-108);
@@ -2758,9 +2760,10 @@ impl Checker<'_> {
     //   signal/event payloads, FORM-102 on `fixed`, TYPL-301 elsewhere
     //   (struct fields and collections, ridl §12.3), via
     //   [`Checker::check_stream_positions`];
-    // - timing and attrs parse in either order → no separate order rule:
-    //   no interaction kind legally carries both, so every wrong-order
-    //   combination already draws its kind rule.
+    // - timing and attrs parse in either order → no separate order rule: a
+    //   command or query legally carries both since ADR-0015 decision 2, the
+    //   AST accessors read each child wherever it sits, and the postfix-order
+    //   question is recorded as roadmap story E9.12.
 
     /// RIDL-401: an interaction re-declaring a name a `reserved` tombstone
     /// retired. The secondary label points at the tombstone, so the reader does
@@ -3265,10 +3268,13 @@ impl Checker<'_> {
         v2::EventDef { payload, timing }
     }
 
-    /// Resolves a signal's or event's timing to its IR `Timing` (ridl §9,
-    /// ADR-0008 decision 12): parses and validates the `@` annotation or
-    /// applies the package default, accumulating the RIDL-10x diagnostics
-    /// [`timing::resolve_timing`] returns. Always `Some` for a signal or event.
+    /// Resolves one interaction's timing to its IR `Timing` (ridl §9, ADR-0008
+    /// decision 12, ADR-0015 decisions 2–6): parses and validates the `@`
+    /// annotation or applies the package default, accumulating the RIDL-10x
+    /// diagnostics [`timing::resolve_timing`] returns. Always `Some` for a
+    /// signal or event; for a command or query, `Some` exactly when an
+    /// annotation was written — the §9.1 defaulting path is signal/event
+    /// only, so an undeclared RPC bound stays absent (RIDL-112).
     fn resolve_member_timing(
         &mut self,
         annot: Option<ast::Timing>,
@@ -3676,9 +3682,6 @@ impl Checker<'_> {
                     .to_string(),
             );
         }
-        if let Some(timing) = command.timing() {
-            self.reject_timing(&timing, "command");
-        }
         let params = command
             .params()
             .map(|params| self.lower_params(&params, "command"))
@@ -3686,15 +3689,24 @@ impl Checker<'_> {
         self.check_member_attrs(command.syntax(), MemberKind::Command);
         let param_types = self.param_expr_types(command.params().as_ref());
         let contracts = self.lower_contracts(command.syntax(), name, false, &param_types, None);
-        v2::CommandDef { params, contracts }
+        // The RPC bounds (ridl §9, ADR-0015 decisions 2–4): the range form
+        // resolves through the same pass as a signal's, and an undeclared
+        // bound stays `None` — warned (RIDL-112), never defaulted.
+        let timing = self.resolve_member_timing(
+            command.timing(),
+            member_name_range(command.name(), command.syntax()),
+            timing::InteractionKind::Command,
+        );
+        v2::CommandDef {
+            params,
+            contracts,
+            timing,
+        }
     }
 
     /// `query Name '(' params ')' ':' return_type attr_block?` (ridl §7.1,
     /// Appendix C; inline `T | E` per general form §6.1, ADR-0008 decision 1).
     fn lower_query(&mut self, query: &ast::QueryDef, name: &str) -> v2::QueryDef {
-        if let Some(timing) = query.timing() {
-            self.reject_timing(&timing, "query");
-        }
         let params = query
             .params()
             .map(|params| self.lower_params(&params, "query"))
@@ -3711,10 +3723,18 @@ impl Checker<'_> {
             None => ExprType::Unsupported("an absent return type".to_string()),
         });
         let contracts = self.lower_contracts(query.syntax(), name, true, &param_types, result_type);
+        // The RPC bounds (ridl §9, ADR-0015 decisions 2–4), exactly as on a
+        // command; a query's response bound covers the reply.
+        let timing = self.resolve_member_timing(
+            query.timing(),
+            member_name_range(query.name(), query.syntax()),
+            timing::InteractionKind::Query,
+        );
         v2::QueryDef {
             params,
             return_type,
             contracts,
+            timing,
         }
     }
 
@@ -3870,37 +3890,22 @@ impl Checker<'_> {
         error_arms == 1 && success_arms == 1
     }
 
-    /// RIDL-106: a timing annotation on a kind that carries none.
+    /// RIDL-106: a timing annotation on `fixed`, the one kind that carries
+    /// none.
     ///
-    /// Timing belongs to `signal` and `event` (ridl §9); the grammar accepts
-    /// `@` on all five kinds so that the narrowing is a semantic rule with a
-    /// semantic message, and this is that rule for the three kinds that carry
-    /// no timing. `command` and `query` used to draw FORM-102 here while
-    /// `fixed` drew RIDL-106 — one rule under two codes, one of them a parse
-    /// code whose catalogue meaning is "unexpected token", for a token the
-    /// parser deliberately accepts.
-    fn reject_timing(&mut self, timing: &ast::Timing, kind: &str) {
-        let because = match kind {
-            "command" => {
-                "a command is invoked on demand, not published on a schedule, and its \
-                 acknowledgement is not a publication"
-            }
-            "query" => {
-                "a query is answered on demand, not published on a schedule, and its reply is \
-                 not a publication"
-            }
-            _ => {
-                "a `fixed` is provisioned externally and never republished, so it has no rate \
-                 floor and no staleness bound"
-            }
-        };
+    /// The grammar accepts `@` on all five kinds so that the narrowing is a
+    /// semantic rule with a semantic message. `command` and `query` were in
+    /// this rule until ADR-0015 decision 2 admitted the range form on both
+    /// (E9.4); their timing now resolves in the timing pass, and `fixed`
+    /// remains the only kind whose annotation is rejected here.
+    fn reject_timing(&mut self, timing: &ast::Timing) {
         self.error(
             DiagCode::RIDL_106,
             timing.syntax().text_range(),
-            format!(
-                "a timing annotation is not valid on `{kind}` — {because}. Timing belongs to \
-                 `signal` and `event` (ridl §9)"
-            ),
+            "a timing annotation is not valid on `fixed` — a `fixed` is provisioned externally \
+             and never republished, so it has no rate floor and no staleness bound. Timing \
+             belongs to `signal`, `event`, and (as a range) `command` and `query` (ridl §9)"
+                .to_string(),
         );
     }
 
@@ -3935,7 +3940,7 @@ impl Checker<'_> {
             );
         }
         if let Some(timing) = fin.timing() {
-            self.reject_timing(&timing, "fixed");
+            self.reject_timing(&timing);
         }
         if let Some(block) = fin.attr_block() {
             self.error(
@@ -5829,13 +5834,13 @@ mod tests {
              \x20 event b : Hidden @[1s..2s]\n\
              \x20 fixed c : Hidden\n\
              \x20 fixed d : [Hidden; 1..4]\n\
-             \x20 command e(p : Hidden)\n\
-             \x20 command f(p : <Hidden>)\n\
-             \x20 query g() : Hidden\n\
-             \x20 query h() : (x : Hidden, y : Tick)\n\
-             \x20 query i() : <Hidden>\n\
-             \x20 query j() : Tick | Boom\n\
-             \x20 query k() : Hidden | Bang\n\
+             \x20 command e(p : Hidden) @[..50ms]\n\
+             \x20 command f(p : <Hidden>) @[..50ms]\n\
+             \x20 query g() : Hidden @[..50ms]\n\
+             \x20 query h() : (x : Hidden, y : Tick) @[..50ms]\n\
+             \x20 query i() : <Hidden> @[..50ms]\n\
+             \x20 query j() : Tick | Boom @[..50ms]\n\
+             \x20 query k() : Hidden | Bang @[..50ms]\n\
              }\n",
         );
         assert_eq!(
@@ -5872,15 +5877,15 @@ mod tests {
              \x20 event b : Hidden @[1s..2s]\n\
              \x20 fixed c : Hidden\n\
              \x20 fixed d : [Hidden; 1..MAXLEN]\n\
-             \x20 command e(p : Hidden)\n\
-             \x20 command f(p : <Hidden>)\n\
-             \x20 query g() : Hidden\n\
-             \x20 query h() : (x : Hidden, y : Tick)\n\
-             \x20 query i() : <Hidden>\n\
-             \x20 query j() : Tick | Boom\n\
-             \x20 query k() : Hidden | Bang\n\
-             \x20 command l(p : Tick) [ require p < MAXLEN ]\n\
-             \x20 query m(p : Tick) : Mode [ ensure result == Mode.ON ]\n\
+             \x20 command e(p : Hidden) @[..50ms]\n\
+             \x20 command f(p : <Hidden>) @[..50ms]\n\
+             \x20 query g() : Hidden @[..50ms]\n\
+             \x20 query h() : (x : Hidden, y : Tick) @[..50ms]\n\
+             \x20 query i() : <Hidden> @[..50ms]\n\
+             \x20 query j() : Tick | Boom @[..50ms]\n\
+             \x20 query k() : Hidden | Bang @[..50ms]\n\
+             \x20 command l(p : Tick) [ require p < MAXLEN ] @[..50ms]\n\
+             \x20 query m(p : Tick) : Mode [ ensure result == Mode.ON ] @[..50ms]\n\
              }\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
@@ -5898,7 +5903,7 @@ mod tests {
              internal type Hidden : integer [0..10]\n\
              interface Panel {\n\
              \x20 signal a : Tick @1s\n\
-             \x20 query g() : Tick\n\
+             \x20 query g() : Tick @[..50ms]\n\
              }\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
@@ -5917,7 +5922,7 @@ mod tests {
              internal type Hidden : integer [0..10]\n\
              service app.panel {\n\
              \x20 signal a : Hidden @1s\n\
-             \x20 command e(p : Hidden)\n\
+             \x20 command e(p : Hidden) @[..50ms]\n\
              }\n",
         );
         assert_eq!(codes(&checked), vec!["TYPL-005", "TYPL-005"]);
@@ -5984,9 +5989,9 @@ mod tests {
              internal const SECRET_MAX = 7\n\
              internal enum Mode { OFF = 0, ON = 1 }\n\
              interface Panel {\n\
-             \x20 command e(p : Tick) [ require p < SECRET_MAX ]\n\
-             \x20 query g(p : Tick) : Tick [ ensure result > SECRET_MAX ]\n\
-             \x20 command h(p : Mode) [ require p == Mode.ON ]\n\
+             \x20 command e(p : Tick) [ require p < SECRET_MAX ] @[..50ms]\n\
+             \x20 query g(p : Tick) : Tick [ ensure result > SECRET_MAX ] @[..50ms]\n\
+             \x20 command h(p : Mode) [ require p == Mode.ON ] @[..50ms]\n\
              }\n",
         );
         // Two constant reads, then the parameter type and the enum head of
@@ -6018,7 +6023,7 @@ mod tests {
              type Tick : integer [0..100]\n\
              internal const level = 5\n\
              interface Panel {\n\
-             \x20 command e(level : Tick) [ require level < 10 ]\n\
+             \x20 command e(level : Tick) [ require level < 10 ] @[..50ms]\n\
              }\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", messages(&checked),);
@@ -6045,7 +6050,7 @@ mod tests {
              internal const MAX_LEVEL = 5\n\
              interface Panel {\n\
              \x20 signal MAX_LEVEL : Tick @1s\n\
-             \x20 command c(p : Tick) [ require p < MAX_LEVEL ]\n\
+             \x20 command c(p : Tick) [ require p < MAX_LEVEL ] @[..50ms]\n\
              }\n",
         );
         assert!(
@@ -6061,7 +6066,7 @@ mod tests {
              internal const MAX_LEVEL = 5\n\
              interface Panel {\n\
              \x20 signal MAX_LEVEL : Tick @1s\n\
-             \x20 query g(p : Tick) : Tick [ ensure result > MAX_LEVEL ]\n\
+             \x20 query g(p : Tick) : Tick [ ensure result > MAX_LEVEL ] @[..50ms]\n\
              }\n",
         );
         assert_eq!(
@@ -6576,13 +6581,13 @@ mod tests {
     fn ridl_104_return_type_on_command() {
         let bad = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  command reset(): Speed\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  command reset(): Speed @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&bad), vec!["RIDL-104"]);
 
         let good = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  command reset()\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  command reset() @[..50ms]\n}}\n"),
         );
         assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
     }
@@ -6591,13 +6596,13 @@ mod tests {
     fn ridl_105_query_returning_unit() {
         let bad = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  query q(): ()\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  query q(): () @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&bad), vec!["RIDL-105"]);
 
         let good = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  query q(): Speed\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  query q(): Speed @[..50ms]\n}}\n"),
         );
         assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
     }
@@ -6980,7 +6985,7 @@ mod tests {
     fn ridl_202_stream_element_not_a_named_type() {
         let bad = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  query q(): <integer>\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  query q(): <integer> @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&bad), vec!["RIDL-202"]);
 
@@ -6989,7 +6994,7 @@ mod tests {
         let good = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface I {{\n  query named(): <Speed>\n  query raw(): <string>\n}}\n"
+                "{PRELUDE}interface I {{\n  query named(): <Speed> @[..50ms]\n  query raw(): <string> @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
@@ -7023,7 +7028,7 @@ mod tests {
         let good = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface I {{\n  command c(p: Speed) [ require p > 0.0 ]\n  query q(w: Speed): Speed [ require w > 0.0\n    ensure result >= 0.0 ]\n}}\n"
+                "{PRELUDE}interface I {{\n  command c(p: Speed) [ require p > 0.0 ] @[..50ms]\n  query q(w: Speed): Speed [ require w > 0.0\n    ensure result >= 0.0 ] @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
@@ -7033,7 +7038,7 @@ mod tests {
     fn ridl_302_ensure_on_command() {
         let checked = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  command c() [ ensure x > 0.0 ]\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  command c() [ ensure x > 0.0 ] @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&checked), vec!["RIDL-302"]);
     }
@@ -7063,61 +7068,61 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         for (name, body, fragment, offending) in [
             (
                 "unknown reference",
-                "command c(p: Speed) [ require unknownName > 0 ]",
+                "command c(p: Speed) [ require unknownName > 0 ] @[..50ms]",
                 "`unknownName` does not resolve here",
                 "unknownName",
             ),
             (
                 "cross-domain arithmetic",
-                "command c(speed: Speed, window: Duration) [ require speed + window > 0 ]",
+                "command c(speed: Speed, window: Duration) [ require speed + window > 0 ] @[..50ms]",
                 "`+` over a duration",
                 "speed + window",
             ),
             (
                 "cross-named-type arithmetic",
-                "command c(speed: Speed, torque: Torque) [ require speed + torque > 0.0 ]",
+                "command c(speed: Speed, torque: Torque) [ require speed + torque > 0.0 ] @[..50ms]",
                 "`+` requires numeric operands of one type",
                 "speed + torque",
             ),
             (
                 "non-boolean root",
-                "command c(p: Speed) [ require 3 ]",
+                "command c(p: Speed) [ require 3 ] @[..50ms]",
                 "not a predicate",
                 "3",
             ),
             (
                 "signal read in an ensure",
-                "query q(): Speed [ ensure currentSpeed >= 0.0 ]",
+                "query q(): Speed [ ensure currentSpeed >= 0.0 ] @[..50ms]",
                 "`currentSpeed` does not resolve here",
                 "currentSpeed",
             ),
             (
                 "a qualified member chain",
-                "command c(position: GearPosition) [ require position != app.GearPosition.PARK ]",
+                "command c(position: GearPosition) [ require position != app.GearPosition.PARK ] @[..50ms]",
                 "`.GearPosition` names a type, not a member",
                 "app.GearPosition",
             ),
             (
                 "`result` in a require",
-                "query q(): Speed [ require result >= 0.0 ]",
+                "query q(): Speed [ require result >= 0.0 ] @[..50ms]",
                 "`result` is not in scope here",
                 "result",
             ),
             (
                 "struct-field access",
-                "query q(n: Count): Speed [ require n.severity >= 4\n    ensure result >= 0.0 ]",
+                "query q(n: Count): Speed [ require n.severity >= 4\n    ensure result >= 0.0 ] @[..50ms]",
                 "the guaranteed subset admits field access on a tuple-typed `result` only",
                 "n.severity",
             ),
             (
                 "`%` over a float-backed operand",
-                "query q(n: Count): Speed [ require n % 0.5 == 0.0\n    ensure result >= 0.0 ]",
+                "query q(n: Count): Speed [ require n % 0.5 == 0.0\n    ensure result >= 0.0 ] @[..50ms]",
                 "`%` requires integer-backed operands",
                 "n % 0.5",
             ),
             (
                 "duration arithmetic",
-                "query q(w: Duration): Speed [ require w + 10ms < 1s\n    ensure result >= 0.0 ]",
+                "query q(w: Duration): Speed [ require w + 10ms < 1s\n    ensure result >= 0.0 ] @[..50ms]",
                 "`+` over a duration",
                 "w + 10ms",
             ),
@@ -7155,12 +7160,12 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         for (name, body, both) in [
             (
                 "float-backed named type against a `Speed` constant",
-                "command c(t: Torque) [ require t < MAX_SPEED ]",
+                "command c(t: Torque) [ require t < MAX_SPEED ] @[..50ms]",
                 ["`app.Torque`", "`app.Speed`"],
             ),
             (
                 "integer-backed named type against a `Speed` parameter",
-                "command c(s: Speed) [ require s < MAX_COUNT ]",
+                "command c(s: Speed) [ require s < MAX_COUNT ] @[..50ms]",
                 ["`app.Speed`", "`app.Count`"],
             ),
         ] {
@@ -7196,7 +7201,7 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         let checked = check_ridl(
             "app",
             &format!(
-                "{CONTRACT_PRELUDE}interface I {{\n  command c(max: Speed) [ require max <= MAX_SPEED ]\n}}\n"
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(max: Speed) [ require max <= MAX_SPEED ] @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -7210,19 +7215,19 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         for (name, body) in [
             (
                 "two float-backed named types",
-                "command c(a: Speed, b: Speed) [ require a % b == 0.0 ]",
+                "command c(a: Speed, b: Speed) [ require a % b == 0.0 ] @[..50ms]",
             ),
             (
                 "a float-backed constant",
-                "command c(a: Speed) [ require a % MAX_SPEED == 0.0 ]",
+                "command c(a: Speed) [ require a % MAX_SPEED == 0.0 ] @[..50ms]",
             ),
             (
                 "a bare float-backed type",
-                "command c(a: Ratio, b: Ratio) [ require a % b == 0.0 ]",
+                "command c(a: Ratio, b: Ratio) [ require a % b == 0.0 ] @[..50ms]",
             ),
             (
                 "an integer-backed type against a float literal",
-                "command c(a: Count) [ require a % 0.5 == 0 ]",
+                "command c(a: Count) [ require a % 0.5 == 0 ] @[..50ms]",
             ),
         ] {
             let checked = check_ridl(
@@ -7251,7 +7256,7 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         let checked = check_ridl(
             "app",
             &format!(
-                "{CONTRACT_PRELUDE}interface I {{\n  command c(a: Count, b: Count) [\n    require a % b == 0\n    require a % MAX_COUNT == 0\n  ]\n}}\n"
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(a: Count, b: Count) [\n    require a % b == 0\n    require a % MAX_COUNT == 0\n  ] @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -7265,7 +7270,7 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         let checked = check_ridl(
             "app",
             &format!(
-                "{CONTRACT_PRELUDE}interface I {{\n  command c(p: GearPosition) [ require p != GearPosition.TYPO ]\n}}\n"
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(p: GearPosition) [ require p != GearPosition.TYPO ] @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-306"]);
@@ -7279,7 +7284,7 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         let good = check_ridl(
             "app",
             &format!(
-                "{CONTRACT_PRELUDE}interface I {{\n  command c(p: GearPosition) [ require p != GearPosition.PARK ]\n}}\n"
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(p: GearPosition) [ require p != GearPosition.PARK ] @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&good).is_empty(), "got: {:?}", good.diagnostics);
@@ -7292,7 +7297,7 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
         let checked = check_ridl(
             "app",
             &format!(
-                "{CONTRACT_PRELUDE}interface I {{\n  command c(l: Label) [ require l == \"x\" ]\n}}\n"
+                "{CONTRACT_PRELUDE}interface I {{\n  command c(l: Label) [ require l == \"x\" ] @[..50ms]\n}}\n"
             ),
         );
         assert!(
@@ -7319,7 +7324,7 @@ enum GearPosition {\n  PARK  = 0\n  DRIVE = 1\n}\n";
             let checked = check_ridl(
                 "app",
                 &format!(
-                    "{CONTRACT_PRELUDE}interface I {{\n  query q(): Speed [ ensure result >= {literal} ]\n}}\n"
+                    "{CONTRACT_PRELUDE}interface I {{\n  query q(): Speed [ ensure result >= {literal} ] @[..50ms]\n}}\n"
                 ),
             );
             assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -7358,8 +7363,8 @@ import veh.common.Speed\n\
 import veh.common.Torque\n\
 import veh.common.MAX_SPEED\n\
 interface I {\n\
-  command ok(s: Speed) [ require s <= MAX_SPEED ]\n\
-  command bad(t: Torque) [ require t <= MAX_SPEED ]\n\
+  command ok(s: Speed) [ require s <= MAX_SPEED ] @[..50ms]\n\
+  command bad(t: Torque) [ require t <= MAX_SPEED ] @[..50ms]\n\
 }\n",
         );
         let ws = Workspace::new(&db, vec![cluster, common], BTreeMap::new());
@@ -7383,7 +7388,7 @@ interface I {\n\
         let checked = check_ridl(
             "app",
             &format!(
-                "{CONTRACT_PRELUDE}interface I {{\n  query q(window: Duration): Speed [ ensure window > 0ms ]\n}}\n"
+                "{CONTRACT_PRELUDE}interface I {{\n  query q(window: Duration): Speed [ ensure window > 0ms ] @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-305"]);
@@ -7402,21 +7407,21 @@ interface I {\n\
   command setRange(min: Speed, max: Speed) [\n\
     require min < max\n\
     require max <= MAX_SPEED\n\
-  ]\n\
+  ] @[..50ms]\n\
   command setGear(position: GearPosition) [\n\
     require position != GearPosition.PARK || currentSpeed == 0.0\n\
-  ]\n\
+  ] @[..50ms]\n\
   query getAverageSpeed(window: Duration): Speed [\n\
     require window > 0ms\n\
     ensure result >= 0.0\n\
-  ]\n\
+  ] @[..50ms]\n\
   query getRange(): (min: Speed, max: Speed) [\n\
     ensure result.min >= 0.0 && result.max <= MAX_SPEED\n\
-  ]\n\
+  ] @[..50ms]\n\
   query stepsOf(n: Count): Count [\n\
     require n % 2 == 0\n\
     ensure result >= 0\n\
-  ]\n\
+  ] @[..50ms]\n\
 }}\n"
             ),
         );
@@ -7434,7 +7439,7 @@ interface I {\n\
   query q(min: Speed, max: Speed): Speed [\n\
     require (min<max)&&(max<=MAX_SPEED)\n\
     ensure  result>=0.0\n\
-  ]\n\
+  ] @[..50ms]\n\
 }}\n"
             ),
         );
@@ -7490,7 +7495,7 @@ interface I {\n\
   command c(min: Speed, max: Speed) [\n\
     require min < max\n\
     require max <= MAX_SPEED\n\
-  ]\n\
+  ] @[..50ms]\n\
 }}\n"
             ),
         );
@@ -7517,7 +7522,7 @@ interface I {\n\
                 "{CONTRACT_PRELUDE}interface I {{\n\
   query q(w: Duration): Speed [\n\
     require w > 0ms\n\
-  ]\n\
+  ] @[..50ms]\n\
 }}\n"
             ),
         );
@@ -7535,7 +7540,7 @@ interface I {\n\
   query q(w: Duration): Speed [\n\
     require w > 0ms\n\
     require w < 10s\n\
-  ]\n\
+  ] @[..50ms]\n\
 }}\n"
             ),
         );
@@ -7554,7 +7559,7 @@ interface I {\n\
   query q(w: Duration): Speed [\n\
     require w > 0ms\n\
     ensure  result >= 0.0\n\
-  ]\n\
+  ] @[..50ms]\n\
 }}\n"
             ),
         );
@@ -7583,7 +7588,7 @@ interface I {\n\
   command c(min: Speed, max: Speed) [\n\
     require min < max\n\
     require max <= MAX_SPEED\n\
-  ]\n\
+  ] @[..50ms]\n\
 }}\n"
             ),
         );
@@ -7603,7 +7608,7 @@ interface I {\n\
                 "{CONTRACT_PRELUDE}interface I {{\n\
   command c(min: Speed, max: Speed) [\n\
     require max <= MAX_SPEED\n\
-  ]\n\
+  ] @[..50ms]\n\
 }}\n"
             ),
         );
@@ -7621,7 +7626,7 @@ interface I {\n\
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface I {{\n  reserved resetCounters\n  query resetCounters(w: Speed): Speed\n}}\n"
+                "{PRELUDE}interface I {{\n  reserved resetCounters\n  query resetCounters(w: Speed): Speed @[..50ms]\n}}\n"
             ),
         );
         // `resetCounters` is also mutation-named, so the E2.10a lint fires
@@ -7634,7 +7639,7 @@ interface I {\n\
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n  event a : Speed\n  query b(): Speed\n}}\n"
+                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n  event a : Speed\n  query b(): Speed @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-402"]);
@@ -7645,34 +7650,44 @@ interface I {\n\
         assert_eq!(interface_walk(&checked), [("a", 1), ("b", 2)]);
     }
 
-    /// One rule, one code: a timing annotation on any kind that carries none is
-    /// RIDL-106, and each message says why *that* kind carries none.
-    ///
-    /// `command` and `query` used to draw FORM-102 while `fixed` drew RIDL-106.
-    /// FORM-102's catalogue meaning is "unexpected token", and the grammar
-    /// accepts `@` on all five kinds on purpose, so the token was never
-    /// unexpected — the rejection is semantic and now wears a semantic code.
+    /// RIDL-106 narrowed and RIDL-103 widened, in one place (ADR-0015
+    /// decision 6): `command` and `query` admit the range form now, so a
+    /// strict period on them is RIDL-103 — the same rule that already covered
+    /// `event`, stated over every kind but `signal` — and `fixed` is the one
+    /// kind whose annotation is still RIDL-106.
     #[test]
-    fn ridl_106_timing_on_every_kind_that_carries_none() {
-        for (kind, member, because) in [
-            ("command", "command c() @10ms", "invoked on demand"),
-            ("query", "query q(): Speed @10ms", "answered on demand"),
-            ("fixed", "fixed v : Version @10ms", "provisioned externally"),
+    fn ridl_106_timing_on_fixed_and_ridl_103_strict_period_on_rpc() {
+        let on_fixed = check_ridl(
+            "app",
+            &format!("{PRELUDE}interface I {{\n  fixed v : Version @10ms\n}}\n"),
+        );
+        assert_eq!(codes(&on_fixed), vec!["RIDL-106"]);
+        let message = &on_fixed.diagnostics[0].message;
+        assert!(
+            message.starts_with("a timing annotation is not valid on `fixed`"),
+            "{message}",
+        );
+        assert!(
+            message.contains("provisioned externally"),
+            "the message must say why `fixed` carries no timing: {message}",
+        );
+        assert!(
+            message.contains("`command` and `query`"),
+            "the message must name the kinds that do carry timing: {message}",
+        );
+
+        for (kind, member) in [
+            ("command", "command c() @10ms"),
+            ("query", "query q(): Speed @10ms"),
         ] {
             let checked = check_ridl("app", &format!("{PRELUDE}interface I {{\n  {member}\n}}\n"));
-            assert_eq!(codes(&checked), vec!["RIDL-106"], "{kind}");
-            let message = &checked.diagnostics[0].message;
+            assert_eq!(codes(&checked), vec!["RIDL-103"], "{kind}");
             assert!(
-                message.starts_with(&format!("a timing annotation is not valid on `{kind}`")),
-                "{kind}: {message}",
-            );
-            assert!(
-                message.contains(because),
-                "{kind}: the message must say why this kind carries no timing: {message}",
-            );
-            assert!(
-                message.contains("`signal` and `event`"),
-                "{kind}: the message must name the kinds that do carry timing: {message}",
+                checked.diagnostics[0]
+                    .message
+                    .contains("not isochronous by contract"),
+                "{kind}: the message must name the RPC reason: {}",
+                checked.diagnostics[0].message,
             );
         }
     }
@@ -7750,7 +7765,7 @@ interface I {\n\
 
         let tuple_param = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  command c(p: (a: Speed))\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  command c(p: (a: Speed)) @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&tuple_param), vec!["FORM-102"]);
         assert_eq!(
@@ -7777,7 +7792,7 @@ interface I {\n\
         // a duplicate key FORM-108.
         let known = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  command c() [ persist ]\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  command c() [ persist ] @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&known), vec!["FORM-107"]);
         assert!(
@@ -7788,13 +7803,13 @@ interface I {\n\
 
         let unknown = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  command c() [ frobnicate ]\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  command c() [ frobnicate ] @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&unknown), vec!["FORM-106"]);
 
         let duplicate = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  command c() [ persist, persist ]\n}}\n"),
+            &format!("{PRELUDE}interface I {{\n  command c() [ persist, persist ] @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&duplicate), vec!["FORM-107", "FORM-107", "FORM-108"]);
 
@@ -7969,7 +7984,7 @@ interface VehicleStatus {
   /// Request a gear change
   command setGear(position: GearPosition) [
     require position != GearPosition.PARK || currentSpeed == 0.0
-  ]
+  ] @[20ms..200ms]
 
   reserved resetCounters
 
@@ -7977,13 +7992,13 @@ interface VehicleStatus {
   query getAverageSpeed(window: Duration): Speed [
     require window > 0ms
     ensure  result >= 0.0
-  ]
+  ] @[10ms..50ms]
 
   /// Fault history as a finite stream
-  query streamFaults(filter: DiagFilter): <FaultEvent>
+  query streamFaults(filter: DiagFilter): <FaultEvent> @[..1s]
 
   /// Paged fault snapshot
-  query getFaultPage(filter: DiagFilter): FaultPage | DiagError
+  query getFaultPage(filter: DiagFilter): FaultPage | DiagError @[..100ms]
 
   fixed softwareVersion : Version
   fixed capabilities    : [Label; 0..32]
@@ -8478,21 +8493,47 @@ interface VehicleStatus {
         );
     }
 
+    /// Declared RPC bounds lower into the IR on both kinds, and an undeclared
+    /// bound stays absent (ADR-0015 decisions 4 and 7): the bare command draws
+    /// RIDL-112 and its `timing` field is `None` — the §9.1 defaulting path
+    /// never touches an RPC.
     #[test]
-    fn command_carries_no_timing_in_ir() {
-        // A command has no `Timing` field at all — timing is absent from the IR
-        // for command/query/fixed (ridl §9).
+    fn rpc_bounds_lower_into_the_ir_and_absent_stays_absent() {
         let checked = check_ridl(
             "app",
-            &format!("{PRELUDE}interface I {{\n  command c(p: Speed)\n}}\n"),
+            &format!(
+                "{PRELUDE}interface I {{\n  command c(p: Speed) @[20ms..50ms]\n  query q(): Speed @[..100ms]\n  command bare()\n}}\n"
+            ),
         );
-        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
-        let v2::decl::Kind::CommandDef(_) = interaction(&checked, "c").kind.as_ref().unwrap()
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-112"],
+            "only the bare command warns"
+        );
+
+        let v2::decl::Kind::CommandDef(command) = interaction(&checked, "c").kind.as_ref().unwrap()
         else {
             panic!("expected a command");
         };
-        // `CommandDef` has no timing field — nothing to assert absent beyond
-        // the type shape; the absence is structural.
+        let timing = command.timing.as_ref().expect("declared bounds lower");
+        assert_eq!(timing.mode, v2::TimingMode::Range as i32);
+        assert_eq!(timing.min_us.as_deref(), Some("20000"));
+        assert_eq!(timing.max_us.as_deref(), Some("50000"));
+        assert!(!timing.default_applied, "an RPC bound is never defaulted");
+
+        let v2::decl::Kind::QueryDef(query) = interaction(&checked, "q").kind.as_ref().unwrap()
+        else {
+            panic!("expected a query");
+        };
+        let timing = query.timing.as_ref().expect("declared bounds lower");
+        assert_eq!(timing.min_us, None, "the half-open throttle stays unset");
+        assert_eq!(timing.max_us.as_deref(), Some("100000"));
+
+        let v2::decl::Kind::CommandDef(bare) = interaction(&checked, "bare").kind.as_ref().unwrap()
+        else {
+            panic!("expected a command");
+        };
+        assert_eq!(bare.timing, None, "undeclared means absent in the IR");
     }
 
     #[test]
@@ -8502,7 +8543,7 @@ interface VehicleStatus {
         // `ReturnType.fallible` with both arms canonical.
         let checked = check_ridl(
             "app",
-            "package app\nstruct FaultPage {\n  count : integer [0..64]\n}\nerror enum DiagError {\n  STORAGE_BUSY = 0\n}\ninterface I {\n  query getFaultPage(): FaultPage | DiagError\n}\n",
+            "package app\nstruct FaultPage {\n  count : integer [0..64]\n}\nerror enum DiagError {\n  STORAGE_BUSY = 0\n}\ninterface I {\n  query getFaultPage(): FaultPage | DiagError @[..50ms]\n}\n",
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
         let query = query_def(&checked, "getFaultPage");
@@ -8529,7 +8570,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalReport | CalError\n}}\n"
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalReport | CalError @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -8565,7 +8606,7 @@ interface VehicleStatus {
         let app = ridl_package(
             &db,
             "app",
-            "package app\nimport veh.common.CalError\nstruct CalReport {\n  count : integer [0..64]\n}\ntype Axle: integer [0..3]\ninterface I {\n  query calibrate(axle: Axle): CalReport | CalError\n}\n",
+            "package app\nimport veh.common.CalError\nstruct CalReport {\n  count : integer [0..64]\n}\ntype Axle: integer [0..3]\ninterface I {\n  query calibrate(axle: Axle): CalReport | CalError @[..50ms]\n}\n",
         );
         let ws = Workspace::new(&db, vec![app, common], BTreeMap::new());
         let checked = check_package(&db, ws, app, std);
@@ -8595,7 +8636,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError | CalReport\n}}\n"
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError | CalReport @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-303"]);
@@ -8614,7 +8655,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalReport | Speed\n}}\n"
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalReport | Speed @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-303"]);
@@ -8633,7 +8674,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError\n}}\n"
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-303"]);
@@ -8651,7 +8692,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError | CalError\n}}\n"
+                "{FALLIBLE_VOCAB}interface I {{\n  query calibrate(axle: Axle): CalError | CalError @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-303"]);
@@ -8667,7 +8708,7 @@ interface VehicleStatus {
         // `command c(e: CalError)` — an error-typed parameter (warning).
         let checked = check_ridl(
             "app",
-            &format!("{FALLIBLE_VOCAB}interface I {{\n  command c(e: CalError)\n}}\n"),
+            &format!("{FALLIBLE_VOCAB}interface I {{\n  command c(e: CalError) @[..50ms]\n}}\n"),
         );
         assert_eq!(codes(&checked), vec!["RIDL-304"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
@@ -8680,7 +8721,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{FALLIBLE_VOCAB}union CalOutcome {{\n  ok : CalReport\n  err : CalError\n}}\ninterface I {{\n  query q(outcome: CalOutcome): CalReport | CalError\n}}\n"
+                "{FALLIBLE_VOCAB}union CalOutcome {{\n  ok : CalReport\n  err : CalError\n}}\ninterface I {{\n  query q(outcome: CalOutcome): CalReport | CalError @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-304"]);
@@ -8726,7 +8767,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{FALLIBLE_VOCAB}union CalOutcome {{\n  ok : CalReport\n  err : CalError\n}}\ninterface I {{\n  query calibrate(axle: Axle): CalOutcome\n}}\n"
+                "{FALLIBLE_VOCAB}union CalOutcome {{\n  ok : CalReport\n  err : CalError\n}}\ninterface I {{\n  query calibrate(axle: Axle): CalOutcome @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(
@@ -8856,7 +8897,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n  event a : Speed\n  query b(): Speed\n}}\n"
+                "{PRELUDE}interface I {{\n  signal a : Speed @10ms\n  event a : Speed\n  query b(): Speed @[..50ms]\n}}\n"
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-402"]);
@@ -9079,7 +9120,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed)\n}}\n"
+                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -9126,7 +9167,7 @@ interface VehicleStatus {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) [ require temperature < t ]\n}}\n"
+                "{PRELUDE}service veh.hvac.cabin {{\n  signal temperature : Speed @10ms\n  command setTarget(t: Speed) [ require temperature < t ] @[..50ms]\n}}\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);

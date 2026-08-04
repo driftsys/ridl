@@ -577,6 +577,7 @@ mod v2_round_trip {
                 uses_result: false,
                 observer_id: "VehicleStatus.setTarget.require[0]".to_string(),
             }],
+            timing: None,
         };
 
         // query fetchFaults(page : PageSpec) : FaultPage | DiagError
@@ -600,6 +601,7 @@ mod v2_round_trip {
                 uses_result: true,
                 observer_id: "VehicleStatus.fetchFaults.ensure[0]".to_string(),
             }],
+            timing: None,
         };
 
         // fixed vin : Vin
@@ -648,6 +650,7 @@ mod v2_round_trip {
                 ))),
             }),
             contracts: Vec::new(),
+            timing: None,
         };
 
         // service veh.adas.status : VehicleStatus — named reference.

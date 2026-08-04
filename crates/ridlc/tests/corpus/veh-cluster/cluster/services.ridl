@@ -120,42 +120,42 @@ service veh.hvac.cabin {
   command setTarget(t: Temperature) [
     require t >= -10.0
     require cabinTemp >= -40.0
-  ]
+  ] @[..50ms]
 
   /// A retired member. The tombstone holds its ordinal for ever, so every
   /// ordinal after it carries the gap (ridl §11).
   reserved setEcoMode
 
   /// Client-produced stream on a parameter (ridl §12.1).
-  command replayTrace(samples: <FilterState>)
+  command replayTrace(samples: <FilterState>) @[..50ms]
 
   /// Provider-produced stream in return position.
-  query streamFilterHistory(limit: FanLevel): <FilterState>
+  query streamFilterHistory(limit: FanLevel): <FilterState> @[..50ms]
 
   /// Bidirectional — a stream in both positions at once.
-  query rebalance(samples: <FilterState>): <ClimateReport>
+  query rebalance(samples: <FilterState>): <ClimateReport> @[..50ms]
 
   /// A postcondition that reads `result` — tuple-field access is the widest
   /// `result` shape the guaranteed expression subset admits (ridl §13).
   query getBounds(): (min: Temperature, max: Temperature) [
     require true
     ensure result.min <= result.max
-  ]
+  ] @[..50ms]
 
   /// Inline fallible return `T | E` — the canonical spelling in return
   /// position (general form §6.1). Its transport identity is synthesized from
   /// the enclosing shape and the ordinal, which is exactly what an inline
   /// shape has to get right without an interface name to borrow.
-  query calibrate(axle: FanLevel): ClimateReport | HvacError
+  query calibrate(axle: FanLevel): ClimateReport | HvacError @[..50ms]
 
   /// A plain named-type return.
-  query getClimate(): ClimateReport
+  query getClimate(): ClimateReport @[..50ms]
 
   /**
    * Superseded by `getClimate`.
    * @deprecated use getClimate — this returns only the cabin reading
    */
-  query getCabinTemp(): Temperature
+  query getCabinTemp(): Temperature @[..50ms]
 
   /// Provisioned, immutable for the software-instance lifetime (ridl §8).
   fixed unitSerial : Label
@@ -171,16 +171,16 @@ service veh.hvac.cabin {
   /// Boolean conjunction.
   command setFan(level: FanLevel) [
     require level >= 0 && level <= 7
-  ]
+  ] @[..50ms]
 
   /// Arithmetic over a parameter, and a reference to a declared `const`.
   command trimFan(level: FanLevel) [
     require level + 1 <= 7
     require level <= MAX_FAN
-  ]
+  ] @[..50ms]
 
   /// Arithmetic over `result`.
   query scaledFan(): FanLevel [
     ensure result * 2 >= 0
-  ]
+  ] @[..50ms]
 }

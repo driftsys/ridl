@@ -252,9 +252,12 @@ fn vocabulary() -> TokenStream {
         /// One interaction's resolved timing, in exact microseconds.
         ///
         /// `min_us` is the rate floor and `max_us` the staleness bound; a strict
-        /// period carries the same value in both. `default_applied` records that
+        /// period carries the same value in both. On a `command` or `query` the
+        /// same two bounds are the call throttle and the response bound
+        /// (ridl §9, ADR-0015 decision 3). `default_applied` records that
         /// the contract was written without a `@` annotation and the configured
-        /// default was resolved in (ridl §9.1).
+        /// default was resolved in (ridl §9.1) — always `false` for an RPC,
+        /// whose bounds are never defaulted.
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub struct TimingConst {
             pub mode: TimingMode,
@@ -375,8 +378,10 @@ fn emit_interface(
     let timing_entries = &out.timing;
     let contract_entries = &out.contracts;
     let timing_doc = doc_attrs(&format!(
-        "Resolved timing for every signal and event of `{name}`, keyed by the \
-         source name, in exact microseconds (ridl §9)."
+        "Resolved timing for every timed interaction of `{name}`, keyed by the \
+         source name, in exact microseconds (ridl §9): rate floor and staleness \
+         bound on a signal or event, call throttle and response bound on a \
+         command or query (ADR-0015 decision 3)."
     ));
     let contracts_doc = doc_attrs(&format!(
         "Every `require` and `ensure` clause of `{name}` as data, in source \
@@ -505,6 +510,13 @@ fn emit_interaction(
                 &command.contracts,
                 &mut out.contracts,
             )?;
+
+            // The declared RPC bounds ride the same timing table as a
+            // signal's (ADR-0015): the two microsecond constants are the call
+            // throttle and the response bound. Absent when undeclared.
+            if let Some(spec) = &command.timing {
+                out.timing.push(timing_entry(interface, source_name, spec)?);
+            }
         }
 
         Some(v2::decl::Kind::QueryDef(query)) => {
@@ -549,6 +561,12 @@ fn emit_interaction(
             }
 
             push_contracts(interface, source_name, &query.contracts, &mut out.contracts)?;
+
+            // As on a command: the declared RPC bounds ride the timing table
+            // (ADR-0015).
+            if let Some(spec) = &query.timing {
+                out.timing.push(timing_entry(interface, source_name, spec)?);
+            }
         }
 
         Some(v2::decl::Kind::FixedDef(fixed_def)) => {

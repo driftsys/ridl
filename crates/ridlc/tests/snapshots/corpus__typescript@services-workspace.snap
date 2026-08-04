@@ -182,13 +182,17 @@ export interface DoorControlProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const doorControlTiming = {
   lockState: { mode: 'range', minUs: 100000n, maxUs: 1000000n, defaultApplied: false },
   doorMoved: { mode: 'range', minUs: 50000n, maxUs: 500000n, defaultApplied: false },
+  lock: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  readDoor: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
 } as const;
 
 /**
@@ -250,12 +254,15 @@ export interface TelemetryProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const telemetryTiming = {
   distance: { mode: 'range', minUs: 1000000n, maxUs: 10000000n, defaultApplied: false },
+  fuelLevel: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
 } as const;
 
 /**
@@ -457,12 +464,18 @@ export interface Service_fleet_vehicle_mirrorsProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const service_fleet_vehicle_mirrorsTiming = {
   foldAngle: { mode: 'range', minUs: 200000n, maxUs: 2000000n, defaultApplied: false },
+  fold: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  readFold: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  readDoor: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  readLegacyDoor: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
 } as const;
 
 /**

@@ -15,11 +15,11 @@ error enum Categories {
 interface Errors {
 
   /// A query whose only outcome is failure has no success path.
-  query onlyFails(limit: Level): DiagError
+  query onlyFails(limit: Level): DiagError @[..50ms]
 
   /// Failure flowing toward a provider: the caller has nothing to report.
-  command absorb(fault: DiagError)
+  command absorb(fault: DiagError) @[..50ms]
 
   /// The inline `T | E` spelling is canonical in return position.
-  query paged(limit: Level): NamedResult
+  query paged(limit: Level): NamedResult @[..50ms]
 }

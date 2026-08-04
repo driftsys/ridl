@@ -228,7 +228,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
-            "contracts": []
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -254,7 +259,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "err": "DoorFault"
               }
             },
-            "contracts": []
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
           }
         },
         {
@@ -324,7 +334,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 "usesResult": true,
                 "observerId": "Telemetry.fuelLevel.ensure[0]"
               }
-            ]
+            ],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
           }
         }
       ]
@@ -441,7 +456,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 }
               ],
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -486,7 +506,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "usesResult": true,
                   "observerId": "fleet.vehicle.mirrors.readFold.ensure[0]"
                 }
-              ]
+              ],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -526,7 +551,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "err": "fleet.contracts.DoorFault"
                 }
               },
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           },
           {
@@ -552,7 +582,12 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   "err": "fleet.legacy.DoorFault"
                 }
               },
-              "contracts": []
+              "contracts": [],
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "50000",
+                "defaultApplied": false
+              }
             }
           }
         ]

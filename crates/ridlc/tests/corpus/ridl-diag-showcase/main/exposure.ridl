@@ -32,10 +32,10 @@ internal interface Backdoor {
   fixed slots : [Level; 1..HANDLE_SLOTS]
   command trim(level: Level) [
     require level < HANDLE_MAX
-  ]
+  ] @[..50ms]
   query drain(): Level [
     ensure result < HANDLE_MAX
-  ]
+  ] @[..50ms]
 }
 
 /// A public interface over a package-private payload, parameter, return type,
@@ -57,14 +57,14 @@ interface Exposed {
   signal handle : Handle @10ms
   signal HANDLE_MAX : Level @10ms
   fixed slots : [Level; 1..HANDLE_SLOTS]
-  command bind(h: Handle)
-  query readHandle(): Handle
+  command bind(h: Handle) @[..50ms]
+  query readHandle(): Handle @[..50ms]
   command trim(level: Level) [
     require level < HANDLE_MAX
-  ]
+  ] @[..50ms]
   query drain(): Level [
     ensure result < HANDLE_MAX
-  ]
+  ] @[..50ms]
 }
 
 /// A public service publishing a package-private shape (RIDL-143). This is the

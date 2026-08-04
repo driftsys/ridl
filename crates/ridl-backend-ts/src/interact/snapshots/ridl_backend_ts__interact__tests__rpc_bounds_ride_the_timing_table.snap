@@ -1,9 +1,7 @@
 ---
 source: crates/ridl-backend-ts/src/interact/tests.rs
-expression: render(&package)
+expression: source
 ---
-import * as veh_common from './veh.common';
-
 /**
  * What a signal read is standing on (ridl §4.5). `'init'` — the provider has
  * not published yet and the value is the channel init (ridl §4.4); `'live'` —
@@ -50,13 +48,32 @@ export type Result<T, E> =
  */
 export interface VehicleStatusConsumer {
   /**
-   * Current vehicle speed — isochronous, drives rmdl clocks downstream
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
    *
    * @ordinal 1
-   * @init 0.0
-   * @provenance `'init'` until the provider's first publication (ridl §4.4).
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
-  currentSpeed: SignalHandle<veh_common.Speed>;
+  setGear(position: GearPosition): Promise<void>;
+  /**
+   * @ordinal 2
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getAverageSpeed(): Promise<Speed>;
+  /**
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @ordinal 3
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  resetFaults(): Promise<void>;
 }
 
 /**
@@ -68,12 +85,32 @@ export interface VehicleStatusConsumer {
  */
 export interface VehicleStatusProvider {
   /**
-   * Current vehicle speed — isochronous, drives rmdl clocks downstream
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
    *
    * @ordinal 1
-   * @init 0.0
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
    */
-  currentSpeed: { publish(value: veh_common.Speed): void };
+  setGear(position: GearPosition): Promise<void>;
+  /**
+   * @ordinal 2
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  getAverageSpeed(): Promise<Speed>;
+  /**
+   * A command is fire-and-forget (ridl §6): it declares no result, and an
+   * observable outcome travels back as state, not as a return value. The
+   * promise settles on the runtime's delivery acknowledgment, which "carries
+   * no functional payload, never reaches the contract surface, and is not
+   * application-visible as a return value" (ridl §6.1).
+   *
+   * @ordinal 3
+   * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
+   */
+  resetFaults(): Promise<void>;
 }
 
 /**
@@ -85,7 +122,8 @@ export interface VehicleStatusProvider {
  * absent when undeclared.
  */
 export const vehicleStatusTiming = {
-  currentSpeed: { mode: 'strict-periodic', minUs: 10000n, maxUs: 10000n, defaultApplied: false },
+  setGear: { mode: 'range', minUs: 20000n, maxUs: 200000n, defaultApplied: false },
+  getAverageSpeed: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
 } as const;
 
 /**

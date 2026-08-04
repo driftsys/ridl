@@ -1,4 +1,5 @@
-// Timing diagnostics (ridl §9.2, §16.1): RIDL-100, 101, 102, 103, 108.
+// Timing diagnostics (ridl §9, §9.2, §16.1): RIDL-100, 101, 102, 103, 108,
+// 112.
 
 package diag.ridl
 
@@ -21,4 +22,20 @@ interface Timing {
   /// Strict periodic on an event: an isochronous rate is meaningless for
   /// occurrences.
   event tick : Sample @100ms
+
+  /// Strict periodic on a command — RIDL-103, widened by ADR-0015: a caller
+  /// is not isochronous by contract. This drew RIDL-106 until `command` and
+  /// `query` admitted the range form.
+  command timedCommand() @1s
+
+  /// Nor on a query.
+  query timedQuery(): Level @1s
+
+  /// A query with no declared response bound — warned (RIDL-112), never
+  /// defaulted: absent means absent in the IR (ADR-0015).
+  query unbounded(): Level
+
+  /// `@[20ms..]` declares a call throttle and no response bound, so it warns
+  /// exactly as the bare query above does. A missing `min` draws nothing.
+  command throttledOnly(level: Level) @[20ms..]
 }

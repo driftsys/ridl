@@ -83,17 +83,17 @@ interface Cruise {
   signal currentSpeed : Speed @10ms
   command setRange(min: Speed, max: Speed) [
     require min < max
-  ]
+  ] @[..50ms]
   command overshoot(desired: Speed) [
     require desired > 300.0
-  ]
+  ] @[..50ms]
   command guard(desired: Speed) [
     require desired != 0.0 || currentSpeed == 0.0
-  ]
+  ] @[..50ms]
   query average(window: Count): Speed [
     require window > 0
     ensure result >= 0.0
-  ]
+  ] @[..50ms]
 }
 ";
 
@@ -213,10 +213,10 @@ fn the_boundary_corpus_is_sampled_so_endpoint_clauses_are_not_called_suspect() {
 type Speed : km/h [0.0..250.0 step 0.5]\n\
 type Count : integer [0..1000]\n\
 interface I {\n\
-  command atMax(c: Count) [ require c == 1000 ]\n\
-  command atMin(s: Speed) [ require s == 0.0 ]\n\
-  command atTop(s: Speed) [ require s == 250.0 ]\n\
-  command nearTop(s: Speed) [ require s > 249.0 ]\n\
+  command atMax(c: Count) [ require c == 1000 ] @[..50ms]\n\
+  command atMin(s: Speed) [ require s == 0.0 ] @[..50ms]\n\
+  command atTop(s: Speed) [ require s == 250.0 ] @[..50ms]\n\
+  command nearTop(s: Speed) [ require s > 249.0 ] @[..50ms]\n\
 }\n",
     );
     let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
@@ -260,8 +260,8 @@ fn zero_is_injected_only_when_the_range_actually_contains_it() {
 type Pos : integer [5..9]\n\
 type Spans : integer [-1000000..1000000]\n\
 interface I {\n\
-  command outside(p: Pos) [ require p == 0 ]\n\
-  command inside(s: Spans) [ require s == 0 ]\n\
+  command outside(p: Pos) [ require p == 0 ] @[..50ms]\n\
+  command inside(s: Spans) [ require s == 0 ] @[..50ms]\n\
 }\n",
     );
     let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
@@ -349,7 +349,7 @@ fn a_draw_outside_its_own_range_is_discarded_rather_than_evaluated() {
         "package app\n\
 type Fine : float [1.0000000000000001..1.0000000000000009 step 0.0000000000000001]\n\
 interface I {\n\
-  command below(v: Fine) [ require v < 1.0000000000000001 ]\n\
+  command below(v: Fine) [ require v < 1.0000000000000001 ] @[..50ms]\n\
 }\n",
     );
     let (code, stdout, _) = ridl(&[
@@ -399,8 +399,8 @@ fn a_multi_parameter_suspect_carries_the_combination_caveat() {
         "package app\n\
 type Count : integer [0..1000]\n\
 interface I {\n\
-  command corner(a: Count, b: Count) [ require a == 0 && b == 1000 ]\n\
-  command single(a: Count) [ require a > 2000 ]\n\
+  command corner(a: Count, b: Count) [ require a == 0 && b == 1000 ] @[..50ms]\n\
+  command single(a: Count) [ require a > 2000 ] @[..50ms]\n\
 }\n",
     );
     let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
@@ -468,8 +468,8 @@ fn a_run_that_evaluated_nothing_says_so_and_cannot_read_as_success() {
 type Speed : km/h [0.0..250.0 step 0.5]\n\
 interface I {\n\
   signal speedNow : Speed @10ms\n\
-  command a(s: Speed) [ require speedNow == 0.0 ]\n\
-  command b(s: Speed) [ require speedNow > 1.0 ]\n\
+  command a(s: Speed) [ require speedNow == 0.0 ] @[..50ms]\n\
+  command b(s: Speed) [ require speedNow > 1.0 ] @[..50ms]\n\
 }\n",
     );
     let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
@@ -510,7 +510,7 @@ fn the_json_summary_lets_ci_tell_tested_nothing_from_all_good() {
 type Speed : km/h [0.0..250.0 step 0.5]\n\
 interface I {\n\
   signal speedNow : Speed @10ms\n\
-  command a(s: Speed) [ require speedNow == 0.0 ]\n\
+  command a(s: Speed) [ require speedNow == 0.0 ] @[..50ms]\n\
 }\n",
     );
     let (code, stdout, _) = ridl(&[
@@ -564,8 +564,8 @@ fn the_summary_counts_constant_false_clauses_as_findings() {
 type Speed : km/h [0.0..250.0 step 0.5]\n\
 const MAX_SPEED : Speed = 200.0\n\
 interface I {\n\
-  command a(s: Speed) [ require MAX_SPEED < 0.0 ]\n\
-  command b(s: Speed) [ require MAX_SPEED > 300.0 ]\n\
+  command a(s: Speed) [ require MAX_SPEED < 0.0 ] @[..50ms]\n\
+  command b(s: Speed) [ require MAX_SPEED > 300.0 ] @[..50ms]\n\
 }\n",
     );
     let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
@@ -640,7 +640,7 @@ fn a_clause_reading_no_parameter_is_evaluated_once() {
         "package app\n\
 type Speed : km/h [0.0..250.0 step 0.5]\n\
 const MAX_SPEED : Speed = 200.0\n\
-interface I {\n  command c(s: Speed) [ require MAX_SPEED > 0.0 ]\n}\n",
+interface I {\n  command c(s: Speed) [ require MAX_SPEED > 0.0 ] @[..50ms]\n}\n",
     );
     let (code, stdout, _) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
     assert_eq!(code, 0, "{stdout}");
@@ -720,8 +720,8 @@ fn contracts_inside_a_service_with_an_inline_shape_are_reported() {
         "package app\n\
 type Speed : km/h [0.0..250.0 step 0.5]\n\
 service app.cruise {\n\
-  command overshoot(desired: Speed) [ require desired > 300.0 ]\n\
-  query peek(): Speed [ ensure result >= 0.0 ]\n\
+  command overshoot(desired: Speed) [ require desired > 300.0 ] @[..50ms]\n\
+  query peek(): Speed [ ensure result >= 0.0 ] @[..50ms]\n\
 }\n",
     );
     let (code, stdout, stderr) = ridl(&["test", dir.path().to_str().expect("utf-8 path")]);
@@ -754,7 +754,7 @@ fn a_service_naming_an_interface_reports_its_clauses_once() {
         "package app\n\
 type Speed : km/h [0.0..250.0 step 0.5]\n\
 interface Cruise {\n\
-  command overshoot(desired: Speed) [ require desired > 300.0 ]\n\
+  command overshoot(desired: Speed) [ require desired > 300.0 ] @[..50ms]\n\
 }\n\
 service app.cruise : Cruise\n",
     );
@@ -956,20 +956,20 @@ import veh.legacy.Level as LegacyLevel\n\
 import veh.legacy.LIMIT as LEGACY_LIMIT\n\
 import veh.legacy.GearPosition as LegacyGear\n\
 interface Cruise {\n\
-  command setSpeed(s: Speed) [ require s > 0.0 ]\n\
-  command own(l: Level) [ require l > LIMIT ]\n\
-  command aliased(l: LegacyLevel) [ require l < LEGACY_LIMIT ]\n\
-  command ownBounds(l: Level) [ require l > 7 ]\n\
-  command legacyBounds(l: LegacyLevel) [ require l > 7 ]\n\
-  command ratio(l: Level) [ require 5 / TWO > 2 ]\n\
-  command gear(l: Level) [ require GearPosition.PARK != GearPosition.DRIVE ]\n\
-  command legacyGear(l: Level) [ require LegacyGear.PARK != LegacyGear.REVERSE ]\n\
+  command setSpeed(s: Speed) [ require s > 0.0 ] @[..50ms]\n\
+  command own(l: Level) [ require l > LIMIT ] @[..50ms]\n\
+  command aliased(l: LegacyLevel) [ require l < LEGACY_LIMIT ] @[..50ms]\n\
+  command ownBounds(l: Level) [ require l > 7 ] @[..50ms]\n\
+  command legacyBounds(l: LegacyLevel) [ require l > 7 ] @[..50ms]\n\
+  command ratio(l: Level) [ require 5 / TWO > 2 ] @[..50ms]\n\
+  command gear(l: Level) [ require GearPosition.PARK != GearPosition.DRIVE ] @[..50ms]\n\
+  command legacyGear(l: Level) [ require LegacyGear.PARK != LegacyGear.REVERSE ] @[..50ms]\n\
   command windowed(l: Level) [\n\
     require WINDOW > 4ms && WINDOW < 6ms\n\
     require WINDOW != 5us\n\
   ]\n\
-  command stamp(t: Timestamp) [ require t > 0 ]\n\
-  query avg(window: Duration): Speed [ require window == 1ms ]\n\
+  command stamp(t: Timestamp) [ require t > 0 ] @[..50ms]\n\
+  query avg(window: Duration): Speed [ require window == 1ms ] @[..50ms]\n\
 }\n",
     );
     dir
@@ -1282,13 +1282,13 @@ fn two_members_declaring_one_package_name_keep_their_own_declarations() {
         "a/a.ridl",
         "package dup.pkg\n\
 type Level : integer [1000..2000]\n\
-interface First {\n  command wide(l: Level) [ require l > 7 ]\n}\n",
+interface First {\n  command wide(l: Level) [ require l > 7 ] @[..50ms]\n}\n",
     );
     dir.write(
         "b/b.ridl",
         "package dup.pkg\n\
 type Level : integer [0..7]\n\
-interface Second {\n  command narrow(l: Level) [ require l > 7 ]\n}\n",
+interface Second {\n  command narrow(l: Level) [ require l > 7 ] @[..50ms]\n}\n",
     );
 
     let path = dir.path().to_str().expect("utf-8 path");

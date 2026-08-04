@@ -475,6 +475,12 @@ message CommandDef {
   repeated Param params = 1;
   // require only (RIDL-302).
   repeated Contract contracts = 2;
+  // Declared bounds (ridl §9, ADR-0015 decision 7): min_us is the call
+  // throttle, max_us the response bound — for a command, the bound on
+  // acceptance (§6.1), not on execution. mode is always Range and
+  // default_applied always false. Absent when undeclared — never defaulted
+  // (ADR-0015 decision 4).
+  Timing timing = 3;
 }
 
 // A request/response interaction (ridl §7).
@@ -482,6 +488,11 @@ message QueryDef {
   repeated Param params = 1;
   ReturnType return_type = 2;
   repeated Contract contracts = 3;
+  // Declared bounds (ridl §9, ADR-0015 decision 7): min_us is the call
+  // throttle, max_us the response bound on the reply. mode is always Range
+  // and default_applied always false. Absent when undeclared — never
+  // defaulted (ADR-0015 decision 4).
+  Timing timing = 4;
 }
 
 // A provisioned-constant interaction (ridl §8).

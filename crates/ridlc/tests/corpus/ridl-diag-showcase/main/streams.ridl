@@ -17,5 +17,5 @@ interface Streams {
   event burst : <Sample> @[1s..10s]
 
   /// The element must be a named type, `string`, or `bytes`.
-  query numbers(limit: Level): <integer>
+  query numbers(limit: Level): <integer> @[..50ms]
 }

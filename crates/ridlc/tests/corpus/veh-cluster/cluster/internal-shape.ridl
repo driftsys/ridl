@@ -55,15 +55,15 @@ internal struct RawWheelSpan {
 internal interface WheelDiagnostics {
   signal wheelTicks : RawTickCount @[100ms..1s]
   event slipDetected : FilterState @[50ms..500ms]
-  query readTicks(): RawTickCount
+  query readTicks(): RawTickCount @[..50ms]
   // Appended, so the ordinals above do not move (ridl §11). A parameter is its
   // own exposure position: it is one of the positions rustc reported when a
   // public interface carried an `internal` payload.
-  command resetTicks(seed: RawTickCount)
+  command resetTicks(seed: RawTickCount) @[..50ms]
   // The tuple return — one of the two interaction positions a tuple can reach.
   // A signal or event payload and a parameter are narrowed to a named type
   // (FORM-102), and a collection return is FORM-101.
-  query readSpan(): (min : RawTickCount, max : RawTickCount)
+  query readSpan(): (min : RawTickCount, max : RawTickCount) @[..50ms]
   // The other one, and the position that had no corpus entry at all: FORM-102
   // narrows a `fixed` payload to "a named type OR AN ARRAY" and does not
   // descend into the element, so a tuple reaches an interaction through the
