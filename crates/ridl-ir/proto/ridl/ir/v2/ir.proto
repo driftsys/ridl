@@ -265,10 +265,13 @@ message Field {
 
 // A reserved tombstone — a retired slot that is never reused (typl §7.4).
 message Reserved {
-  // The retired ordinal slot in a struct, union, or interface body; 0 in
+  // The retired ordinal slot in a struct, union, or interface body, or the
+  // retired shape slot in a service's list (ADR-0015 decision 15); 0 in
   // enum bodies, where the retired identity is the value.
   uint32 ordinal = 1;
-  // The retired field name, e.g. `reserved legacyChecksum` (typl §7.4).
+  // The retired field name, e.g. `reserved legacyChecksum` (typl §7.4) —
+  // the retired interface name in a service's shape list, where it is
+  // required (RIDL-148, ADR-0015 decision 24).
   optional string name = 2;
   // The retired integer value in enum bodies, e.g. `reserved 3`
   // (typl §7.4).
