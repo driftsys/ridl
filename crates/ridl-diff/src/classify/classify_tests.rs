@@ -1694,6 +1694,143 @@ fn a_service_shape_redeclaring_a_reserved_name_is_breaking() {
     );
 }
 
+/// The E9.6 regression (ADR-0015 decision 24): a composed reference
+/// retargeted to a different interface with the same final name. The walk
+/// matches slots by interface name, so without the reference comparison the
+/// slot read as unchanged and the report came out `identical` — compatible
+/// by omission, where the superseded `ServiceChanged` comparison had
+/// reported it breaking. A matched slot whose reference differs is a removal
+/// and a reuse of the freed slot, and both classify breaking.
+#[test]
+fn a_retargeted_slot_with_the_same_interface_name_is_breaking() {
+    let old = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "fleet.c1.DiagBlock")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "fleet.c2.DiagBlock")],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "got {:?}",
+        report.changes
+    );
+    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
+    assert_row(
+        &old,
+        &new,
+        Category::ServiceShapeAppended,
+        Verdict::Breaking,
+    );
+}
+
+/// Fail closed (ADR-0015 decision 24, ADR-0012 decision 9): two live shapes
+/// with one interface name are IR the checker rejects (RIDL-147), and the
+/// name-keyed walk cannot compare them slot by slot — dropping the second
+/// slot used to collapse into its twin and report `identical`. The list is
+/// compared as a whole, and any difference is breaking.
+#[test]
+fn a_shape_list_with_colliding_names_fails_closed() {
+    let old = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![
+            ref_slot(1, "fleet.c1.DiagBlock"),
+            ref_slot(2, "fleet.c2.DiagBlock"),
+        ],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "fleet.c1.DiagBlock")],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "got {:?}",
+        report.changes
+    );
+}
+
+/// The guard fails closed on a difference, not on the shape of the IR alone:
+/// the same unkeyable list on both sides is no change at all.
+#[test]
+fn an_unchanged_colliding_shape_list_is_identical() {
+    let service = service_shapes(
+        "fleet.app.diag",
+        vec![
+            ref_slot(1, "fleet.c1.DiagBlock"),
+            ref_slot(2, "fleet.c2.DiagBlock"),
+        ],
+    );
+    let old = service_pkg(vec![service.clone()]);
+    let new = service_pkg(vec![service]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Identical,
+        "got {:?}",
+        report.changes
+    );
+}
+
+/// A nameless tombstone (RIDL-148 IR) makes the list unkeyable too: it is
+/// invisible to the name-keyed reserved map, so dropping it slid every later
+/// shape down a slot with nothing reported at all.
+#[test]
+fn dropping_a_nameless_tombstone_fails_closed() {
+    let nameless = v2::ServiceShape {
+        id: 2,
+        kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
+            ordinal: 2,
+            name: None,
+            value: Some(2),
+        })),
+    };
+    let old = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "I"), nameless, ref_slot(3, "J")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "got {:?}",
+        report.changes
+    );
+}
+
+/// The one-step retire-and-redeclare: the new side holds a tombstone and a
+/// live shape under one name — RIDL-146 IR — which used to report
+/// `identical`. The unkeyable side fails the walk closed.
+#[test]
+fn a_live_shape_beside_its_own_tombstone_fails_closed() {
+    let old = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![ref_slot(1, "fleet.c1.DiagBlock")],
+    )]);
+    let new = service_pkg(vec![service_shapes(
+        "fleet.app.diag",
+        vec![
+            reserved_slot(1, "DiagBlock"),
+            ref_slot(2, "fleet.c2.DiagBlock"),
+        ],
+    )]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "got {:?}",
+        report.changes
+    );
+}
+
 /// The switch between the named list and the inline shape stays
 /// `ServiceChanged` — the half ADR-0015 decision 19 keeps: extraction
 /// rewrites the transport identity of every fallible query in the shape

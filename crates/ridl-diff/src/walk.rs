@@ -753,7 +753,14 @@ fn diff_service(
 /// inherited, not invented. Slots key on the interface **name** — the
 /// identity a binding separates the ordinal spaces by (decision 17) — so the
 /// walk matches a removal against its tombstone the way the checker's
-/// RIDL-146 does.
+/// RIDL-146 does. The keying is sound only under two guarantees the checker
+/// gives (ADR-0015 decision 24): an interface name is unique within a
+/// service (RIDL-147, with RIDL-145 and RIDL-146 covering the other
+/// collisions) and every tombstone spells a name (RIDL-148). A snapshot
+/// loaded off disk can violate both, so [`keyed_by_name`] gates the walk and
+/// an unkeyable list is compared as a whole, failing closed. A matched
+/// slot's **reference** is compared too: a retarget is a removal plus a
+/// reuse of the freed slot (decision 24), never a match.
 fn diff_service_shapes(
     pkg: &str,
     svc: &str,
@@ -761,6 +768,26 @@ fn diff_service_shapes(
     new: &v2::Service,
     changes: &mut Vec<Change>,
 ) {
+    // A list that cannot be keyed by interface name — a nameless tombstone,
+    // one name on two slots — is IR the checker rejects (RIDL-145 to
+    // RIDL-148). Matching it by name collapses slots, which is how a dropped
+    // twin-named shape once diffed as `identical` (ADR-0015 decision 24), so
+    // such a list is compared as a whole instead: unchanged is honest, and
+    // any difference classifies breaking (ADR-0012 decision 9 — an
+    // unrecognised case never reports compatible).
+    if !keyed_by_name(old) || !keyed_by_name(new) {
+        if old.shapes != new.shapes {
+            emit(
+                changes,
+                format!("{pkg}/{svc}"),
+                Category::ServiceChanged,
+                Some("a shape list that cannot be keyed by interface name".to_string()),
+                Some("compared as a whole".to_string()),
+            );
+        }
+        return;
+    }
+
     let old_live = live_shapes(old);
     let new_live = live_shapes(new);
     let old_reserved = reserved_shapes(old);
@@ -772,42 +799,67 @@ fn diff_service_shapes(
         .map(|(name, id, reference)| (*name, (*id, *reference)))
         .collect();
 
-    // (name, old id, new id) for shapes present on both sides.
+    // (name, old id, new id) for shapes present on both sides under the same
+    // reference.
     let mut matched: Vec<(&str, u32, u32)> = Vec::new();
+    // Names present on both sides whose reference changed — retargeted, so
+    // never matched (ADR-0015 decision 24).
+    let mut retargeted: BTreeSet<&str> = BTreeSet::new();
 
     for (name, old_id, old_ref) in &old_live {
         let shape_path = format!("{pkg}/{svc}/{name}");
-        if let Some((new_id, _)) = new_live_map.get(name) {
-            matched.push((name, *old_id, *new_id));
-        } else if let Some(reserved_id) = new_reserved.get(name) {
-            // A tombstone must hold the retired shape's own slot (ridl §11
-            // one level up). A tombstone placed elsewhere lets the surviving
-            // shapes slide into the freed slot.
-            if *reserved_id == *old_id {
-                emit(
-                    changes,
-                    shape_path,
-                    Category::ServiceShapeRetired,
-                    Some((*old_ref).to_string()),
-                    Some("reserved".to_string()),
-                );
-            } else {
+        match new_live_map.get(name) {
+            Some((new_id, new_ref)) if new_ref == old_ref => {
+                matched.push((name, *old_id, *new_id));
+            }
+            // The reference behind a surviving name changed — a retarget.
+            // The superseded `ServiceChanged` comparison reported this
+            // breaking, and the per-slot categories keep covering it
+            // (ADR-0015 decision 24): the old interface leaves the list
+            // with no tombstone here, and the loop over the new side
+            // reports the incoming reference against the slot it takes.
+            Some(_) => {
+                retargeted.insert(*name);
                 emit(
                     changes,
                     shape_path,
                     Category::ServiceShapeRemoved,
-                    Some(format!("{old_ref} at slot {old_id}")),
-                    Some(format!("reserved at slot {reserved_id}")),
+                    Some((*old_ref).to_string()),
+                    None,
                 );
             }
-        } else {
-            emit(
-                changes,
-                shape_path,
-                Category::ServiceShapeRemoved,
-                Some((*old_ref).to_string()),
-                None,
-            );
+            None => {
+                if let Some(reserved_id) = new_reserved.get(name) {
+                    // A tombstone must hold the retired shape's own slot
+                    // (ridl §11 one level up). A tombstone placed elsewhere
+                    // lets the surviving shapes slide into the freed slot.
+                    if *reserved_id == *old_id {
+                        emit(
+                            changes,
+                            shape_path,
+                            Category::ServiceShapeRetired,
+                            Some((*old_ref).to_string()),
+                            Some("reserved".to_string()),
+                        );
+                    } else {
+                        emit(
+                            changes,
+                            shape_path,
+                            Category::ServiceShapeRemoved,
+                            Some(format!("{old_ref} at slot {old_id}")),
+                            Some(format!("reserved at slot {reserved_id}")),
+                        );
+                    }
+                } else {
+                    emit(
+                        changes,
+                        shape_path,
+                        Category::ServiceShapeRemoved,
+                        Some((*old_ref).to_string()),
+                        None,
+                    );
+                }
+            }
         }
     }
 
@@ -867,7 +919,10 @@ fn diff_service_shapes(
     }
 
     for (name, new_id, new_ref) in &new_live {
-        if old_live_names.contains(name) {
+        // A matched name is settled above — unless its reference changed, in
+        // which case the incoming reference is a new occupant of the slot
+        // and is judged here like any other addition (ADR-0015 decision 24).
+        if old_live_names.contains(name) && !retargeted.contains(name) {
             continue;
         }
         let shape_path = format!("{pkg}/{svc}/{name}");
@@ -975,8 +1030,40 @@ fn live_shapes(service: &v2::Service) -> Vec<(&str, u32, &str)> {
         .collect()
 }
 
+/// Whether a service's named shape list can be keyed by interface name — the
+/// property the checker guarantees (RIDL-145 to RIDL-148) and the shape walk
+/// stands on (ADR-0015 decisions 17 and 24): every slot recognised, every
+/// tombstone named, and no interface name held by two slots. A snapshot
+/// loaded off disk can violate any of these, and a name-keyed walk over such
+/// a list collapses slots into one another, so the caller compares the list
+/// as a whole and fails closed instead (ADR-0012 decision 9).
+fn keyed_by_name(service: &v2::Service) -> bool {
+    let mut seen = BTreeSet::new();
+    for slot in &service.shapes {
+        let name = match &slot.kind {
+            Some(v2::service_shape::Kind::InterfaceRef(reference)) => {
+                reference.rsplit('.').next().unwrap_or(reference.as_str())
+            }
+            Some(v2::service_shape::Kind::Reserved(reserved)) => match reserved.name.as_deref() {
+                Some(name) => name,
+                None => return false,
+            },
+            // `diff_service` routes a list holding an inline slot to
+            // `diff_interface` or `ServiceChanged`, so one here — like a
+            // slot with no kind at all — is IR this walk does not recognise.
+            Some(v2::service_shape::Kind::Inline(_)) | None => return false,
+        };
+        if !seen.insert(name) {
+            return false;
+        }
+    }
+    true
+}
+
 /// The names retired by service-level `reserved` tombstones, each with the
-/// slot its tombstone holds.
+/// slot its tombstone holds. A nameless tombstone cannot reach here — a list
+/// holding one fails [`keyed_by_name`] and is never walked (ADR-0015
+/// decision 24).
 fn reserved_shapes(service: &v2::Service) -> BTreeMap<&str, u32> {
     service
         .shapes

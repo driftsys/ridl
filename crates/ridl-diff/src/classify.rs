@@ -203,7 +203,11 @@ fn appended(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
 /// (ADR-0015 decision 19). Appending is compatible, but only when the slot it
 /// takes was never occupied: an interface id freed by an untombstoned removal
 /// and handed to a new shape reuses an identity, exactly as at the
-/// interaction level.
+/// interaction level. The old occupant is compared by name **and** by
+/// reference: a retargeted slot keeps its interface name while its reference
+/// changes, and ADR-0015 decision 24 reads that as a removal and a reuse of
+/// the freed slot — breaking, where a name-only comparison saw no occupant
+/// change at all.
 fn shape_appended(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     let Some((container, member)) = member_path(change) else {
         return Verdict::Breaking;
@@ -213,16 +217,16 @@ fn shape_appended(change: &Change, old: &v2::Package, new: &v2::Package) -> Verd
     else {
         return Verdict::Breaking;
     };
-    let Some(id) = shape_slots(new_service)
+    let Some((id, new_ref)) = shape_slots(new_service)
         .into_iter()
-        .find(|(name, _)| *name == member)
-        .map(|(_, id)| id)
+        .find(|(name, ..)| *name == member)
+        .map(|(_, id, reference)| (id, reference))
     else {
         return Verdict::Breaking;
     };
 
-    for (name, old_id) in shape_slots(old_service) {
-        if old_id == id && name != member {
+    for (name, old_id, old_ref) in shape_slots(old_service) {
+        if old_id == id && (name != member || old_ref != new_ref) {
             return Verdict::Breaking;
         }
     }
@@ -823,15 +827,17 @@ fn find_service<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Serv
     package.services.iter().find(|service| service.name == name)
 }
 
-/// Every slot of a service's shape list as (interface name, id), tombstones
-/// included — [`slots`]'s rule one level up (ADR-0015 decision 15): a
-/// tombstone occupies its slot exactly so the id is never reused. The name is
-/// the reference's final segment — the identity a binding keys the ordinal
-/// spaces on (ADR-0015 decision 17) and what a tombstone spells — matching
-/// the walk's `live_shapes`. An inline slot or a nameless tombstone reads as
-/// the empty name, which never equals a real interface name, so the slot is
-/// held against every reuse without matching anything.
-fn shape_slots(service: &v2::Service) -> Vec<(&str, u32)> {
+/// Every slot of a service's shape list as (interface name, id, reference),
+/// tombstones included — [`slots`]'s rule one level up (ADR-0015 decision
+/// 15): a tombstone occupies its slot exactly so the id is never reused. The
+/// name is the reference's final segment — the identity a binding keys the
+/// ordinal spaces on (ADR-0015 decision 17) and what a tombstone spells —
+/// matching the walk's `live_shapes`; the reference travels whole so
+/// [`shape_appended`] can tell a slot's old occupant from the same interface
+/// re-listed (ADR-0015 decision 24). An inline slot or a nameless tombstone
+/// reads as the empty name, which never equals a real interface name, so the
+/// slot is held against every reuse without matching anything.
+fn shape_slots(service: &v2::Service) -> Vec<(&str, u32, Option<&str>)> {
     service
         .shapes
         .iter()
@@ -839,11 +845,12 @@ fn shape_slots(service: &v2::Service) -> Vec<(&str, u32)> {
             Some(v2::service_shape::Kind::InterfaceRef(reference)) => Some((
                 reference.rsplit('.').next().unwrap_or(reference.as_str()),
                 slot.id,
+                Some(reference.as_str()),
             )),
             Some(v2::service_shape::Kind::Reserved(reserved)) => {
-                Some((reserved.name.as_deref().unwrap_or(""), slot.id))
+                Some((reserved.name.as_deref().unwrap_or(""), slot.id, None))
             }
-            Some(v2::service_shape::Kind::Inline(_)) => Some(("", slot.id)),
+            Some(v2::service_shape::Kind::Inline(_)) => Some(("", slot.id, None)),
             None => None,
         })
         .collect()
@@ -1074,13 +1081,21 @@ pub fn explain(category: Category) -> &'static str {
             "              the service's dotted name, a named interface from its own name\n",
             "              (ADR-0008 d4, ADR-0015 d15). A changed shape list is not this\n",
             "              category: it is read per slot by the service_shape_* rows\n",
-            "              (ADR-0015 d19)"
+            "              (ADR-0015 d19)\n",
+            "  note        also reported, breaking, over a changed shape list that cannot\n",
+            "              be keyed by interface name — a nameless tombstone, or one name\n",
+            "              on two slots: IR the checker rejects (RIDL-147, RIDL-148). The\n",
+            "              per-slot walk keys on the name, so such a list is compared as\n",
+            "              a whole and fails closed (ADR-0015 d24, ADR-0012 d9)"
         ),
         Category::ServiceShapeAppended => concat!(
             "A shape added after every slot that existed before in a service's list.\n",
             "  compatible  the slot it takes was never occupied\n",
             "  breaking    the slot was freed by an untombstoned removal and is now\n",
-            "              reused by a new shape — a reused interface id (ADR-0015 d19)"
+            "              reused by a new shape — a reused interface id (ADR-0015 d19).\n",
+            "              A retargeted slot — the same interface name bound to a\n",
+            "              different reference — is this reuse paired with a\n",
+            "              service_shape_removed of the old reference (ADR-0015 d24)"
         ),
         Category::ServiceShapeInserted => concat!(
             "A shape added before the end of a service's list.\n",
@@ -1098,7 +1113,10 @@ pub fn explain(category: Category) -> &'static str {
             "A shape removed from a service's list without a `reserved` tombstone\n",
             "holding its slot.\n",
             "  breaking    always — the freed slot becomes reusable, so the interface id\n",
-            "              is no longer permanent (ADR-0015 d19)"
+            "              is no longer permanent (ADR-0015 d19). A retargeted slot — the\n",
+            "              same interface name bound to a different reference — is this\n",
+            "              removal paired with the incoming reference's own change\n",
+            "              (ADR-0015 d24)"
         ),
         Category::ServiceShapeRetired => concat!(
             "A shape removed and replaced by a `reserved` tombstone in its own slot.\n",
