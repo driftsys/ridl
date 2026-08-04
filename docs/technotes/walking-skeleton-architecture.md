@@ -107,8 +107,10 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   8), so the pre-cut field reservations v1 carried are visible only in v2's
   numbering. Range bounds, steps, init values, and timing bounds are canonical
   decimal strings — the schema has no float or double field — and derived wire
-  widths ride alongside as enums (ADR-0007 decision 9). The prost types carry
-  `serde` for the exact-decimal JSON debug rendering, which is the same form
+  widths ride alongside as enums (ADR-0007 decision 9). The crate renders three
+  encodings of that schema — canonical protobuf JSON, prototext, and protobuf
+  binary — the two text ones over a descriptor pool `build.rs` embeds from the
+  same compilation that generates the types (ADR-0014). JSON is the form
   `ridl baseline` writes and `ridl diff` reads.
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
