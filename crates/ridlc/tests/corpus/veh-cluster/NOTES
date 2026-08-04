@@ -27,6 +27,10 @@ and §14.5 needs both service forms exercised.
   bounds, lower-bound-only, upper-bound-only, and one untimed interaction whose
   bounds come from the package `[defaults].timing`. The IR carries resolved
   microsecond bounds in every case, with `default_applied` set only on the last.
+  The RPC bounds (ADR-0015) are carried too: `appendix-a.ridl` declares both
+  bounds on a `command` (`setGear`) and on a `query` (`getAverageSpeed`), plus
+  the half-open response-bound-only form, so the IR, both backends, and the
+  goldens all exercise a timing entry on both RPC kinds.
 - **Ordinals with a gap, in both tombstone forms.** `reserved setEcoMode` holds
   ordinal 8 in the inline shape and `reserved resetCounters` holds ordinal 6 in
   `VehicleStatus`. `cluster/evolution.ridl` adds the *nameless* form,

@@ -43,20 +43,20 @@ service fleet.vehicle.telemetry : Telemetry
 /// resolved through the workspace members above.
 service fleet.vehicle.mirrors {
   signal foldAngle : Percent @[200ms..2s]
-  command fold(door: DoorId)
+  command fold(door: DoorId) @[..50ms]
   query readFold(door: DoorId): Percent [
     require door <= 7
     ensure result >= 0.0
-  ]
+  ] @[..50ms]
   fixed mirrorCount : DoorId
 
   /// Cross-package `T | E`: both arms live in `fleet.contracts`, so the
   /// synthesized transport identity carries their fully qualified names.
-  query readDoor(door: DoorId): DoorReport | DoorFault
+  query readDoor(door: DoorId): DoorReport | DoorFault @[..50ms]
 
   /// The same, with the error arm reached through an import alias. The alias
   /// is a source-level convenience; the transport identity must show the
   /// canonical `fleet.legacy.DoorFault`, because a registry keying on it has
   /// to be stable against how a consumer chose to spell its imports.
-  query readLegacyDoor(door: DoorId): DoorReport | LegacyFault
+  query readLegacyDoor(door: DoorId): DoorReport | LegacyFault @[..50ms]
 }

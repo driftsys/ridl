@@ -28,8 +28,8 @@ error enum DoorFault {
 interface DoorControl {
   signal lockState : LockState @[100ms..1s]
   event doorMoved : DoorReport @[50ms..500ms]
-  command lock(door: DoorId)
-  query readDoor(door: DoorId): DoorReport | DoorFault
+  command lock(door: DoorId) @[..50ms]
+  query readDoor(door: DoorId): DoorReport | DoorFault @[..50ms]
   fixed doorCount : DoorId
 }
 
@@ -39,5 +39,5 @@ interface Telemetry {
   signal distance : Odometer @[1s..10s]
   query fuelLevel(): Percent [
     ensure result >= 0.0
-  ]
+  ] @[..50ms]
 }

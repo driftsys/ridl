@@ -40,7 +40,7 @@ mod classify_tests;
 // proposes is `_ =>`, which classifies the new variant silently. The
 // two lints below reject a wildcard over `Category` — the first when
 // it covers several variants, the second when it covers exactly one,
-// which is the case a 21st variant creates.
+// which is the case one added variant creates.
 #[deny(
     clippy::wildcard_enum_match_arm,
     clippy::match_wildcard_for_single_variants
@@ -79,6 +79,7 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
         Category::DeclAdded => added(change, old, new),
         Category::ConstraintChanged => constraint(change, old, new),
         Category::TimingChanged => timing(change, old, new),
+        Category::RpcBoundChanged => rpc_bound(change, old, new),
         Category::ContractChanged => contract(change, old, new),
     }
 }
@@ -521,6 +522,71 @@ fn timing(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     Verdict::Compatible
 }
 
+/// A declared RPC-bound change on a command or query (ADR-0015 decision 8).
+///
+/// The two bounds keep their generic §9 meaning — `min` the rate floor, `max`
+/// the staleness bound — but on an RPC `min` is the **call throttle** and
+/// constrains the consumer, so its direction inverts against [`timing`]'s
+/// convention: raising it withdraws a call rate the caller was entitled to
+/// use (breaking), and lowering it leaves the caller less constrained
+/// (compatible). `max` is the response bound, a provider promise, and keeps
+/// the provider-side rule: raised is a weaker promise (breaking), lowered a
+/// stronger one (compatible). A bound added or removed — the whole annotation
+/// included — is breaking in both directions, exactly as in [`timing`]:
+/// callers size timeouts against a declared bound, so its appearance and its
+/// disappearance both change what a consumer may assume at all.
+///
+/// This is a distinct category rather than a kind-aware branch inside
+/// [`timing`] so that a missed branch fails closed (ADR-0012 decision 9): the
+/// deny lints above turn a missing arm into a compile error rather than a
+/// silently inherited signal rule that calls a raised RPC `min` compatible.
+fn rpc_bound(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
+    let Some((container, member)) = member_path(change) else {
+        return Verdict::Breaking;
+    };
+    let (Some(old_decl), Some(new_decl)) = (
+        find_interaction(old, container, member),
+        find_interaction(new, container, member),
+    ) else {
+        return Verdict::Breaking;
+    };
+    let (Some(old_timing), Some(new_timing)) = (rpc_timing(old_decl), rpc_timing(new_decl)) else {
+        // An interaction kind that is not an RPC. The walk cannot produce
+        // this — it emits `RpcBoundChanged` only inside its command and query
+        // arms — but [`classify`] is public and takes any hand-built
+        // [`Change`], so the arm stays and follows the module's
+        // unlisted-is-breaking rule (see [`timing`] for why it is not a
+        // `debug_assert!`).
+        return Verdict::Breaking;
+    };
+
+    let (Some(old_timing), Some(new_timing)) = (old_timing, new_timing) else {
+        // The annotation appearing where there was none, or dropped, is a
+        // bound added or removed — breaking in both directions.
+        return Verdict::Breaking;
+    };
+
+    // The mode is always `Range` on an RPC (ADR-0015 decision 7); anything
+    // else in a snapshot is erroneous IR, and a flip is breaking regardless.
+    if old_timing.mode != new_timing.mode {
+        return Verdict::Breaking;
+    }
+    // A throttle raised, a response bound raised, or either bound added or
+    // removed. `raised` covers the added case (`None` → `Some`), `dropped` the
+    // removed one. This is [`timing`]'s predicate with the `min` direction
+    // inverted — `raised` where the signal rule reads `lowered`.
+    if raised(old_timing.min_us.as_deref(), new_timing.min_us.as_deref())
+        || dropped(old_timing.min_us.as_deref(), new_timing.min_us.as_deref())
+        || raised(old_timing.max_us.as_deref(), new_timing.max_us.as_deref())
+        || dropped(old_timing.max_us.as_deref(), new_timing.max_us.as_deref())
+    {
+        return Verdict::Breaking;
+    }
+    // What remains is a throttle lowered or a response bound lowered — the
+    // caller is less constrained, or the provider promises more.
+    Verdict::Compatible
+}
+
 /// Whether a bound present before is absent now.
 fn dropped(old: Option<&str>, new: Option<&str>) -> bool {
     old.is_some() && new.is_none()
@@ -533,6 +599,18 @@ fn interaction_timing(decl: &v2::Decl) -> Option<Option<&v2::Timing>> {
     match &decl.kind {
         Some(Kind::SignalDef(def)) => Some(def.timing.as_ref()),
         Some(Kind::EventDef(def)) => Some(def.timing.as_ref()),
+        _ => None,
+    }
+}
+
+/// The declared timing of a command or query; `None` for other kinds, and
+/// `Some(None)` for an RPC that declares no bounds (never defaulted,
+/// ADR-0015 decision 4).
+fn rpc_timing(decl: &v2::Decl) -> Option<Option<&v2::Timing>> {
+    use v2::decl::Kind;
+    match &decl.kind {
+        Some(Kind::CommandDef(def)) => Some(def.timing.as_ref()),
+        Some(Kind::QueryDef(def)) => Some(def.timing.as_ref()),
         _ => None,
     }
 }
@@ -757,7 +835,7 @@ pub fn category_from_word(word: &str) -> Option<Category> {
 // proposes is `_ =>`, which classifies the new variant silently. The
 // two lints below reject a wildcard over `Category` — the first when
 // it covers several variants, the second when it covers exactly one,
-// which is the case a 21st variant creates.
+// which is the case one added variant creates.
 #[deny(
     clippy::wildcard_enum_match_arm,
     clippy::match_wildcard_for_single_variants
@@ -844,6 +922,21 @@ pub fn explain(category: Category) -> &'static str {
             "  note        editing `[defaults].timing` needs no special rule: diff\n",
             "              compares resolved bounds, so it surfaces here on every\n",
             "              defaulted interaction (ridl 9.1)"
+        ),
+        Category::RpcBoundChanged => concat!(
+            "A command or query declared RPC bound changed (ADR-0015 d8).\n",
+            "  compatible  min lowered (the caller may call more often) or max lowered\n",
+            "              (a stronger provider promise), with the mode unchanged\n",
+            "  breaking    min raised — on an RPC, min is the call throttle and\n",
+            "              constrains the caller, so raising it withdraws a call rate\n",
+            "              the caller was entitled to use; max raised (a weaker provider\n",
+            "              promise); a bound added or removed, the whole annotation\n",
+            "              included\n",
+            "  note        the min direction is the inverse of timing_changed's, which\n",
+            "              is why this is a category of its own rather than a branch:\n",
+            "              a missed branch would inherit the signal rule and call a\n",
+            "              raised RPC min compatible (ADR-0012 d9, fail closed).\n",
+            "              RPC bounds are never defaulted (ridl 9.1 does not apply)"
         ),
         Category::ContractChanged => concat!(
             "A command or query require/ensure clause set changed (ridl 13).\n",

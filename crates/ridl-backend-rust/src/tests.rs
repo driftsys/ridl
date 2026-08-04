@@ -896,6 +896,7 @@ fn two_tuples_mangling_to_one_name_are_refused() {
                             })),
                         }),
                         contracts: Vec::new(),
+                        timing: None,
                     }),
                 )],
             ),
@@ -915,6 +916,7 @@ fn two_tuples_mangling_to_one_name_are_refused() {
                             })),
                         }),
                         contracts: Vec::new(),
+                        timing: None,
                     }),
                 )],
             ),
@@ -967,6 +969,7 @@ fn one_tuple_discovered_twice_is_not_a_collision() {
                         })),
                     }),
                     contracts: Vec::new(),
+                    timing: None,
                 }),
             )],
         )],
@@ -2264,6 +2267,7 @@ fn command_returns_unit_and_records_its_require() {
                 false,
                 "VehicleStatus.setGear.require[0]",
             )],
+            timing: None,
         }),
     )]);
     assert!(
@@ -2273,6 +2277,59 @@ fn command_returns_unit_and_records_its_require() {
     assert!(
         source.contains("VehicleStatus.setGear.require[0]"),
         "the observer stub id is emitted as data, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+/// The declared RPC bounds ride the same timing table as a signal's
+/// (ADR-0015): the two microsecond constants are the call throttle and the
+/// response bound, on two more kinds. An undeclared RPC contributes no entry
+/// — its bounds are never defaulted.
+#[test]
+fn rpc_bounds_ride_the_timing_table() {
+    let source = rust_for_interaction(vec![
+        interaction(
+            "setGear",
+            5,
+            "Request a gear change",
+            v2::decl::Kind::CommandDef(v2::CommandDef {
+                params: vec![param("position", named_type("veh.common.GearPosition"))],
+                contracts: Vec::new(),
+                timing: Some(timing(v2::TimingMode::Range, Some("20000"), Some("200000"))),
+            }),
+        ),
+        interaction(
+            "getAverageSpeed",
+            6,
+            "Sliding-window average",
+            v2::decl::Kind::QueryDef(v2::QueryDef {
+                params: Vec::new(),
+                return_type: Some(v2::ReturnType {
+                    kind: Some(v2::return_type::Kind::Value(named_type("veh.common.Speed"))),
+                }),
+                contracts: Vec::new(),
+                // The half-open `@[..50ms]`: a response bound and no throttle.
+                timing: Some(timing(v2::TimingMode::Range, None, Some("50000"))),
+            }),
+        ),
+        interaction(
+            "resetFaults",
+            7,
+            "No declared bounds",
+            v2::decl::Kind::CommandDef(v2::CommandDef {
+                params: Vec::new(),
+                contracts: Vec::new(),
+                timing: None,
+            }),
+        ),
+    ]);
+    assert!(
+        source.contains("\"setGear\"") && source.contains("\"getAverageSpeed\""),
+        "both bounded RPCs appear in the timing table, got:\n{source}"
+    );
+    assert!(
+        !source.contains("\"resetFaults\""),
+        "an undeclared RPC contributes no timing entry, got:\n{source}"
     );
     insta::assert_snapshot!(source);
 }
@@ -2292,6 +2349,7 @@ fn fallible_query_carries_the_transport_identity() {
                 })),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     )]);
     assert!(
@@ -2322,6 +2380,7 @@ fn tuple_return_query_generates_a_named_struct() {
                 })),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     )]);
     assert!(
@@ -2343,6 +2402,7 @@ fn bidirectional_stream_query_uses_ridl_stream_on_both_sides() {
                 kind: Some(v2::return_type::Kind::Value(stream_of("FaultEvent"))),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     )]);
     assert!(
@@ -2424,6 +2484,7 @@ fn services_both_forms() {
                         v2::decl::Kind::CommandDef(v2::CommandDef {
                             params: vec![param("target", named_type("Temperature"))],
                             contracts: Vec::new(),
+                            timing: None,
                         }),
                     )],
                 )),
@@ -2670,6 +2731,7 @@ fn inline_service_fallible_query_uses_the_dotted_service_name() {
                 })),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     );
     let source = generate(&interaction_package(
@@ -2739,6 +2801,7 @@ fn inline_service_observer_ids_and_identity_agree() {
                 true,
                 "veh.adas.logs.fetchPage.ensure[0]",
             )],
+            timing: None,
         }),
     );
     let source = generate(&interaction_package(
@@ -2779,6 +2842,7 @@ fn named_interface_identity_is_the_interface_name() {
                 })),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     )]);
     assert!(
@@ -2827,6 +2891,7 @@ fn contract_stubs_carry_uses_result() {
                     "VehicleStatus.getAverageSpeed.ensure[0]",
                 ),
             ],
+            timing: None,
         }),
     )]);
 
@@ -2874,6 +2939,7 @@ fn a_contract_without_a_kind_is_a_generate_error() {
                         false,
                         "VehicleStatus.setGear.require[0]",
                     )],
+                    timing: None,
                 }),
             )],
         )],
@@ -2918,6 +2984,7 @@ fn a_stream_of_a_non_stream_primitive_is_a_generate_error() {
                         })),
                     }),
                     contracts: Vec::new(),
+                    timing: None,
                 }),
             )],
         )],
@@ -2952,6 +3019,7 @@ fn a_stream_of_string_is_admitted() {
                 })),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     )]);
     assert!(
@@ -3104,6 +3172,7 @@ fn deprecated_reaches_interactions_and_both_faces() {
                 v2::decl::Kind::CommandDef(v2::CommandDef {
                     params: Vec::new(),
                     contracts: Vec::new(),
+                    timing: None,
                 }),
             ),
             "use setGear",
@@ -3119,6 +3188,7 @@ fn deprecated_reaches_interactions_and_both_faces() {
                         kind: Some(v2::return_type::Kind::Value(named_type("Speed"))),
                     }),
                     contracts: Vec::new(),
+                    timing: None,
                 }),
             ),
             "use getAverageSpeed",
@@ -3198,6 +3268,7 @@ fn tuples_inside_an_inline_service_use_the_generated_type_name() {
                 })),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     );
     let send_pair = interaction(
@@ -3215,6 +3286,7 @@ fn tuples_inside_an_inline_service_use_the_generated_type_name() {
                 },
             )],
             contracts: Vec::new(),
+            timing: None,
         }),
     );
     let fetch = interaction(
@@ -3230,6 +3302,7 @@ fn tuples_inside_an_inline_service_use_the_generated_type_name() {
                 })),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     );
 
@@ -3372,6 +3445,7 @@ fn a_declaration_colliding_with_an_inline_shape_face_is_refused() {
                         v2::decl::Kind::CommandDef(v2::CommandDef {
                             params: Vec::new(),
                             contracts: Vec::new(),
+                            timing: None,
                         }),
                     )],
                 )),
@@ -3405,6 +3479,7 @@ fn a_declaration_colliding_with_a_generated_tuple_struct_is_refused() {
                 })),
             }),
             contracts: Vec::new(),
+            timing: None,
         }),
     );
     let error = generate(&interaction_package(
@@ -3525,6 +3600,7 @@ fn nested_tuple_interface() -> v2::Interface {
                     })),
                 }),
                 contracts: Vec::new(),
+                timing: None,
             }),
         )],
     )
@@ -3635,6 +3711,7 @@ fn an_interface_colliding_with_an_inline_shape_name_is_refused() {
                     v2::decl::Kind::CommandDef(v2::CommandDef {
                         params: Vec::new(),
                         contracts: Vec::new(),
+                        timing: None,
                     }),
                 )],
             )),
@@ -3669,6 +3746,7 @@ fn two_inline_shapes_normalizing_to_one_type_name_are_refused() {
                     v2::decl::Kind::CommandDef(v2::CommandDef {
                         params: Vec::new(),
                         contracts: Vec::new(),
+                        timing: None,
                     }),
                 )],
             )),
@@ -3788,6 +3866,7 @@ fn visibility_package() -> v2::Package {
                             true,
                             "Hidden.getBounds.ensure[0]",
                         )],
+                        timing: None,
                     }),
                 ),
             ],
@@ -3829,6 +3908,7 @@ fn visibility_package() -> v2::Package {
                         true,
                         ensure_id,
                     )],
+                    timing: None,
                 }),
             ),
             interaction(
@@ -3849,6 +3929,7 @@ fn visibility_package() -> v2::Package {
                         })),
                     }),
                     contracts: Vec::new(),
+                    timing: None,
                 }),
             ),
         ]

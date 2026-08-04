@@ -8,22 +8,22 @@ package diag.ridl
 interface LintsOne {
 
   /// A `set…` name reads as a mutation; a state-mutating request is a command.
-  query setLevel(level: Level): Level
+  query setLevel(level: Level): Level @[..50ms]
 
   /// The payload struct re-declares publication time and a frame counter,
   /// both already carried by the envelope.
   signal echo : EnvelopeEcho @[1s..10s]
 
   /// First of the three scopes `SharedFault` serves.
-  query readOne(limit: Level): Sample | SharedFault
+  query readOne(limit: Level): Sample | SharedFault @[..50ms]
 }
 
 interface LintsTwo {
   /// Second scope.
-  query readTwo(limit: Level): Sample | SharedFault
+  query readTwo(limit: Level): Sample | SharedFault @[..50ms]
 }
 
 /// Third scope — an inline service shape, not a named interface.
 service diag.lints.inline {
-  query readThree(limit: Level): Sample | SharedFault
+  query readThree(limit: Level): Sample | SharedFault @[..50ms]
 }

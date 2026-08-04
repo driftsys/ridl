@@ -446,10 +446,14 @@ diag_codes! {
         RIDL_102 = "RIDL-102", Error,
             "zero or negative timing duration";
 
-        /// A strict-periodic `@Xms` annotation on an `event` — strict periodic is
-        /// signal only (ridl §9.2, §16.1). Emitted by the checker (E2 task 9).
+        /// A strict-periodic `@Xms` annotation on a kind other than `signal` —
+        /// the isochronous mode belongs to state alone (ridl §9.2, §16.1).
+        /// Widened from "on an `event`" by ADR-0015 decision 6 when `command`
+        /// and `query` gained the range form (E9.4): the same rule, stated
+        /// over the three kinds it excludes instead of one. Emitted by the
+        /// checker (E2 task 9).
         RIDL_103 = "RIDL-103", Error,
-            "strict-periodic `@Xms` on an `event`";
+            "strict-periodic `@Xms` on a kind other than `signal`";
 
         /// Explicit return type on a `command` — a command always returns `()`
         /// (ridl §6.1, §16.1). Emitted by the checker (E2 task 5).
@@ -461,17 +465,19 @@ diag_codes! {
         RIDL_105 = "RIDL-105", Error,
             "`query` returning `()`";
 
-        /// A timing annotation on an interaction kind that carries none —
-        /// `command`, `query`, or `fixed` — or an attribute block on `fixed`
-        /// (ridl §8, §9, §16.1). Emitted by the checker (E2 task 5).
+        /// A timing annotation on `fixed` — the one kind that carries none —
+        /// or an attribute block on `fixed` (ridl §8, §9, §16.1). Emitted by
+        /// the checker (E2 task 5).
         ///
-        /// The callables drew FORM-102 until the E2 close-out, so one rule sat
-        /// under two codes and one of them was a parse code whose catalogue
-        /// meaning is "unexpected token" — for a token the grammar accepts on
-        /// purpose, precisely so the narrowing can be a semantic rule with a
-        /// semantic message.
+        /// Narrowed by ADR-0015 decision 6 (E9.4): `command` and `query` admit
+        /// the range form now, so the two RPC kinds left this rule and only
+        /// `fixed` remains in both halves. The callables drew FORM-102 until
+        /// the E2 close-out, so one rule sat under two codes and one of them
+        /// was a parse code whose catalogue meaning is "unexpected token" —
+        /// for a token the grammar accepts on purpose, precisely so the
+        /// narrowing can be a semantic rule with a semantic message.
         RIDL_106 = "RIDL-106", Error,
-            "timing annotation on a kind that carries none, or attribute block on `fixed`";
+            "timing annotation on `fixed`, or attribute block on `fixed`";
 
         /// Type declaration inside an `interface` or `service` body — typl
         /// declarations live at package level (ridl §14.1, §16.1).
@@ -505,6 +511,19 @@ diag_codes! {
         /// (ridl §4.4, §16.1). Emitted by the checker (E2 task 5).
         RIDL_110 = "RIDL-110", Error,
             "signal `= value` init override violates the payload constraints";
+
+        /// A `command` or `query` with no declared response bound — no `@`
+        /// annotation at all, or the half-open `@[min..]` that declares a
+        /// throttle only (ridl §9, §16.1; ADR-0015 decisions 4 and 6). Warning;
+        /// an active profile may escalate it to an error, the same two-step
+        /// §9.1 gives an untimed signal or event. The RPC counterpart of
+        /// RIDL-100, and deliberately not RIDL-100 itself: that text turns on
+        /// a default having been applied, which is exactly what an RPC never
+        /// gets — absent means undeclared in the IR. RIDL-111 is reserved for
+        /// the interface-used-as-a-type error (ADR-0008 decision 21), so 112
+        /// is the first free code in the band. Emitted by the checker (E9.4).
+        RIDL_112 = "RIDL-112", Warning,
+            "`command` or `query` with no declared response bound";
 
         /// Duplicate `service` name across the whole workspace — the service
         /// catalog is a flat global namespace (ridl §14.5, §16.4). Emitted

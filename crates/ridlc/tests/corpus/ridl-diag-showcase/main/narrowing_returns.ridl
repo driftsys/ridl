@@ -14,5 +14,5 @@ package diag.ridl
 interface NarrowingReturns {
 
   /// Collection in return position.
-  query listLevels(): [Level; 0..8]
+  query listLevels(): [Level; 0..8] @[..50ms]
 }

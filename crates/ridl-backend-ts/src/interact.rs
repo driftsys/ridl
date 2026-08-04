@@ -623,7 +623,10 @@ fn interaction_type_ts(ctx: &Ctx, ft: &v2::FieldType) -> Result<String, Generate
 /// The resolved timing of every timed interaction, as data (ridl §9). Bounds
 /// are **bigint microseconds**: the IR carries exact decimal microsecond
 /// strings (ADR-0008 decision 12), and `bigint` is the only TypeScript
-/// numeric form that holds them without rounding.
+/// numeric form that holds them without rounding. A command's or query's
+/// entry carries its declared RPC bounds — the call throttle and the response
+/// bound (ADR-0015 decision 3) — and is absent when undeclared, because an
+/// RPC bound is never defaulted.
 fn emit_timing(names: Names, interface: &v2::Interface) -> Result<String, GenerateError> {
     // Diagnostics name the interface the way the author wrote it, so the
     // identity name is the one that belongs in an error message.
@@ -633,6 +636,8 @@ fn emit_timing(names: Names, interface: &v2::Interface) -> Result<String, Genera
         let timing = match &decl.kind {
             Some(v2::decl::Kind::SignalDef(signal)) => signal.timing.as_ref(),
             Some(v2::decl::Kind::EventDef(event)) => event.timing.as_ref(),
+            Some(v2::decl::Kind::CommandDef(command)) => command.timing.as_ref(),
+            Some(v2::decl::Kind::QueryDef(query)) => query.timing.as_ref(),
             _ => None,
         };
         let Some(timing) = timing else { continue };
@@ -652,9 +657,11 @@ fn emit_timing(names: Names, interface: &v2::Interface) -> Result<String, Genera
     let doc = "\
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * \"untimed\" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 ";
     if entries.is_empty() {

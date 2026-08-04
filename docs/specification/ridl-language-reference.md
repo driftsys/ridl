@@ -777,7 +777,7 @@ base clocks, and defines "late" for the observability plane.
 signal currentSpeed : Speed @10ms
 ```
 
-**Range — signal and event:**
+**Range — signal, event, command, and query:**
 
 ```ridl
 @[20ms..100ms]    // both bounds
@@ -797,20 +797,21 @@ than 500ms" — is the correct one, and it is the same reading on a signal and o
 an event.
 
 What differs per kind is **what the runtime does** at each bound, and that is
-_derived_ from the state-versus-occurrence semantics of the declaring keyword
-(§3), not from the annotation. The familiar four names are the derivation, not
-the definition:
+_derived_ from the semantics of the declaring keyword (§3), not from the
+annotation. The familiar names are the derivation, not the definition:
 
-| Bound                   | On a `signal` (state)                                            | On an `event` (occurrence)                                    |
-| ----------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- |
-| `min` — rate floor      | **debounce** — a faster update is coalesced into the next sample | **throttle** — the provider must not raise occurrences faster |
-| `max` — staleness bound | **refresh ceiling** — re-publish even if unchanged               | **TTL** — an occurrence older than `max` is discarded         |
+| Bound                   | On a `signal` (state)                                            | On an `event` (occurrence)                                    | On a `command` / `query` (call)                       |
+| ----------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- | ----------------------------------------------------- |
+| `min` — rate floor      | **debounce** — a faster update is coalesced into the next sample | **throttle** — the provider must not raise occurrences faster | **call throttle** — the caller must not call faster   |
+| `max` — staleness bound | **refresh ceiling** — re-publish even if unchanged               | **TTL** — an occurrence older than `max` is discarded         | **response bound** — the provider must respond within |
 
 A state value that is stale is refreshed and a fast one coalesced, because state
 survives being unchanged and only the latest sample matters; an occurrence that
 is stale is discarded and a fast one throttled, because every occurrence is
-individually meaningful and cannot be merged into its successor. Editor hover
-expands the per-kind consequence from the declaring keyword.
+individually meaningful and cannot be merged into its successor. A call has no
+sample to refresh or discard: its two bounds oblige the two ends of the call
+directly — §9.3 (ADR-0015). Editor hover expands the per-kind consequence from
+the declaring keyword.
 
 ### 9.1 Default Timing
 
@@ -843,20 +844,33 @@ keep this safe:
 Strict periodic `@Xms` is never defaulted — an isochronous rate is always an
 explicit engineering decision (it drives rmdl base clocks).
 
+**A `command` or `query` is never defaulted either** (ADR-0015 decision 4). An
+RPC with no declared response bound draws RIDL-112 (warning; an active profile
+may escalate it to an error, the same two-step as RIDL-100 above). What it does
+not get is a default: there is no plausible generic value, because what the
+provider does differs by orders of magnitude between interactions; and a
+defaulted response bound is worse than none, because it is a provider obligation
+callers size their own timeouts against, so inventing one manufactures a promise
+nobody made. Absent means undeclared in the IR, so an undeclared RPC bound stays
+clear of the changed-default machinery above.
+
 ### 9.2 Validity Rules
 
 Rules: `@0ms` is an error (RIDL-102); `@[X..Y]` with `X > Y` is an error
-(RIDL-101); `@[X..X]` draws a warning (RIDL-108) on a signal and on an event
-alike — it is a degenerate range, a rate floor equal to its staleness bound,
+(RIDL-101); `@[X..X]` draws a warning (RIDL-108) on every kind that admits the
+range — it is a degenerate range, a rate floor equal to its staleness bound,
 which is almost always a mistake. It is **not** a spelling of the strict period
 `@Xms`: a strict period is a separate mode, admitted on signals only, never
 defaulted (§9.1), recorded in the IR beside the bounds, and a change between the
 two modes is breaking whatever the bounds do.
 
-Timing belongs to `signal` and `event`. An `@` annotation on a `command`, a
-`query` or a `fixed` is RIDL-106 — one code for one rule, over all three kinds.
-The grammar admits the annotation on every interaction kind so that the
-narrowing is a semantic rule with a semantic message; it is not a parse error.
+Timing belongs to every kind but `fixed`. A `signal` takes either form; an
+`event`, a `command`, and a `query` take the range form only, so a strict period
+`@Xms` on any of the three is RIDL-103 — an isochronous rate is meaningless for
+occurrences, and a caller is not isochronous by contract (ADR-0015 decision 5).
+An `@` annotation on a `fixed` is RIDL-106. The grammar admits the annotation on
+every interaction kind so that each narrowing is a semantic rule with a semantic
+message; none is a parse error.
 
 A signal's `@Xms` or `@[..max]` is an alertable **freshness SLO**: a subscriber
 that has not seen a publication within the bound may treat the value as stale —
@@ -868,6 +882,44 @@ evaluated on **envelope timestamps** (§3.1), never on payload content.
 _DDS students will recognise `max` as the DEADLINE QoS and staleness as
 LIVELINESS — ridl puts them in the contract instead of a QoS profile; see
 Appendix F._
+
+### 9.3 RPC Bounds — the Call Throttle and the Response Bound
+
+`command` and `query` admit the range form, and only the range form (ADR-0015
+decisions 2, 3, and 5). The two bounds keep their generic meaning; the per-kind
+consequence is derived from the declaring keyword, exactly as it is for state
+and occurrences:
+
+- **`min` is the call throttle** — the minimum interval between calls. It
+  constrains the **caller**, not the provider. That is not an inconsistency:
+  `min` always constrains whoever initiates, and on an RPC the initiator is the
+  consumer. It is enforceable at the provider's admission point, and it is what
+  a rate-limiting binding already implements.
+- **`max` is the response bound** — the provider must respond within it. What
+  responding means is derived per kind. For a `query` it is the **reply**. For a
+  `command` it is **acceptance** — the delivery acknowledgment of §6.1 — since
+  §6.1 promises no execution outcome: a command's bound covers admission and
+  queueing at the provider, and **not** execution.
+
+The response bound is a bound on the response, not on delivery. Delivery latency
+is a property of the link, so a per-interaction delivery bound would declare the
+same number on every declaration in the package and carry no information.
+Response time is what varies per interaction — which is why gRPC, DDS-RPC, and
+AIDL all bound the whole call.
+
+The half-open spellings carry the two partial cases: `@[..100ms]` is a response
+bound with no throttle, and `@[20ms..]` a throttle with no response bound. An
+RPC whose response bound is undeclared — a bare declaration, or the `@[20ms..]`
+spelling — draws RIDL-112 and is **never defaulted** (§9.1). The warning is
+about `max` specifically, not about the annotation; a missing `min` draws
+nothing, because an unbounded call rate is the sensible default and is what
+every RPC has today.
+
+In the IR the declared bounds reuse the `Timing` message unchanged (ADR-0015
+decision 7): the mode is always the range mode, `min_us` is the call throttle,
+`max_us` the response bound, `default_applied` always false, and an undeclared
+bound is absent. The response bound is for RPC what §10.3 calls the freshness
+machinery for pub/sub: the contract-level view of transport health.
 
 ---
 
@@ -965,7 +1017,8 @@ generated code names the stratum in exactly these words. Generated caller-side
 types carry a transport-error variant supplied by the runtime (`ridl-rt`), not
 by the `.ridl` source — including command delivery status for callers that
 choose to supervise it. The freshness machinery (§9) is the contract-level view
-of transport health for pub/sub.
+of transport health for pub/sub; the response bound (§9.3) is the same view for
+RPC.
 
 **The invariant across all three strata:** what the contract _declares_ is
 exactly the failure knowledge a domain engineer possesses (Stratum 1); what the
@@ -1285,19 +1338,20 @@ restated here.
 
 ### 16.1 Timing (RIDL-1xx)
 
-| Code     | Rule                                                                                                                                 | Severity                                                  |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------- |
-| RIDL-100 | `signal` or `event` without timing annotation — default `[100ms..1000ms]` (or configured `[defaults].timing`) applied                | warning; error if active profile requires explicit timing |
-| RIDL-101 | `@[X..Y]` where `X > Y`                                                                                                              | error                                                     |
-| RIDL-102 | zero or negative duration                                                                                                            | error                                                     |
-| RIDL-103 | strict periodic `@Xms` on `event`                                                                                                    | error                                                     |
-| RIDL-104 | explicit return type on `command`                                                                                                    | error                                                     |
-| RIDL-105 | `query` returning `()`                                                                                                               | error                                                     |
-| RIDL-106 | timing annotation on a kind that carries none — `command`, `query`, `fixed` (§9); attribute block on `fixed` (§8)                    | error                                                     |
-| RIDL-107 | type declaration inside an `interface` or a `service` body — raised at parse time, where the declaration is recognised and recovered | error                                                     |
-| RIDL-108 | `@[X..X]` — a degenerate range, the rate floor equal to its staleness bound (§9.2); `signal` and `event` alike                       | warning                                                   |
-| RIDL-109 | signal payload type has no derivable init value and no `= value` override (§4.4)                                                     | error                                                     |
-| RIDL-110 | signal `= value` init override violates a scalar payload's range, string length bound, or `match` pattern                            | error                                                     |
+| Code     | Rule                                                                                                                                 | Severity                                                   |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| RIDL-100 | `signal` or `event` without timing annotation — default `[100ms..1000ms]` (or configured `[defaults].timing`) applied                | warning; error if active profile requires explicit timing  |
+| RIDL-101 | `@[X..Y]` where `X > Y`                                                                                                              | error                                                      |
+| RIDL-102 | zero or negative duration                                                                                                            | error                                                      |
+| RIDL-103 | strict periodic `@Xms` on a kind other than `signal` (§9.2, §9.3) — widened from `event` only by ADR-0015                            | error                                                      |
+| RIDL-104 | explicit return type on `command`                                                                                                    | error                                                      |
+| RIDL-105 | `query` returning `()`                                                                                                               | error                                                      |
+| RIDL-106 | timing annotation on `fixed`, the one kind that carries none (§9); attribute block on `fixed` (§8) — narrowed by ADR-0015            | error                                                      |
+| RIDL-107 | type declaration inside an `interface` or a `service` body — raised at parse time, where the declaration is recognised and recovered | error                                                      |
+| RIDL-108 | `@[X..X]` — a degenerate range, the rate floor equal to its staleness bound (§9.2); `signal` and `event` alike                       | warning                                                    |
+| RIDL-109 | signal payload type has no derivable init value and no `= value` override (§4.4)                                                     | error                                                      |
+| RIDL-110 | signal `= value` init override violates a scalar payload's range, string length bound, or `match` pattern                            | error                                                      |
+| RIDL-112 | `command` or `query` with no declared response bound (§9.3) — a bare declaration, or the half-open `@[min..]`; never defaulted       | warning; error if active profile requires a response bound |
 
 **Known gap — RIDL-110.** The check runs only where the payload names a scalar
 `type` declaration, and covers exactly the three violations the row names: a
@@ -1403,10 +1457,45 @@ and the same spelling is the constant.
    `event`/`query`, and the person boundary needs the same triple for long user
    operations. Decide whether the composition idiom is documented convention or
    deserves sugar.
-5. **QoS beyond timing.** DDS reliability (reliable/best-effort), history depth,
-   liveliness: deliberately absent from the contract — timing bounds are the
-   contract-level QoS, the rest is transport/deployment (rsdl). Confirm this
-   boundary survives the first DDS binding.
+5. ~~**QoS beyond timing.**~~ **Answered by ADR-0015 — the absorption
+   principle.** The earlier wording here — QoS "deliberately absent from the
+   contract" — described exclusion, and reading it literally is what produced
+   the recurring request for a QoS block. The boundary it drew was correct; the
+   description of it was not. The principle is:
+
+   > ridl expresses QoS as **semantic obligation**, never as a transport knob. A
+   > binding maps each obligation onto its native QoS; a transport lacking the
+   > mechanism either satisfies the obligation by construction or fails at bind
+   > time.
+
+   That is what preserves the §1.1 transport-neutrality claim: the same contract
+   binds to SOME/IP, proto/gRPC, DBC, AIDL, MQTT, or an in-process broker
+   without carrying any of their vocabulary, because it carries none of their
+   mechanisms — only the outcomes a consumer may rely on. Mapping the
+   contract-bearing DDS policy set against ridl:
+
+   | DDS policy                     | ridl                                                                                                | verdict                         |
+   | ------------------------------ | --------------------------------------------------------------------------------------------------- | ------------------------------- |
+   | RELIABILITY                    | the interaction kind is the reliability class (§3)                                                  | covered by construction         |
+   | DURABILITY (TRANSIENT_LOCAL)   | §4.4 last-value guarantee; events explicitly carry none (§5.1)                                      | covered                         |
+   | DEADLINE                       | §9 `max` staleness bound                                                                            | covered                         |
+   | LIVELINESS                     | §9 freshness SLO, §10.3 detection                                                                   | covered                         |
+   | TIME_BASED_FILTER              | §9 `min` rate floor, derived as debounce                                                            | covered                         |
+   | LIFESPAN                       | §9 `max`, derived as event TTL (§5.2)                                                               | covered                         |
+   | OWNERSHIP / OWNERSHIP_STRENGTH | §4.2 — exactly one owning provider per flow                                                         | covered by construction         |
+   | DESTINATION_ORDER              | §3.1 envelope timestamp and per-channel sequence number                                             | covered                         |
+   | RESOURCE_LIMITS (payload)      | typl bounded collections and length bounds                                                          | covered, in the type system     |
+   | HISTORY (KEEP_LAST N)          | §4 signal is latest-value; §5.1 rules out event replay                                              | out of scope, deliberately      |
+   | DURABILITY (PERSISTENT)        | `persist`, reserved by ADR-0008 decision 3                                                          | reserved                        |
+   | LATENCY_BUDGET                 | a delivery-delay hint permitting batching; the DDS specification is explicit it is not a commitment | no analogue needed, none wanted |
+   | RPC reply timeout (DDS-RPC)    | `@[..max]` response bound on `command`/`query`                                                      | covered — §9.3 (ADR-0015)       |
+
+   The table is the contract-bearing subset — PARTITION, TRANSPORT_PRIORITY, the
+   writer/reader lifecycle policies and the reader-side content filters are
+   deployment or reader-local concerns (rsdl). The last row was the one genuine
+   gap, and it is not a core DDS QoS policy at all: the reply timeout lives in
+   DDS-RPC, and its relatives are gRPC's deadline, SOME/IP's configured timeout,
+   and AIDL's transaction timeout. §9.3 closed it.
 6. **Mid-stream invalid elements** (§12.4): quarantine-and-continue vs abort —
    per-binding policy or contract-level choice?
 7. **Reflection/discovery service.** The spy/control bridge (concept note §9.2)
@@ -1503,24 +1592,25 @@ interface VehicleStatus {
   /// Raised on every door state change; stale after 500ms
   event doorOpened : DoorPayload @[50ms..500ms]
 
-  /// Request a gear change — outcome observed via currentGear, not returned
+  /// Request a gear change — outcome observed via currentGear, not returned;
+  /// callers throttle to one request per 20ms, acceptance within 200ms (§9)
   command setGear(position: GearPosition) [
     require position != GearPosition.PARK || currentSpeed == 0.0
-  ]
+  ] @[20ms..200ms]
 
   reserved resetCounters          // retired ordinal — never reused
 
-  /// Sliding-window average
+  /// Sliding-window average — replied within 50ms (§9)
   query getAverageSpeed(window: Duration): Speed [
     require window > 0ms
     ensure  result >= 0.0
-  ]
+  ] @[10ms..50ms]
 
   /// Fault history as a finite stream
-  query streamFaults(filter: DiagFilter): <FaultEvent>
+  query streamFaults(filter: DiagFilter): <FaultEvent> @[..1s]
 
   /// Paged fault snapshot — fallible query via inline `T | E` (§10.1)
-  query getFaultPage(filter: DiagFilter): FaultPage | DiagError
+  query getFaultPage(filter: DiagFilter): FaultPage | DiagError @[..100ms]
 
   fixed softwareVersion : Version
   fixed capabilities    : [Label; 0..32]
@@ -1534,16 +1624,18 @@ interface VehicleStatus {
 Interaction mapping per target. Type/width mapping is typl Appendix D; the two
 compose.
 
-| ridl                           | SOME/IP                                                                      | proto3 / gRPC                                                | AIDL                               | DDS                                                   | MQTT / AsyncAPI               |
-| ------------------------------ | ---------------------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------- | ----------------------------------------------------- | ----------------------------- |
-| `signal`                       | field notifier (+ auto-derived getter from last-value cache)                 | server-streaming RPC or pub/sub sidecar                      | callback / `oneway` listener       | topic, `TRANSIENT_LOCAL` durability, DEADLINE = `max` | retained message on channel   |
-| `event`                        | event (eventgroup)                                                           | server-streaming RPC                                         | callback                           | topic, `VOLATILE` durability                          | non-retained publish          |
-| `command`                      | request w/ empty response (= ack, §6.1)                                      | unary RPC → `Empty` (= ack)                                  | `oneway` + runtime ack shim        | reliable-QoS request topic (DDS ack)                  | publish QoS 1 (puback = ack)  |
-| `query`                        | request/response method                                                      | unary/streaming RPC                                          | method                             | request/reply (RPC over DDS)                          | request/reply channel pair    |
-| `fixed`                        | field with getter only                                                       | unary getter RPC (cacheable)                                 | constant/property                  | —                                                     | retained provisioning channel |
-| result-union error arm (§10.1) | method return code table                                                     | `google.rpc.Status` + typed detail                           | `ServiceSpecificException` code    | reply union arm                                       | error payload schema          |
-| ordinals (§11)                 | method ID = ordinal; event ID = ordinal + event flag; eventgroup = interface | RPC name (identity is nominal)                               | transaction code = ordinal         | topic name suffix                                     | channel path segment          |
-| Stratum 2 (§10.2)              | `E_MALFORMED_MESSAGE` / `E_NOT_OK` / `E_UNKNOWN_METHOD`                      | `INVALID_ARGUMENT` / `FAILED_PRECONDITION` / `UNIMPLEMENTED` | `IllegalArgumentException` mapping | reply status                                          | error topic convention        |
+| ridl                             | SOME/IP                                                                      | proto3 / gRPC                                                  | AIDL                                                | DDS                                                   | MQTT / AsyncAPI               |
+| -------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------- | ----------------------------- |
+| `signal`                         | field notifier (+ auto-derived getter from last-value cache)                 | server-streaming RPC or pub/sub sidecar                        | callback / `oneway` listener                        | topic, `TRANSIENT_LOCAL` durability, DEADLINE = `max` | retained message on channel   |
+| `event`                          | event (eventgroup)                                                           | server-streaming RPC                                           | callback                                            | topic, `VOLATILE` durability                          | non-retained publish          |
+| `command`                        | request w/ empty response (= ack, §6.1)                                      | unary RPC → `Empty` (= ack)                                    | `oneway` + runtime ack shim                         | reliable-QoS request topic (DDS ack)                  | publish QoS 1 (puback = ack)  |
+| `query`                          | request/response method                                                      | unary/streaming RPC                                            | method                                              | request/reply (RPC over DDS)                          | request/reply channel pair    |
+| RPC response bound, `max` (§9.3) | derived request/response timeout, supervised by the binding                  | server-side deadline; per-call client override stays Stratum 3 | transaction-timeout supervision in the runtime shim | DDS-RPC reply timeout                                 | reply-channel timeout         |
+| RPC call throttle, `min` (§9.3)  | admission-side rate limit at the provider                                    | server-side admission rate limit                               | admission check in the runtime shim                 | requester-side rate limit                             | inbound publish rate limit    |
+| `fixed`                          | field with getter only                                                       | unary getter RPC (cacheable)                                   | constant/property                                   | —                                                     | retained provisioning channel |
+| result-union error arm (§10.1)   | method return code table                                                     | `google.rpc.Status` + typed detail                             | `ServiceSpecificException` code                     | reply union arm                                       | error payload schema          |
+| ordinals (§11)                   | method ID = ordinal; event ID = ordinal + event flag; eventgroup = interface | RPC name (identity is nominal)                                 | transaction code = ordinal                          | topic name suffix                                     | channel path segment          |
+| Stratum 2 (§10.2)                | `E_MALFORMED_MESSAGE` / `E_NOT_OK` / `E_UNKNOWN_METHOD`                      | `INVALID_ARGUMENT` / `FAILED_PRECONDITION` / `UNIMPLEMENTED`   | `IllegalArgumentException` mapping                  | reply status                                          | error topic convention        |
 
 **Notes.** The command **delivery acknowledgment** (§6.1) is realised with each
 transport's cheapest confirmed primitive, as shown in the command row — where a
@@ -1592,9 +1684,10 @@ event_def     = doc_comment? "event"   camelCase_id ":" type_ref timing? attr_bl
                  as RIDL-501 through RIDL-508 (§16.5). *)
 
 init_value    = "=" ( literal | SCREAMING_SNAKE_ID ) ;   (* bare init override — §4.4 *)
-command_def   = doc_comment? "command" camelCase_id "(" param_list ")" attr_block? ;
+command_def   = doc_comment? "command" camelCase_id "(" param_list ")" attr_block? timing? ;
 query_def     = doc_comment? "query"   camelCase_id "(" param_list ")" ":" return_type
-                attr_block? ;
+                attr_block? timing? ;
+              (* range form only on command and query — a strict period is RIDL-103, §9.3 *)
 fixed_def     = doc_comment? "fixed"   camelCase_id ":" fixed_type ;
               (* no error syntax — a fallible_type return makes a query fallible, §10.1 *)
 
@@ -1680,36 +1773,36 @@ Method as in typl Appendix G: can ridl express what a contract author reaches
 for in each major interface language? ✓ covered, ≈ covered differently (usually
 stricter), ✗ not expressible (deliberate or open).
 
-| Foreign construct                                                | ridl equivalent                                                                | Status                                                                |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| CORBA/Franca **attribute** (readable, subscribable state)        | `signal` + §4.4 last-value                                                     | ✓                                                                     |
-| attribute **setter**                                             | explicit `command` (never implicit)                                            | ≈ deliberate — mutation is always a visible verb                      |
-| Franca **broadcast**                                             | `event`                                                                        | ✓                                                                     |
-| Franca **selective broadcast** (per-client)                      | —                                                                              | ✗ open §17.1                                                          |
-| Franca/AIDL **fireAndForget / oneway**                           | `command`                                                                      | ✓ first-class                                                         |
-| method with **error** (Franca error enum, SOME/IP return code)   | result-union return; error arm → native error channel                          | ✓                                                                     |
-| **exception hierarchies with payloads** (CORBA, Java)            | `error struct` / `error union` arms in result unions                           | ≈ deliberate — closed sets, no hierarchies, errors are data           |
-| gRPC **unary / server-stream / client-stream / bidi**            | `query T` / `query : <T>` / `command(<T>)` or `query(<T>)` / `query(<T>): <U>` | ✓                                                                     |
-| gRPC **deadline**                                                | caller-side, Stratum 3 (transport)                                             | ≈ relocated — contract owns freshness (§9), calls own their deadlines |
-| DDS **DEADLINE QoS**                                             | `@[..max]` refresh ceiling / freshness SLO                                     | ✓ in-contract                                                         |
-| DDS **durability (TRANSIENT_LOCAL)**                             | §4.4 last-value guarantee (signals)                                            | ✓ normative, not tunable                                              |
-| DDS **reliability / history depth**                              | — (transport/rsdl)                                                             | ✗ deliberate §17.5                                                    |
-| DDS **liveliness**                                               | staleness via freshness bounds + observability                                 | ≈                                                                     |
-| SOME/IP **field get/set/notify**                                 | signal (get derived, notify native) + command (set)                            | ✓ decomposed                                                          |
-| SOME/IP **eventgroups**                                          | interface-level subscription granularity                                       | ≈ coarser; §17.1                                                      |
-| AUTOSAR **signal groups** (atomic sample)                        | struct payload on one signal                                                   | ≈ idiom; §17.3                                                        |
-| AUTOSAR **client/server + sender/receiver ports**                | query/command + signal/event                                                   | ✓                                                                     |
-| AIDL **in/out/inout parameters**                                 | parameters in, tuple returns out                                               | ≈ deliberate — no out-params                                          |
-| FIDL **events** (server-initiated on protocol)                   | `event`                                                                        | ✓                                                                     |
-| FIDL **strict/flexible evolution**                               | ordinals + `reserved` + `ridl-diff` categories                                 | ≈                                                                     |
-| ROS 2 **action** (goal/feedback/result)                          | command + progress signal + result query/event                                 | ≈ composition idiom §17.4                                             |
-| WIT **resource** (capability handle with methods)                | —                                                                              | ✗ open — relevant when rmdl/WASM host interfaces mature               |
-| WIT **future / stream**                                          | `query` return / `<T>`                                                         | ✓                                                                     |
-| AsyncAPI **channel + operation**                                 | interaction + transport binding                                                | ✓                                                                     |
-| MQTT **retained message**                                        | §4.4                                                                           | ✓                                                                     |
-| OPC-UA **historical access**                                     | — (test/observability plane, not contract)                                     | ≈ relocated                                                           |
-| **service discovery** (SOME/IP-SD, DDS discovery)                | rsdl topology + reflection service §17.7                                       | ≈ relocated                                                           |
-| **interface versioning** (Franca `version`, SOME/IP major/minor) | package version + `ridl-diff`                                                  | ≈ relocated, mechanical                                               |
+| Foreign construct                                                | ridl equivalent                                                                              | Status                                                      |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| CORBA/Franca **attribute** (readable, subscribable state)        | `signal` + §4.4 last-value                                                                   | ✓                                                           |
+| attribute **setter**                                             | explicit `command` (never implicit)                                                          | ≈ deliberate — mutation is always a visible verb            |
+| Franca **broadcast**                                             | `event`                                                                                      | ✓                                                           |
+| Franca **selective broadcast** (per-client)                      | —                                                                                            | ✗ open §17.1                                                |
+| Franca/AIDL **fireAndForget / oneway**                           | `command`                                                                                    | ✓ first-class                                               |
+| method with **error** (Franca error enum, SOME/IP return code)   | result-union return; error arm → native error channel                                        | ✓                                                           |
+| **exception hierarchies with payloads** (CORBA, Java)            | `error struct` / `error union` arms in result unions                                         | ≈ deliberate — closed sets, no hierarchies, errors are data |
+| gRPC **unary / server-stream / client-stream / bidi**            | `query T` / `query : <T>` / `command(<T>)` or `query(<T>)` / `query(<T>): <U>`               | ✓                                                           |
+| gRPC **deadline**                                                | `@[..max]` response bound on `command`/`query` (§9.3); the per-call override stays Stratum 3 | ✓ in-contract (ADR-0015)                                    |
+| DDS **DEADLINE QoS**                                             | `@[..max]` refresh ceiling / freshness SLO                                                   | ✓ in-contract                                               |
+| DDS **durability (TRANSIENT_LOCAL)**                             | §4.4 last-value guarantee (signals)                                                          | ✓ normative, not tunable                                    |
+| DDS **reliability / history depth**                              | — (transport/rsdl)                                                                           | ✗ deliberate §17.5                                          |
+| DDS **liveliness**                                               | staleness via freshness bounds + observability                                               | ≈                                                           |
+| SOME/IP **field get/set/notify**                                 | signal (get derived, notify native) + command (set)                                          | ✓ decomposed                                                |
+| SOME/IP **eventgroups**                                          | interface-level subscription granularity                                                     | ≈ coarser; §17.1                                            |
+| AUTOSAR **signal groups** (atomic sample)                        | struct payload on one signal                                                                 | ≈ idiom; §17.3                                              |
+| AUTOSAR **client/server + sender/receiver ports**                | query/command + signal/event                                                                 | ✓                                                           |
+| AIDL **in/out/inout parameters**                                 | parameters in, tuple returns out                                                             | ≈ deliberate — no out-params                                |
+| FIDL **events** (server-initiated on protocol)                   | `event`                                                                                      | ✓                                                           |
+| FIDL **strict/flexible evolution**                               | ordinals + `reserved` + `ridl-diff` categories                                               | ≈                                                           |
+| ROS 2 **action** (goal/feedback/result)                          | command + progress signal + result query/event                                               | ≈ composition idiom §17.4                                   |
+| WIT **resource** (capability handle with methods)                | —                                                                                            | ✗ open — relevant when rmdl/WASM host interfaces mature     |
+| WIT **future / stream**                                          | `query` return / `<T>`                                                                       | ✓                                                           |
+| AsyncAPI **channel + operation**                                 | interaction + transport binding                                                              | ✓                                                           |
+| MQTT **retained message**                                        | §4.4                                                                                         | ✓                                                           |
+| OPC-UA **historical access**                                     | — (test/observability plane, not contract)                                                   | ≈ relocated                                                 |
+| **service discovery** (SOME/IP-SD, DDS discovery)                | rsdl topology + reflection service §17.7                                                     | ≈ relocated                                                 |
+| **interface versioning** (Franca `version`, SOME/IP major/minor) | package version + `ridl-diff`                                                                | ≈ relocated, mechanical                                     |
 
 **Verdict.** ridl covers the working set of every surveyed interface language
 through five kinds plus two orthogonal clauses (timing, contracts) — where the

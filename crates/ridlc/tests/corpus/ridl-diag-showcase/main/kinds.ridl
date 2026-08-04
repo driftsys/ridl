@@ -6,21 +6,15 @@ package diag.ridl
 interface Kinds {
 
   /// A command always returns `()`; writing a return type is an error.
-  command withReturn(level: Level): Speed
+  command withReturn(level: Level): Speed @[..50ms]
 
   /// A query must return something; an empty return belongs to `command`.
-  query nothingBack(): ()
+  query nothingBack(): () @[..50ms]
 
-  /// `fixed` takes no timing annotation.
+  /// `fixed` takes no timing annotation — since ADR-0015 admitted the range
+  /// form on `command` and `query`, it is the one kind that carries none.
+  /// A strict period on a command or query is RIDL-103, in `timing.ridl`.
   fixed timedFixed : Level @1s
-
-  /// Neither does a command: timing belongs to `signal` and `event` (ridl §9),
-  /// and one rule is one code — this drew FORM-102 ("unexpected token") until
-  /// the E2 close-out, for a token the grammar accepts on purpose.
-  command timedCommand() @1s
-
-  /// Nor a query.
-  query timedQuery(): Level @1s
 
   /// `fixed` takes no attribute block either.
   fixed constrainedFixed : Level [

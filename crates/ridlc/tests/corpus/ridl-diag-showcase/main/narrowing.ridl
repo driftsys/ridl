@@ -23,11 +23,11 @@ interface Narrowing {
   event maybeRaised : Sample? @[1s..2s]
 
   /// Optional parameter on a command.
-  command takeMaybe(level: Level?)
+  command takeMaybe(level: Level?) @[..50ms]
 
   /// Optional payload on a fixed.
   fixed maybeSerial : Serial?
 
   /// Map parameter on a command — a map is not a named type.
-  command takeMap(table: [Level : Sample; 0..8])
+  command takeMap(table: [Level : Sample; 0..8]) @[..50ms]
 }

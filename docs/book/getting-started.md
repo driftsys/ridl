@@ -441,7 +441,7 @@ import veh.common.Warning
 import veh.common.WarningFlags
 
 interface Warnings {
-  command clearWarning(flag: Warning)
+  command clearWarning(flag: Warning) @[..50ms]
   signal  activeWarnings : WarningFlags @[50ms..1s]
 }
 ```
@@ -492,19 +492,35 @@ import veh.common.Speed
 import veh.common.GearPosition
 
 interface Control {
-  command setTargetSpeed(speed: Speed)
-  command enableCruiseControl()
-  command resetFaults()
-  command setGear(position: GearPosition)
+  command setTargetSpeed(speed: Speed) @[..50ms]
+  command enableCruiseControl() @[..50ms]
+  command resetFaults() @[..200ms]
+  command setGear(position: GearPosition) @[20ms..100ms]
 
-  query getCurrentSpeed(): Speed
-  query getSpeedHistory(window: Duration): (min: Speed, max: Speed, avg: Speed)
+  query getCurrentSpeed(): Speed @[..50ms]
+  query getSpeedHistory(window: Duration): (min: Speed, max: Speed, avg: Speed) @[..100ms]
 }
 ```
 
 A query return may be a named type, a tuple of named fields, a stream, or an
 inline `T | E` union that makes the query fallible. Parameters are named types
 or streams — a tuple is not a parameter type; pass a struct.
+
+A command or query takes the same `@[min..max]` range a signal does, with the
+same two bounds read for a call: `min` is the **call throttle** — the caller
+must not call faster — and `max` is the **response bound** — the provider must
+respond within it. For a query, responding is the reply; for a command it is
+acceptance, the delivery acknowledgment, not execution. `setGear` above
+declares both: callers throttle to one request per 20 ms, and the provider
+accepts within 100 ms. Only the range form is admitted — a strict periodic
+`@Xms` on a command or query is a `RIDL-103` error, because a caller is not
+isochronous by contract.
+
+Unlike a signal, an RPC with no declared response bound is never given a
+default: there is no plausible generic value, and a manufactured provider
+obligation is worse than none. It draws a `RIDL-112` warning instead, and the
+bound stays absent in the IR. `@[20ms..]` — a throttle with no response bound —
+warns the same way; a missing `min` draws nothing.
 
 ## Structs and optionality
 
@@ -573,7 +589,7 @@ import veh.common.Axle
 
 interface Calibration {
   /// Fallible query — the inline `T | E` return is the canonical spelling.
-  query calibrate(axle: Axle): CalReport | CalError
+  query calibrate(axle: Axle): CalReport | CalError @[..5s]
 }
 ```
 
@@ -647,10 +663,10 @@ import veh.common.SensorSample
 import veh.common.ProcessedSample
 
 interface Transfer {
-  query   streamFaults(filter: DiagFilter): <FaultCode>       // provider produces
-  query   streamLogs(): <LogLine>                             // text stream
-  command uploadFirmware(data: <FwBlock>)                     // consumer produces
-  query   pipe(samples: <SensorSample>): <ProcessedSample>    // bidirectional
+  query   streamFaults(filter: DiagFilter): <FaultCode> @[..1s]      // provider produces
+  query   streamLogs(): <LogLine> @[..1s]                             // text stream
+  command uploadFirmware(data: <FwBlock>) @[..1s]                     // consumer produces
+  query   pipe(samples: <SensorSample>): <ProcessedSample> @[..1s]    // bidirectional
 }
 ```
 
@@ -680,13 +696,13 @@ interface Cruise {
   command setTargetSpeed(speed: Speed) [
     require speed > 0.0
     require speed <= SPEED_LIMIT_EU
-  ]
+  ] @[..50ms]
 
   query getSpeedHistory(window: Duration): (min: Speed, max: Speed, avg: Speed) [
     require window > 0ms
     ensure  result.min <= result.avg
     ensure  result.avg <= result.max
-  ]
+  ] @[..100ms]
 }
 ```
 
@@ -845,7 +861,7 @@ service veh.cluster.status : VehicleStatus
 
 service veh.cluster.hvac {
   signal  temperature : Temperature @[1s..10s]
-  command setTarget(temp: Temperature)
+  command setTarget(temp: Temperature) @[..50ms]
 }
 ```
 
@@ -1024,20 +1040,20 @@ interface PowertrainManager {
 
   command requestStart(mode: EngineState) [
     require mode == EngineState.CRANKING
-  ]
-  command requestStop()
+  ] @[..200ms]
+  command requestStop() @[..200ms]
   command setGear(gear: GearPosition) [
     require gear != GearPosition.PARK || engineRpm == 0.0
-  ]
+  ] @[20ms..100ms]
 
   query getDiagnostics(): (
     engineState   : EngineState
     activeGear    : GearPosition
     faultCount    : FaultCount
     lastFaultTime : Timestamp
-  )
+  ) @[..100ms]
 
-  query streamFaults(severity: Severity): <FaultPayload>
+  query streamFaults(severity: Severity): <FaultPayload> @[..1s]
 
   fixed softwareVersion    : Version
   fixed calibrationVersion : Version
@@ -1127,16 +1143,16 @@ interface BodyControl {
    */
   event accessAttempt : AccessEvent @[100ms..30s]
 
-  command setAllLocks(lock: LockState)
-  command setDoorLock(sensorId: DoorIndex, lock: LockState)
-  command setWindowPosition(sensorId: DoorIndex, position: Ratio)
+  command setAllLocks(lock: LockState) @[..100ms]
+  command setDoorLock(sensorId: DoorIndex, lock: LockState) @[..100ms]
+  command setWindowPosition(sensorId: DoorIndex, position: Ratio) @[..100ms]
   command setClimateTarget(temp: Temperature) [
     require temp >= 16.0
     require temp <= 30.0
-  ]
+  ] @[..100ms]
 
-  query getLockStatus(): (allLocked: AllLocked, unlockedCount: UnlockCount)
-  query getBodyStatus(): (doors: DoorSet, windows: WindowSet)
+  query getLockStatus(): (allLocked: AllLocked, unlockedCount: UnlockCount) @[..50ms]
+  query getBodyStatus(): (doors: DoorSet, windows: WindowSet) @[..50ms]
 
   fixed doorCount          : DoorCount
   fixed windowCount        : WindowCount
@@ -1220,8 +1236,8 @@ interface DriverMonitoring {
   event distractionDetected : DistractionEvent @[200ms..10s]
   event fatigueDetected     : FatigueEvent @[500ms..30s]
 
-  command acknowledgeAlert(level: AlertLevel)
-  command setMonitoringEnabled(enabled: Monitoring)
+  command acknowledgeAlert(level: AlertLevel) @[..50ms]
+  command setMonitoringEnabled(enabled: Monitoring) @[..50ms]
 
   query getDriverState(): (
     attentionScore  : Ratio
@@ -1231,9 +1247,9 @@ interface DriverMonitoring {
   ) [
     ensure result.attentionScore >= 0.0
     ensure result.attentionScore <= 100.0
-  ]
+  ] @[..100ms]
 
-  query streamAttention(interval: SampleInterval): <AttentionMetrics>
+  query streamAttention(interval: SampleInterval): <AttentionMetrics> @[..1s]
 
   fixed modelVersion  : Version
   fixed sensorType    : Label

@@ -443,7 +443,8 @@ export interface VehicleStatusConsumer {
    */
   doorOpened: EventHandle<DoorPayload>;
   /**
-   * Request a gear change — outcome observed via currentGear, not returned
+   * Request a gear change — outcome observed via currentGear, not returned;
+   * callers throttle to one request per 20ms, acceptance within 200ms (§9)
    *
    * A command is fire-and-forget (ridl §6): it declares no result, and an
    * observable outcome travels back as state, not as a return value. The
@@ -456,7 +457,7 @@ export interface VehicleStatusConsumer {
    */
   setGear(position: veh_common.GearPosition): Promise<void>;
   /**
-   * Sliding-window average
+   * Sliding-window average — replied within 50ms (§9)
    *
    * @ordinal 7
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
@@ -524,7 +525,8 @@ export interface VehicleStatusProvider {
    */
   doorOpened: { publish(occurrence: DoorPayload): void };
   /**
-   * Request a gear change — outcome observed via currentGear, not returned
+   * Request a gear change — outcome observed via currentGear, not returned;
+   * callers throttle to one request per 20ms, acceptance within 200ms (§9)
    *
    * A command is fire-and-forget (ridl §6): it declares no result, and an
    * observable outcome travels back as state, not as a return value. The
@@ -537,7 +539,7 @@ export interface VehicleStatusProvider {
    */
   setGear(position: veh_common.GearPosition): Promise<void>;
   /**
-   * Sliding-window average
+   * Sliding-window average — replied within 50ms (§9)
    *
    * @ordinal 7
    * @remarks A rejected promise is an infrastructure failure — detected, undeclared (gf §6.4).
@@ -562,15 +564,21 @@ export interface VehicleStatusProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const vehicleStatusTiming = {
   currentSpeed: { mode: 'strict-periodic', minUs: 10000n, maxUs: 10000n, defaultApplied: false },
   engineTemp: { mode: 'range', minUs: 20000n, maxUs: 100000n, defaultApplied: false },
   warnings: { mode: 'range', minUs: 50000n, maxUs: 1000000n, defaultApplied: false },
   doorOpened: { mode: 'range', minUs: 50000n, maxUs: 500000n, defaultApplied: false },
+  setGear: { mode: 'range', minUs: 20000n, maxUs: 200000n, defaultApplied: false },
+  getAverageSpeed: { mode: 'range', minUs: 10000n, maxUs: 50000n, defaultApplied: false },
+  streamFaults: { mode: 'range', minUs: undefined, maxUs: 1000000n, defaultApplied: false },
+  getFaultPage: { mode: 'range', minUs: undefined, maxUs: 100000n, defaultApplied: false },
 } as const;
 
 /**
@@ -651,9 +659,11 @@ export interface WheelHistoryProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const wheelHistoryTiming = {
   wheelTicks: { mode: 'range', minUs: 100000n, maxUs: 1000000n, defaultApplied: false },
@@ -764,13 +774,18 @@ interface WheelDiagnosticsProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 const wheelDiagnosticsTiming = {
   wheelTicks: { mode: 'range', minUs: 100000n, maxUs: 1000000n, defaultApplied: false },
   slipDetected: { mode: 'range', minUs: 50000n, maxUs: 500000n, defaultApplied: false },
+  readTicks: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  resetTicks: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  readSpan: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
 } as const;
 
 /**
@@ -822,9 +837,11 @@ export interface WheelSummaryProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const wheelSummaryTiming = {
   wheelHealth: { mode: 'range', minUs: 1000000n, maxUs: 10000000n, defaultApplied: false },
@@ -904,9 +921,11 @@ export interface Service_veh_cluster_wheelsProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const service_veh_cluster_wheelsTiming = {
   ticks: { mode: 'range', minUs: 100000n, maxUs: 1000000n, defaultApplied: false },
@@ -1284,9 +1303,11 @@ export interface Service_veh_hvac_cabinProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const service_veh_hvac_cabinTiming = {
   cabinTemp: { mode: 'strict-periodic', minUs: 1000000n, maxUs: 1000000n, defaultApplied: false },
@@ -1295,6 +1316,17 @@ export const service_veh_hvac_cabinTiming = {
   fanLevel: { mode: 'range', minUs: undefined, maxUs: 2000000n, defaultApplied: false },
   compressorLoad: { mode: 'strict-periodic', minUs: 500n, maxUs: 500n, defaultApplied: false },
   filterClogged: { mode: 'range', minUs: 200000n, maxUs: 2000000n, defaultApplied: true },
+  setTarget: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  replayTrace: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  streamFilterHistory: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  rebalance: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  getBounds: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  calibrate: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  getClimate: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  getCabinTemp: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  setFan: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  trimFan: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
+  scaledFan: { mode: 'range', minUs: undefined, maxUs: 50000n, defaultApplied: false },
 } as const;
 
 /**

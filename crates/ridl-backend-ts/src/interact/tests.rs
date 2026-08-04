@@ -142,7 +142,11 @@ fn contract(
 }
 
 fn command(params: Vec<v2::Param>, contracts: Vec<v2::Contract>) -> v2::decl::Kind {
-    v2::decl::Kind::CommandDef(v2::CommandDef { params, contracts })
+    v2::decl::Kind::CommandDef(v2::CommandDef {
+        params,
+        contracts,
+        timing: None,
+    })
 }
 
 fn query(
@@ -156,6 +160,7 @@ fn query(
             kind: Some(return_type),
         }),
         contracts,
+        timing: None,
     })
 }
 
@@ -462,6 +467,65 @@ fn timing_modes_and_bounds() {
     assert!(
         source.contains("minUs: 9007199254740993n, maxUs: 9007199254740995n"),
         "a bound past Number.MAX_SAFE_INTEGER must survive exactly, got:\n{source}"
+    );
+    insta::assert_snapshot!(source);
+}
+
+/// The declared RPC bounds ride the same timing table as a signal's
+/// (ADR-0015): the call throttle and the response bound are the same two
+/// bigint constants, on two more kinds. An undeclared RPC contributes no
+/// entry — its bounds are never defaulted.
+#[test]
+fn rpc_bounds_ride_the_timing_table() {
+    let package = interact_package(
+        vec![interface(
+            "VehicleStatus",
+            vec![
+                interaction(
+                    "setGear",
+                    1,
+                    v2::decl::Kind::CommandDef(v2::CommandDef {
+                        params: vec![param("position", named("GearPosition"))],
+                        contracts: Vec::new(),
+                        timing: Some(timing(
+                            v2::TimingMode::Range,
+                            Some("20000"),
+                            Some("200000"),
+                            false,
+                        )),
+                    }),
+                ),
+                interaction(
+                    "getAverageSpeed",
+                    2,
+                    v2::decl::Kind::QueryDef(v2::QueryDef {
+                        params: Vec::new(),
+                        return_type: Some(v2::ReturnType {
+                            kind: Some(v2::return_type::Kind::Value(named("Speed"))),
+                        }),
+                        contracts: Vec::new(),
+                        // The half-open `@[..50ms]`: a response bound and no
+                        // throttle.
+                        timing: Some(timing(v2::TimingMode::Range, None, Some("50000"), false)),
+                    }),
+                ),
+                interaction("resetFaults", 3, command(Vec::new(), Vec::new())),
+            ],
+        )],
+        Vec::new(),
+    );
+    let source = render(&package);
+    assert!(
+        source.contains("setGear: { mode: 'range', minUs: 20000n, maxUs: 200000n"),
+        "a command's bounds land in the timing table, got:\n{source}"
+    );
+    assert!(
+        source.contains("getAverageSpeed: { mode: 'range', minUs: undefined, maxUs: 50000n"),
+        "a query's half-open bounds land in the timing table, got:\n{source}"
+    );
+    assert!(
+        !source.contains("resetFaults: { mode:"),
+        "an undeclared RPC contributes no timing entry, got:\n{source}"
     );
     insta::assert_snapshot!(source);
 }

@@ -74,9 +74,11 @@ export interface VehicleStatusProvider {
 
 /**
  * Resolved timing (ridl §9): `minUs` is the rate floor, `maxUs` the
- * staleness bound, both in microseconds. `defaultApplied` marks a bound the
- * compiler resolved from the configured default rather than from source —
- * "untimed" does not exist beyond the parser (ridl §9.1).
+ * staleness bound, both in microseconds — on a command or query, the call
+ * throttle and the response bound (ADR-0015 decision 3). `defaultApplied`
+ * marks a bound the compiler resolved from the configured default rather
+ * than from source; an RPC bound is never defaulted and its entry is
+ * absent when undeclared.
  */
 export const vehicleStatusTiming = {} as const;
 

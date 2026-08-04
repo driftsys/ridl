@@ -6,58 +6,46 @@ input_file: crates/ridlc/tests/corpus/ridl-diag-showcase/ridl.toml
 error[RIDL-104]: return type on command — a command always returns `()`; use `query` for a result
   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:9:37
   │
-9 │   command withReturn(level: Level): Speed
+9 │   command withReturn(level: Level): Speed @[..50ms]
   │                                     ^^^^^
 
 error[RIDL-105]: query returning `()` — a query must return a value; use `command`
    ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:12:24
    │
-12 │   query nothingBack(): ()
+12 │   query nothingBack(): () @[..50ms]
    │                        ^^
 
-error[RIDL-106]: a timing annotation is not valid on `fixed` — a `fixed` is provisioned externally and never republished, so it has no rate floor and no staleness bound. Timing belongs to `signal` and `event` (ridl §9)
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:15:28
+error[RIDL-106]: a timing annotation is not valid on `fixed` — a `fixed` is provisioned externally and never republished, so it has no rate floor and no staleness bound. Timing belongs to `signal`, `event`, and (as a range) `command` and `query` (ridl §9)
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:17:28
    │
-15 │   fixed timedFixed : Level @1s
+17 │   fixed timedFixed : Level @1s
    │                            ^^^
 
-error[RIDL-106]: a timing annotation is not valid on `command` — a command is invoked on demand, not published on a schedule, and its acknowledgement is not a publication. Timing belongs to `signal` and `event` (ridl §9)
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:20:26
-   │
-20 │   command timedCommand() @1s
-   │                          ^^^
-
-error[RIDL-106]: a timing annotation is not valid on `query` — a query is answered on demand, not published on a schedule, and its reply is not a publication. Timing belongs to `signal` and `event` (ridl §9)
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:23:29
-   │
-23 │   query timedQuery(): Level @1s
-   │                             ^^^
-
 error[RIDL-106]: an attribute block is not valid on `fixed` — a `fixed` has no timing to override and no contract to state, because it is provisioned externally and never changes while the software runs (ridl §8)
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:26:34
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:20:34
    │  
-26 │     fixed constrainedFixed : Level [
+20 │     fixed constrainedFixed : Level [
    │ ╭──────────────────────────────────^
-27 │ │     require true
-28 │ │   ]
+21 │ │     require true
+22 │ │   ]
    │ ╰───^
 
 error[RIDL-301]: `require` not valid on fixed — contracts belong to `command` and `query`
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:27:5
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:21:5
    │
-27 │     require true
+21 │     require true
    │     ^^^^^^^^^^^^
 
 error[RIDL-107]: `struct` starts a typl declaration, and an interface body holds interactions and `reserved` tombstones only — move the declaration to package level, beside the interface (ridl reference §14.1)
-   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:31:3
+   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:25:3
    │
-31 │   struct Nested {
+25 │   struct Nested {
    │   ^^^^^^
 
 error[FORM-101]: a return type must be a named type, a named-field tuple `(a: A, b: B)`, a stream `<T>`, or a fallible `T | E` (ridl reference §7.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/narrowing_returns.ridl:17:23
    │
-17 │   query listLevels(): [Level; 0..8]
+17 │   query listLevels(): [Level; 0..8] @[..50ms]
    │                       ^
 
 error[RIDL-403]: `view` is reserved by another profile of the family, so it cannot start a declaration here — a `.ridl` file declares `interface` and `service`. Move the declaration to the profile that owns the word, or, if `view` was meant as a name, choose one the family does not reserve (ridl reference §16.4)
@@ -147,19 +135,19 @@ warning[RIDL-307]: `error` enum value `INVALID_VALUE` is a reserved Stratum-2 co
 error[RIDL-303]: query returns a bare error type `DiagError` — a query with no success path is not a query
    ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:18:34
    │
-18 │   query onlyFails(limit: Level): DiagError
+18 │   query onlyFails(limit: Level): DiagError @[..50ms]
    │                                  ^^^^^^^^^
 
 warning[RIDL-304]: command parameter `fault` has error type `DiagError` — failure flowing toward a provider
    ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:21:25
    │
-21 │   command absorb(fault: DiagError)
+21 │   command absorb(fault: DiagError) @[..50ms]
    │                         ^^^^^^^^^
 
 warning[RIDL-308]: query returns the named result union `NamedResult` — in return position the inline spelling is canonical: write `Sample | DiagError` (general form §6.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/errors.ridl:24:30
    │
-24 │   query paged(limit: Level): NamedResult
+24 │   query paged(limit: Level): NamedResult @[..50ms]
    │                              ^^^^^^^^^^^
 
 error[RIDL-401]: `legacyTemp` is retired: this body reserves the name, and a retired name keeps its wire identity for ever, so a consumer still holding the old contract would read this interaction as the retired one. Give it a different name (ridl §11)
@@ -195,13 +183,13 @@ error[TYPL-005]: public `Exposed` exposes internal constant `HANDLE_SLOTS` — a
 error[TYPL-005]: public `Exposed` exposes internal type `Handle` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
    ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:60:19
    │
-60 │   command bind(h: Handle)
+60 │   command bind(h: Handle) @[..50ms]
    │                   ^^^^^^
 
 error[TYPL-005]: public `Exposed` exposes internal type `Handle` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
    ┌─ tests/corpus/ridl-diag-showcase/main/exposure.ridl:61:23
    │
-61 │   query readHandle(): Handle
+61 │   query readHandle(): Handle @[..50ms]
    │                       ^^^^^^
 
 error[TYPL-005]: public `Exposed` exposes internal constant `HANDLE_MAX` — a public declaration may name only public declarations, so that the contract surface is fully importable (typl §3.3)
@@ -249,7 +237,7 @@ error[RIDL-302]: `ensure` not valid on command — a command has no result to ob
 warning[RIDL-308]: query returns the named result union `NamedResult` — in return position the inline spelling is canonical: write `Sample | DiagError` (general form §6.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/inline_shape.ridl:30:30
    │
-30 │   query paged(limit: Level): NamedResult
+30 │   query paged(limit: Level): NamedResult @[..50ms]
    │                              ^^^^^^^^^^^
 
 error[FORM-102]: signal payload must be a named type
@@ -267,7 +255,7 @@ error[FORM-102]: event payload must be a named type
 error[FORM-102]: command parameter must be a named type or a stream
    ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:26:28
    │
-26 │   command takeMaybe(level: Level?)
+26 │   command takeMaybe(level: Level?) @[..50ms]
    │                            ^^^^^^
 
 error[FORM-102]: fixed payload must be a named type or an array
@@ -279,7 +267,7 @@ error[FORM-102]: fixed payload must be a named type or an array
 error[FORM-102]: command parameter must be a named type or a stream
    ┌─ tests/corpus/ridl-diag-showcase/main/narrowing.ridl:32:26
    │
-32 │   command takeMap(table: [Level : Sample; 0..8])
+32 │   command takeMap(table: [Level : Sample; 0..8]) @[..50ms]
    │                          ^^^^^^^^^^^^^^^^^^^^^^
 
 error[RIDL-141]: `Sample` is not an interface, and a service publishes an interface — name the interface that carries these interactions, or give the service an inline `{ … }` body of its own (ridl §14.5)
@@ -309,38 +297,62 @@ error[RIDL-201]: a stream `<T>` is not valid on an event payload — an unbounde
 error[RIDL-202]: `integer` is a primitive, and a stream element is a named type or the raw `string`/`bytes` spelling — declare a `type` for it, so the element carries the range, unit and bounds one element promises (ridl §12.2)
    ┌─ tests/corpus/ridl-diag-showcase/main/streams.ridl:20:33
    │
-20 │   query numbers(limit: Level): <integer>
+20 │   query numbers(limit: Level): <integer> @[..50ms]
    │                                 ^^^^^^^
 
 warning[RIDL-100]: signal without a timing annotation — the default `@[100ms..1s]` is applied: it publishes no slower than the rate floor and a subscriber may treat a value older than the staleness bound as stale. Write the bounds this signal really promises (ridl §9.1)
-   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:10:10
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:11:10
    │
-10 │   signal untimed : Speed
+11 │   signal untimed : Speed
    │          ^^^^^^^
 
 error[RIDL-101]: the rate floor `500ms` is longer than the staleness bound `100ms` — in `@[min..max]` the first bound is how often the value is published and the second how old it may get, so the first must not exceed the second (ridl §9.2)
-   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:13:29
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:14:29
    │
-13 │   signal inverted : Speed @[500ms..100ms]
+14 │   signal inverted : Speed @[500ms..100ms]
    │                             ^^^^^^^^^^^^
 
 error[RIDL-102]: the strict period is `0ms` — a period is a duration greater than zero, because a period of zero promises a publication with no delay at all (ridl §9.2)
-   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:16:23
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:17:23
    │
-16 │   signal zero : Speed @0ms
+17 │   signal zero : Speed @0ms
    │                       ^^^^
 
 warning[RIDL-108]: the rate floor and the staleness bound are both `250ms` — a subscriber may then call the value stale the moment the next publication is due, leaving no margin for jitter. Widen the staleness bound, or write the strict period `@250ms` if the rate really is isochronous — that is a separate mode, not a spelling of this range (ridl §9.2)
-   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:19:31
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:20:31
    │
-19 │   signal degenerate : Speed @[250ms..250ms]
+20 │   signal degenerate : Speed @[250ms..250ms]
    │                               ^^^^^^^^^^^^
 
 error[RIDL-103]: the strict period `@100ms` is not valid on an event — a strict period is an isochronous publication rate, and an event reports occurrences that arrive when they arrive. Write a range `@[min..max]` instead (ridl §9.2)
-   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:23:23
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:24:23
    │
-23 │   event tick : Sample @100ms
+24 │   event tick : Sample @100ms
    │                       ^^^^^^
+
+error[RIDL-103]: the strict period `@1s` is not valid on a command — a strict period is an isochronous publication rate, and a caller is not isochronous by contract (ADR-0015 decision 5). Write a range `@[min..max]` instead (ridl §9.2)
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:29:26
+   │
+29 │   command timedCommand() @1s
+   │                          ^^^
+
+error[RIDL-103]: the strict period `@1s` is not valid on a query — a strict period is an isochronous publication rate, and a caller is not isochronous by contract (ADR-0015 decision 5). Write a range `@[min..max]` instead (ridl §9.2)
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:32:29
+   │
+32 │   query timedQuery(): Level @1s
+   │                             ^^^
+
+warning[RIDL-112]: query without a declared response bound — no default is applied, because a response bound is a provider obligation callers size their timeouts against, and inventing one would manufacture a promise nobody made. Write `@[..max]` to bound the reply (ridl §9)
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:36:9
+   │
+36 │   query unbounded(): Level
+   │         ^^^^^^^^^
+
+warning[RIDL-112]: command without a declared response bound — no default is applied, because a response bound is a provider obligation callers size their timeouts against, and inventing one would manufacture a promise nobody made. Write `@[..max]` to bound acceptance — the §6.1 acknowledgment, not execution (ridl §9)
+   ┌─ tests/corpus/ridl-diag-showcase/main/timing.ridl:40:11
+   │
+40 │   command throttledOnly(level: Level) @[20ms..]
+   │           ^^^^^^^^^^^^^
 
 note[TYPL-115]: type `Serial` has no derivable init value and no declared `= value`
    ┌─ tests/corpus/ridl-diag-showcase/main/vocabulary.typl:14:6
@@ -351,7 +363,7 @@ note[TYPL-115]: type `Serial` has no derivable init value and no declared `= val
 warning[RIDL-404]: query `setLevel` is named like a mutation (`set…`) — queries should be read-only or idempotent, so if it mutates state it belongs to `command` (ridl §7.2). If the name is a domain noun rather than a verb (`setPoint`, `resetReason`), ignore this.
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:11:9
    │
-11 │   query setLevel(level: Level): Level
+11 │   query setLevel(level: Level): Level @[..50ms]
    │         ^^^^^^^^
 
 note[RIDL-406]: signal payload `EnvelopeEcho` declares `frameCounter`, which the envelope already carries — every publication is delivered with a timestamp and a sequence number, so the payload need not re-declare them (ridl §3.1). Domain metadata distinct from transport metadata is legitimate: keep the field if it records when the fact occurred rather than when it was published, or if it counts the fact itself rather than the publication carrying it.
@@ -363,19 +375,19 @@ note[RIDL-406]: signal payload `EnvelopeEcho` declares `frameCounter`, which the
 note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:18:32
    │
-18 │   query readOne(limit: Level): Sample | SharedFault
+18 │   query readOne(limit: Level): Sample | SharedFault @[..50ms]
    │                                ^^^^^^^^^^^^^^^^^^^^
 
 note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:23:32
    │
-23 │   query readTwo(limit: Level): Sample | SharedFault
+23 │   query readTwo(limit: Level): Sample | SharedFault @[..50ms]
    │                                ^^^^^^^^^^^^^^^^^^^^
 
 note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 interaction scopes (LintsOne, LintsTwo, diag.lints.inline) — one error type spanning unrelated failure domains makes each caller handle failures it cannot cause (ridl §10.1)
    ┌─ tests/corpus/ridl-diag-showcase/main/lints.ridl:28:34
    │
-28 │   query readThree(limit: Level): Sample | SharedFault
+28 │   query readThree(limit: Level): Sample | SharedFault @[..50ms]
    │                                  ^^^^^^^^^^^^^^^^^^^^
 
 error[RIDL-140]: duplicate service name `diag.showcase.duplicate` — the service catalog is a flat global namespace

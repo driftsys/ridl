@@ -106,9 +106,12 @@ pub enum TimingMode {
 /// One interaction's resolved timing, in exact microseconds.
 ///
 /// `min_us` is the rate floor and `max_us` the staleness bound; a strict
-/// period carries the same value in both. `default_applied` records that
+/// period carries the same value in both. On a `command` or `query` the
+/// same two bounds are the call throttle and the response bound
+/// (ridl §9, ADR-0015 decision 3). `default_applied` records that
 /// the contract was written without a `@` annotation and the configured
-/// default was resolved in (ridl §9.1).
+/// default was resolved in (ridl §9.1) — always `false` for an RPC,
+/// whose bounds are never defaulted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimingConst {
     pub mode: TimingMode,
@@ -176,7 +179,7 @@ pub trait DoorControlProvider {
     /// Handles `readDoor` — query ordinal 4 (ridl §7).
     async fn on_read_door(&mut self, door: DoorId) -> Result<DoorReport, DoorFault>;
 }
-/// Resolved timing for every signal and event of `DoorControl`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `DoorControl`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const DOOR_CONTROL_TIMING: &[(&str, TimingConst)] = &[
     (
         "lockState",
@@ -193,6 +196,24 @@ pub const DOOR_CONTROL_TIMING: &[(&str, TimingConst)] = &[
             mode: TimingMode::Range,
             min_us: Some(50000),
             max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+    (
+        "lock",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "readDoor",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
             default_applied: false,
         },
     ),
@@ -222,7 +243,7 @@ pub trait TelemetryProvider {
     /// Handles `fuelLevel` — query ordinal 2 (ridl §7).
     async fn on_fuel_level(&mut self) -> Percent;
 }
-/// Resolved timing for every signal and event of `Telemetry`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `Telemetry`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const TELEMETRY_TIMING: &[(&str, TimingConst)] = &[
     (
         "distance",
@@ -230,6 +251,15 @@ pub const TELEMETRY_TIMING: &[(&str, TimingConst)] = &[
             mode: TimingMode::Range,
             min_us: Some(1000000),
             max_us: Some(10000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "fuelLevel",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
             default_applied: false,
         },
     ),
@@ -310,9 +340,12 @@ pub enum TimingMode {
 /// One interaction's resolved timing, in exact microseconds.
 ///
 /// `min_us` is the rate floor and `max_us` the staleness bound; a strict
-/// period carries the same value in both. `default_applied` records that
+/// period carries the same value in both. On a `command` or `query` the
+/// same two bounds are the call throttle and the response bound
+/// (ridl §9, ADR-0015 decision 3). `default_applied` records that
 /// the contract was written without a `@` annotation and the configured
-/// default was resolved in (ridl §9.1).
+/// default was resolved in (ridl §9.1) — always `false` for an RPC,
+/// whose bounds are never defaulted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimingConst {
     pub mode: TimingMode,
@@ -412,7 +445,7 @@ pub trait ServiceFleetVehicleMirrorsProvider {
         door: crate::fleet::contracts::DoorId,
     ) -> Result<crate::fleet::contracts::DoorReport, crate::fleet::legacy::DoorFault>;
 }
-/// Resolved timing for every signal and event of `ServiceFleetVehicleMirrors`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `ServiceFleetVehicleMirrors`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const SERVICE_FLEET_VEHICLE_MIRRORS_TIMING: &[(&str, TimingConst)] = &[
     (
         "foldAngle",
@@ -420,6 +453,42 @@ pub const SERVICE_FLEET_VEHICLE_MIRRORS_TIMING: &[(&str, TimingConst)] = &[
             mode: TimingMode::Range,
             min_us: Some(200000),
             max_us: Some(2000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "fold",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "readFold",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "readDoor",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "readLegacyDoor",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
             default_applied: false,
         },
     ),

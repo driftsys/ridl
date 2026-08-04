@@ -12,10 +12,10 @@ interface Attrs {
   command flagged(level: Level) [
     persist
     persist
-  ]
+  ] @[..50ms]
 
   /// Not a key the general form defines at all.
   command unknown(level: Level) [
     frobnicate = 3
-  ]
+  ] @[..50ms]
 }

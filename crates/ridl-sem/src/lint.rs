@@ -468,7 +468,7 @@ enum GearPosition {
         let checked = check_ridl(&format!(
             "{PRELUDE}
 interface Drive {{
-  query setGear(position: GearPosition): Speed
+  query setGear(position: GearPosition): Speed @[..50ms]
 }}
 "
         ));
@@ -491,13 +491,13 @@ interface Drive {{
         let checked = check_ridl(&format!(
             "{PRELUDE}
 interface Drive {{
-  query setGear(position: GearPosition): Speed
-  query resetTrip(position: GearPosition): Speed
-  query clearFaults(position: GearPosition): Speed
-  query applyBrake(position: GearPosition): Speed
-  query writeConfig(position: GearPosition): Speed
-  query updateMap(position: GearPosition): Speed
-  command setSpeed(target: Speed)
+  query setGear(position: GearPosition): Speed @[..50ms]
+  query resetTrip(position: GearPosition): Speed @[..50ms]
+  query clearFaults(position: GearPosition): Speed @[..50ms]
+  query applyBrake(position: GearPosition): Speed @[..50ms]
+  query writeConfig(position: GearPosition): Speed @[..50ms]
+  query updateMap(position: GearPosition): Speed @[..50ms]
+  command setSpeed(target: Speed) @[..50ms]
 }}
 "
         ));
@@ -516,9 +516,9 @@ interface Drive {{
         let checked = check_ridl(&format!(
             "{PRELUDE}
 interface Drive {{
-  query settings(position: GearPosition): Speed
-  query clearance(position: GearPosition): Speed
-  query getGear(position: GearPosition): GearPosition
+  query settings(position: GearPosition): Speed @[..50ms]
+  query clearance(position: GearPosition): Speed @[..50ms]
+  query getGear(position: GearPosition): GearPosition @[..50ms]
 }}
 "
         ));
@@ -538,11 +538,11 @@ interface Drive {{
         let checked = check_ridl(&format!(
             "{PRELUDE}
 interface Ecu {{
-  query setPoint(): Speed
-  query resetReason(): GearPosition
-  query updateAvailable(): GearPosition
-  query writeProtectEnabled(): GearPosition
-  query applyForce(): Speed
+  query setPoint(): Speed @[..50ms]
+  query resetReason(): GearPosition @[..50ms]
+  query updateAvailable(): GearPosition @[..50ms]
+  query writeProtectEnabled(): GearPosition @[..50ms]
+  query applyForce(): Speed @[..50ms]
 }}
 "
         ));
@@ -586,11 +586,11 @@ error enum DiagError {
         let checked = check_ridl(&format!(
             "{DIAG_VOCABULARY}
 interface Cluster {{
-  query faults(): FaultPage | DiagError
+  query faults(): FaultPage | DiagError @[..50ms]
 }}
 
 interface Powertrain {{
-  query faults(): FaultPage | DiagError
+  query faults(): FaultPage | DiagError @[..50ms]
 }}
 "
         ));
@@ -602,15 +602,15 @@ interface Powertrain {{
         let checked = check_ridl(&format!(
             "{DIAG_VOCABULARY}
 interface Cluster {{
-  query faults(): FaultPage | DiagError
+  query faults(): FaultPage | DiagError @[..50ms]
 }}
 
 interface Powertrain {{
-  query faults(): FaultPage | DiagError
+  query faults(): FaultPage | DiagError @[..50ms]
 }}
 
 interface Infotainment {{
-  query faults(): FaultPage | DiagError
+  query faults(): FaultPage | DiagError @[..50ms]
 }}
 "
         ));
@@ -635,9 +635,9 @@ interface Infotainment {{
         let checked = check_ridl(&format!(
             "{DIAG_VOCABULARY}
 interface Cluster {{
-  query faults(): FaultPage | DiagError
-  query archive(): FaultPage | DiagError
-  query live(): FaultPage | DiagError
+  query faults(): FaultPage | DiagError @[..50ms]
+  query archive(): FaultPage | DiagError @[..50ms]
+  query live(): FaultPage | DiagError @[..50ms]
 }}
 "
         ));
@@ -657,15 +657,15 @@ union FaultPageResult {{
 }}
 
 interface Cluster {{
-  query faults(): FaultPageResult
+  query faults(): FaultPageResult @[..50ms]
 }}
 
 interface Powertrain {{
-  query faults(): FaultPageResult
+  query faults(): FaultPageResult @[..50ms]
 }}
 
 interface Infotainment {{
-  query faults(): FaultPage | DiagError
+  query faults(): FaultPage | DiagError @[..50ms]
 }}
 "
         ));
@@ -698,7 +698,7 @@ struct FaultEvent {
         let silent = check_ridl(&format!(
             "{FAULT_EVENT}
 interface Diagnostics {{
-  query streamFaults(): <FaultEvent>
+  query streamFaults(): <FaultEvent> @[..50ms]
 }}
 "
         ));
@@ -814,7 +814,7 @@ union FaultPageResult {{
 }}
 
 interface Diagnostics {{
-  query getFaultPage(): FaultPageResult
+  query getFaultPage(): FaultPageResult @[..50ms]
 }}
 "
         ));
@@ -835,7 +835,7 @@ interface Diagnostics {{
         let checked = check_ridl(&format!(
             "{DIAG_VOCABULARY}
 interface Diagnostics {{
-  query getFaultPage(): FaultPage | DiagError
+  query getFaultPage(): FaultPage | DiagError @[..50ms]
 }}
 "
         ));
@@ -870,7 +870,7 @@ struct AuditRecord {{
         let checked = check_ridl(&format!(
             "{PRELUDE}
 service veh.drive {{
-  query setGear(position: GearPosition): Speed
+  query setGear(position: GearPosition): Speed @[..50ms]
 }}
 "
         ));
@@ -892,13 +892,13 @@ service veh.drive {{
         let winner = format!(
             "{PRELUDE}
 interface Drive {{
-  query setGear(position: GearPosition): Speed
+  query setGear(position: GearPosition): Speed @[..50ms]
 }}
 "
         );
         let loser = "package app
 interface Drive {
-  query setGear(position: GearPosition): Speed
+  query setGear(position: GearPosition): Speed @[..50ms]
 }
 ";
         let checked = check_ridl_files(&[("a.ridl", &winner), ("b.ridl", loser)]);

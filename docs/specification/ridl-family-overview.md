@@ -182,9 +182,10 @@ By home; see each reference for full statements.
   sentinels · byte order home · canonical encoding · **explicit wire-width floor
   (deferred `wire` clause, §17.11)**
 - **ridl §17**: selective broadcasts · interaction-set reuse · signal groups ·
-  actions/long-operations idiom · QoS boundary vs DDS · mid-stream invalid
-  policy · reflection service · failure-management spec (with safety/HA
-  properties direction)
+  actions/long-operations idiom · mid-stream invalid policy · reflection service
+  · failure-management spec (with safety/HA properties direction) — the QoS
+  boundary question is answered by the ADR-0015 absorption principle (ridl
+  §17.5)
 - **rxdl §11**: the intent occurrence keyword · the acquisition/query cell ·
   interaction citation paths (ridl's, recorded there) · journeys and screen flow
   · accessibility metadata

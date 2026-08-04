@@ -55,9 +55,12 @@ review caught and no single-clause fixture could have. Keep both clauses.
 
 ## Codes exercised here
 
-- RIDL: 100, 101, 102, 103, 104, 105, 106 (all four positions: `command`,
-  `query` and `fixed` timing, plus the `fixed` attribute block), 107, 108, 109,
-  110, 140, 141, 143,
+- RIDL: 100, 101, 102, 103 (on an `event` and, since ADR-0015 widened the
+  rule, on a `command` and a `query`), 104, 105, 106 (both remaining
+  positions: `fixed` timing and the `fixed` attribute block — `command` and
+  `query` left this rule when ADR-0015 admitted the range form on them), 107,
+  108, 109, 110, 112 (both spellings: a bare query, and `@[20ms..]` declaring
+  a throttle with no response bound), 140, 141, 143,
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
   406.
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).

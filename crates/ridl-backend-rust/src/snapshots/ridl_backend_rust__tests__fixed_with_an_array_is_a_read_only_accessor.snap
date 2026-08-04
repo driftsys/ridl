@@ -50,9 +50,12 @@ pub enum TimingMode {
 /// One interaction's resolved timing, in exact microseconds.
 ///
 /// `min_us` is the rate floor and `max_us` the staleness bound; a strict
-/// period carries the same value in both. `default_applied` records that
+/// period carries the same value in both. On a `command` or `query` the
+/// same two bounds are the call throttle and the response bound
+/// (ridl §9, ADR-0015 decision 3). `default_applied` records that
 /// the contract was written without a `@` annotation and the configured
-/// default was resolved in (ridl §9.1).
+/// default was resolved in (ridl §9.1) — always `false` for an RPC,
+/// whose bounds are never defaulted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimingConst {
     pub mode: TimingMode,
@@ -95,7 +98,7 @@ pub trait VehicleStatusConsumer {
 /// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {}
-/// Resolved timing for every signal and event of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const VEHICLE_STATUS_TIMING: &[(&str, TimingConst)] = &[];
 /// Every `require` and `ensure` clause of `VehicleStatus` as data, in source order, for an observer to install (ridl §13).
 pub const VEHICLE_STATUS_CONTRACTS: &[ContractStub] = &[];

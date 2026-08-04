@@ -348,9 +348,12 @@ pub enum TimingMode {
 /// One interaction's resolved timing, in exact microseconds.
 ///
 /// `min_us` is the rate floor and `max_us` the staleness bound; a strict
-/// period carries the same value in both. `default_applied` records that
+/// period carries the same value in both. On a `command` or `query` the
+/// same two bounds are the call throttle and the response bound
+/// (ridl §9, ADR-0015 decision 3). `default_applied` records that
 /// the contract was written without a `@` annotation and the configured
-/// default was resolved in (ridl §9.1).
+/// default was resolved in (ridl §9.1) — always `false` for an RPC,
+/// whose bounds are never defaulted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct TimingConst {
     pub mode: TimingMode,
@@ -409,14 +412,15 @@ pub trait VehicleStatusConsumer {
     /// event `doorOpened` — ordinal 4 (ridl §5).
     /// An occurrence is not state: there is no last-value cache and no provenance.
     fn door_opened(&mut self) -> &mut dyn EventHandle<DoorPayload>;
-    /// Request a gear change — outcome observed via currentGear, not returned
+    /// Request a gear change — outcome observed via currentGear, not returned;
+    /// callers throttle to one request per 20ms, acceptance within 200ms (§9)
     ///
     /// command `setGear` — ordinal 5 (ridl §6).
     /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
     /// require: position != GearPosition.PARK || currentSpeed == 0.0
     async fn set_gear(&self, position: crate::veh::common::GearPosition);
-    /// Sliding-window average
+    /// Sliding-window average — replied within 50ms (§9)
     ///
     /// query `getAverageSpeed` — ordinal 7 (ridl §7).
     /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
@@ -474,7 +478,7 @@ pub trait VehicleStatusProvider {
         filter: DiagFilter,
     ) -> Result<FaultPage, DiagError>;
 }
-/// Resolved timing for every signal and event of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const VEHICLE_STATUS_TIMING: &[(&str, TimingConst)] = &[
     (
         "currentSpeed",
@@ -509,6 +513,42 @@ pub const VEHICLE_STATUS_TIMING: &[(&str, TimingConst)] = &[
             mode: TimingMode::Range,
             min_us: Some(50000),
             max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+    (
+        "setGear",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(20000),
+            max_us: Some(200000),
+            default_applied: false,
+        },
+    ),
+    (
+        "getAverageSpeed",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: Some(10000),
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "streamFaults",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(1000000),
+            default_applied: false,
+        },
+    ),
+    (
+        "getFaultPage",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(100000),
             default_applied: false,
         },
     ),
@@ -569,7 +609,7 @@ pub trait WheelHistoryProvider {
     /// Publishes `wheelSlipRate` — signal ordinal 5 (ridl §4).
     fn publish_wheel_slip_rate(&mut self, value: crate::veh::common::Ratio);
 }
-/// Resolved timing for every signal and event of `WheelHistory`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `WheelHistory`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const WHEEL_HISTORY_TIMING: &[(&str, TimingConst)] = &[
     (
         "wheelTicks",
@@ -642,7 +682,7 @@ pub(crate) trait WheelDiagnosticsProvider {
     /// Handles `readSpan` — query ordinal 5 (ridl §7).
     async fn on_read_span(&mut self) -> WheelDiagnosticsReadSpanResult;
 }
-/// Resolved timing for every signal and event of `WheelDiagnostics`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `WheelDiagnostics`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub(crate) const WHEEL_DIAGNOSTICS_TIMING: &[(&str, TimingConst)] = &[
     (
         "wheelTicks",
@@ -659,6 +699,33 @@ pub(crate) const WHEEL_DIAGNOSTICS_TIMING: &[(&str, TimingConst)] = &[
             mode: TimingMode::Range,
             min_us: Some(50000),
             max_us: Some(500000),
+            default_applied: false,
+        },
+    ),
+    (
+        "readTicks",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "resetTicks",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "readSpan",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
             default_applied: false,
         },
     ),
@@ -682,7 +749,7 @@ pub trait WheelSummaryProvider {
     /// Publishes `wheelHealth` — signal ordinal 1 (ridl §4).
     fn publish_wheel_health(&mut self, value: FanLevel);
 }
-/// Resolved timing for every signal and event of `WheelSummary`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `WheelSummary`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const WHEEL_SUMMARY_TIMING: &[(&str, TimingConst)] = &[
     (
         "wheelHealth",
@@ -716,7 +783,7 @@ pub trait ServiceVehClusterWheelsProvider {
     /// Raises `slipped` — event ordinal 4 (ridl §5).
     fn raise_slipped(&mut self, occurrence: FilterState);
 }
-/// Resolved timing for every signal and event of `ServiceVehClusterWheels`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `ServiceVehClusterWheels`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const SERVICE_VEH_CLUSTER_WHEELS_TIMING: &[(&str, TimingConst)] = &[
     (
         "ticks",
@@ -911,7 +978,7 @@ pub trait ServiceVehHvacCabinProvider {
     /// Handles `scaledFan` — query ordinal 20 (ridl §7).
     async fn on_scaled_fan(&mut self) -> FanLevel;
 }
-/// Resolved timing for every signal and event of `ServiceVehHvacCabin`, keyed by the source name, in exact microseconds (ridl §9).
+/// Resolved timing for every timed interaction of `ServiceVehHvacCabin`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const SERVICE_VEH_HVAC_CABIN_TIMING: &[(&str, TimingConst)] = &[
     (
         "cabinTemp",
@@ -965,6 +1032,105 @@ pub const SERVICE_VEH_HVAC_CABIN_TIMING: &[(&str, TimingConst)] = &[
             min_us: Some(200000),
             max_us: Some(2000000),
             default_applied: true,
+        },
+    ),
+    (
+        "setTarget",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "replayTrace",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "streamFilterHistory",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "rebalance",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "getBounds",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "calibrate",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "getClimate",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "getCabinTemp",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "setFan",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "trimFan",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
+        },
+    ),
+    (
+        "scaledFan",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
+            default_applied: false,
         },
     ),
 ];

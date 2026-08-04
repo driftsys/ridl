@@ -91,27 +91,51 @@ pub struct ContractStub {
 /// The consumer face of `VehicleStatus` — what a component that uses this interface calls (ridl §10.1).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusConsumer {
-    /// Current vehicle speed
+    /// Request a gear change
     ///
-    /// signal `currentSpeed` — ordinal 1 (ridl §4).
-    /// The channel is never empty: a read before the provider's first publication yields `250`, and every read carries its provenance (`Init`, `Live`, or `Invalid` — ridl §4.4, §4.5).
-    /// The channel overrides the type's init with `MAX_SPEED`.
-    fn current_speed(&mut self) -> &mut dyn SignalHandle<crate::veh::common::Speed>;
+    /// command `setGear` — ordinal 5 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn set_gear(&self, position: crate::veh::common::GearPosition);
+    /// Sliding-window average
+    ///
+    /// query `getAverageSpeed` — ordinal 6 (ridl §7).
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn get_average_speed(&self) -> crate::veh::common::Speed;
+    /// No declared bounds
+    ///
+    /// command `resetFaults` — ordinal 7 (ridl §6).
+    /// Always returns `()`. A delivery acknowledgment travels beneath the call — the receiving binding confirms received and accepted for execution — but it carries no functional payload, never reaches the contract surface, and is not application-visible as a return value (ridl §6.1). Observable results travel back as state.
+    /// A transport failure is an infrastructure failure — detected, undeclared (gf §6.4): it is carried by runtime types, never by this signature.
+    async fn reset_faults(&self);
 }
 /// The provider face of `VehicleStatus` — what a component that implements this interface fulfils (ridl §10.1). A `fixed` has no entry here: it is provisioned externally and populated at binding initialization (ridl §8).
 #[allow(async_fn_in_trait)]
 pub trait VehicleStatusProvider {
-    /// Publishes `currentSpeed` — signal ordinal 1 (ridl §4).
-    fn publish_current_speed(&mut self, value: crate::veh::common::Speed);
+    /// Handles `setGear` — command ordinal 5 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_set_gear(&mut self, position: crate::veh::common::GearPosition);
+    /// Handles `getAverageSpeed` — query ordinal 6 (ridl §7).
+    async fn on_get_average_speed(&mut self) -> crate::veh::common::Speed;
+    /// Handles `resetFaults` — command ordinal 7 (ridl §6). The binding has already validated the payload and the `require` clauses; a violating command never reaches this method (ridl §6.2).
+    async fn on_reset_faults(&mut self);
 }
 /// Resolved timing for every timed interaction of `VehicleStatus`, keyed by the source name, in exact microseconds (ridl §9): rate floor and staleness bound on a signal or event, call throttle and response bound on a command or query (ADR-0015 decision 3).
 pub const VEHICLE_STATUS_TIMING: &[(&str, TimingConst)] = &[
     (
-        "currentSpeed",
+        "setGear",
         TimingConst {
-            mode: TimingMode::StrictPeriodic,
-            min_us: Some(10000),
-            max_us: Some(10000),
+            mode: TimingMode::Range,
+            min_us: Some(20000),
+            max_us: Some(200000),
+            default_applied: false,
+        },
+    ),
+    (
+        "getAverageSpeed",
+        TimingConst {
+            mode: TimingMode::Range,
+            min_us: None,
+            max_us: Some(50000),
             default_applied: false,
         },
     ),

@@ -603,6 +603,18 @@ fn diff_interaction(
                     Some(contracts_str(&b.contracts)),
                 );
             }
+            // The declared RPC bounds travel as their own category, not as
+            // `TimingChanged`: the `min` direction inverts on an RPC
+            // (ADR-0015 decision 8).
+            if a.timing != b.timing {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::RpcBoundChanged,
+                    Some(timing_str(a.timing.as_ref())),
+                    Some(timing_str(b.timing.as_ref())),
+                );
+            }
         }
         (Some(Kind::QueryDef(a)), Some(Kind::QueryDef(b))) => {
             if a.params != b.params {
@@ -630,6 +642,17 @@ fn diff_interaction(
                     Category::ContractChanged,
                     Some(contracts_str(&a.contracts)),
                     Some(contracts_str(&b.contracts)),
+                );
+            }
+            // As on a command: the declared RPC bounds are their own category
+            // (ADR-0015 decision 8).
+            if a.timing != b.timing {
+                emit(
+                    changes,
+                    path.to_string(),
+                    Category::RpcBoundChanged,
+                    Some(timing_str(a.timing.as_ref())),
+                    Some(timing_str(b.timing.as_ref())),
                 );
             }
         }

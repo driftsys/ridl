@@ -23,6 +23,12 @@
 //! unset; an untimed signal or event resolves the configured default (RIDL-100)
 //! so that "untimed" never survives past the parser (ridl §9.1) — the IR always
 //! carries concrete bounds and a `default_applied` flag (ADR-0008 decision 12).
+//!
+//! `command` and `query` admit the range form only (ADR-0015 decisions 2, 3,
+//! and 5): `min` is the call throttle and `max` the response bound. An RPC is
+//! **warned, never defaulted** (RIDL-112, ADR-0015 decision 4) — the §9.1
+//! defaulting path above is signal/event only, and an undeclared RPC bound
+//! stays absent in the IR.
 
 use num_bigint::BigInt;
 use num_rational::BigRational;
@@ -53,8 +59,11 @@ pub struct TimingSpec {
     pub default_applied: bool,
 }
 
-/// The five ridl interaction kinds (ridl §4–§8). Only [`InteractionKind::Signal`]
-/// and [`InteractionKind::Event`] carry timing; the other three never do.
+/// The five ridl interaction kinds (ridl §4–§8). [`InteractionKind::Signal`]
+/// and [`InteractionKind::Event`] carry timing and are defaulted when untimed;
+/// [`InteractionKind::Command`] and [`InteractionKind::Query`] admit the range
+/// form only and are never defaulted (ADR-0015 decisions 2 and 4);
+/// [`InteractionKind::Fixed`] carries none.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InteractionKind {
     Signal,
@@ -120,22 +129,28 @@ pub fn parse_default_timing(text: &str) -> Result<TimingSpec, String> {
 }
 
 /// Resolves one interaction's timing to concrete bounds (ridl §9, ADR-0008
-/// decision 12).
+/// decision 12, ADR-0015 decisions 2–6).
 ///
 /// For a `signal` or `event` the result is always `Some`: an explicit `@`
 /// annotation is parsed and validated, and an untimed one resolves to `default`
-/// (RIDL-100). For `command`/`query`/`fixed` the result is always `None` and no
-/// diagnostic is produced — those kinds carry no timing, and the structural
-/// checker already reports any annotation written on them (FORM-102 / RIDL-106).
+/// (RIDL-100). For a `command` or `query` the result is `Some` exactly when an
+/// annotation was written: an RPC is warned, never defaulted (RIDL-112,
+/// ADR-0015 decision 4), so an absent annotation stays `None` and the
+/// `default` argument is never read on this path. For `fixed` the result is
+/// always `None` and no diagnostic is produced — the kind carries no timing,
+/// and the structural checker already reports any annotation written on it
+/// (RIDL-106).
 ///
 /// Validity diagnostics carry `file` as their span source: RIDL-100 (default
 /// applied, warning, anchored on `anchor` — the interaction that received the
 /// default), RIDL-101 (lower bound exceeds upper), RIDL-102 (zero or negative
-/// duration), RIDL-103 (strict `@Xms` on an event), RIDL-108 (`@[X..X]` equal
-/// bounds, warning), and FORM-102 for a duration literal that is not a whole
-/// number of time units (ridl §2.1). An erroneous annotation still lowers its
-/// written bounds, so the IR reflects the source honestly (the E1 discipline)
-/// and no written bound is ever silently unset.
+/// duration), RIDL-103 (strict `@Xms` on a kind other than `signal`), RIDL-108
+/// (`@[X..X]` equal bounds, warning), RIDL-112 (`command` or `query` with no
+/// declared response bound, warning, anchored on `anchor`), and FORM-102 for a
+/// duration literal that is not a whole number of time units (ridl §2.1). An
+/// erroneous annotation still lowers its written bounds, so the IR reflects
+/// the source honestly (the E1 discipline) and no written bound is ever
+/// silently unset.
 pub fn resolve_timing(
     annot: Option<&ast::Timing>,
     kind: InteractionKind,
@@ -143,31 +158,12 @@ pub fn resolve_timing(
     file: FileId,
     anchor: TextRange,
 ) -> (Option<TimingSpec>, Vec<Diagnostic>) {
-    if !matches!(kind, InteractionKind::Signal | InteractionKind::Event) {
+    if matches!(kind, InteractionKind::Fixed) {
         return (None, Vec::new());
     }
 
     let Some(annot) = annot else {
-        // Untimed: the configured default is applied (ridl §9.1); RIDL-100
-        // warns and names the applied bounds, anchored on the interaction that
-        // received the default so a package with many untimed interactions
-        // yields one navigable warning each.
-        let spec = applied_default(default);
-        let diag = diagnostic(
-            DiagCode::RIDL_100,
-            Severity::Warning,
-            file,
-            anchor,
-            format!(
-                "{} without a timing annotation — the default `@{}` is applied: it publishes no \
-                 slower than the rate floor and a subscriber may treat a value older than the \
-                 staleness bound as stale. Write the bounds this {} really promises (ridl §9.1)",
-                kind_noun(kind),
-                render_bounds(&spec),
-                kind_noun(kind),
-            ),
-        );
-        return (Some(spec), vec![diag]);
+        return untimed(kind, default, file, anchor);
     };
 
     let mut diags = Vec::new();
@@ -238,6 +234,15 @@ pub fn resolve_timing(
                 ));
             }
         }
+        // A half-open `@[min..]` on an RPC declares a throttle and no response
+        // bound, so it warns exactly as a bare undecorated RPC does (ADR-0015
+        // decision 4). The test is on the written token, not the resolved
+        // value: an unreadable `max` already drew FORM-102 above and is a
+        // written bound, not an undeclared one.
+        if matches!(kind, InteractionKind::Command | InteractionKind::Query) && max_token.is_none()
+        {
+            diags.push(missing_response_bound(kind, file, anchor));
+        }
         let spec = TimingSpec {
             mode: TimingMode::Range,
             min_us: min,
@@ -264,16 +269,31 @@ pub fn resolve_timing(
                 ),
             ));
         }
-        if matches!(kind, InteractionKind::Event) {
+        // RIDL-103, widened from event-only by ADR-0015 decision 6: the
+        // isochronous mode belongs to state alone, so a strict period is an
+        // error on every kind but `signal`. (`fixed` returned above — it
+        // carries no timing at all, which is RIDL-106.)
+        if !matches!(kind, InteractionKind::Signal) {
+            let (article, subject) = match kind {
+                InteractionKind::Event => (
+                    "an",
+                    "an event reports occurrences that arrive when they arrive",
+                ),
+                _ => (
+                    "a",
+                    "a caller is not isochronous by contract (ADR-0015 decision 5)",
+                ),
+            };
             diags.push(error(
                 DiagCode::RIDL_103,
                 file,
                 node,
                 format!(
-                    "the strict period `@{}` is not valid on an event — a strict period is an \
-                     isochronous publication rate, and an event reports occurrences that arrive \
-                     when they arrive. Write a range `@[min..max]` instead (ridl §9.2)",
+                    "the strict period `@{}` is not valid on {article} {} — a strict period is \
+                     an isochronous publication rate, and {subject}. Write a range `@[min..max]` \
+                     instead (ridl §9.2)",
                     token.text(),
+                    kind_noun(kind),
                 ),
             ));
         }
@@ -286,10 +306,82 @@ pub fn resolve_timing(
         (Some(spec), diags)
     } else {
         // A degenerate `Timing` node with neither a duration nor a range (a
-        // parse error, already reported). Apply the default so the IR still
-        // carries concrete bounds.
-        (Some(applied_default(default)), diags)
+        // parse error, already reported). A signal or event applies the
+        // default so the IR still carries concrete bounds; an RPC stays
+        // absent, because absent means undeclared (ADR-0015 decision 4).
+        match kind {
+            InteractionKind::Signal | InteractionKind::Event => {
+                (Some(applied_default(default)), diags)
+            }
+            _ => {
+                diags.push(missing_response_bound(kind, file, anchor));
+                (None, diags)
+            }
+        }
     }
+}
+
+/// An interaction with no `@` annotation at all.
+///
+/// A signal or event resolves the configured default (ridl §9.1); RIDL-100
+/// warns and names the applied bounds, anchored on the interaction that
+/// received the default so a package with many untimed interactions yields one
+/// navigable warning each. A command or query is warned, never defaulted
+/// (RIDL-112, ADR-0015 decision 4): there is no plausible generic response
+/// bound, so the IR carries nothing rather than a manufactured promise.
+fn untimed(
+    kind: InteractionKind,
+    default: &TimingSpec,
+    file: FileId,
+    anchor: TextRange,
+) -> (Option<TimingSpec>, Vec<Diagnostic>) {
+    match kind {
+        InteractionKind::Signal | InteractionKind::Event => {
+            let spec = applied_default(default);
+            let diag = diagnostic(
+                DiagCode::RIDL_100,
+                Severity::Warning,
+                file,
+                anchor,
+                format!(
+                    "{} without a timing annotation — the default `@{}` is applied: it publishes \
+                     no slower than the rate floor and a subscriber may treat a value older than \
+                     the staleness bound as stale. Write the bounds this {} really promises \
+                     (ridl §9.1)",
+                    kind_noun(kind),
+                    render_bounds(&spec),
+                    kind_noun(kind),
+                ),
+            );
+            (Some(spec), vec![diag])
+        }
+        _ => (None, vec![missing_response_bound(kind, file, anchor)]),
+    }
+}
+
+/// RIDL-112: a `command` or `query` with no declared response bound — no
+/// annotation at all, or the half-open `@[min..]` that declares a throttle
+/// only (ADR-0015 decisions 4 and 6). Warning; a profile may escalate it, the
+/// same two-step §9.1 gives an untimed signal or event. A missing `min` draws
+/// nothing — an unbounded call rate is the default every RPC has today.
+fn missing_response_bound(kind: InteractionKind, file: FileId, anchor: TextRange) -> Diagnostic {
+    let responding = match kind {
+        InteractionKind::Command => "acceptance — the §6.1 acknowledgment, not execution",
+        _ => "the reply",
+    };
+    diagnostic(
+        DiagCode::RIDL_112,
+        Severity::Warning,
+        file,
+        anchor,
+        format!(
+            "{} without a declared response bound — no default is applied, because a response \
+             bound is a provider obligation callers size their timeouts against, and inventing \
+             one would manufacture a promise nobody made. Write `@[..max]` to bound {} (ridl §9)",
+            kind_noun(kind),
+            responding,
+        ),
+    )
 }
 
 /// One bound of a configured `[defaults].timing`, required to be a whole
@@ -517,7 +609,7 @@ mod tests {
     }
 
     /// Parses one interaction declaration inside an interface and returns its
-    /// timing annotation (the `signal`/`event` timing accessor).
+    /// timing annotation (every timed kind's timing accessor).
     fn annot(decl: &str) -> ast::Timing {
         let src = format!("package p\ninterface I {{\n  {decl}\n}}\n");
         let parse = ridl_syntax::parse(&src, Profile::Ridl);
@@ -526,7 +618,9 @@ mod tests {
         match interface.members().next().expect("one member") {
             ast::InterfaceMember::Signal(signal) => signal.timing().expect("signal timing"),
             ast::InterfaceMember::Event(event) => event.timing().expect("event timing"),
-            other => panic!("expected a signal or event, got {other:?}"),
+            ast::InterfaceMember::Command(command) => command.timing().expect("command timing"),
+            ast::InterfaceMember::Query(query) => query.timing().expect("query timing"),
+            other => panic!("expected a timed interaction kind, got {other:?}"),
         }
     }
 
@@ -814,16 +908,150 @@ mod tests {
     }
 
     #[test]
-    fn command_query_fixed_carry_no_timing() {
-        for kind in [
-            InteractionKind::Command,
-            InteractionKind::Query,
-            InteractionKind::Fixed,
+    fn fixed_carries_no_timing() {
+        let (spec, diags) = resolve(None, InteractionKind::Fixed, &builtin_default_timing());
+        assert_eq!(spec, None, "fixed carries no timing");
+        assert!(diags.is_empty(), "fixed produces no timing diagnostic");
+    }
+
+    // --- RPC bounds (ADR-0015 decisions 2–6, E9.4) ------------------------
+
+    /// The range form resolves on a command and a query exactly as it does on
+    /// a signal: `min` is the call throttle, `max` the response bound, and
+    /// nothing is defaulted (ADR-0015 decisions 2 and 3).
+    #[test]
+    fn rpc_range_resolves_both_bounds_clean() {
+        for (decl, kind) in [
+            (
+                "command setTarget(speed: Speed) @[20ms..50ms]",
+                InteractionKind::Command,
+            ),
+            (
+                "query getSpeed(): Speed @[20ms..50ms]",
+                InteractionKind::Query,
+            ),
         ] {
-            let (spec, diags) = resolve(None, kind, &builtin_default_timing());
-            assert_eq!(spec, None, "{kind:?} carries no timing");
-            assert!(diags.is_empty(), "{kind:?} produces no timing diagnostic");
+            let (spec, diags) = resolve(Some(&annot(decl)), kind, &builtin_default_timing());
+            assert!(diags.is_empty(), "{kind:?} range is clean: {diags:?}");
+            let spec = spec.expect("a written annotation resolves");
+            assert_eq!(spec.mode, TimingMode::Range);
+            assert_eq!(spec.min_us, Some(us("20000")));
+            assert_eq!(spec.max_us, Some(us("50000")));
+            assert!(!spec.default_applied, "an RPC bound is never defaulted");
         }
+    }
+
+    /// `@[..100ms]` declares a response bound and no throttle — a missing
+    /// `min` draws nothing (ADR-0015 decision 4).
+    #[test]
+    fn rpc_half_open_response_bound_only_warns_nothing() {
+        let (spec, diags) = resolve(
+            Some(&annot("query getSpeed(): Speed @[..100ms]")),
+            InteractionKind::Query,
+            &builtin_default_timing(),
+        );
+        assert!(diags.is_empty(), "a missing throttle is clean: {diags:?}");
+        let spec = spec.expect("resolved");
+        assert_eq!(spec.min_us, None);
+        assert_eq!(spec.max_us, Some(us("100000")));
+    }
+
+    /// `@[20ms..]` declares a throttle and no response bound, so it warns
+    /// exactly as a bare undecorated RPC does (ADR-0015 decision 4).
+    #[test]
+    fn rpc_half_open_throttle_only_draws_ridl_112() {
+        let (spec, diags) = resolve(
+            Some(&annot("query getSpeed(): Speed @[20ms..]")),
+            InteractionKind::Query,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&diags), vec!["RIDL-112"]);
+        assert_eq!(diags[0].severity, Severity::Warning);
+        // The written throttle still lowers honestly.
+        let spec = spec.expect("resolved");
+        assert_eq!(spec.min_us, Some(us("20000")));
+        assert_eq!(spec.max_us, None, "absent means absent — never defaulted");
+    }
+
+    /// A bare command or query draws RIDL-112 and resolves no timing at all:
+    /// the §9.1 defaulting path is signal/event only, so the IR carries
+    /// nothing rather than a manufactured bound (ADR-0015 decision 4).
+    #[test]
+    fn rpc_without_annotation_draws_ridl_112_and_stays_absent() {
+        for kind in [InteractionKind::Command, InteractionKind::Query] {
+            let (spec, diags) = resolve(None, kind, &builtin_default_timing());
+            assert_eq!(spec, None, "{kind:?} is never defaulted");
+            assert_eq!(codes(&diags), vec!["RIDL-112"]);
+            assert_eq!(diags[0].severity, Severity::Warning);
+        }
+        // The command message derives responding as acceptance, not execution
+        // (ridl §6.1, ADR-0015 decision 3).
+        let (_, on_command) = resolve(None, InteractionKind::Command, &builtin_default_timing());
+        assert!(
+            on_command[0].message.contains("acceptance") && on_command[0].message.contains("§6.1"),
+            "a command's bound is acceptance: {}",
+            on_command[0].message,
+        );
+        let (_, on_query) = resolve(None, InteractionKind::Query, &builtin_default_timing());
+        assert!(
+            on_query[0].message.contains("the reply"),
+            "a query's bound is the reply: {}",
+            on_query[0].message,
+        );
+    }
+
+    /// Strict periodic stays signal-only: `@Xms` on a command or query is
+    /// RIDL-103, widened from event-only (ADR-0015 decisions 5 and 6).
+    #[test]
+    fn ridl_103_strict_periodic_on_command_and_query() {
+        for (decl, kind) in [
+            (
+                "command setTarget(speed: Speed) @10ms",
+                InteractionKind::Command,
+            ),
+            ("query getSpeed(): Speed @10ms", InteractionKind::Query),
+        ] {
+            let (spec, diags) = resolve(Some(&annot(decl)), kind, &builtin_default_timing());
+            assert_eq!(codes(&diags), vec!["RIDL-103"], "{kind:?}");
+            assert!(
+                diags[0].message.contains("not isochronous by contract"),
+                "the message names the RPC reason: {}",
+                diags[0].message,
+            );
+            // The written period still lowers honestly.
+            assert_eq!(spec.expect("resolved").min_us, Some(us("10000")));
+        }
+    }
+
+    /// RIDL-101, RIDL-102, and RIDL-108 apply to an RPC unchanged (ADR-0015
+    /// decision 6).
+    #[test]
+    fn rpc_range_validity_rules_apply_unchanged() {
+        let (_, inverted) = resolve(
+            Some(&annot("query getSpeed(): Speed @[100ms..50ms]")),
+            InteractionKind::Query,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&inverted), vec!["RIDL-101"]);
+
+        let (_, zero) = resolve(
+            Some(&annot("command setTarget(speed: Speed) @[0ms..100ms]")),
+            InteractionKind::Command,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&zero), vec!["RIDL-102"]);
+
+        let (_, degenerate) = resolve(
+            Some(&annot("query getSpeed(): Speed @[30ms..30ms]")),
+            InteractionKind::Query,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&degenerate), vec!["RIDL-108"]);
+        assert!(
+            !degenerate[0].message.contains("@30ms"),
+            "an RPC has no strict period to be offered: {}",
+            degenerate[0].message,
+        );
     }
 
     #[test]

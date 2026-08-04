@@ -23,9 +23,9 @@ service diag.showcase.inline {
   /// RIDL-302 — a command has no result to observe, inside an inline shape.
   command act(level: Level) [
     ensure true
-  ]
+  ] @[..50ms]
 
   /// RIDL-308 — the named result union steered to `T | E`, inside an inline
   /// shape.
-  query paged(limit: Level): NamedResult
+  query paged(limit: Level): NamedResult @[..50ms]
 }

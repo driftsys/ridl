@@ -57,14 +57,14 @@ pub enum Verdict {
 /// left `CATEGORIES` shadowed rather than produced, and an assertion comparing
 /// two lists can be defeated by editing what feeds it.
 ///
-/// A 21st variant therefore stops three functions compiling — [`classify`],
+/// A new variant therefore stops three functions compiling — [`classify`],
 /// [`explain`], and [`category_word`] — and reaches `CATEGORIES` with no second
 /// edit. The escape rustc's own `help:` text proposes for those three errors is
 /// a wildcard arm. Each of the three functions denies
 /// `clippy::wildcard_enum_match_arm` and
 /// `clippy::match_wildcard_for_single_variants` for exactly that reason. The
 /// second lint is the load-bearing one: the first does not fire when the
-/// wildcard covers a single variant, which is precisely the 21st-variant case,
+/// wildcard covers a single variant, which is precisely the added-variant case,
 /// so denying it alone leaves clippy green.
 ///
 /// How far the wildcard gets before clippy stops it depends on what its body
@@ -75,7 +75,7 @@ pub enum Verdict {
 /// `just build` runs clippy so that the third is caught too.
 ///
 /// What this does **not** close: rustc forces *an* arm, not the right one. A
-/// 21st variant given an explicit arm that classifies compatible, or whose rule
+/// new variant given an explicit arm that classifies compatible, or whose rule
 /// row describes the wrong rule, still compiles and still passes. The [`explain`]
 /// coverage test checks that each row names a verdict and that its word
 /// round-trips; neither is proof that the row is correct.
@@ -146,6 +146,11 @@ declare_categories! {
         ParamsChanged,
         /// A signal/event resolved timing changed.
         TimingChanged,
+        /// A command/query declared RPC bound changed (ADR-0015 decision 8).
+        /// Separate from [`Category::TimingChanged`] because the direction of
+        /// `min` inverts: on an RPC it constrains the caller, not the
+        /// provider, so the signal/event rule must not be inherited silently.
+        RpcBoundChanged,
         /// A command/query require/ensure clause set changed.
         ContractChanged,
         /// A derived wire width or scalar backing changed.
@@ -342,7 +347,7 @@ pub(crate) fn verdict_word(verdict: Verdict) -> &'static str {
 // proposes is `_ =>`, which classifies the new variant silently. The
 // two lints below reject a wildcard over `Category` — the first when
 // it covers several variants, the second when it covers exactly one,
-// which is the case a 21st variant creates.
+// which is the case one added variant creates.
 #[deny(
     clippy::wildcard_enum_match_arm,
     clippy::match_wildcard_for_single_variants
@@ -361,6 +366,7 @@ pub fn category_word(category: Category) -> &'static str {
         Category::ReturnChanged => "return_changed",
         Category::ParamsChanged => "params_changed",
         Category::TimingChanged => "timing_changed",
+        Category::RpcBoundChanged => "rpc_bound_changed",
         Category::ContractChanged => "contract_changed",
         Category::WidthChanged => "width_changed",
         Category::ConstraintChanged => "constraint_changed",
