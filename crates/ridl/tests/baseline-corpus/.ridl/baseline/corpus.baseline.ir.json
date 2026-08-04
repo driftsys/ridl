@@ -3,222 +3,164 @@
   "decls": [
     {
       "name": "Speed",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Unit": "km/h"
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "250",
-            "step": "0.5",
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "FloatWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "unit": "km/h"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "250",
+          "step": "0.5"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
       }
     },
     {
       "name": "DoorState",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Primitive": 2
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "1",
-            "step": null,
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "IntWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_INTEGER"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "1"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "intWidth": "INT_WIDTH_U8"
       }
     },
     {
       "name": "GearIndex",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Primitive": 2
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "6",
-            "step": null,
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "IntWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_INTEGER"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "6"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "intWidth": "INT_WIDTH_U8"
       }
     }
   ],
   "interfaces": [
     {
       "name": "VehicleStatus",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "interactions": [
         {
           "name": "currentSpeed",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 1,
-          "kind": {
-            "SignalDef": {
-              "payload": "Speed",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": 1,
-                "min_us": "10000",
-                "max_us": "10000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "Speed",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_STRICT_PERIODIC",
+              "minUs": "10000",
+              "maxUs": "10000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "doorOpened",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 2,
-          "kind": {
-            "EventDef": {
-              "payload": "DoorState",
-              "timing": {
-                "mode": 2,
-                "min_us": "100000",
-                "max_us": "1000000",
-                "default_applied": false
-              }
+          "eventDef": {
+            "payload": "DoorState",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "doorClosed",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 3,
-          "kind": {
-            "EventDef": {
-              "payload": "DoorState",
-              "timing": {
-                "mode": 2,
-                "min_us": "100000",
-                "max_us": "1000000",
-                "default_applied": false
-              }
+          "eventDef": {
+            "payload": "DoorState",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "setGear",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 4,
-          "kind": {
-            "CommandDef": {
-              "params": [
-                {
-                  "name": "gear",
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "GearIndex"
-                    }
-                  }
+          "commandDef": {
+            "params": [
+              {
+                "name": "gear",
+                "type": {
+                  "optional": false,
+                  "named": "GearIndex"
                 }
-              ],
-              "contracts": []
-            }
+              }
+            ],
+            "contracts": []
           }
         },
         {
           "name": "",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 5,
-          "kind": {
-            "ReservedSlot": {
-              "ordinal": 5,
-              "name": "legacyWheelPhase",
-              "value": null
-            }
+          "reservedSlot": {
+            "ordinal": 5,
+            "name": "legacyWheelPhase"
           }
         }
       ]
@@ -227,90 +169,74 @@
   "services": [
     {
       "name": "corpus.baseline.hvac",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "",
       "labels": [],
-      "deprecated": null,
-      "shape": {
-        "Inline": {
-          "name": "",
-          "visibility": 0,
-          "doc": "",
-          "labels": [],
-          "deprecated": null,
-          "interactions": [
-            {
-              "name": "cabinTemp",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 1,
-              "kind": {
-                "SignalDef": {
-                  "payload": "Speed",
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "timing": {
-                    "mode": 2,
-                    "min_us": "500000",
-                    "max_us": "5000000",
-                    "default_applied": false
-                  }
-                }
-              }
-            },
-            {
-              "name": "filterClogged",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 2,
-              "kind": {
-                "EventDef": {
-                  "payload": "DoorState",
-                  "timing": {
-                    "mode": 2,
-                    "min_us": "100000",
-                    "max_us": "1000000",
-                    "default_applied": false
-                  }
-                }
-              }
-            },
-            {
-              "name": "setEcoMode",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 3,
-              "kind": {
-                "CommandDef": {
-                  "params": [
-                    {
-                      "name": "level",
-                      "type": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "GearIndex"
-                        }
-                      }
-                    }
-                  ],
-                  "contracts": []
-                }
+      "inline": {
+        "name": "",
+        "visibility": "VISIBILITY_UNSPECIFIED",
+        "doc": "",
+        "labels": [],
+        "interactions": [
+          {
+            "name": "cabinTemp",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "",
+            "labels": [],
+            "ordinal": 1,
+            "signalDef": {
+              "payload": "Speed",
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "minUs": "500000",
+                "maxUs": "5000000",
+                "defaultApplied": false
               }
             }
-          ]
-        }
+          },
+          {
+            "name": "filterClogged",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "",
+            "labels": [],
+            "ordinal": 2,
+            "eventDef": {
+              "payload": "DoorState",
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "minUs": "100000",
+                "maxUs": "1000000",
+                "defaultApplied": false
+              }
+            }
+          },
+          {
+            "name": "setEcoMode",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "",
+            "labels": [],
+            "ordinal": 3,
+            "commandDef": {
+              "params": [
+                {
+                  "name": "level",
+                  "type": {
+                    "optional": false,
+                    "named": "GearIndex"
+                  }
+                }
+              ],
+              "contracts": []
+            }
+          }
+        ]
       }
     }
   ]

@@ -9,954 +9,699 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   "decls": [
     {
       "name": "Speed",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "Vehicle speed over ground",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Unit": "km/h"
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "250",
-            "step": "0.5",
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "FloatWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "unit": "km/h"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "250",
+          "step": "0.5"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
       }
     },
     {
       "name": "Temperature",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "Coolant / ambient temperature",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Unit": "Cel"
-            }
-          },
-          "constraint": {
-            "min": "-40",
-            "max": "125",
-            "step": "0.1",
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "FloatWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "unit": "Cel"
+        },
+        "constraint": {
+          "min": "-40",
+          "max": "125",
+          "step": "0.1"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
       }
     },
     {
       "name": "RPM",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "Engine crankshaft speed",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Unit": "/min"
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "8000",
-            "step": "10",
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "FloatWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "unit": "/min"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "8000",
+          "step": "10"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
       }
     },
     {
       "name": "Ratio",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "Normalised ratio",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Unit": "%"
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "100",
-            "step": "0.1",
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "FloatWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "unit": "%"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "100",
+          "step": "0.1"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
       }
     },
     {
       "name": "Counter",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Primitive": 2
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "65535",
-            "step": null,
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "IntWidth": 3
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_INTEGER"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "65535"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "intWidth": "INT_WIDTH_U16"
       }
     },
     {
       "name": "Gain",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Primitive": 3
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "1",
-            "step": "0.01",
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "FloatWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_FLOAT"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "1",
+          "step": "0.01"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
       }
     },
     {
       "name": "MAX_SPEED",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "Speed",
-          "value": "250",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "Speed",
+        "value": "250"
       }
     },
     {
       "name": "SPEED_LIMIT_EU",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "Speed",
-          "value": "130",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "Speed",
+        "value": "130"
       }
     },
     {
       "name": "MAX_GEAR",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "integer",
-          "value": "6",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "integer",
+        "value": "6"
       }
     },
     {
       "name": "IDLE_RPM",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "RPM",
-          "value": "800",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "RPM",
+        "value": "800"
       }
     },
     {
       "name": "GearPosition",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "EnumDef": {
-          "values": [
-            {
-              "name": "PARK",
-              "value": 0,
-              "doc": ""
-            },
-            {
-              "name": "DRIVE",
-              "value": 1,
-              "doc": ""
-            },
-            {
-              "name": "REVERSE",
-              "value": 2,
-              "doc": ""
-            },
-            {
-              "name": "NEUTRAL",
-              "value": 3,
-              "doc": ""
-            }
-          ],
-          "reserved": []
-        }
+      "enumDef": {
+        "values": [
+          {
+            "name": "PARK",
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": "DRIVE",
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": "REVERSE",
+            "value": "2",
+            "doc": ""
+          },
+          {
+            "name": "NEUTRAL",
+            "value": "3",
+            "doc": ""
+          }
+        ],
+        "reserved": []
       }
     },
     {
       "name": "Warning",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "EnumDef": {
-          "values": [
-            {
-              "name": "LOW_FUEL",
-              "value": 0,
-              "doc": ""
-            },
-            {
-              "name": "CHECK_ENGINE",
-              "value": 1,
-              "doc": ""
-            },
-            {
-              "name": "DOOR_OPEN",
-              "value": 2,
-              "doc": ""
-            },
-            {
-              "name": "SEATBELT",
-              "value": 3,
-              "doc": ""
-            }
-          ],
-          "reserved": []
-        }
+      "enumDef": {
+        "values": [
+          {
+            "name": "LOW_FUEL",
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": "CHECK_ENGINE",
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": "DOOR_OPEN",
+            "value": "2",
+            "doc": ""
+          },
+          {
+            "name": "SEATBELT",
+            "value": "3",
+            "doc": ""
+          }
+        ],
+        "reserved": []
       }
     },
     {
       "name": "WarningFlags",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "EnumSetDef": {
-          "backing_enum": "Warning",
-          "bits": [
-            {
-              "name": "LOW_FUEL",
-              "value": 0,
-              "doc": ""
-            },
-            {
-              "name": "CHECK_ENGINE",
-              "value": 1,
-              "doc": ""
-            },
-            {
-              "name": "DOOR_OPEN",
-              "value": 2,
-              "doc": ""
-            },
-            {
-              "name": "SEATBELT",
-              "value": 3,
-              "doc": ""
-            }
-          ],
-          "width": 1
-        }
+      "enumSetDef": {
+        "backingEnum": "Warning",
+        "bits": [
+          {
+            "name": "LOW_FUEL",
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": "CHECK_ENGINE",
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": "DOOR_OPEN",
+            "value": "2",
+            "doc": ""
+          },
+          {
+            "name": "SEATBELT",
+            "value": "3",
+            "doc": ""
+          }
+        ],
+        "width": "INT_WIDTH_U8"
       }
     },
     {
       "name": "SpeedLimitPayload",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "limit",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "Speed"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "actual",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "Speed"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "limit",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Speed"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": true
-        }
+          },
+          {
+            "field": {
+              "name": "actual",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "Speed"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
       }
     },
     {
       "name": "DriverProfile",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "name",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "ridl.std.Name"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": false,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "speed",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "Speed"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "override",
-                  "ordinal": 3,
-                  "type": {
-                    "optional": true,
-                    "kind": {
-                      "Named": "Speed"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "gears",
-                  "ordinal": 4,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "InlineScalar": {
-                        "backing": {
-                          "kind": {
-                            "Primitive": 2
-                          }
-                        },
-                        "constraint": {
-                          "min": "0",
-                          "max": "6",
-                          "step": null,
-                          "len_min": null,
-                          "len_max": null,
-                          "pattern": null,
-                          "pattern_const": null
-                        },
-                        "declared_init": null,
-                        "init": null,
-                        "width": {
-                          "IntWidth": 1
-                        }
-                      }
-                    }
-                  },
-                  "declared_init": "6",
-                  "init": {
-                    "derivable": true,
-                    "value": "6"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "name",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "ridl.std.Name"
+              },
+              "init": {
+                "derivable": false
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": false
-        }
+          },
+          {
+            "field": {
+              "name": "speed",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "Speed"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "field": {
+              "name": "override",
+              "ordinal": 3,
+              "type": {
+                "optional": true,
+                "named": "Speed"
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "field": {
+              "name": "gears",
+              "ordinal": 4,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_INTEGER"
+                  },
+                  "constraint": {
+                    "min": "0",
+                    "max": "6"
+                  },
+                  "intWidth": "INT_WIDTH_U8"
+                }
+              },
+              "declaredInit": "6",
+              "init": {
+                "derivable": true,
+                "value": "6"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
       }
     },
     {
       "name": "SensorBounds",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "range",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Tuple": {
-                        "fields": [
-                          {
-                            "name": "min",
-                            "type": {
-                              "optional": false,
-                              "kind": {
-                                "Named": "Speed"
-                              }
-                            }
-                          },
-                          {
-                            "name": "max",
-                            "type": {
-                              "optional": false,
-                              "kind": {
-                                "Named": "Speed"
-                              }
-                            }
-                          }
-                        ]
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "range",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "tuple": {
+                  "fields": [
+                    {
+                      "name": "min",
+                      "type": {
+                        "optional": false,
+                        "named": "Speed"
+                      }
+                    },
+                    {
+                      "name": "max",
+                      "type": {
+                        "optional": false,
+                        "named": "Speed"
                       }
                     }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
+                  ]
                 }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "readings",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Array": {
-                        "element": {
-                          "optional": false,
-                          "kind": {
-                            "Named": "Speed"
-                          }
-                        },
-                        "min": 8,
-                        "max": 8
-                      }
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "labels",
-                  "ordinal": 3,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Array": {
-                        "element": {
-                          "optional": false,
-                          "kind": {
-                            "Named": "ridl.std.Label"
-                          }
-                        },
-                        "min": 1,
-                        "max": 16
-                      }
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": false,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "meta",
-                  "ordinal": 4,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Map": {
-                        "key": {
-                          "optional": false,
-                          "kind": {
-                            "Named": "ridl.std.Label"
-                          }
-                        },
-                        "value": {
-                          "optional": false,
-                          "kind": {
-                            "Named": "ridl.std.Name"
-                          }
-                        },
-                        "min": 0,
-                        "max": 32
-                      }
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": false
-        }
+          },
+          {
+            "field": {
+              "name": "readings",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": "Speed"
+                  },
+                  "min": "8",
+                  "max": "8"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "field": {
+              "name": "labels",
+              "ordinal": 3,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": "ridl.std.Label"
+                  },
+                  "min": "1",
+                  "max": "16"
+                }
+              },
+              "init": {
+                "derivable": false
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "field": {
+              "name": "meta",
+              "ordinal": 4,
+              "type": {
+                "optional": false,
+                "map": {
+                  "key": {
+                    "optional": false,
+                    "named": "ridl.std.Label"
+                  },
+                  "value": {
+                    "optional": false,
+                    "named": "ridl.std.Name"
+                  },
+                  "min": "0",
+                  "max": "32"
+                }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
       }
     },
     {
       "name": "SensorResult",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "UnionDef": {
-          "arms": [
-            {
-              "name": "ok",
-              "ordinal": 1,
-              "type_ref": "SensorReading",
-              "doc": ""
-            },
-            {
-              "name": "err",
-              "ordinal": 2,
-              "type_ref": "SensorFault",
-              "doc": ""
-            }
-          ],
-          "is_result": true,
-          "reserved": []
-        }
+      "unionDef": {
+        "arms": [
+          {
+            "name": "ok",
+            "ordinal": 1,
+            "typeRef": "SensorReading",
+            "doc": ""
+          },
+          {
+            "name": "err",
+            "ordinal": 2,
+            "typeRef": "SensorFault",
+            "doc": ""
+          }
+        ],
+        "isResult": true,
+        "reserved": []
       }
     },
     {
       "name": "SensorReading",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "value",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "Speed"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "timestamp",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "ridl.std.Timestamp"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "value",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Speed"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": true
-        }
+          },
+          {
+            "field": {
+              "name": "timestamp",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "ridl.std.Timestamp"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
       }
     },
     {
       "name": "SensorFault",
-      "visibility": 1,
-      "is_error": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "code",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "Counter"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "message",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "ridl.std.Message"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": false,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "code",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Counter"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": false
-        }
+          },
+          {
+            "field": {
+              "name": "message",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "ridl.std.Message"
+              },
+              "init": {
+                "derivable": false
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
       }
     },
     {
       "name": "RawWheelFrame",
-      "visibility": 2,
-      "is_error": false,
+      "visibility": "VISIBILITY_INTERNAL",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "ticks",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "Counter"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "frame",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "InlineScalar": {
-                        "backing": {
-                          "kind": {
-                            "Primitive": 5
-                          }
-                        },
-                        "constraint": {
-                          "min": null,
-                          "max": null,
-                          "step": null,
-                          "len_min": 8,
-                          "len_max": 8,
-                          "pattern": null,
-                          "pattern_const": null
-                        },
-                        "declared_init": null,
-                        "init": null,
-                        "width": null
-                      }
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": false,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "ticks",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "Counter"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": false
-        }
+          },
+          {
+            "field": {
+              "name": "frame",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_BYTES"
+                  },
+                  "constraint": {
+                    "lenMin": "8",
+                    "lenMax": "8"
+                  }
+                }
+              },
+              "init": {
+                "derivable": false
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
       }
     }
   ],
@@ -970,1157 +715,858 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   "decls": [
     {
       "name": "DoorPayload",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "sensorId",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "InlineScalar": {
-                        "backing": {
-                          "kind": {
-                            "Primitive": 2
-                          }
-                        },
-                        "constraint": {
-                          "min": "0",
-                          "max": "15",
-                          "step": null,
-                          "len_min": null,
-                          "len_max": null,
-                          "pattern": null,
-                          "pattern_const": null
-                        },
-                        "declared_init": null,
-                        "init": null,
-                        "width": {
-                          "IntWidth": 1
-                        }
-                      }
-                    }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "sensorId",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_INTEGER"
                   },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
+                  "constraint": {
+                    "min": "0",
+                    "max": "15"
                   },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
+                  "intWidth": "INT_WIDTH_U8"
                 }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "isOpen",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Primitive": 1
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "false"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": true
-        }
+          },
+          {
+            "field": {
+              "name": "isOpen",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+              },
+              "init": {
+                "derivable": true,
+                "value": "false"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
       }
     },
     {
       "name": "DiagFilter",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "severity",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "InlineScalar": {
-                        "backing": {
-                          "kind": {
-                            "Primitive": 2
-                          }
-                        },
-                        "constraint": {
-                          "min": "0",
-                          "max": "5",
-                          "step": null,
-                          "len_min": null,
-                          "len_max": null,
-                          "pattern": null,
-                          "pattern_const": null
-                        },
-                        "declared_init": null,
-                        "init": null,
-                        "width": {
-                          "IntWidth": 1
-                        }
-                      }
-                    }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "severity",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_INTEGER"
                   },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
+                  "constraint": {
+                    "min": "0",
+                    "max": "5"
                   },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
+                  "intWidth": "INT_WIDTH_U8"
                 }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "category",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": true,
-                    "kind": {
-                      "Named": "ridl.std.Label"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": false
-        }
+          },
+          {
+            "field": {
+              "name": "category",
+              "ordinal": 2,
+              "type": {
+                "optional": true,
+                "named": "ridl.std.Label"
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
       }
     },
     {
       "name": "FaultEvent",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "code",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "InlineScalar": {
-                        "backing": {
-                          "kind": {
-                            "Primitive": 2
-                          }
-                        },
-                        "constraint": {
-                          "min": "0",
-                          "max": "65535",
-                          "step": null,
-                          "len_min": null,
-                          "len_max": null,
-                          "pattern": null,
-                          "pattern_const": null
-                        },
-                        "declared_init": null,
-                        "init": null,
-                        "width": {
-                          "IntWidth": 3
-                        }
-                      }
-                    }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "code",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_INTEGER"
                   },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
+                  "constraint": {
+                    "min": "0",
+                    "max": "65535"
                   },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
+                  "intWidth": "INT_WIDTH_U16"
                 }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "message",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "ridl.std.Message"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": false,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "timestamp",
-                  "ordinal": 3,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "ridl.std.Timestamp"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": false
-        }
+          },
+          {
+            "field": {
+              "name": "message",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "ridl.std.Message"
+              },
+              "init": {
+                "derivable": false
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "field": {
+              "name": "timestamp",
+              "ordinal": 3,
+              "type": {
+                "optional": false,
+                "named": "ridl.std.Timestamp"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": false
       }
     },
     {
       "name": "DiagError",
-      "visibility": 1,
-      "is_error": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "EnumDef": {
-          "values": [
-            {
-              "name": "FILTER_INVALID",
-              "value": 0,
-              "doc": ""
-            },
-            {
-              "name": "STORAGE_BUSY",
-              "value": 1,
-              "doc": ""
-            },
-            {
-              "name": "ACCESS_DENIED",
-              "value": 2,
-              "doc": ""
-            }
-          ],
-          "reserved": []
-        }
+      "enumDef": {
+        "values": [
+          {
+            "name": "FILTER_INVALID",
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": "STORAGE_BUSY",
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": "ACCESS_DENIED",
+            "value": "2",
+            "doc": ""
+          }
+        ],
+        "reserved": []
       }
     },
     {
       "name": "FaultPage",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "faults",
-                  "ordinal": 1,
-                  "type": {
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "faults",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
                     "optional": false,
-                    "kind": {
-                      "Array": {
-                        "element": {
-                          "optional": false,
-                          "kind": {
-                            "Named": "FaultEvent"
-                          }
-                        },
-                        "min": 0,
-                        "max": 64
-                      }
-                    }
+                    "named": "FaultEvent"
                   },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
+                  "min": "0",
+                  "max": "64"
                 }
-              }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": false
-        }
+          }
+        ],
+        "fixedLayout": false
       }
     },
     {
       "name": "RawTickCount",
-      "visibility": 2,
-      "is_error": false,
+      "visibility": "VISIBILITY_INTERNAL",
+      "isError": false,
       "doc": "A package-private payload type, so the interaction layer's legal\n`internal`-over-`internal` case is exercised inside one package. The\ncross-package counterpart is impossible by construction: a foreign\n`internal` name never resolves (typl §3.3).",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Primitive": 2
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "65535",
-            "step": null,
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "IntWidth": 3
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_INTEGER"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "65535"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "intWidth": "INT_WIDTH_U16"
       }
     },
     {
       "name": "RawWheelSpan",
-      "visibility": 2,
-      "is_error": false,
+      "visibility": "VISIBILITY_INTERNAL",
+      "isError": false,
       "doc": "The window of raw tick counts a wheel diagnostic covers.",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "span",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Tuple": {
-                        "fields": [
-                          {
-                            "name": "first",
-                            "type": {
-                              "optional": false,
-                              "kind": {
-                                "Named": "RawTickCount"
-                              }
-                            }
-                          },
-                          {
-                            "name": "latest",
-                            "type": {
-                              "optional": false,
-                              "kind": {
-                                "Named": "RawTickCount"
-                              }
-                            }
-                          }
-                        ]
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "span",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "tuple": {
+                  "fields": [
+                    {
+                      "name": "first",
+                      "type": {
+                        "optional": false,
+                        "named": "RawTickCount"
+                      }
+                    },
+                    {
+                      "name": "latest",
+                      "type": {
+                        "optional": false,
+                        "named": "RawTickCount"
                       }
                     }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
+                  ]
                 }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "bursts",
-                  "ordinal": 2,
-                  "type": {
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "field": {
+              "name": "bursts",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "array": {
+                  "element": {
                     "optional": false,
-                    "kind": {
-                      "Array": {
-                        "element": {
-                          "optional": false,
-                          "kind": {
-                            "Tuple": {
-                              "fields": [
-                                {
-                                  "name": "first",
-                                  "type": {
-                                    "optional": false,
-                                    "kind": {
-                                      "Named": "RawTickCount"
-                                    }
-                                  }
-                                },
-                                {
-                                  "name": "latest",
-                                  "type": {
-                                    "optional": false,
-                                    "kind": {
-                                      "Named": "RawTickCount"
-                                    }
-                                  }
-                                }
-                              ]
-                            }
+                    "tuple": {
+                      "fields": [
+                        {
+                          "name": "first",
+                          "type": {
+                            "optional": false,
+                            "named": "RawTickCount"
                           }
                         },
-                        "min": 2,
-                        "max": 2
-                      }
+                        {
+                          "name": "latest",
+                          "type": {
+                            "optional": false,
+                            "named": "RawTickCount"
+                          }
+                        }
+                      ]
                     }
                   },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": null
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
+                  "min": "2",
+                  "max": "2"
                 }
-              }
+              },
+              "init": {
+                "derivable": true
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": true
-        }
+          }
+        ],
+        "fixedLayout": true
       }
     },
     {
       "name": "FanLevel",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Primitive": 2
-            }
-          },
-          "constraint": {
-            "min": "0",
-            "max": "7",
-            "step": null,
-            "len_min": null,
-            "len_max": null,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": null,
-          "init": {
-            "derivable": true,
-            "value": "0"
-          },
-          "width": {
-            "IntWidth": 1
-          }
-        }
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_INTEGER"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "7"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "intWidth": "INT_WIDTH_U8"
       }
     },
     {
       "name": "FilterState",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "hoursRun",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "InlineScalar": {
-                        "backing": {
-                          "kind": {
-                            "Primitive": 2
-                          }
-                        },
-                        "constraint": {
-                          "min": "0",
-                          "max": "65535",
-                          "step": null,
-                          "len_min": null,
-                          "len_max": null,
-                          "pattern": null,
-                          "pattern_const": null
-                        },
-                        "declared_init": null,
-                        "init": null,
-                        "width": {
-                          "IntWidth": 3
-                        }
-                      }
-                    }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "hoursRun",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_INTEGER"
                   },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
+                  "constraint": {
+                    "min": "0",
+                    "max": "65535"
                   },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
+                  "intWidth": "INT_WIDTH_U16"
                 }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "clogged",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Primitive": 1
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "false"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": true
-        }
+          },
+          {
+            "field": {
+              "name": "clogged",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+              },
+              "init": {
+                "derivable": true,
+                "value": "false"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
       }
     },
     {
       "name": "ClimateReport",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "StructDef": {
-          "members": [
-            {
-              "member": {
-                "Field": {
-                  "name": "cabin",
-                  "ordinal": 1,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "veh.common.Temperature"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "setpoint",
-                  "ordinal": 2,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "veh.common.Temperature"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
-            },
-            {
-              "member": {
-                "Field": {
-                  "name": "fan",
-                  "ordinal": 3,
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "FanLevel"
-                    }
-                  },
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "doc": "",
-                  "labels": [],
-                  "deprecated": null
-                }
-              }
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "cabin",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "named": "veh.common.Temperature"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
             }
-          ],
-          "fixed_layout": true
-        }
+          },
+          {
+            "field": {
+              "name": "setpoint",
+              "ordinal": 2,
+              "type": {
+                "optional": false,
+                "named": "veh.common.Temperature"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
+            }
+          },
+          {
+            "field": {
+              "name": "fan",
+              "ordinal": 3,
+              "type": {
+                "optional": false,
+                "named": "FanLevel"
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
       }
     },
     {
       "name": "HvacError",
-      "visibility": 1,
-      "is_error": true,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": true,
       "doc": "",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "EnumDef": {
-          "values": [
-            {
-              "name": "COMPRESSOR_OFF",
-              "value": 0,
-              "doc": ""
-            },
-            {
-              "name": "SENSOR_FAULT",
-              "value": 1,
-              "doc": ""
-            }
-          ],
-          "reserved": []
-        }
+      "enumDef": {
+        "values": [
+          {
+            "name": "COMPRESSOR_OFF",
+            "value": "0",
+            "doc": ""
+          },
+          {
+            "name": "SENSOR_FAULT",
+            "value": "1",
+            "doc": ""
+          }
+        ],
+        "reserved": []
       }
     },
     {
       "name": "MAX_FAN",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "A declared constant, so a contract clause can reference one. The guaranteed\nexpression subset admits constants (ridl §13) and nothing in the corpus\nexercised that until these members were added.",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "FanLevel",
-          "value": "7",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "FanLevel",
+        "value": "7"
       }
     },
     {
       "name": "FAN_CEILING",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "The ceiling a fan request is clamped to.",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "FanLevel",
-          "value": "7",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "FanLevel",
+        "value": "7"
       }
     },
     {
       "name": "FAN_LIMIT",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "The same ceiling, one hop further along the chain.",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "FanLevel",
-          "value": "7",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "FanLevel",
+        "value": "7"
       }
     },
     {
       "name": "FanTag",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "The label a cabin fan reports itself under.",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "TypeDef": {
-          "backing": {
-            "kind": {
-              "Primitive": 4
-            }
-          },
-          "constraint": {
-            "min": null,
-            "max": null,
-            "step": null,
-            "len_min": 1,
-            "len_max": 32,
-            "pattern": null,
-            "pattern_const": null
-          },
-          "declared_init": "unset",
-          "init": {
-            "derivable": true,
-            "value": "unset"
-          },
-          "width": null
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_STRING"
+        },
+        "constraint": {
+          "lenMin": "1",
+          "lenMax": "32"
+        },
+        "declaredInit": "unset",
+        "init": {
+          "derivable": true,
+          "value": "unset"
         }
       }
     },
     {
       "name": "FAN_TAG",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "The cabin fan's label.",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "FanTag",
-          "value": "cabin-fan",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "FanTag",
+        "value": "cabin-fan"
       }
     },
     {
       "name": "FAN_LABEL",
-      "visibility": 1,
-      "is_error": false,
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
       "doc": "The same label, reached through the constant above.",
       "labels": [],
-      "deprecated": null,
       "ordinal": 0,
-      "kind": {
-        "ConstDef": {
-          "type_ref": "FanTag",
-          "value": "cabin-fan",
-          "regex": null
-        }
+      "constDef": {
+        "typeRef": "FanTag",
+        "value": "cabin-fan"
       }
     }
   ],
   "interfaces": [
     {
       "name": "VehicleStatus",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "Main vehicle status interface.",
       "labels": [
         "SIL_B",
         "CAL_2",
         "PRIVATE"
       ],
-      "deprecated": null,
       "interactions": [
         {
           "name": "currentSpeed",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "Current vehicle speed — isochronous, drives rmdl clocks downstream",
           "labels": [],
-          "deprecated": null,
           "ordinal": 1,
-          "kind": {
-            "SignalDef": {
-              "payload": "veh.common.Speed",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": 1,
-                "min_us": "10000",
-                "max_us": "10000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "veh.common.Speed",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_STRICT_PERIODIC",
+              "minUs": "10000",
+              "maxUs": "10000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "engineTemp",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "Engine temperature — change-driven, 100ms freshness SLO",
           "labels": [],
-          "deprecated": null,
           "ordinal": 2,
-          "kind": {
-            "SignalDef": {
-              "payload": "veh.common.Temperature",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": 2,
-                "min_us": "20000",
-                "max_us": "100000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "veh.common.Temperature",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "20000",
+              "maxUs": "100000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "warnings",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "Active warnings — last-value delivered on subscribe (§4.4)",
           "labels": [],
-          "deprecated": null,
           "ordinal": 3,
-          "kind": {
-            "SignalDef": {
-              "payload": "veh.common.WarningFlags",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": ""
-              },
-              "timing": {
-                "mode": 2,
-                "min_us": "50000",
-                "max_us": "1000000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "veh.common.WarningFlags",
+            "init": {
+              "derivable": true,
+              "value": ""
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "1000000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "doorOpened",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "Raised on every door state change; stale after 500ms",
           "labels": [],
-          "deprecated": null,
           "ordinal": 4,
-          "kind": {
-            "EventDef": {
-              "payload": "DoorPayload",
-              "timing": {
-                "mode": 2,
-                "min_us": "50000",
-                "max_us": "500000",
-                "default_applied": false
-              }
+          "eventDef": {
+            "payload": "DoorPayload",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "setGear",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "Request a gear change — outcome observed via currentGear, not returned",
           "labels": [],
-          "deprecated": null,
           "ordinal": 5,
-          "kind": {
-            "CommandDef": {
-              "params": [
-                {
-                  "name": "position",
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "veh.common.GearPosition"
-                    }
-                  }
+          "commandDef": {
+            "params": [
+              {
+                "name": "position",
+                "type": {
+                  "optional": false,
+                  "named": "veh.common.GearPosition"
                 }
-              ],
-              "contracts": [
-                {
-                  "kind": 1,
-                  "source": "position != GearPosition.PARK || currentSpeed == 0.0",
-                  "signal_refs": [
-                    "VehicleStatus.currentSpeed"
-                  ],
-                  "param_refs": [
-                    "position"
-                  ],
-                  "uses_result": false,
-                  "observer_id": "VehicleStatus.setGear.require[0]"
-                }
-              ]
-            }
+              }
+            ],
+            "contracts": [
+              {
+                "kind": "CONTRACT_KIND_REQUIRE",
+                "source": "position != GearPosition.PARK || currentSpeed == 0.0",
+                "signalRefs": [
+                  "VehicleStatus.currentSpeed"
+                ],
+                "paramRefs": [
+                  "position"
+                ],
+                "usesResult": false,
+                "observerId": "VehicleStatus.setGear.require[0]"
+              }
+            ]
           }
         },
         {
           "name": "",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 6,
-          "kind": {
-            "ReservedSlot": {
-              "ordinal": 6,
-              "name": "resetCounters",
-              "value": null
-            }
+          "reservedSlot": {
+            "ordinal": 6,
+            "name": "resetCounters"
           }
         },
         {
           "name": "getAverageSpeed",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "Sliding-window average",
           "labels": [],
-          "deprecated": null,
           "ordinal": 7,
-          "kind": {
-            "QueryDef": {
-              "params": [
-                {
-                  "name": "window",
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "ridl.std.Duration"
-                    }
-                  }
+          "queryDef": {
+            "params": [
+              {
+                "name": "window",
+                "type": {
+                  "optional": false,
+                  "named": "ridl.std.Duration"
                 }
-              ],
-              "return_type": {
-                "kind": {
-                  "Value": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "veh.common.Speed"
-                    }
-                  }
-                }
+              }
+            ],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "named": "veh.common.Speed"
+              }
+            },
+            "contracts": [
+              {
+                "kind": "CONTRACT_KIND_REQUIRE",
+                "source": "window > 0ms",
+                "signalRefs": [],
+                "paramRefs": [
+                  "window"
+                ],
+                "usesResult": false,
+                "observerId": "VehicleStatus.getAverageSpeed.require[0]"
               },
-              "contracts": [
-                {
-                  "kind": 1,
-                  "source": "window > 0ms",
-                  "signal_refs": [],
-                  "param_refs": [
-                    "window"
-                  ],
-                  "uses_result": false,
-                  "observer_id": "VehicleStatus.getAverageSpeed.require[0]"
-                },
-                {
-                  "kind": 2,
-                  "source": "result >= 0.0",
-                  "signal_refs": [],
-                  "param_refs": [],
-                  "uses_result": true,
-                  "observer_id": "VehicleStatus.getAverageSpeed.ensure[0]"
-                }
-              ]
-            }
+              {
+                "kind": "CONTRACT_KIND_ENSURE",
+                "source": "result >= 0.0",
+                "signalRefs": [],
+                "paramRefs": [],
+                "usesResult": true,
+                "observerId": "VehicleStatus.getAverageSpeed.ensure[0]"
+              }
+            ]
           }
         },
         {
           "name": "streamFaults",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "Fault history as a finite stream",
           "labels": [],
-          "deprecated": null,
           "ordinal": 8,
-          "kind": {
-            "QueryDef": {
-              "params": [
-                {
-                  "name": "filter",
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "DiagFilter"
-                    }
-                  }
+          "queryDef": {
+            "params": [
+              {
+                "name": "filter",
+                "type": {
+                  "optional": false,
+                  "named": "DiagFilter"
                 }
-              ],
-              "return_type": {
-                "kind": {
-                  "Value": {
-                    "optional": false,
-                    "kind": {
-                      "Stream": {
-                        "element": {
-                          "Named": "FaultEvent"
-                        }
-                      }
-                    }
-                  }
+              }
+            ],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "stream": {
+                  "named": "FaultEvent"
                 }
-              },
-              "contracts": []
-            }
+              }
+            },
+            "contracts": []
           }
         },
         {
           "name": "getFaultPage",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "Paged fault snapshot — fallible query via inline `T | E` (§10.1)",
           "labels": [],
-          "deprecated": null,
           "ordinal": 9,
-          "kind": {
-            "QueryDef": {
-              "params": [
-                {
-                  "name": "filter",
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "DiagFilter"
-                    }
-                  }
+          "queryDef": {
+            "params": [
+              {
+                "name": "filter",
+                "type": {
+                  "optional": false,
+                  "named": "DiagFilter"
                 }
-              ],
-              "return_type": {
-                "kind": {
-                  "Fallible": {
-                    "ok": "FaultPage",
-                    "err": "DiagError"
-                  }
-                }
-              },
-              "contracts": []
-            }
+              }
+            ],
+            "returnType": {
+              "fallible": {
+                "ok": "FaultPage",
+                "err": "DiagError"
+              }
+            },
+            "contracts": []
           }
         },
         {
           "name": "softwareVersion",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 10,
-          "kind": {
-            "FixedDef": {
-              "payload": {
-                "optional": false,
-                "kind": {
-                  "Named": "ridl.std.Version"
-                }
-              }
+          "fixedDef": {
+            "payload": {
+              "optional": false,
+              "named": "ridl.std.Version"
             }
           }
         },
         {
           "name": "capabilities",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 11,
-          "kind": {
-            "FixedDef": {
-              "payload": {
-                "optional": false,
-                "kind": {
-                  "Array": {
-                    "element": {
-                      "optional": false,
-                      "kind": {
-                        "Named": "ridl.std.Label"
-                      }
-                    },
-                    "min": 0,
-                    "max": 32
-                  }
-                }
+          "fixedDef": {
+            "payload": {
+              "optional": false,
+              "array": {
+                "element": {
+                  "optional": false,
+                  "named": "ridl.std.Label"
+                },
+                "min": "0",
+                "max": "32"
               }
             }
           }
@@ -2129,115 +1575,94 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": "WheelHistory",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "Retired members in a named interface. Ordinals 2 and 4 can never be\nreissued; `wheelSlipRate` is ordinal 5, not ordinal 3.",
       "labels": [],
-      "deprecated": null,
       "interactions": [
         {
           "name": "wheelTicks",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 1,
-          "kind": {
-            "SignalDef": {
-              "payload": "FanLevel",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": 2,
-                "min_us": "100000",
-                "max_us": "1000000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "FanLevel",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 2,
-          "kind": {
-            "ReservedSlot": {
-              "ordinal": 2,
-              "name": "legacyWheelPhase",
-              "value": null
-            }
+          "reservedSlot": {
+            "ordinal": 2,
+            "name": "legacyWheelPhase"
           }
         },
         {
           "name": "wheelTemp",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 3,
-          "kind": {
-            "SignalDef": {
-              "payload": "veh.common.Temperature",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": 2,
-                "min_us": "1000000",
-                "max_us": "10000000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "veh.common.Temperature",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "1000000",
+              "maxUs": "10000000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 4,
-          "kind": {
-            "ReservedSlot": {
-              "ordinal": 4,
-              "name": null,
-              "value": 4
-            }
+          "reservedSlot": {
+            "ordinal": 4,
+            "value": "4"
           }
         },
         {
           "name": "wheelSlipRate",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 5,
-          "kind": {
-            "SignalDef": {
-              "payload": "veh.common.Ratio",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": 2,
-                "min_us": "500000",
-                "max_us": "5000000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "veh.common.Ratio",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "500000",
+              "maxUs": "5000000",
+              "defaultApplied": false
             }
           }
         }
@@ -2245,197 +1670,155 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": "WheelDiagnostics",
-      "visibility": 2,
+      "visibility": "VISIBILITY_INTERNAL",
       "doc": "A package-private contract shape: realized inside this package, never part\nof the cross-package surface.",
       "labels": [],
-      "deprecated": null,
       "interactions": [
         {
           "name": "wheelTicks",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 1,
-          "kind": {
-            "SignalDef": {
-              "payload": "RawTickCount",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": 2,
-                "min_us": "100000",
-                "max_us": "1000000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "RawTickCount",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "slipDetected",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 2,
-          "kind": {
-            "EventDef": {
-              "payload": "FilterState",
-              "timing": {
-                "mode": 2,
-                "min_us": "50000",
-                "max_us": "500000",
-                "default_applied": false
-              }
+          "eventDef": {
+            "payload": "FilterState",
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "50000",
+              "maxUs": "500000",
+              "defaultApplied": false
             }
           }
         },
         {
           "name": "readTicks",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 3,
-          "kind": {
-            "QueryDef": {
-              "params": [],
-              "return_type": {
-                "kind": {
-                  "Value": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "RawTickCount"
-                    }
-                  }
-                }
-              },
-              "contracts": []
-            }
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "named": "RawTickCount"
+              }
+            },
+            "contracts": []
           }
         },
         {
           "name": "resetTicks",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 4,
-          "kind": {
-            "CommandDef": {
-              "params": [
-                {
-                  "name": "seed",
-                  "type": {
-                    "optional": false,
-                    "kind": {
-                      "Named": "RawTickCount"
-                    }
-                  }
+          "commandDef": {
+            "params": [
+              {
+                "name": "seed",
+                "type": {
+                  "optional": false,
+                  "named": "RawTickCount"
                 }
-              ],
-              "contracts": []
-            }
+              }
+            ],
+            "contracts": []
           }
         },
         {
           "name": "readSpan",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 5,
-          "kind": {
-            "QueryDef": {
-              "params": [],
-              "return_type": {
-                "kind": {
-                  "Value": {
-                    "optional": false,
-                    "kind": {
-                      "Tuple": {
-                        "fields": [
-                          {
-                            "name": "min",
-                            "type": {
-                              "optional": false,
-                              "kind": {
-                                "Named": "RawTickCount"
-                              }
-                            }
-                          },
-                          {
-                            "name": "max",
-                            "type": {
-                              "optional": false,
-                              "kind": {
-                                "Named": "RawTickCount"
-                              }
-                            }
-                          }
-                        ]
+          "queryDef": {
+            "params": [],
+            "returnType": {
+              "value": {
+                "optional": false,
+                "tuple": {
+                  "fields": [
+                    {
+                      "name": "min",
+                      "type": {
+                        "optional": false,
+                        "named": "RawTickCount"
+                      }
+                    },
+                    {
+                      "name": "max",
+                      "type": {
+                        "optional": false,
+                        "named": "RawTickCount"
                       }
                     }
-                  }
+                  ]
                 }
-              },
-              "contracts": []
-            }
+              }
+            },
+            "contracts": []
           }
         },
         {
           "name": "tickBounds",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 6,
-          "kind": {
-            "FixedDef": {
-              "payload": {
-                "optional": false,
-                "kind": {
-                  "Array": {
-                    "element": {
-                      "optional": false,
-                      "kind": {
-                        "Tuple": {
-                          "fields": [
-                            {
-                              "name": "low",
-                              "type": {
-                                "optional": false,
-                                "kind": {
-                                  "Named": "RawTickCount"
-                                }
-                              }
-                            },
-                            {
-                              "name": "high",
-                              "type": {
-                                "optional": false,
-                                "kind": {
-                                  "Named": "RawTickCount"
-                                }
-                              }
-                            }
-                          ]
+          "fixedDef": {
+            "payload": {
+              "optional": false,
+              "array": {
+                "element": {
+                  "optional": false,
+                  "tuple": {
+                    "fields": [
+                      {
+                        "name": "low",
+                        "type": {
+                          "optional": false,
+                          "named": "RawTickCount"
+                        }
+                      },
+                      {
+                        "name": "high",
+                        "type": {
+                          "optional": false,
+                          "named": "RawTickCount"
                         }
                       }
-                    },
-                    "min": 2,
-                    "max": 2
+                    ]
                   }
-                }
+                },
+                "min": "2",
+                "max": "2"
               }
             }
           }
@@ -2444,33 +1827,28 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     },
     {
       "name": "WheelSummary",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "A public shape beside it, so the generated output shows the two side by\nside and the difference is readable in one snapshot.",
       "labels": [],
-      "deprecated": null,
       "interactions": [
         {
           "name": "wheelHealth",
-          "visibility": 0,
-          "is_error": false,
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
           "doc": "",
           "labels": [],
-          "deprecated": null,
           "ordinal": 1,
-          "kind": {
-            "SignalDef": {
-              "payload": "FanLevel",
-              "declared_init": null,
-              "init": {
-                "derivable": true,
-                "value": "0"
-              },
-              "timing": {
-                "mode": 2,
-                "min_us": "1000000",
-                "max_us": "10000000",
-                "default_applied": false
-              }
+          "signalDef": {
+            "payload": "FanLevel",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "1000000",
+              "maxUs": "10000000",
+              "defaultApplied": false
             }
           }
         }
@@ -2480,765 +1858,612 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
   "services": [
     {
       "name": "veh.cluster.wheels",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "The same two forms inside a service's inline shape.",
       "labels": [],
-      "deprecated": null,
-      "shape": {
-        "Inline": {
-          "name": "",
-          "visibility": 0,
-          "doc": "",
-          "labels": [],
-          "deprecated": null,
-          "interactions": [
-            {
-              "name": "ticks",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 1,
-              "kind": {
-                "SignalDef": {
-                  "payload": "FanLevel",
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "timing": {
-                    "mode": 2,
-                    "min_us": "100000",
-                    "max_us": "1000000",
-                    "default_applied": false
-                  }
-                }
-              }
-            },
-            {
-              "name": "",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 2,
-              "kind": {
-                "ReservedSlot": {
-                  "ordinal": 2,
-                  "name": "legacyTicks",
-                  "value": null
-                }
-              }
-            },
-            {
-              "name": "",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 3,
-              "kind": {
-                "ReservedSlot": {
-                  "ordinal": 3,
-                  "name": null,
-                  "value": 3
-                }
-              }
-            },
-            {
-              "name": "slipped",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 4,
-              "kind": {
-                "EventDef": {
-                  "payload": "FilterState",
-                  "timing": {
-                    "mode": 2,
-                    "min_us": "50000",
-                    "max_us": "500000",
-                    "default_applied": false
-                  }
-                }
+      "inline": {
+        "name": "",
+        "visibility": "VISIBILITY_UNSPECIFIED",
+        "doc": "",
+        "labels": [],
+        "interactions": [
+          {
+            "name": "ticks",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "",
+            "labels": [],
+            "ordinal": 1,
+            "signalDef": {
+              "payload": "FanLevel",
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "minUs": "100000",
+                "maxUs": "1000000",
+                "defaultApplied": false
               }
             }
-          ]
-        }
+          },
+          {
+            "name": "",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "",
+            "labels": [],
+            "ordinal": 2,
+            "reservedSlot": {
+              "ordinal": 2,
+              "name": "legacyTicks"
+            }
+          },
+          {
+            "name": "",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "",
+            "labels": [],
+            "ordinal": 3,
+            "reservedSlot": {
+              "ordinal": 3,
+              "value": "3"
+            }
+          },
+          {
+            "name": "slipped",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "",
+            "labels": [],
+            "ordinal": 4,
+            "eventDef": {
+              "payload": "FilterState",
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "minUs": "50000",
+                "maxUs": "500000",
+                "defaultApplied": false
+              }
+            }
+          }
+        ]
       }
     },
     {
       "name": "veh.cluster.status",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "The cluster's published vehicle-status contract.",
       "labels": [],
-      "deprecated": null,
-      "shape": {
-        "InterfaceRef": "VehicleStatus"
-      }
+      "interfaceRef": "VehicleStatus"
     },
     {
       "name": "veh.cluster.standby",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "A redundant twin over the same interface shape — one interface, many\nservices (ridl §14.0). Both services carry the identical member set; only\nthe global address differs.",
       "labels": [],
-      "deprecated": null,
-      "shape": {
-        "InterfaceRef": "VehicleStatus"
-      }
+      "interfaceRef": "VehicleStatus"
     },
     {
       "name": "veh.hvac.cabin",
-      "visibility": 1,
+      "visibility": "VISIBILITY_PUBLIC",
       "doc": "Cabin climate — a one-off global contract, declared inline.",
       "labels": [
         "QM",
         "PRIVATE"
       ],
-      "deprecated": null,
-      "shape": {
-        "Inline": {
-          "name": "",
-          "visibility": 0,
-          "doc": "",
-          "labels": [],
-          "deprecated": null,
-          "interactions": [
-            {
-              "name": "cabinTemp",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Strict periodic — signal only (ridl §9).",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 1,
-              "kind": {
-                "SignalDef": {
-                  "payload": "veh.common.Temperature",
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "timing": {
-                    "mode": 1,
-                    "min_us": "1000000",
-                    "max_us": "1000000",
-                    "default_applied": false
+      "inline": {
+        "name": "",
+        "visibility": "VISIBILITY_UNSPECIFIED",
+        "doc": "",
+        "labels": [],
+        "interactions": [
+          {
+            "name": "cabinTemp",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Strict periodic — signal only (ridl §9).",
+            "labels": [],
+            "ordinal": 1,
+            "signalDef": {
+              "payload": "veh.common.Temperature",
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": "TIMING_MODE_STRICT_PERIODIC",
+                "minUs": "1000000",
+                "maxUs": "1000000",
+                "defaultApplied": false
+              }
+            }
+          },
+          {
+            "name": "targetTemp",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Range with both bounds.",
+            "labels": [],
+            "ordinal": 2,
+            "signalDef": {
+              "payload": "veh.common.Temperature",
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "minUs": "500000",
+                "maxUs": "5000000",
+                "defaultApplied": false
+              }
+            }
+          },
+          {
+            "name": "blowerDuty",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Range, lower bound only — no staleness bound declared.",
+            "labels": [],
+            "ordinal": 3,
+            "signalDef": {
+              "payload": "veh.common.Ratio",
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "minUs": "200000",
+                "defaultApplied": false
+              }
+            }
+          },
+          {
+            "name": "fanLevel",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Range, upper bound only — no rate floor declared.",
+            "labels": [],
+            "ordinal": 4,
+            "signalDef": {
+              "payload": "FanLevel",
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "maxUs": "2000000",
+                "defaultApplied": false
+              }
+            }
+          },
+          {
+            "name": "compressorLoad",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Microsecond resolution, and an init override for the channel (ridl §4.4).",
+            "labels": [],
+            "ordinal": 5,
+            "signalDef": {
+              "payload": "veh.common.Ratio",
+              "declaredInit": "12.5",
+              "init": {
+                "derivable": true,
+                "value": "12.5"
+              },
+              "timing": {
+                "mode": "TIMING_MODE_STRICT_PERIODIC",
+                "minUs": "500",
+                "maxUs": "500",
+                "defaultApplied": false
+              }
+            }
+          },
+          {
+            "name": "filterClogged",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Untimed: the package `[defaults].timing` is resolved at compile time and\nlands in the IR as concrete bounds with `default_applied` set (ridl §9.1).",
+            "labels": [],
+            "ordinal": 6,
+            "eventDef": {
+              "payload": "FilterState",
+              "timing": {
+                "mode": "TIMING_MODE_RANGE",
+                "minUs": "200000",
+                "maxUs": "2000000",
+                "defaultApplied": true
+              }
+            }
+          },
+          {
+            "name": "setTarget",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Fire-and-forget, with a precondition over its own parameter and over\nthis shape's own signal (ridl §13).",
+            "labels": [],
+            "ordinal": 7,
+            "commandDef": {
+              "params": [
+                {
+                  "name": "t",
+                  "type": {
+                    "optional": false,
+                    "named": "veh.common.Temperature"
                   }
                 }
-              }
-            },
-            {
-              "name": "targetTemp",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Range with both bounds.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 2,
-              "kind": {
-                "SignalDef": {
-                  "payload": "veh.common.Temperature",
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "timing": {
-                    "mode": 2,
-                    "min_us": "500000",
-                    "max_us": "5000000",
-                    "default_applied": false
-                  }
-                }
-              }
-            },
-            {
-              "name": "blowerDuty",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Range, lower bound only — no staleness bound declared.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 3,
-              "kind": {
-                "SignalDef": {
-                  "payload": "veh.common.Ratio",
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "timing": {
-                    "mode": 2,
-                    "min_us": "200000",
-                    "max_us": null,
-                    "default_applied": false
-                  }
-                }
-              }
-            },
-            {
-              "name": "fanLevel",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Range, upper bound only — no rate floor declared.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 4,
-              "kind": {
-                "SignalDef": {
-                  "payload": "FanLevel",
-                  "declared_init": null,
-                  "init": {
-                    "derivable": true,
-                    "value": "0"
-                  },
-                  "timing": {
-                    "mode": 2,
-                    "min_us": null,
-                    "max_us": "2000000",
-                    "default_applied": false
-                  }
-                }
-              }
-            },
-            {
-              "name": "compressorLoad",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Microsecond resolution, and an init override for the channel (ridl §4.4).",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 5,
-              "kind": {
-                "SignalDef": {
-                  "payload": "veh.common.Ratio",
-                  "declared_init": "12.5",
-                  "init": {
-                    "derivable": true,
-                    "value": "12.5"
-                  },
-                  "timing": {
-                    "mode": 1,
-                    "min_us": "500",
-                    "max_us": "500",
-                    "default_applied": false
-                  }
-                }
-              }
-            },
-            {
-              "name": "filterClogged",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Untimed: the package `[defaults].timing` is resolved at compile time and\nlands in the IR as concrete bounds with `default_applied` set (ridl §9.1).",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 6,
-              "kind": {
-                "EventDef": {
-                  "payload": "FilterState",
-                  "timing": {
-                    "mode": 2,
-                    "min_us": "200000",
-                    "max_us": "2000000",
-                    "default_applied": true
-                  }
-                }
-              }
-            },
-            {
-              "name": "setTarget",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Fire-and-forget, with a precondition over its own parameter and over\nthis shape's own signal (ridl §13).",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 7,
-              "kind": {
-                "CommandDef": {
-                  "params": [
-                    {
-                      "name": "t",
-                      "type": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "veh.common.Temperature"
-                        }
-                      }
-                    }
+              ],
+              "contracts": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "t >= -10.0",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "t"
                   ],
-                  "contracts": [
-                    {
-                      "kind": 1,
-                      "source": "t >= -10.0",
-                      "signal_refs": [],
-                      "param_refs": [
-                        "t"
-                      ],
-                      "uses_result": false,
-                      "observer_id": "veh.hvac.cabin.setTarget.require[0]"
-                    },
-                    {
-                      "kind": 1,
-                      "source": "cabinTemp >= -40.0",
-                      "signal_refs": [
-                        "veh.hvac.cabin.cabinTemp"
-                      ],
-                      "param_refs": [],
-                      "uses_result": false,
-                      "observer_id": "veh.hvac.cabin.setTarget.require[1]"
-                    }
-                  ]
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.setTarget.require[0]"
+                },
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "cabinTemp >= -40.0",
+                  "signalRefs": [
+                    "veh.hvac.cabin.cabinTemp"
+                  ],
+                  "paramRefs": [],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.setTarget.require[1]"
                 }
-              }
-            },
-            {
-              "name": "",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "A retired member. The tombstone holds its ordinal for ever, so every\nordinal after it carries the gap (ridl §11).",
-              "labels": [],
-              "deprecated": null,
+              ]
+            }
+          },
+          {
+            "name": "",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "A retired member. The tombstone holds its ordinal for ever, so every\nordinal after it carries the gap (ridl §11).",
+            "labels": [],
+            "ordinal": 8,
+            "reservedSlot": {
               "ordinal": 8,
-              "kind": {
-                "ReservedSlot": {
-                  "ordinal": 8,
-                  "name": "setEcoMode",
-                  "value": null
-                }
-              }
-            },
-            {
-              "name": "replayTrace",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Client-produced stream on a parameter (ridl §12.1).",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 9,
-              "kind": {
-                "CommandDef": {
-                  "params": [
-                    {
-                      "name": "samples",
-                      "type": {
-                        "optional": false,
-                        "kind": {
-                          "Stream": {
-                            "element": {
-                              "Named": "FilterState"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ],
-                  "contracts": []
-                }
-              }
-            },
-            {
-              "name": "streamFilterHistory",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Provider-produced stream in return position.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 10,
-              "kind": {
-                "QueryDef": {
-                  "params": [
-                    {
-                      "name": "limit",
-                      "type": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "FanLevel"
-                        }
-                      }
-                    }
-                  ],
-                  "return_type": {
-                    "kind": {
-                      "Value": {
-                        "optional": false,
-                        "kind": {
-                          "Stream": {
-                            "element": {
-                              "Named": "FilterState"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  "contracts": []
-                }
-              }
-            },
-            {
-              "name": "rebalance",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Bidirectional — a stream in both positions at once.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 11,
-              "kind": {
-                "QueryDef": {
-                  "params": [
-                    {
-                      "name": "samples",
-                      "type": {
-                        "optional": false,
-                        "kind": {
-                          "Stream": {
-                            "element": {
-                              "Named": "FilterState"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  ],
-                  "return_type": {
-                    "kind": {
-                      "Value": {
-                        "optional": false,
-                        "kind": {
-                          "Stream": {
-                            "element": {
-                              "Named": "ClimateReport"
-                            }
-                          }
-                        }
-                      }
-                    }
-                  },
-                  "contracts": []
-                }
-              }
-            },
-            {
-              "name": "getBounds",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "A postcondition that reads `result` — tuple-field access is the widest\n`result` shape the guaranteed expression subset admits (ridl §13).",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 12,
-              "kind": {
-                "QueryDef": {
-                  "params": [],
-                  "return_type": {
-                    "kind": {
-                      "Value": {
-                        "optional": false,
-                        "kind": {
-                          "Tuple": {
-                            "fields": [
-                              {
-                                "name": "min",
-                                "type": {
-                                  "optional": false,
-                                  "kind": {
-                                    "Named": "veh.common.Temperature"
-                                  }
-                                }
-                              },
-                              {
-                                "name": "max",
-                                "type": {
-                                  "optional": false,
-                                  "kind": {
-                                    "Named": "veh.common.Temperature"
-                                  }
-                                }
-                              }
-                            ]
-                          }
-                        }
-                      }
-                    }
-                  },
-                  "contracts": [
-                    {
-                      "kind": 1,
-                      "source": "true",
-                      "signal_refs": [],
-                      "param_refs": [],
-                      "uses_result": false,
-                      "observer_id": "veh.hvac.cabin.getBounds.require[0]"
-                    },
-                    {
-                      "kind": 2,
-                      "source": "result.min <= result.max",
-                      "signal_refs": [],
-                      "param_refs": [],
-                      "uses_result": true,
-                      "observer_id": "veh.hvac.cabin.getBounds.ensure[0]"
-                    }
-                  ]
-                }
-              }
-            },
-            {
-              "name": "calibrate",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Inline fallible return `T | E` — the canonical spelling in return\nposition (general form §6.1). Its transport identity is synthesized from\nthe enclosing shape and the ordinal, which is exactly what an inline\nshape has to get right without an interface name to borrow.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 13,
-              "kind": {
-                "QueryDef": {
-                  "params": [
-                    {
-                      "name": "axle",
-                      "type": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "FanLevel"
-                        }
-                      }
-                    }
-                  ],
-                  "return_type": {
-                    "kind": {
-                      "Fallible": {
-                        "ok": "ClimateReport",
-                        "err": "HvacError"
-                      }
-                    }
-                  },
-                  "contracts": []
-                }
-              }
-            },
-            {
-              "name": "getClimate",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "A plain named-type return.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 14,
-              "kind": {
-                "QueryDef": {
-                  "params": [],
-                  "return_type": {
-                    "kind": {
-                      "Value": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "ClimateReport"
-                        }
-                      }
-                    }
-                  },
-                  "contracts": []
-                }
-              }
-            },
-            {
-              "name": "getCabinTemp",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Superseded by `getClimate`.",
-              "labels": [],
-              "deprecated": "use getClimate — this returns only the cabin reading",
-              "ordinal": 15,
-              "kind": {
-                "QueryDef": {
-                  "params": [],
-                  "return_type": {
-                    "kind": {
-                      "Value": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "veh.common.Temperature"
-                        }
-                      }
-                    }
-                  },
-                  "contracts": []
-                }
-              }
-            },
-            {
-              "name": "unitSerial",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Provisioned, immutable for the software-instance lifetime (ridl §8).",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 16,
-              "kind": {
-                "FixedDef": {
-                  "payload": {
+              "name": "setEcoMode"
+            }
+          },
+          {
+            "name": "replayTrace",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Client-produced stream on a parameter (ridl §12.1).",
+            "labels": [],
+            "ordinal": 9,
+            "commandDef": {
+              "params": [
+                {
+                  "name": "samples",
+                  "type": {
                     "optional": false,
-                    "kind": {
-                      "Named": "ridl.std.Label"
+                    "stream": {
+                      "named": "FilterState"
                     }
                   }
                 }
-              }
-            },
-            {
-              "name": "supportedModes",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "A collection-typed fixed.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 17,
-              "kind": {
-                "FixedDef": {
-                  "payload": {
+              ],
+              "contracts": []
+            }
+          },
+          {
+            "name": "streamFilterHistory",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Provider-produced stream in return position.",
+            "labels": [],
+            "ordinal": 10,
+            "queryDef": {
+              "params": [
+                {
+                  "name": "limit",
+                  "type": {
                     "optional": false,
-                    "kind": {
-                      "Array": {
-                        "element": {
+                    "named": "FanLevel"
+                  }
+                }
+              ],
+              "returnType": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": "FilterState"
+                  }
+                }
+              },
+              "contracts": []
+            }
+          },
+          {
+            "name": "rebalance",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Bidirectional — a stream in both positions at once.",
+            "labels": [],
+            "ordinal": 11,
+            "queryDef": {
+              "params": [
+                {
+                  "name": "samples",
+                  "type": {
+                    "optional": false,
+                    "stream": {
+                      "named": "FilterState"
+                    }
+                  }
+                }
+              ],
+              "returnType": {
+                "value": {
+                  "optional": false,
+                  "stream": {
+                    "named": "ClimateReport"
+                  }
+                }
+              },
+              "contracts": []
+            }
+          },
+          {
+            "name": "getBounds",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "A postcondition that reads `result` — tuple-field access is the widest\n`result` shape the guaranteed expression subset admits (ridl §13).",
+            "labels": [],
+            "ordinal": 12,
+            "queryDef": {
+              "params": [],
+              "returnType": {
+                "value": {
+                  "optional": false,
+                  "tuple": {
+                    "fields": [
+                      {
+                        "name": "min",
+                        "type": {
                           "optional": false,
-                          "kind": {
-                            "Named": "ridl.std.Label"
-                          }
-                        },
-                        "min": 0,
-                        "max": 8
+                          "named": "veh.common.Temperature"
+                        }
+                      },
+                      {
+                        "name": "max",
+                        "type": {
+                          "optional": false,
+                          "named": "veh.common.Temperature"
+                        }
                       }
-                    }
+                    ]
                   }
                 }
-              }
-            },
-            {
-              "name": "setFan",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Boolean conjunction.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 18,
-              "kind": {
-                "CommandDef": {
-                  "params": [
-                    {
-                      "name": "level",
-                      "type": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "FanLevel"
-                        }
-                      }
-                    }
-                  ],
-                  "contracts": [
-                    {
-                      "kind": 1,
-                      "source": "level >= 0 && level <= 7",
-                      "signal_refs": [],
-                      "param_refs": [
-                        "level"
-                      ],
-                      "uses_result": false,
-                      "observer_id": "veh.hvac.cabin.setFan.require[0]"
-                    }
-                  ]
+              },
+              "contracts": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "true",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.getBounds.require[0]"
+                },
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result.min <= result.max",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "veh.hvac.cabin.getBounds.ensure[0]"
                 }
-              }
-            },
-            {
-              "name": "trimFan",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Arithmetic over a parameter, and a reference to a declared `const`.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 19,
-              "kind": {
-                "CommandDef": {
-                  "params": [
-                    {
-                      "name": "level",
-                      "type": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "FanLevel"
-                        }
-                      }
-                    }
-                  ],
-                  "contracts": [
-                    {
-                      "kind": 1,
-                      "source": "level + 1 <= 7",
-                      "signal_refs": [],
-                      "param_refs": [
-                        "level"
-                      ],
-                      "uses_result": false,
-                      "observer_id": "veh.hvac.cabin.trimFan.require[0]"
-                    },
-                    {
-                      "kind": 1,
-                      "source": "level <= MAX_FAN",
-                      "signal_refs": [],
-                      "param_refs": [
-                        "level"
-                      ],
-                      "uses_result": false,
-                      "observer_id": "veh.hvac.cabin.trimFan.require[1]"
-                    }
-                  ]
+              ]
+            }
+          },
+          {
+            "name": "calibrate",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Inline fallible return `T | E` — the canonical spelling in return\nposition (general form §6.1). Its transport identity is synthesized from\nthe enclosing shape and the ordinal, which is exactly what an inline\nshape has to get right without an interface name to borrow.",
+            "labels": [],
+            "ordinal": 13,
+            "queryDef": {
+              "params": [
+                {
+                  "name": "axle",
+                  "type": {
+                    "optional": false,
+                    "named": "FanLevel"
+                  }
                 }
+              ],
+              "returnType": {
+                "fallible": {
+                  "ok": "ClimateReport",
+                  "err": "HvacError"
+                }
+              },
+              "contracts": []
+            }
+          },
+          {
+            "name": "getClimate",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "A plain named-type return.",
+            "labels": [],
+            "ordinal": 14,
+            "queryDef": {
+              "params": [],
+              "returnType": {
+                "value": {
+                  "optional": false,
+                  "named": "ClimateReport"
+                }
+              },
+              "contracts": []
+            }
+          },
+          {
+            "name": "getCabinTemp",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Superseded by `getClimate`.",
+            "labels": [],
+            "deprecated": "use getClimate — this returns only the cabin reading",
+            "ordinal": 15,
+            "queryDef": {
+              "params": [],
+              "returnType": {
+                "value": {
+                  "optional": false,
+                  "named": "veh.common.Temperature"
+                }
+              },
+              "contracts": []
+            }
+          },
+          {
+            "name": "unitSerial",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Provisioned, immutable for the software-instance lifetime (ridl §8).",
+            "labels": [],
+            "ordinal": 16,
+            "fixedDef": {
+              "payload": {
+                "optional": false,
+                "named": "ridl.std.Label"
               }
-            },
-            {
-              "name": "scaledFan",
-              "visibility": 0,
-              "is_error": false,
-              "doc": "Arithmetic over `result`.",
-              "labels": [],
-              "deprecated": null,
-              "ordinal": 20,
-              "kind": {
-                "QueryDef": {
-                  "params": [],
-                  "return_type": {
-                    "kind": {
-                      "Value": {
-                        "optional": false,
-                        "kind": {
-                          "Named": "FanLevel"
-                        }
-                      }
-                    }
+            }
+          },
+          {
+            "name": "supportedModes",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "A collection-typed fixed.",
+            "labels": [],
+            "ordinal": 17,
+            "fixedDef": {
+              "payload": {
+                "optional": false,
+                "array": {
+                  "element": {
+                    "optional": false,
+                    "named": "ridl.std.Label"
                   },
-                  "contracts": [
-                    {
-                      "kind": 2,
-                      "source": "result * 2 >= 0",
-                      "signal_refs": [],
-                      "param_refs": [],
-                      "uses_result": true,
-                      "observer_id": "veh.hvac.cabin.scaledFan.ensure[0]"
-                    }
-                  ]
+                  "min": "0",
+                  "max": "8"
                 }
               }
             }
-          ]
-        }
+          },
+          {
+            "name": "setFan",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Boolean conjunction.",
+            "labels": [],
+            "ordinal": 18,
+            "commandDef": {
+              "params": [
+                {
+                  "name": "level",
+                  "type": {
+                    "optional": false,
+                    "named": "FanLevel"
+                  }
+                }
+              ],
+              "contracts": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "level >= 0 && level <= 7",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "level"
+                  ],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.setFan.require[0]"
+                }
+              ]
+            }
+          },
+          {
+            "name": "trimFan",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Arithmetic over a parameter, and a reference to a declared `const`.",
+            "labels": [],
+            "ordinal": 19,
+            "commandDef": {
+              "params": [
+                {
+                  "name": "level",
+                  "type": {
+                    "optional": false,
+                    "named": "FanLevel"
+                  }
+                }
+              ],
+              "contracts": [
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "level + 1 <= 7",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "level"
+                  ],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.trimFan.require[0]"
+                },
+                {
+                  "kind": "CONTRACT_KIND_REQUIRE",
+                  "source": "level <= MAX_FAN",
+                  "signalRefs": [],
+                  "paramRefs": [
+                    "level"
+                  ],
+                  "usesResult": false,
+                  "observerId": "veh.hvac.cabin.trimFan.require[1]"
+                }
+              ]
+            }
+          },
+          {
+            "name": "scaledFan",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "isError": false,
+            "doc": "Arithmetic over `result`.",
+            "labels": [],
+            "ordinal": 20,
+            "queryDef": {
+              "params": [],
+              "returnType": {
+                "value": {
+                  "optional": false,
+                  "named": "FanLevel"
+                }
+              },
+              "contracts": [
+                {
+                  "kind": "CONTRACT_KIND_ENSURE",
+                  "source": "result * 2 >= 0",
+                  "signalRefs": [],
+                  "paramRefs": [],
+                  "usesResult": true,
+                  "observerId": "veh.hvac.cabin.scaledFan.ensure[0]"
+                }
+              ]
+            }
+          }
+        ]
       }
     }
   ]

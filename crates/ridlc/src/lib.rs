@@ -587,7 +587,10 @@ fn materialize_and_lock(
 ///
 /// The Rust and C-header emits share one [`generate`](ridl_backend_rust::generate)
 /// call; a codegen failure is recorded as a diagnostic and those two emits are
-/// skipped, while `ir-json` (a direct IR dump) is always written. The TypeScript
+/// skipped. The `ir-json` emit (a direct IR dump) follows the same rule: when
+/// the package cannot be rendered as canonical protobuf JSON (ADR-0014
+/// decision 12), the failure is recorded as a diagnostic and no artifact is
+/// written. The TypeScript
 /// emit is a second, independent backend
 /// ([`generate`](ridl_backend_ts::generate)) over the same IR, with its own
 /// result type and its own failure path — a backend that cannot render this
@@ -648,12 +651,24 @@ fn write_emits(
                     std::fs::write(out_dir.join(format!("{base}.h")), &generated.c_header)?;
                 }
             }
-            Emit::IrJson => {
-                std::fs::write(
-                    out_dir.join(format!("{base}.ir.json")),
-                    ridl_ir::v2::to_json_pretty(ir),
-                )?;
-            }
+            Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {
+                Ok(json) => {
+                    std::fs::write(out_dir.join(format!("{base}.ir.json")), json)?;
+                }
+                // A package the checker accepted can still nest past the JSON
+                // transcoder's recursion limit (ADR-0014 decision 12) — a
+                // tool-level failure with no source span, reported the way the
+                // TypeScript backend's `Unrepresentable` is, with no artifact
+                // written.
+                Err(err) => {
+                    diagnostics.push(error_diagnostic(
+                        "",
+                        err.to_string(),
+                        FileId::DETACHED,
+                        TextRange::default(),
+                    ));
+                }
+            },
             Emit::TypeScript => {
                 if let Some(generated) = &generated_ts {
                     std::fs::write(out_dir.join(format!("{base}.ts")), &generated.source)?;

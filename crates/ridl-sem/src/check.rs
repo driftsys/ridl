@@ -4787,7 +4787,10 @@ mod tests {
             checked.diagnostics,
         );
         assert_eq!(checked.ir.name, "veh.common");
-        insta::assert_snapshot!("appendix_b_ir", v2::to_json_pretty(&checked.ir));
+        insta::assert_snapshot!(
+            "appendix_b_ir",
+            v2::to_json_pretty(&checked.ir).expect("the appendix package serializes as IR JSON")
+        );
     }
 
     /// `fixed_layout` is derived per struct: every field fixed-width and
@@ -8061,7 +8064,10 @@ interface VehicleStatus {
         assert_eq!(interface.visibility, v2::Visibility::Public as i32);
         assert_eq!(interface.doc, "Main vehicle status interface.");
         assert_eq!(interface.labels, ["SIL_B", "CAL_2", "PRIVATE"]);
-        insta::assert_snapshot!("appendix_a_ir", v2::to_json_pretty(&checked.ir));
+        insta::assert_snapshot!(
+            "appendix_a_ir",
+            v2::to_json_pretty(&checked.ir).expect("the appendix package serializes as IR JSON")
+        );
     }
 
     #[test]
@@ -8572,7 +8578,8 @@ interface VehicleStatus {
         };
         assert_eq!(fallible.ok, "CalReport");
         assert_eq!(fallible.err, "veh.common.CalError");
-        let json = v2::to_json_pretty(&checked.ir);
+        let json =
+            v2::to_json_pretty(&checked.ir).expect("the checked package serializes as IR JSON");
         assert!(
             json.contains("\"ok\": \"CalReport\"")
                 && json.contains("\"err\": \"veh.common.CalError\""),

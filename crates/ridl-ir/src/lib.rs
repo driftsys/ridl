@@ -16,6 +16,39 @@ pub mod v2 {
 
     include!(concat!(env!("OUT_DIR"), "/ridl.ir.v2.rs"));
 
+    /// The descriptor pool over the compiled IR schema — the reflection data
+    /// the canonical protobuf JSON surface needs (ADR-0014 decision 7).
+    /// `build.rs` writes the `FileDescriptorSet` to `OUT_DIR` from the same
+    /// `protox` compilation that generates the types above, so the pool and
+    /// the types cannot disagree; every `expect` on this path leans on that.
+    static DESCRIPTOR_POOL: std::sync::LazyLock<prost_reflect::DescriptorPool> =
+        std::sync::LazyLock::new(|| {
+            prost_reflect::DescriptorPool::decode(
+                include_bytes!(concat!(env!("OUT_DIR"), "/ir_descriptor.binpb")).as_slice(),
+            )
+            .expect("the embedded descriptor set decodes: build.rs wrote it from the schema compilation that generated these types")
+        });
+
+    /// The `Package` message descriptor — the entry point of every
+    /// reflection-path encoder and decoder in this module.
+    pub(crate) fn package_descriptor() -> prost_reflect::MessageDescriptor {
+        DESCRIPTOR_POOL
+            .get_message_by_name("ridl.ir.v2.Package")
+            .expect("ridl.ir.v2.Package is declared by the compiled schema")
+    }
+
+    /// Rebuilds a package as a `DynamicMessage` over the descriptor pool —
+    /// the step `prost-reflect` needs before rendering a text encoding.
+    /// Transcoding goes through the wire encoding, whose decoder enforces
+    /// prost's fixed recursion limit, so a package whose composite nesting
+    /// crosses that limit fails here — an input-dependent failure, not
+    /// schema drift (ADR-0014 decision 12).
+    fn transcode(package: &Package) -> Result<prost_reflect::DynamicMessage, prost::DecodeError> {
+        let mut dynamic = prost_reflect::DynamicMessage::new(package_descriptor());
+        dynamic.transcode_from(package)?;
+        Ok(dynamic)
+    }
+
     /// Derives the synthesized transport identity of an inline `T | E`
     /// result union (ADR-0008 decision 4): the enclosing interface name plus
     /// the interaction ordinal plus the ordered arm references. The single
@@ -33,11 +66,86 @@ pub mod v2 {
         )
     }
 
-    /// Renders a package as pretty-printed JSON — the debug rendering of the
-    /// IR (ADR-0004 §4), used by golden tests and diagnostic output.
-    pub fn to_json_pretty(package: &Package) -> String {
-        serde_json::to_string_pretty(package)
-            .expect("IR serialization to JSON cannot fail: the generated types hold only JSON-representable values")
+    /// The error [`to_json_pretty`] returns. The serialization surface is
+    /// fallible on purpose — ADR-0014 decision 12, which retracts decision
+    /// 7's infallible return: the reflection path transcodes through the
+    /// wire encoding, whose decoder enforces prost's fixed recursion limit,
+    /// and legal source can nest composites past it.
+    #[derive(Debug)]
+    pub struct SerializeError(prost::DecodeError);
+
+    impl std::fmt::Display for SerializeError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "cannot render the package as canonical protobuf JSON: {}; the known cause \
+                 is composite nesting deeper than the transcoding decoder's recursion limit",
+                self.0
+            )
+        }
+    }
+
+    impl std::error::Error for SerializeError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(&self.0)
+        }
+    }
+
+    /// Renders a package as pretty-printed canonical protobuf JSON — the one
+    /// dialect every IR surface carries: the `--emit ir-json` artifact, the
+    /// baselines, and the goldens (ADR-0014 decision 1).
+    ///
+    /// A field holding its default is emitted rather than skipped (decision
+    /// 2); an unset proto3 `optional` field is omitted entirely, never
+    /// rendered as `null` (the answer to that decision's open item). 64-bit
+    /// fields render as strings, the canonical mapping JavaScript consumers
+    /// need (decision 8).
+    ///
+    /// Fallible on purpose (ADR-0014 decision 12, retracting decision 7's
+    /// infallible return): the transcode into the dynamic message goes
+    /// through the wire encoding, and a package whose composite nesting
+    /// crosses prost's recursion limit fails there. That input is legal
+    /// source, so the failure is returned rather than panicked on.
+    pub fn to_json_pretty(package: &Package) -> Result<String, SerializeError> {
+        let mut buf = Vec::new();
+        let mut serializer = serde_json::Serializer::pretty(&mut buf);
+        transcode(package)
+            .map_err(SerializeError)?
+            .serialize_with_options(
+                &mut serializer,
+                &prost_reflect::SerializeOptions::new().skip_default_fields(false),
+            )
+            .expect("rendering the transcoded message cannot fail: the input-dependent recursion limit binds the transcode above, and the writer is an in-memory Vec");
+        Ok(String::from_utf8(buf).expect("serde_json emits UTF-8"))
+    }
+
+    /// Reads a package from canonical protobuf JSON — the inverse of
+    /// [`to_json_pretty`]. Unknown fields are rejected (the `prost-reflect`
+    /// default), so a snapshot written against a different schema fails
+    /// loudly rather than dropping fields silently. A package whose
+    /// composite nesting crosses prost's recursion limit fails in the
+    /// transcode out of the dynamic message; that failure is mapped into
+    /// the same error return, not expected on (ADR-0014 decision 12).
+    pub fn from_json(text: &str) -> Result<Package, serde_json::Error> {
+        let mut deserializer = serde_json::Deserializer::from_str(text);
+        let dynamic =
+            prost_reflect::DynamicMessage::deserialize(package_descriptor(), &mut deserializer)?;
+        deserializer.end()?;
+        dynamic.transcode_to().map_err(serde::de::Error::custom)
+    }
+
+    /// Encodes a package in the protobuf binary wire format — the canonical
+    /// interchange encoding (ADR-0014 decision 9). Binary needs no
+    /// descriptors: prost's generated encoding is schema-faithful by
+    /// construction.
+    pub fn to_binary(package: &Package) -> Vec<u8> {
+        prost::Message::encode_to_vec(package)
+    }
+
+    /// Decodes a package from the protobuf binary wire format — the inverse
+    /// of [`to_binary`].
+    pub fn from_binary(bytes: &[u8]) -> Result<Package, prost::DecodeError> {
+        prost::Message::decode(bytes)
     }
 
     /// One interface shape of a package (ridl §14.0): a declared `interface`,
@@ -301,7 +409,6 @@ pub mod v2 {
 #[cfg(test)]
 mod v2_round_trip {
     use crate::v2;
-    use prost::Message;
 
     /// Wraps an interaction kind in the shared `Decl` envelope. Visibility
     /// and `is_error` stay unset on interactions (ridl §14.1); the ordinal is
@@ -519,15 +626,268 @@ mod v2_round_trip {
         }
     }
 
+    /// The typl vocabulary surface the interaction fixture does not reach:
+    /// the boxed `inlineScalar` oneof member, genuine 64-bit integer fields
+    /// (array and map bounds, length bounds, `Reserved.value`,
+    /// `EnumValue.value`), a tuple, a map, a union, an enum set, a constant,
+    /// and a set `deprecated`. A second fixture, so each stays readable; the
+    /// same round-trip tests drive both.
+    fn vocabulary_fixture() -> v2::Package {
+        fn decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
+            v2::Decl {
+                name: name.to_string(),
+                visibility: v2::Visibility::Public as i32,
+                is_error: false,
+                doc: String::new(),
+                labels: Vec::new(),
+                deprecated: None,
+                ordinal: 0,
+                kind: Some(kind),
+            }
+        }
+
+        fn field(name: &str, ordinal: u32, field_type: v2::FieldType) -> v2::Field {
+            v2::Field {
+                name: name.to_string(),
+                ordinal,
+                r#type: Some(field_type),
+                declared_init: None,
+                init: None,
+                doc: String::new(),
+                labels: Vec::new(),
+                deprecated: None,
+            }
+        }
+
+        // const MAX_RETRY : integer = 24
+        let max_retry = v2::ConstDef {
+            type_ref: Some("integer".to_string()),
+            value: "24".to_string(),
+            regex: None,
+        };
+
+        // enum Gear { PARK = 1  DRIVE = 2  reserved 7 } — the tombstone
+        // retires the integer value, a genuine int64 field.
+        let gear = v2::EnumDef {
+            values: vec![
+                v2::EnumValue {
+                    name: "PARK".to_string(),
+                    value: 1,
+                    doc: String::new(),
+                },
+                v2::EnumValue {
+                    name: "DRIVE".to_string(),
+                    value: 2,
+                    doc: String::new(),
+                },
+            ],
+            reserved: vec![v2::Reserved {
+                ordinal: 0,
+                name: None,
+                value: Some(7),
+            }],
+        };
+
+        // enumset Warnings { LOW_FUEL = 0  ICE_RISK = 33 } — the standalone
+        // form; bit 33 forces the u64 width and is a genuine int64 value.
+        let warnings = v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![
+                v2::EnumValue {
+                    name: "LOW_FUEL".to_string(),
+                    value: 0,
+                    doc: String::new(),
+                },
+                v2::EnumValue {
+                    name: "ICE_RISK".to_string(),
+                    value: 33,
+                    doc: String::new(),
+                },
+            ],
+            width: v2::IntWidth::U64 as i32,
+        };
+
+        // type PlateText : string [1..86] — character length bounds, two
+        // genuine uint64 fields behind proto3 `optional`.
+        let plate_text = v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                min: None,
+                max: None,
+                step: None,
+                len_min: Some(1),
+                len_max: Some(86),
+                pattern: None,
+                pattern_const: None,
+            }),
+            declared_init: None,
+            init: None,
+            width: None,
+        };
+
+        // union Sample { speed : Speed  gear : Gear }
+        let sample = v2::UnionDef {
+            arms: vec![
+                v2::UnionArm {
+                    name: "speed".to_string(),
+                    ordinal: 1,
+                    type_ref: "Speed".to_string(),
+                    doc: String::new(),
+                },
+                v2::UnionArm {
+                    name: "gear".to_string(),
+                    ordinal: 2,
+                    type_ref: "Gear".to_string(),
+                    doc: String::new(),
+                },
+            ],
+            is_result: false,
+            reserved: Vec::new(),
+        };
+
+        // retries : integer [0..24] = 3 — the boxed `inlineScalar` oneof
+        // member: the committed regression guard for ADR-0014 Open item 2,
+        // which established that the Rust-side `Box` is invisible to the
+        // reflection path. The enclosing field carries the init; the nested
+        // TypeDef's stays unset.
+        let retries = v2::Field {
+            declared_init: Some("3".to_string()),
+            init: Some(v2::InitValue {
+                derivable: true,
+                value: Some("3".to_string()),
+            }),
+            ..field(
+                "retries",
+                1,
+                v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+                        backing: Some(v2::Backing {
+                            kind: Some(v2::backing::Kind::Primitive(
+                                v2::PrimitiveType::Integer as i32,
+                            )),
+                        }),
+                        constraint: Some(v2::Constraint {
+                            min: Some("0".to_string()),
+                            max: Some("24".to_string()),
+                            step: None,
+                            len_min: None,
+                            len_max: None,
+                            pattern: None,
+                            pattern_const: None,
+                        }),
+                        declared_init: None,
+                        init: None,
+                        width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+                    }))),
+                },
+            )
+        };
+
+        // position : (x : Speed, y : Speed) — an anonymous named-field
+        // composite (typl §11).
+        let position = field(
+            "position",
+            2,
+            v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                    fields: vec![
+                        v2::TupleField {
+                            name: "x".to_string(),
+                            r#type: Some(named_type("Speed")),
+                        },
+                        v2::TupleField {
+                            name: "y".to_string(),
+                            r#type: Some(named_type("Speed")),
+                        },
+                    ],
+                })),
+            },
+        );
+
+        // gears : [Gear; 1..4096] — array bounds are genuine uint64 fields.
+        let gears = field(
+            "gears",
+            3,
+            v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(named_type("Gear"))),
+                    min: 1,
+                    max: 4096,
+                }))),
+            },
+        );
+
+        // plates : { PlateText -> Gear } [0..53] — map bounds are genuine
+        // uint64 fields. The field is deprecated, covering the optional
+        // string on the Field envelope.
+        let plates = v2::Field {
+            deprecated: Some("superseded by gears".to_string()),
+            ..field(
+                "plates",
+                4,
+                v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                        key: Some(Box::new(named_type("PlateText"))),
+                        value: Some(Box::new(named_type("Gear"))),
+                        min: 0,
+                        max: 53,
+                    }))),
+                },
+            )
+        };
+
+        let snapshot = v2::StructDef {
+            members: [retries, position, gears, plates]
+                .into_iter()
+                .map(|field| v2::StructMember {
+                    member: Some(v2::struct_member::Member::Field(field)),
+                })
+                .collect(),
+            fixed_layout: false,
+        };
+
+        v2::Package {
+            name: "veh.vocab".to_string(),
+            decls: vec![
+                decl("MAX_RETRY", v2::decl::Kind::ConstDef(max_retry)),
+                decl("Gear", v2::decl::Kind::EnumDef(gear)),
+                decl("Warnings", v2::decl::Kind::EnumSetDef(warnings)),
+                decl("PlateText", v2::decl::Kind::TypeDef(plate_text)),
+                // The union is deprecated — the optional string on the Decl
+                // envelope.
+                v2::Decl {
+                    deprecated: Some("use Snapshot".to_string()),
+                    ..decl("Sample", v2::decl::Kind::UnionDef(sample))
+                },
+                decl("Snapshot", v2::decl::Kind::StructDef(snapshot)),
+            ],
+            interfaces: Vec::new(),
+            services: Vec::new(),
+        }
+    }
+
     #[test]
     fn protobuf_round_trip_preserves_package() {
         let package = fixture();
 
-        let mut buf = Vec::new();
-        package.encode(&mut buf).expect("encode must succeed");
-        let decoded = v2::Package::decode(buf.as_slice()).expect("decode must succeed");
+        let buf = v2::to_binary(&package);
+        let decoded = v2::from_binary(buf.as_slice()).expect("decode must succeed");
 
         assert_eq!(package, decoded);
+
+        // The vocabulary fixture rides the same round trip.
+        let vocabulary = vocabulary_fixture();
+        let decoded_vocabulary =
+            v2::from_binary(v2::to_binary(&vocabulary).as_slice()).expect("decode must succeed");
+        assert_eq!(vocabulary, decoded_vocabulary);
 
         let interface = &decoded.interfaces[0];
         let ordinals: Vec<u32> = interface.interactions.iter().map(|d| d.ordinal).collect();
@@ -548,23 +908,52 @@ mod v2_round_trip {
 
     #[test]
     fn json_round_trip_preserves_package() {
-        let package = fixture();
+        for package in [fixture(), vocabulary_fixture()] {
+            let json = v2::to_json_pretty(&package).expect("the fixture serializes as IR JSON");
+            let decoded = v2::from_json(&json).expect("json deserialization must succeed");
 
-        let json = v2::to_json_pretty(&package);
-        let decoded: v2::Package =
-            serde_json::from_str(&json).expect("json deserialization must succeed");
+            assert_eq!(package, decoded);
+        }
+    }
 
-        assert_eq!(package, decoded);
+    /// Parses emitted JSON the way ADR-0014 decision 11's conformance test
+    /// requires: unknown fields rejected, trailing input rejected, and the
+    /// result transcoded into the generated types.
+    fn strict_parse(json: &str) -> v2::Package {
+        let mut deserializer = serde_json::Deserializer::from_str(json);
+        let dynamic = prost_reflect::DynamicMessage::deserialize_with_options(
+            v2::package_descriptor(),
+            &mut deserializer,
+            &prost_reflect::DeserializeOptions::new().deny_unknown_fields(true),
+        )
+        .expect("a strict conformant parser must accept the emitted JSON");
+        deserializer.end().expect("no trailing input");
+        dynamic
+            .transcode_to()
+            .expect("the strictly parsed message transcodes into the generated types")
+    }
+
+    /// The conformance claim of ADR-0014 decision 11: a conformant protobuf
+    /// JSON parser configured to reject unknown fields accepts the emitted
+    /// JSON. Re-reading tests that claim itself; asserting on the rendered
+    /// text would only restate the serializer's behaviour back to itself.
+    #[test]
+    fn emitted_json_survives_a_strict_conformant_parse() {
+        for package in [fixture(), vocabulary_fixture()] {
+            let json = v2::to_json_pretty(&package).expect("the fixture serializes as IR JSON");
+            assert_eq!(package, strict_parse(&json));
+        }
     }
 
     #[test]
     fn json_renders_timing_bounds_and_fallible_arms_exactly() {
-        let json = v2::to_json_pretty(&fixture());
+        let json = v2::to_json_pretty(&fixture()).expect("the fixture serializes as IR JSON");
 
         // Exactness is visible: timing bounds are exact-decimal microsecond
-        // strings, never floating-point numbers (ADR-0008 decision 12).
+        // strings, never floating-point numbers (ADR-0008 decision 12) —
+        // under the canonical lowerCamelCase field name (ADR-0014 decision 1).
         assert!(
-            json.contains(r#""min_us": "10000""#),
+            json.contains(r#""minUs": "10000""#),
             "the timing bound must be a JSON string, got: {json}"
         );
         // Both arms of the inline T | E return are visible by name.
@@ -575,6 +964,36 @@ mod v2_round_trip {
         assert!(
             json.contains(r#""err": "DiagError""#),
             "the err arm must render, got: {json}"
+        );
+    }
+
+    /// ADR-0014 decision 8's stringification, tested on genuine 64-bit
+    /// fields. The timing assertion above proves nothing about it —
+    /// `Timing.min_us` is `optional string` in the schema — so the claim
+    /// needs fields whose wire type actually is `uint64` or `int64`.
+    #[test]
+    fn json_renders_64_bit_integer_fields_as_strings() {
+        let json = v2::to_json_pretty(&vocabulary_fixture())
+            .expect("the vocabulary fixture serializes as IR JSON");
+
+        // uint64: the array's upper bound.
+        assert!(
+            json.contains(r#""max": "4096""#),
+            "an array bound must be a JSON string, got: {json}"
+        );
+        // uint64 behind proto3 `optional`: the character length bound.
+        assert!(
+            json.contains(r#""lenMax": "86""#),
+            "a length bound must be a JSON string, got: {json}"
+        );
+        // int64: the retired enum value and the enum-set bit position.
+        assert!(
+            json.contains(r#""value": "7""#),
+            "a retired enum value must be a JSON string, got: {json}"
+        );
+        assert!(
+            json.contains(r#""value": "33""#),
+            "an enum-set bit position must be a JSON string, got: {json}"
         );
     }
 
@@ -810,5 +1229,111 @@ mod v2_round_trip {
             ..Default::default()
         };
         assert!(v2::referenced_packages(&package).is_empty());
+    }
+
+    /// Below prost's recursion limit at two message levels per nesting level
+    /// — the depth ADR-0014 decision 12 measured as round-tripping correctly.
+    const NESTING_BELOW_LIMIT: usize = 45;
+    /// Past the limit today. The tests assert the outcome — an error, never a
+    /// panic — not the exact threshold, so a prost release that moves the
+    /// limit moves these constants, not the assertions.
+    const NESTING_PAST_LIMIT: usize = 60;
+
+    /// One declaration whose payload nests `depth` levels of inline arrays —
+    /// each level costs two message levels on the wire (`FieldType` plus
+    /// `ArrayType`), the arithmetic ADR-0014 decision 12 records against
+    /// prost's recursion limit.
+    fn nested_package(depth: usize) -> v2::Package {
+        let mut payload = v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Primitive(
+                v2::PrimitiveType::Integer as i32,
+            )),
+        };
+        for _ in 0..depth {
+            payload = v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(payload)),
+                    min: 1,
+                    max: 1,
+                }))),
+            };
+        }
+        v2::Package {
+            name: "veh.deep".to_string(),
+            decls: vec![v2::Decl {
+                name: "deep".to_string(),
+                kind: Some(v2::decl::Kind::FixedDef(v2::FixedDef {
+                    payload: Some(payload),
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// The JSON form of [`nested_package`], built by hand: past the limit the
+    /// serializer rejects the package, so its JSON cannot come from
+    /// [`v2::to_json_pretty`]. The chosen depth stays under `serde_json`'s
+    /// own recursion limit of 128, so the failure exercised is the transcode
+    /// out of the dynamic message, not the JSON parse.
+    fn nested_json(depth: usize) -> String {
+        let mut payload = r#"{"primitive": "PRIMITIVE_TYPE_INTEGER"}"#.to_string();
+        for _ in 0..depth {
+            payload = format!(r#"{{"array": {{"element": {payload}, "min": "1", "max": "1"}}}}"#);
+        }
+        format!(
+            r#"{{"name": "veh.deep", "decls": [{{"name": "deep", "fixedDef": {{"payload": {payload}}}}}]}}"#
+        )
+    }
+
+    /// ADR-0014 decision 12: nesting past the transcoder's recursion limit is
+    /// reachable from legal source, so serialization reports it as an error
+    /// instead of panicking.
+    #[test]
+    fn json_serialization_past_the_nesting_limit_returns_an_error() {
+        let err = v2::to_json_pretty(&nested_package(NESTING_PAST_LIMIT))
+            .expect_err("serialization past the recursion limit must fail, not panic");
+        assert!(
+            err.to_string().contains("recursion limit"),
+            "the error must name the nesting limit as the known cause, got: {err}"
+        );
+    }
+
+    /// The read direction of the same defect: the transcode out of the
+    /// dynamic message crosses the same recursion limit, and `from_json` maps
+    /// it into its error return instead of expecting on it (ADR-0014
+    /// decision 12).
+    #[test]
+    fn json_parse_past_the_nesting_limit_returns_an_error() {
+        let error = v2::from_json(&nested_json(NESTING_PAST_LIMIT))
+            .expect_err("parsing past the recursion limit must fail, not panic");
+
+        // Assert *which* limit was reached. `serde_json` carries its own
+        // recursion limit of 128, and this input clears the transcoding
+        // decoder's limit by only one nesting level, so an `is_err()`
+        // assertion alone would keep passing if the constant were raised —
+        // while silently testing `serde_json`'s parser instead of the
+        // transcode path this test exists to pin. prost says "recursion limit
+        // reached"; `serde_json` says "recursion limit exceeded".
+        let message = error.to_string();
+        assert!(
+            message.contains("recursion limit reached"),
+            "the transcoding decoder's limit must be the one reached, not \
+             serde_json's own; got: {message}"
+        );
+    }
+
+    /// The bound must not tighten silently: below the limit the package still
+    /// serializes and round-trips, so a change that narrows what the JSON
+    /// surface accepts fails here.
+    #[test]
+    fn json_round_trip_below_the_nesting_limit_succeeds() {
+        let package = nested_package(NESTING_BELOW_LIMIT);
+        let json = v2::to_json_pretty(&package)
+            .expect("below the recursion limit, serialization succeeds");
+        let decoded = v2::from_json(&json).expect("below the recursion limit, parsing succeeds");
+        assert_eq!(package, decoded);
     }
 }

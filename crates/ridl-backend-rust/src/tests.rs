@@ -2545,7 +2545,7 @@ fn appendix_a() -> v2::Package {
         .split_once("\n---\n")
         .map(|(_, body)| body)
         .unwrap_or(&text);
-    let package: v2::Package = serde_json::from_str(body)
+    let package = v2::from_json(body)
         .expect("the ridl-sem Appendix A golden deserializes as an IR v2 package");
 
     // The golden is the whole point, so its shape is asserted rather than

@@ -7,9 +7,13 @@ repository.workspace = true
 
 [dependencies]
 prost.workspace = true
+prost-reflect.workspace = true
+# `from_json` maps the transcode failure into its `serde_json::Error` return
+# through `serde::de::Error::custom` (ADR-0014 decision 12).
 serde.workspace = true
 serde_json.workspace = true
 
 [build-dependencies]
+prost.workspace = true
 prost-build.workspace = true
 protox.workspace = true

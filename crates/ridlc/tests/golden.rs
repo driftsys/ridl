@@ -21,7 +21,11 @@ fn fixture_compiles_to_committed_snapshots() {
     );
 
     insta::assert_snapshot!("generated_rust", output.rust_source);
-    insta::assert_snapshot!("ir_package", ridl_ir::v2::to_json_pretty(&output.package));
+    insta::assert_snapshot!(
+        "ir_package",
+        ridl_ir::v2::to_json_pretty(&output.package)
+            .expect("the fixture package serializes as IR JSON")
+    );
 }
 
 /// A typl name that is a Rust keyword (`fn`) lexes as a valid identifier and

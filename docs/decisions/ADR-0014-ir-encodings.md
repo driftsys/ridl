@@ -102,8 +102,8 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
    two cannot disagree.
 
    Six functions in `ridl_ir::v2` where there is one today. `to_json_pretty`
-   keeps its name and its current signature, including its infallible return, so
-   no call site is renamed:
+   keeps its name, so no call site is renamed. **It does not keep its infallible
+   return — see decision 12, which retracts that clause.**
 
    | Function                              | Mechanism                      |
    | ------------------------------------- | ------------------------------ |
@@ -147,6 +147,50 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     reject unknown fields. Asserting on the rendered text would only restate the
     serializer's behaviour back to itself; re-reading tests the claim the change
     actually makes, which is that a conformant parser accepts this output.
+
+12. **Amendment (2026-08-04) — the serialization surface is fallible on both
+    directions, retracting decision 7's infallible return.** Decision 7 kept
+    `to_json_pretty` infallible on the reasoning that "the new failure modes are
+    the same class as the existing `expect` — they cannot occur unless the
+    schema and the generated types disagree." **That reasoning is false**, and
+    the E9.1 review demonstrated it.
+
+    `prost-reflect` transcodes by encoding the typed message and decoding it
+    into a `DynamicMessage`, and prost's `RECURSION_LIMIT` is a non-configurable
+    constant of 100 message levels. Each level of inline composite nesting costs
+    **two** message levels for an array or a map (`FieldType` plus `ArrayType`
+    or `MapType`) and **three** for a tuple, because `TupleField` is itself a
+    message. So the limit is reached at roughly 49 levels of array nesting and
+    roughly 32 levels of tuple nesting, and the tuple bound is the one that
+    matters, being the tighter of the two. Measured on the E9.1 branch: a
+    package nested 45 array levels deep serializes and round-trips correctly and
+    at 55 it fails; through the CLI a 30-level tuple source succeeds and a
+    40-level one fails. The failure is **input-dependent**, not schema drift, so
+    no `expect` on that path is justified.
+
+    This is reachable from legal source. A `.typl` file declaring 55 nested
+    inline arrays passes the lexer, the parser, and the checker, and then
+    `ridlc build --emit ir-json` panics — while `--emit rust`,
+    `--emit c-header`, and `--emit typescript` all emit that same package
+    correctly. A panic in a compiler on input it accepted is a defect, and on
+    the write path it is a regression against the `serde` rendering this record
+    replaces, which had no such limit.
+
+    Therefore: `to_json_pretty` returns a `Result`; `from_json` maps the decode
+    failure into its existing error return rather than expecting on it; and the
+    one production call site reports the failure as a detached error diagnostic
+    and writes no artifact, which is the pattern `ridlc` already uses for the
+    TypeScript backend's `Unrepresentable` error. The five remaining call sites
+    are tests.
+
+    **A checker-level nesting limit was rejected.** It would restrict input that
+    three of the four emits handle correctly, which is a language change made to
+    work around a library limit. If the bound ever binds in practice, the escape
+    hatch is the one the Alternatives section already records: the JSON
+    mechanism sits behind `to_json_pretty` and `from_json`, and `pbjson` emits
+    straight-line field writes with no transcode and therefore no recursion
+    limit. That reversibility was recorded as a hypothetical; it is now a
+    concrete contingency with a known trigger.
 
 ## Alternatives considered
 
@@ -195,14 +239,20 @@ rather than this estimate.
 
 ## Open
 
-1. **How `skip_default_fields(false)` treats proto3 `optional` fields that are
-   unset** — omitted, or emitted as `null`. The schema uses `optional` for
-   `deprecated`, `len_min`, `pattern`, and others, so this decides real golden
-   shape. To be answered by writing one test against the library before the
-   rewrite, not by reading its documentation.
-2. **Whether the `.boxed()` oneof member configured in `build.rs`
-   (`FieldType.kind.inline_scalar`) needs special handling on the reflection
-   path.** Same method: one test before the rewrite.
+1. **Answered during E9.1 (2026-08-04): an unset proto3 `optional` field is
+   omitted entirely, and `null` never appears in the output.**
+   `skip_default_fields(false)` forces emission only of non-optional fields
+   holding their default — `"isError": false`, `"doc": ""`, `"labels": []`,
+   `"ordinal": 0`. Unset `optional` fields (`deprecated`, `lenMin`, `pattern`),
+   unset message fields, and unset oneofs produce no key at all. Established by
+   a probe against `prost-reflect` 0.16.5 over the real schema, not from its
+   documentation. Decision 2 is scoped accordingly.
+2. **Answered during E9.1 (2026-08-04): the `.boxed()` oneof member
+   (`FieldType.kind.inline_scalar`) needs no special handling on the reflection
+   path.** `transcode_from` goes through the wire encoding, so the Rust-side
+   `Box` is never visible to reflection. A package holding an `inlineScalar`
+   round-trips through typed, dynamic, JSON, dynamic, typed and compares equal,
+   including under a strict parse.
 3. **No cross-language conformance test.** It would be the strongest available
    evidence and it needs a non-Rust protobuf runtime in CI. That belongs to
    E4.5's "a third-party backend consumes the IR" criterion. Recorded as a known
