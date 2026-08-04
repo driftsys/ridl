@@ -48,6 +48,28 @@
   typl constants out of a wire schema, and makes typl §17.11 a precondition for
   FlatBuffers. Not epic-scoped: it binds every backend the workspace grows.
 
+- **ADR-0014 — IR encodings.** Canonical protobuf JSON replaces the `serde`
+  rendering on every surface — artifacts, baselines, and goldens — because the
+  rendering that shipped is serde's view of the generated Rust structs and no
+  conformant protobuf parser can read it. Adds prototext and binary emits over a
+  build-time descriptor pool, fixes the canonical-form policy E4.5 cites (binary
+  is canonical, JSON is derived and conformance-obliged, prototext is for
+  inspection), and makes the `ridl.std` emit filter an exhaustive
+  classification. Supersedes the rendering clause of ADR-0004 §4. Not
+  epic-scoped: it binds the artifact every future backend consumes.
+
+- **ADR-0015 — QoS absorption, RPC bounds, and the interface as the unit.** ridl
+  expresses QoS as semantic obligation, never as a transport knob, so it
+  _absorbs_ QoS rather than excluding it. `command` and `query` gain the range
+  form of the §9 timing annotation — `min` is a call throttle, `max` a response
+  bound — warned but never defaulted (RIDL-112), with a diff category of its own
+  because `min`'s direction inverts on an RPC. States the coherence rule at the
+  interface grain, makes a provided interface the generation unit, and lifts the
+  one-interface restriction on `service` so that grain is real: a
+  comma-separated shape list, per-interface ordinals keyed by name, flat
+  addressing preserved, three diagnostics, and five diff categories. Not
+  epic-scoped: it binds the language surface until superseded.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.

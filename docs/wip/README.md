@@ -6,8 +6,15 @@ that are not yet ratified as normative references. They graduate into
 [`../decisions/`](../decisions/)) as they settle.
 
 Superpowers specs and plans live here while an epic runs and are archived
-verbatim to [`../archive/`](../archive/) at epic close. None is open: the epic
-E2 plan was archived by the E2 gardening pass on 2026-07-26.
+verbatim to [`../archive/`](../archive/) at epic close. **One is open:**
+`e9-execution-plan.md`, covering roadmap stories E9.1 to E9.6. The epic E2 plan
+was archived by the E2 gardening pass on 2026-07-26.
+
+- **e9-execution-plan.md** — the execution plan for E9.1 to E9.6: story order
+  and dependencies, what each story must verify, the working rules for the
+  block, and what is deliberately left to a later one. Ratified by
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) and
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md).
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -33,16 +40,26 @@ E2 plan was archived by the E2 gardening pass on 2026-07-26.
   serde rendering of Rust structs, not protobuf JSON, so no non-Rust protobuf
   runtime can parse it. Proposes canonical protobuf JSON plus prototext and
   binary emits, and **ADR-0014**, superseding ADR-0004 §4's rendering clause.
-  Roadmap: E9.1–E9.3.
+  Roadmap: E9.1–E9.3. **Ratified 2026-08-04** as
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md); this note stays as the
+  reasoning trail, including the measurements the record summarises.
 - **2026-08-03-rpc-response-bound-design.md** — the first pass at ridl §17.5
   open question 5. Finds that ridl _absorbs_ QoS rather than excluding it, and
   proposes RPC bounds with a response bound, the coherence rule, and
   **ADR-0015**. Roadmap: E9.4, E9.5, E9.12. Its ADR was renumbered from 0013,
-  which was taken before it was written — see the note in §8.
+  which was taken before it was written — see the note in §8. **Ratified
+  2026-08-04** as
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md), together
+  with the multi-interface note below; the record's Status says why the two
+  became one record rather than two.
 - **2026-08-03-multi-interface-services-design.md** — lifts the one-interface
   restriction on `ServiceDef`, with per-interface ordinals keyed by name, flat
   addressing preserved, three diagnostics, and five diff categories. The design
-  pass §11.1 of the RPC note called for. Roadmap: E9.6.
+  pass §11.1 of the RPC note called for. Roadmap: E9.6. **Ratified 2026-08-04**
+  as decisions 12 to 19 of
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md). That
+  record's decision 20, retiring the `Service` message's `oneof` field numbers,
+  is new there rather than ratified from this note — see its Status.
 - **2026-08-03-schema-projection-design.md** — the identity chain from ridl to
   proto3 and FlatBuffers, the projection contract, and the generated store and
   dispatcher shapes. Roadmap: E9.7–E9.11.
