@@ -460,6 +460,29 @@ indistinguishable, so no claim about any of the three can be exercised.
     exists to design out — and the first of them was a regression, because the
     superseded `ServiceChanged` comparison had reported it breaking.
 
+    **The uniqueness rule is over every shape, live or retired, and a tombstone
+    must spell a name.** Stating it only for live shapes leaves two ways to put
+    one name on two slots, and both make the list unkeyable:
+
+    - **RIDL-148 is minted** — a service-level tombstone that spells no
+      interface name. `ReservedEntry` is shared with typl's struct and union
+      tombstones, so the grammar admits the numeric spelling `reserved 2`, which
+      retires an _ordinal_. At the service level the identity a binding keys on
+      is the interface **name** (decision 17), so a nameless tombstone can never
+      match the shape it is meant to retire, and the one compatible retirement
+      move the model promises does not work for that spelling.
+    - **RIDL-147 covers a name repeated across tombstones**, not only across
+      live shapes. Two tombstones spelling one name compile clean otherwise, and
+      the service then loses its per-slot diff vocabulary for good: the walk
+      cannot key the list, so every later edit — including the sanctioned
+      compatible append — is compared as a whole and reports breaking. That
+      fails closed rather than shipping a wire break, but a clean-compiling
+      source should not be able to degrade a service permanently.
+
+    RIDL-146 already covers the third pairing, a live shape re-declared under a
+    retired name. With all three enforced, a checked package cannot produce a
+    shape list the walk is unable to key.
+
 ## Alternatives considered
 
 | Candidate                                                 | Verdict  | Reason                                                                                                                                                                                                                                                                                                                      |
