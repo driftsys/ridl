@@ -283,9 +283,22 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     the parse runs on an explicitly sized 16 MiB thread, so the depth that fits
     is a property of the crate rather than of the ambient stack, which differs
     between debug and release builds and between platforms — the same input
-    parses everywhere or nowhere. 1,000 is roughly thirty times the ceiling this
-    amendment removes and far beyond real IR — the deepest nesting in the corpus
-    is single digits — so it must never bind on real work.
+    parses everywhere or nowhere.
+
+    **The cap cannot bind on IR this toolchain produces, and the bound is
+    measured rather than guessed.** The checker refuses type nesting past 128
+    levels (FORM-102), and the deepest package that limit admits emits JSON
+    **262 brackets** deep — so 1,000 leaves a factor of 3.8 over anything
+    `ridlc` can write, and the deepest nesting in the corpus is single digits.
+    The cap exists for input this toolchain did not write: a hand-edited
+    baseline, or a snapshot from elsewhere.
+
+    That FORM-102 ceiling is also why the writer needs no cap of its own. The
+    pbjson serializer recurses, so a sufficiently deep package would exhaust the
+    stack — but no such package can reach it, because the front end refuses the
+    source that would produce one. The residual write-side abort measured at
+    roughly 5,000 levels is unreachable except by hand-building a `Package` in
+    Rust, which is outside what this record governs.
 
     Measured on the two `veh-cluster` corpus packages (release build, 55 kB and
     16 kB artifacts): serialization is 3.9 to 4.5 times faster than the

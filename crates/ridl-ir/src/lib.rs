@@ -145,12 +145,19 @@ pub mod v2 {
     }
 
     /// The nesting ceiling `from_json` enforces, in JSON bracket levels.
-    /// 1,000 is roughly thirty times the ~32-tuple-level ceiling the pbjson
-    /// move removed (ADR-0014 decisions 12 and 14) and far beyond real IR —
-    /// the deepest nesting in the corpus is single digits — so it must never
-    /// bind on real work. It exists because past the stack ceiling the
-    /// failure mode is a stack-overflow abort, which cannot be caught; a cap
-    /// turns that into a diagnostic.
+    ///
+    /// It cannot bind on IR this toolchain produces, and the bound is a
+    /// measurement rather than a guess. The checker refuses type nesting past
+    /// 128 levels (FORM-102), and the deepest package that limit admits emits
+    /// JSON **262 brackets** deep — so 1,000 leaves a factor of 3.8 over
+    /// anything `ridlc` can write, and the deepest nesting in the corpus is
+    /// single digits.
+    ///
+    /// It exists for input this toolchain did not write: a hand-edited
+    /// baseline, or a snapshot from elsewhere. Past the stack ceiling the
+    /// failure mode is a stack-overflow abort, which no caller can catch, so
+    /// the cap turns an abort into a diagnostic (ADR-0014 decisions 12
+    /// and 14).
     const MAX_JSON_NESTING: usize = 1_000;
 
     /// The stack `from_json` parses on, in bytes. An explicit size makes the
