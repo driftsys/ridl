@@ -103,8 +103,9 @@ fn formatting_preserves_content_tokens_over_the_ok_corpus() {
 #[test]
 fn content_tokens_detect_a_dropped_comment_and_a_mutated_literal() {
     // Dropping the in-constraint comment changes the stream — so had the
-    // formatter still dropped it, `formatting_preserves_content_tokens` would
-    // fail on such an input.
+    // formatter still dropped it,
+    // `formatting_preserves_content_tokens_over_the_ok_corpus` would fail on
+    // such an input.
     let with_comment = content_tokens("package p\ntype F: bytes [/* fixed */ 8]\n");
     let without_comment = content_tokens("package p\ntype F: bytes [8]\n");
     assert_ne!(with_comment, without_comment, "a dropped comment must show");

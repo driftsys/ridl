@@ -6943,8 +6943,9 @@ mod tests {
 
     #[test]
     fn ridl_106_timing_or_attr_block_on_fixed() {
-        // The timing half is `ridl_106_timing_on_every_kind_that_carries_none`;
-        // this is the attribute-block half, which stays `fixed`-only because a
+        // The timing half is
+        // `ridl_106_timing_on_fixed_and_ridl_103_strict_period_on_rpc`; this
+        // is the attribute-block half, which stays `fixed`-only because a
         // command and a query do take an attribute block (their contracts).
         let attributed = check_ridl(
             "app",

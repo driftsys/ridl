@@ -453,7 +453,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      diagnostic (ADR-0008 decisions 9 and 13). Provoked by the committed \
                      baseline corpus member, driven by \
                      `check_reports_ordinal_drift_against_the_committed_baseline` and \
-                     `inline_shape_removal_renders_without_a_span` in \
+                     `inline_shape_removal_spans_the_service_name` in \
                      `crates/ridl/tests/baseline_desk.rs`",
         },
     ),
@@ -618,6 +618,43 @@ fn every_ridl_profile_code_has_a_living_example() {
                      move it to `Showcase`",
                 );
             }
+        }
+    }
+}
+
+/// Every test an [`Elsewhere`] reason cites by name exists in the file the
+/// same reason names.
+///
+/// A reason string is prose, so the compiler checks none of it: when the
+/// sibling crate renamed a baseline-desk test, the RIDL-407 reason kept the
+/// old name and pointed readers at a test that no longer existed. This reads
+/// each backticked snake_case identifier in a reason as a test name and
+/// requires a `fn` of that name in one of the `.rs` files the reason cites.
+#[test]
+fn every_test_cited_in_an_elsewhere_reason_exists() {
+    let root = repository_root();
+    for (code, provoked) in RIDL_PROFILE_CODES {
+        let Elsewhere { reason, .. } = provoked else {
+            continue;
+        };
+        // Backticked spans are the odd-numbered segments of a backtick split.
+        let spans: Vec<&str> = reason.split('`').skip(1).step_by(2).collect();
+        let files: Vec<&&str> = spans.iter().filter(|s| s.ends_with(".rs")).collect();
+        let test_names = spans.iter().filter(|s| {
+            s.contains('_')
+                && s.chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        });
+        for name in test_names {
+            let defined = files.iter().any(|file| {
+                std::fs::read_to_string(root.join(file))
+                    .is_ok_and(|source| source.contains(&format!("fn {name}(")))
+            });
+            assert!(
+                defined,
+                "{code}: the reason cites `{name}`, and no `.rs` file the reason names \
+                 ({files:?}) defines a function of that name",
+            );
         }
     }
 }
