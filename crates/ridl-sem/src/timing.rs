@@ -133,10 +133,13 @@ pub fn parse_default_timing(text: &str) -> Result<TimingSpec, String> {
 ///
 /// For a `signal` or `event` the result is always `Some`: an explicit `@`
 /// annotation is parsed and validated, and an untimed one resolves to `default`
-/// (RIDL-100). For a `command` or `query` the result is `Some` exactly when an
-/// annotation was written: an RPC is warned, never defaulted (RIDL-112,
-/// ADR-0015 decision 4), so an absent annotation stays `None` and the
-/// `default` argument is never read on this path. For `fixed` the result is
+/// (RIDL-100). For a `command` or `query` the result is `Some` exactly when a
+/// readable annotation was written: an RPC is warned, never defaulted
+/// (RIDL-112, ADR-0015 decision 4), so an undeclared bound stays `None` and
+/// the `default` argument is never read on this path. RIDL-112 covers what
+/// was not declared — no annotation at all, or the half-open `@[min..]` — and
+/// stays quiet on an annotation the parser could not read, whose only report
+/// is the parser's FORM-101. For `fixed` the result is
 /// always `None` and no diagnostic is produced — the kind carries no timing,
 /// and the structural checker already reports any annotation written on it
 /// (RIDL-106).
@@ -239,7 +242,29 @@ pub fn resolve_timing(
         // decision 4). The test is on the written token, not the resolved
         // value: an unreadable `max` already drew FORM-102 above and is a
         // written bound, not an undeclared one.
-        if matches!(kind, InteractionKind::Command | InteractionKind::Query) && max_token.is_none()
+        //
+        // The warning requires the literal spelling `@[min..]`: a written
+        // `min`, an absent `max`, the `..` consumed into the range node, and
+        // the range parsed to its closing `]`. Tokens enter these nodes only
+        // where the grammar expects them, so the four legs together admit no
+        // other source text — a duration stood before a consumed `..`, no
+        // duration followed it, and the consumed `]` means the token after
+        // the `..` was the bracket itself — and on that path none of the
+        // parser's four FORM-101 sites in the annotation can have fired.
+        // Every other shape — no bound token on either side (recovery from
+        // `@[20xs..50ms]`, or `@[..]`), no closing `]` (`@[20ms..50xs]`), or
+        // both bounds written with no `..` between them (`@[20ms 50ms]`) —
+        // already drew FORM-101, and a bound that failed to parse is not a
+        // bound the author declined to declare: `@[20xs..50ms]` and
+        // `@[20ms 50ms]` each demonstrably write a `50ms` response bound, so
+        // advising the author to declare one would advise on intent the
+        // checker could not read. The package fails to compile on the
+        // FORM-101 regardless, so no artifact or baseline can carry the
+        // state.
+        if matches!(kind, InteractionKind::Command | InteractionKind::Query)
+            && min_token.is_some()
+            && max_token.is_none()
+            && range_parsed_whole(annot, &range)
         {
             diags.push(missing_response_bound(kind, file, anchor));
         }
@@ -306,17 +331,20 @@ pub fn resolve_timing(
         (Some(spec), diags)
     } else {
         // A degenerate `Timing` node with neither a duration nor a range (a
-        // parse error, already reported). A signal or event applies the
-        // default so the IR still carries concrete bounds; an RPC stays
-        // absent, because absent means undeclared (ADR-0015 decision 4).
+        // parse error, already reported as FORM-101). A signal or event
+        // applies the default so the IR still carries concrete bounds. An RPC
+        // stays absent and draws no RIDL-112: the annotation was written and
+        // could not be read, so the author may well have declared a response
+        // bound (`@[20xs..50ms]` writes one), and the checker must not advise
+        // on intent it could not read. The package fails to compile on the
+        // FORM-101 regardless, so no artifact or baseline can carry this
+        // state. (ADR-0015 decision 4 warns on a readable annotation with no
+        // `max` — a malformed annotation has no readable `max` either way.)
         match kind {
             InteractionKind::Signal | InteractionKind::Event => {
                 (Some(applied_default(default)), diags)
             }
-            _ => {
-                diags.push(missing_response_bound(kind, file, anchor));
-                (None, diags)
-            }
+            _ => (None, diags),
         }
     }
 }
@@ -515,6 +543,25 @@ fn is_zero(value: &ExactValue) -> bool {
     *value.0.numer() == BigInt::from(0)
 }
 
+/// Whether a range annotation parsed to its end: the `..` separator was
+/// consumed into the range node and the closing `]` into the `Timing` node.
+/// The parser consumes each exactly when it stands where the grammar expects
+/// it, so a missing one marks a range whose parse failed midway (FORM-101).
+/// In `@[20ms..50xs]` the unreadable upper bound is no `Duration` token, so
+/// neither it nor the `]` behind it ever enters the node; in `@[20ms 50ms]`
+/// the failed `..` leaves both written durations in the node with no
+/// separator, so `max()` — which anchors on the `..` token — reads the
+/// written `50ms` as absent.
+fn range_parsed_whole(annot: &ast::Timing, range: &ast::TimingRange) -> bool {
+    let has_token = |node: &ridl_syntax::SyntaxNode, kind: ridl_syntax::SyntaxKind| {
+        node.children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .any(|token| token.kind() == kind)
+    };
+    has_token(range.syntax(), ridl_syntax::SyntaxKind::DotDot)
+        && has_token(annot.syntax(), ridl_syntax::SyntaxKind::RBracket)
+}
+
 /// The declaring keyword's noun for a diagnostic message.
 fn kind_noun(kind: InteractionKind) -> &'static str {
     match kind {
@@ -611,17 +658,26 @@ mod tests {
     /// Parses one interaction declaration inside an interface and returns its
     /// timing annotation (every timed kind's timing accessor).
     fn annot(decl: &str) -> ast::Timing {
+        annot_and_parse_codes(decl).0
+    }
+
+    /// Like [`annot`], but also returns the parser's diagnostic codes — for a
+    /// malformed annotation, whose FORM-101 is the parser's report and never
+    /// this module's.
+    fn annot_and_parse_codes(decl: &str) -> (ast::Timing, Vec<&'static str>) {
         let src = format!("package p\ninterface I {{\n  {decl}\n}}\n");
         let parse = ridl_syntax::parse(&src, Profile::Ridl);
+        let parse_codes = parse.errors().iter().map(|error| error.code).collect();
         let file = SourceFile::cast(parse.syntax()).expect("root is a SourceFile");
         let interface = file.interfaces().next().expect("one interface");
-        match interface.members().next().expect("one member") {
+        let timing = match interface.members().next().expect("one member") {
             ast::InterfaceMember::Signal(signal) => signal.timing().expect("signal timing"),
             ast::InterfaceMember::Event(event) => event.timing().expect("event timing"),
             ast::InterfaceMember::Command(command) => command.timing().expect("command timing"),
             ast::InterfaceMember::Query(query) => query.timing().expect("query timing"),
             other => panic!("expected a timed interaction kind, got {other:?}"),
-        }
+        };
+        (timing, parse_codes)
     }
 
     fn us(text: &str) -> ExactValue {
@@ -998,6 +1054,73 @@ mod tests {
             "a query's bound is the reply: {}",
             on_query[0].message,
         );
+    }
+
+    /// RIDL-112 stops at what was written: an RPC with no annotation warns, a
+    /// half-open `@[min..]` warns, and an annotation the parser could not read
+    /// warns nothing — the boundary pinned from both sides.
+    ///
+    /// The unreadable spellings each draw FORM-101 from the parser, and that
+    /// is where their reporting ends. `@[20xs..50ms]` demonstrably writes a
+    /// `50ms` response bound, so advising the author to declare one would
+    /// advise on intent the checker could not read; and the package fails to
+    /// compile on the FORM-101 regardless, so no artifact or baseline can
+    /// carry the state. ADR-0015 decision 4 is undisturbed: its warning is
+    /// about `max`, and a malformed annotation has no readable `max` either
+    /// way.
+    #[test]
+    fn ridl_112_warns_on_undeclared_bounds_and_not_on_unreadable_ones() {
+        // No annotation at all — warned, never defaulted.
+        let (spec, bare) = resolve(None, InteractionKind::Query, &builtin_default_timing());
+        assert_eq!(spec, None);
+        assert_eq!(codes(&bare), vec!["RIDL-112"]);
+
+        // A readable range that declares a throttle and no response bound.
+        let (_, half_open) = resolve(
+            Some(&annot("query getSpeed(): Speed @[20ms..]")),
+            InteractionKind::Query,
+            &builtin_default_timing(),
+        );
+        assert_eq!(codes(&half_open), vec!["RIDL-112"]);
+
+        // An annotation that was written and could not be read: a `Timing`
+        // node with neither duration nor range, a range with no bound token
+        // on either side, a range whose parse stopped before the closing
+        // `]`, and a range with both bounds written and no `..` between them
+        // — one spelling for each degenerate shape the parser leaves.
+        for (decl, kind) in [
+            ("query getSpeed(): Speed @fast", InteractionKind::Query),
+            (
+                "command setTarget(p: Speed) @[20xs..50ms]",
+                InteractionKind::Command,
+            ),
+            (
+                "query getSpeed(): Speed @[20ms..50xs]",
+                InteractionKind::Query,
+            ),
+            (
+                "query getSpeed(): Speed @[20ms 50ms]",
+                InteractionKind::Query,
+            ),
+        ] {
+            let (timing, parse_codes) = annot_and_parse_codes(decl);
+            assert!(
+                parse_codes.contains(&"FORM-101"),
+                "{decl} still draws its FORM-101, got {parse_codes:?}",
+            );
+            let (spec, diags) = resolve(Some(&timing), kind, &builtin_default_timing());
+            assert_eq!(
+                codes(&diags),
+                Vec::<&str>::new(),
+                "{decl}: an unreadable annotation is FORM-101's alone",
+            );
+            // Suppressing the warning did not start defaulting: whatever
+            // lowers carries no response bound and no applied default.
+            if let Some(spec) = spec {
+                assert_eq!(spec.max_us, None, "{decl}: no bound is manufactured");
+                assert!(!spec.default_applied, "{decl}: never defaulted");
+            }
+        }
     }
 
     /// Strict periodic stays signal-only: `@Xms` on a command or query is
