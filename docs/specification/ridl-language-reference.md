@@ -675,11 +675,11 @@ command uploadFirmware(data: <FwBlock>)
   must know about is a `query` returning `T | E` — the language forces that
   honesty
 - `require` permitted (§13); `ensure` not (nothing to observe)
-- **A range timing annotation is permitted and warned when absent** (§9.3): the
-  `max` bound is a response bound on acceptance — the delivery acknowledgment
-  below, never execution — and the `min` bound is a call throttle on the caller.
-  RIDL-112 reports a command that declares no response bound; no default is
-  applied
+- **A range timing annotation is permitted, and an undeclared response bound
+  draws a warning** (§9.3): the `max` bound is a response bound on acceptance —
+  the delivery acknowledgment below, never execution — and the `min` bound is a
+  call throttle on the caller. RIDL-112 reports a command that declares no
+  response bound; no default is applied
 - **Fire-and-forget describes the contract, not the wire.** The runtime protocol
   carries a **delivery acknowledgment** beneath every command: the receiving
   binding confirms _received and accepted for execution_ (payload valid,
@@ -730,10 +730,10 @@ query calibrate(axle: Axle): CalReport | CalError     // inline T | E — fallib
 - `require` and `ensure` permitted (§13); `ensure` constrains `result`
 - Functional failure is expressed **in the return type**: the inline `T | E`
   form makes the query fallible — §10.1. There is no `throws` clause in ridl
-- **A range timing annotation is permitted and warned when absent** (§9.3): the
-  `max` bound is a response bound on the reply, and the `min` bound is a call
-  throttle on the caller. RIDL-112 reports a query that declares no response
-  bound; no default is applied
+- **A range timing annotation is permitted, and an undeclared response bound
+  draws a warning** (§9.3): the `max` bound is a response bound on the reply,
+  and the `min` bound is a call throttle on the caller. RIDL-112 reports a query
+  that declares no response bound; no default is applied
 
 ### 7.2 Concurrency and Idempotence
 
@@ -1357,7 +1357,7 @@ restated here.
 | RIDL-105 | `query` returning `()`                                                                                                               | error                                                      |
 | RIDL-106 | timing annotation on `fixed`, the one kind that carries none (§9); attribute block on `fixed` (§8) — narrowed by ADR-0015            | error                                                      |
 | RIDL-107 | type declaration inside an `interface` or a `service` body — raised at parse time, where the declaration is recognised and recovered | error                                                      |
-| RIDL-108 | `@[X..X]` — a degenerate range, the rate floor equal to its staleness bound (§9.2); `signal` and `event` alike                       | warning                                                    |
+| RIDL-108 | `@[X..X]` — a degenerate range, the rate floor equal to its staleness bound (§9.2); every kind that admits the range                 | warning                                                    |
 | RIDL-109 | signal payload type has no derivable init value and no `= value` override (§4.4)                                                     | error                                                      |
 | RIDL-110 | signal `= value` init override violates a scalar payload's range, string length bound, or `match` pattern                            | error                                                      |
 | RIDL-112 | `command` or `query` with no declared response bound (§9.3) — a bare declaration, or the half-open `@[min..]`; never defaulted       | warning; error if active profile requires a response bound |
