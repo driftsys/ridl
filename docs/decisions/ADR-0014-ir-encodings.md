@@ -92,6 +92,11 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
 6. **The `serde` derives come off the generated types.** The `type_attribute` in
    `build.rs` is removed. `serde` and `serde_json` remain underneath
    `prost-reflect` as the JSON writer, but no longer determine the shape.
+   **Amended by decision 14: the generated types carry serde impls again —
+   `pbjson-build` generates them from the schema at build time. That is not the
+   removed arrangement returning: the derives followed the Rust shape, while the
+   generated impls follow the protobuf JSON mapping and are canonical by
+   construction.**
 
 7. **The two text encodings go through `prost-reflect` and a build-time
    descriptor pool; binary needs neither.** `build.rs` writes the
@@ -110,6 +115,10 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
    | `to_json_pretty` / `from_json`        | `prost-reflect`, `serde`       |
    | `to_text_format` / `from_text_format` | `prost-reflect`, `text-format` |
    | `to_binary` / `from_binary`           | `prost`, no descriptors        |
+
+   **The JSON row is superseded by decision 14: `to_json_pretty` and `from_json`
+   go through the `pbjson`-generated impls, with no descriptor lookup and no
+   transcode. The pool stays, serving prototext alone.**
 
    `from_text_format` is required rather than speculative: without it the
    prototext emit has no round-trip test, and a write path with no read path is
@@ -190,7 +199,11 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     mechanism sits behind `to_json_pretty` and `from_json`, and `pbjson` emits
     straight-line field writes with no transcode and therefore no recursion
     limit. That reversibility was recorded as a hypothetical; it is now a
-    concrete contingency with a known trigger.
+    concrete contingency with a known trigger. **Decision 14 executed it: the
+    JSON write side no longer transcodes, so the depth failure mode this
+    decision records is gone from JSON — `to_json_pretty` stays fallible for the
+    one error path that remains — while prototext keeps the transcode and this
+    decision's error contract.**
 
 13. **Amendment (2026-08-04) — the prototext reader is crate-private, and the
     writer's ceiling is a documented limit rather than a defect.**
@@ -226,16 +239,73 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     the error return reachable. Recorded as debt on driftsys/ridl#218 rather
     than built for a consumer that does not exist.
 
+14. **Amendment (2026-08-04) — the JSON mechanism moves to `pbjson`-generated
+    impls, executing decision 12's contingency; the pool stays for prototext.**
+    Decision 12 turned the transcode's depth failure into a returned error and
+    named the escape hatch with its trigger. The trigger is now measured:
+    `ridlc build --emit ir-json` fails on legal source the checker accepts —
+    roughly 49 nested arrays or 32 nested tuples — while `--emit rust`,
+    `--emit c-header`, and `--emit typescript` all emit the same package. A
+    compiler that accepts input and then cannot write its primary interchange
+    artifact for it is the failure this record exists to prevent, so the
+    contingency is executed.
+
+    `build.rs` runs `pbjson-build` over the same `protox` descriptor set that
+    generates the types, with `emit_fields()` as the only option set: that is
+    decision 2's contract exactly — a non-`optional` field holding its default
+    is emitted, a proto3 `optional` field stays gated on presence, and `null`
+    never appears. `retain_enum_prefix()` stays unset; despite its name it
+    governs the Rust variant naming the generator assumes, and it does not
+    compile against prost's prefix-stripped variants. `ignore_unknown_fields()`
+    stays unset, so the generated deserializer keeps the strictness decision
+    11's conformance test relies on. The output is byte-identical to what the
+    reflection path rendered: every committed golden passed unchanged, and the
+    corpus artifacts byte-compare equal across the switch.
+
+    **The write side is unrestricted.** The generated impl writes the typed
+    message with no transcode, so prost's recursion limit no longer applies; 400
+    levels of array nesting serialize and round-trip in a committed test.
+    `to_json_pretty` keeps its `Result` — decision 12's retraction of the
+    infallible return stands — because one error path remains in the generated
+    impl: an `i32` enum field holding a discriminant outside the schema. That is
+    data-dependent, not schema drift, so it is returned (as
+    `SerializeError::Json`; the error type now carries one variant per encoding)
+    and the `ridlc` diagnostic arm stays.
+
+    **The read side gets a deterministic ceiling.** `serde_json` imposes its own
+    recursion limit of 128 JSON levels, which would bind before anything else
+    and leave the ceiling near where the transcode had it; it is disabled (the
+    `unbounded_depth` feature, `disable_recursion_limit`). Two guards replace
+    it. `from_json` measures bracket nesting before parsing — skipping string
+    literals, including escaped quotes and escaped backslashes — and refuses
+    input past 1,000 levels with an error: past a stack ceiling the failure is
+    an abort no caller can catch, and the cap turns it into a diagnostic. And
+    the parse runs on an explicitly sized 16 MiB thread, so the depth that fits
+    is a property of the crate rather than of the ambient stack, which differs
+    between debug and release builds and between platforms — the same input
+    parses everywhere or nowhere. 1,000 is roughly thirty times the ceiling this
+    amendment removes and far beyond real IR — the deepest nesting in the corpus
+    is single digits — so it must never bind on real work.
+
+    Measured on the two `veh-cluster` corpus packages (release build, 55 kB and
+    16 kB artifacts): serialization is 3.9 to 4.5 times faster than the
+    reflection path and parsing is 2.2 to 2.4 times faster — the Alternatives
+    estimate of "three to five times" on the serialization step was accurate.
+    Dependencies: `pbjson` at run time and `pbjson-build` at build time, both
+    0.9.0, targeting prost ^0.14 and passing the wasm32 check; `prost-reflect`
+    stays behind prototext, dropping its `serde` feature. Decision 13 is
+    unchanged on both sides.
+
 ## Alternatives considered
 
-| Candidate                                             | Verdict  | Reason                                                                                                                                                                                                                    |
-| ----------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `pbjson-build` instead of `prost-reflect`             | rejected | generates canonical JSON at build time with no runtime pool, and was the recommendation until prototext entered scope. It is JSON only, and prototext needs a runtime descriptor pool, so its single advantage disappears |
-| Prototext for goldens                                 | rejected | it reads better — `snake_case` names, bare enum names, no 64-bit stringification — but a golden in a format no shipped artifact uses tests the renderer rather than the artifact                                          |
-| Prototext as the recommended interchange format       | rejected | TypeScript has no usable text-format parser, and TypeScript is a named target of ADR-0004                                                                                                                                 |
-| Additive only — keep `serde` JSON, add new emits      | rejected | zero churn, but it leaves the misleading artifact shipped under the name every consumer reaches for first, and raises the dialect count instead of lowering it                                                            |
-| A compatibility shim for existing baselines           | rejected | the version is `0.0.0` with no tags and nothing published, so no baseline exists outside this repository                                                                                                                  |
-| Reuse `TimingChanged`-style enumeration in the filter | rejected | see decision 10 — an enumeration of variants is what allowed the defect to be latent, and the next encoding would reintroduce it                                                                                          |
+| Candidate                                             | Verdict                        | Reason                                                                                                                                                                                                                                                                                                                                                                                        |
+| ----------------------------------------------------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pbjson-build` instead of `prost-reflect`             | adopted for JSON (decision 14) | generates canonical JSON at build time with no runtime pool, and was the recommendation until prototext entered scope. It is JSON only, and prototext needs a runtime descriptor pool, so its single advantage disappears — the original verdict, outweighed once decision 12 measured the transcode failing on legal source: a correctness trigger, not a cost one. Prototext keeps the pool |
+| Prototext for goldens                                 | rejected                       | it reads better — `snake_case` names, bare enum names, no 64-bit stringification — but a golden in a format no shipped artifact uses tests the renderer rather than the artifact                                                                                                                                                                                                              |
+| Prototext as the recommended interchange format       | rejected                       | TypeScript has no usable text-format parser, and TypeScript is a named target of ADR-0004                                                                                                                                                                                                                                                                                                     |
+| Additive only — keep `serde` JSON, add new emits      | rejected                       | zero churn, but it leaves the misleading artifact shipped under the name every consumer reaches for first, and raises the dialect count instead of lowering it                                                                                                                                                                                                                                |
+| A compatibility shim for existing baselines           | rejected                       | the version is `0.0.0` with no tags and nothing published, so no baseline exists outside this repository                                                                                                                                                                                                                                                                                      |
+| Reuse `TimingChanged`-style enumeration in the filter | rejected                       | see decision 10 — an enumeration of variants is what allowed the defect to be latent, and the next encoding would reintroduce it                                                                                                                                                                                                                                                              |
 
 The `prost-reflect` cost is real and small, and is recorded rather than hidden.
 It renders JSON by transcoding the typed message and then walking that tree with
@@ -249,7 +319,8 @@ moves a 39 ms command by well under a millisecond. This is a compiler writing a
 few files once per build, not a serving path. The choice is also reversible
 without disturbing consumers, because the JSON mechanism sits behind
 `to_json_pretty` and `from_json`; any such change should follow a measurement
-rather than this estimate.
+rather than this estimate. **Decision 14 made the change — on a correctness
+trigger rather than this cost, with the measurement recorded there.**
 
 ## Consequences
 
@@ -264,9 +335,14 @@ rather than this estimate.
 - **Negative — every IR golden is regenerated.** Two IR `.snap` files in
   `ridl-sem`, the `ridlc` `ir_package` golden, and the corpus snapshots. The
   diff is large and mechanical, which makes it a poor place to hide a semantic
-  change; the round-trip and conformance tests are what guard it.
+  change; the round-trip and conformance tests are what guard it. **Decision
+  14's mechanism change, by contrast, regenerated none: byte-identical output
+  was its acceptance bar, and every golden passed unchanged.**
 - **Negative — `ridl-ir` gains a dependency** (`prost-reflect`, with its `serde`
   and `text-format` features) and a `LazyLock` descriptor pool at run time.
+  **Since decision 14 the pool serves prototext alone: `prost-reflect` keeps
+  only `text-format`, and the crate adds `pbjson` at run time and `pbjson-build`
+  at build time for the JSON path.**
 - **Neutral — 64-bit fields render as strings.** Correct per the mapping and
   required by JavaScript consumers, but it is a visible change in every golden
   that carries a timing bound, a length bound, or an enum discriminant.
