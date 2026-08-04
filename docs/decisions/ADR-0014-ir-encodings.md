@@ -195,14 +195,20 @@ rather than this estimate.
 
 ## Open
 
-1. **How `skip_default_fields(false)` treats proto3 `optional` fields that are
-   unset** — omitted, or emitted as `null`. The schema uses `optional` for
-   `deprecated`, `len_min`, `pattern`, and others, so this decides real golden
-   shape. To be answered by writing one test against the library before the
-   rewrite, not by reading its documentation.
-2. **Whether the `.boxed()` oneof member configured in `build.rs`
-   (`FieldType.kind.inline_scalar`) needs special handling on the reflection
-   path.** Same method: one test before the rewrite.
+1. **Answered during E9.1 (2026-08-04): an unset proto3 `optional` field is
+   omitted entirely, and `null` never appears in the output.**
+   `skip_default_fields(false)` forces emission only of non-optional fields
+   holding their default — `"isError": false`, `"doc": ""`, `"labels": []`,
+   `"ordinal": 0`. Unset `optional` fields (`deprecated`, `lenMin`, `pattern`),
+   unset message fields, and unset oneofs produce no key at all. Established by
+   a probe against `prost-reflect` 0.16.5 over the real schema, not from its
+   documentation. Decision 2 is scoped accordingly.
+2. **Answered during E9.1 (2026-08-04): the `.boxed()` oneof member
+   (`FieldType.kind.inline_scalar`) needs no special handling on the reflection
+   path.** `transcode_from` goes through the wire encoding, so the Rust-side
+   `Box` is never visible to reflection. A package holding an `inlineScalar`
+   round-trips through typed, dynamic, JSON, dynamic, typed and compares equal,
+   including under a strict parse.
 3. **No cross-language conformance test.** It would be the strongest available
    evidence and it needs a non-Rust protobuf runtime in CI. That belongs to
    E4.5's "a third-party backend consumes the IR" criterion. Recorded as a known
