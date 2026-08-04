@@ -675,6 +675,11 @@ command uploadFirmware(data: <FwBlock>)
   must know about is a `query` returning `T | E` — the language forces that
   honesty
 - `require` permitted (§13); `ensure` not (nothing to observe)
+- **A range timing annotation is permitted and warned when absent** (§9.3): the
+  `max` bound is a response bound on acceptance — the delivery acknowledgment
+  below, never execution — and the `min` bound is a call throttle on the caller.
+  RIDL-112 reports a command that declares no response bound; no default is
+  applied
 - **Fire-and-forget describes the contract, not the wire.** The runtime protocol
   carries a **delivery acknowledgment** beneath every command: the receiving
   binding confirms _received and accepted for execution_ (payload valid,
@@ -725,6 +730,10 @@ query calibrate(axle: Axle): CalReport | CalError     // inline T | E — fallib
 - `require` and `ensure` permitted (§13); `ensure` constrains `result`
 - Functional failure is expressed **in the return type**: the inline `T | E`
   form makes the query fallible — §10.1. There is no `throws` clause in ridl
+- **A range timing annotation is permitted and warned when absent** (§9.3): the
+  `max` bound is a response bound on the reply, and the `min` bound is a call
+  throttle on the caller. RIDL-112 reports a query that declares no response
+  bound; no default is applied
 
 ### 7.2 Concurrency and Idempotence
 
