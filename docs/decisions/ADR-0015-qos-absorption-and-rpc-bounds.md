@@ -427,6 +427,39 @@ indistinguishable, so no claim about any of the three can be exercised.
     file would enlarge it for one check. The family already resolves this shape
     the same way at §14.5, enforcing at deploy time rather than compile time.
 
+24. **Amendment (2026-08-04) — an interface name must be unique within a
+    service, and a retargeted slot is breaking.** The E9.6 review found two
+    fail-open defects in the compatibility classifier, and both trace to a hole
+    in this record rather than to the implementation alone.
+
+    Decision 17 keys a binding's ordinal spaces on the interface **name**, and
+    decision 18 mints RIDL-145 for the same interface listed twice — keyed on
+    the canonical **reference**. Nothing in between requires the _names_ of a
+    service's shapes to differ. Two distinct interfaces from different packages
+    may share a final segment (`fleet.c1.DiagBlock` and `fleet.c2.DiagBlock`),
+    and decision 17 then makes them indistinguishable at the binding, while a
+    diff walk that matches slots by name collapses them.
+
+    Therefore:
+
+    - **RIDL-147 is minted** — two shapes of one service whose interface names
+      collide, even though their references differ. Error, because decision 17
+      leaves the binding no way to tell the two ordinal spaces apart. RIDL-145
+      keeps its own rule, which is the same reference listed twice; this is the
+      different-reference, same-name case, and it needs its own message because
+      the remedy differs — an alias cannot fix it, only a rename or a different
+      composition.
+    - **A slot whose reference changes is breaking.** Decision 19 says the five
+      `ServiceShape*` categories supersede the "changed `interface_ref`" half of
+      `ServiceChanged`. That means the categories must **cover** the retarget,
+      not that the comparison disappears. A matched slot whose reference differs
+      is a removal and a reuse of the freed slot, and it classifies breaking.
+
+    Both defects reported **compatible by omission** on a change the classifier
+    did not understand, which is the exact failure mode ADR-0012 decision 9
+    exists to design out — and the first of them was a regression, because the
+    superseded `ServiceChanged` comparison had reported it breaking.
+
 ## Alternatives considered
 
 | Candidate                                                 | Verdict  | Reason                                                                                                                                                                                                                                                                                                                      |
