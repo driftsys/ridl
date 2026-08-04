@@ -364,9 +364,13 @@ fn build_ir_emits_write_no_standard_artifact() {
 /// which compiles — fails here instead.
 ///
 /// The variant list comes from `clap`'s derive rather than a hand-kept array,
-/// so no variant can be missing from the sweep, and the expectation is itself
-/// a wildcard-free `match`, so a new variant stops this test compiling until
-/// its intended answer is added. Neither `match` can check that the answer
+/// so a new variant joins the sweep with no maintenance — unless it is marked
+/// `#[value(skip)]`, which removes it from `value_variants()` and so from this
+/// sweep. No variant is skipped today, and a skipped one would be unreachable
+/// from the command line, but the classifier's own `match` is what forces it
+/// to be classified at all. The expectation here is itself a wildcard-free
+/// `match`, so a new variant stops this test compiling until its intended
+/// answer is added. Neither `match` can check that the answer
 /// chosen for a new variant is correct — rustc forces *an* arm, not the right
 /// one.
 #[test]
