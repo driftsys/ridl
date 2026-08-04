@@ -136,6 +136,102 @@ fn non_json_ir_snapshots_are_refused() {
     }
 }
 
+/// A workspace whose root also holds IR artifacts — exactly what
+/// `ridl build ws --out-dir ws --emit ir-text` produces — is still a source
+/// tree: the directory refusal below must not fire when the directory
+/// directly holds a `ridl.toml` or a `.typl`/`.ridl` file, or a real
+/// workspace would be misreported as a snapshot directory and told to
+/// re-emit itself.
+#[test]
+fn a_source_tree_holding_stray_ir_artifacts_still_compiles() {
+    let dir = TempDir::new("stray");
+    dir.write("ws/ridl.toml", MANIFEST);
+    dir.write("ws/iface.ridl", BASE);
+    dir.write("ws/veh.cluster.ir.txtpb", "name: \"veh.cluster\"\n");
+    let old = dir.path().join("ws");
+    let new = dir.write("new.ridl", BASE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+
+    assert_eq!(code, 0, "a source tree compiles as source:\n{stderr}");
+    assert_eq!(stdout, "identical\n", "stdout:\n{stdout:?}");
+}
+
+/// A `ridl.toml` path designates its workspace, the same as handing the
+/// workspace root itself — only IR artifacts are recognised by name, and
+/// every other file reaches the source compiler ([`load_diff_side`]).
+#[test]
+fn a_manifest_path_designates_its_workspace() {
+    let dir = TempDir::new("manifest");
+    let manifest = dir.write("ws/ridl.toml", MANIFEST);
+    dir.write("ws/iface.ridl", BASE);
+    let new = dir.write("new.ridl", BASE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), manifest.as_os_str(), new.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "the manifest path compiles its workspace:\n{stderr}"
+    );
+    assert_eq!(stdout, "identical\n", "stdout:\n{stdout:?}");
+}
+
+/// A directory holding IR artifacts, no `.ir.json`, and no source — `ridl
+/// diff out/ src/` after `--emit ir-text` — draws a message that describes
+/// it (issue #218 item 4). Before the fix, the directory fell through to the
+/// source compiler, which reported `` no `ridl.toml` found at or above ... ``
+/// — a misdiagnosis of the actual mistake.
+#[test]
+fn a_directory_of_non_json_artifacts_is_described_not_compiled() {
+    let dir = TempDir::new("txtpb-dir");
+    dir.write("out/veh.cluster.ir.txtpb", "name: \"veh.cluster\"\n");
+    let out = dir.path().join("out");
+    let source = dir.write("new.ridl", BASE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), out.as_os_str(), source.as_os_str()]);
+
+    assert_eq!(code, 2, "the directory is an input error:\n{stderr}");
+    assert!(
+        stdout.is_empty(),
+        "no report over a refused input:\n{stdout}"
+    );
+    assert_eq!(
+        stderr,
+        format!(
+            "error: {}: the directory holds IR artifacts (`veh.cluster.ir.txtpb`) but no \
+             `.ir.json` snapshot; `ridl diff` compares `.ir.json` snapshots only (ADR-0014 \
+             decision 5); emit the packages with `--emit ir-json` to compare them\n",
+            out.display()
+        ),
+        "the message describes the directory, not a missing manifest"
+    );
+}
+
+/// `ridl diff` over a snapshot directory (the shape `.ridl/baseline/` takes)
+/// and a source tree keeps working: the directory's `.ir.json` files are the
+/// baseline side, the source tree is compiled, and an unchanged workspace is
+/// identical.
+#[test]
+fn snapshot_dir_vs_source_tree_identical_exits_zero() {
+    let dir = TempDir::new("snapdir");
+    let root = dir.path().join("ws");
+    dir.write("ws/ridl.toml", MANIFEST);
+    dir.write("ws/iface.ridl", BASE);
+    let published = dir.path().join("published");
+    let (baseline_code, _, baseline_err) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        published.as_os_str(),
+    ]);
+    assert_eq!(baseline_code, 0, "the baseline publishes:\n{baseline_err}");
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), published.as_os_str(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "an unchanged workspace exits 0:\n{stderr}");
+    assert_eq!(stdout, "identical\n", "stdout:\n{stdout:?}");
+}
+
 /// Retiring an interaction but writing its `reserved` tombstone at the end of
 /// the body frees the retired ordinal, so a surviving interaction slides down
 /// into it (ridl §11). Driven through real source so the compiler assigns the

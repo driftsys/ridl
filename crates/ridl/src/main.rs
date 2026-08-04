@@ -243,9 +243,19 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
 ///    whole directory. Falling through to a compile here would silently diff
 ///    the current source against itself and always report `identical`
 ///    (ADR-0008 decision 14: `ridl diff` reads the workspace-local baseline);
-/// 3. anything else — a `.typl`/`.ridl` file, a package directory, or a
-///    workspace root — compiled in process through `ridlc::compile_workspace`.
-///    A directory with no `.ir.json` in it is source, and takes this path.
+/// 3. anything else — a source file, a package directory, or a workspace
+///    root — compiled in process through `ridlc::compile_workspace`.
+///
+/// Only IR artifacts are recognised by name — the suffix table (issue #218
+/// item 4). A file in a non-JSON IR encoding is refused rather than parsed
+/// as source, and so is a directory that holds IR artifacts but neither an
+/// `.ir.json` snapshot nor source: no `ridl.toml` and no `.typl`/`.ridl`
+/// file directly inside it. Everything else is source. Recognising *source*
+/// by extension was tried and reverted — it refused inputs the compiler
+/// accepts, such as a `ridl.toml` path designating its workspace, an
+/// extensionless source file, or a symlink — so a renamed artifact whose
+/// name lost the `.ir.` infix still falls through to the compiler (recorded
+/// on issue #218).
 ///
 /// A read, parse, or compile error renders to stderr and yields exit code 2 —
 /// `ridl diff` never emits a diff report over a snapshot it could not build.
@@ -254,7 +264,7 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
         return load_snapshots(&[entry.to_path_buf()]);
     }
 
-    // The other two IR encodings are refused by name, before the source
+    // The other IR encodings are refused by name, before the source
     // fallback below can parse prototext or binary as `.typl` and report its
     // syntax errors — a misdiagnosis of the actual mistake.
     if is_non_json_ir(entry) {
@@ -270,6 +280,24 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
         let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
             return load_snapshots(&snapshots);
+        }
+        // A directory holding IR artifacts and no `.ir.json` is a snapshot
+        // directory in an encoding this surface refuses — `ridl diff out/
+        // src/` after `--emit ir-text` — unless it is a source tree: a build
+        // can write its artifacts into the workspace itself (`--out-dir .`),
+        // and such a tree compiles below exactly as `ridl check` reads it,
+        // stray artifacts included. For the snapshot directory, say what it
+        // is rather than falling through to the compiler and reporting the
+        // directory's missing manifest (issue #218 item 4).
+        if !is_source_dir(entry)
+            && let Some(witness) = first_non_json_ir_in(entry)
+        {
+            return Err(refuse_artifact_directory(
+                entry,
+                &witness,
+                "`ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); emit the \
+                 packages with `--emit ir-json` to compare them",
+            ));
         }
     }
 
@@ -297,26 +325,61 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     }
 }
 
-/// Whether `path` is an `.ir.json` snapshot (a file whose name ends `.ir.json`)
-/// rather than a source input.
+/// The one snapshot suffix this surface accepts — baselines and diffs stay
+/// `.ir.json` (ADR-0014 decision 5). Drawn from the emit table in `ridlc`
+/// rather than spelled here, so the recognition cannot drift from the name
+/// the artifact writer uses (issue #218 item 4).
+const IR_JSON_SUFFIX: &str = match Emit::IrJson.ir_dump_suffix() {
+    Some(suffix) => suffix,
+    None => panic!("`ir-json` is an IR dump"),
+};
+
+/// Whether `path` is an `.ir.json` snapshot (a file whose name ends
+/// [`IR_JSON_SUFFIX`]) rather than a source input.
 fn is_ir_json(path: &Path) -> bool {
     path.is_file()
         && path
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| name.ends_with(".ir.json"))
+            .is_some_and(|name| name.ends_with(IR_JSON_SUFFIX))
 }
 
 /// Whether `path` is an IR artifact in an encoding the snapshot surface must
-/// refuse: prototext (`.ir.txtpb`) and binary (`.ir.binpb`) are emittable,
-/// but baselines and diffs stay `.ir.json` (ADR-0014 decision 5) — a
-/// committed baseline must be reviewable in a pull request.
+/// refuse: every suffix the emit table names except `.ir.json` — prototext
+/// (`.ir.txtpb`) and binary (`.ir.binpb`) today. Baselines and diffs stay
+/// `.ir.json` (ADR-0014 decision 5) — a committed baseline must be
+/// reviewable in a pull request. The suffixes are iterated from the table
+/// rather than spelled here, so an encoding added to `ridlc` is refused by
+/// name with no edit on this side (issue #218 item 4).
 fn is_non_json_ir(path: &Path) -> bool {
     path.is_file()
         && path
             .file_name()
             .and_then(|name| name.to_str())
-            .is_some_and(|name| name.ends_with(".ir.txtpb") || name.ends_with(".ir.binpb"))
+            .is_some_and(|name| {
+                Emit::ir_dump_suffixes()
+                    .any(|(emit, suffix)| emit != Emit::IrJson && name.ends_with(suffix))
+            })
+}
+
+/// Whether `path` is a source file by the rule the workspace loader collects
+/// with: a file whose extension is `typl` or `ridl`. Used only to tell a
+/// source tree from a snapshot directory ([`is_source_dir`]) — a diff
+/// *argument* is never gated on this, because a source file's own name is
+/// unconstrained ([`load_diff_side`]).
+fn is_source_file(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .extension()
+            .is_some_and(|extension| extension == "typl" || extension == "ridl")
+}
+
+/// Whether `dir` is a source tree by its direct contents: it holds a
+/// `ridl.toml` or at least one `.typl`/`.ridl` file. A snapshot directory —
+/// `.ridl/baseline/`, or a build `--out-dir` — holds neither.
+fn is_source_dir(dir: &Path) -> bool {
+    dir.join("ridl.toml").is_file()
+        || files_matching(dir, is_source_file).is_ok_and(|files| !files.is_empty())
 }
 
 // ==========================================================================
@@ -699,24 +762,76 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
 
 /// Loads the baseline packages: every `.ir.json` in a directory, in file-name
 /// order, or the single file `location` names.
+///
+/// A directory holding IR artifacts but no `.ir.json` is refused rather than
+/// read as an *empty* baseline (issue #218 item 4): skipping it silently
+/// would report a clean desk check that ran against nothing. A directory
+/// with no IR artifacts at all keeps yielding an empty baseline — that is
+/// the ordinary "no baseline published yet" state, and [`desk_check`] skips
+/// it silently.
 fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
-        snapshot_files(location)?
+        let snapshots = snapshot_files(location)?;
+        if snapshots.is_empty()
+            && let Some(witness) = first_non_json_ir_in(location)
+        {
+            return Err(refuse_artifact_directory(
+                location,
+                &witness,
+                "a baseline stays `.ir.json` (ADR-0014 decision 5); publish one with \
+                 `ridl baseline`",
+            ));
+        }
+        snapshots
     } else {
         vec![location.to_path_buf()]
     };
     load_snapshots(&files)
 }
 
-/// The `.ir.json` snapshots directly inside `dir`, in file-name order.
-fn ir_json_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+/// The files directly inside `dir` that satisfy `keep`, in file-name order.
+fn files_matching(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<PathBuf>> {
     let mut files: Vec<PathBuf> = std::fs::read_dir(dir)?
         .flatten()
         .map(|entry| entry.path())
-        .filter(|path| is_ir_json(path))
+        .filter(|path| keep(path))
         .collect();
     files.sort();
     Ok(files)
+}
+
+/// The `.ir.json` snapshots directly inside `dir`, in file-name order.
+fn ir_json_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
+    files_matching(dir, is_ir_json)
+}
+
+/// The first non-JSON IR artifact directly inside `dir`, in file-name order —
+/// the witness a directory refusal names. A read failure yields `None`: every
+/// caller has just listed the same directory through [`snapshot_files`], so
+/// its own fallback reports the cause.
+fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
+    files_matching(dir, is_non_json_ir)
+        .unwrap_or_default()
+        .into_iter()
+        .next()
+}
+
+/// Reports a directory that holds IR artifacts but no `.ir.json` snapshot —
+/// a snapshot directory in an encoding this surface refuses, not a source
+/// tree or an unpublished baseline — and yields exit 2 (issue #218 item 4).
+/// `witness` is the artifact the message names; `expectation` finishes the
+/// message with what the calling command accepts and the remedy.
+fn refuse_artifact_directory(dir: &Path, witness: &Path, expectation: &str) -> ExitCode {
+    eprintln!(
+        "error: {}: the directory holds IR artifacts (`{}`) but no `.ir.json` snapshot; \
+         {expectation}",
+        dir.display(),
+        witness
+            .file_name()
+            .unwrap_or(witness.as_os_str())
+            .to_string_lossy()
+    );
+    ExitCode::from(2)
 }
 
 /// [`ir_json_files`] with an unreadable directory turned into exit 2 — a

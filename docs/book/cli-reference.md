@@ -174,6 +174,13 @@ ridl check --baseline ./nope
 error: the baseline `./nope` does not exist
 ```
 
+A baseline directory that holds IR artifacts but no `.ir.json` snapshot —
+named with `--baseline` or auto-discovered at `.ridl/baseline/` — is also
+exit 2, with a message naming an artifact it found: a baseline stays
+`.ir.json` ([ADR-0014][adr-0014] decision 5), so such a directory is a
+baseline in a refused encoding, not the silently skipped "no baseline
+published yet" state — which an *empty* directory still is.
+
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
 the workspace against it and warns (RIDL-407) on every interaction whose
@@ -652,12 +659,15 @@ Options:
 
 `OLD` and `NEW` each take one of three forms: an `.ir.json` snapshot, a
 directory of them (the shape `.ridl/baseline/` takes), or source — a file, a
-package directory, or a workspace root — compiled in process. The other two
-IR encodings `ridl build` can emit are refused by name: an `.ir.txtpb` or
-`.ir.binpb` input is an error (exit 2), because diffs and baselines read
-`.ir.json` only ([ADR-0014][adr-0014] decision 5). Omit both and
-pass `--explain <CATEGORY>` instead to print that category's classification
-rule without comparing anything.
+package directory, or a workspace root — compiled in process. Only IR
+artifacts are recognised by name, and two inputs are refused rather than
+compiled (exit 2): an `.ir.txtpb` or `.ir.binpb` file, because diffs and
+baselines read `.ir.json` only ([ADR-0014][adr-0014] decision 5); and a
+directory that holds IR artifacts but no `.ir.json` snapshot and no source —
+no `ridl.toml` and no `.typl`/`.ridl` file — which is a snapshot directory in
+a refused encoding, not a source tree. Every other input reaches the source
+compiler. Omit both and pass `--explain <CATEGORY>` instead to print that
+category's classification rule without comparing anything.
 
 **It writes nothing.** The report goes to stdout; a compile error's
 diagnostics go to stderr instead and no report prints.
