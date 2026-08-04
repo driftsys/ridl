@@ -131,10 +131,12 @@ pub mod v2 {
     /// decision's open item). 64-bit fields render as strings, the canonical
     /// mapping JavaScript consumers need (decision 8).
     ///
-    /// Still fallible (ADR-0014 decision 14, narrowing decision 12): the
-    /// generated impl writes the typed message directly, so the transcode's
-    /// recursion limit is gone, but one error path remains — an `i32` enum
-    /// field holding a discriminant outside the schema. The checker never
+    /// Still fallible (ADR-0014 decision 14, amending decision 12), but the
+    /// error path changed rather than survived: the generated impl writes
+    /// the typed message directly, so the transcode's depth error is gone,
+    /// and the one error path it has is new — an `i32` enum field holding a
+    /// discriminant outside the schema, which the retired reflection path
+    /// serialized successfully as its bare number. The checker never
     /// produces one, but the value is data, not schema, so the failure is
     /// returned rather than panicked on.
     pub fn to_json_pretty(package: &Package) -> Result<String, SerializeError> {
@@ -147,11 +149,11 @@ pub mod v2 {
     /// The nesting ceiling `from_json` enforces, in JSON bracket levels.
     ///
     /// It cannot bind on IR this toolchain produces, and the bound is a
-    /// measurement rather than a guess. The checker refuses type nesting past
-    /// 128 levels (FORM-102), and the deepest package that limit admits emits
-    /// JSON **262 brackets** deep — so 1,000 leaves a factor of 3.8 over
-    /// anything `ridlc` can write, and the deepest nesting in the corpus is
-    /// single digits.
+    /// measurement rather than a guess. The parser refuses type nesting past
+    /// 128 levels (FORM-102, `MAX_TYPE_DEPTH` in `ridl-syntax`), and the
+    /// deepest package that limit admits emits JSON **262 brackets** deep —
+    /// so 1,000 leaves a factor of 3.8 over anything `ridlc` can write, and
+    /// the deepest nesting in the corpus is single digits.
     ///
     /// It exists for input this toolchain did not write: a hand-edited
     /// baseline, or a snapshot from elsewhere. Past the stack ceiling the
@@ -1618,10 +1620,13 @@ mod v2_round_trip {
         });
     }
 
-    /// The one error path left on the JSON write side (ADR-0014 decision
-    /// 14): an `i32` enum field holding a discriminant outside the schema —
-    /// data, not depth. The checker never produces one, so there is no CLI
-    /// route to this failure; it is pinned here at the crate surface.
+    /// The one error path on the JSON write side (ADR-0014 decision 14),
+    /// and it is new with the generated impl, not a survivor of the
+    /// transcode's: an `i32` enum field holding a discriminant outside the
+    /// schema — data, not depth — which the retired reflection path
+    /// serialized successfully as its bare number. The checker never
+    /// produces one, so there is no CLI route to this failure; it is pinned
+    /// here at the crate surface.
     #[test]
     fn json_serialization_of_an_out_of_schema_discriminant_returns_an_error() {
         let mut package = fixture();

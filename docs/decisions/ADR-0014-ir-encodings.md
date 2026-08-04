@@ -129,8 +129,12 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
    emits as `"10000"` rather than `10000`. JavaScript loses integer precision
    above 2^53 and the TypeScript backend already models timing as `bigint`;
    overriding the canonical behaviour would break the consumers this change
-   exists to serve. Prototext is set to `pretty`, `skip_default_fields(false)`,
-   and `print_message_fields_in_index_order`, so its output ordering is
+   exists to serve. **Amended by decision 14: `stringify_64_bit_integers` is a
+   `prost-reflect` option the JSON path no longer has — the pbjson-generated
+   impl stringifies 64-bit integers unconditionally. The behaviour this decision
+   fixes is unchanged and still required; only the mechanism sentence is
+   superseded.** Prototext is set to `pretty`, `skip_default_fields(false)`, and
+   `print_message_fields_in_index_order`, so its output ordering is
    deterministic rather than incidental.
 
 9. **The canonical-form policy, for E4.5 to cite: binary is canonical, JSON is
@@ -156,6 +160,11 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     reject unknown fields. Asserting on the rendered text would only restate the
     serializer's behaviour back to itself; re-reading tests the claim the change
     actually makes, which is that a conformant parser accepts this output.
+    **Amended by decision 14: `DeserializeOptions` is a `prost-reflect` type no
+    longer on the JSON path. The strict re-read goes through the
+    pbjson-generated `Deserialize` impl, whose default already rejects unknown
+    fields — `ignore_unknown_fields()` stays unset in `build.rs`. The claim
+    tested is unchanged.**
 
 12. **Amendment (2026-08-04) — the serialization surface is fallible on both
     directions, retracting decision 7's infallible return.** Decision 7 kept
@@ -201,9 +210,10 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     limit. That reversibility was recorded as a hypothetical; it is now a
     concrete contingency with a known trigger. **Decision 14 executed it: the
     JSON write side no longer transcodes, so the depth failure mode this
-    decision records is gone from JSON — `to_json_pretty` stays fallible for the
-    one error path that remains — while prototext keeps the transcode and this
-    decision's error contract.**
+    decision records is gone from JSON — `to_json_pretty` stays fallible, but
+    for a new error path the generated impl introduces, not a survivor of this
+    one (decision 14) — while prototext keeps the transcode and this decision's
+    error contract.**
 
 13. **Amendment (2026-08-04) — the prototext reader is crate-private, and the
     writer's ceiling is a documented limit rather than a defect.**
@@ -266,11 +276,13 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     message with no transcode, so prost's recursion limit no longer applies; 400
     levels of array nesting serialize and round-trip in a committed test.
     `to_json_pretty` keeps its `Result` — decision 12's retraction of the
-    infallible return stands — because one error path remains in the generated
-    impl: an `i32` enum field holding a discriminant outside the schema. That is
-    data-dependent, not schema drift, so it is returned (as
-    `SerializeError::Json`; the error type now carries one variant per encoding)
-    and the `ridlc` diagnostic arm stays.
+    infallible return stands — but the error path changes rather than survives:
+    the depth error is gone, and the generated impl introduces a new one — an
+    `i32` enum field holding a discriminant outside the schema, which the
+    retired path serialized successfully as its bare number
+    (`"visibility": 999`). That is data-dependent, not schema drift, so it is
+    returned (as `SerializeError::Json`; the error type now carries one variant
+    per encoding) and the `ridlc` diagnostic arm stays.
 
     **The read side gets a deterministic ceiling.** `serde_json` imposes its own
     recursion limit of 128 JSON levels, which would bind before anything else
@@ -283,22 +295,62 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     the parse runs on an explicitly sized 16 MiB thread, so the depth that fits
     is a property of the crate rather than of the ambient stack, which differs
     between debug and release builds and between platforms — the same input
-    parses everywhere or nowhere.
+    parses everywhere or nowhere. On targets without spawnable threads — the
+    wasm family; `wasm32-unknown-unknown` is the `just wasm-check` target, and
+    `spawn_scoped` fails there at run time — the parse runs in line on the
+    ambient stack: the deterministic-stack guarantee does not hold there, and
+    the cap is the guard.
 
     **The cap cannot bind on IR this toolchain produces, and the bound is
-    measured rather than guessed.** The checker refuses type nesting past 128
-    levels (FORM-102), and the deepest package that limit admits emits JSON
-    **262 brackets** deep — so 1,000 leaves a factor of 3.8 over anything
-    `ridlc` can write, and the deepest nesting in the corpus is single digits.
-    The cap exists for input this toolchain did not write: a hand-edited
-    baseline, or a snapshot from elsewhere.
+    measured rather than guessed.** The parser refuses type nesting past 128
+    levels (FORM-102, `MAX_TYPE_DEPTH` in `crates/ridl-syntax/src/parser.rs`),
+    and the deepest package that limit admits emits JSON **262 brackets** deep —
+    so 1,000 leaves a factor of 3.8 over anything `ridlc` can write, and the
+    deepest nesting in the corpus is single digits. The cap exists for input
+    this toolchain did not write: a hand-edited baseline, or a snapshot from
+    elsewhere.
 
     That FORM-102 ceiling is also why the writer needs no cap of its own. The
     pbjson serializer recurses, so a sufficiently deep package would exhaust the
     stack — but no such package can reach it, because the front end refuses the
-    source that would produce one. The residual write-side abort measured at
-    roughly 5,000 levels is unreachable except by hand-building a `Package` in
-    Rust, which is outside what this record governs.
+    source that would produce one. The residual write-side abort — measured at
+    roughly 5,000 levels on an 8 MiB stack, debug build; the writer recurses on
+    the caller's stack, so the figure is a property of that stack, not of the
+    crate — is unreachable except by hand-building a `Package` in Rust, which is
+    outside what this record governs.
+
+    **The reader also narrows against the retired reflection reader on four
+    counts beyond the ceiling**, recorded here the way the unknown-field
+    strictness above is. The generated deserializer rejects an out-of-range
+    numeric enum value (`"visibility": 77`) — the proto3 JSON mapping expects
+    parsers to accept numeric enum values, and the retired _writer_ emitted
+    exactly such a number for an out-of-schema discriminant; in-range numbers
+    are still accepted. It rejects `null` for a repeated field
+    (`"decls": null`), which the retired reader read as empty — `null` for an
+    optional scalar or message field is still accepted. It rejects a duplicate
+    JSON key, which the retired reader resolved last-wins — stricter, and
+    arguably better. And it rejects float and exponent notation for integer
+    fields (`"min": 1.0`), which the mapping accepts. The practical exposure is
+    narrow: baselines are toolchain-written, so the input that reaches these
+    paths is a hand-edited or third-party snapshot read by `ridl diff` or
+    `ridl check --baseline`. Decision 11's conformance claim is unaffected — it
+    is a claim about this toolchain's output being readable by a conformant
+    parser, not about this reader accepting everything the mapping permits. Each
+    narrowing is pinned by a test, so a future mechanism change confronts it
+    rather than reversing it unnoticed.
+
+    **A pre-existing limit on the binary path is recorded here rather than left
+    in a test comment: prost's decode limit binds on IR this toolchain
+    produces.** For legal source whose composite nesting sits between roughly 50
+    levels (arrays; roughly 33 for tuples — decision 12's arithmetic against
+    prost's non-configurable limit of 100 message levels) and the 128 the parser
+    admits, `from_binary` refuses what `to_binary` wrote, while JSON now
+    round-trips the same package. Decision 9 names binary the canonical
+    encoding, so a canonical encoding that cannot round-trip a legal package is
+    a known limit worth stating — "the cap cannot bind on IR this toolchain
+    produces" above is a claim about JSON specifically. The limit predates this
+    amendment, and prost does not expose it for configuration, so it is
+    recorded, not fixed.
 
     Measured on the two `veh-cluster` corpus packages (release build, 55 kB and
     16 kB artifacts): serialization is 3.9 to 4.5 times faster than the
