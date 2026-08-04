@@ -1653,6 +1653,79 @@ mod v2_round_trip {
         );
     }
 
+    /// A reader narrowing ADR-0014 decision 14 records: the proto3 JSON
+    /// mapping expects parsers to accept numeric enum values, and the
+    /// generated deserializer does — within the schema's range. A
+    /// discriminant outside it (`"visibility": 77`) is rejected, where the
+    /// retired reflection reader accepted it — and the retired *writer*
+    /// emitted exactly such a number for an out-of-schema discriminant.
+    /// Pinned so the narrowing stays a decision rather than an accident: a
+    /// future mechanism change must confront this test.
+    #[test]
+    fn json_parse_rejects_an_out_of_range_numeric_enum_value() {
+        let with_visibility =
+            |value: &str| format!(r#"{{"name": "veh.x", "decls": [{{"visibility": {value}}}]}}"#);
+        v2::from_json(&with_visibility("1"))
+            .expect("an in-range numeric enum value parses, as the mapping expects");
+        let error = v2::from_json(&with_visibility("77"))
+            .expect_err("an out-of-range numeric enum value must be rejected");
+        assert!(
+            error.to_string().contains("invalid value: integer `77`"),
+            "the error must name the value, got: {error}"
+        );
+    }
+
+    /// A reader narrowing ADR-0014 decision 14 records: the mapping accepts
+    /// float and exponent notation for integer fields (`"min": 1.0`), and
+    /// the retired reflection reader did; the generated deserializer
+    /// rejects both. Pinned for the same reason as the numeric-enum case
+    /// above.
+    #[test]
+    fn json_parse_rejects_a_float_form_integer() {
+        for spelling in ["1.0", "1e0"] {
+            let error = v2::from_json(&format!(
+                r#"{{"name": "veh.x", "decls": [{{"fixedDef": {{"payload": {{"array": {{"min": {spelling}}}}}}}}}]}}"#,
+            ))
+            .expect_err("a float-form integer must be rejected");
+            assert!(
+                error.to_string().contains("did not match any variant"),
+                "the integer field's deserializer must be the one refusing `{spelling}`, \
+                 got: {error}"
+            );
+        }
+    }
+
+    /// A reader narrowing ADR-0014 decision 14 records: `null` for a
+    /// repeated field (`"decls": null`), which the retired reflection
+    /// reader read as empty, is rejected. `null` for an optional scalar or
+    /// message field is still accepted — parity with the retired reader,
+    /// asserted alongside so the narrowing's edge is pinned from both
+    /// sides.
+    #[test]
+    fn json_parse_rejects_null_for_a_repeated_field() {
+        let error = v2::from_json(r#"{"name": "veh.x", "decls": null}"#)
+            .expect_err("null for a repeated field must be rejected");
+        assert!(
+            error.to_string().contains("invalid type: null"),
+            "the error must name the null, got: {error}"
+        );
+        v2::from_json(r#"{"name": "veh.x", "decls": [{"deprecated": null}]}"#)
+            .expect("null for an optional scalar field still parses");
+    }
+
+    /// A reader narrowing ADR-0014 decision 14 records: a duplicate JSON
+    /// key, which the retired reflection reader resolved last-wins, is
+    /// rejected.
+    #[test]
+    fn json_parse_rejects_a_duplicate_key() {
+        let error = v2::from_json(r#"{"name": "a", "name": "b"}"#)
+            .expect_err("a duplicate key must be rejected");
+        assert!(
+            error.to_string().contains("duplicate field `name`"),
+            "the error must name the duplicated field, got: {error}"
+        );
+    }
+
     /// The read-side ceiling (ADR-0014 decision 14): nesting past 1,000
     /// bracket levels returns an error before the parse begins — a
     /// diagnostic, where unbounded recursion would eventually abort on a
