@@ -1325,11 +1325,17 @@ a given binding is delivery coherence, treated separately below.
 The rule is **implicit, not declared** — there is no `coherent` keyword. Three
 rules the family already states produce it: §4.2 gives every flow exactly one
 owning provider; a provider computes its outputs in one step (rmdl's topological
-schedule, rmdl §6); and a service is the published unit realized by one provider
-(§14.6). So the values a provider publishes in one step are a simultaneous state
-by construction. Signals publishing at different rates do not break this: in a
-given step some cells are written and others are not, but every value present
-came from the same step, so the observed set remains a state that existed.
+schedule, rmdl §6); and each provider realizes the service it publishes as a
+whole (rsdl §5.3, RSDL-502). So the values a provider publishes in one step are
+a simultaneous state by construction. Signals publishing at different rates do
+not break this: in a given step some cells are written and others are not, but
+every value present is one that provider held at that step, so the observed set
+remains a state that existed.
+
+Declared redundancy does not weaken the rule. Two components may provide the
+same service (§14.6 above, rsdl §10), and the rule then holds of each provider's
+published set — which is what a consumer reads, since a consumer reads one
+provider at a time.
 
 Declaring `coherent` would declare a consequence of how the platform executes,
 which the general form §4.1 deletion test exists to reject. It would also be
@@ -1376,7 +1382,8 @@ generatable from the IR alone. From one provided interface:
   `max` staleness bound (§9);
 - one **dispatcher** — its events, commands, and queries, routed by the
   interface's single ordinal sequence (§11), with the typl constraints checked
-  before the handler and the response bound applied around it (§9.3).
+  before the handler and the response bound applied per its per-kind derivation
+  (§9.3) — around the reply for a query, around acceptance for a command.
 
 The **service is the addressing unit**: it contributes the global name and the
 `service.member` addresses, never the shape of what is generated. The store and
@@ -1884,7 +1891,7 @@ stricter), ✗ not expressible (deliberate or open).
 | DDS **liveliness**                                               | staleness via freshness bounds + observability                                               | ≈                                                           |
 | SOME/IP **field get/set/notify**                                 | signal (get derived, notify native) + command (set)                                          | ✓ decomposed                                                |
 | SOME/IP **eventgroups**                                          | interface-level subscription granularity                                                     | ≈ coarser; §17.1                                            |
-| AUTOSAR **signal groups** (atomic sample)                        | struct payload on one signal                                                                 | ✓ idiom, confirmed (§14.5, ADR-0015)                        |
+| AUTOSAR **signal groups** (atomic sample)                        | struct payload on one signal                                                                 | ≈ idiom, confirmed (§14.5, ADR-0015)                        |
 | AUTOSAR **client/server + sender/receiver ports**                | query/command + signal/event                                                                 | ✓                                                           |
 | AIDL **in/out/inout parameters**                                 | parameters in, tuple returns out                                                             | ≈ deliberate — no out-params                                |
 | FIDL **events** (server-initiated on protocol)                   | `event`                                                                                      | ✓                                                           |
