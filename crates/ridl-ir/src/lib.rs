@@ -626,6 +626,254 @@ mod v2_round_trip {
         }
     }
 
+    /// The typl vocabulary surface the interaction fixture does not reach:
+    /// the boxed `inlineScalar` oneof member, genuine 64-bit integer fields
+    /// (array and map bounds, length bounds, `Reserved.value`,
+    /// `EnumValue.value`), a tuple, a map, a union, an enum set, a constant,
+    /// and a set `deprecated`. A second fixture, so each stays readable; the
+    /// same round-trip tests drive both.
+    fn vocabulary_fixture() -> v2::Package {
+        fn decl(name: &str, kind: v2::decl::Kind) -> v2::Decl {
+            v2::Decl {
+                name: name.to_string(),
+                visibility: v2::Visibility::Public as i32,
+                is_error: false,
+                doc: String::new(),
+                labels: Vec::new(),
+                deprecated: None,
+                ordinal: 0,
+                kind: Some(kind),
+            }
+        }
+
+        fn field(name: &str, ordinal: u32, field_type: v2::FieldType) -> v2::Field {
+            v2::Field {
+                name: name.to_string(),
+                ordinal,
+                r#type: Some(field_type),
+                declared_init: None,
+                init: None,
+                doc: String::new(),
+                labels: Vec::new(),
+                deprecated: None,
+            }
+        }
+
+        // const MAX_RETRY : integer = 24
+        let max_retry = v2::ConstDef {
+            type_ref: Some("integer".to_string()),
+            value: "24".to_string(),
+            regex: None,
+        };
+
+        // enum Gear { PARK = 1  DRIVE = 2  reserved 7 } — the tombstone
+        // retires the integer value, a genuine int64 field.
+        let gear = v2::EnumDef {
+            values: vec![
+                v2::EnumValue {
+                    name: "PARK".to_string(),
+                    value: 1,
+                    doc: String::new(),
+                },
+                v2::EnumValue {
+                    name: "DRIVE".to_string(),
+                    value: 2,
+                    doc: String::new(),
+                },
+            ],
+            reserved: vec![v2::Reserved {
+                ordinal: 0,
+                name: None,
+                value: Some(7),
+            }],
+        };
+
+        // enumset Warnings { LOW_FUEL = 0  ICE_RISK = 33 } — the standalone
+        // form; bit 33 forces the u64 width and is a genuine int64 value.
+        let warnings = v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![
+                v2::EnumValue {
+                    name: "LOW_FUEL".to_string(),
+                    value: 0,
+                    doc: String::new(),
+                },
+                v2::EnumValue {
+                    name: "ICE_RISK".to_string(),
+                    value: 33,
+                    doc: String::new(),
+                },
+            ],
+            width: v2::IntWidth::U64 as i32,
+        };
+
+        // type PlateText : string [1..86] — character length bounds, two
+        // genuine uint64 fields behind proto3 `optional`.
+        let plate_text = v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                min: None,
+                max: None,
+                step: None,
+                len_min: Some(1),
+                len_max: Some(86),
+                pattern: None,
+                pattern_const: None,
+            }),
+            declared_init: None,
+            init: None,
+            width: None,
+        };
+
+        // union Sample { speed : Speed  gear : Gear }
+        let sample = v2::UnionDef {
+            arms: vec![
+                v2::UnionArm {
+                    name: "speed".to_string(),
+                    ordinal: 1,
+                    type_ref: "Speed".to_string(),
+                    doc: String::new(),
+                },
+                v2::UnionArm {
+                    name: "gear".to_string(),
+                    ordinal: 2,
+                    type_ref: "Gear".to_string(),
+                    doc: String::new(),
+                },
+            ],
+            is_result: false,
+            reserved: Vec::new(),
+        };
+
+        // retries : integer [0..24] = 3 — the boxed `inlineScalar` oneof
+        // member: the committed regression guard for ADR-0014 Open item 2,
+        // which established that the Rust-side `Box` is invisible to the
+        // reflection path. The enclosing field carries the init; the nested
+        // TypeDef's stays unset.
+        let retries = v2::Field {
+            declared_init: Some("3".to_string()),
+            init: Some(v2::InitValue {
+                derivable: true,
+                value: Some("3".to_string()),
+            }),
+            ..field(
+                "retries",
+                1,
+                v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+                        backing: Some(v2::Backing {
+                            kind: Some(v2::backing::Kind::Primitive(
+                                v2::PrimitiveType::Integer as i32,
+                            )),
+                        }),
+                        constraint: Some(v2::Constraint {
+                            min: Some("0".to_string()),
+                            max: Some("24".to_string()),
+                            step: None,
+                            len_min: None,
+                            len_max: None,
+                            pattern: None,
+                            pattern_const: None,
+                        }),
+                        declared_init: None,
+                        init: None,
+                        width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U8 as i32)),
+                    }))),
+                },
+            )
+        };
+
+        // position : (x : Speed, y : Speed) — an anonymous named-field
+        // composite (typl §11).
+        let position = field(
+            "position",
+            2,
+            v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                    fields: vec![
+                        v2::TupleField {
+                            name: "x".to_string(),
+                            r#type: Some(named_type("Speed")),
+                        },
+                        v2::TupleField {
+                            name: "y".to_string(),
+                            r#type: Some(named_type("Speed")),
+                        },
+                    ],
+                })),
+            },
+        );
+
+        // gears : [Gear; 1..4096] — array bounds are genuine uint64 fields.
+        let gears = field(
+            "gears",
+            3,
+            v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(named_type("Gear"))),
+                    min: 1,
+                    max: 4096,
+                }))),
+            },
+        );
+
+        // plates : { PlateText -> Gear } [0..53] — map bounds are genuine
+        // uint64 fields. The field is deprecated, covering the optional
+        // string on the Field envelope.
+        let plates = v2::Field {
+            deprecated: Some("superseded by gears".to_string()),
+            ..field(
+                "plates",
+                4,
+                v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                        key: Some(Box::new(named_type("PlateText"))),
+                        value: Some(Box::new(named_type("Gear"))),
+                        min: 0,
+                        max: 53,
+                    }))),
+                },
+            )
+        };
+
+        let snapshot = v2::StructDef {
+            members: [retries, position, gears, plates]
+                .into_iter()
+                .map(|field| v2::StructMember {
+                    member: Some(v2::struct_member::Member::Field(field)),
+                })
+                .collect(),
+            fixed_layout: false,
+        };
+
+        v2::Package {
+            name: "veh.vocab".to_string(),
+            decls: vec![
+                decl("MAX_RETRY", v2::decl::Kind::ConstDef(max_retry)),
+                decl("Gear", v2::decl::Kind::EnumDef(gear)),
+                decl("Warnings", v2::decl::Kind::EnumSetDef(warnings)),
+                decl("PlateText", v2::decl::Kind::TypeDef(plate_text)),
+                // The union is deprecated — the optional string on the Decl
+                // envelope.
+                v2::Decl {
+                    deprecated: Some("use Snapshot".to_string()),
+                    ..decl("Sample", v2::decl::Kind::UnionDef(sample))
+                },
+                decl("Snapshot", v2::decl::Kind::StructDef(snapshot)),
+            ],
+            interfaces: Vec::new(),
+            services: Vec::new(),
+        }
+    }
+
     #[test]
     fn protobuf_round_trip_preserves_package() {
         let package = fixture();
@@ -634,6 +882,12 @@ mod v2_round_trip {
         let decoded = v2::from_binary(buf.as_slice()).expect("decode must succeed");
 
         assert_eq!(package, decoded);
+
+        // The vocabulary fixture rides the same round trip.
+        let vocabulary = vocabulary_fixture();
+        let decoded_vocabulary =
+            v2::from_binary(v2::to_binary(&vocabulary).as_slice()).expect("decode must succeed");
+        assert_eq!(vocabulary, decoded_vocabulary);
 
         let interface = &decoded.interfaces[0];
         let ordinals: Vec<u32> = interface.interactions.iter().map(|d| d.ordinal).collect();
@@ -654,12 +908,29 @@ mod v2_round_trip {
 
     #[test]
     fn json_round_trip_preserves_package() {
-        let package = fixture();
+        for package in [fixture(), vocabulary_fixture()] {
+            let json = v2::to_json_pretty(&package).expect("the fixture serializes as IR JSON");
+            let decoded = v2::from_json(&json).expect("json deserialization must succeed");
 
-        let json = v2::to_json_pretty(&package).expect("the fixture serializes as IR JSON");
-        let decoded = v2::from_json(&json).expect("json deserialization must succeed");
+            assert_eq!(package, decoded);
+        }
+    }
 
-        assert_eq!(package, decoded);
+    /// Parses emitted JSON the way ADR-0014 decision 11's conformance test
+    /// requires: unknown fields rejected, trailing input rejected, and the
+    /// result transcoded into the generated types.
+    fn strict_parse(json: &str) -> v2::Package {
+        let mut deserializer = serde_json::Deserializer::from_str(json);
+        let dynamic = prost_reflect::DynamicMessage::deserialize_with_options(
+            v2::package_descriptor(),
+            &mut deserializer,
+            &prost_reflect::DeserializeOptions::new().deny_unknown_fields(true),
+        )
+        .expect("a strict conformant parser must accept the emitted JSON");
+        deserializer.end().expect("no trailing input");
+        dynamic
+            .transcode_to()
+            .expect("the strictly parsed message transcodes into the generated types")
     }
 
     /// The conformance claim of ADR-0014 decision 11: a conformant protobuf
@@ -668,21 +939,10 @@ mod v2_round_trip {
     /// text would only restate the serializer's behaviour back to itself.
     #[test]
     fn emitted_json_survives_a_strict_conformant_parse() {
-        let package = fixture();
-        let json = v2::to_json_pretty(&package).expect("the fixture serializes as IR JSON");
-
-        let mut deserializer = serde_json::Deserializer::from_str(&json);
-        let dynamic = prost_reflect::DynamicMessage::deserialize_with_options(
-            v2::package_descriptor(),
-            &mut deserializer,
-            &prost_reflect::DeserializeOptions::new().deny_unknown_fields(true),
-        )
-        .expect("a strict conformant parser must accept the emitted JSON");
-        deserializer.end().expect("no trailing input");
-        let decoded: v2::Package = dynamic
-            .transcode_to()
-            .expect("the strictly parsed message transcodes into the generated types");
-        assert_eq!(package, decoded);
+        for package in [fixture(), vocabulary_fixture()] {
+            let json = v2::to_json_pretty(&package).expect("the fixture serializes as IR JSON");
+            assert_eq!(package, strict_parse(&json));
+        }
     }
 
     #[test]
@@ -704,6 +964,36 @@ mod v2_round_trip {
         assert!(
             json.contains(r#""err": "DiagError""#),
             "the err arm must render, got: {json}"
+        );
+    }
+
+    /// ADR-0014 decision 8's stringification, tested on genuine 64-bit
+    /// fields. The timing assertion above proves nothing about it —
+    /// `Timing.min_us` is `optional string` in the schema — so the claim
+    /// needs fields whose wire type actually is `uint64` or `int64`.
+    #[test]
+    fn json_renders_64_bit_integer_fields_as_strings() {
+        let json = v2::to_json_pretty(&vocabulary_fixture())
+            .expect("the vocabulary fixture serializes as IR JSON");
+
+        // uint64: the array's upper bound.
+        assert!(
+            json.contains(r#""max": "4096""#),
+            "an array bound must be a JSON string, got: {json}"
+        );
+        // uint64 behind proto3 `optional`: the character length bound.
+        assert!(
+            json.contains(r#""lenMax": "86""#),
+            "a length bound must be a JSON string, got: {json}"
+        );
+        // int64: the retired enum value and the enum-set bit position.
+        assert!(
+            json.contains(r#""value": "7""#),
+            "a retired enum value must be a JSON string, got: {json}"
+        );
+        assert!(
+            json.contains(r#""value": "33""#),
+            "an enum-set bit position must be a JSON string, got: {json}"
         );
     }
 
