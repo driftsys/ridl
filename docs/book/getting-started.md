@@ -845,8 +845,8 @@ at your desk, before CI sees it.
 An `interface` is an abstract shape: a reusable, identity-less group of
 interactions. It is not addressable and not deployed.
 
-A `service` is a global, named, published declaration of one — the catalog
-entry that gives a contract a concrete identity in the system. The
+A `service` is a global, named, published declaration of one or more of them —
+the catalog entry that gives contracts a concrete identity in the system. The
 specification defines its members as addressed `service.member`; no runtime
 resolves such an address today, so read it as the naming scheme a deployment
 will use. Service names are unique across the system and always public, and
@@ -859,20 +859,34 @@ import veh.common.Temperature
 
 service veh.cluster.status : VehicleStatus
 
+service veh.cluster.dash : VehicleStatus, Warnings
+
 service veh.cluster.hvac {
   signal  temperature : Temperature @[1s..10s]
   command setTarget(temp: Temperature) @[..50ms]
 }
 ```
 
-The first form names an existing interface; the second declares an inline shape
-for a one-off contract not worth a reusable interface. A service declaration
-says nothing about how the contract is realized on the wire — that is a
-deployment question, and rsdl's, when rsdl exists.
+The first form names existing interfaces — a comma-separated list, and the
+commas are required, the one place the family's separators are not optional:
+the list has no closing token, so it ends where the next declaration begins.
+The last form declares an inline shape for a one-off contract not worth a
+reusable interface. A service declaration says nothing about how the contract
+is realized on the wire — that is a deployment question, and rsdl's, when rsdl
+exists.
+
+Composing interfaces is how a recurring interaction set — a diagnostics block,
+a heartbeat — is reused without duplication: each composed interface keeps its
+own ordinal space, and its slot in the list carries an interface id that
+follows the same append-only rule as ordinals, with a service-level `reserved`
+tombstone holding a retired slot. Because members stay addressed
+`service.member`, two composed interfaces must not share a member name
+(`RIDL-144`).
 
 Interfaces are flat: there is no interface inheritance. Sharing a _shape_ is
-typl's job; a shared interaction set is not something the language supports, so
-that a base change can never renumber a derived contract's wire identity.
+typl's job; a shared interaction _set_ is composed at the service, never
+flattened into the interface, so that a base change can never renumber a
+derived contract's wire identity.
 
 ## Naming conventions
 
