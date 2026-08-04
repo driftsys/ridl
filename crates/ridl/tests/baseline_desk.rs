@@ -553,7 +553,73 @@ fn check_reports_a_missing_explicit_baseline() {
     ]);
 
     assert_eq!(code, 2, "a named baseline that is absent is an error");
-    assert!(stderr.contains("baseline"), "the error says so:\n{stderr}");
+    assert_eq!(
+        stderr,
+        format!(
+            "error: the baseline `{}` does not exist\n",
+            absent.display()
+        ),
+        "the error names the missing path"
+    );
+}
+
+/// `--baseline` pointing at a directory that holds IR artifacts but no
+/// `.ir.json` snapshot is refused, exit 2 (issue #218 item 4). Before the
+/// refusal the snapshot scan read it as an *empty* baseline: the desk check
+/// silently ran against nothing and the command printed nothing at all —
+/// false assurance, worse than a confusing message.
+#[test]
+fn check_refuses_a_baseline_directory_of_non_json_artifacts() {
+    let dir = TempDir::new("txtpb-dir");
+    let root = package_workspace(&dir, BASE);
+    dir.write("artifacts/veh.cluster.ir.txtpb", "name: \"veh.cluster\"\n");
+    let artifacts = dir.path().join("artifacts");
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        artifacts.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 2,
+        "the artifact directory is an input error:\n{stderr}"
+    );
+    assert_eq!(
+        stderr,
+        format!(
+            "error: {}: the directory holds IR artifacts (`veh.cluster.ir.txtpb`) but no \
+             `.ir.json` snapshot; a baseline stays `.ir.json` (ADR-0014 decision 5); publish \
+             one with `ridl baseline`\n",
+            artifacts.display()
+        ),
+        "the message describes the directory, not an empty baseline"
+    );
+}
+
+/// The control for the refusal above: a directory with no IR artifacts at
+/// all is the ordinary "no baseline published yet" state — an empty
+/// baseline, silently skipped, exactly as before the refusal existed.
+#[test]
+fn check_skips_an_empty_baseline_directory() {
+    let dir = TempDir::new("emptydir");
+    let root = package_workspace(&dir, BASE);
+    let empty = dir.path().join("published");
+    std::fs::create_dir_all(&empty).expect("create the empty baseline directory");
+
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        empty.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 0,
+        "an empty baseline directory is not an error:\n{stderr}"
+    );
+    assert_eq!(stderr, "", "and it stays silent");
 }
 
 /// `--baseline` refuses a prototext or binary IR artifact by name: a

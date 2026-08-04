@@ -296,22 +296,14 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
         // directory in an encoding this surface refuses — `ridl diff out/
         // src/` after `--emit ir-text` — not a source tree. Say that, rather
         // than falling through to the compiler and reporting the directory's
-        // missing manifest (issue #218 item 4). The second scan cannot
-        // practically fail — `snapshot_files` read the same directory a
-        // moment ago; if it does, the compiler below reports its own cause.
-        let artifacts = files_matching(entry, is_non_json_ir).unwrap_or_default();
-        if let Some(artifact) = artifacts.first() {
-            eprintln!(
-                "error: {}: the directory holds IR artifacts (`{}`) but no `.ir.json` snapshot; \
-                 `ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); emit the \
+        // missing manifest (issue #218 item 4).
+        if let Some(witness) = first_non_json_ir_in(entry) {
+            return Err(refuse_artifact_directory(
+                entry,
+                &witness,
+                "`ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); emit the \
                  packages with `--emit ir-json` to compare them",
-                entry.display(),
-                artifact
-                    .file_name()
-                    .unwrap_or(artifact.as_os_str())
-                    .to_string_lossy()
-            );
-            return Err(ExitCode::from(2));
+            ));
         }
     }
 
@@ -763,9 +755,27 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
 
 /// Loads the baseline packages: every `.ir.json` in a directory, in file-name
 /// order, or the single file `location` names.
+///
+/// A directory holding IR artifacts but no `.ir.json` is refused rather than
+/// read as an *empty* baseline (issue #218 item 4): skipping it silently
+/// would report a clean desk check that ran against nothing. A directory
+/// with no IR artifacts at all keeps yielding an empty baseline — that is
+/// the ordinary "no baseline published yet" state, and [`desk_check`] skips
+/// it silently.
 fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
-        snapshot_files(location)?
+        let snapshots = snapshot_files(location)?;
+        if snapshots.is_empty()
+            && let Some(witness) = first_non_json_ir_in(location)
+        {
+            return Err(refuse_artifact_directory(
+                location,
+                &witness,
+                "a baseline stays `.ir.json` (ADR-0014 decision 5); publish one with \
+                 `ridl baseline`",
+            ));
+        }
+        snapshots
     } else {
         vec![location.to_path_buf()]
     };
@@ -786,6 +796,35 @@ fn files_matching(dir: &Path, keep: fn(&Path) -> bool) -> std::io::Result<Vec<Pa
 /// The `.ir.json` snapshots directly inside `dir`, in file-name order.
 fn ir_json_files(dir: &Path) -> std::io::Result<Vec<PathBuf>> {
     files_matching(dir, is_ir_json)
+}
+
+/// The first non-JSON IR artifact directly inside `dir`, in file-name order —
+/// the witness a directory refusal names. A read failure yields `None`: every
+/// caller has just listed the same directory through [`snapshot_files`], so
+/// its own fallback reports the cause.
+fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
+    files_matching(dir, is_non_json_ir)
+        .unwrap_or_default()
+        .into_iter()
+        .next()
+}
+
+/// Reports a directory that holds IR artifacts but no `.ir.json` snapshot —
+/// a snapshot directory in an encoding this surface refuses, not a source
+/// tree or an unpublished baseline — and yields exit 2 (issue #218 item 4).
+/// `witness` is the artifact the message names; `expectation` finishes the
+/// message with what the calling command accepts and the remedy.
+fn refuse_artifact_directory(dir: &Path, witness: &Path, expectation: &str) -> ExitCode {
+    eprintln!(
+        "error: {}: the directory holds IR artifacts (`{}`) but no `.ir.json` snapshot; \
+         {expectation}",
+        dir.display(),
+        witness
+            .file_name()
+            .unwrap_or(witness.as_os_str())
+            .to_string_lossy()
+    );
+    ExitCode::from(2)
 }
 
 /// [`ir_json_files`] with an unreadable directory turned into exit 2 — a

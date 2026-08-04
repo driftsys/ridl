@@ -174,6 +174,12 @@ ridl check --baseline ./nope
 error: the baseline `./nope` does not exist
 ```
 
+A `--baseline` directory that holds IR artifacts but no `.ir.json` snapshot
+is also exit 2, with a message naming an artifact it found: a baseline stays
+`.ir.json` ([ADR-0014][adr-0014] decision 5), so such a directory is a
+baseline in a refused encoding, not the silently skipped "no baseline
+published yet" state — which an *empty* directory still is.
+
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
 the workspace against it and warns (RIDL-407) on every interaction whose
