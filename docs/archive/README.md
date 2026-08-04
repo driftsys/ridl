@@ -29,6 +29,20 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0007](../decisions/ADR-0007-e1-execution.md) served as the spec. The
   gardened records are [ADR-0007](../decisions/ADR-0007-e1-execution.md) and
   [the as-built architecture technote](../technotes/walking-skeleton-architecture.md).
+- **2026-08-04-e9-1-to-e9-6-execution-plan.md** — the execution plan for roadmap
+  stories E9.1 to E9.6, archived verbatim from `docs/wip/` once the block
+  landed. Unlike the E0, E1 and E2 plans, this one gardened as it went: each
+  story wrote its own durable records in its own pull request, so the closing
+  pass archives the plan and syncs the drift rather than writing the records up
+  afterwards. The gardened records are
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md),
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md), the
+  roadmap's Epic 9 status paragraph, and the ridl reference sections each story
+  amended. The four design notes it was written from stay in `docs/wip/`: three
+  are ratified and kept as the reasoning trail, and the fourth
+  (`2026-08-03-schema-projection-design.md`) covers E9.7 to E9.11, which this
+  block did not run.
+
 - **2026-07-19-e2-ridl-interface-layer-plan.md** — the epic E2 (ridl, the
   interface layer) implementation plan, archived verbatim from `docs/wip/` once
   the epic landed. As with E0 and E1, the roadmap's Epic 2 section plus

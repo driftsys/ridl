@@ -6,15 +6,9 @@ that are not yet ratified as normative references. They graduate into
 [`../decisions/`](../decisions/)) as they settle.
 
 Superpowers specs and plans live here while an epic runs and are archived
-verbatim to [`../archive/`](../archive/) at epic close. **One is open:**
-`e9-execution-plan.md`, covering roadmap stories E9.1 to E9.6. The epic E2 plan
-was archived by the E2 gardening pass on 2026-07-26.
-
-- **e9-execution-plan.md** — the execution plan for E9.1 to E9.6: story order
-  and dependencies, what each story must verify, the working rules for the
-  block, and what is deliberately left to a later one. Ratified by
-  [ADR-0014](../decisions/ADR-0014-ir-encodings.md) and
-  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md).
+verbatim to [`../archive/`](../archive/) at epic close. **None is open.** The
+epic E2 plan was archived by the E2 gardening pass on 2026-07-26, and the E9.1
+to E9.6 execution plan on 2026-08-04.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the

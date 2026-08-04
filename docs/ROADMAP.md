@@ -264,6 +264,34 @@ bounds).
 The two epics must not run concurrently on the IR. E9 is the nearer-term product
 path; E3 is the larger, more speculative one.
 
+**Status: E9.1 to E9.6 landed (2026-08-04), as PRs #215, #217, and #219 to
+
+# 223.** Both records are ratified and implemented
+
+[ADR-0014](decisions/ADR-0014-ir-encodings.md) is complete: canonical protobuf
+JSON replaced the `serde` rendering on every surface, prototext and binary
+joined it as emits, and the `ridl.std` filter became an exhaustive
+classification over `Emit`.
+[ADR-0015](decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) is complete for
+this block: `command` and `query` carry the range form with RIDL-112 warning an
+undeclared response bound, the coherence rule is normative prose in ridl §14.5,
+and a service composes several interfaces with per-interface ordinals keyed by
+name.
+
+Two ADR amendments came out of review rather than out of design, and both are
+recorded in place. **ADR-0014 decision 12** retracts decision 7's infallible
+`to_json_pretty`: `prost-reflect` transcodes through the wire encoding and
+prost's `RECURSION_LIMIT` is not configurable, so deep composite nesting
+panicked on source the checker accepts and the other three emits handle.
+**ADR-0015 decision 24** requires an interface name to be unique across a
+service's shapes, live or retired, and makes a retargeted slot breaking — two
+shape changes had been diffing as compatible by omission, one of them a
+regression against the comparison decision 19 superseded.
+
+**E9.7 to E9.12 are not in this block.** The IR is settled and E3 is unblocked;
+the projections, the schema hash, the store and dispatcher, and the recorded
+general form R5 drift remain. Consolidated debt: driftsys/ridl#218.
+
 | ID    | Story                                                                                                                                                                                                                                           | Done when                                                                                                                               | Size |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---- |
 | E9.1  | `ridl-ir` serialization rewrite — the emitted `.ir.json` is a serde rendering of Rust structs, not protobuf JSON, so no non-Rust protobuf runtime can parse it (ADR-0014)                                                                       | a non-Rust protobuf runtime parses the emitted IR                                                                                       | L    |
