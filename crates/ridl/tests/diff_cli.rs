@@ -207,6 +207,94 @@ fn a_directory_of_non_json_artifacts_is_described_not_compiled() {
     );
 }
 
+/// A directory whose snapshots sit one level down — `ridl diff .ridl ws/`
+/// instead of `ridl diff .ridl/baseline ws/` — is described, exit 2 (issue
+/// #230).
+///
+/// This one failed **open**, which is worse than the silent desk check the
+/// issue was filed for. The directory holds no `.ir.json` directly and is not
+/// a source tree, so it fell through to the source compiler; the compiler
+/// walked up to the workspace's own `ridl.toml` and compiled the *current*
+/// source as the baseline side. Both sides were then the same tree, and the
+/// gate printed `identical` and exited 0 over a breaking change. The control
+/// below pins that the change really is breaking, so a regression here shows
+/// up as a gate that passes rather than as a wording change.
+#[test]
+fn a_directory_whose_snapshots_are_nested_is_described_not_compiled() {
+    let dir = TempDir::new("nested-dir");
+    let root = dir.path().join("ws");
+    dir.write("ws/ridl.toml", MANIFEST);
+    dir.write("ws/iface.ridl", BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline publishes:\n{stderr}");
+    dir.write("ws/iface.ridl", BREAKING);
+
+    // The control: aimed at the directory that holds the snapshots, this
+    // exact comparison gates.
+    let published = root.join(".ridl/baseline");
+    let (control, control_out, control_err) =
+        ridl(&["diff".as_ref(), published.as_os_str(), root.as_os_str()]);
+    assert_eq!(
+        control, 1,
+        "the edit is breaking:\n{control_out}{control_err}"
+    );
+
+    let nest = root.join(".ridl");
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), nest.as_os_str(), root.as_os_str()]);
+
+    assert_eq!(code, 2, "one level too high is an input error:\n{stderr}");
+    assert_eq!(
+        stdout, "",
+        "a refused input yields no report — least of all `identical`:\n{stdout}"
+    );
+    assert_eq!(
+        stderr,
+        format!(
+            "error: {}: no `.ir.json` snapshot directly inside, but the subdirectory \
+             `baseline` holds one; snapshots are read from one directory, never from the \
+             directories below it; compare `{}` instead\n",
+            nest.display(),
+            published.display(),
+        ),
+        "the message names the subdirectory that holds the snapshots"
+    );
+}
+
+/// A workspace that published its baseline *inside itself* — `ridl baseline
+/// ws --out ws/published` — holds `.ir.json` files one level down, so the
+/// nested-snapshot refusal above must not fire on it: it is a source tree,
+/// and `ridl diff ws/ other` is an ordinary source comparison. The direct
+/// `ridl.toml` is what keeps the two apart, the same test that exempts a tree
+/// holding stray artifacts.
+#[test]
+fn a_source_tree_holding_its_own_snapshots_still_compiles() {
+    let dir = TempDir::new("ownsnap");
+    let root = dir.path().join("ws");
+    dir.write("ws/ridl.toml", MANIFEST);
+    dir.write("ws/iface.ridl", BASE);
+    let published = root.join("published");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        published.as_os_str(),
+    ]);
+    assert_eq!(code, 0, "the baseline publishes:\n{stderr}");
+    assert!(
+        published.join("veh.cluster.ir.json").is_file(),
+        "the snapshots sit one level below the workspace root",
+    );
+    let new = dir.write("new.ridl", BREAKING);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), root.as_os_str(), new.as_os_str()]);
+
+    assert_eq!(code, 1, "the source tree still compiles:\n{stderr}");
+    assert!(
+        stdout.starts_with("breaking"),
+        "and the breaking change is found:\n{stdout}",
+    );
+}
+
 /// `ridl diff` over a snapshot directory (the shape `.ridl/baseline/` takes)
 /// and a source tree keeps working: the directory's `.ir.json` files are the
 /// baseline side, the source tree is compiled, and an unchanged workspace is

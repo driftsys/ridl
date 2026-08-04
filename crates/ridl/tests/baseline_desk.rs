@@ -598,9 +598,125 @@ fn check_refuses_a_baseline_directory_of_non_json_artifacts() {
     );
 }
 
-/// The control for the refusal above: a directory with no IR artifacts at
-/// all is the ordinary "no baseline published yet" state — an empty
-/// baseline, silently skipped, exactly as before the refusal existed.
+/// `--baseline` pointing one level above the published snapshots — `.ridl`
+/// rather than `.ridl/baseline` — is refused, exit 2 (issue #230).
+///
+/// The directory holds no IR artifact *directly*, so the artifact refusal
+/// above cannot see it, and it used to be indistinguishable from the ordinary
+/// "no baseline published yet" state below: the desk check ran against
+/// nothing and the command printed nothing at all. The control at the head of
+/// this test is what makes that false assurance rather than a quiet no-op —
+/// the very same edit warns when the flag names the right directory.
+///
+/// The snapshots are described where they are rather than descended into.
+/// `ridl baseline` publishes one flat directory of `.ir.json` files and
+/// stages into a *sibling* directory, so snapshots below a baseline directory
+/// are never something the toolchain writes: descending would accept a layout
+/// nothing produces, and would have to choose between subdirectories when
+/// more than one holds snapshots — silently merging two unrelated baselines.
+#[test]
+fn check_refuses_a_baseline_directory_whose_snapshots_are_nested() {
+    let dir = TempDir::new("nested");
+    let root = package_workspace(&dir, BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is published: {stderr}");
+    dir.write("cluster.ridl", REORDERED);
+
+    // The control: aimed at the directory that holds the snapshots, this
+    // exact drift draws the desk warning.
+    let published = root.join(".ridl/baseline");
+    let (_, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        published.as_os_str(),
+    ]);
+    assert!(
+        stderr.contains("RIDL-407"),
+        "the drift this run must not lose sight of:\n{stderr}",
+    );
+
+    let nest = root.join(".ridl");
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        nest.as_os_str(),
+    ]);
+
+    assert_eq!(code, 2, "one level too high is an input error:\n{stderr}");
+    assert_eq!(
+        stderr,
+        format!(
+            "error: {}: no `.ir.json` snapshot directly inside, but the subdirectory \
+             `baseline` holds one; snapshots are read from one directory, never from the \
+             directories below it; pass `--baseline {}` instead\n",
+            nest.display(),
+            published.display(),
+        ),
+        "the message names the subdirectory that holds the snapshots"
+    );
+}
+
+/// A published baseline that cannot be *listed* is exit 2, not an empty
+/// baseline.
+///
+/// The nesting scan reads a level no caller has listed, so it is the one
+/// place where a directory that cannot be read could quietly become a
+/// directory that holds nothing: `--baseline .ridl` over an unreadable
+/// `.ridl/baseline/` used to report `Ok(0 packages)`, and `desk_check`
+/// returns early on an empty baseline — a clean desk check that ran against a
+/// baseline it never opened. That is the same false assurance issue #230 is
+/// about, reached through permissions instead of a mistyped path, so the
+/// error is reported rather than swallowed.
+#[cfg(unix)]
+#[test]
+fn check_reports_a_baseline_subdirectory_it_cannot_read() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let dir = TempDir::new("unreadable");
+    let root = package_workspace(&dir, BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is published: {stderr}");
+    dir.write("cluster.ridl", REORDERED);
+
+    let published = root.join(".ridl/baseline");
+    let restore = std::fs::metadata(&published)
+        .expect("the published directory exists")
+        .permissions();
+    std::fs::set_permissions(&published, std::fs::Permissions::from_mode(0o000))
+        .expect("make the published directory unreadable");
+    // A process that can read it anyway — root — cannot stage this case at
+    // all, so there is nothing to assert rather than something to fail on.
+    if std::fs::read_dir(&published).is_ok() {
+        std::fs::set_permissions(&published, restore).expect("restore the permissions");
+        return;
+    }
+
+    let nest = root.join(".ridl");
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        nest.as_os_str(),
+    ]);
+    std::fs::set_permissions(&published, restore).expect("restore the permissions");
+
+    assert_eq!(
+        code, 2,
+        "a baseline that cannot be read is not an absent one:\n{stderr}"
+    );
+    assert!(
+        stderr.starts_with(&format!("error: cannot read {}: ", published.display())),
+        "the message names the directory it could not list:\n{stderr}"
+    );
+}
+
+/// The control for both refusals above: a directory with no IR artifacts at
+/// all — directly inside or one level down — is the ordinary "no baseline
+/// published yet" state. An empty baseline, silently skipped, exactly as
+/// before either refusal existed. Turning this into an error would break the
+/// desk check for every workspace that has not published a baseline.
 #[test]
 fn check_skips_an_empty_baseline_directory() {
     let dir = TempDir::new("emptydir");
