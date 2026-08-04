@@ -484,8 +484,9 @@ fn enclosing_shape<'a>(
 }
 
 /// Renders one interaction: the signature, the §11 ordinal, the payload with
-/// its typl detail, the resolved timing with its per-kind reading, the error
-/// strata note for a fallible return, and the doc envelope.
+/// its typl detail, the resolved — on an RPC, declared — timing with its
+/// per-kind reading, the error strata note for a fallible return, and the doc
+/// envelope.
 fn render_interaction(
     db: &dyn salsa::Database,
     ws: Workspace,
@@ -521,9 +522,20 @@ fn render_interaction(
                 out.push_str(&payload_line(db, ws, std, pkg, named));
             }
         }
+        Some(v2::decl::Kind::CommandDef(command)) => {
+            // An RPC bound is never defaulted, so absent means undeclared and
+            // renders nothing (ADR-0015 decision 4). The query arm below is
+            // the same.
+            if let Some(timing) = &command.timing {
+                out.push_str(&timing_line(timing, Reading::Acceptance));
+            }
+        }
         Some(v2::decl::Kind::QueryDef(query)) => {
             if let Some(fallible) = query.return_type.as_ref().and_then(fallible_of) {
                 out.push_str(&strata_note(fallible));
+            }
+            if let Some(timing) = &query.timing {
+                out.push_str(&timing_line(timing, Reading::Reply));
             }
         }
         _ => {}
@@ -562,17 +574,20 @@ fn interaction_signature(owner: &str, decl: &v2::Decl) -> String {
             event.payload,
             timing_suffix(event.timing.as_ref()),
         ),
-        Some(v2::decl::Kind::CommandDef(command)) => {
-            format!("command {name}({})", params(&command.params))
-        }
+        Some(v2::decl::Kind::CommandDef(command)) => format!(
+            "command {name}({}){}",
+            params(&command.params),
+            timing_suffix(command.timing.as_ref()),
+        ),
         Some(v2::decl::Kind::QueryDef(query)) => format!(
-            "query {name}({}): {}",
+            "query {name}({}): {}{}",
             params(&query.params),
             query
                 .return_type
                 .as_ref()
                 .map(return_text)
                 .unwrap_or_else(|| "?".to_string()),
+            timing_suffix(query.timing.as_ref()),
         ),
         Some(v2::decl::Kind::FixedDef(fixed_def)) => format!(
             "fixed {name} : {}",
@@ -607,24 +622,38 @@ fn payload_line(
 }
 
 /// Which per-kind reading general form §6.2 derives for an interaction: a
-/// signal carries state, an event carries occurrences.
+/// signal carries state, an event carries occurrences, and an RPC responds —
+/// a command with its acceptance, a query with its reply (ridl §9.3).
 #[derive(Clone, Copy)]
 enum Reading {
     State,
     Occurrence,
+    Acceptance,
+    Reply,
 }
 
 impl Reading {
     /// The derived consequence of the generic bounds. The annotation itself
     /// means one thing everywhere — `min` is a rate floor, `max` a staleness
     /// bound — and only the declaring keyword decides what happens at each
-    /// edge (general form §6.2).
+    /// edge (general form §6.2). On an RPC the derived pair is the call
+    /// throttle and the response bound, and what responding means is itself
+    /// per kind: for a command it is acceptance — the §6.1 acknowledgment,
+    /// not execution — and for a query it is the reply (ADR-0015 decision 3).
     fn text(self) -> &'static str {
         match self {
             Self::State => "min = rate floor (debounce), max = staleness bound (refresh ceiling)",
             Self::Occurrence => {
                 "min = rate floor (throttle), max = staleness bound \
                  (TTL: stale occurrences discarded)"
+            }
+            Self::Acceptance => {
+                "min = call throttle (the caller must not call faster), \
+                 max = response bound (acceptance: the §6.1 acknowledgment, not execution)"
+            }
+            Self::Reply => {
+                "min = call throttle (the caller must not call faster), \
+                 max = response bound (the reply)"
             }
         }
     }
