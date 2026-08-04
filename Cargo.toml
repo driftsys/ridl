@@ -22,6 +22,12 @@ lsp-server = "0.10.0"
 lsp-types = "0.97.0"
 num-bigint = "0.4.8"
 num-rational = "0.4.2"
+# The IR's canonical protobuf JSON (ADR-0014 decision 14): `pbjson-build`
+# generates the serde impls at build time from the same `protox` descriptor
+# set that generates the types, and `pbjson` is the runtime the generated
+# code calls into. Both target prost ^0.14, matching the pin below.
+pbjson = "0.9.0"
+pbjson-build = "0.9.0"
 prettyplease = "0.2.37"
 proc-macro2 = "1.0.106"
 # Default features off: `testgen` (E1.18) makes proptest a normal dependency of
@@ -32,10 +38,11 @@ proc-macro2 = "1.0.106"
 proptest = { version = "1.11.0", default-features = false }
 prost = "0.14.4"
 prost-build = "0.14.4"
-# The reflection side of the IR encodings (ADR-0014 decision 7): canonical
-# protobuf JSON via `serde`, prototext via `text-format`. Depends on
-# prost ^0.14, matching the pin above.
-prost-reflect = { version = "0.16.5", features = ["serde", "text-format"] }
+# The reflection side of the IR encodings (ADR-0014 decision 7, amended by
+# decision 14): prototext via `text-format`. JSON moved to `pbjson`-generated
+# impls, so the `serde` feature is no longer needed. Depends on prost ^0.14,
+# matching the pin above.
+prost-reflect = { version = "0.16.5", features = ["text-format"] }
 protox = "0.9.1"
 # The book-example harness parses `docs/book/` with the same CommonMark parser
 # mdBook uses, and with mdBook's option set, so what the harness compiles and

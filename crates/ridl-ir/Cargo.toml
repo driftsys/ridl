@@ -6,14 +6,21 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+# The runtime the pbjson-generated serde impls call into (ADR-0014
+# decision 14).
+pbjson.workspace = true
 prost.workspace = true
 prost-reflect.workspace = true
-# `from_json` maps the transcode failure into its `serde_json::Error` return
-# through `serde::de::Error::custom` (ADR-0014 decision 12).
+# `from_json` builds its depth-cap error through `serde::de::Error::custom`
+# (ADR-0014 decision 14).
 serde.workspace = true
-serde_json.workspace = true
+# `unbounded_depth` exposes `Deserializer::disable_recursion_limit`, which
+# `from_json` needs: serde_json's own limit of 128 JSON levels would bind
+# before the crate's documented ceiling of 1,000 (ADR-0014 decision 14).
+serde_json = { workspace = true, features = ["unbounded_depth"] }
 
 [build-dependencies]
+pbjson-build.workspace = true
 prost.workspace = true
 prost-build.workspace = true
 protox.workspace = true
