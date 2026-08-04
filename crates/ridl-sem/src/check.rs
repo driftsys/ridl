@@ -3021,10 +3021,10 @@ impl Checker<'_> {
         }
     }
 
-    /// Lowers a service's named shape list (ADR-0015 decisions 12 to 18).
-    /// Interface ids are 1-based by declaration order and a tombstone holds
-    /// its slot (decision 15) — ridl §11's model one level up. Three rules
-    /// guard the list:
+    /// Lowers a service's named shape list (ADR-0015 decisions 12 to 18, and
+    /// decision 24). Interface ids are 1-based by declaration order and a
+    /// tombstone holds its slot (decision 15) — ridl §11's model one level
+    /// up. Five rules guard the list:
     ///
     /// - **RIDL-145** — the same interface named twice. The second listing is
     ///   dropped and holds no slot, mirroring RIDL-402's first-wins rule; its
@@ -3033,6 +3033,16 @@ impl Checker<'_> {
     /// - **RIDL-146** — a shape re-declaring a name a service-level
     ///   `reserved` tombstone retired: RIDL-401 one level up. As there, the
     ///   offender still lowers into its slot; the error blocks emission.
+    /// - **RIDL-147** — two shapes whose interface names collide even though
+    ///   their references differ (decision 24). A binding keys the ordinal
+    ///   spaces on the interface name (decision 17), so the two shapes would
+    ///   be indistinguishable at every binding. The offender lowers into its
+    ///   slot, as with RIDL-146.
+    /// - **RIDL-148** — a tombstone that spells no interface name (decision
+    ///   24): the literal spellings the shared `reserved` grammar admits
+    ///   lower to a nameless tombstone nothing can ever match, so the
+    ///   sanctioned retirement would silently not work. The slot still
+    ///   lowers, holding its id.
     /// - **RIDL-144** — a member name duplicated across the composed
     ///   interfaces. Flat addressing (decision 16) gives every member the
     ///   address `service.member`, so two referents for one name cannot be
@@ -3057,6 +3067,11 @@ impl Checker<'_> {
         // its qualified spelling collide as one interface. The winner's span
         // is kept so the diagnostic can point at it.
         let mut seen: HashMap<String, TextRange> = HashMap::new();
+        // RIDL-147 keys on the interface name — the final segment of the
+        // canonical reference: the first shape to compose a name owns it,
+        // and its reference and span feed the diagnostic (ADR-0015
+        // decision 24).
+        let mut name_owners: HashMap<String, (String, TextRange)> = HashMap::new();
         // RIDL-144: member name → the interface that first contributed it and
         // the shape slot that listed the interface.
         let mut member_owners: HashMap<String, (String, TextRange)> = HashMap::new();
@@ -3065,6 +3080,16 @@ impl Checker<'_> {
         for shape in service.shapes() {
             match shape {
                 ast::ServiceShape::Reserved(entry) => {
+                    // A service-level tombstone retires an interface *name*
+                    // (ADR-0015 decisions 17 and 24). The literal spellings
+                    // the shared `reserved` grammar admits lower to a
+                    // nameless tombstone that neither RIDL-146's pre-pass
+                    // nor the diff walk can ever match, so RIDL-148 rejects
+                    // them. The slot still lowers, holding its id, so the
+                    // later slots keep their numbering.
+                    if member_name(entry.name()).is_none() {
+                        self.reserved_shape_without_a_name(&entry);
+                    }
                     id += 1;
                     // The tombstone stores its slot twice — on the shape AND
                     // in `Reserved` — set from the one counter, as the
@@ -3080,10 +3105,12 @@ impl Checker<'_> {
                     let range = path.syntax().text_range();
                     let (canonical, symbol) = self.lower_service_ref(&path);
                     // RIDL-146 compares the interface's own name — the final
-                    // segment of the reference. A tombstone can only spell a
-                    // bare name, and the interface name is what a binding
-                    // keys the ordinal spaces on (ADR-0015 decision 17), so
-                    // it is the identity the tombstone retires.
+                    // segment of the reference. A service-level tombstone
+                    // spells an interface name (RIDL-148 rejects the
+                    // nameless literal spellings), and the interface name is
+                    // what a binding keys the ordinal spaces on (ADR-0015
+                    // decision 17), so it is the identity the tombstone
+                    // retires.
                     let shape_name = canonical.rsplit('.').next().unwrap_or(&canonical);
                     if let Some(tombstone) = reserved.get(shape_name).copied() {
                         self.redeclared_reserved_shape(shape_name, range, tombstone);
@@ -3094,6 +3121,27 @@ impl Checker<'_> {
                         continue;
                     }
                     seen.insert(canonical.clone(), range);
+                    // RIDL-147 — two shapes whose interface names collide
+                    // even though their references differ (ADR-0015 decision
+                    // 24). The same-reference case cannot reach here:
+                    // RIDL-145 above owns it and drops the listing. The
+                    // offender still lowers into its slot, as with RIDL-146;
+                    // the error blocks emission.
+                    match name_owners.get(shape_name) {
+                        Some((owner, owner_range)) => {
+                            let (owner, owner_range) = (owner.clone(), *owner_range);
+                            self.colliding_service_shape(
+                                shape_name,
+                                &canonical,
+                                range,
+                                &owner,
+                                owner_range,
+                            );
+                        }
+                        None => {
+                            name_owners.insert(shape_name.to_string(), (canonical.clone(), range));
+                        }
+                    }
                     if let Some(symbol) = &symbol
                         && symbol.kind == SymbolKind::Interface
                     {
@@ -3161,6 +3209,54 @@ impl Checker<'_> {
         );
     }
 
+    /// RIDL-147: two shapes of one service whose interface names collide even
+    /// though their references differ (ADR-0015 decision 24). A binding
+    /// separates the ordinal spaces by interface name (decision 17), so the
+    /// two shapes would be indistinguishable at every binding. Its own code
+    /// rather than RIDL-145 because the remedy differs: an import alias
+    /// cannot fix a name collision — the name is the interface's own — only
+    /// a rename or a different composition can.
+    fn colliding_service_shape(
+        &mut self,
+        name: &str,
+        canonical: &str,
+        range: TextRange,
+        owner: &str,
+        owner_range: TextRange,
+    ) {
+        self.error_with_label(
+            DiagCode::RIDL_147,
+            range,
+            format!(
+                "`{canonical}` composes as `{name}`, and this service already composes `{owner}` \
+                 under the same name — a binding separates the ordinal spaces by interface name \
+                 (ADR-0015 decision 17), so two shapes of one service cannot share one. An import \
+                 alias cannot help: rename one of the two interfaces, or compose this one into a \
+                 different service (ridl §14.5)"
+            ),
+            owner_range,
+            format!("`{owner}` composes as `{name}` here"),
+        );
+    }
+
+    /// RIDL-148: a service-level `reserved` tombstone that spells no
+    /// interface name (ADR-0015 decision 24). The shared `reserved` grammar
+    /// admits a literal, but a service tombstone retires an interface name —
+    /// the identity a binding keys the ordinal spaces on (decision 17) — so
+    /// a nameless tombstone holds a slot that retires nothing, and the
+    /// sanctioned retirement of ridl §14.5 would silently not work.
+    fn reserved_shape_without_a_name(&mut self, entry: &ast::ReservedEntry) {
+        self.error(
+            DiagCode::RIDL_148,
+            entry.syntax().text_range(),
+            "a service-level `reserved` retires an interface name, and this tombstone spells \
+             none — the interface name is the identity a binding keys the ordinal spaces on \
+             (ADR-0015 decision 17), so a tombstone without one can never match a retired \
+             shape. Write `reserved` followed by the retired interface's name (ridl §14.5, §11)"
+                .to_string(),
+        );
+    }
+
     /// RIDL-144: a member name duplicated across a service's interfaces
     /// (ADR-0015 decisions 16 and 18). Addressing is flat — `service.member`
     /// — so one member name cannot have two referents; two independently
@@ -3190,8 +3286,12 @@ impl Checker<'_> {
     /// The live member names of the interface `symbol` points at, read from
     /// its defining file — the checked package's own or an imported one.
     /// `reserved` tombstones inside the body hold ordinals, not addresses, so
-    /// they do not count against flat addressing (ADR-0015 decision 16). A
-    /// symbol whose definition cannot be found reads as empty.
+    /// they do not count against flat addressing (ADR-0015 decision 16), and
+    /// a name the body declares twice counts once: the duplicate is RIDL-402
+    /// in the interface's own package and only its first-wins survivor
+    /// lowers, so reading the raw AST members here made an interface draw a
+    /// RIDL-144 collision against itself. A symbol whose definition cannot
+    /// be found reads as empty.
     fn interface_member_names(&self, symbol: &Symbol) -> Vec<String> {
         let source = source_file(self.db, symbol.file);
         let Some(interface) = source
@@ -3200,10 +3300,12 @@ impl Checker<'_> {
         else {
             return Vec::new();
         };
+        let mut survivors = HashSet::new();
         interface
             .members()
             .filter(|member| !matches!(member, ast::InterfaceMember::Reserved(_)))
             .filter_map(|member| member_name(member.name()))
+            .filter(|name| survivors.insert(name.clone()))
             .collect()
     }
 
@@ -9459,6 +9561,87 @@ interface VehicleStatus {
             ),
         );
         assert_eq!(codes(&checked), vec!["RIDL-146"]);
+    }
+
+    /// RIDL-147: two shapes whose interface names collide even though their
+    /// references differ (ADR-0015 decision 24). RIDL-145 keys on the
+    /// canonical reference and stays silent here, and RIDL-144 stays silent
+    /// because the members are disjoint — yet a binding keyed on the
+    /// interface name (decision 17) could not tell the two shapes apart.
+    /// Both shapes still lower into their slots; the error blocks emission.
+    #[test]
+    fn ridl_147_colliding_interface_names_across_packages() {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let c1 = ridl_package(
+            &db,
+            "fleet.c1",
+            "package fleet.c1\ntype Flag: boolean\n\
+             interface DiagBlock {\n  signal status : Flag @[1s..10s]\n}\n",
+        );
+        let c2 = ridl_package(
+            &db,
+            "fleet.c2",
+            "package fleet.c2\ntype Flag: boolean\n\
+             interface DiagBlock {\n  signal fault : Flag @[1s..10s]\n  signal uptime : Flag @[1s..10s]\n}\n",
+        );
+        let app = ridl_package(
+            &db,
+            "fleet.app",
+            "package fleet.app\nservice fleet.app.diag : fleet.c1.DiagBlock, fleet.c2.DiagBlock\n",
+        );
+        let ws = Workspace::new(&db, vec![c1, c2, app], BTreeMap::new());
+
+        let checked = check_package(&db, ws, app, std);
+        assert_eq!(codes(&checked), vec!["RIDL-147"]);
+        assert!(
+            checked.diagnostics[0].message.contains("`DiagBlock`"),
+            "the message names the colliding interface name, got: {}",
+            checked.diagnostics[0].message
+        );
+        assert_eq!(
+            checked.ir.services[0].shapes.len(),
+            2,
+            "both shapes still hold their slots",
+        );
+    }
+
+    /// RIDL-148: a service-level tombstone must spell an interface name. The
+    /// literal spelling lowers to a nameless tombstone that neither
+    /// RIDL-146's pre-pass nor the diff walk can ever match, so the
+    /// sanctioned retirement of ridl §14.5 would silently not work (ADR-0015
+    /// decision 24). The slot still lowers and holds its id.
+    #[test]
+    fn ridl_148_numeric_service_tombstone_is_rejected() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
+                 interface HealthBlock {{\n  signal uptime : Speed @10ms\n}}\n\
+                 service veh.body.doors : DoorControl, reserved 2, HealthBlock\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-148"]);
+        assert_eq!(
+            checked.ir.services[0].shapes.len(),
+            3,
+            "the rejected tombstone still holds slot 2",
+        );
+    }
+
+    /// An interface with an internal duplicate — RIDL-402 in its own body —
+    /// composes without a spurious RIDL-144 against itself: the member walk
+    /// reads RIDL-402's first-wins survivor set, not the raw AST members.
+    #[test]
+    fn an_internal_duplicate_draws_no_ridl_144_against_its_own_interface() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface Bad {{\n  signal x : Speed @10ms\n  signal x : Speed @10ms\n}}\n\
+                 service veh.body.bad : Bad\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-402"]);
     }
 
     /// RIDL-143 applies per shape in the list (ADR-0015 decision 18): a

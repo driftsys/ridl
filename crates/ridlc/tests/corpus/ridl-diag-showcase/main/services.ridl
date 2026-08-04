@@ -1,6 +1,7 @@
 // Service diagnostics (ridl §14.5, §16.4): RIDL-141 and the composition
-// rules RIDL-144 to RIDL-146 here, RIDL-140 across the workspace — the twin
-// member republishes `diag.showcase.duplicate`.
+// rules RIDL-144 to RIDL-148 here, RIDL-140 across the workspace — the twin
+// member republishes `diag.showcase.duplicate`, and its `Published` is the
+// second half of the RIDL-147 name collision.
 
 package diag.ridl
 
@@ -34,3 +35,13 @@ service diag.showcase.twice : Published, Published
 /// RIDL-401 one level up: the tombstone retires `Published` for this service
 /// wherever it sits in the list.
 service diag.showcase.retired : reserved Published, Published
+
+/// Two shapes with one interface name from different packages (RIDL-147) —
+/// RIDL-145 keys on the reference and stays silent, and the members are
+/// disjoint so RIDL-144 stays silent too, but a binding separates the ordinal
+/// spaces by interface name (ADR-0015 decision 24).
+service diag.showcase.collide : Published, diag.twin.Published
+
+/// A service-level tombstone spells an interface name; the numeric spelling
+/// lowers to a nameless tombstone no shape can ever match (RIDL-148).
+service diag.showcase.numbered : Published, reserved 2

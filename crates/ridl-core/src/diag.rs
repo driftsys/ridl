@@ -413,7 +413,7 @@ diag_codes! {
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
     /// this module, with the severity the ridl reference §16 tables classify it
-    /// at. RIDL-140, RIDL-141, and RIDL-143 to RIDL-146 sit in the 1xx band
+    /// at. RIDL-140, RIDL-141, and RIDL-143 to RIDL-148 sit in the 1xx band
     /// while the reference lists them under the §16.4 evolution table — a
     /// documented anomaly kept as written (ADR-0008 decision 6). RIDL-111 and
     /// RIDL-142 are reserved by ADR-0008 decision 21 and are not declared yet,
@@ -583,6 +583,30 @@ diag_codes! {
         /// by the checker (E9.6).
         RIDL_146 = "RIDL-146", Error,
             "interface re-declared under a service-level `reserved` name";
+
+        /// Two shapes of one service whose interface names collide even though
+        /// their references differ (ridl §14.5, §16.4; ADR-0015 decision 24).
+        /// A binding separates the ordinal spaces by interface name (decision
+        /// 17), so a service carrying `fleet.c1.DiagBlock` and
+        /// `fleet.c2.DiagBlock` leaves the binding no way to tell the two
+        /// apart. Its own code rather than RIDL-145 — that rule is the same
+        /// reference listed twice — because the remedy differs: an import
+        /// alias cannot fix a name collision, only renaming one interface or
+        /// composing it into a different service can. Emitted per-package by
+        /// the checker (E9.6).
+        RIDL_147 = "RIDL-147", Error,
+            "two interfaces with one name composed into one service";
+
+        /// A service-level `reserved` tombstone that spells no interface name
+        /// (ridl §14.5, §16.4; ADR-0015 decision 24) — the literal spellings
+        /// the shared `reserved` grammar admits for enum bodies. A service
+        /// tombstone retires an interface name: the name is the identity a
+        /// binding keys the ordinal spaces on (decision 17) and the only
+        /// thing RIDL-146 or the diff walk can match a retirement against, so
+        /// a nameless tombstone holds a slot that retires nothing. Emitted
+        /// per-package by the checker (E9.6).
+        RIDL_148 = "RIDL-148", Error,
+            "service-level `reserved` tombstone without an interface name";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker (E2 task 5).

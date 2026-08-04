@@ -11,9 +11,11 @@ Two members, because one package cannot provoke everything:
   error in one family never suppresses the checker in another. Its manifest
   carries an invalid `[defaults].timing`, which is MANI-009; the built-in
   `[100ms..1000ms]` is the fallback, so RIDL-100 still reports concrete bounds.
-- `twin/` — package `diag.twin`. It exists only to republish the service name
+- `twin/` — package `diag.twin`. It republishes the service name
   `diag.showcase.duplicate`, because the service catalog is a workspace-wide
-  namespace and RIDL-140 cannot be provoked from a single package.
+  namespace and RIDL-140 cannot be provoked from a single package, and it
+  declares its own `Published` so `main/services.ridl` can compose two
+  interfaces with one name (RIDL-147) — one package cannot declare two.
 
 `main/narrowing.ridl` and `main/narrowing_returns.ridl` cover what typl shapes
 may cross an interaction boundary — optional in any interaction position, a map
