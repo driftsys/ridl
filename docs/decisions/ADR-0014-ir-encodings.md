@@ -102,8 +102,8 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
    two cannot disagree.
 
    Six functions in `ridl_ir::v2` where there is one today. `to_json_pretty`
-   keeps its name and its current signature, including its infallible return, so
-   no call site is renamed:
+   keeps its name, so no call site is renamed. **It does not keep its infallible
+   return — see decision 12, which retracts that clause.**
 
    | Function                              | Mechanism                      |
    | ------------------------------------- | ------------------------------ |
@@ -147,6 +147,48 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     reject unknown fields. Asserting on the rendered text would only restate the
     serializer's behaviour back to itself; re-reading tests the claim the change
     actually makes, which is that a conformant parser accepts this output.
+
+12. **Amendment (2026-08-04) — the serialization surface is fallible on both
+    directions, retracting decision 7's infallible return.** Decision 7 kept
+    `to_json_pretty` infallible on the reasoning that "the new failure modes are
+    the same class as the existing `expect` — they cannot occur unless the
+    schema and the generated types disagree." **That reasoning is false**, and
+    the E9.1 review demonstrated it.
+
+    `prost-reflect` transcodes by encoding the typed message and decoding it
+    into a `DynamicMessage`, and prost's `RECURSION_LIMIT` is a non-configurable
+    constant of 100 message levels. Each level of inline composite nesting costs
+    two message levels (`FieldType` plus `ArrayType`, `TupleType`, or
+    `MapType`), so the limit is reached at roughly 49 levels of nesting.
+    Measured on the E9.1 branch: a package nested 45 levels deep serializes and
+    round-trips correctly; at 55 levels `to_json_pretty` panics with
+    `DecodeError { description: RecursionLimitReached }`. The failure is
+    **input-dependent**, not schema drift, so no `expect` on that path is
+    justified.
+
+    This is reachable from legal source. A `.typl` file declaring 55 nested
+    inline arrays passes the lexer, the parser, and the checker, and then
+    `ridlc build --emit ir-json` panics — while `--emit rust`,
+    `--emit c-header`, and `--emit typescript` all emit that same package
+    correctly. A panic in a compiler on input it accepted is a defect, and on
+    the write path it is a regression against the `serde` rendering this record
+    replaces, which had no such limit.
+
+    Therefore: `to_json_pretty` returns a `Result`; `from_json` maps the decode
+    failure into its existing error return rather than expecting on it; and the
+    one production call site reports the failure as a detached error diagnostic
+    and writes no artifact, which is the pattern `ridlc` already uses for the
+    TypeScript backend's `Unrepresentable` error. The five remaining call sites
+    are tests.
+
+    **A checker-level nesting limit was rejected.** It would restrict input that
+    three of the four emits handle correctly, which is a language change made to
+    work around a library limit. If the bound ever binds in practice, the escape
+    hatch is the one the Alternatives section already records: the JSON
+    mechanism sits behind `to_json_pretty` and `from_json`, and `pbjson` emits
+    straight-line field writes with no transcode and therefore no recursion
+    limit. That reversibility was recorded as a hypothetical; it is now a
+    concrete contingency with a known trigger.
 
 ## Alternatives considered
 
