@@ -281,23 +281,37 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
         if !snapshots.is_empty() {
             return load_snapshots(&snapshots);
         }
-        // A directory holding IR artifacts and no `.ir.json` is a snapshot
-        // directory in an encoding this surface refuses — `ridl diff out/
-        // src/` after `--emit ir-text` — unless it is a source tree: a build
-        // can write its artifacts into the workspace itself (`--out-dir .`),
-        // and such a tree compiles below exactly as `ridl check` reads it,
-        // stray artifacts included. For the snapshot directory, say what it
-        // is rather than falling through to the compiler and reporting the
-        // directory's missing manifest (issue #218 item 4).
-        if !is_source_dir(entry)
-            && let Some(witness) = first_non_json_ir_in(entry)
-        {
-            return Err(refuse_artifact_directory(
-                entry,
-                &witness,
-                "`ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); emit the \
-                 packages with `--emit ir-json` to compare them",
-            ));
+        // Two directory shapes are described rather than compiled: one
+        // holding IR artifacts and no `.ir.json` — a snapshot directory in an
+        // encoding this surface refuses, `ridl diff out/ src/` after `--emit
+        // ir-text` (issue #218 item 4) — and one whose `.ir.json` snapshots
+        // sit a level below it, a path aimed one level too high (issue #230).
+        // The second failed open: the directory fell through to the compiler,
+        // which walked up to the workspace's own manifest and compiled the
+        // current source as the baseline side, so the gate reported
+        // `identical` over a breaking change.
+        //
+        // Neither applies to a source tree. A build can write its artifacts
+        // into the workspace itself (`--out-dir .`) and a workspace can
+        // publish its baseline inside itself (`--out ws/published`); such a
+        // tree compiles below exactly as `ridl check` reads it, artifacts and
+        // snapshots included.
+        if !is_source_dir(entry) {
+            if let Some(witness) = first_non_json_ir_in(entry) {
+                return Err(refuse_artifact_directory(
+                    entry,
+                    &witness,
+                    "`ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); emit \
+                     the packages with `--emit ir-json` to compare them",
+                ));
+            }
+            if let Some(nested) = first_nested_snapshot_dir(entry) {
+                return Err(refuse_nested_snapshot_directory(
+                    entry,
+                    &nested,
+                    &format!("compare `{}` instead", nested.display()),
+                ));
+            }
         }
     }
 
@@ -763,24 +777,34 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
 /// Loads the baseline packages: every `.ir.json` in a directory, in file-name
 /// order, or the single file `location` names.
 ///
-/// A directory holding IR artifacts but no `.ir.json` is refused rather than
-/// read as an *empty* baseline (issue #218 item 4): skipping it silently
-/// would report a clean desk check that ran against nothing. A directory
-/// with no IR artifacts at all keeps yielding an empty baseline — that is
+/// Two directory shapes are refused rather than read as an *empty* baseline,
+/// because skipping either silently would report a clean desk check that ran
+/// against nothing: one holding IR artifacts but no `.ir.json` (issue #218
+/// item 4), and one whose `.ir.json` snapshots sit a level below it (issue
+/// #230). A directory with neither keeps yielding an empty baseline — that is
 /// the ordinary "no baseline published yet" state, and [`desk_check`] skips
 /// it silently.
 fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
         let snapshots = snapshot_files(location)?;
-        if snapshots.is_empty()
-            && let Some(witness) = first_non_json_ir_in(location)
-        {
-            return Err(refuse_artifact_directory(
-                location,
-                &witness,
-                "a baseline stays `.ir.json` (ADR-0014 decision 5); publish one with \
-                 `ridl baseline`",
-            ));
+        if snapshots.is_empty() {
+            // What is directly inside is the more specific complaint, so it
+            // is the one reported when a directory somehow has both.
+            if let Some(witness) = first_non_json_ir_in(location) {
+                return Err(refuse_artifact_directory(
+                    location,
+                    &witness,
+                    "a baseline stays `.ir.json` (ADR-0014 decision 5); publish one with \
+                     `ridl baseline`",
+                ));
+            }
+            if let Some(nested) = first_nested_snapshot_dir(location) {
+                return Err(refuse_nested_snapshot_directory(
+                    location,
+                    &nested,
+                    &format!("pass `--baseline {}` instead", nested.display()),
+                ));
+            }
         }
         snapshots
     } else {
@@ -814,6 +838,61 @@ fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
         .unwrap_or_default()
         .into_iter()
         .next()
+}
+
+/// The first immediate subdirectory of `dir` that itself holds an `.ir.json`
+/// snapshot, in name order — the witness a nesting refusal names.
+///
+/// One level down, and no further. `ridl baseline` publishes one flat
+/// directory of snapshots and stages into a *sibling* of it, so snapshots
+/// below a snapshot directory are never a layout the toolchain writes: they
+/// are the signature of a path aimed one level too high (`.ridl` where
+/// `.ridl/baseline` was meant), which is the mistake worth telling apart from
+/// an unpublished baseline. Searching deeper would mean walking an arbitrary
+/// tree — `--baseline .` at a repository root — to answer a question about
+/// the one directory the author named, so a path aimed two or more levels
+/// high stays the silent pass it is today (issue #230).
+///
+/// A read failure yields `None`: every caller has just listed `dir` through
+/// [`snapshot_files`], so its own fallback reports the cause.
+fn first_nested_snapshot_dir(dir: &Path) -> Option<PathBuf> {
+    let mut subdirectories: Vec<PathBuf> = std::fs::read_dir(dir)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.is_dir())
+        .collect();
+    subdirectories.sort();
+    subdirectories
+        .into_iter()
+        .find(|subdirectory| ir_json_files(subdirectory).is_ok_and(|files| !files.is_empty()))
+}
+
+/// Reports a directory whose `.ir.json` snapshots sit one level below it
+/// rather than inside it, and yields exit 2 (issue #230).
+///
+/// Such a directory holds no IR artifact *directly*, so
+/// [`refuse_artifact_directory`] cannot see it, and the snapshot scan reads it
+/// as an *empty* set — indistinguishable from the ordinary "no baseline
+/// published yet" state, which must stay a silent pass. The snapshots are
+/// described where they are rather than descended into: descending would
+/// accept a layout `ridl baseline` never writes, and would have to choose
+/// between subdirectories when more than one holds snapshots, silently
+/// merging two unrelated baselines.
+///
+/// `nested` is the subdirectory the message names; `remedy` finishes the
+/// message with the path the calling command should have been given.
+fn refuse_nested_snapshot_directory(dir: &Path, nested: &Path, remedy: &str) -> ExitCode {
+    eprintln!(
+        "error: {}: no `.ir.json` snapshot directly inside, but the subdirectory `{}` holds one; \
+         snapshots are read from one directory, never from the directories below it; {remedy}",
+        dir.display(),
+        nested
+            .file_name()
+            .unwrap_or(nested.as_os_str())
+            .to_string_lossy()
+    );
+    ExitCode::from(2)
 }
 
 /// Reports a directory that holds IR artifacts but no `.ir.json` snapshot —
