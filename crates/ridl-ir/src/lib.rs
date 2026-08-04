@@ -1307,10 +1307,21 @@ mod v2_round_trip {
     /// decision 12).
     #[test]
     fn json_parse_past_the_nesting_limit_returns_an_error() {
-        let result = v2::from_json(&nested_json(NESTING_PAST_LIMIT));
+        let error = v2::from_json(&nested_json(NESTING_PAST_LIMIT))
+            .expect_err("parsing past the recursion limit must fail, not panic");
+
+        // Assert *which* limit was reached. `serde_json` carries its own
+        // recursion limit of 128, and this input clears the transcoding
+        // decoder's limit by only one nesting level, so an `is_err()`
+        // assertion alone would keep passing if the constant were raised —
+        // while silently testing `serde_json`'s parser instead of the
+        // transcode path this test exists to pin. prost says "recursion limit
+        // reached"; `serde_json` says "recursion limit exceeded".
+        let message = error.to_string();
         assert!(
-            result.is_err(),
-            "parsing past the recursion limit must fail, not panic"
+            message.contains("recursion limit reached"),
+            "the transcoding decoder's limit must be the one reached, not \
+             serde_json's own; got: {message}"
         );
     }
 

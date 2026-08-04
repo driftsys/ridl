@@ -158,13 +158,15 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
     `prost-reflect` transcodes by encoding the typed message and decoding it
     into a `DynamicMessage`, and prost's `RECURSION_LIMIT` is a non-configurable
     constant of 100 message levels. Each level of inline composite nesting costs
-    two message levels (`FieldType` plus `ArrayType`, `TupleType`, or
-    `MapType`), so the limit is reached at roughly 49 levels of nesting.
-    Measured on the E9.1 branch: a package nested 45 levels deep serializes and
-    round-trips correctly; at 55 levels `to_json_pretty` panics with
-    `DecodeError { description: RecursionLimitReached }`. The failure is
-    **input-dependent**, not schema drift, so no `expect` on that path is
-    justified.
+    **two** message levels for an array or a map (`FieldType` plus `ArrayType`
+    or `MapType`) and **three** for a tuple, because `TupleField` is itself a
+    message. So the limit is reached at roughly 49 levels of array nesting and
+    roughly 32 levels of tuple nesting, and the tuple bound is the one that
+    matters, being the tighter of the two. Measured on the E9.1 branch: a
+    package nested 45 array levels deep serializes and round-trips correctly and
+    at 55 it fails; through the CLI a 30-level tuple source succeeds and a
+    40-level one fails. The failure is **input-dependent**, not schema drift, so
+    no `expect` on that path is justified.
 
     This is reachable from legal source. A `.typl` file declaring 55 nested
     inline arrays passes the lexer, the parser, and the checker, and then
