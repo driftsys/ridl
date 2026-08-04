@@ -1306,6 +1306,84 @@ service veh.hvac.cabin {
   a service; two components providing the same service is _declared redundancy_
   (rsdl §10), not a conflict.
 
+#### Coherence — the published set is simultaneous
+
+> The signals of one **provided interface** are published coherently: the set a
+> provider publishes in one step is a set of values it held simultaneously. A
+> consumer reading two or more of them observes such a set wherever the binding
+> preserves the grouping; where a binding cannot, that is a deploy-time
+> constraint, not a weaker contract. The group's identity is the **interface
+> name** where a service names a shape, and the **service name** where the shape
+> is inline.
+
+The rule states **production** coherence (ADR-0015 decision 9). The three rules
+below establish that the provider's published set is simultaneous; they
+establish nothing about what survives an arbitrary transport, which is why the
+consumer sentence is conditional on the binding. What a consumer observes under
+a given binding is delivery coherence, treated separately below.
+
+The rule is **implicit, not declared** — there is no `coherent` keyword. Three
+rules the family already states produce it: §4.2 gives every flow exactly one
+owning provider; a provider computes its outputs in one step (rmdl's topological
+schedule, rmdl §6); and a service is the published unit realized by one provider
+(§14.6). So the values a provider publishes in one step are a simultaneous state
+by construction. Signals publishing at different rates do not break this: in a
+given step some cells are written and others are not, but every value present
+came from the same step, so the observed set remains a state that existed.
+
+Declaring `coherent` would declare a consequence of how the platform executes,
+which the general form §4.1 deletion test exists to reject. It would also be
+false in the one place it appeared to help: marking one interface coherent would
+imply the others are not, when all of them are.
+
+#### Production coherence and delivery coherence
+
+Production coherence and delivery coherence are different, and the difference is
+a demand on every transport mapping (ADR-0015 decision 10) — in the same sense
+the §4.4 last-value guarantee already is. The provider producing a coherent set
+is implicit; whether a consumer observes it coherently depends on the binding:
+
+| Transport        | How the grouping is preserved                         |
+| ---------------- | ----------------------------------------------------- |
+| shared memory    | one versioned block per group, one generation counter |
+| DDS              | GROUP-scope PRESENTATION with `coherent_access`       |
+| SOME/IP          | one notifier per field; preserved only within a field |
+| static bus (CAN) | preserved only within one frame; not across frames    |
+
+Two consequences follow:
+
+- Where a consumer needs the guarantee to survive an **arbitrary** binding, the
+  answer is the struct idiom (§17.3): make the values one struct, so they are
+  one payload on one channel — atomic on every transport.
+- Where a binding cannot preserve the grouping, that is a **deploy-time
+  constraint**, not a weaker contract. The precedent is the posture constraint
+  above — a statically deployed service's control API requires the discovered
+  posture — and the owner is the same: rsdl derives the transport and checks
+  feasibility against the contract at deploy time (rsdl §8).
+
+Appendix B carries the per-target realization.
+
+#### The generation unit and the addressing unit
+
+A **provided interface is the generation unit** (ADR-0015 decision 11).
+Coherence (above), ordinals (§11), and group identity all key on the same
+boundary, and that convergence is what makes a store and a dispatcher
+generatable from the IR alone. From one provided interface:
+
+- one **store** — its signals, laid out as one coherent block behind a single
+  generation counter; each cell seeded with the payload's init value (§4.4),
+  carrying provenance and the envelope (§3.1), and evaluated against its own
+  `max` staleness bound (§9);
+- one **dispatcher** — its events, commands, and queries, routed by the
+  interface's single ordinal sequence (§11), with the typl constraints checked
+  before the handler and the response bound applied around it (§9.3).
+
+The **service is the addressing unit**: it contributes the global name and the
+`service.member` addresses, never the shape of what is generated. The store and
+the dispatcher multiply with the interfaces a service publishes, not with the
+service — one store and one dispatcher per published interface, under one
+logical name.
+
 ### 14.6 How components relate to services (forward reference)
 
 Interfaces and services are ridl (the contract SSOT); _providing_ and
@@ -1456,11 +1534,15 @@ and the same spelling is the constant.
    patterns (heartbeat + version + diagnostics triad) are duplicated. If
    evidence accumulates, the candidate is compile-time flattening mixins
    (`include DiagBlock`), never inheritance.
-3. **Signal groups / atomic multi-signal updates.** AUTOSAR signal groups
-   deliver several signals as one coherent sample. ridl signals are independent;
-   a coherent multi-value sample is currently "make the payload a struct". Is
-   that answer always sufficient? Probably yes — record the idiom, watch for
-   counterexamples.
+3. ~~**Signal groups / atomic multi-signal updates.**~~ **Closed by ADR-0015 —
+   the struct idiom is confirmed.** The provisional answer here — a coherent
+   multi-value sample is "make the payload a struct" — holds, and the rule it
+   sits inside is now stated in §14.5: the signals of one provided interface are
+   published coherently, and whether a consumer observes the grouping depends on
+   the binding. A struct payload is one payload on one channel, so it is atomic
+   on every transport — the form to use where the guarantee must survive an
+   arbitrary binding. Where a binding cannot preserve the interface grouping,
+   that is a deploy-time constraint (§14.5), not a weaker contract.
 4. **Actions (long-running operations).** ROS 2 actions = goal + feedback +
    result. Composable today as `command` + progress `signal` + completion
    `event`/`query`, and the person boundary needs the same triple for long user
@@ -1636,6 +1718,7 @@ compose.
 | ridl                             | SOME/IP                                                                      | proto3 / gRPC                                                  | AIDL                                                | DDS                                                   | MQTT / AsyncAPI               |
 | -------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------- | ----------------------------- |
 | `signal`                         | field notifier (+ auto-derived getter from last-value cache)                 | server-streaming RPC or pub/sub sidecar                        | callback / `oneway` listener                        | topic, `TRANSIENT_LOCAL` durability, DEADLINE = `max` | retained message on channel   |
+| coherent-set delivery (§14.5)    | per-field only — no grouping across notifiers                                | per-message only — no grouping across streams                  | per-parcel only — one callback per signal           | GROUP-scope PRESENTATION with `coherent_access`       | per-message only, per channel |
 | `event`                          | event (eventgroup)                                                           | server-streaming RPC                                           | callback                                            | topic, `VOLATILE` durability                          | non-retained publish          |
 | `command`                        | request w/ empty response (= ack, §6.1)                                      | unary RPC → `Empty` (= ack)                                    | `oneway` + runtime ack shim                         | reliable-QoS request topic (DDS ack)                  | publish QoS 1 (puback = ack)  |
 | `query`                          | request/response method                                                      | unary/streaming RPC                                            | method                                              | request/reply (RPC over DDS)                          | request/reply channel pair    |
@@ -1654,9 +1737,11 @@ the ack never surfaces in generated application APIs as a return value. The §4.
 last-value guarantee is what makes the SOME/IP _getter_ derivable — a ridl
 signal generates the full SOME/IP field triple minus setter (setters are
 explicit `command`s, by design). DBC/CAN binds signals only
-(`event`/`command`/`query` do not exist on classic CAN — profile error). The
-WASM component target maps `query` streams to WIT `stream<T>` (native in WASI
-0.3) — the rmdl-behind-an-interface story stays whole in the browser.
+(`event`/`command`/`query` do not exist on classic CAN — profile error), and a
+coherent set survives only within one frame (§14.5); a set that must stay
+simultaneous on every target is one struct payload (§17.3). The WASM component
+target maps `query` streams to WIT `stream<T>` (native in WASI 0.3) — the
+rmdl-behind-an-interface story stays whole in the browser.
 
 ---
 

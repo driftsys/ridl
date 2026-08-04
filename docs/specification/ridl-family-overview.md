@@ -181,11 +181,12 @@ By home; see each reference for full statements.
   (arithmetic bounds, predicates, infix `match`, invariants) · explicit wire
   sentinels · byte order home · canonical encoding · **explicit wire-width floor
   (deferred `wire` clause, §17.11)**
-- **ridl §17**: selective broadcasts · interaction-set reuse · signal groups ·
+- **ridl §17**: selective broadcasts · interaction-set reuse ·
   actions/long-operations idiom · mid-stream invalid policy · reflection service
   · failure-management spec (with safety/HA properties direction) — the QoS
   boundary question is answered by the ADR-0015 absorption principle (ridl
-  §17.5)
+  §17.5), and the signal-groups question is closed by the ADR-0015 coherence
+  rule: the struct idiom is confirmed (ridl §17.3)
 - **rxdl §11**: the intent occurrence keyword · the acquisition/query cell ·
   interaction citation paths (ridl's, recorded there) · journeys and screen flow
   · accessibility metadata
