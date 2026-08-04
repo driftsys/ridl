@@ -112,6 +112,30 @@ fn source_files_identical_exits_zero() {
     );
 }
 
+/// `ridl diff` refuses the two non-JSON IR encodings by name — diffs and
+/// baselines stay `.ir.json` (ADR-0014 decision 5). Before the refusal the
+/// file fell through to the source compiler, which parsed the artifact as
+/// `.typl` and reported FORM-104 into it — a misdiagnosis of the actual
+/// mistake.
+#[test]
+fn non_json_ir_snapshots_are_refused() {
+    let dir = TempDir::new("refuse");
+    let source = dir.write("new.ridl", BASE);
+    for name in ["old.ir.txtpb", "old.ir.binpb"] {
+        let artifact = dir.write(name, "name: \"veh.cluster\"\n");
+        let (code, _, stderr) = ridl(&["diff".as_ref(), artifact.as_os_str(), source.as_os_str()]);
+        assert_eq!(code, 2, "`{name}` is an input error, stderr:\n{stderr}");
+        assert!(
+            stderr.contains(".ir.json"),
+            "the refusal must name the accepted encoding:\n{stderr}"
+        );
+        assert!(
+            !stderr.contains("FORM-104"),
+            "the artifact must not be parsed as source:\n{stderr}"
+        );
+    }
+}
+
 /// Retiring an interaction but writing its `reserved` tombstone at the end of
 /// the body frees the retired ordinal, so a surviving interaction slides down
 /// into it (ridl §11). Driven through real source so the compiler assigns the

@@ -652,7 +652,10 @@ Options:
 
 `OLD` and `NEW` each take one of three forms: an `.ir.json` snapshot, a
 directory of them (the shape `.ridl/baseline/` takes), or source — a file, a
-package directory, or a workspace root — compiled in process. Omit both and
+package directory, or a workspace root — compiled in process. The other two
+IR encodings `ridl build` can emit are refused by name: an `.ir.txtpb` or
+`.ir.binpb` input is an error (exit 2), because diffs and baselines read
+`.ir.json` only ([ADR-0014][adr-0014] decision 5). Omit both and
 pass `--explain <CATEGORY>` instead to print that category's classification
 rule without comparing anything.
 
@@ -1042,5 +1045,6 @@ argument.
 
 [adr-0007]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0007-e1-execution.md
 [adr-0010]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0010-cli-conventions.md
+[adr-0014]: https://github.com/driftsys/ridl/blob/main/docs/decisions/ADR-0014-ir-encodings.md
 [issue-196]: https://github.com/driftsys/ridl/issues/196
 [clig]: https://clig.dev

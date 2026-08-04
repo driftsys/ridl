@@ -252,6 +252,18 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
         return load_snapshots(&[entry.to_path_buf()]);
     }
 
+    // The other two IR encodings are refused by name, before the source
+    // fallback below can parse prototext or binary as `.typl` and report its
+    // syntax errors — a misdiagnosis of the actual mistake.
+    if is_non_json_ir(entry) {
+        eprintln!(
+            "error: {}: `ridl diff` compares `.ir.json` snapshots only (ADR-0014 decision 5); \
+             emit the package with `--emit ir-json` to compare it",
+            entry.display()
+        );
+        return Err(ExitCode::from(2));
+    }
+
     if entry.is_dir() {
         let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
@@ -291,6 +303,18 @@ fn is_ir_json(path: &Path) -> bool {
             .file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name.ends_with(".ir.json"))
+}
+
+/// Whether `path` is an IR artifact in an encoding the snapshot surface must
+/// refuse: prototext (`.ir.txtpb`) and binary (`.ir.binpb`) are emittable,
+/// but baselines and diffs stay `.ir.json` (ADR-0014 decision 5) — a
+/// committed baseline must be reviewable in a pull request.
+fn is_non_json_ir(path: &Path) -> bool {
+    path.is_file()
+        && path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.ends_with(".ir.txtpb") || name.ends_with(".ir.binpb"))
 }
 
 // ==========================================================================
@@ -437,6 +461,17 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
 /// existed.
 fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf>, ExitCode> {
     match flag {
+        // A prototext or binary IR artifact is refused by name — baselines
+        // stay `.ir.json` (ADR-0014 decision 5) — before the snapshot loader
+        // can report it as malformed JSON, which misdiagnoses the mistake.
+        Some(explicit) if is_non_json_ir(explicit) => {
+            eprintln!(
+                "error: the baseline `{}` is not an `.ir.json` snapshot: a baseline stays \
+                 `.ir.json` (ADR-0014 decision 5); publish one with `ridl baseline`",
+                explicit.display()
+            );
+            Err(ExitCode::from(2))
+        }
         Some(explicit) if explicit.exists() => Ok(Some(explicit.to_path_buf())),
         Some(explicit) => {
             eprintln!(
