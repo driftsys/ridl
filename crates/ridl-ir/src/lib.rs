@@ -39,12 +39,14 @@ pub mod v2 {
 
     /// Rebuilds a package as a `DynamicMessage` over the descriptor pool —
     /// the step `prost-reflect` needs before rendering a text encoding.
-    fn transcode(package: &Package) -> prost_reflect::DynamicMessage {
+    /// Transcoding goes through the wire encoding, whose decoder enforces
+    /// prost's fixed recursion limit, so a package whose composite nesting
+    /// crosses that limit fails here — an input-dependent failure, not
+    /// schema drift (ADR-0014 decision 12).
+    fn transcode(package: &Package) -> Result<prost_reflect::DynamicMessage, prost::DecodeError> {
         let mut dynamic = prost_reflect::DynamicMessage::new(package_descriptor());
-        dynamic
-            .transcode_from(package)
-            .expect("transcoding into the dynamic message cannot fail: the descriptor pool and the generated types come from one schema compilation");
-        dynamic
+        dynamic.transcode_from(package)?;
+        Ok(dynamic)
     }
 
     /// Derives the synthesized transport identity of an inline `T | E`
@@ -64,6 +66,31 @@ pub mod v2 {
         )
     }
 
+    /// The error [`to_json_pretty`] returns. The serialization surface is
+    /// fallible on purpose — ADR-0014 decision 12, which retracts decision
+    /// 7's infallible return: the reflection path transcodes through the
+    /// wire encoding, whose decoder enforces prost's fixed recursion limit,
+    /// and legal source can nest composites past it.
+    #[derive(Debug)]
+    pub struct SerializeError(prost::DecodeError);
+
+    impl std::fmt::Display for SerializeError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(
+                f,
+                "cannot render the package as canonical protobuf JSON: {}; the known cause \
+                 is composite nesting deeper than the transcoding decoder's recursion limit",
+                self.0
+            )
+        }
+    }
+
+    impl std::error::Error for SerializeError {
+        fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+            Some(&self.0)
+        }
+    }
+
     /// Renders a package as pretty-printed canonical protobuf JSON — the one
     /// dialect every IR surface carries: the `--emit ir-json` artifact, the
     /// baselines, and the goldens (ADR-0014 decision 1).
@@ -73,30 +100,38 @@ pub mod v2 {
     /// rendered as `null` (the answer to that decision's open item). 64-bit
     /// fields render as strings, the canonical mapping JavaScript consumers
     /// need (decision 8).
-    pub fn to_json_pretty(package: &Package) -> String {
+    ///
+    /// Fallible on purpose (ADR-0014 decision 12, retracting decision 7's
+    /// infallible return): the transcode into the dynamic message goes
+    /// through the wire encoding, and a package whose composite nesting
+    /// crosses prost's recursion limit fails there. That input is legal
+    /// source, so the failure is returned rather than panicked on.
+    pub fn to_json_pretty(package: &Package) -> Result<String, SerializeError> {
         let mut buf = Vec::new();
         let mut serializer = serde_json::Serializer::pretty(&mut buf);
         transcode(package)
+            .map_err(SerializeError)?
             .serialize_with_options(
                 &mut serializer,
                 &prost_reflect::SerializeOptions::new().skip_default_fields(false),
             )
-            .expect("IR serialization to JSON cannot fail: the descriptor pool and the generated types come from one schema compilation");
-        String::from_utf8(buf).expect("serde_json emits UTF-8")
+            .expect("rendering the transcoded message cannot fail: the input-dependent recursion limit binds the transcode above, and the writer is an in-memory Vec");
+        Ok(String::from_utf8(buf).expect("serde_json emits UTF-8"))
     }
 
     /// Reads a package from canonical protobuf JSON — the inverse of
     /// [`to_json_pretty`]. Unknown fields are rejected (the `prost-reflect`
     /// default), so a snapshot written against a different schema fails
-    /// loudly rather than dropping fields silently.
+    /// loudly rather than dropping fields silently. A package whose
+    /// composite nesting crosses prost's recursion limit fails in the
+    /// transcode out of the dynamic message; that failure is mapped into
+    /// the same error return, not expected on (ADR-0014 decision 12).
     pub fn from_json(text: &str) -> Result<Package, serde_json::Error> {
         let mut deserializer = serde_json::Deserializer::from_str(text);
         let dynamic =
             prost_reflect::DynamicMessage::deserialize(package_descriptor(), &mut deserializer)?;
         deserializer.end()?;
-        Ok(dynamic
-            .transcode_to()
-            .expect("transcoding out of the dynamic message cannot fail: the descriptor pool and the generated types come from one schema compilation"))
+        dynamic.transcode_to().map_err(serde::de::Error::custom)
     }
 
     /// Encodes a package in the protobuf binary wire format — the canonical
@@ -621,7 +656,7 @@ mod v2_round_trip {
     fn json_round_trip_preserves_package() {
         let package = fixture();
 
-        let json = v2::to_json_pretty(&package);
+        let json = v2::to_json_pretty(&package).expect("the fixture serializes as IR JSON");
         let decoded = v2::from_json(&json).expect("json deserialization must succeed");
 
         assert_eq!(package, decoded);
@@ -634,7 +669,7 @@ mod v2_round_trip {
     #[test]
     fn emitted_json_survives_a_strict_conformant_parse() {
         let package = fixture();
-        let json = v2::to_json_pretty(&package);
+        let json = v2::to_json_pretty(&package).expect("the fixture serializes as IR JSON");
 
         let mut deserializer = serde_json::Deserializer::from_str(&json);
         let dynamic = prost_reflect::DynamicMessage::deserialize_with_options(
@@ -652,7 +687,7 @@ mod v2_round_trip {
 
     #[test]
     fn json_renders_timing_bounds_and_fallible_arms_exactly() {
-        let json = v2::to_json_pretty(&fixture());
+        let json = v2::to_json_pretty(&fixture()).expect("the fixture serializes as IR JSON");
 
         // Exactness is visible: timing bounds are exact-decimal microsecond
         // strings, never floating-point numbers (ADR-0008 decision 12) —
@@ -904,5 +939,100 @@ mod v2_round_trip {
             ..Default::default()
         };
         assert!(v2::referenced_packages(&package).is_empty());
+    }
+
+    /// Below prost's recursion limit at two message levels per nesting level
+    /// — the depth ADR-0014 decision 12 measured as round-tripping correctly.
+    const NESTING_BELOW_LIMIT: usize = 45;
+    /// Past the limit today. The tests assert the outcome — an error, never a
+    /// panic — not the exact threshold, so a prost release that moves the
+    /// limit moves these constants, not the assertions.
+    const NESTING_PAST_LIMIT: usize = 60;
+
+    /// One declaration whose payload nests `depth` levels of inline arrays —
+    /// each level costs two message levels on the wire (`FieldType` plus
+    /// `ArrayType`), the arithmetic ADR-0014 decision 12 records against
+    /// prost's recursion limit.
+    fn nested_package(depth: usize) -> v2::Package {
+        let mut payload = v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Primitive(
+                v2::PrimitiveType::Integer as i32,
+            )),
+        };
+        for _ in 0..depth {
+            payload = v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                    element: Some(Box::new(payload)),
+                    min: 1,
+                    max: 1,
+                }))),
+            };
+        }
+        v2::Package {
+            name: "veh.deep".to_string(),
+            decls: vec![v2::Decl {
+                name: "deep".to_string(),
+                kind: Some(v2::decl::Kind::FixedDef(v2::FixedDef {
+                    payload: Some(payload),
+                })),
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    /// The JSON form of [`nested_package`], built by hand: past the limit the
+    /// serializer rejects the package, so its JSON cannot come from
+    /// [`v2::to_json_pretty`]. The chosen depth stays under `serde_json`'s
+    /// own recursion limit of 128, so the failure exercised is the transcode
+    /// out of the dynamic message, not the JSON parse.
+    fn nested_json(depth: usize) -> String {
+        let mut payload = r#"{"primitive": "PRIMITIVE_TYPE_INTEGER"}"#.to_string();
+        for _ in 0..depth {
+            payload = format!(r#"{{"array": {{"element": {payload}, "min": "1", "max": "1"}}}}"#);
+        }
+        format!(
+            r#"{{"name": "veh.deep", "decls": [{{"name": "deep", "fixedDef": {{"payload": {payload}}}}}]}}"#
+        )
+    }
+
+    /// ADR-0014 decision 12: nesting past the transcoder's recursion limit is
+    /// reachable from legal source, so serialization reports it as an error
+    /// instead of panicking.
+    #[test]
+    fn json_serialization_past_the_nesting_limit_returns_an_error() {
+        let err = v2::to_json_pretty(&nested_package(NESTING_PAST_LIMIT))
+            .expect_err("serialization past the recursion limit must fail, not panic");
+        assert!(
+            err.to_string().contains("recursion limit"),
+            "the error must name the nesting limit as the known cause, got: {err}"
+        );
+    }
+
+    /// The read direction of the same defect: the transcode out of the
+    /// dynamic message crosses the same recursion limit, and `from_json` maps
+    /// it into its error return instead of expecting on it (ADR-0014
+    /// decision 12).
+    #[test]
+    fn json_parse_past_the_nesting_limit_returns_an_error() {
+        let result = v2::from_json(&nested_json(NESTING_PAST_LIMIT));
+        assert!(
+            result.is_err(),
+            "parsing past the recursion limit must fail, not panic"
+        );
+    }
+
+    /// The bound must not tighten silently: below the limit the package still
+    /// serializes and round-trips, so a change that narrows what the JSON
+    /// surface accepts fails here.
+    #[test]
+    fn json_round_trip_below_the_nesting_limit_succeeds() {
+        let package = nested_package(NESTING_BELOW_LIMIT);
+        let json = v2::to_json_pretty(&package)
+            .expect("below the recursion limit, serialization succeeds");
+        let decoded = v2::from_json(&json).expect("below the recursion limit, parsing succeeds");
+        assert_eq!(package, decoded);
     }
 }

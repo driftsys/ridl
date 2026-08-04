@@ -183,6 +183,7 @@ fn compile_entry(entry: &Path) -> Compiled {
                 format!(
                     "// ===== package {name} =====\n{}",
                     ridl_ir::v2::to_json_pretty(ir)
+                        .expect("a clean entry's IR serializes as IR JSON")
                 )
             })
             .collect::<Vec<_>>()

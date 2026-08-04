@@ -1259,6 +1259,7 @@ dependencies = [
  "prost-build",
  "prost-reflect",
  "protox",
+ "serde",
  "serde_json",
 ]
 
