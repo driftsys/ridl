@@ -40,7 +40,12 @@ map.
   provisioned-constant keyword is `fixed` — supersedes ADR-0008 decision 5),
   ADR-0012 (the interaction boundary model — retires uxdl, gives ridl five
   interaction families and their correspondence obligations; binds the language
-  surface).
+  surface), ADR-0013 (codegen backend scope — _proposed_, classifies a backend
+  by what its target can represent), ADR-0014 (the IR's own encodings —
+  canonical protobuf JSON, prototext, binary; binds the artifact every future
+  backend consumes), ADR-0015 (QoS absorption, the RPC response bound, the
+  coherence rule, and composition of interfaces into a service; binds the
+  language surface).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 

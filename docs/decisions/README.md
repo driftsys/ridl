@@ -67,8 +67,12 @@
   interface grain, makes a provided interface the generation unit, and lifts the
   one-interface restriction on `service` so that grain is real: a
   comma-separated shape list, per-interface ordinals keyed by name, flat
-  addressing preserved, three diagnostics, and five diff categories. Not
-  epic-scoped: it binds the language surface until superseded.
+  addressing preserved, five diagnostics (RIDL-144 to RIDL-148), and five diff
+  categories. Not epic-scoped: it binds the language surface until superseded.
+  Two amendments came out of implementation review rather than design: ADR-0014
+  decision 12 retracts that record's infallible serialization return, and
+  decision 24 here requires an interface name to be unique across a service's
+  shapes, live or retired, and makes a retargeted slot breaking.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
