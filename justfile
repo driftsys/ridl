@@ -28,9 +28,9 @@ fmt:
     prim .
     markdownlint '**/*.md' --fix
 
-# Lint gate — no writes: prim --check (formatting) + markdownlint (style).
+# Lint gate — no writes: prim fmt --check (formatting) + markdownlint (style).
 check:
-    prim --check .
+    prim fmt --check .
     markdownlint '**/*.md'
 
 # Check that the rustc about to run is the version rust-toolchain.toml pins.

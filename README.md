@@ -124,7 +124,7 @@ The task runner is [`just`](https://github.com/casey/just):
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `just`                 | list the recipes                                                                                                                                              |
 | `just fmt`             | reformat the connective tissue with prim, fix Markdown                                                                                                        |
-| `just check`           | lint gate — `prim --check` + markdownlint, no writes                                                                                                          |
+| `just check`           | lint gate — `prim fmt --check` + markdownlint, no writes                                                                                                      |
 | `just toolchain-check` | the running toolchain is the one `rust-toolchain.toml` pins                                                                                                   |
 | `just gate-parity`     | CI invokes every member of `just build`                                                                                                                       |
 | `just fmt-check`       | `cargo fmt --all --check` (no writes)                                                                                                                         |
