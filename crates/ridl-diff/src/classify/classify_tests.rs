@@ -1112,6 +1112,30 @@ fn a_lowered_rpc_throttle_on_a_query_is_compatible() {
     assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Compatible);
 }
 
+/// The mode arm: the mode is always `Range` on an RPC (ADR-0015 decision 7),
+/// so a snapshot flipping it is erroneous IR and breaking regardless. The
+/// bounds are identical on both sides, so no other arm can decide this.
+#[test]
+fn an_rpc_timing_mode_flip_is_breaking() {
+    let old = bounded_command(Some(range(Some("10000"), Some("10000"))));
+    let new = bounded_command(Some(strict("10000")));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
+/// The mirror of [`a_default_applied_flip_over_identical_bounds_is_compatible`]
+/// with the opposite verdict: `default_applied` is always false on an RPC,
+/// because an RPC bound is never defaulted (ADR-0015 decision 7), so a
+/// snapshot flipping it is erroneous IR and fails closed (ADR-0012
+/// decision 9) rather than reading as a default made explicit.
+#[test]
+fn an_rpc_default_applied_flip_over_identical_bounds_is_breaking() {
+    let mut defaulted = range(Some("10000"), Some("100000"));
+    defaulted.default_applied = true;
+    let old = bounded_command(Some(defaulted));
+    let new = bounded_command(Some(range(Some("10000"), Some("100000"))));
+    assert_row(&old, &new, Category::RpcBoundChanged, Verdict::Breaking);
+}
+
 /// The category-mismatch fallback in `rpc_bound`, the mirror of
 /// [`a_timing_change_on_a_kind_that_carries_no_timing_is_breaking`]: the walk
 /// emits `RpcBoundChanged` only from its command and query arms, but
