@@ -859,14 +859,16 @@ impl<'a> Parser<'a> {
         }
     }
 
-    /// `ServiceDef = 'service' DottedName (':' interface_ref:PathType | '{'
-    /// (inline_members ','?)* '}')` — the global published declaration of an
-    /// interface (ridl reference §14.5, E2.13). The `service_def` production
-    /// is absent from Appendix C; E2 task 8 authors it. The named-shape form
-    /// names an interface after `:`; the inline form carries an interaction
-    /// body reusing [`Parser::interface_body`], so the checker runs the same
-    /// structural pass over it (RIDL-401/-402). A service takes no
-    /// `internal`/`error` modifiers — it is a global, published contract.
+    /// `ServiceDef = 'service' DottedName (':' shapes (',' shapes)* ','? |
+    /// '{' (inline_members ','?)* '}')` — the global published declaration of
+    /// one or more interfaces (ridl reference §14.5, ADR-0015 decision 12).
+    /// The `service_def` production is absent from Appendix C; E2 task 8
+    /// authors it. The named form carries a comma-separated shape list after
+    /// `:`; the inline form carries an interaction body reusing
+    /// [`Parser::interface_body`], so the checker runs the same structural
+    /// pass over it (RIDL-401/-402). Never both forms (ADR-0015 decision 14).
+    /// A service takes no `internal`/`error` modifiers — it is a global,
+    /// published contract.
     fn service_def(&mut self) {
         self.start(SyntaxKind::ServiceDef);
         self.bump(); // 'service'
@@ -874,7 +876,7 @@ impl<'a> Parser<'a> {
         match self.current() {
             Some(SyntaxKind::Colon) => {
                 self.bump(); // ':'
-                self.path_type();
+                self.service_shape_list();
             }
             Some(SyntaxKind::LBrace) => {
                 self.bump(); // '{'
@@ -882,10 +884,53 @@ impl<'a> Parser<'a> {
             }
             _ => self.error_at_current(
                 "FORM-101",
-                "expected `:` and an interface, or `{` and an inline shape".to_string(),
+                "expected `:` and an interface list, or `{` and an inline shape".to_string(),
             ),
         }
         self.builder.finish_node();
+    }
+
+    /// The comma-separated shape list of a service's named form: a `PathType`
+    /// or a `ReservedEntry` per slot (ADR-0015 decision 12).
+    ///
+    /// Commas are **required** between shapes, diverging from the family's
+    /// optional-comma convention, and the reason is structural (ADR-0015
+    /// decision 13): every other list in the grammar is terminated by a
+    /// closing token — `}` for a body, `)` for a parameter list, `]` for an
+    /// attribute block — and this one is not, because it ends where the next
+    /// declaration begins. It would still parse without commas, since every
+    /// top-level declaration starts with a keyword and a bare `CamelCase`
+    /// identifier never does — but it would parse greedily, so a mistyped
+    /// declaration on a following line (`Struct Foo {` for `struct Foo {`)
+    /// would be absorbed as another shape and the error would surface at the
+    /// `{` with no connection to the mistake. Ending the list at the first
+    /// missing comma instead leaves that identifier to the top-level loop,
+    /// whose FORM-102 points at it directly. A trailing comma stays optional.
+    fn service_shape_list(&mut self) {
+        self.service_shape();
+        // `current()` peeks past trivia without consuming it, so a list that
+        // ends here leaves the trailing trivia outside the ServiceDef node.
+        while self.at(SyntaxKind::Comma) {
+            self.bump(); // ','
+            // A trailing comma: nothing after it starts a shape.
+            if !self.at(SyntaxKind::ReservedKw) && !self.at_path_segment() {
+                break;
+            }
+            self.service_shape();
+        }
+    }
+
+    /// One shape slot: an interface reference, or a service-level `reserved`
+    /// tombstone — the same `ReservedEntry` typl's struct and union tombstones
+    /// and interface bodies already share (ADR-0015 decision 12). A primitive
+    /// keyword still parses as a path segment and the checker rejects it
+    /// (RIDL-141), the E1 lenient-parser discipline.
+    fn service_shape(&mut self) {
+        if self.at(SyntaxKind::ReservedKw) {
+            self.reserved_entry();
+        } else {
+            self.path_type();
+        }
     }
 
     /// `DottedName = 'ident' ('.' 'ident')*` — a dotted global service name
@@ -2668,6 +2713,85 @@ interface I {{
                 );
             }
         }
+    }
+
+    /// ADR-0015 decision 13: commas are required between service shapes,
+    /// because the list has no closing token — it ends where the next
+    /// declaration begins. A missing comma therefore ends the list, and the
+    /// following bare `CamelCase` identifier is reported at the top level,
+    /// **at the identifier**: the greedy alternative would absorb a mistyped
+    /// `Struct Foo {` as another shape and surface the error at the `{` with
+    /// no connection to the mistake.
+    #[test]
+    fn a_missing_comma_ends_the_shape_list_at_the_next_identifier() {
+        let input = "package p\nservice p.svc : DoorControl\nStruct Foo {\n  a : X\n}\n";
+        let parsed = parse(input, Profile::Ridl);
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "the ended list must stay lossless",
+        );
+        // The ServiceDef holds exactly the one shape before the missing comma.
+        let service = parsed
+            .syntax()
+            .descendants()
+            .find(|node| node.kind() == SyntaxKind::ServiceDef)
+            .expect("the service parses");
+        assert_eq!(
+            service
+                .children()
+                .filter(|child| child.kind() == SyntaxKind::PathType)
+                .count(),
+            1,
+            "`Struct` must not be absorbed as a second shape, got {service:#?}",
+        );
+        // The error points at `Struct` — the identifier itself, where the
+        // mistake is — never at the `{` after it.
+        let struct_offset = input.find("Struct").expect("the fixture spells it") as u32;
+        let error = &parsed.errors()[0];
+        assert_eq!(
+            u32::from(error.range.start()),
+            struct_offset,
+            "the diagnostic lands on the identifier, got: {:?}",
+            parsed.errors(),
+        );
+    }
+
+    /// The trailing comma stays optional (ADR-0015 decision 13), and a
+    /// service-level `reserved` tombstone is a direct `ReservedEntry` child of
+    /// the ServiceDef — the same node typl's tombstones use.
+    #[test]
+    fn a_shape_list_admits_a_trailing_comma_and_a_tombstone() {
+        let input = "package p\nservice p.svc : DoorControl, reserved LegacyDiag, MotorControl,\n";
+        let parsed = parse(input, Profile::Ridl);
+        assert!(
+            parsed.errors().is_empty(),
+            "the list parses clean, got: {:?}",
+            parsed.errors(),
+        );
+        let service = parsed
+            .syntax()
+            .descendants()
+            .find(|node| node.kind() == SyntaxKind::ServiceDef)
+            .expect("the service parses");
+        let kinds: Vec<SyntaxKind> = service
+            .children()
+            .filter(|child| {
+                matches!(
+                    child.kind(),
+                    SyntaxKind::PathType | SyntaxKind::ReservedEntry
+                )
+            })
+            .map(|child| child.kind())
+            .collect();
+        assert_eq!(
+            kinds,
+            [
+                SyntaxKind::PathType,
+                SyntaxKind::ReservedEntry,
+                SyntaxKind::PathType,
+            ],
+        );
     }
 
     /// Nothing at all after `reserved` is a missing token, not a wrong one:
