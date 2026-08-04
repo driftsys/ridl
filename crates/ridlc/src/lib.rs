@@ -626,9 +626,9 @@ fn materialize_and_lock(
 /// call; a codegen failure is recorded as a diagnostic and those two emits are
 /// skipped. The `ir-json` and `ir-text` emits (direct IR dumps) follow the
 /// same rule: when the package cannot be rendered in that encoding (ADR-0014
-/// decision 12), the failure is recorded as a diagnostic and no artifact is
-/// written. The `ir-binary` dump has no failure path — binary needs no
-/// descriptors and no transcode (ADR-0014 decision 7). The TypeScript
+/// decisions 12 and 14), the failure is recorded as a diagnostic and no
+/// artifact is written. The `ir-binary` dump has no failure path — binary
+/// needs no descriptors and no transcode (ADR-0014 decision 7). The TypeScript
 /// emit is a second, independent backend
 /// ([`generate`](ridl_backend_ts::generate)) over the same IR, with its own
 /// result type and its own failure path — a backend that cannot render this
@@ -693,9 +693,10 @@ fn write_emits(
                 Ok(json) => {
                     std::fs::write(out_dir.join(format!("{base}.ir.json")), json)?;
                 }
-                // A package the checker accepted can still nest past the JSON
-                // transcoder's recursion limit (ADR-0014 decision 12) — a
-                // tool-level failure with no source span, reported the way the
+                // The pbjson-generated writer has no nesting limit (ADR-0014
+                // decision 14); its one remaining failure is an enum field
+                // holding a discriminant outside the schema — a tool-level
+                // failure with no source span, reported the way the
                 // TypeScript backend's `Unrepresentable` is, with no artifact
                 // written.
                 Err(err) => {
@@ -707,9 +708,10 @@ fn write_emits(
                     ));
                 }
             },
-            // Prototext goes through the same transcode as JSON and carries
-            // the same recursion-limit failure mode (ADR-0014 decision 12):
-            // the failure is a diagnostic and no artifact is written.
+            // Prototext still transcodes through the descriptor pool and
+            // keeps the recursion-limit failure mode JSON lost (ADR-0014
+            // decisions 12 and 14): the failure is a diagnostic and no
+            // artifact is written.
             Emit::IrText => match ridl_ir::v2::to_text_format(ir) {
                 Ok(text) => {
                     std::fs::write(out_dir.join(format!("{base}.ir.txtpb")), text)?;
