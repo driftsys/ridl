@@ -22,3 +22,9 @@ service diag.showcase.projection {
   signal parseHTTPResponse : Ratio @[100ms..1s]
   signal parseHttpResponse : Ratio @[100ms..1s]
 }
+
+/// Two parameters whose projections collide. Rust would emit one function
+/// with two identically named arguments, which does not compile.
+interface ProjectionParams {
+  command setIt(vinNumber : Ratio, vin_number : Ratio) @[..500ms]
+}

@@ -4346,6 +4346,26 @@ impl Checker<'_> {
     /// names the callable kind in the FORM-102 message. A parameter whose
     /// shape is rejected lowers with no type (already reported).
     fn lower_params(&mut self, params: &ast::ParamList, noun: &str) -> Vec<v2::Param> {
+        // RIDL-149 over one parameter list (ADR-0016 decisions 3 and 4). Two
+        // parameter names that collide after the transform become one binding
+        // in a target whose namespace is snake_case — in Rust, one function
+        // with two identically named arguments, which does not compile. A
+        // pre-pass rather than a check inside the map, because the map's
+        // closure returns the lowered `Param` and threading the seen-set
+        // through it would not read any clearer.
+        let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
+        for param in params.params() {
+            let Some(name) = member_name(param.name()) else {
+                continue;
+            };
+            let range = member_name_range(param.name(), param.syntax());
+            let projection = snake_case(&name);
+            if let Some((first_name, first)) = projected.get(&projection).cloned() {
+                self.colliding_projected_name(&name, &first_name, &projection, range, first);
+            } else {
+                projected.insert(projection, (name, range));
+            }
+        }
         params
             .params()
             .map(|param| {
