@@ -557,6 +557,15 @@ transport/posture, 9xx bundles.
 8. **Global service catalog scoping** — a flat global service namespace
    (RIDL-140) is the SSOT ideal, but very large programs may need catalog
    namespacing/versioning beyond the package system. Watch as catalogs grow.
+9. **Service-number allocation** — a service's own number has no derivation in
+   any layer. §8 derives method and event IDs from ridl §11 ordinals and says
+   nothing about the service number; hashing the name was studied and rejected
+   (ridl Appendix E — renames silently break wire, IDs unreadable from source);
+   declaration order does not exist to be counted, because the service catalog
+   is a flat global namespace spanning packages (ridl §14.5, RIDL-140). What
+   remains is allocation-and-record — a registry pinned in a lockfile-shaped
+   artifact — deferred to E6 with the rest of deployment. Binds tag-based
+   transports only; proto and gRPC identity is nominal (ADR-0016 decision 8).
 
 ---
 

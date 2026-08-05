@@ -78,6 +78,16 @@
   decision 24 here requires an interface name to be unique across a service's
   shapes, live or retired, and makes a retargeted slot breaking.
 
+- **ADR-0016 — Schema projection and the pinned name transform.** The four
+  properties every projection from IR identity to a target's namespace must
+  satisfy, with injectivity restated as a checked property of the package
+  (RIDL-149) because no case-folding transform can carry it; the pinned
+  `snake_case` algorithm — `c_header.rs`'s, reversing the design note's choice
+  on measured evidence — public in `ridl-ir`, with both backend copies deleted;
+  the check in `ridl-sem`, over interaction members and parameters. Ratifies the
+  schema-projection note and corrects three of its statements. Not epic-scoped:
+  it binds every backend that projects.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.
