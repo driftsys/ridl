@@ -8,6 +8,7 @@
 
 use crate::{GenerateError, ScalarBacking, backing_scalar};
 use minijinja::{Environment, context};
+use ridl_ir::name::snake_case;
 use ridl_ir::v2;
 use serde::Serialize;
 
@@ -269,24 +270,5 @@ fn c_ident_for_ref(package: &str, reference: &str) -> String {
     }
 }
 
-/// snake_case of a CamelCase or acronym name, for C identifiers. A boundary is
-/// inserted before an uppercase letter that follows a lowercase letter or that
-/// begins a word (an uppercase run followed by a lowercase letter).
-fn snake_case(name: &str) -> String {
-    let chars: Vec<char> = name.chars().collect();
-    let mut out = String::new();
-    for (index, &current) in chars.iter().enumerate() {
-        if current.is_uppercase() && index > 0 {
-            let previous = chars[index - 1];
-            let next_lower = chars.get(index + 1).is_some_and(|c| c.is_lowercase());
-            if previous.is_lowercase()
-                || previous.is_numeric()
-                || (previous.is_uppercase() && next_lower)
-            {
-                out.push('_');
-            }
-        }
-        out.extend(current.to_lowercase());
-    }
-    out
-}
+// The name transform is `ridl_ir::name::snake_case` — one pinned function for
+// every backend (ADR-0016 decision 2).
