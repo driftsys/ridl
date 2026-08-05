@@ -143,14 +143,22 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
    interface names colliding within a service; this is the same fail-closed rule
    one level down.
 
-4. **The check covers two namespaces — the members of one interface, and the
-   parameters of one interaction.** Both are where the transform is applied
-   today, and both already emit Rust that does not compile: colliding members
-   give one trait two methods of the same name, and colliding parameters give
-   one function two identically named arguments. Struct fields reach the Rust
+4. **The check covers two of the three namespaces the transform is applied to
+   today — the members of one interface, and the parameters of one
+   interaction.** The first includes a service's inline shape: an inline shape
+   is an interface shape (ridl §14.5), so its members are checked the same way.
+   Both covered namespaces already emit Rust that does not compile: colliding
+   members give one trait two methods of the same name, and colliding parameters
+   give one function two identically named arguments. The third namespace stays
+   outside the check: `c_header.rs` renders a package's type names through the
+   transform when it emits the extern-C header, so a package declaring
+   `type HTTPServer` beside `type HttpServer` compiles with no diagnostic today
+   and emits a header with two `typedef`s of one name, which no C consumer can
+   compile. That defect predates this story, and extending RIDL-149 to type
+   names is a known exclusion from E9.7's scope. Struct fields reach the Rust
    backend untransformed, so they stay out until E9.8 extends both the transform
-   and this check to them in the commit that starts projecting them, which keeps
-   the rule and its application in step.
+   and this check to them in the commit that starts projecting them, so that the
+   rule and its application change in the same commit.
 
 5. **The check runs in `ridl-sem`, not in a backend.** The transform is fixed by
    the family rather than selected by a target, so the collision is a property
@@ -211,9 +219,9 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
 - **Positive — a nominal-identity backend has a specified transform to build
   on.** E9.8 and E9.9 consume one public, tested function instead of choosing
   between two divergent private copies.
-- **Positive — the shipped defect closes.** A package whose member or parameter
-  names collide after the transform is rejected with RIDL-149 instead of
-  emitting Rust that `rustc` rejects.
+- **Positive — the shipped member and parameter defect closes.** A package whose
+  member or parameter names collide after the transform is rejected with
+  RIDL-149 instead of emitting Rust that `rustc` rejects.
 - **Positive — both corrections are free today, measured.** Over the corpus, the
   book, the tests, and `docs/`: no identifier anywhere has the
   acronym-followed-by-word shape, so decision 1 changes no generated output and
@@ -227,6 +235,17 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   is already broken.
 - **Negative — struct fields stay outside the transform and the check until E9.8
   projects them** (decision 4). Stated here rather than discovered there.
+- **Negative — the C header's type names stay inside the transform but outside
+  the check** (decision 4). A package whose type names collide after the
+  transform still compiles with no diagnostic and emits a header no C consumer
+  can compile. The defect predates this story, and extending RIDL-149 to type
+  names is excluded from E9.7's scope.
+- **Negative — a second transform in the Rust backend has the same defect shape
+  and stays open.** `crates/ridl-backend-rust/src/lib.rs` camel-cases union arm
+  names, so arms `foo_bar` and `fooBar` both emit the Rust variant `FooBar` and
+  the emitted file fails to compile (E0428). That transform is not the pinned
+  `snake_case` and is outside this record's scope, so RIDL-149 does not make
+  "the backend never emits non-compiling output on a name collision" true.
 
 ## Documents amended
 
