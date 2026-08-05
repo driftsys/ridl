@@ -12,3 +12,13 @@ interface Projection {
   signal parseHTTPResponse : Ratio @[100ms..1s]
   signal parseHttpResponse : Ratio @[100ms..1s]
 }
+
+/// The same collision, reached through a service's inline shape (ridl
+/// §14.5) rather than a named `interface`. An inline shape is an interface
+/// shape, so RIDL-149 applies to its members too (ADR-0016 decision 4) —
+/// see `inline_shape.ridl` for the other per-member checks proved the same
+/// way.
+service diag.showcase.projection {
+  signal parseHTTPResponse : Ratio @[100ms..1s]
+  signal parseHttpResponse : Ratio @[100ms..1s]
+}

@@ -3494,6 +3494,11 @@ impl Checker<'_> {
 
         // The winner's span is kept so RIDL-402 can point at it.
         let mut seen: HashMap<String, TextRange> = HashMap::new();
+        // RIDL-149: two member names that collide after the pinned name
+        // transform (ADR-0016 decision 3) — see [`Checker::lower_interface`].
+        // An inline shape is an interface shape (ridl §14.5), so the same
+        // check applies to its members.
+        let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
         let mut interactions = Vec::new();
         let mut ordinal = 0u32;
         for member in service.inline_members() {
@@ -3513,6 +3518,14 @@ impl Checker<'_> {
                 if let Some(first) = seen.get(&name).copied() {
                     self.duplicate_interaction(&name, range, first);
                     continue;
+                }
+                // The offender still lowers and holds its ordinal — see
+                // [`Checker::lower_interface`].
+                let projection = snake_case(&name);
+                if let Some((first_name, first)) = projected.get(&projection).cloned() {
+                    self.colliding_projected_name(&name, &first_name, &projection, range, first);
+                } else {
+                    projected.insert(projection, (name.clone(), range));
                 }
                 seen.insert(name, range);
             }
