@@ -106,10 +106,10 @@ shapes or one inline shape, never both — a two-branch alternation — and the
 classifier keeps a switch between the forms breaking (its decision 19 retains
 that half of `ServiceChanged`, for the reason its decision 15 gives: extraction
 rewrites the transport identity of every fallible query in the shape). What
-survives of the proposal is the numbering alone: in the IR an inline shape
-carries interface id 1, only ever as the single slot of an inline-form service.
-A projection must therefore not treat "extract the inline shape into a named
-interface" as identity-preserving.
+survives of the proposal is the numbering alone, which its decision 15 records:
+in the IR an inline shape carries interface id 1, only ever as the single slot
+of an inline-form service. A projection must therefore not treat "extract the
+inline shape into a named interface" as identity-preserving.
 
 ## Decision
 

@@ -165,10 +165,13 @@ the store table; §7.4, that the dispatcher is a routing table keyed by ordinal.
 - §7.2's algorithm choice, reversed — §2.1 above.
 - §7.2's and §3 property 4's injectivity requirement, restated as a checked
   property of a package — §2.2 above.
-- §2.1's proposal that a service's inline shape occupies slot 1, which did not
-  ship: [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md)
-  decision 14 keeps the inline and named forms separate and classifies a switch
-  between them as breaking.
+- §2.1's proposal that slot 1 makes the inline form a degenerate case of the
+  general one. The numbering shipped —
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) decision 15
+  gives an inline shape interface id 1, only ever as the single slot of an
+  inline-form service — but the unification did not: decision 14 keeps the two
+  forms separate, and decision 19 keeps a switch between them breaking, for
+  decision 15's reason.
 
 **Recorded:** that the shipped Rust backend emits duplicate identifiers on
 colliding names, which decision 3 closes.
