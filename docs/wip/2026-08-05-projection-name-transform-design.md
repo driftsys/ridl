@@ -90,8 +90,13 @@ interface Probe {
 
 `ridl build --emit rust` writes `fn vin_number` twice into one trait and
 `fn publish_vin_number` twice, and `rustc` rejects the emitted file with two
-errors. The companion note treats the collision as a risk a nominal-identity
-target would introduce. It is a defect in the shipped Rust backend.
+errors. Parameter names project through the same transform, so
+`command setIt(vinNumber : Speed, vin_number : Speed)` emits
+`async fn set_it(&self, vin_number: Speed, vin_number: Speed)`, which binds one
+identifier twice in a single parameter list.
+
+The companion note treats the collision as a risk a nominal-identity target
+would introduce. It is a defect in the shipped Rust backend.
 
 ## 3. Decisions
 
@@ -115,10 +120,14 @@ target would introduce. It is a defect in the shipped Rust backend.
    decision 24 minted for interface names colliding within a service; this is
    the same fail-closed rule one level down.
 
-4. **The check covers interaction members only.** That is where the transform is
-   applied today. Struct fields reach the Rust backend untransformed, and E9.8
-   extends both the transform and this check to them in the commit that starts
-   projecting them, so the rule and its application stay in step.
+4. **The check covers two namespaces — the members of one interface, and the
+   parameters of one interaction.** Both are where the transform is applied
+   today, and both already emit Rust that does not compile: colliding members
+   give one trait two methods of the same name, and colliding parameters give
+   one function two identically named arguments. Struct fields reach the Rust
+   backend untransformed, so they stay out until E9.8 extends both the transform
+   and this check to them in the commit that starts projecting them, which keeps
+   the rule and its application in step.
 
 5. **The check runs in `ridl-sem`, not in a backend.** The transform is fixed by
    the family rather than selected by a target, so checking it leaves `ridlc` a
@@ -191,7 +200,8 @@ than alongside it.
 
 ## 7. Out of scope
 
-- Struct fields, until E9.8 projects them — decision 4 above.
+- Struct fields, until E9.8 projects them — decision 4 above. Interaction
+  parameters are **in** scope, for the reason decision 4 gives.
 - Numbering stability, which needs numbers E9.7 does not assign.
 - The member-name form rule and the typl §2.3 ambiguity — §3.1 above.
 - The transport-binding question §7.4 leaves open: whether a byte-channel
