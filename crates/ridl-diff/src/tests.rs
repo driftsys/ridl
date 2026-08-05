@@ -695,9 +695,21 @@ fn a_fresh_tombstone_at_the_end_is_compatible() {
 // Projection contract property 3, at the name level (ADR-0016).
 // --------------------------------------------------------------------------
 
-/// For any delta the classifier calls compatible, no surviving member's
-/// projected name changes. Names are the only identity E9.7 pins; E9.8
-/// extends this test to the numbers a projection assigns.
+/// For any delta the classifier calls compatible, a surviving member's raw
+/// name — and therefore its projection, since the transform is a pure
+/// function of the name — is left untouched.
+///
+/// This does not pin that `snake_case` is applied at all, or applied
+/// correctly: a compatible delta cannot move a raw name today, so the
+/// equality checked below is vacuous with respect to the transform itself —
+/// it would hold under any deterministic function of the name, not
+/// `snake_case` specifically. The transform's own behaviour is pinned
+/// separately, by the unit tests in `crates/ridl-ir/src/name.rs`.
+///
+/// Names are the only identity E9.7 assigns. E9.8 extends this test to the
+/// numbers a projection assigns, where the arm gains real content: a
+/// projection can assign a number that a compatible delta moves
+/// independently of the name it numbers.
 ///
 /// The deltas are the compatible ones the classifier recognises: appending an
 /// interaction into a never-occupied slot, and retiring one to a tombstone.
