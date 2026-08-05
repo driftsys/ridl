@@ -611,6 +611,24 @@ diag_codes! {
         RIDL_148 = "RIDL-148", Error,
             "service-level `reserved` tombstone without an interface name";
 
+        /// Two names in one scope that collide after the pinned name
+        /// transform (ridl §11, §16.4; ADR-0016 decision 3). The transform is
+        /// not injective and no case-folding transform can be, so
+        /// `parseHTTPResponse` and `parseHttpResponse` both project to
+        /// `parse_http_response` and a target whose namespace is snake_case
+        /// would carry one identifier twice — in Rust, one trait with two
+        /// methods of the same name, or one function with two identically
+        /// named arguments. The projection contract's injectivity obligation
+        /// is discharged here, on the package, because it cannot be carried
+        /// by the function. Its own code rather than RIDL-402 — that rule is
+        /// the same name declared twice — because the remedy differs: these
+        /// names are distinct in source and only their projections collide.
+        /// Scoped to the members of one interface and the parameters of one
+        /// interaction (decision 4); struct fields join when E9.8 projects
+        /// them. Emitted per-package by the checker (E9.7).
+        RIDL_149 = "RIDL-149", Error,
+            "two names in one scope collide after the pinned name transform";
+
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker (E2 task 5).
         RIDL_201 = "RIDL-201", Error,
