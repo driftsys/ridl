@@ -315,7 +315,16 @@ Expected: PASS. The module is pure `core`/`alloc` string work and adds no
 dependency, so this should be uneventful; run it because `ridl-ir` is in the
 wasm-checked set.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Run the gate**
+
+```bash
+just build
+```
+
+Expected: PASS. Required by the Global Constraints before any commit that
+touches Rust.
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add crates/ridl-ir/src/name.rs crates/ridl-ir/src/lib.rs
@@ -795,6 +804,29 @@ fn a_compatible_delta_moves_no_projected_name() {
             }
         }
     }
+
+    // The discriminating arm. Without it the loop above could pass because
+    // nothing in the fixtures ever moves a projection, rather than because
+    // compatibility is what preserves it. A rename moves the projection, and
+    // the classifier calls a rename breaking — so the two sides of the
+    // invariant are both exercised.
+    let renamed = vec![
+        signal("vehicleSpeed", 1, "Speed"),
+        signal("parseHTTPResponse", 2, "Ratio"),
+    ];
+    let old = pkg("veh.cluster", interface("VehicleStatus", base.clone()));
+    let new = pkg("veh.cluster", interface("VehicleStatus", renamed));
+
+    assert_eq!(
+        diff_packages(&old, &new).verdict,
+        Verdict::Breaking,
+        "a rename must classify breaking, or the invariant above is vacuous"
+    );
+    assert_ne!(
+        ridl_ir::name::snake_case("currentSpeed"),
+        ridl_ir::name::snake_case("vehicleSpeed"),
+        "the rename must move the projection, or this arm proves nothing"
+    );
 }
 ```
 
@@ -804,13 +836,15 @@ fn a_compatible_delta_moves_no_projected_name() {
 cargo test -p ridl-diff --locked a_compatible_delta_moves_no_projected_name
 ```
 
-Expected: PASS. This test passes on the first run by construction — the
-transform is a pure function of the name and a rename is breaking, so there is
-no way for a compatible delta to move a projection today. That is the point: it
-pins the property so E9.8 cannot break it while adding numbering. If it
-**fails**, the fixture is wrong — check that the `reserved` helper's ordinal
-matches the member it retires, because a mismatched tombstone classifies
-breaking and trips the verdict assertion rather than the projection one.
+Expected: PASS. The compatible arm passes on the first run by construction — the
+transform is a pure function of the name and a rename is breaking, so no
+compatible delta can move a projection today. That is the point: it pins the
+property so E9.8 cannot break it while adding numbering. The breaking arm at the
+end is what stops that from being vacuous — it shows a projection can move and
+that the classifier calls such a change breaking. If the test **fails**, the
+fixture is wrong — check that the `reserved` helper's ordinal matches the member
+it retires, because a mismatched tombstone classifies breaking and trips the
+verdict assertion rather than the projection one.
 
 - [ ] **Step 3: Run the gate and commit**
 
