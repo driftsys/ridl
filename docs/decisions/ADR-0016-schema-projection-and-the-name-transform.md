@@ -239,13 +239,14 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   the check** (decision 4). A package whose type names collide after the
   transform still compiles with no diagnostic and emits a header no C consumer
   can compile. The defect predates this story, and extending RIDL-149 to type
-  names is excluded from E9.7's scope.
+  names is excluded from E9.7's scope. Recorded on driftsys/ridl#236.
 - **Negative — a second transform in the Rust backend has the same defect shape
   and stays open.** `crates/ridl-backend-rust/src/lib.rs` camel-cases union arm
   names, so arms `foo_bar` and `fooBar` both emit the Rust variant `FooBar` and
   the emitted file fails to compile (E0428). That transform is not the pinned
   `snake_case` and is outside this record's scope, so RIDL-149 does not make
   "the backend never emits non-compiling output on a name collision" true.
+  Recorded on driftsys/ridl#237.
 
 ## Documents amended
 
