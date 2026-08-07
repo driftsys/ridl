@@ -517,6 +517,24 @@ sources — an actuator is mode-gated, derated, mid-stroke, policy-gated, and
 fitted or not. Only the person boundary requires that unavailability be
 perceivable in advance.
 
+#### Field-level absence is a sixth thing, and is not on this list
+
+All five sources above are properties of an **interaction**. A field inside a
+payload may separately carry no value, written with typl's `?` (typl §7.1) — a
+CAM-style status message whose acceleration was not measured this cycle is
+well-formed, its channel is live, and one field is empty.
+
+On an interaction payload `?` has exactly one meaning: **the provider has no
+value for this field right now.** It never means "this variant does not have
+it", because that is the provisioning source above, and provisioning renders as
+the interaction being _absent_ — a variant with no accelerometer omits the
+interaction rather than publishing a permanently empty field.
+
+Absence is realised per target, not per contract: a target that can represent it
+structurally does so, and one that cannot takes a value the range does not use,
+without surfacing that value to consumers
+([ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 7).
+
 ---
 
 ## 4. Signal

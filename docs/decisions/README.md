@@ -46,7 +46,10 @@
   ridl §4.4 last-value, §4.5 provenance, or the §3.1 envelope; a **language**
   backend emits source. Also fixes which width layer each class reads, rules
   typl constants out of a wire schema, and makes typl §17.11 a precondition for
-  FlatBuffers. Not epic-scoped: it binds every backend the workspace grows.
+  FlatBuffers. Decision 7 adds field absence: `?` is declared once and realised
+  per target — structurally where the target can, in-band from a value the range
+  does not use where it cannot, never surfaced to consumers. Not epic-scoped: it
+  binds every backend the workspace grows.
 
 - **ADR-0014 — IR encodings.** Canonical protobuf JSON replaces the `serde`
   rendering on every surface — artifacts, baselines, and goldens — because the
