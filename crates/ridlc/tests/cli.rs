@@ -246,7 +246,8 @@ fn build_help_documents_every_emit_value() {
             "ir-json",
             "ir-text",
             "ir-binary",
-            "typescript"
+            "typescript",
+            "proto"
         ],
         "`--emit` must offer exactly these artifacts, help:\n{help}"
     );
@@ -388,7 +389,10 @@ fn build_ir_emits_write_no_standard_artifact() {
 fn every_emit_variant_is_classified() {
     for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
         let expected = match emit {
-            ridlc::Emit::Rust | ridlc::Emit::CHeader | ridlc::Emit::TypeScript => false,
+            ridlc::Emit::Rust
+            | ridlc::Emit::CHeader
+            | ridlc::Emit::TypeScript
+            | ridlc::Emit::Proto => false,
             ridlc::Emit::IrJson | ridlc::Emit::IrText | ridlc::Emit::IrBinary => true,
         };
         assert_eq!(
@@ -415,7 +419,10 @@ fn every_emit_variant_is_classified() {
 fn every_emit_variant_names_its_intended_suffix() {
     for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
         let expected = match emit {
-            ridlc::Emit::Rust | ridlc::Emit::CHeader | ridlc::Emit::TypeScript => None,
+            ridlc::Emit::Rust
+            | ridlc::Emit::CHeader
+            | ridlc::Emit::TypeScript
+            | ridlc::Emit::Proto => None,
             ridlc::Emit::IrJson => Some(".ir.json"),
             ridlc::Emit::IrText => Some(".ir.txtpb"),
             ridlc::Emit::IrBinary => Some(".ir.binpb"),

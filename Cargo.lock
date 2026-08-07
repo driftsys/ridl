@@ -1204,6 +1204,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ridl-backend-proto"
+version = "0.0.0"
+dependencies = [
+ "insta",
+ "protox",
+ "ridl-ir",
+ "tempfile",
+]
+
+[[package]]
 name = "ridl-backend-rust"
 version = "0.0.0"
 dependencies = [
@@ -1321,6 +1331,7 @@ version = "0.0.0"
 dependencies = [
  "clap",
  "insta",
+ "ridl-backend-proto",
  "ridl-backend-rust",
  "ridl-backend-ts",
  "ridl-core",

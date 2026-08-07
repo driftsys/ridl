@@ -299,6 +299,11 @@ pub enum Emit {
     /// emit carries the same asymmetry, and both keep it.
     #[value(name = "typescript")]
     TypeScript,
+    /// The proto3 schema, written to `<base>.proto`.
+    ///
+    /// A wire backend: the typl surface plus the interaction identity table,
+    /// and nothing above them (ADR-0013 decision 2).
+    Proto,
 }
 
 impl Emit {
@@ -349,7 +354,7 @@ impl Emit {
     )]
     pub const fn ir_dump_suffix(self) -> Option<&'static str> {
         match self {
-            Emit::Rust | Emit::CHeader | Emit::TypeScript => None,
+            Emit::Rust | Emit::CHeader | Emit::TypeScript | Emit::Proto => None,
             Emit::IrJson => Some(".ir.json"),
             Emit::IrText => Some(".ir.txtpb"),
             Emit::IrBinary => Some(".ir.binpb"),
@@ -663,7 +668,9 @@ fn materialize_and_lock(
 /// emit is a second, independent backend
 /// ([`generate`](ridl_backend_ts::generate)) over the same IR, with its own
 /// result type and its own failure path — a backend that cannot render this
-/// package skips only its own artifact.
+/// package skips only its own artifact. The proto3 emit is a third,
+/// independent backend on the same pattern
+/// ([`generate`](ridl_backend_proto::generate)).
 fn write_emits(
     out_dir: &Path,
     base: &str,
@@ -698,6 +705,23 @@ fn write_emits(
                 diagnostics.push(error_diagnostic(
                     "",
                     message,
+                    FileId::DETACHED,
+                    TextRange::default(),
+                ));
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    let generated_proto = if emits.iter().any(|emit| matches!(emit, Emit::Proto)) {
+        match ridl_backend_proto::generate(ir) {
+            Ok(generated) => Some(generated),
+            Err(err) => {
+                diagnostics.push(error_diagnostic(
+                    "",
+                    err.message,
                     FileId::DETACHED,
                     TextRange::default(),
                 ));
@@ -775,6 +799,14 @@ fn write_emits(
             Emit::TypeScript => {
                 if let Some(generated) = &generated_ts {
                     std::fs::write(out_dir.join(format!("{base}.ts")), &generated.source)?;
+                }
+            }
+            Emit::Proto => {
+                if let Some(generated) = &generated_proto {
+                    std::fs::write(
+                        out_dir.join(format!("{base}.proto")),
+                        &generated.proto_source,
+                    )?;
                 }
             }
         }
