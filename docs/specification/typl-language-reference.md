@@ -1105,10 +1105,28 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
    the init half became §5.8 (init values — a declared bare `= value` or
    derived), and the invalid half is handled at the interaction layer — ridl
    §4.5 propagates invalidity as channel state, with the SNA sentinel as its
-   **CAN/AUTOSAR wire realisation**. What remains typl's: whether a type may
-   _declare_ its wire sentinel explicitly (`[ invalid = 255 ]`) for brownfield
-   DBC matching, rather than the codegen choosing one. Reduced-scope open
-   question.
+   **CAN/AUTOSAR wire realisation**.
+
+   _Narrowed further by
+   [ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 7:_ where
+   the codegen is free to choose the value, no typl syntax is needed — `?`
+   declares the absence and the backend picks a value the range does not use.
+   What remains open is only the case where the backend **may not choose**,
+   because a published standard has fixed the value. Two sub-cases are known and
+   are the inputs to that decision when it is taken:
+
+   - a single fixed value, as in a brownfield DBC signal whose SNA encoding is
+     already deployed;
+   - several fixed values with **distinct meanings**, as in the ETSI ITS
+     vehicle-length data type, which separates "longer than this field can
+     express" from "not measured". One reserved value cannot carry both, and a
+     consumer can act on the first while it can only abstain on the second.
+
+   The question is answerable when a conformance target exists. Modelling one
+   published message end to end — a Cooperative Awareness Message is the
+   candidate, since it carries genuinely optional fields, fixed-value fields,
+   and fields whose meaning depends on a sibling — is the way to test a proposal
+   before it becomes syntax.
 9. **Byte order.** CAN/DBC signals carry per-signal byte order (Intel/Motorola);
    SOME/IP defaults big-endian. typl is silent. Endianness is almost certainly a
    _transport/deployment_ property (rsdl or codegen profile), not a type

@@ -179,8 +179,10 @@ By home; see each reference for full statements.
 - **typl §17**: string-backed enums · exclusive bounds · uniqueItems · recursion
   policy · unit conversion algebra · scientific notation · expr-core deferrals
   (arithmetic bounds, predicates, infix `match`, invariants) · explicit wire
-  sentinels · byte order home · canonical encoding · **explicit wire-width floor
-  (deferred `wire` clause, §17.11)**
+  sentinels **(narrowed by ADR-0013 decision 7 to the standards-conformance case
+  — where the backend may choose, `?` needs no syntax)** · byte order home ·
+  canonical encoding · **explicit wire-width floor (deferred `wire` clause,
+  §17.11)**
 - **ridl §17**: selective broadcasts · actions/long-operations idiom ·
   mid-stream invalid policy · reflection service · failure-management spec (with
   safety/HA properties direction) — the QoS boundary question is answered by the

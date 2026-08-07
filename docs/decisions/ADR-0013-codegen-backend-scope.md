@@ -86,7 +86,9 @@ language layer at `int64`/`float64`.
    represent §4.4 last-value, §4.5 provenance, or the §3.1 envelope must not
    emit a construct that implies it does. Where the language already refuses a
    construct on a target — optionals and unions on AUTOSAR Classic and CAN (typl
-   Appendix D) — a wire backend refuses rather than approximates.
+   Appendix D) — a wire backend refuses rather than approximates. **Decision 7
+   below narrows this for optionality specifically:** a target that can carry
+   the fact of absence, but not structurally, realises it rather than refusing.
 
 3. **Every backend emits the interaction identity table.** ridl §11's ordinals
    become a generated, keyed table per interface, with retired ordinals held
@@ -139,15 +141,55 @@ language layer at `int64`/`float64`.
    §17.11. That open question must be closed before a FlatBuffers backend ships,
    not after.
 
+7. **Amendment (2026-08-07) — field absence is declared once and realised per
+   target.** typl §7.1's `?` states that a field may carry no value. That is a
+   contract fact, not a transport fact, so it binds every backend; what differs
+   is realisation.
+
+   - **A target that can represent absence structurally does so** — `Option<T>`
+     in Rust, `T | undefined` in TypeScript, proto3 presence tracking, an
+     omitted CBOR map key, a DDS optional member.
+   - **A target that cannot must realise absence in-band**, taking a value the
+     type's declared range does not use, and **must not surface that value in
+     the generated application API**. A CAN consumer and a DDS consumer of one
+     contract both read "no value"; neither reads a number whose meaning is
+     private to the protocol. A realisation that leaks the value into consumer
+     code is the approximation decision 2 forbids, not an instance of this
+     decision.
+   - **An in-band realisation requires the range to have room.** Where the
+     declared range leaves no value spare at the resolved width, the backend
+     fails with a diagnostic rather than choosing silently. This is ADR-0016's
+     totality property — a projection is defined for every input or the backend
+     refuses — applied to values rather than to identifiers.
+
+   This narrows decision 2 for optionality alone. Refusal remains correct where
+   the target cannot carry the fact at all; realisation is correct where it can
+   carry the fact but not the structure, which is what typl Appendix D's "never
+   silently default-filled" was guarding against.
+
+   **Nothing changes today.** No current backend is in the second class: Rust,
+   the extern-C header, and TypeScript all represent absence structurally. typl
+   Appendix D's existing rule — a `?` field on a Classic/CAN-bound struct is a
+   codegen error — stands until a backend exists that this decision governs.
+   What is recorded here is the rule that will govern it, so the first such
+   backend implements a decision rather than inventing one.
+
+   The remaining question is not how a backend chooses a value but what happens
+   when it may not choose: conformance to a published standard that fixes the
+   value, and in some cases fixes more than one with distinct meanings. That is
+   typl §17 open question 8, narrowed to that case by this amendment.
+
 ## Alternatives considered
 
-| Candidate                                                    | Verdict  | Reason                                                                                                                                            |
-| ------------------------------------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Emit a proto3 `service` with a pub/sub sidecar convention    | rejected | moves §4.4 and §4.5 semantics into an undocumented sidecar the schema does not describe; the generated artifact then understates the contract     |
-| Emit a `ServiceStore` message holding each signal's value    | deferred | a store slot needs value, provenance (§4.5), and envelope (§3.1) to answer freshness, which makes it a runtime contract rather than a wire schema |
-| Per-kind identity tables — one enum per signal/event/command | rejected | ridl §11 numbers interactions in one interface-wide, kind-blind sequence; four tables would imply four numberings the language does not have      |
-| Let each wire backend infer its own widths from the range    | rejected | typl §4.2 resolves width once in the checker so every backend agrees; a second inference site is a second source of truth that drifts silently    |
-| Emit typl constants as proto3 enum members                   | rejected | proto3 enums are `int32`, so every float and regex constant is unrepresentable, and the integer ones would misstate a compile-time value as a tag |
+| Candidate                                                    | Verdict  | Reason                                                                                                                                                                                                                                 |
+| ------------------------------------------------------------ | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Emit a proto3 `service` with a pub/sub sidecar convention    | rejected | moves §4.4 and §4.5 semantics into an undocumented sidecar the schema does not describe; the generated artifact then understates the contract                                                                                          |
+| Emit a `ServiceStore` message holding each signal's value    | deferred | a store slot needs value, provenance (§4.5), and envelope (§3.1) to answer freshness, which makes it a runtime contract rather than a wire schema                                                                                      |
+| Per-kind identity tables — one enum per signal/event/command | rejected | ridl §11 numbers interactions in one interface-wide, kind-blind sequence; four tables would imply four numberings the language does not have                                                                                           |
+| Let each wire backend infer its own widths from the range    | rejected | typl §4.2 resolves width once in the checker so every backend agrees; a second inference site is a second source of truth that drifts silently                                                                                         |
+| Emit typl constants as proto3 enum members                   | rejected | proto3 enums are `int32`, so every float and regex constant is unrepresentable, and the integer ones would misstate a compile-time value as a tag                                                                                      |
+| Let a type declare its own reserved wire values in typl now  | deferred | decision 7 needs no syntax: `?` already declares the fact and the backend chooses the value. Syntax earns its place only when a published standard fixes the value, and no such target is being implemented — typl §17 open question 8 |
+| Surface the reserved value to consumers as a named constant  | rejected | puts the protocol's private knowledge in every consumer, which is the leak decision 7's second clause forbids; the value is a wire fact, never an API fact                                                                             |
 
 ## Consequences
 
@@ -169,6 +211,15 @@ language layer at `int64`/`float64`.
   an emit and the snapshot tests that cover them.
 - **Neutral — the ceiling may not describe the language backends.** See Open
   item 1.
+- **Positive — the first sentinel-emitting backend implements a rule instead of
+  inventing one** (decision 7). The choice of value, the obligation not to leak
+  it, and the failure mode when the range is full are settled before any target
+  needs them, which is the cheapest moment to settle them.
+- **Neutral — decision 7 costs nothing today and is unexercised.** No current
+  backend is in its second class, so the rule ships untested against a real
+  target. That is deliberate: writing the syntax a conformance target would need
+  before such a target exists would be building for a case whose shape is not
+  yet known.
 
 ## Open
 
@@ -193,13 +244,18 @@ language layer at `int64`/`float64`.
 ## References
 
 - `docs/specification/typl-language-reference.md` — §4.2 and §4.3 (width
-  inference), §6 (constants), §17.11 (the deferred `wire` floor), Appendix D
-  (codegen targets, the language and transport layers)
+  inference), §6 (constants), §7.1 (`?` optionality — the fact decision 7
+  realises), §17.11 (the deferred `wire` floor), §17 open question 8 (the
+  standards-conformance case decision 7 leaves open), Appendix D (codegen
+  targets, the language and transport layers)
 - `docs/specification/ridl-language-reference.md` — §3.1 (the implicit
-  envelope), §4.4 (init value and last-value), §4.5 (invalid state), §6.1
+  envelope), §3.4 (availability, and why field absence is not one of its five
+  sources), §4.4 (init value and last-value), §4.5 (invalid state), §6.1
   (delivery acknowledgment), §11 (interaction identity and evolution), §14.6
   (components and services), §17 open questions 5, 7, and 9, Appendix B
   (interaction mapping per target)
+- ADR-0016 decision 6 — the projection contract's totality property, which
+  decision 7's range-has-room obligation instantiates for values
 - ADR-0007 decision 9 — widths ride alongside the exact constraint strings in
   the IR
 - ADR-0008 decision 7 — the TypeScript backend and the `internal` mapping
