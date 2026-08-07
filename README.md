@@ -79,7 +79,8 @@ docs/
 │   ├── uxdl-language-reference-v0.1.md   Retired by ADR-0012; its content moved into ridl and rxdl
 │   ├── 2026-07-18-e0-walking-skeleton-plan.md
 │   ├── 2026-07-18-e1-typl-tooling-spine-plan.md
-│   └── 2026-07-19-e2-ridl-interface-layer-plan.md
+│   ├── 2026-07-19-e2-ridl-interface-layer-plan.md
+│   └── …                           Landed epic plans and design/plan pairs; see archive/README.md
 └── decisions/                  Architecture Decision Records
     ├── ADR-0002-module-system.md
     ├── ADR-0004-implementation-sequencing-and-stack.md

@@ -57,6 +57,7 @@ provenance. Nothing here is normative — the current references live in
   which ratifies the schema-projection note, carries these corrections, and
   cites this pair for the measurements and the full task-by-task execution
   trail.
+
 - **2026-07-19-e2-ridl-interface-layer-plan.md** — the epic E2 (ridl, the
   interface layer) implementation plan, archived verbatim from `docs/wip/` once
   the epic landed. As with E0 and E1, the roadmap's Epic 2 section plus
