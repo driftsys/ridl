@@ -66,6 +66,13 @@ by the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
   were written up as a dedicated design/plan pair for E9.7
   (`2026-08-05-projection-name-transform-{design,plan}.md`), archived once that
   story landed — see [`../archive/README.md`](../archive/README.md).
+- **2026-08-08-proto3-projection-design.md** — the first wire backend: the two
+  tiers ADR-0013 admits, the typl-surface mapping, the interaction identity
+  table, and the struct-field transform ADR-0016 decision 4 binds to this story.
+  Records four decisions of its own — the emit ceiling for E9.8, constraints as
+  comments, direct text emission, and `protox` as the validity check — and
+  leaves the ADR-0013 decision 2 versus ADR-0016 decision 10 conflict over the
+  `service` block to E9.11. Roadmap: E9.8.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
