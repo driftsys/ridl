@@ -22,7 +22,7 @@ parameters of one interaction.
 **Design of record:**
 [`2026-08-05-projection-name-transform-design.md`](2026-08-05-projection-name-transform-design.md),
 which corrects
-[`2026-08-03-schema-projection-design.md`](2026-08-03-schema-projection-design.md).
+[`2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md).
 
 ## Global Constraints
 
