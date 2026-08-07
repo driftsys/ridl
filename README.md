@@ -79,7 +79,8 @@ docs/
 │   ├── uxdl-language-reference-v0.1.md   Retired by ADR-0012; its content moved into ridl and rxdl
 │   ├── 2026-07-18-e0-walking-skeleton-plan.md
 │   ├── 2026-07-18-e1-typl-tooling-spine-plan.md
-│   └── 2026-07-19-e2-ridl-interface-layer-plan.md
+│   ├── 2026-07-19-e2-ridl-interface-layer-plan.md
+│   └── …                           Landed epic plans and design/plan pairs; see archive/README.md
 └── decisions/                  Architecture Decision Records
     ├── ADR-0002-module-system.md
     ├── ADR-0004-implementation-sequencing-and-stack.md
@@ -91,7 +92,10 @@ docs/
     ├── ADR-0010-cli-conventions.md
     ├── ADR-0011-provisioned-constant-keyword.md
     ├── ADR-0012-interaction-boundary-model.md
-    └── ADR-0013-codegen-backend-scope.md
+    ├── ADR-0013-codegen-backend-scope.md
+    ├── ADR-0014-ir-encodings.md
+    ├── ADR-0015-qos-absorption-and-rpc-bounds.md
+    └── ADR-0016-schema-projection-and-the-name-transform.md
 ```
 
 ## Where to start
@@ -163,10 +167,9 @@ drift apart (ADR-0009).
 
 ## A note on ADR numbering
 
-The ADRs present here are 0002 and 0004–0013. ADR-0001 and ADR-0003 are not in
+The ADRs present here are 0002 and 0004–0016. ADR-0001 and ADR-0003 are not in
 this repository — ADR-0003 ("the family decision") is noted as not-yet-written
-in the family overview. ADR-0014 and ADR-0015 are claimed by design notes under
-`docs/wip/` and are not yet written.
+in the family overview.
 
 ## License
 

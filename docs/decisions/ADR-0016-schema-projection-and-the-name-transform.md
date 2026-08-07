@@ -12,7 +12,7 @@ encoded.
 It ratifies the schema-projection note,
 [`docs/wip/2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md),
 and corrects three of its statements. The corrections' reasoning trail is
-[`docs/wip/2026-08-05-projection-name-transform-design.md`](../wip/2026-08-05-projection-name-transform-design.md),
+[`docs/archive/2026-08-05-projection-name-transform-design.md`](../archive/2026-08-05-projection-name-transform-design.md),
 which carries the measurements this record summarises. Throughout this record,
 "the note" is the schema-projection note, and a reference of the form note §3 is
 to it; language-reference sections are named in full (ridl §11, rsdl §13).
@@ -269,7 +269,7 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
 
 - [`docs/wip/2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md)
   — the note this record ratifies and corrects
-- [`docs/wip/2026-08-05-projection-name-transform-design.md`](../wip/2026-08-05-projection-name-transform-design.md)
+- [`docs/archive/2026-08-05-projection-name-transform-design.md`](../archive/2026-08-05-projection-name-transform-design.md)
   — the corrections' reasoning trail, with the measurements
 - [ADR-0008](ADR-0008-e2-execution.md) — decision 4 (fallible transport
   identity), decision 9 (`ridlc` is a pure source-to-IR function)

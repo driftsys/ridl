@@ -6,9 +6,11 @@ that are not yet ratified as normative references. They graduate into
 [`../decisions/`](../decisions/)) as they settle.
 
 Superpowers specs and plans live here while an epic runs and are archived
-verbatim to [`../archive/`](../archive/) at epic close. **None is open.** The
-epic E2 plan was archived by the E2 gardening pass on 2026-07-26, and the E9.1
-to E9.6 execution plan on 2026-08-04.
+verbatim to [`../archive/`](../archive/) at epic close, or as a design/plan pair
+once the story they cover lands. **None is open.** The epic E2 plan was archived
+by the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
+2026-08-04, and the E9.7 design/plan pair
+(`2026-08-05-projection-name-transform-{design,plan}.md`) on 2026-08-07.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -59,15 +61,11 @@ to E9.6 execution plan on 2026-08-04.
   dispatcher shapes. Roadmap: E9.7–E9.11. **Ratified 2026-08-05** as
   [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
   which corrects three of its statements — the transform choice, the injectivity
-  requirement, and the inline-shape unification; the note stays as the reasoning
-  trail.
-- **2026-08-05-projection-name-transform-design.md** — written while executing
-  E9.7: the schema-projection note's tie-breaker does not discriminate between
-  the two `snake_case` implementations, its injectivity requirement is
-  unsatisfiable by any case-folding transform, and the shipped Rust backend
-  emits non-compiling output on colliding names. Carries the measurements
-  ADR-0016 summarises. Roadmap: E9.7. **Ratified 2026-08-05** as
-  [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md).
+  requirement, and the inline-shape unification. This note stays as the
+  reasoning trail for E9.8–E9.11, which have not landed yet. Its own corrections
+  were written up as a dedicated design/plan pair for E9.7
+  (`2026-08-05-projection-name-transform-{design,plan}.md`), archived once that
+  story landed — see [`../archive/README.md`](../archive/README.md).
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

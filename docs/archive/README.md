@@ -43,6 +43,21 @@ provenance. Nothing here is normative — the current references live in
   (`2026-08-03-schema-projection-design.md`) covers E9.7 to E9.11, which this
   block did not run.
 
+- **2026-08-05-projection-name-transform-design.md** and
+  **2026-08-05-projection-name-transform-plan.md** — a design/plan pair written
+  while executing roadmap story E9.7, once execution found that the
+  schema-projection note's tie-breaker did not discriminate between the two
+  `snake_case` implementations, its injectivity requirement was unsatisfiable by
+  any case-folding transform, and the shipped Rust backend already emitted
+  non-compiling output on colliding names. Archived as a pair once E9.7 landed,
+  unlike the schema-projection note itself, which stays in `docs/wip/` as the
+  reasoning trail for the E9.8–E9.11 stories it still covers. The gardened
+  record is
+  [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
+  which ratifies the schema-projection note, carries these corrections, and
+  cites this pair for the measurements and the full task-by-task execution
+  trail.
+
 - **2026-07-19-e2-ridl-interface-layer-plan.md** — the epic E2 (ridl, the
   interface layer) implementation plan, archived verbatim from `docs/wip/` once
   the epic landed. As with E0 and E1, the roadmap's Epic 2 section plus
