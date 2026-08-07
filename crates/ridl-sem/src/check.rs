@@ -30,6 +30,7 @@ use std::collections::{HashMap, HashSet};
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span};
 use ridl_core::package::{Package, Workspace, package_of};
+use ridl_ir::name::snake_case;
 use ridl_ir::v2;
 use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, HasName};
 use ridl_syntax::{Profile, SyntaxKind};
@@ -2864,6 +2865,10 @@ impl Checker<'_> {
 
         // The winner's span is kept so RIDL-402 can point at it.
         let mut seen: HashMap<String, TextRange> = HashMap::new();
+        // RIDL-149: two member names that collide after the pinned name
+        // transform (ADR-0016 decision 3). Keyed on the projection, holding
+        // the first member's source name and span for the label.
+        let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
         let mut interactions = Vec::new();
         let mut ordinal = 0u32;
         for member in def.members() {
@@ -2897,6 +2902,15 @@ impl Checker<'_> {
                 if let Some(first) = seen.get(&name).copied() {
                     self.duplicate_interaction(&name, range, first);
                     continue;
+                }
+                // The offender still lowers and holds its ordinal, as with
+                // RIDL-146 and RIDL-147: the error blocks emission, and
+                // dropping the member would shift every later ordinal.
+                let projection = snake_case(&name);
+                if let Some((first_name, first)) = projected.get(&projection).cloned() {
+                    self.colliding_projected_name(&name, &first_name, &projection, range, first);
+                } else {
+                    projected.insert(projection, (name.clone(), range));
                 }
                 seen.insert(name, range);
             }
@@ -3273,6 +3287,31 @@ impl Checker<'_> {
         );
     }
 
+    /// RIDL-149: two names in one scope that collide after the pinned name
+    /// transform (ADR-0016 decision 3). Shared by the interface-member check
+    /// and the parameter check — one rule over two namespaces.
+    fn colliding_projected_name(
+        &mut self,
+        name: &str,
+        first: &str,
+        projected: &str,
+        range: TextRange,
+        first_range: TextRange,
+    ) {
+        self.error_with_label(
+            DiagCode::RIDL_149,
+            range,
+            format!(
+                "`{name}` and `{first}` both become `{projected}` under the name \
+                 transform, so a target whose namespace is snake_case would carry \
+                 one identifier twice. Rename one of them (ridl §11, §16.4; \
+                 ADR-0016 decision 3)"
+            ),
+            first_range,
+            format!("`{first}` becomes `{projected}` here"),
+        );
+    }
+
     /// RIDL-148: a service-level `reserved` tombstone that spells no
     /// interface name (ADR-0015 decision 24). The shared `reserved` grammar
     /// admits a literal, but a service tombstone retires an interface name —
@@ -3455,6 +3494,11 @@ impl Checker<'_> {
 
         // The winner's span is kept so RIDL-402 can point at it.
         let mut seen: HashMap<String, TextRange> = HashMap::new();
+        // RIDL-149: two member names that collide after the pinned name
+        // transform (ADR-0016 decision 3) — see [`Checker::lower_interface`].
+        // An inline shape is an interface shape (ridl §14.5), so the same
+        // check applies to its members.
+        let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
         let mut interactions = Vec::new();
         let mut ordinal = 0u32;
         for member in service.inline_members() {
@@ -3474,6 +3518,14 @@ impl Checker<'_> {
                 if let Some(first) = seen.get(&name).copied() {
                     self.duplicate_interaction(&name, range, first);
                     continue;
+                }
+                // The offender still lowers and holds its ordinal — see
+                // [`Checker::lower_interface`].
+                let projection = snake_case(&name);
+                if let Some((first_name, first)) = projected.get(&projection).cloned() {
+                    self.colliding_projected_name(&name, &first_name, &projection, range, first);
+                } else {
+                    projected.insert(projection, (name.clone(), range));
                 }
                 seen.insert(name, range);
             }
@@ -4294,6 +4346,26 @@ impl Checker<'_> {
     /// names the callable kind in the FORM-102 message. A parameter whose
     /// shape is rejected lowers with no type (already reported).
     fn lower_params(&mut self, params: &ast::ParamList, noun: &str) -> Vec<v2::Param> {
+        // RIDL-149 over one parameter list (ADR-0016 decisions 3 and 4). Two
+        // parameter names that collide after the transform become one binding
+        // in a target whose namespace is snake_case — in Rust, one function
+        // with two identically named arguments, which does not compile. A
+        // pre-pass rather than a check inside the map, because the map's
+        // closure returns the lowered `Param` and threading the seen-set
+        // through it would not read any clearer.
+        let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
+        for param in params.params() {
+            let Some(name) = member_name(param.name()) else {
+                continue;
+            };
+            let range = member_name_range(param.name(), param.syntax());
+            let projection = snake_case(&name);
+            if let Some((first_name, first)) = projected.get(&projection).cloned() {
+                self.colliding_projected_name(&name, &first_name, &projection, range, first);
+            } else {
+                projected.insert(projection, (name, range));
+            }
+        }
         params
             .params()
             .map(|param| {

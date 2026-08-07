@@ -139,8 +139,10 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-diff/src/tests.rs",
-        lines: 1,
-        why: "a test mutating one fixture interface",
+        lines: 3,
+        why: "a test mutating one fixture interface, plus two lines in the \
+              name-stability test indexing into the single fixture interface \
+              both the old and new packages share",
     },
     Allowed {
         path: "crates/ridl-diff/src/classify/classify_tests.rs",

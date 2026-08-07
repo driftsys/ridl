@@ -50,6 +50,7 @@ use crate::{
 };
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
+use ridl_ir::name::snake_case;
 use ridl_ir::v2;
 use std::collections::{HashMap, HashSet};
 
@@ -1013,31 +1014,8 @@ fn label_doc(labels: &[String]) -> TokenStream {
 // Name conversion.
 // ---------------------------------------------------------------------------
 
-/// snake_case of a camelCase ridl name: `currentSpeed` becomes `current_speed`.
-/// An underscore already present is kept, and a run of capitals is not split, so
-/// the mapping is stable under repeated application.
-pub(crate) fn snake_case(name: &str) -> String {
-    let mut out = String::new();
-    let mut prev_lower_or_digit = false;
-    for ch in name.chars() {
-        if ch == '_' {
-            out.push('_');
-            prev_lower_or_digit = false;
-            continue;
-        }
-        if ch.is_ascii_uppercase() {
-            if prev_lower_or_digit {
-                out.push('_');
-            }
-            out.extend(ch.to_lowercase());
-            prev_lower_or_digit = false;
-        } else {
-            out.push(ch);
-            prev_lower_or_digit = ch.is_ascii_lowercase() || ch.is_ascii_digit();
-        }
-    }
-    out
-}
+// The name transform is `ridl_ir::name::snake_case` — one pinned function for
+// every backend (ADR-0016 decision 2).
 
 /// SCREAMING_SNAKE_CASE of a name, for the generated metadata constants.
 fn screaming_snake(name: &str) -> String {

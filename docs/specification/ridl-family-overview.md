@@ -201,7 +201,8 @@ By home; see each reference for full statements.
 - **rsdl §13**: composition/deployment boundary · dynamic topology/orchestration
   (elastic) · transport/posture policy expressiveness · service discovery
   matching · end-to-end timing composition · bundle dependency/versioning ·
-  resilience realization · global service catalog scoping
+  resilience realization · global service catalog scoping · service-number
+  allocation (tag-based transports; ADR-0016)
 - **Cross-cutting, unhomed**: IR stability policy (blocks `ridl-diff` contract
   and plugin protocol) · UCUM→AUTOSAR unit mapping table · bridge authentication
   (concept note)

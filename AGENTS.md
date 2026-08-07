@@ -45,7 +45,8 @@ map.
   canonical protobuf JSON, prototext, binary; binds the artifact every future
   backend consumes), ADR-0015 (QoS absorption, the RPC response bound, the
   coherence rule, and composition of interfaces into a service; binds the
-  language surface).
+  language surface), ADR-0016 (schema projection and the pinned name transform;
+  binds every backend that projects identity onto a target namespace).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 

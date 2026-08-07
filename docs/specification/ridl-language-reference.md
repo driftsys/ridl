@@ -1585,6 +1585,7 @@ either direction.
 | RIDL-146 | interface re-declared under a service-level `reserved` name — RIDL-401 one level up (§14.5, §11)                                                                                                                                                                                                                                 | error    |
 | RIDL-147 | two shapes of one service whose interface names collide even though their references differ — a binding separates the ordinal spaces by interface name, so the two would be indistinguishable; the rule is over every shape, live or retired, so a name spelled by two tombstones is the same code (§14.5; ADR-0015 decision 24) | error    |
 | RIDL-148 | service-level `reserved` tombstone without an interface name — the literal spelling lowers to a nameless tombstone no shape can ever match, so the sanctioned retirement would silently not work (§14.5; ADR-0015 decision 24)                                                                                                   | error    |
+| RIDL-149 | two names in one scope that collide after the pinned name transform — the transform is not injective and no case-folding transform can be, so two names distinct in source can project to one identifier; scoped to the members of one interface and the parameters of one interaction (§11; ADR-0016 decision 3)                | error    |
 
 RIDL-141 and RIDL-143 apply **per shape in the service's shape list** (ADR-0015
 decision 18): neither rule changed when composition arrived, only the span each

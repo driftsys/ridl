@@ -645,6 +645,8 @@ pub mod v2 {
     }
 }
 
+pub mod name;
+
 #[cfg(test)]
 mod v2_round_trip {
     use crate::v2;

@@ -56,7 +56,18 @@ to E9.6 execution plan on 2026-08-04.
   is new there rather than ratified from this note — see its Status.
 - **2026-08-03-schema-projection-design.md** — the identity chain from ridl to
   proto3 and FlatBuffers, the projection contract, and the generated store and
-  dispatcher shapes. Roadmap: E9.7–E9.11.
+  dispatcher shapes. Roadmap: E9.7–E9.11. **Ratified 2026-08-05** as
+  [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
+  which corrects three of its statements — the transform choice, the injectivity
+  requirement, and the inline-shape unification; the note stays as the reasoning
+  trail.
+- **2026-08-05-projection-name-transform-design.md** — written while executing
+  E9.7: the schema-projection note's tie-breaker does not discriminate between
+  the two `snake_case` implementations, its injectivity requirement is
+  unsatisfiable by any case-folding transform, and the shipped Rust backend
+  emits non-compiling output on colliding names. Carries the measurements
+  ADR-0016 summarises. Roadmap: E9.7. **Ratified 2026-08-05** as
+  [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md).
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

@@ -690,3 +690,95 @@ fn a_fresh_tombstone_at_the_end_is_compatible() {
     assert_eq!(report.changes[0].category, Category::InteractionAppended);
     assert_eq!(report.verdict, Verdict::Compatible);
 }
+
+// --------------------------------------------------------------------------
+// Projection contract property 3, at the name level (ADR-0016).
+// --------------------------------------------------------------------------
+
+/// For any delta the classifier calls compatible, a surviving member's raw
+/// name — and therefore its projection, since the transform is a pure
+/// function of the name — is left untouched.
+///
+/// This does not pin that `snake_case` is applied at all, or applied
+/// correctly: a compatible delta cannot move a raw name today, so the
+/// equality checked below is vacuous with respect to the transform itself —
+/// it would hold under any deterministic function of the name, not
+/// `snake_case` specifically. The transform's own behaviour is pinned
+/// separately, by the unit tests in `crates/ridl-ir/src/name.rs`.
+///
+/// Names are the only identity E9.7 assigns. E9.8 extends this test to the
+/// numbers a projection assigns, where the arm gains real content: a
+/// projection can assign a number that a compatible delta moves
+/// independently of the name it numbers.
+///
+/// The deltas are the compatible ones the classifier recognises: appending an
+/// interaction into a never-occupied slot, and retiring one to a tombstone.
+#[test]
+fn a_compatible_delta_moves_no_projected_name() {
+    let base = vec![
+        signal("currentSpeed", 1, "Speed"),
+        signal("parseHTTPResponse", 2, "Ratio"),
+    ];
+
+    let appended = {
+        let mut v = base.clone();
+        v.push(signal("wheelTicks", 3, "Ratio"));
+        v
+    };
+    let retired = vec![
+        signal("currentSpeed", 1, "Speed"),
+        reserved("parseHTTPResponse", 2),
+    ];
+
+    for (label, new_members) in [("append", appended), ("retire", retired)] {
+        let old = pkg("veh.cluster", interface("VehicleStatus", base.clone()));
+        let new = pkg("veh.cluster", interface("VehicleStatus", new_members));
+
+        let report = diff_packages(&old, &new);
+        assert_eq!(
+            report.verdict,
+            Verdict::Compatible,
+            "{label}: fixture is not a compatible delta"
+        );
+
+        // Every member the delta kept must project to the same name it did
+        // before. A tombstone carries no name to project.
+        for old_member in &old.interfaces[0].interactions {
+            let survivor = new.interfaces[0]
+                .interactions
+                .iter()
+                .find(|m| m.name == old_member.name && !m.name.is_empty());
+            if let Some(survivor) = survivor {
+                assert_eq!(
+                    ridl_ir::name::snake_case(&old_member.name),
+                    ridl_ir::name::snake_case(&survivor.name),
+                    "{label}: `{}` changed projection under a compatible delta",
+                    old_member.name
+                );
+            }
+        }
+    }
+
+    // The discriminating arm. Without it the loop above could pass because
+    // nothing in the fixtures ever moves a projection, rather than because
+    // compatibility is what preserves it. A rename moves the projection, and
+    // the classifier calls a rename breaking — so the two sides of the
+    // invariant are both exercised.
+    let renamed = vec![
+        signal("vehicleSpeed", 1, "Speed"),
+        signal("parseHTTPResponse", 2, "Ratio"),
+    ];
+    let old = pkg("veh.cluster", interface("VehicleStatus", base.clone()));
+    let new = pkg("veh.cluster", interface("VehicleStatus", renamed));
+
+    assert_eq!(
+        diff_packages(&old, &new).verdict,
+        Verdict::Breaking,
+        "a rename must classify breaking, or the invariant above is vacuous"
+    );
+    assert_ne!(
+        ridl_ir::name::snake_case("currentSpeed"),
+        ridl_ir::name::snake_case("vehicleSpeed"),
+        "the rename must move the projection, or this arm proves nothing"
+    );
+}

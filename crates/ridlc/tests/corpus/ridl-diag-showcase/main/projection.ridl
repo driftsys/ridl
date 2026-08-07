@@ -1,0 +1,30 @@
+// RIDL-149: two names in one scope that collide after the pinned name
+// transform (ADR-0016 decision 3). The names differ in source, so RIDL-402
+// (the same name declared twice) does not apply — only the projection
+// collides, and a target whose namespace is snake_case would carry one
+// identifier twice.
+
+package diag.ridl
+
+/// Two members whose projections collide. `parseHTTPResponse` and
+/// `parseHttpResponse` both become `parse_http_response`.
+interface Projection {
+  signal parseHTTPResponse : Ratio @[100ms..1s]
+  signal parseHttpResponse : Ratio @[100ms..1s]
+}
+
+/// The same collision, reached through a service's inline shape (ridl
+/// §14.5) rather than a named `interface`. An inline shape is an interface
+/// shape, so RIDL-149 applies to its members too (ADR-0016 decision 4) —
+/// see `inline_shape.ridl` for the other per-member checks proved the same
+/// way.
+service diag.showcase.projection {
+  signal parseHTTPResponse : Ratio @[100ms..1s]
+  signal parseHttpResponse : Ratio @[100ms..1s]
+}
+
+/// Two parameters whose projections collide. Rust would emit one function
+/// with two identically named arguments, which does not compile.
+interface ProjectionParams {
+  command setIt(vinNumber : Ratio, vin_number : Ratio) @[..500ms]
+}
