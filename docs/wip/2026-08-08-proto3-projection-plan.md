@@ -1362,7 +1362,12 @@ so it exercises tier 2 and almost none of tier 1.
 
 - Create: `crates/ridl-backend-proto/tests/fixtures/cruise.ridl`
 - Create: `crates/ridl-backend-proto/tests/corpus.rs`
-- Create: `crates/ridl-backend-proto/src/snapshots/` (insta writes here)
+- Create: `crates/ridl-backend-proto/tests/snapshots/` — `insta` writes beside
+  the test file, so an integration test's snapshots land here. The unit-test
+  snapshots of the other backends live in `src/snapshots/` because their tests
+  are in `src/tests.rs`; both conventions are correct for their location.
+- Modify: `crates/ridl-backend-proto/Cargo.toml` — `ridlc` as a dev-dependency,
+  for the source-to-IR compile path
 
 **Interfaces:**
 
