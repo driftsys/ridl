@@ -1208,8 +1208,10 @@ name = "ridl-backend-proto"
 version = "0.0.0"
 dependencies = [
  "insta",
+ "proptest",
  "protox",
  "ridl-core",
+ "ridl-diff",
  "ridl-ir",
  "ridlc",
  "tempfile",

@@ -28,4 +28,9 @@ ridlc = { path = "../ridlc" }
 # corpus test constructs one itself, the same way `crates/ridlc/tests/cli.rs`
 # does for its own `compile_workspace` calls.
 ridl-core = { path = "../ridl-core" }
+# The stability property (tests/stability.rs, ADR-0016 decision 6 property 3)
+# is driven from ridl-diff's own classifier, so the crate that owns the
+# compatible/breaking rule is a dev-dependency here.
+proptest = { workspace = true, features = ["std"] }
+ridl-diff = { path = "../ridl-diff" }
 tempfile = "3.15.0"
