@@ -68,8 +68,9 @@ to E9.11 still read the E9.8 design note, from the archive.
   were written up as a dedicated design/plan pair for E9.7
   (`2026-08-05-projection-name-transform-{design,plan}.md`), archived once that
   story landed — see [`../archive/README.md`](../archive/README.md).
-- **2026-08-08-flatbuffers-projection-design.md** — the second wire backend.
-  Every structural claim is verified against `flatc` 25.12.19 and `planus` 1.3.0
+- **2026-08-08-flatbuffers-projection-design.md** and
+  **2026-08-08-flatbuffers-projection-plan.md** — the second wire backend. Every
+  structural claim is verified against `flatc` 25.12.19 and `planus` 1.3.0
   rather than reasoned from the records, and three of them amend a record: a
   union is isolated in a wrapper table rather than hand-rolled (the
   schema-projection note §4.4 is superseded), a struct is always a `table`
