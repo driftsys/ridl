@@ -403,6 +403,136 @@ fn an_enum_that_already_declares_zero_gains_no_synthetic_member() {
 }
 
 #[test]
+fn a_declared_zero_leads_even_when_it_is_not_declared_first() {
+    // typl §8 assigns every enum value explicitly and does not require the
+    // zero-valued member to come first in source order — `lower_enum`
+    // preserves source order and does not sort. proto3 requires the emitted
+    // first value to be zero regardless, so a zero declared later must still
+    // be moved to lead.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Mode".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![
+                    v2::EnumValue {
+                        name: "ON".to_string(),
+                        value: 1,
+                        doc: String::new(),
+                    },
+                    v2::EnumValue {
+                        name: "OFF".to_string(),
+                        value: 0,
+                        doc: String::new(),
+                    },
+                ],
+                reserved: Vec::new(),
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("enum Mode {\n  MODE_OFF = 0;\n  MODE_ON = 1;\n}"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_retired_zero_slot_synthesizes_unspecified_without_a_conflicting_reserved() {
+    // typl allows retiring the zero slot with `reserved 0` instead of giving
+    // it a live member. proto3 still requires a live value at 0, so
+    // MODE_UNSPECIFIED = 0 is synthesized to fill it — and the matching
+    // `reserved 0;` must NOT also be emitted, because protoc rejects the
+    // same number claimed as both a live value and reserved.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Mode".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![v2::EnumValue {
+                    name: "ON".to_string(),
+                    value: 1,
+                    doc: String::new(),
+                }],
+                reserved: vec![v2::Reserved {
+                    value: Some(0),
+                    ..Default::default()
+                }],
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("enum Mode {\n  MODE_UNSPECIFIED = 0;\n  MODE_ON = 1;\n}"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        !generated.proto_source.contains("reserved 0;"),
+        "a retired zero slot filled by the synthetic member must not also be reserved:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_struct_field_typed_by_an_enum_projects_and_compiles() {
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "GearPosition".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![
+                        v2::EnumValue {
+                            name: "PARK".to_string(),
+                            value: 1,
+                            doc: String::new(),
+                        },
+                        v2::EnumValue {
+                            name: "DRIVE".to_string(),
+                            value: 2,
+                            doc: String::new(),
+                        },
+                    ],
+                    reserved: Vec::new(),
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Status".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("gear", 1, named_type("GearPosition"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.proto_source.contains("GearPosition gear = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
 fn an_enum_value_outside_int32_is_refused() {
     // proto3 enum values are int32; typl admits int64.
     let package = v2::Package {

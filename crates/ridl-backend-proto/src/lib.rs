@@ -120,17 +120,31 @@ fn emit_messages(out: &mut String, package: &v2::Package) -> Result<(), Generate
 /// itself, so two typl enums in one package that each declare a value named
 /// `OK` would emit a redefinition `protoc` rejects — every emitted value is
 /// therefore prefixed with `screaming_snake_case` of its own enum's name.
-/// proto3 also requires the first value to be zero, so `<PREFIX>_UNSPECIFIED
-/// = 0` is synthesized when no declared value already takes zero. A value
-/// outside `i32` is refused: proto3 enum values are int32, and typl admits
-/// int64 (typl §8).
+/// proto3 also requires the first value in the emitted enum to be zero.
+/// typl §8 assigns every value explicitly and does not require the
+/// zero-valued member to be declared first, so a declared zero is moved to
+/// lead regardless of its source position (`protoc` rejects a zero declared
+/// out of order the same as a missing one). When no declared value is zero —
+/// including when the zero slot is retired with `reserved 0` rather than
+/// given a live member — `<PREFIX>_UNSPECIFIED = 0` is synthesized to fill
+/// it; a retired zero slot is then a live value, not a reservation, so the
+/// matching `reserved 0;` is dropped instead of also being emitted, which
+/// `protoc` would reject as the same number claimed twice. A value outside
+/// `i32` is refused: proto3 enum and reserved values are int32, and typl
+/// admits int64 (typl §8).
 fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), GenerateError> {
     let prefix = screaming_snake_case(name);
     out.push_str(&format!("\nenum {name} {{\n"));
-    if !def.values.iter().any(|value| value.value == 0) {
+
+    let zero_declared = def.values.iter().any(|value| value.value == 0);
+    if !zero_declared {
         out.push_str(&format!("  {prefix}_UNSPECIFIED = 0;\n"));
     }
-    for value in &def.values {
+
+    // A declared zero leads, whatever position it held in typl source order.
+    let (zero_values, other_values): (Vec<_>, Vec<_>) =
+        def.values.iter().partition(|value| value.value == 0);
+    for value in zero_values.into_iter().chain(other_values) {
         let number = i32::try_from(value.value).map_err(|_| GenerateError {
             message: format!(
                 "{name}.{} takes value {}, outside proto3's int32 range for an enum value.",
@@ -142,8 +156,22 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
             screaming_snake_case(&value.name)
         ));
     }
+
     for reserved in &def.reserved {
-        out.push_str(&format!("  reserved {};\n", reserved.value.unwrap_or(0)));
+        let retired = reserved.value.unwrap_or(0);
+        // The synthesized `UNSPECIFIED = 0` above already fills a retired
+        // zero slot as a live value; reserving it too is the same number
+        // claimed twice, which `protoc` rejects.
+        if retired == 0 && !zero_declared {
+            continue;
+        }
+        let retired = i32::try_from(retired).map_err(|_| GenerateError {
+            message: format!(
+                "{name} retires value {retired}, outside proto3's int32 range for an enum \
+                 value."
+            ),
+        })?;
+        out.push_str(&format!("  reserved {retired};\n"));
     }
     out.push_str("}\n");
     Ok(())
@@ -221,7 +249,8 @@ fn field_type_text(
 
 /// A resolved named-type reference at a field position. A named scalar
 /// inlines to its backing scalar and leaves its name, unit, range and step
-/// as a comment; a struct reference names the message it becomes.
+/// as a comment; a struct reference names the message it becomes; an enum
+/// reference names the `enum` it becomes ([`emit_enum`]).
 fn named_field_type(
     package: &v2::Package,
     owner: &str,
@@ -242,6 +271,7 @@ fn named_field_type(
             Some(constraint_comment(&decl.name, td)),
         )),
         Some(v2::decl::Kind::StructDef(_)) => Ok((decl.name.clone(), None)),
+        Some(v2::decl::Kind::EnumDef(_)) => Ok((decl.name.clone(), None)),
         Some(v2::decl::Kind::EnumSetDef(esd)) => Ok(enum_set_field_type(esd)),
         _ => Err(GenerateError {
             message: format!(
