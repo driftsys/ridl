@@ -7,10 +7,14 @@ that are not yet ratified as normative references. They graduate into
 
 Superpowers specs and plans live here while an epic runs and are archived
 verbatim to [`../archive/`](../archive/) at epic close, or as a design/plan pair
-once the story they cover lands. **None is open.** The epic E2 plan was archived
-by the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
-2026-08-04, and the E9.7 design/plan pair
-(`2026-08-05-projection-name-transform-{design,plan}.md`) on 2026-08-07.
+once the story they cover lands. **One pair is open** — the
+`2026-08-08-proto3-projection-{design,plan}.md` pair stays past E9.8's own
+landing, because E9.9 to E9.11 still read it, the same reason
+`2026-08-03-schema-projection-design.md` stays. Every other design/plan pair
+here has landed and archived: the epic E2 plan was archived by the E2 gardening
+pass on 2026-07-26, the E9.1 to E9.6 execution plan on 2026-08-04, and the E9.7
+design/plan pair (`2026-08-05-projection-name-transform-{design,plan}.md`) on
+2026-08-07.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -62,7 +66,7 @@ by the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
   [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
   which corrects three of its statements — the transform choice, the injectivity
   requirement, and the inline-shape unification. This note stays as the
-  reasoning trail for E9.8–E9.11, which have not landed yet. Its own corrections
+  reasoning trail for E9.9–E9.11, which have not landed yet. Its own corrections
   were written up as a dedicated design/plan pair for E9.7
   (`2026-08-05-projection-name-transform-{design,plan}.md`), archived once that
   story landed — see [`../archive/README.md`](../archive/README.md).
@@ -75,7 +79,10 @@ by the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
   leaves the ADR-0013 decision 2 versus ADR-0016 decision 10 conflict over the
   `service` block to E9.11. The plan is nine tasks; its task 3 carries the
   `ridl-sem` change and the struct projection in one commit, because ADR-0016
-  decision 4 requires them to change together. Roadmap: E9.8.
+  decision 4 requires them to change together. Roadmap: E9.8. **Landed
+  2026-08-08** as `ridl-backend-proto`. Kept here rather than archived: E9.9's
+  FlatBuffers projection and E9.11's store and dispatcher both read this note,
+  the same reason the parent schema-projection note stays.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

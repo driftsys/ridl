@@ -49,6 +49,7 @@ crates/                         The compiler workspace (typl + ridl)
 ├── ridl-lsp/                   Language server (diagnostics, hover, goto, rename, inlay)
 ├── ridl-backend-rust/          Rust + extern-C code generation over the IR
 ├── ridl-backend-ts/            TypeScript code generation over the IR
+├── ridl-backend-proto/         proto3 schema generation over the IR (a wire backend, ADR-0013 decision 2)
 ├── ridl-diff/                  The `ridl diff` IR-snapshot compare engine + classifier
 └── ridl-fmt/                   The `ridl fmt` engine (rowan-based)
 editors/vscode/                 VS Code extension (TextMate grammars + LSP client)

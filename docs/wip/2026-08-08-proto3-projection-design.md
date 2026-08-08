@@ -83,8 +83,13 @@ A named scalar inlines to its backing scalar. Given this declaration:
 type Speed : km/h [0.0..250.0 step 0.5]
 ```
 
-a field of type `Speed` reaches the schema as a bare `double`. The unit, the
-range and the step have no proto3 construct to occupy.
+a field of type `Speed` reaches the schema as a bare `float`, not `double`: the
+declared `step` lets the checker derive a 32-bit width for the range
+(`derive_float_width`, `crates/ridl-sem/src/scalar.rs`), and the proto backend
+inlines whatever width the checker already decided rather than deciding one of
+its own. A named scalar with no `step`, or with a range and step the 32-bit
+derivation cannot represent, inlines as `double` instead. Either way, the unit,
+the range and the step have no proto3 construct to occupy.
 
 **They are recorded as generated comments at each use site.** The alternative
 considered was a published options extension file — extending
@@ -204,28 +209,66 @@ every row of §3.1 has a living example.
 
 ## 7. Blast radius
 
-- **New crate** `crates/ridl-backend-proto/`, with the surface
-  `ridl-backend-rust` already has:
-  `generate(&v2::Package) -> Result<Generated,
-  GenerateError>`. It adds its
-  own scope to `.git-std.toml`, which is an explicit list rather than
-  path-derived.
+- **New crate** `crates/ridl-backend-proto/`, with two functions rather than the
+  one `generate(&v2::Package) -> Result<Generated, GenerateError>` the other two
+  backends have: `generate` covers a package with no cross-package reference,
+  and `generate_with` takes a second argument, every other package a
+  cross-package reference might need to resolve against. `generate` is a
+  convenience wrapper over `generate_with(package, &[])`; `ridl-backend-rust`
+  and `ridl-backend-ts` have no equivalent second function because neither
+  resolves a foreign reference itself. It adds its own scope to `.git-std.toml`,
+  which is an explicit list rather than path-derived.
 - **New emit value** `Emit::Proto`, flag `proto`, artifact `<base>.proto`. It is
   a code emit, so `ir_dump_suffix` returns `None`; the wildcard-free discipline
   around that `match` means the compiler names every site that must be updated.
+- **`ridlc`'s `write_emits`** takes the other packages a package might
+  cross-reference and calls `generate_with` — the proto backend is the one of
+  the three that resolves a foreign reference itself rather than leaving it to
+  the target language's own import mechanism. `run_build` computes the argument
+  once, ahead of the per-package loop, as every checked package plus
+  `ridl.std`'s IR (present whenever the workspace references it). E9.9 and E9.11
+  inherit this `generate`/`generate_with` shape: any later backend that must
+  resolve a foreign named-type reference itself takes the same two functions.
 - **`ridl-sem`** gains the extended RIDL-149 check of §5.
 - **`ridl-backend-rust`** starts transforming struct field names (§5), which is
   where snapshot churn would appear if any exists.
 - **`wasm-check`** must pass, so the new crate builds under
   `--no-default-features`.
-- **`ridl.std`** gets no emitted file. `ridl.std.Duration` and
-  `ridl.std.Timestamp` map onto `google.protobuf.Duration` and
-  `google.protobuf.Timestamp` with the matching `import`. `ridl.std` is
-  version-locked to the compiler binary and already excluded from IR dumps for
-  that reason.
-- **Cross-package references** emit `import "<package-name>.proto";`, which is
-  the file naming the TypeScript backend already depends on in package and
-  workspace mode.
+- **`ridl.std` gets no special casing, and its emitted file is empty of
+  declarations.** All 21 of its members are named scalars (typl reference
+  Appendix A) — a named scalar inlines to its backing scalar whether local or
+  foreign (§3.1), so every `ridl.std` member reaches a use site through that
+  same inlining path and never needs an `import`. `ridl.std.proto` is still
+  written whenever a workspace references `ridl.std` and `--emit` includes
+  `proto` — `run_build` writes it under the same condition it writes
+  `ridl.std.rs`/`.h`/`.ts`, with no per-backend special case — but it holds only
+  `syntax = "proto3";` and `package ridl.std;`, because a package of named
+  scalars alone induces no message, enum or identity table.
+
+  An earlier version of this backend mapped `ridl.std.Duration` and
+  `ridl.std.Timestamp` onto the protobuf well-known messages
+  `google.protobuf.Duration` and `google.protobuf.Timestamp`, with a matching
+  `import`. That mapping was implemented, then reverted. `Duration` and
+  `Timestamp` are typl scalars (typl reference Appendix A), not messages, while
+  the two well-known types are seconds-plus-nanoseconds MESSAGES, so the mapping
+  changed the wire encoding relative to the typl declaration. A wrapper-message
+  alternative — projecting a named scalar onto its protobuf wrapper type
+  (`google.protobuf.DoubleValue`, `google.protobuf.Int64Value`, and so on)
+  instead of inlining it — was considered and rejected too, for two reasons.
+  First, cost: a wrapper message adds a message tag and a length delimiter
+  around the one field it carries, which is roughly +22% on the wire for a
+  wrapped `double` and roughly +100% for a small varint. Second, and independent
+  of size, a message-typed field in proto3 always has explicit presence, so
+  wrapping would give every named-scalar field the presence semantics of a
+  declared `?` whether or not the typl field declared one — realising absence
+  for a field that never declared it, which collides with ADR-0013 decision 7's
+  rule that absence tracks the `?` the language actually declares.
+- **Cross-package references** to a `struct`, `enum` or `union` emit
+  `import "<package-name>.proto";`, which is the file naming the TypeScript
+  backend already depends on in package and workspace mode. A cross-package
+  reference to a named scalar or an enum set inlines instead, exactly as a
+  same-package one does, and never gains an import — see the `ridl.std` bullet
+  above, which is the general case rather than a special one.
 
 ## 8. Out of scope
 
@@ -256,3 +299,13 @@ every row of §3.1 has a living example.
   this story, and ADR-0016's consequences already record that RIDL-149 does not
   make "the backend never emits non-compiling output on a name collision" true
   in general.
+- **An inline scalar field has no home for its constraint information.** §3.2
+  gives a named scalar's unit, range and step a home as a generated comment at
+  each use site. A field declared with an inline scalar instead of a named type
+  — `pressure : integer [0..100]`, written directly in field position — carries
+  the same range information in the IR, but there is no named type to hang a
+  comment on, and `resolve_field_type` emits no comment for the `InlineScalar`
+  case (`crates/ridl-backend-proto/src/lib.rs`). The constraint is therefore not
+  lost from the IR, only from the emitted schema: an inline scalar field
+  currently has no home for it at all. Left open rather than resolved here; no
+  solution is proposed.

@@ -310,6 +310,7 @@ Options:
           - ir-text:    The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
           - ir-binary:  The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
           - typescript: Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:      The proto3 schema, written to `<base>.proto`
           
           [default: rust]
 
@@ -324,6 +325,14 @@ Options:
 targets. `--frozen` is the same flag as on `ridl check`: it is
 [`ridlc build --frozen`](#ridlc-build), documented word for word since
 [ADR-0010][adr-0010].
+
+**`proto` is a wire backend** (ADR-0013 decision 2): it emits the typl
+surface — structs, enums, enum sets and unions, projected to proto3 messages
+and enums, with named-scalar constraints carried as comments — plus the
+interaction identity table, one enum per interface giving each signal, event,
+command, query and fixed its ordinal. It emits no `service` block, no call
+face, and no value store; store and dispatcher generation is roadmap story
+E9.11, not this emit.
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —
@@ -941,7 +950,7 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `c-header`, `ir-json`, `ir-text`, `ir-binary`, `typescript`
+          The artifacts to emit: `rust` (default), `c-header`, `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`
 
           Possible values:
           - rust:       Idiomatic Rust source, written to `<base>.rs`
@@ -950,6 +959,7 @@ Options:
           - ir-text:    The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
           - ir-binary:  The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
           - typescript: Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:      The proto3 schema, written to `<base>.proto`
           
           [default: rust]
 

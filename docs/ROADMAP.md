@@ -314,9 +314,52 @@ unreachable there and a stack overflow cannot be caught. **ADR-0014 decision
 standing: the JSON reader is stricter than the one it replaced, and prost's
 decode limit binds on the binary path for IR this toolchain produces.
 
-**E9.7 to E9.12 are not in this block.** The IR is settled and E3 is unblocked;
-the projections, the schema hash, the store and dispatcher, and the recorded
-general form R5 drift remain. Consolidated debt: driftsys/ridl#218.
+**Status: E9.7 landed 2026-08-07** as PR driftsys/ridl#238, closing out the
+projection contract ADR-0016 ratified above: `ridl_ir::name::snake_case` became
+the one pinned transform, both existing copies were deleted, and RIDL-149
+rejects two members of one interface or two parameters of one interaction that
+collide after it. PR driftsys/ridl#239 amended
+[ADR-0013](decisions/ADR-0013-codegen-backend-scope.md) decision 7 the same
+week, narrowing "a wire backend refuses what its target cannot represent" to
+name absence specifically: a target that can carry absence in-band, by reserving
+a value the declared range does not use, does so rather than refusing the field
+outright.
+
+**E9.8 landed 2026-08-08** as `ridl-backend-proto`, the first wire backend
+(ADR-0013 decision 2). The typl surface — structs, enums, enum sets and unions —
+projects to proto3 messages and enums; the interaction identity table projects
+to one ordinal enum per interface. No `service` block, no call face, no value
+store. Struct fields joined the pinned transform and RIDL-149 in this story,
+discharging ADR-0016 decision 4's exclusion in the same commit that starts
+projecting them. Validity is established by compiling every emitted schema with
+`protox` inside the test suite, and the stability property is driven from
+`ridl_diff::diff_packages` rather than hand-picked examples.
+
+The design took two decisions of its own, neither recorded in an ADR.
+**Constraints are carried as comments, and only as comments:** a named scalar's
+unit, range and step have no proto3 construct to occupy, so they are recorded as
+a generated comment at each use site — leaving an inline scalar field, which
+names no type to hang a comment on, with no home for its constraint information
+at all, recorded as an open question rather than solved. **The emit ceiling for
+this story is tier 1 and tier 2, and nothing above them:** E9.8 emits no
+`service` block, leaving that to E9.11 rather than resolving the tension below
+as a side effect of adding a backend.
+
+**The conflict left for E9.11.** ADR-0013 decision 2 says a wire backend emits
+"no `service` block, no call face, no value store"; ADR-0016 decision 10
+describes the dispatcher as "one service definition per provided interface" — in
+proto3, a `service` block. E9.8 avoids the conflict by emitting neither. E9.11
+cannot: it is store-and-dispatcher generation, so it is where the first proto
+`service` block would be written, and the two readings must be reconciled by an
+ADR amendment before that story writes an emitter against either one. A second
+consequence for E9.11 to inherit: tier 2 emits only the ordinal enum and never
+an interaction's payload type, so no payload type reaches the import path today
+— the store and the dispatcher will need to import the payload types tier 2
+never touches.
+
+**E9.9 to E9.12 are not in this block.** The IR is settled and E3 is unblocked;
+the FlatBuffers projection, the schema hash, the store and dispatcher, and the
+recorded general form R5 drift remain. Consolidated debt: driftsys/ridl#218.
 
 | ID    | Story                                                                                                                                                                                                                                                                 | Done when                                                                                                                               | Size |
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---- |
