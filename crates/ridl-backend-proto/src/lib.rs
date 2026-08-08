@@ -94,18 +94,58 @@ fn check_field_number(owner: &str, name: &str, number: u32) -> Result<(), Genera
 
 /// Tier 1 (ADR-0013 decision 2): the typl surface. A struct becomes a
 /// `message`; a named scalar becomes no declaration of its own — it inlines
-/// to its backing scalar at each use site (design §3.1). A constant is not
-/// emitted (ADR-0013 decision 5). Enums, enum sets and unions join in later
-/// commits of this story; until then a declaration of one of those kinds
-/// emits nothing here, and a field referencing one is refused by
+/// to its backing scalar at each use site (design §3.1). An enum becomes a
+/// proto3 `enum` ([`emit_enum`]). A constant is not emitted (ADR-0013
+/// decision 5). An enum set becomes no declaration of its own either — like a
+/// named scalar, it resolves at each use site ([`named_field_type`]). Unions
+/// join in a later commit of this story; until then a declaration of that
+/// kind emits nothing here, and a field referencing one is refused by
 /// [`named_field_type`] rather than emitted as a type `protoc` cannot
 /// resolve.
 fn emit_messages(out: &mut String, package: &v2::Package) -> Result<(), GenerateError> {
     for decl in &package.decls {
-        if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
-            emit_struct(out, package, &decl.name, def)?;
+        match &decl.kind {
+            Some(v2::decl::Kind::StructDef(def)) => emit_struct(out, package, &decl.name, def)?,
+            Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
+            _ => {}
         }
     }
+    Ok(())
+}
+
+/// One enum as one proto3 `enum` (design §3.1, §3.4): values keep their
+/// explicitly assigned numbers, and a `Reserved` retires its number rather
+/// than let it be reused (typl §7.4). Two proto3 rules force choices no typl
+/// surface states. proto3 scopes an enum's values as siblings of the enum
+/// itself, so two typl enums in one package that each declare a value named
+/// `OK` would emit a redefinition `protoc` rejects — every emitted value is
+/// therefore prefixed with `screaming_snake_case` of its own enum's name.
+/// proto3 also requires the first value to be zero, so `<PREFIX>_UNSPECIFIED
+/// = 0` is synthesized when no declared value already takes zero. A value
+/// outside `i32` is refused: proto3 enum values are int32, and typl admits
+/// int64 (typl §8).
+fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), GenerateError> {
+    let prefix = screaming_snake_case(name);
+    out.push_str(&format!("\nenum {name} {{\n"));
+    if !def.values.iter().any(|value| value.value == 0) {
+        out.push_str(&format!("  {prefix}_UNSPECIFIED = 0;\n"));
+    }
+    for value in &def.values {
+        let number = i32::try_from(value.value).map_err(|_| GenerateError {
+            message: format!(
+                "{name}.{} takes value {}, outside proto3's int32 range for an enum value.",
+                value.name, value.value
+            ),
+        })?;
+        out.push_str(&format!(
+            "  {prefix}_{} = {number};\n",
+            screaming_snake_case(&value.name)
+        ));
+    }
+    for reserved in &def.reserved {
+        out.push_str(&format!("  reserved {};\n", reserved.value.unwrap_or(0)));
+    }
+    out.push_str("}\n");
     Ok(())
 }
 
@@ -202,6 +242,7 @@ fn named_field_type(
             Some(constraint_comment(&decl.name, td)),
         )),
         Some(v2::decl::Kind::StructDef(_)) => Ok((decl.name.clone(), None)),
+        Some(v2::decl::Kind::EnumSetDef(esd)) => Ok(enum_set_field_type(esd)),
         _ => Err(GenerateError {
             message: format!(
                 "{owner}.{field_name} references `{reference}`, a declaration kind this \
@@ -209,6 +250,30 @@ fn named_field_type(
             ),
         }),
     }
+}
+
+/// The proto3 scalar and use-site comment for an enum set (design §3.3). A
+/// proto enum field holds one value, and an enum set is a combination of
+/// bits, so it gains no declaration of its own — like a named scalar, it
+/// resolves at each use site instead. The scalar is the one `proto_scalar`
+/// gives its declared width; the bit names and positions become one comment
+/// line each, in the form `LOW_FUEL = bit 0`.
+fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
+    let scalar = proto_scalar(&v2::TypeDef {
+        width: Some(v2::type_def::Width::IntWidth(esd.width)),
+        ..Default::default()
+    });
+    let lines: Vec<String> = esd
+        .bits
+        .iter()
+        .map(|bit| format!("// {} = bit {}", bit.name, bit.value))
+        .collect();
+    let comment = if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n  "))
+    };
+    (scalar.to_string(), comment)
 }
 
 /// The proto3 scalar for a resolved typl width (typl Appendix D). proto3 has

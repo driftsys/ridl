@@ -312,6 +312,216 @@ fn an_optional_field_takes_the_proto3_optional_keyword() {
 }
 
 #[test]
+fn an_enum_prefixes_its_values_and_gains_a_zero_member() {
+    // proto3 scopes enum values as siblings of the enum, so two enums in one
+    // package could otherwise both declare OK. And the first value must be 0.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "GearPosition".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![
+                    v2::EnumValue {
+                        name: "PARK".to_string(),
+                        value: 1,
+                        doc: String::new(),
+                    },
+                    v2::EnumValue {
+                        name: "DRIVE".to_string(),
+                        value: 2,
+                        doc: String::new(),
+                    },
+                ],
+                // The retired identity of an enum tombstone lives in `value`,
+                // not `ordinal`: `ordinal` is 0 in enum bodies (ir.proto,
+                // Reserved.ordinal doc comment).
+                reserved: vec![v2::Reserved {
+                    value: Some(3),
+                    ..Default::default()
+                }],
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        generated.proto_source.contains(
+            "enum GearPosition {\n  \
+         GEAR_POSITION_UNSPECIFIED = 0;\n  \
+         GEAR_POSITION_PARK = 1;\n  \
+         GEAR_POSITION_DRIVE = 2;\n  \
+         reserved 3;\n}"
+        ),
+        "got:\n{}",
+        generated.proto_source
+    );
+
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_enum_that_already_declares_zero_gains_no_synthetic_member() {
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Mode".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![
+                    v2::EnumValue {
+                        name: "OFF".to_string(),
+                        value: 0,
+                        doc: String::new(),
+                    },
+                    v2::EnumValue {
+                        name: "ON".to_string(),
+                        value: 1,
+                        doc: String::new(),
+                    },
+                ],
+                reserved: Vec::new(),
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        !generated.proto_source.contains("MODE_UNSPECIFIED"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("MODE_OFF = 0;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_enum_value_outside_int32_is_refused() {
+    // proto3 enum values are int32; typl admits int64.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Wide".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![v2::EnumValue {
+                    name: "HUGE".to_string(),
+                    value: i64::from(i32::MAX) + 1,
+                    doc: String::new(),
+                }],
+                reserved: Vec::new(),
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let error = generate(&package).expect_err("must refuse");
+    assert!(error.message.contains("int32"), "got: {}", error.message);
+}
+
+#[test]
+fn a_const_is_not_emitted() {
+    // ADR-0013 decision 5: neither proto3 nor FlatBuffers has a constant
+    // declaration, and no instance of a typl constant ever crosses a wire.
+    // A wire backend may emit one as a comment and must not encode it as an
+    // enum, which is the mistake this test exists to catch.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "MAX_GEAR".to_string(),
+            kind: Some(v2::decl::Kind::ConstDef(v2::ConstDef {
+                type_ref: Some("integer".to_string()),
+                value: "6".to_string(),
+                regex: None,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        !generated.proto_source.contains("enum MAX_GEAR"),
+        "a const must not become an enum:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        !generated.proto_source.contains("message MAX_GEAR"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_enum_set_becomes_an_integer_with_its_bits_in_a_comment() {
+    // A proto enum field holds one value, so it cannot represent a
+    // combination of bits. Emitting one would imply a guarantee proto3 does
+    // not make (ADR-0013 decision 2).
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Warnings".to_string(),
+                kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                    backing_enum: None,
+                    bits: vec![
+                        v2::EnumValue {
+                            name: "LOW_FUEL".to_string(),
+                            value: 0,
+                            doc: String::new(),
+                        },
+                        v2::EnumValue {
+                            name: "DOOR_AJAR".to_string(),
+                            value: 1,
+                            doc: String::new(),
+                        },
+                    ],
+                    width: v2::IntWidth::U32 as i32,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Status".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("warnings", 1, named_type("Warnings"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        !generated.proto_source.contains("enum Warnings"),
+        "an enum set must not become a proto enum:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("uint32 warnings = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("LOW_FUEL = bit 0"),
+        "got:\n{}",
+        generated.proto_source
+    );
+
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
 fn a_struct_field_number_in_the_protobuf_reserved_span_is_refused() {
     // The 19,000–19,999 span and the 536,870,911 ceiling constrain message
     // field numbers, which is what a struct field becomes.
