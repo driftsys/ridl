@@ -55,6 +55,14 @@ struct Allowed {
 
 const ALLOWED: &[Allowed] = &[
     Allowed {
+        path: "crates/ridl-backend-proto/tests/stability.rs",
+        lines: 4,
+        why: "the stability property's mutations edit the generated fixture's \
+              one interface in place, which needs `&mut` access `shapes()` \
+              cannot yield; the fixture declares no service, so the named \
+              store is the complete set",
+    },
+    Allowed {
         path: "crates/ridl-backend-rust/src/c_header.rs",
         lines: 1,
         why: "a comment-only listing of what the C ABI does not express — it \

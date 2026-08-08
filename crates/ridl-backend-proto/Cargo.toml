@@ -1,0 +1,36 @@
+[package]
+name = "ridl-backend-proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ridl-ir = { path = "../ridl-ir" }
+
+# protox is TEST-ONLY and must stay here. It is the validity check of
+# ADR-0016's totality property, not part of emission: making it a normal
+# dependency would put a protobuf compiler in every build and break
+# `just wasm-check`.
+[dev-dependencies]
+insta.workspace = true
+protox.workspace = true
+# The source-to-IR compile path for tests/corpus.rs (`ridlc::compile`) —
+# ridlc depends on this crate as a normal dependency, so this is a
+# dev-dependency cycle back to the crate under test. Cargo supports this: a
+# dev-dependency is not part of the graph used to build this crate as a
+# library, only of the graph used to build its own test binaries, so the
+# `ridlc` this pulls in links against the ordinary (non-test) build of this
+# crate.
+ridlc = { path = "../ridlc" }
+# For `ridl_core::RidlDatabase`, the salsa database `ridlc::compile_workspace`
+# takes — needed directly (not only through `ridlc`) because the multi-package
+# corpus test constructs one itself, the same way `crates/ridlc/tests/cli.rs`
+# does for its own `compile_workspace` calls.
+ridl-core = { path = "../ridl-core" }
+# The stability property (tests/stability.rs, ADR-0016 decision 6 property 3)
+# is driven from ridl-diff's own classifier, so the crate that owns the
+# compatible/breaking rule is a dev-dependency here.
+proptest = { workspace = true, features = ["std"] }
+ridl-diff = { path = "../ridl-diff" }
+tempfile = "3.15.0"

@@ -58,6 +58,27 @@ provenance. Nothing here is normative — the current references live in
   cites this pair for the measurements and the full task-by-task execution
   trail.
 
+- **2026-08-08-proto3-projection-design.md** and
+  **2026-08-08-proto3-projection-plan.md** — the design/plan pair for roadmap
+  story E9.8, the first wire backend (`ridl-backend-proto`): the two tiers
+  ADR-0013 admits, the typl-surface mapping, the interaction identity table, and
+  the RIDL-149 extension to struct fields that ADR-0016 decision 4 bound to the
+  commit that starts projecting them. Archived as a pair once E9.8 landed;
+  E9.9's FlatBuffers projection and E9.11's store and dispatcher still read the
+  design note, now from here, beside the parent schema-projection note that
+  stays in `docs/wip/`. The gardened records are the roadmap's Epic 9 status
+  paragraphs — which also carry the ADR-0013 decision 2 versus ADR-0016 decision
+  10 conflict left for E9.11, and the payload-type imports that story inherits —
+  the ridl reference's RIDL-149 row, and the CLI reference's `proto` emit. The
+  story's own decisions — the emit ceiling, constraints as comments only, the
+  inlining rule that reversed the well-known-type mapping, and name totality
+  over proto3's three symbol scopes — are in no ADR: the first three are
+  recorded in the design note, the fourth only in the branch's commit trail.
+  Read the plan as a plan, not as a description: its task 6 maps
+  `ridl.std.Duration` and `ridl.std.Timestamp` onto the protobuf well-known
+  types, a mapping execution implemented and then reverted — the reversal and
+  its reasoning are in the design note's blast-radius section.
+
 - **2026-07-19-e2-ridl-interface-layer-plan.md** — the epic E2 (ridl, the
   interface layer) implementation plan, archived verbatim from `docs/wip/` once
   the epic landed. As with E0 and E1, the roadmap's Epic 2 section plus

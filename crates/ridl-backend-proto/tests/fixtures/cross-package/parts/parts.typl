@@ -1,0 +1,17 @@
+// A minimal package whose struct and enum are referenced from another
+// package's fields (task 7 review finding 1) — small on purpose: this
+// fixture's only job is to give `generate_with`'s cross-package resolver a
+// foreign struct and a foreign enum to resolve against a real compile, so
+// the `import` line the referencing package emits names a file that a real
+// package actually produced.
+
+package proto.parts
+
+struct Wheel {
+  radius : integer [0..100]
+}
+
+enum Grade {
+  A = 0
+  B = 1
+}

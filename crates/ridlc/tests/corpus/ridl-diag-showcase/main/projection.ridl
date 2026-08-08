@@ -28,3 +28,13 @@ service diag.showcase.projection {
 interface ProjectionParams {
   command setIt(vinNumber : Ratio, vin_number : Ratio) @[..500ms]
 }
+
+/// Two struct fields whose projections collide. `parseHTTPResponse` and
+/// `parseHttpResponse` both become `parse_http_response` — the same
+/// collision as `Projection` above, one typl declaration kind lower: a
+/// struct field is checked by the same rule as an interaction member or a
+/// command parameter (ADR-0016 decision 4).
+struct ProjectionFields {
+  parseHTTPResponse : Ratio
+  parseHttpResponse : Ratio
+}

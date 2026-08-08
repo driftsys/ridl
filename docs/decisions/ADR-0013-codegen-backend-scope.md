@@ -8,8 +8,23 @@ workspace grows, in the way ADR-0009 binds the gate and ADR-0010 binds the CLI
 contract.
 
 Decision 2's ceiling is settled for wire backends. **Whether the same ceiling
-binds the language backends is open** — see Open item 1. Nothing here is
-implemented; no proto3 or FlatBuffers backend exists.
+binds the language backends is open** — see Open item 1.
+
+**Amendment (2026-08-08).** A proto3 backend now exists —
+`crates/ridl-backend-proto`, built by roadmap story E9.8 — so "nothing here is
+implemented" no longer holds for decision 2's two tiers. Decision 7's second
+class still has no backend in it.
+
+**Decision 2 conflicts with
+[ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decision 10,
+and the conflict is unresolved.** Decision 2 says a wire backend emits "no
+`service` block"; ADR-0016 decision 10 describes the dispatcher as "one service
+definition per provided interface", which on proto3 is a `service` block. E9.8
+avoided the collision by emitting neither, which the roadmap supports because
+E9.11 owns the store and the dispatcher. **E9.11 cannot avoid it** and must
+resolve it by amending one of the two records before writing an emitter against
+either reading. [ADR-0017](ADR-0017-proto3-projection-rules.md) records the
+rules E9.8 needed that neither record supplied.
 
 ## Context
 
