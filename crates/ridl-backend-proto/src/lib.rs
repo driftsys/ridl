@@ -27,7 +27,7 @@
 //! fail to resolve.
 
 use ridl_ir::v2;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 #[cfg(test)]
 mod tests;
@@ -77,10 +77,15 @@ pub fn generate_with(
 ) -> Result<Generated, GenerateError> {
     let packages = Packages { package, others };
     let mut imports: BTreeSet<String> = BTreeSet::new();
+    // One package scope spans both walks, because the identity tables are
+    // package-level enums the same as the declared ones: a declared type
+    // named `<Interface>Ordinal` and the generated table for `<Interface>`
+    // collide, and only a scope that has seen both can refuse it.
+    let mut names = SymbolScope::package(&package.name);
 
     let mut body = String::new();
-    emit_messages(&mut body, packages, &mut imports)?;
-    emit_identity_tables(&mut body, package)?;
+    emit_messages(&mut body, packages, &mut names, &mut imports)?;
+    emit_identity_tables(&mut body, package, &mut names)?;
 
     let mut out = String::new();
     out.push_str("syntax = \"proto3\";\n\n");
@@ -101,6 +106,59 @@ pub fn generate_with(
 struct Packages<'a> {
     package: &'a v2::Package,
     others: &'a [&'a v2::Package],
+}
+
+/// One proto3 symbol scope, tracking every name this backend emits into it so
+/// a second claim on one name is refused before `protoc` sees the
+/// redefinition. proto3 gives this backend two name scopes to respect: the
+/// **package** — the top-level message and enum names, plus every enum's
+/// value names, which proto3 scopes as siblings of their enum rather than
+/// inside it — and one **message's body**, where the field names and the
+/// `oneof` names share one table. (Field numbers, the third symbol space, are
+/// [`check_field_number`]'s.) This is ADR-0016 decision 6's totality property
+/// applied to names the way [`check_field_number`] applies it to numbers: the
+/// projection is defined for every input, or the backend refuses with a
+/// diagnostic rather than emitting a schema the target rejects.
+struct SymbolScope {
+    /// Named in the refusal: ``package `veh.common` `` or ``message `Payload` ``.
+    scope: String,
+    /// Each projected name, to the plain description of the construct that
+    /// claimed it — quoted back when a second claim on the name is refused.
+    claimed: HashMap<String, String>,
+}
+
+impl SymbolScope {
+    fn package(name: &str) -> Self {
+        Self {
+            scope: format!("package `{name}`"),
+            claimed: HashMap::new(),
+        }
+    }
+
+    fn message(name: &str) -> Self {
+        Self {
+            scope: format!("message `{name}`"),
+            claimed: HashMap::new(),
+        }
+    }
+
+    /// Registers the proto3 name that `source` — a plain description such as
+    /// ``struct `Reading` `` or ``value `PARK` of enum `GearPosition` `` — is
+    /// about to emit. The second claim on one name is refused with an error
+    /// naming both claimants.
+    fn claim(&mut self, name: &str, source: &str) -> Result<(), GenerateError> {
+        if let Some(previous) = self.claimed.insert(name.to_string(), source.to_string()) {
+            return Err(GenerateError {
+                message: format!(
+                    "`{name}` is claimed twice in {}: once by {previous}, and again by \
+                     {source}. proto3 rejects a name defined twice, so rename one of the \
+                     two so their projected names differ.",
+                    self.scope
+                ),
+            });
+        }
+        Ok(())
+    }
 }
 
 /// proto reserves field numbers 19,000 through 19,999 for its own use.
@@ -169,22 +227,23 @@ fn check_field_number(owner: &str, name: &str, number: u32) -> Result<(), Genera
 fn emit_messages(
     out: &mut String,
     packages: Packages,
+    names: &mut SymbolScope,
     imports: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let mut tuples: Vec<InducedTuple> = Vec::new();
     for decl in &packages.package.decls {
         match &decl.kind {
             Some(v2::decl::Kind::StructDef(def)) => {
-                emit_struct(out, packages, &decl.name, def, &mut tuples, imports)?;
+                emit_struct(out, packages, &decl.name, def, &mut tuples, names, imports)?;
             }
-            Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
+            Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def, names)?,
             Some(v2::decl::Kind::UnionDef(def)) => {
-                emit_union(out, packages, &decl.name, def, imports)?;
+                emit_union(out, packages, &decl.name, def, names, imports)?;
             }
             _ => {}
         }
     }
-    emit_induced_tuples(out, packages, &mut tuples, imports)?;
+    emit_induced_tuples(out, packages, &mut tuples, names, imports)?;
     Ok(())
 }
 
@@ -207,13 +266,47 @@ fn emit_messages(
 /// `protoc` would reject as the same number claimed twice. A value outside
 /// `i32` is refused: proto3 enum and reserved values are int32, and typl
 /// admits int64 (typl §8).
-fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), GenerateError> {
+///
+/// Every value name this enum emits — the synthesized zero included — is
+/// claimed in the package scope, because of the sibling scoping above: a
+/// declared value spelling `<PREFIX>_UNSPECIFIED` after the transform, two
+/// values of one enum colliding after it, or two enums whose names share one
+/// SCREAMING_SNAKE prefix each synthesize the same `UNSPECIFIED` member, and
+/// each would emit a redefinition `protoc` rejects, so each is refused
+/// instead ([`SymbolScope`]).
+///
+/// A tombstone that retires a *name* rather than a value (`reserved retired`,
+/// typl §7.4) carries no number, and none is invented for it — a fabricated
+/// `reserved 0;` would claim a live declared zero a second time. The retired
+/// name still projects, as the value name it would have taken, so proto3's
+/// own name reservation carries it: `reserved "<PREFIX>_<NAME>";`.
+fn emit_enum(
+    out: &mut String,
+    name: &str,
+    def: &v2::EnumDef,
+    names: &mut SymbolScope,
+) -> Result<(), GenerateError> {
     let prefix = screaming_snake_case(name);
+    names.claim(name, &format!("enum `{name}`"))?;
     out.push_str(&format!("\nenum {name} {{\n"));
+
+    // The value names this enum itself emits, for the reserved-name check
+    // below: a reserved name conflicts only with its own enum's live values,
+    // unlike the package-wide claims above.
+    let mut value_names: HashSet<String> = HashSet::new();
 
     let zero_declared = def.values.iter().any(|value| value.value == 0);
     if !zero_declared {
-        out.push_str(&format!("  {prefix}_UNSPECIFIED = 0;\n"));
+        let unspecified = format!("{prefix}_UNSPECIFIED");
+        names.claim(
+            &unspecified,
+            &format!(
+                "the `{unspecified} = 0` member synthesized for enum `{name}` (proto3 \
+                 requires a zero-valued first member)"
+            ),
+        )?;
+        value_names.insert(unspecified.clone());
+        out.push_str(&format!("  {unspecified} = 0;\n"));
     }
 
     // A declared zero leads, whatever position it held in typl source order.
@@ -226,27 +319,52 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
                 value.name, value.value
             ),
         })?;
-        out.push_str(&format!(
-            "  {prefix}_{} = {number};\n",
-            screaming_snake_case(&value.name)
-        ));
+        let member = format!("{prefix}_{}", screaming_snake_case(&value.name));
+        names.claim(&member, &format!("value `{}` of enum `{name}`", value.name))?;
+        value_names.insert(member.clone());
+        out.push_str(&format!("  {member} = {number};\n"));
     }
 
     for reserved in &def.reserved {
-        let retired = reserved.value.unwrap_or(0);
-        // The synthesized `UNSPECIFIED = 0` above already fills a retired
-        // zero slot as a live value; reserving it too is the same number
-        // claimed twice, which `protoc` rejects.
-        if retired == 0 && !zero_declared {
-            continue;
+        match reserved.value {
+            Some(retired) => {
+                // The synthesized `UNSPECIFIED = 0` above already fills a
+                // retired zero slot as a live value; reserving it too is the
+                // same number claimed twice, which `protoc` rejects.
+                if retired == 0 && !zero_declared {
+                    continue;
+                }
+                let retired = i32::try_from(retired).map_err(|_| GenerateError {
+                    message: format!(
+                        "{name} retires value {retired}, outside proto3's int32 range for an \
+                         enum value."
+                    ),
+                })?;
+                out.push_str(&format!("  reserved {retired};\n"));
+            }
+            None => {
+                let Some(retired_name) = reserved.name.as_deref() else {
+                    return Err(GenerateError {
+                        message: format!(
+                            "{name} carries a `reserved` entry with neither a value nor a \
+                             name in the IR."
+                        ),
+                    });
+                };
+                let projected = format!("{prefix}_{}", screaming_snake_case(retired_name));
+                if value_names.contains(&projected) {
+                    return Err(GenerateError {
+                        message: format!(
+                            "`{projected}` is both a live value and a reserved name of enum \
+                             `{name}`: a declared value and the tombstone `reserved \
+                             {retired_name}` project to one proto3 name. Rename one of the \
+                             two so their projected names differ."
+                        ),
+                    });
+                }
+                out.push_str(&format!("  reserved \"{projected}\";\n"));
+            }
         }
-        let retired = i32::try_from(retired).map_err(|_| GenerateError {
-            message: format!(
-                "{name} retires value {retired}, outside proto3's int32 range for an enum \
-                 value."
-            ),
-        })?;
-        out.push_str(&format!("  reserved {retired};\n"));
     }
     out.push_str("}\n");
     Ok(())
@@ -255,17 +373,28 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
 /// One struct as one `message`: field numbers are the typl §7.4 ordinals, a
 /// tombstone emits proto `reserved`, and a `?` field takes the proto3
 /// `optional` keyword, because proto3 represents absence structurally
-/// (ADR-0013 decision 7). Field names go through the pinned transform —
-/// proto3's field namespace is snake_case, and RIDL-149 has already refused
-/// any package where two field names collide under it (ADR-0016 decision 4).
+/// (ADR-0013 decision 7) — except on an array or map field, where it has no
+/// structural absence to offer (`optional repeated` does not parse, and a map
+/// field takes no label) and the type leaves no in-band value spare, so
+/// decision 7's last clause applies: the backend refuses with a diagnostic
+/// rather than choosing silently.
+///
+/// Field names go through the pinned transform — proto3's field namespace is
+/// snake_case. RIDL-149 refuses a compiled package where two field names
+/// collide under it (ADR-0016 decision 4), and the message scope here refuses
+/// the same collision for IR handed to this backend directly, so totality
+/// does not depend on the caller having run the semantic pass.
 fn emit_struct(
     out: &mut String,
     packages: Packages,
     name: &str,
     def: &v2::StructDef,
     tuples: &mut Vec<InducedTuple>,
+    names: &mut SymbolScope,
     imports: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
+    names.claim(name, &format!("struct `{name}`"))?;
+    let mut members = SymbolScope::message(name);
     out.push_str(&format!("\nmessage {name} {{\n"));
     for member in &def.members {
         match &member.member {
@@ -274,17 +403,50 @@ fn emit_struct(
             }
             Some(v2::struct_member::Member::Field(field)) => {
                 check_field_number(name, &field.name, field.ordinal)?;
+                let field_name = ridl_ir::name::snake_case(&field.name);
+                members.claim(
+                    &field_name,
+                    &format!("field `{}` of struct `{name}`", field.name),
+                )?;
+                let optional = matches!(&field.r#type, Some(ty) if ty.optional);
+                if optional {
+                    match field.r#type.as_ref().and_then(|ty| ty.kind.as_ref()) {
+                        Some(v2::field_type::Kind::Array(_)) => {
+                            return Err(GenerateError {
+                                message: format!(
+                                    "{name}.{} is an optional array, and proto3 cannot mark a \
+                                     repeated field absent: an absent list is indistinguishable \
+                                     from an empty one, and no value is spare to carry the fact \
+                                     in-band, so this backend refuses rather than choosing \
+                                     silently (ADR-0013 decision 7). Remove the `?`, or wrap the \
+                                     array in a struct, whose absence proto3 can track.",
+                                    field.name
+                                ),
+                            });
+                        }
+                        Some(v2::field_type::Kind::Map(_)) => {
+                            return Err(GenerateError {
+                                message: format!(
+                                    "{name}.{} is an optional map, and proto3 cannot mark a map \
+                                     field absent: an absent map is indistinguishable from an \
+                                     empty one, and no value is spare to carry the fact in-band, \
+                                     so this backend refuses rather than choosing silently \
+                                     (ADR-0013 decision 7). Remove the `?`, or wrap the map in a \
+                                     struct, whose absence proto3 can track.",
+                                    field.name
+                                ),
+                            });
+                        }
+                        _ => {}
+                    }
+                }
                 let (scalar, comment) = field_type_text(packages, name, field, tuples, imports)?;
                 if let Some(comment) = comment {
                     out.push_str(&format!("  {comment}\n"));
                 }
-                let optional = match &field.r#type {
-                    Some(ty) if ty.optional => "optional ",
-                    _ => "",
-                };
+                let optional = if optional { "optional " } else { "" };
                 out.push_str(&format!(
-                    "  {optional}{scalar} {} = {};\n",
-                    ridl_ir::name::snake_case(&field.name),
+                    "  {optional}{scalar} {field_name} = {};\n",
                     field.ordinal
                 ));
             }
@@ -303,25 +465,41 @@ fn emit_struct(
 /// admit a `reserved` statement inside one. An arm carries no constraint
 /// comment: unlike a struct field, a `oneof` arm has no line of its own
 /// before it to hold one.
+///
+/// A union whose every arm is retired emits the message with its `reserved`
+/// statements and no `oneof` block at all: proto3 requires a oneof to hold at
+/// least one field, and retiring the last live arm is an ordinary evolution
+/// state, not an error. The oneof's own name shares the enclosing message's
+/// symbol table with the arm names, so `value` is claimed first, and an arm
+/// projecting to `value` — or two arms projecting to one name — is refused
+/// rather than emitted as a redefinition ([`SymbolScope`]).
 fn emit_union(
     out: &mut String,
     packages: Packages,
     name: &str,
     def: &v2::UnionDef,
+    names: &mut SymbolScope,
     imports: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
-    out.push_str(&format!("\nmessage {name} {{\n  oneof value {{\n"));
-    for arm in &def.arms {
-        check_field_number(name, &arm.name, arm.ordinal)?;
-        let (scalar, _comment) =
-            named_field_type(packages, name, &arm.name, &arm.type_ref, imports)?;
-        out.push_str(&format!(
-            "    {scalar} {} = {};\n",
-            ridl_ir::name::snake_case(&arm.name),
-            arm.ordinal
-        ));
+    names.claim(name, &format!("union `{name}`"))?;
+    out.push_str(&format!("\nmessage {name} {{\n"));
+    if !def.arms.is_empty() {
+        let mut members = SymbolScope::message(name);
+        members.claim(
+            "value",
+            "the `oneof value` wrapper every union message carries",
+        )?;
+        out.push_str("  oneof value {\n");
+        for arm in &def.arms {
+            check_field_number(name, &arm.name, arm.ordinal)?;
+            let arm_name = ridl_ir::name::snake_case(&arm.name);
+            members.claim(&arm_name, &format!("arm `{}` of union `{name}`", arm.name))?;
+            let (scalar, _comment) =
+                named_field_type(packages, name, &arm.name, &arm.type_ref, imports)?;
+            out.push_str(&format!("    {scalar} {arm_name} = {};\n", arm.ordinal));
+        }
+        out.push_str("  }\n");
     }
-    out.push_str("  }\n");
     for reserved in &def.reserved {
         out.push_str(&format!("  reserved {};\n", reserved.ordinal));
     }
@@ -546,11 +724,16 @@ struct InducedTuple {
 /// Two different tuples reaching the same generated name is refused rather
 /// than resolved by picking one: nothing upstream keeps two field paths from
 /// mangling to the same CamelCase string, and there is no sound way to
-/// choose between two different message shapes for one name.
+/// choose between two different message shapes for one name. The generated
+/// name is also claimed in the package scope, because nothing keeps a field
+/// path from mangling to a name the package already declares — `PointPair`
+/// induced at `Point.pair` beside a declared `struct PointPair` — and that
+/// too is a redefinition `protoc` rejects ([`SymbolScope`]).
 fn emit_induced_tuples(
     out: &mut String,
     packages: Packages,
     tuples: &mut Vec<InducedTuple>,
+    names: &mut SymbolScope,
     imports: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let mut seen: HashMap<String, v2::TupleType> = HashMap::new();
@@ -573,6 +756,10 @@ fn emit_induced_tuples(
             continue;
         }
         seen.insert(induced.name.clone(), induced.tuple.clone());
+        names.claim(
+            &induced.name,
+            "a message generated for a tuple, named for the field path that reaches it",
+        )?;
         emit_induced_tuple(out, packages, &induced, tuples, imports)?;
     }
     Ok(())
@@ -877,13 +1064,38 @@ fn render_constraint(constraint: &v2::Constraint) -> String {
 /// and kind-blind, matching ridl §11's single ordinal sequence. Retired
 /// ordinals are held against reuse with `reserved`, and an `UNSPECIFIED = 0`
 /// member leads because ridl ordinals are 1-based.
-fn emit_identity_tables(out: &mut String, package: &v2::Package) -> Result<(), GenerateError> {
+///
+/// The table's enum name and every member name are claimed in the package
+/// scope ([`SymbolScope`]): a declared type named `<Interface>Ordinal`, an
+/// interaction named `unspecified`, or two interactions whose names collide
+/// after the transform would each emit a redefinition `protoc` rejects, so
+/// each is refused instead.
+fn emit_identity_tables(
+    out: &mut String,
+    package: &v2::Package,
+    names: &mut SymbolScope,
+) -> Result<(), GenerateError> {
     for shape in package.shapes() {
         let enum_name = format!("{}Ordinal", type_name(shape.name));
         let prefix = screaming_snake_case(&enum_name);
+        names.claim(
+            &enum_name,
+            &format!(
+                "the ordinal table generated for `{}` (ADR-0013 decision 3)",
+                shape.name
+            ),
+        )?;
 
         out.push_str(&format!("\nenum {enum_name} {{\n"));
-        out.push_str(&format!("  {prefix}_UNSPECIFIED = 0;\n"));
+        let unspecified = format!("{prefix}_UNSPECIFIED");
+        names.claim(
+            &unspecified,
+            &format!(
+                "the `{unspecified} = 0` member synthesized for `{enum_name}` (ridl \
+                 ordinals are 1-based)"
+            ),
+        )?;
+        out.push_str(&format!("  {unspecified} = 0;\n"));
 
         for decl in &shape.interface.interactions {
             match &decl.kind {
@@ -892,11 +1104,12 @@ fn emit_identity_tables(out: &mut String, package: &v2::Package) -> Result<(), G
                 }
                 _ => {
                     check_field_number(shape.name, &decl.name, decl.ordinal)?;
-                    out.push_str(&format!(
-                        "  {prefix}_{} = {};\n",
-                        screaming_snake_case(&decl.name),
-                        decl.ordinal
-                    ));
+                    let member = format!("{prefix}_{}", screaming_snake_case(&decl.name));
+                    names.claim(
+                        &member,
+                        &format!("interaction `{}` of `{}`", decl.name, shape.name),
+                    )?;
+                    out.push_str(&format!("  {member} = {};\n", decl.ordinal));
                 }
             }
         }

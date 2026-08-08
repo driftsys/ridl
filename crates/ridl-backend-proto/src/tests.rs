@@ -1144,6 +1144,507 @@ fn a_tuple_field_induces_a_positional_message() {
     compile_with_protox("veh.common.proto", &generated.proto_source);
 }
 
+// ==========================================================================
+// Name totality (final whole-branch review): every input below used to
+// return Ok carrying a schema protox rejects. ADR-0016 decision 6's totality
+// property covers names the same as numbers, so each is now either refused
+// with a GenerateError or emitted in a form protox accepts.
+// ==========================================================================
+
+#[test]
+fn an_optional_array_field_is_refused() {
+    // `optional repeated` does not parse, and proto3 cannot mark a repeated
+    // field absent in any other way (ADR-0013 decision 7's last clause).
+    let mut ty = array_of(float64_type());
+    ty.optional = true;
+    let package = struct_package("Trace", "samples", 1, ty);
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("optional array"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_optional_map_field_is_refused() {
+    // A map field takes no label in proto3, so `?` has no realisation there
+    // either (ADR-0013 decision 7's last clause).
+    let mut ty = map_of(v2::PrimitiveType::String, float64_type());
+    ty.optional = true;
+    let package = struct_package("Index", "byName", 1, ty);
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("optional map"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn a_union_arm_projecting_to_value_collides_with_the_oneof_wrapper() {
+    // An oneof's name shares the enclosing message's symbol table with its
+    // fields, and every union message wraps its arms in `oneof value`.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Resp".to_string(),
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![v2::UnionArm {
+                        name: "value".to_string(),
+                        ordinal: 1,
+                        type_ref: "Speed".to_string(),
+                        doc: String::new(),
+                    }],
+                    is_result: false,
+                    reserved: Vec::new(),
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`value` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+    assert!(error.message.contains("oneof"), "got: {}", error.message);
+}
+
+#[test]
+fn a_union_with_every_arm_retired_emits_reserved_and_no_oneof() {
+    // Retiring the last live arm is an ordinary evolution state, and proto3
+    // requires a oneof to hold at least one field — so the message keeps its
+    // `reserved` statements and carries no `oneof` block at all.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Legacy".to_string(),
+            kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                arms: Vec::new(),
+                is_result: false,
+                reserved: vec![
+                    v2::Reserved {
+                        ordinal: 1,
+                        ..Default::default()
+                    },
+                    v2::Reserved {
+                        ordinal: 2,
+                        ..Default::default()
+                    },
+                ],
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("message Legacy {\n  reserved 1;\n  reserved 2;\n}"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        !generated.proto_source.contains("oneof"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_enum_value_named_unspecified_collides_with_the_synthesized_zero() {
+    // No declared zero, so `STATUS_UNSPECIFIED = 0` is synthesized — and the
+    // declared value `unspecified` projects to the same name at value 1.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Status".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![
+                    v2::EnumValue {
+                        name: "unspecified".to_string(),
+                        value: 1,
+                        doc: String::new(),
+                    },
+                    v2::EnumValue {
+                        name: "active".to_string(),
+                        value: 2,
+                        doc: String::new(),
+                    },
+                ],
+                reserved: Vec::new(),
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error
+            .message
+            .contains("`STATUS_UNSPECIFIED` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("synthesized"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_interaction_named_unspecified_collides_with_the_synthesized_zero() {
+    // The identity table synthesizes `<PREFIX>_UNSPECIFIED = 0` because ridl
+    // ordinals are 1-based — an interaction named `unspecified` projects to
+    // the same member name.
+    let package = v2::Package {
+        name: "veh.cluster".to_string(),
+        interfaces: vec![v2::Interface {
+            name: "Status".to_string(),
+            interactions: vec![signal_decl("unspecified", 1)],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error
+            .message
+            .contains("`STATUS_ORDINAL_UNSPECIFIED` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn a_name_based_enum_tombstone_reserves_the_projected_name_not_zero() {
+    // `reserved retired` in an enum body carries a name and no value
+    // (`lower_reserved` leaves `value` unset), and no value may be invented
+    // for it: a fabricated `reserved 0;` claims the live declared zero a
+    // second time, which protox rejects. proto3's own name reservation
+    // carries the retired name instead.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Mode".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![
+                    v2::EnumValue {
+                        name: "OFF".to_string(),
+                        value: 0,
+                        doc: String::new(),
+                    },
+                    v2::EnumValue {
+                        name: "ON".to_string(),
+                        value: 1,
+                        doc: String::new(),
+                    },
+                ],
+                reserved: vec![v2::Reserved {
+                    ordinal: 0,
+                    name: Some("retired".to_string()),
+                    value: None,
+                }],
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("reserved \"MODE_RETIRED\";"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        !generated.proto_source.contains("reserved 0;"),
+        "a name-based tombstone must not fabricate value 0:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_name_based_enum_tombstone_colliding_with_a_live_value_is_refused() {
+    // `protoc` rejects an enum value that uses a reserved name, so a
+    // tombstone and a live value projecting to one name is refused rather
+    // than emitted.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Mode".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![v2::EnumValue {
+                    name: "fooBar".to_string(),
+                    value: 0,
+                    doc: String::new(),
+                }],
+                reserved: vec![v2::Reserved {
+                    ordinal: 0,
+                    name: Some("foo_bar".to_string()),
+                    value: None,
+                }],
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error
+            .message
+            .contains("both a live value and a reserved name"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("MODE_FOO_BAR"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn two_enum_values_colliding_after_the_transform_are_refused() {
+    // proto3 scopes enum values as siblings of the enum, and the pinned
+    // transform maps `fooBar` and `foo_bar` to one SCREAMING_SNAKE name.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "E".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![
+                    v2::EnumValue {
+                        name: "fooBar".to_string(),
+                        value: 1,
+                        doc: String::new(),
+                    },
+                    v2::EnumValue {
+                        name: "foo_bar".to_string(),
+                        value: 2,
+                        doc: String::new(),
+                    },
+                ],
+                reserved: Vec::new(),
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`E_FOO_BAR` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn two_union_arms_colliding_after_the_transform_are_refused() {
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "GearIndex".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(gear_index_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "U".to_string(),
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![
+                        v2::UnionArm {
+                            name: "fooBar".to_string(),
+                            ordinal: 1,
+                            type_ref: "Speed".to_string(),
+                            doc: String::new(),
+                        },
+                        v2::UnionArm {
+                            name: "foo_bar".to_string(),
+                            ordinal: 2,
+                            type_ref: "GearIndex".to_string(),
+                            doc: String::new(),
+                        },
+                    ],
+                    is_result: false,
+                    reserved: Vec::new(),
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`foo_bar` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn two_struct_fields_colliding_after_the_transform_are_refused() {
+    // RIDL-149 refuses this for a compiled package; the backend refuses it
+    // for IR handed to `generate` directly, so totality does not depend on
+    // the caller having run the semantic pass.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "S".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![
+                    field_member("fooBar", 1, float64_type()),
+                    field_member("foo_bar", 2, int64_type()),
+                ],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`foo_bar` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn a_declared_type_colliding_with_a_generated_ordinal_table_is_refused() {
+    // The identity table for interface `Foo` is a package-level enum named
+    // `FooOrdinal` — a declared type of that name is a redefinition.
+    let package = v2::Package {
+        name: "veh.cluster".to_string(),
+        decls: vec![v2::Decl {
+            name: "FooOrdinal".to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: vec![v2::EnumValue {
+                    name: "A".to_string(),
+                    value: 0,
+                    doc: String::new(),
+                }],
+                reserved: Vec::new(),
+            })),
+            ..Default::default()
+        }],
+        interfaces: vec![v2::Interface {
+            name: "Foo".to_string(),
+            interactions: vec![signal_decl("currentSpeed", 1)],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`FooOrdinal` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("ordinal table"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_induced_tuple_message_colliding_with_a_declared_type_is_refused() {
+    // `Point.pair` induces a message named `PointPair`, and nothing keeps a
+    // package from also declaring a struct of that name.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "PointPair".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("x", 1, float64_type())],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Point".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member(
+                        "pair",
+                        1,
+                        tuple_of(vec![float64_type(), float64_type()]),
+                    )],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`PointPair` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+    assert!(error.message.contains("tuple"), "got: {}", error.message);
+}
+
+#[test]
+fn two_enums_sharing_a_prefix_collide_on_the_synthesized_zero() {
+    // `HTTPServer` and `HttpServer` are distinct type names, but both take
+    // the prefix `HTTP_SERVER` under the pinned transform, so both would
+    // synthesize `HTTP_SERVER_UNSPECIFIED = 0` as package-scope siblings.
+    let enum_with_one_value = |value_name: &str| v2::EnumDef {
+        values: vec![v2::EnumValue {
+            name: value_name.to_string(),
+            value: 1,
+            doc: String::new(),
+        }],
+        reserved: Vec::new(),
+    };
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "HTTPServer".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(enum_with_one_value("OK"))),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "HttpServer".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(enum_with_one_value("BUSY"))),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error
+            .message
+            .contains("`HTTP_SERVER_UNSPECIFIED` is claimed twice"),
+        "got: {}",
+        error.message
+    );
+}
+
 /// A signal interaction at `ordinal`. The kind is immaterial to tier 2: the
 /// table is interface-wide and kind-blind (ridl §11, ADR-0013 decision 3).
 fn signal_decl(name: &str, ordinal: u32) -> v2::Decl {
