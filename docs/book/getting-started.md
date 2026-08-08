@@ -765,17 +765,18 @@ validate a vocabulary and its combinations (diagnostics `TYPL-402` and
 ridl build --emit rust --out-dir out
 ```
 
-`ridl build` compiles a workspace and writes one artifact per package. Six
+`ridl build` compiles a workspace and writes one artifact per package. Seven
 emit targets exist today:
 
-| `--emit`     | Output               | Contents                                |
-| ------------ | -------------------- | --------------------------------------- |
-| `rust`       | `<package>.rs`       | idiomatic Rust source (the default)     |
-| `c-header`   | `<package>.h`        | the extern-C header                     |
-| `ir-json`    | `<package>.ir.json`  | the lowered IR v2 as exact-decimal JSON |
-| `ir-text`    | `<package>.ir.txtpb` | the lowered IR v2 as prototext          |
-| `ir-binary`  | `<package>.ir.binpb` | the lowered IR v2 as protobuf binary    |
-| `typescript` | `<package>.ts`       | idiomatic TypeScript source             |
+| `--emit`     | Output               | Contents                                    |
+| ------------ | -------------------- | ------------------------------------------- |
+| `rust`       | `<package>.rs`       | idiomatic Rust source (the default)         |
+| `c-header`   | `<package>.h`        | the extern-C header                         |
+| `ir-json`    | `<package>.ir.json`  | the lowered IR v2 as exact-decimal JSON     |
+| `ir-text`    | `<package>.ir.txtpb` | the lowered IR v2 as prototext              |
+| `ir-binary`  | `<package>.ir.binpb` | the lowered IR v2 as protobuf binary        |
+| `typescript` | `<package>.ts`       | idiomatic TypeScript source                 |
+| `proto`      | `<package>.proto`    | the proto3 schema — types and the ordinals  |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by

@@ -1747,6 +1747,13 @@ impl Checker<'_> {
             }
         }
 
+        // RIDL-149: two field names that collide after the pinned name
+        // transform (ADR-0016 decisions 3 and 4). Struct fields joined this
+        // check when E9.8 started projecting them onto proto3, whose field
+        // namespace is snake_case. Keyed on the projection, holding the first
+        // field's source name and span for the label.
+        let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
+
         let mut members = Vec::new();
         let mut ordinal = 0u32;
         let mut fixed = true;
@@ -1772,6 +1779,21 @@ impl Checker<'_> {
                             member_name_range(field.name(), field.syntax()),
                             format!("field `{name}` re-declares a `reserved` name"),
                         );
+                    }
+                    if let Some(name) = member_name(field.name()) {
+                        let range = member_name_range(field.name(), field.syntax());
+                        let projection = snake_case(&name);
+                        if let Some((first_name, first)) = projected.get(&projection).cloned() {
+                            self.colliding_projected_name(
+                                &name,
+                                &first_name,
+                                &projection,
+                                range,
+                                first,
+                            );
+                        } else {
+                            projected.insert(projection, (name, range));
+                        }
                     }
                     let lowered = self.lower_field(&field, ordinal);
                     if lowered
@@ -5829,6 +5851,64 @@ mod tests {
         );
         assert_eq!(codes(&checked), vec!["TYPL-211"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+    }
+
+    // --- RIDL-149 over struct fields (ADR-0016 decision 4) ----------------
+
+    /// ADR-0016 decision 4: struct fields join the transform and RIDL-149 in
+    /// the commit that starts projecting them, which is E9.8's proto backend.
+    #[test]
+    fn ridl_149_two_struct_fields_colliding_after_the_transform_are_refused() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct Reading {\n\
+               vinNumber : integer [0..1]\n\
+               vin_number : integer [0..1]\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(checked.diagnostics[0].message.contains("vin_number"));
+    }
+
+    #[test]
+    fn ridl_149_struct_fields_that_do_not_collide_are_accepted() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct Reading {\n\
+               vinNumber : integer [0..1]\n\
+               engineTemp : integer [0..1]\n\
+             }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// A field that both re-declares a `reserved` name and collides under the
+    /// transform reports both diagnostics, matching how the interface-member
+    /// check orders its own.
+    #[test]
+    fn ridl_149_and_typl_210_both_report_on_one_struct() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct Reading {\n\
+               reserved vinNumber\n\
+               vinNumber : integer [0..1]\n\
+               vin_number : integer [0..1]\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-210", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
     }
 
     // --- TYPL-212/213/214: error vocabulary and result unions -------------

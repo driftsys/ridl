@@ -1,0 +1,22 @@
+---
+source: crates/ridl-backend-proto/tests/corpus.rs
+expression: generated.proto_source
+---
+syntax = "proto3";
+
+package corpus.baseline;
+
+enum VehicleStatusOrdinal {
+  VEHICLE_STATUS_ORDINAL_UNSPECIFIED = 0;
+  VEHICLE_STATUS_ORDINAL_CURRENT_SPEED = 1;
+  VEHICLE_STATUS_ORDINAL_TYRE_PRESSURE = 2;
+  VEHICLE_STATUS_ORDINAL_DOOR_CLOSED = 3;
+  VEHICLE_STATUS_ORDINAL_DOOR_OPENED = 4;
+  VEHICLE_STATUS_ORDINAL_LEGACY_WHEEL_PHASE = 5;
+}
+
+enum CorpusBaselineHvacOrdinal {
+  CORPUS_BASELINE_HVAC_ORDINAL_UNSPECIFIED = 0;
+  CORPUS_BASELINE_HVAC_ORDINAL_CABIN_TEMP = 1;
+  CORPUS_BASELINE_HVAC_ORDINAL_FILTER_CLOGGED = 2;
+}

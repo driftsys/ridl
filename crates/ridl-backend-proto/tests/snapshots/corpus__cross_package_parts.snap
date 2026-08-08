@@ -1,0 +1,16 @@
+---
+source: crates/ridl-backend-proto/tests/corpus.rs
+expression: parts_generated.proto_source
+---
+syntax = "proto3";
+
+package proto.parts;
+
+message Wheel {
+  uint32 radius = 1;
+}
+
+enum Grade {
+  GRADE_A = 0;
+  GRADE_B = 1;
+}

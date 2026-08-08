@@ -7,6 +7,7 @@ repository.workspace = true
 
 [dependencies]
 clap.workspace = true
+ridl-backend-proto = { path = "../ridl-backend-proto" }
 ridl-backend-rust = { path = "../ridl-backend-rust" }
 ridl-backend-ts = { path = "../ridl-backend-ts" }
 ridl-core = { path = "../ridl-core" }

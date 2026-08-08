@@ -1,0 +1,59 @@
+---
+source: crates/ridl-backend-proto/tests/corpus.rs
+expression: generated.proto_source
+---
+syntax = "proto3";
+
+package veh.cruise;
+
+enum EngageState {
+  ENGAGE_STATE_OFF = 0;
+  ENGAGE_STATE_ARMED = 1;
+  ENGAGE_STATE_ACTIVE = 2;
+  reserved 3;
+}
+
+message Setpoint {
+  // Speed — km/h [0..250 step 0.5]
+  float desired = 1;
+  // Percent — [0..100]
+  optional uint32 tolerance = 2;
+  // Delta — [-100..100]
+  sint32 trim = 3;
+  reserved 4;
+}
+
+message Telemetry {
+  // Speed — km/h [0..250 step 0.5]
+  repeated float history = 1;
+  // Speed — km/h [0..250 step 0.5]
+  map<string, float> by_id = 2;
+  TelemetryBounds bounds = 3;
+  // LOW_FUEL = bit 0
+  // DOOR_AJAR = bit 1
+  uint32 active = 4;
+}
+
+message Command {
+  oneof value {
+    Setpoint engage = 1;
+    uint32 disengage = 2;
+  }
+  reserved 3;
+}
+
+message TelemetryBounds {
+  // Speed — km/h [0..250 step 0.5]
+  float field_1 = 1;
+  // Speed — km/h [0..250 step 0.5]
+  float field_2 = 2;
+}
+
+enum CruiseControlOrdinal {
+  CRUISE_CONTROL_ORDINAL_UNSPECIFIED = 0;
+  CRUISE_CONTROL_ORDINAL_CURRENT_SPEED = 1;
+  CRUISE_CONTROL_ORDINAL_MODE = 2;
+  CRUISE_CONTROL_ORDINAL_WARNING = 3;
+  CRUISE_CONTROL_ORDINAL_SET_TARGET = 4;
+  reserved 5;
+}
