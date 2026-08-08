@@ -43,8 +43,9 @@ repairs the new release wants in the same commit.
    configured scopes are the language scopes (`typl`/`ridl`/`rxdl`/`rmdl`/
    `rsdl`), `family`, `roadmap`, `adr`, the compiler workspace scopes
    (`ridl-syntax`/`ridl-core`/`ridl-sem`/`ridl-ir`/`ridlc`/`ridl-lsp`/
-   `ridl-backend-rust`/`ridl-backend-ts`/`ridl-diff`/`ridl-fmt`/`xtask`/
-   `editors`), and the repo-wide scopes (`repo`/`docs`/`ci`/`hooks`/`deps`).
+   `ridl-backend-rust`/`ridl-backend-ts`/`ridl-backend-proto`/`ridl-diff`/
+   `ridl-fmt`/`xtask`/`editors`), and the repo-wide scopes
+   (`repo`/`docs`/`ci`/`hooks`/`deps`).
 4. Run `just verify` before opening a PR — commit-message lint over your branch
    range, then `just build`.
 5. Open a PR. CI runs these same recipes — it installs the tools a runner needs

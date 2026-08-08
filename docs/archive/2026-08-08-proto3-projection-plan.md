@@ -22,7 +22,7 @@ transform), `protox` (pure-Rust protobuf compiler, test-only here), `insta`
 **Design of record:**
 [`2026-08-08-proto3-projection-design.md`](2026-08-08-proto3-projection-design.md),
 which ratifies against
-[`2026-08-03-schema-projection-design.md`](2026-08-03-schema-projection-design.md)
+[`2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md)
 ("the note").
 
 ## Global Constraints

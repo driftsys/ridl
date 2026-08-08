@@ -27,6 +27,24 @@ This ADR was accepted under the delegated authority recorded in
 written for review, and execution of roadmap story E9.7 needs the decisions
 fixed rather than pending.
 
+**Amendment (2026-08-08), from roadmap story E9.8.** Decision 6's totality
+property is stated over numbers; it extends to names, because a target rejects a
+schema for a duplicate name as readily as for an out-of-range number.
+[ADR-0017](ADR-0017-proto3-projection-rules.md) decision 4 records the extension
+and makes it a backend obligation rather than a language one. ADR-0017 also
+records the rule for a reference that crosses a package boundary, which this
+record does not supply, and notes that enum value names and union arm names
+began projecting through the pinned transform under decision 4's backend check
+rather than under RIDL-149.
+
+**Decision 10 conflicts with [ADR-0013](ADR-0013-codegen-backend-scope.md)
+decision 2, and the conflict is unresolved.** Decision 10 describes the
+dispatcher as "one service definition per provided interface", which on proto3
+is a `service` block; ADR-0013 decision 2 says a wire backend emits none. E9.8
+avoided the collision by emitting neither. E9.11 cannot, and must resolve it by
+amending one of the two records before writing an emitter against either
+reading.
+
 ## Context
 
 The note answers two questions the store-and-dispatcher work raised: what

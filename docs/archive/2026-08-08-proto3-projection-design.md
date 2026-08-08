@@ -10,7 +10,7 @@ nothing above them. It is the first time a ridl name reaches a deployed
 contract, which is why E9.7 had to land first.
 
 Throughout, "the note" is
-[`2026-08-03-schema-projection-design.md`](2026-08-03-schema-projection-design.md),
+[`2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md),
 and a reference of the form note §4.1 is to it. Language-reference sections are
 named in full (ridl §11, typl §7.4, typl Appendix D).
 
@@ -230,8 +230,12 @@ every row of §3.1 has a living example.
   inherit this `generate`/`generate_with` shape: any later backend that must
   resolve a foreign named-type reference itself takes the same two functions.
 - **`ridl-sem`** gains the extended RIDL-149 check of §5.
-- **`ridl-backend-rust`** starts transforming struct field names (§5), which is
-  where snapshot churn would appear if any exists.
+- **`ridl-backend-rust`** is deliberately not changed (§5). It emits a struct
+  field name verbatim, and adopting the transform there would rename a field on
+  every generated Rust struct — a breaking change to a shipped API, recorded as
+  an open question in §8 rather than taken here. An earlier draft of this
+  section said the opposite; the correction is kept because the rest of the
+  record and the shipped code both say what this bullet now says.
 - **`wasm-check`** must pass, so the new crate builds under
   `--no-default-features`.
 - **`ridl.std` gets no special casing, and its emitted file is empty of

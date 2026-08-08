@@ -96,7 +96,8 @@ docs/
     ├── ADR-0013-codegen-backend-scope.md
     ├── ADR-0014-ir-encodings.md
     ├── ADR-0015-qos-absorption-and-rpc-bounds.md
-    └── ADR-0016-schema-projection-and-the-name-transform.md
+    ├── ADR-0016-schema-projection-and-the-name-transform.md
+    └── ADR-0017-proto3-projection-rules.md
 ```
 
 ## Where to start
@@ -168,7 +169,7 @@ drift apart (ADR-0009).
 
 ## A note on ADR numbering
 
-The ADRs present here are 0002 and 0004–0016. ADR-0001 and ADR-0003 are not in
+The ADRs present here are 0002 and 0004–0017. ADR-0001 and ADR-0003 are not in
 this repository — ADR-0003 ("the family decision") is noted as not-yet-written
 in the family overview.
 
