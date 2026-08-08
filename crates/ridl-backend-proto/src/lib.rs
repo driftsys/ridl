@@ -310,6 +310,28 @@ fn resolve_field_type(
                     "{owner}.{field_name} declares an array with no element type in the IR."
                 ),
             })?;
+            // proto3 has no nested `repeated` and no `repeated` map field —
+            // checked here, before resolving the element, so neither
+            // rejection reaches `protoc` as a schema it must itself refuse.
+            match element.kind.as_ref() {
+                Some(v2::field_type::Kind::Array(_)) => {
+                    return Err(GenerateError {
+                        message: format!(
+                            "{owner}.{field_name} is an array of arrays, which proto3 does \
+                             not admit as an array element type."
+                        ),
+                    });
+                }
+                Some(v2::field_type::Kind::Map(_)) => {
+                    return Err(GenerateError {
+                        message: format!(
+                            "{owner}.{field_name} is an array of maps, which proto3 does \
+                             not admit as an array element type."
+                        ),
+                    });
+                }
+                _ => {}
+            }
             let (element_text, comment) = resolve_field_type(
                 package,
                 owner,

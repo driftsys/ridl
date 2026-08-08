@@ -878,6 +878,63 @@ fn a_map_value_that_is_itself_repeated_is_refused() {
 }
 
 #[test]
+fn a_map_value_that_is_itself_a_map_is_refused() {
+    // proto3 forbids a map value from being another map (the language
+    // guide, "Maps": the value type "can be any type except another map").
+    let package = struct_package(
+        "Index",
+        "byName",
+        1,
+        map_of(
+            v2::PrimitiveType::String,
+            map_of(v2::PrimitiveType::String, float64_type()),
+        ),
+    );
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("another map"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_array_of_arrays_is_refused() {
+    // proto3 has no nested `repeated`: `repeated repeated double rows = 1;`
+    // is a syntax error (`protoc`: "expected '=', but found 'rows'"), not
+    // merely unusual. Nested arrays are legal typl (the checker accepts
+    // them, and `ridlc/tests/cli.rs` exercises a 60-level nested-array
+    // package through other backends), so this is a real gap to close
+    // rather than a theoretical one.
+    let package = struct_package("Grid", "rows", 1, array_of(array_of(float64_type())));
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("array of arrays"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn an_array_of_maps_is_refused() {
+    // A map field is already implicitly repeated on the wire, so applying
+    // `repeated` to it is a field-label conflict `protoc` rejects ("Field
+    // labels are not allowed on map fields"), not merely unusual.
+    let package = struct_package(
+        "Index",
+        "byName",
+        1,
+        array_of(map_of(v2::PrimitiveType::String, float64_type())),
+    );
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("array of maps"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
 fn a_tuple_field_induces_a_positional_message() {
     // proto3 has no tuple, so one is generated, named for its owner and field.
     let package = struct_package(
