@@ -1,0 +1,13 @@
+---
+source: crates/ridl-backend-proto/tests/corpus.rs
+expression: vehicle_generated.proto_source
+---
+syntax = "proto3";
+
+package proto.vehicle;
+import "proto.parts.proto";
+
+message Axle {
+  proto.parts.Wheel wheel = 1;
+  proto.parts.Grade grade = 2;
+}

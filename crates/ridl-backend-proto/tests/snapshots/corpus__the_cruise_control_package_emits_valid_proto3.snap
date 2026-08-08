@@ -10,6 +10,7 @@ enum EngageState {
   ENGAGE_STATE_OFF = 0;
   ENGAGE_STATE_ARMED = 1;
   ENGAGE_STATE_ACTIVE = 2;
+  reserved 3;
 }
 
 message Setpoint {
@@ -38,6 +39,7 @@ message Command {
     Setpoint engage = 1;
     uint32 disengage = 2;
   }
+  reserved 3;
 }
 
 message TelemetryBounds {

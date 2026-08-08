@@ -29,11 +29,6 @@ pub fn compile_with_protox(file_name: &str, source: &str) {
 /// directory first — for a schema whose `import` names another package's own
 /// generated file, which must exist for protox to resolve it. `siblings` is
 /// `(file_name, source)` pairs.
-///
-/// Only the unit tests (`src/tests.rs`) call this today — `tests/corpus.rs`
-/// does not — and this file is compiled once per consumer, so an unused-here
-/// warning would otherwise fire in the integration test binary.
-#[allow(dead_code)]
 pub fn compile_with_protox_and_siblings(
     entry_file: &str,
     entry_source: &str,

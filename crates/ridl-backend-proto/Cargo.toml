@@ -23,4 +23,9 @@ protox.workspace = true
 # `ridlc` this pulls in links against the ordinary (non-test) build of this
 # crate.
 ridlc = { path = "../ridlc" }
+# For `ridl_core::RidlDatabase`, the salsa database `ridlc::compile_workspace`
+# takes — needed directly (not only through `ridlc`) because the multi-package
+# corpus test constructs one itself, the same way `crates/ridlc/tests/cli.rs`
+# does for its own `compile_workspace` calls.
+ridl-core = { path = "../ridl-core" }
 tempfile = "3.15.0"

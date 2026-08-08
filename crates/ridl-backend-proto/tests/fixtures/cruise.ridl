@@ -28,6 +28,7 @@ enum EngageState {
   OFF    = 0
   ARMED  = 1
   ACTIVE = 2
+  reserved 3
 }
 
 // ---------- Enum set ----------
@@ -58,6 +59,7 @@ struct Telemetry {
 union Command {
   engage    : Setpoint
   disengage : Percent
+  reserved override
 }
 
 // ---------- Interface ----------
