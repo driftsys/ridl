@@ -15,4 +15,12 @@ ridl-ir = { path = "../ridl-ir" }
 [dev-dependencies]
 insta.workspace = true
 protox.workspace = true
+# The source-to-IR compile path for tests/corpus.rs (`ridlc::compile`) —
+# ridlc depends on this crate as a normal dependency, so this is a
+# dev-dependency cycle back to the crate under test. Cargo supports this: a
+# dev-dependency is not part of the graph used to build this crate as a
+# library, only of the graph used to build its own test binaries, so the
+# `ridlc` this pulls in links against the ordinary (non-test) build of this
+# crate.
+ridlc = { path = "../ridlc" }
 tempfile = "3.15.0"

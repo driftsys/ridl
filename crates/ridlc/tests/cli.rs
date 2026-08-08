@@ -217,6 +217,77 @@ fn build_emit_typescript_writes_the_backend_module() {
     );
 }
 
+/// `build --emit proto` writes `<pkg-name>.proto` holding the proto3 backend's
+/// output for that package.
+///
+/// The interaction-boundary counterpart of
+/// [`build_emit_typescript_writes_the_backend_module`]: no `ridlc`-level
+/// integration test drove `--emit proto` before this one, even though the
+/// emit value has been wired since the backend crate was added — the wiring
+/// was exercised only through `ridl-backend-proto`'s own unit and corpus
+/// tests, never end to end through the CLI. The expected source is
+/// regenerated inside the test from the same entry over the public library
+/// path (`compile_workspace` then `ridl_backend_proto::generate`), so the
+/// assertion is byte equality against the backend rather than a restatement
+/// of whatever the emit happens to write.
+#[test]
+fn build_emit_proto_writes_the_backend_schema() {
+    // A bare named scalar alone would not do: unlike the Rust and TypeScript
+    // backends, the proto3 backend gives a named scalar no declaration of its
+    // own — it inlines only where a field references it (the design this
+    // crate's own `ridl-backend-proto` tests already pin) — so `SPEED_SOURCE`
+    // alone would emit nothing past the file header, and the equality below
+    // would prove nothing.
+    const PROTO_SOURCE: &str = "package veh.common\n\
+         type Speed: km/h [0.0..250.0 step 0.5]\n\
+         struct Reading {\n  value: Speed\n}\n";
+
+    let dir = TempDir::new("build-proto");
+    dir.write("pkg/ridl.toml", PACKAGE_MANIFEST);
+    dir.write("pkg/speed.typl", PROTO_SOURCE);
+    let out = TempDir::new("build-proto-out");
+    let entry = dir.path().join("pkg");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "proto".as_ref(),
+    ]);
+    assert_eq!(code, 0, "a clean package must exit 0, stderr:\n{stderr}");
+
+    let written = std::fs::read_to_string(out.path().join("veh.common.proto"))
+        .expect("proto writes <pkg-name>.proto");
+
+    let mut db = ridl_core::RidlDatabase::default();
+    let checked = ridlc::compile_workspace(&mut db, &entry)
+        .expect("the fixture loads")
+        .checked;
+    let [package] = checked.as_slice() else {
+        panic!("the fixture is one package, got {}", checked.len());
+    };
+    let expected = ridl_backend_proto::generate(&package.ir)
+        .expect("the fixture generates proto3")
+        .proto_source;
+
+    assert!(
+        expected.contains("message Reading")
+            && expected.contains("// Speed — km/h [0..250 step 0.5]"),
+        "the fixture must generate a message with a constraint comment for Speed, or the \
+         equality below proves nothing, got:\n{expected}"
+    );
+    assert_eq!(
+        written, expected,
+        "the emitted file must hold the proto3 backend's output"
+    );
+    assert!(
+        !out.path().join("veh.common.rs").exists(),
+        "proto alone writes no Rust file"
+    );
+}
+
 /// `build --help` offers exactly the artifacts [`ridlc::Emit`] defines, and the
 /// `--emit` summary line names every one of them.
 ///

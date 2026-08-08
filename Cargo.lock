@@ -1210,6 +1210,7 @@ dependencies = [
  "insta",
  "protox",
  "ridl-ir",
+ "ridlc",
  "tempfile",
 ]
 
