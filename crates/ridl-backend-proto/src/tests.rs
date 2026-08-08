@@ -935,6 +935,70 @@ fn an_array_of_maps_is_refused() {
 }
 
 #[test]
+fn a_cross_package_reference_emits_an_import() {
+    let package = struct_package_in(
+        "veh.cluster",
+        "Reading",
+        "value",
+        1,
+        named_type("veh.common.Speed"),
+    );
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("import \"veh.common.proto\";"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated
+            .proto_source
+            .contains("veh.common.Speed value = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+}
+
+#[test]
+fn ridl_std_duration_maps_onto_the_protobuf_well_known_type() {
+    // ridl.std is version-locked to the compiler binary and excluded from IR
+    // dumps, so it gets no emitted file of its own.
+    let package = struct_package_in(
+        "veh.cluster",
+        "Window",
+        "span",
+        1,
+        named_type("ridl.std.Duration"),
+    );
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("import \"google/protobuf/duration.proto\";"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated
+            .proto_source
+            .contains("google.protobuf.Duration span = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        !generated
+            .proto_source
+            .contains("import \"ridl.std.proto\";"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    // protox bundles the well-known types, so this compiles standalone even
+    // though `ridl.std.proto` is not itself present in the temp directory.
+    compile_with_protox("veh.cluster.proto", &generated.proto_source);
+}
+
+#[test]
 fn a_tuple_field_induces_a_positional_message() {
     // proto3 has no tuple, so one is generated, named for its owner and field.
     let package = struct_package(
@@ -1071,8 +1135,21 @@ fn struct_package(
     ordinal: u32,
     r#type: v2::FieldType,
 ) -> v2::Package {
+    struct_package_in("veh.common", name, field_name, ordinal, r#type)
+}
+
+/// [`struct_package`], with the package name given explicitly rather than
+/// fixed to `veh.common` — for a test that must control the referencing
+/// package's own name, such as a cross-package reference.
+fn struct_package_in(
+    package_name: &str,
+    name: &str,
+    field_name: &str,
+    ordinal: u32,
+    r#type: v2::FieldType,
+) -> v2::Package {
     v2::Package {
-        name: "veh.common".to_string(),
+        name: package_name.to_string(),
         decls: vec![v2::Decl {
             name: name.to_string(),
             kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
