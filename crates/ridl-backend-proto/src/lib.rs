@@ -10,14 +10,21 @@
 //! cannot represent — units, ranges, steps — is emitted as comments, which a
 //! descriptor would have addressed by index path through `SourceCodeInfo`.
 //!
-//! A cross-package reference `pkg.Name` is emitted as-is — proto3 uses the
-//! same dotted form for a fully qualified type name — with `import
-//! "pkg.proto";` naming the file that package projects to (design section on
-//! cross-package references, matching the artifact naming the TypeScript
-//! backend already relies on). `ridl.std` is the one exception: it is
-//! version-locked to the compiler binary and already excluded from IR dumps,
-//! so it gets no emitted file of its own. Its two time members map onto the
-//! matching protobuf well-known type instead ([`cross_package_field_type`]).
+//! A cross-package reference resolves against `others` — every other package
+//! [`generate_with`] was given — because how it is emitted depends on what it
+//! names, not on which package it is in: a named scalar or an enum set
+//! **inlines**, local or foreign, the same as a same-package one, because
+//! neither ever becomes a declaration of its own for another file to import
+//! (design §3.1, §3.2). `ridl.std` is not a special case: all 21 of its
+//! members are named scalars (typl reference Appendix A), so every one of
+//! them inlines through this same path — it never needs an `import` and
+//! never needs a protobuf well-known-type mapping. A struct, enum or union
+//! reference is the one case that does need one: it is the message or `enum`
+//! it becomes, qualified `pkg.Name` when foreign, with `import "pkg.proto";`
+//! naming the file that package projects to (matching the artifact naming
+//! the TypeScript backend already relies on). A reference `others` cannot
+//! resolve is refused, rather than emitted as a name `protoc` would then
+//! fail to resolve.
 
 use ridl_ir::v2;
 use std::collections::{BTreeSet, HashMap};
@@ -40,34 +47,39 @@ pub struct GenerateError {
     pub message: String,
 }
 
-/// Generates the proto3 schema for `package`.
+/// Generates the proto3 schema for `package`, with no other package
+/// available to resolve a cross-package reference against. Equivalent to
+/// `generate_with(package, &[])` — a convenience for a package with no
+/// cross-package reference, and for a caller that does not need to resolve
+/// one.
+pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
+    generate_with(package, &[])
+}
+
+/// Generates the proto3 schema for `package`, resolving a cross-package
+/// reference against `others` — every other package `package` might
+/// reference. `others` need not be exhaustive over the workspace: only a
+/// package `package` actually names must be present, and any of its own
+/// unrelated declarations are simply never looked at.
 ///
 /// The import block is collected into a `BTreeSet<String>` so its order is
 /// deterministic — ADR-0016 decision 6's determinism property covers the
 /// whole emission, not only the numbers — and is written after `package
 /// ...;` and before the first declaration, which is why the declarations are
 /// rendered into `body` first: the set is not complete until that walk has
-/// run.
-///
-/// `ridl_ir::v2::referenced_packages` already gives every package a type
-/// reference in `package` names, at package granularity — exactly what an
-/// ordinary `import "pkg.proto";` line needs, and reused here rather than
-/// re-walked. It is filtered clear of `ridl.std`, because that package
-/// resolves to a protobuf well-known type instead of a file of its own; the
-/// well-known import lines are added individually during the declaration
-/// walk, where the reference kept its member name
-/// ([`cross_package_field_type`]) — `referenced_packages` deliberately
-/// erases that member name, which is why it cannot drive that half of the
-/// import block by itself.
-pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
-    let mut imports: BTreeSet<String> = ridl_ir::v2::referenced_packages(package)
-        .into_iter()
-        .filter(|referenced| referenced != "ridl.std")
-        .map(|referenced| format!("{referenced}.proto"))
-        .collect();
+/// run. It gains an entry only where [`named_field_type`] resolves a foreign
+/// struct, enum or union reference — never for a foreign named scalar or
+/// enum set, which inline instead of importing (see the module
+/// documentation).
+pub fn generate_with(
+    package: &v2::Package,
+    others: &[&v2::Package],
+) -> Result<Generated, GenerateError> {
+    let packages = Packages { package, others };
+    let mut imports: BTreeSet<String> = BTreeSet::new();
 
     let mut body = String::new();
-    emit_messages(&mut body, package, &mut imports)?;
+    emit_messages(&mut body, packages, &mut imports)?;
     emit_identity_tables(&mut body, package)?;
 
     let mut out = String::new();
@@ -78,6 +90,17 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     }
     out.push_str(&body);
     Ok(Generated { proto_source: out })
+}
+
+/// The package being generated, plus every other package it might
+/// cross-reference — both read-only for the whole declaration walk, so they
+/// travel together as one bundle rather than as two positional parameters
+/// repeated at every call site (see the module documentation for how a
+/// cross-package reference is resolved against `others`).
+#[derive(Clone, Copy)]
+struct Packages<'a> {
+    package: &'a v2::Package,
+    others: &'a [&'a v2::Package],
 }
 
 /// proto reserves field numbers 19,000 through 19,999 for its own use.
@@ -145,23 +168,23 @@ fn check_field_number(owner: &str, name: &str, number: u32) -> Result<(), Genera
 /// emitted by [`emit_induced_tuples`] after the declarations that reached it.
 fn emit_messages(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     imports: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let mut tuples: Vec<InducedTuple> = Vec::new();
-    for decl in &package.decls {
+    for decl in &packages.package.decls {
         match &decl.kind {
             Some(v2::decl::Kind::StructDef(def)) => {
-                emit_struct(out, package, &decl.name, def, &mut tuples, imports)?;
+                emit_struct(out, packages, &decl.name, def, &mut tuples, imports)?;
             }
             Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
             Some(v2::decl::Kind::UnionDef(def)) => {
-                emit_union(out, package, &decl.name, def, imports)?;
+                emit_union(out, packages, &decl.name, def, imports)?;
             }
             _ => {}
         }
     }
-    emit_induced_tuples(out, package, &mut tuples, imports)?;
+    emit_induced_tuples(out, packages, &mut tuples, imports)?;
     Ok(())
 }
 
@@ -237,7 +260,7 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
 /// any package where two field names collide under it (ADR-0016 decision 4).
 fn emit_struct(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     name: &str,
     def: &v2::StructDef,
     tuples: &mut Vec<InducedTuple>,
@@ -251,7 +274,7 @@ fn emit_struct(
             }
             Some(v2::struct_member::Member::Field(field)) => {
                 check_field_number(name, &field.name, field.ordinal)?;
-                let (scalar, comment) = field_type_text(package, name, field, tuples, imports)?;
+                let (scalar, comment) = field_type_text(packages, name, field, tuples, imports)?;
                 if let Some(comment) = comment {
                     out.push_str(&format!("  {comment}\n"));
                 }
@@ -282,7 +305,7 @@ fn emit_struct(
 /// before it to hold one.
 fn emit_union(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     name: &str,
     def: &v2::UnionDef,
     imports: &mut BTreeSet<String>,
@@ -291,7 +314,7 @@ fn emit_union(
     for arm in &def.arms {
         check_field_number(name, &arm.name, arm.ordinal)?;
         let (scalar, _comment) =
-            named_field_type(package, name, &arm.name, &arm.type_ref, imports)?;
+            named_field_type(packages, name, &arm.name, &arm.type_ref, imports)?;
         out.push_str(&format!(
             "    {scalar} {} = {};\n",
             ridl_ir::name::snake_case(&arm.name),
@@ -311,7 +334,7 @@ fn emit_union(
 /// the way, for [`emit_induced_tuples`] to emit as a message after the
 /// declaration that reached it (proto3 has no tuple, design §3.1).
 fn field_type_text(
-    package: &v2::Package,
+    packages: Packages,
     owner: &str,
     field: &v2::Field,
     tuples: &mut Vec<InducedTuple>,
@@ -323,7 +346,7 @@ fn field_type_text(
         });
     };
     let hint = format!("{owner}{}", type_name(&field.name));
-    resolve_field_type(package, owner, &field.name, &hint, ty, tuples, imports)
+    resolve_field_type(packages, owner, &field.name, &hint, ty, tuples, imports)
 }
 
 /// The proto3 type at one field position, recursing into an array element, a
@@ -338,7 +361,7 @@ fn field_type_text(
 /// so a tuple never reaches the key position (TYPL-209 already requires an
 /// integral or string key, and [`map_key_text`] refuses the rest).
 fn resolve_field_type(
-    package: &v2::Package,
+    packages: Packages,
     owner: &str,
     field_name: &str,
     hint: &str,
@@ -352,7 +375,7 @@ fn resolve_field_type(
         }
         Some(v2::field_type::Kind::InlineScalar(td)) => Ok((proto_scalar(td).to_string(), None)),
         Some(v2::field_type::Kind::Named(reference)) => {
-            named_field_type(package, owner, field_name, reference, imports)
+            named_field_type(packages, owner, field_name, reference, imports)
         }
         Some(v2::field_type::Kind::Array(array)) => {
             let element = array.element.as_ref().ok_or_else(|| GenerateError {
@@ -383,7 +406,7 @@ fn resolve_field_type(
                 _ => {}
             }
             let (element_text, comment) = resolve_field_type(
-                package,
+                packages,
                 owner,
                 field_name,
                 &format!("{hint}Element"),
@@ -424,9 +447,9 @@ fn resolve_field_type(
                 }
                 _ => {}
             }
-            let key_text = map_key_text(package, owner, field_name, key, imports)?;
+            let key_text = map_key_text(packages, owner, field_name, key, imports)?;
             let (value_text, comment) = resolve_field_type(
-                package,
+                packages,
                 owner,
                 field_name,
                 &format!("{hint}Value"),
@@ -466,7 +489,7 @@ const PROTO_MAP_KEY_SCALARS: [&str; 7] = [
 ];
 
 fn map_key_text(
-    package: &v2::Package,
+    packages: Packages,
     owner: &str,
     field_name: &str,
     key: &v2::FieldType,
@@ -475,7 +498,7 @@ fn map_key_text(
     let text = match key.kind.as_ref() {
         Some(v2::field_type::Kind::Primitive(primitive)) => proto_primitive(*primitive).to_string(),
         Some(v2::field_type::Kind::Named(reference)) => {
-            named_field_type(package, owner, field_name, reference, imports)?.0
+            named_field_type(packages, owner, field_name, reference, imports)?.0
         }
         _ => {
             return Err(GenerateError {
@@ -526,7 +549,7 @@ struct InducedTuple {
 /// choose between two different message shapes for one name.
 fn emit_induced_tuples(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     tuples: &mut Vec<InducedTuple>,
     imports: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
@@ -550,7 +573,7 @@ fn emit_induced_tuples(
             continue;
         }
         seen.insert(induced.name.clone(), induced.tuple.clone());
-        emit_induced_tuple(out, package, &induced, tuples, imports)?;
+        emit_induced_tuple(out, packages, &induced, tuples, imports)?;
     }
     Ok(())
 }
@@ -562,7 +585,7 @@ fn emit_induced_tuples(
 /// name onto the wire.
 fn emit_induced_tuple(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     induced: &InducedTuple,
     tuples: &mut Vec<InducedTuple>,
     imports: &mut BTreeSet<String>,
@@ -582,7 +605,7 @@ fn emit_induced_tuple(
         })?;
         let hint = format!("{}Field{ordinal}", induced.name);
         let (scalar, comment) = resolve_field_type(
-            package,
+            packages,
             &induced.name,
             &field_name,
             &hint,
@@ -601,51 +624,90 @@ fn emit_induced_tuple(
 
 /// A resolved named-type reference at a field position. A named scalar
 /// inlines to its backing scalar and leaves its name, unit, range and step
-/// as a comment; a struct reference names the message it becomes; an enum
-/// reference names the `enum` it becomes ([`emit_enum`]); a union reference
-/// names the `message` it becomes ([`emit_union`]) — a union is legal
-/// wherever data is legal (typl §10), the same as a struct or an enum.
+/// as a comment; an enum set inlines to an integer with its bits as a
+/// comment ([`enum_set_field_type`]) — **whether the reference is local or
+/// foreign**, because neither ever becomes a declaration of its own for
+/// another file to import (design §3.1, §3.2). `ridl.std` is not a special
+/// case of this: every one of its members is a named scalar (typl reference
+/// Appendix A), so it always takes this same inlining path. A struct
+/// reference names the message it becomes; an enum reference names the
+/// `enum` it becomes ([`emit_enum`]); a union reference names the `message`
+/// it becomes ([`emit_union`]) — a union is legal wherever data is legal
+/// (typl §10), the same as a struct or an enum — and each of those three is
+/// qualified `pkg.Name` when foreign, with `imports` gaining `pkg.proto`
+/// ([`qualified_message_name`]): they are the only typl kinds this backend
+/// gives a declaration of their own, so they are the only case an import is
+/// needed.
 ///
 /// A reference is cross-package exactly when it carries a `.` — the IR's
 /// canonical form gives a cross-package reference as the fully qualified
 /// `pkg.Name` and a same-package one as the bare `Name`, never an import
-/// alias (`ridl_ir::v2::referenced_packages`'s doc comment). A dotted
-/// reference is handed to [`cross_package_field_type`] rather than looked up
-/// in `package.decls`, which holds only this package's own declarations.
+/// alias (`ridl_ir::v2::referenced_packages`'s doc comment). A same-package
+/// reference is looked up in `package.decls`; a cross-package one is looked
+/// up in `others`, the other packages this backend was given — this
+/// resolution has to happen before the inline-or-qualify decision above
+/// either way, because that decision depends on the referenced
+/// declaration's own kind. A foreign reference `others` cannot resolve — no
+/// package by that name is present, or it holds no declaration by that name
+/// — is refused rather than emitted as a name `protoc` would then fail to
+/// resolve.
 fn named_field_type(
-    package: &v2::Package,
+    packages: Packages,
     owner: &str,
     field_name: &str,
     reference: &str,
     imports: &mut BTreeSet<String>,
 ) -> Result<(String, Option<String>), GenerateError> {
-    if let Some((referenced_package, member)) = reference.rsplit_once('.') {
-        return cross_package_field_type(
-            owner,
-            field_name,
-            reference,
-            referenced_package,
-            member,
-            imports,
-        );
-    }
-    let Some(decl) = package.decls.iter().find(|decl| decl.name == *reference) else {
-        return Err(GenerateError {
-            message: format!(
-                "{owner}.{field_name} references `{reference}`, which is not a declaration \
-                 of this package."
-            ),
-        });
+    let (decl, foreign_package) = match reference.rsplit_once('.') {
+        Some((referenced_package, member)) => {
+            let resolved = packages
+                .others
+                .iter()
+                .find(|candidate| candidate.name == referenced_package)
+                .and_then(|candidate| candidate.decls.iter().find(|decl| decl.name == member));
+            let Some(decl) = resolved else {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} references `{reference}`, which cannot be \
+                         resolved — no package `{referenced_package}` with a declaration \
+                         named `{member}` was given to this backend."
+                    ),
+                });
+            };
+            (decl, Some(referenced_package))
+        }
+        None => {
+            let Some(decl) = packages
+                .package
+                .decls
+                .iter()
+                .find(|decl| decl.name == *reference)
+            else {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} references `{reference}`, which is not a \
+                         declaration of this package."
+                    ),
+                });
+            };
+            (decl, None)
+        }
     };
     match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Ok((
             proto_scalar(td).to_string(),
-            Some(constraint_comment(&decl.name, td)),
+            Some(constraint_comment(reference, td)),
         )),
-        Some(v2::decl::Kind::StructDef(_)) => Ok((decl.name.clone(), None)),
-        Some(v2::decl::Kind::EnumDef(_)) => Ok((decl.name.clone(), None)),
+        Some(v2::decl::Kind::StructDef(_)) => {
+            Ok(qualified_message_name(decl, foreign_package, imports))
+        }
+        Some(v2::decl::Kind::EnumDef(_)) => {
+            Ok(qualified_message_name(decl, foreign_package, imports))
+        }
         Some(v2::decl::Kind::EnumSetDef(esd)) => Ok(enum_set_field_type(esd)),
-        Some(v2::decl::Kind::UnionDef(_)) => Ok((decl.name.clone(), None)),
+        Some(v2::decl::Kind::UnionDef(_)) => {
+            Ok(qualified_message_name(decl, foreign_package, imports))
+        }
         _ => Err(GenerateError {
             message: format!(
                 "{owner}.{field_name} references `{reference}`, a declaration kind that \
@@ -656,53 +718,22 @@ fn named_field_type(
     }
 }
 
-/// The proto3 type of a cross-package reference. Its own package's
-/// declarations are never consulted — `package.decls` in the caller holds
-/// only the current package's declarations, and a cross-package reference
-/// already carries the target's fully qualified name, which is also valid
-/// proto3 syntax for a type in another file. The import line this reference
-/// needs is not added here: [`generate`] already added `import
-/// "pkg.proto";` for every package `ridl_ir::v2::referenced_packages` found,
-/// which covers every non-`ridl.std` reference this function is reached by.
-///
-/// `ridl.std` is the one exception: it is version-locked to the compiler
-/// binary and already excluded from IR dumps, so it gets no emitted file of
-/// its own — `generate` filtered it out of that upfront set — and its
-/// declarations are typl scalars proto3 cannot name by import. Its two time
-/// members map onto the matching protobuf well-known type instead. Getting
-/// the right import line for each — `duration.proto` and not
-/// `timestamp.proto`, or the reverse — needs the member name a package
-/// qualifier alone does not carry, so this is the one case that mutates
-/// `imports` directly rather than relying on the upfront set. Any other
-/// `ridl.std` member is refused by name, so a later addition to the
-/// standard package cannot pass through this backend silently untranslated.
-fn cross_package_field_type(
-    owner: &str,
-    field_name: &str,
-    reference: &str,
-    referenced_package: &str,
-    member: &str,
+/// The proto3 name of a resolved struct, enum or union reference: the bare
+/// declaration name for a same-package reference, or `pkg.Name` for a
+/// foreign one, with `imports` gaining that package's `import "pkg.proto";`
+/// line. Neither carries a constraint comment — that exists only for a
+/// named scalar, which never reaches this function ([`named_field_type`]).
+fn qualified_message_name(
+    decl: &v2::Decl,
+    foreign_package: Option<&str>,
     imports: &mut BTreeSet<String>,
-) -> Result<(String, Option<String>), GenerateError> {
-    if referenced_package != "ridl.std" {
-        return Ok((reference.to_string(), None));
-    }
-    match member {
-        "Duration" => {
-            imports.insert("google/protobuf/duration.proto".to_string());
-            Ok(("google.protobuf.Duration".to_string(), None))
+) -> (String, Option<String>) {
+    match foreign_package {
+        Some(referenced_package) => {
+            imports.insert(format!("{referenced_package}.proto"));
+            (format!("{referenced_package}.{}", decl.name), None)
         }
-        "Timestamp" => {
-            imports.insert("google/protobuf/timestamp.proto".to_string());
-            Ok(("google.protobuf.Timestamp".to_string(), None))
-        }
-        _ => Err(GenerateError {
-            message: format!(
-                "{owner}.{field_name} references `{reference}`, a `ridl.std` member with no \
-                 protobuf well-known type — only `ridl.std.Duration` and `ridl.std.Timestamp` \
-                 map onto one."
-            ),
-        }),
+        None => (decl.name.clone(), None),
     }
 }
 

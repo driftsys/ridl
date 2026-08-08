@@ -456,36 +456,66 @@ pub fn run_build(
         std::fs::create_dir_all(out_dir)?;
         let single_file = entry.is_file() && manifest_root_of(entry).is_none();
         let file_stem = module_name_from_path(&entry.to_string_lossy());
+
+        // `ridl.std` is deliberately absent from `checked` (it is not a
+        // workspace member), so no loop over `checked` ever reaches it. A
+        // consumer's generated code still references it, so the build
+        // writes it whenever the workspace names something from it —
+        // otherwise the raw output does not compile (issue #190). Computed
+        // once, ahead of the per-package loop below, because the proto
+        // backend needs it too (next paragraph) and this is the one
+        // `check_package` call either use pays for.
+        let references_std = checked
+            .iter()
+            .any(|package| ridl_ir::v2::referenced_packages(&package.ir).contains("ridl.std"));
+        // Every emit kind except the direct IR dumps. The reasoning, and the
+        // exhaustive classification ADR-0014 decision 10 requires, live on
+        // `Emit::is_ir_dump`.
+        let code_emits: Vec<Emit> = emits
+            .iter()
+            .copied()
+            .filter(|emit| !emit.is_ir_dump())
+            .collect();
+        let std_ir = (references_std && !code_emits.is_empty())
+            .then(|| check_package(&db, workspace, std, std).ir);
+
+        // Every other package a package's cross-package reference might
+        // name: every sibling in the workspace, plus `ridl.std` when
+        // present — the proto backend resolves a foreign reference itself
+        // rather than leaving it to the target language's own import
+        // statement, so it is the one backend among the three that reads
+        // this (`write_emits`'s doc comment). The other two ignore it.
+        let others: Vec<&ridl_ir::v2::Package> = checked
+            .iter()
+            .map(|package| &package.ir)
+            .chain(std_ir.iter())
+            .collect();
+
         for package in &checked {
             let base = if single_file {
                 file_stem.clone()
             } else {
                 package.ir.name.clone()
             };
-            write_emits(out_dir, &base, &package.ir, emits, &mut diagnostics)?;
+            write_emits(
+                out_dir,
+                &base,
+                &package.ir,
+                &others,
+                emits,
+                &mut diagnostics,
+            )?;
         }
 
-        // `ridl.std` is deliberately absent from `checked` (it is not a
-        // workspace member), so the loop above never reaches it. A
-        // consumer's generated code still references it, so the build
-        // writes it whenever the workspace names something from it —
-        // otherwise the raw output does not compile (issue #190).
-        let references_std = checked
-            .iter()
-            .any(|package| ridl_ir::v2::referenced_packages(&package.ir).contains("ridl.std"));
-        if references_std {
-            // Every emit kind except the direct IR dumps. The reasoning, and
-            // the exhaustive classification ADR-0014 decision 10 requires,
-            // live on `Emit::is_ir_dump`.
-            let code_emits: Vec<Emit> = emits
-                .iter()
-                .copied()
-                .filter(|emit| !emit.is_ir_dump())
-                .collect();
-            if !code_emits.is_empty() {
-                let std_ir = check_package(&db, workspace, std, std).ir;
-                write_emits(out_dir, "ridl.std", &std_ir, &code_emits, &mut diagnostics)?;
-            }
+        if let Some(std_ir) = &std_ir {
+            write_emits(
+                out_dir,
+                "ridl.std",
+                std_ir,
+                &others,
+                &code_emits,
+                &mut diagnostics,
+            )?;
         }
     }
 
@@ -670,11 +700,16 @@ fn materialize_and_lock(
 /// result type and its own failure path — a backend that cannot render this
 /// package skips only its own artifact. The proto3 emit is a third,
 /// independent backend on the same pattern
-/// ([`generate`](ridl_backend_proto::generate)).
+/// ([`generate_with`](ridl_backend_proto::generate_with)) — the one backend
+/// among the three that resolves a cross-package reference itself rather than
+/// leaving it to the target language's own import statement, so it is the
+/// one that needs `others`, the caller's full package list (see
+/// [`run_build`]).
 fn write_emits(
     out_dir: &Path,
     base: &str,
     ir: &ridl_ir::v2::Package,
+    others: &[&ridl_ir::v2::Package],
     emits: &[Emit],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
@@ -716,7 +751,7 @@ fn write_emits(
     };
 
     let generated_proto = if emits.iter().any(|emit| matches!(emit, Emit::Proto)) {
-        match ridl_backend_proto::generate(ir) {
+        match ridl_backend_proto::generate_with(ir, others) {
             Ok(generated) => Some(generated),
             Err(err) => {
                 diagnostics.push(error_diagnostic(

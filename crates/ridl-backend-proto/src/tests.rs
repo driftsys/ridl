@@ -1,4 +1,4 @@
-use crate::generate;
+use crate::{generate, generate_with};
 use ridl_ir::v2;
 
 /// Compiles `source` as proto3 with protox, panicking with the compiler's own
@@ -10,6 +10,26 @@ pub(crate) fn compile_with_protox(file_name: &str, source: &str) {
     std::fs::write(&path, source).expect("write schema");
     if let Err(error) = protox::compile([file_name], [dir.path()]) {
         panic!("emitted schema is not valid proto3:\n{error}\n\n{source}");
+    }
+}
+
+/// [`compile_with_protox`], with `siblings` written into the same temp
+/// directory first — for a schema whose `import` names another package's own
+/// generated file, which must exist for protox to resolve it. `siblings` is
+/// `(file_name, source)` pairs.
+pub(crate) fn compile_with_protox_and_siblings(
+    entry_file: &str,
+    entry_source: &str,
+    siblings: &[(&str, &str)],
+) {
+    let dir = tempfile::tempdir().expect("temp dir");
+    for (file_name, source) in siblings {
+        std::fs::write(dir.path().join(file_name), source).expect("write sibling schema");
+    }
+    let path = dir.path().join(entry_file);
+    std::fs::write(&path, entry_source).expect("write schema");
+    if let Err(error) = protox::compile([entry_file], [dir.path()]) {
+        panic!("emitted schema is not valid proto3:\n{error}\n\n{entry_source}");
     }
 }
 
@@ -934,8 +954,20 @@ fn an_array_of_maps_is_refused() {
     );
 }
 
+// A named scalar inlines whether it is local or foreign — Task 3 already
+// established that for the local case (`!contains("message Speed")` in
+// `a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment`), and a
+// foreign one is no different: it never becomes a declaration of its own for
+// another file to import. `veh.common` here holds only the `Speed` named
+// scalar — never a `message Speed` — so an import naming `veh.common.proto`
+// would point at a file that does not declare the type it was imported for,
+// which `protoc` rejects. `compile_with_protox` is run on every test below
+// except the unresolvable-reference case, so that defect cannot hide behind
+// a skipped check the way it did before this rework.
+
 #[test]
-fn a_cross_package_reference_emits_an_import() {
+fn a_foreign_named_scalar_inlines_with_no_import() {
+    let common = typedef_package("veh.common", "Speed", speed_type_def());
     let package = struct_package_in(
         "veh.cluster",
         "Reading",
@@ -943,7 +975,56 @@ fn a_cross_package_reference_emits_an_import() {
         1,
         named_type("veh.common.Speed"),
     );
-    let generated = generate(&package).expect("generate");
+    let generated = generate_with(&package, &[&common]).expect("generate");
+    assert!(
+        !generated.proto_source.contains("import"),
+        "a named scalar never becomes a declaration another file can hold, so it \
+         needs no import, local or foreign:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated
+            .proto_source
+            .contains("// veh.common.Speed — km/h [0.0..250.0]"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("double value = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.cluster.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_foreign_struct_reference_emits_an_import_and_the_qualified_name() {
+    let common = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Speed".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member("value", 1, float64_type())],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    // `veh.common`'s own schema, generated the same way `ridlc` would, so the
+    // sibling file the assertion below writes actually declares `Speed` —
+    // the gap that let the pre-rework version of this test hide FINDING 1.
+    let common_generated = generate(&common).expect("generate veh.common");
+
+    let package = struct_package_in(
+        "veh.cluster",
+        "Reading",
+        "speed",
+        1,
+        named_type("veh.common.Speed"),
+    );
+    let generated = generate_with(&package, &[&common]).expect("generate");
+
     assert!(
         generated
             .proto_source
@@ -954,48 +1035,108 @@ fn a_cross_package_reference_emits_an_import() {
     assert!(
         generated
             .proto_source
-            .contains("veh.common.Speed value = 1;"),
+            .contains("veh.common.Speed speed = 1;"),
         "got:\n{}",
         generated.proto_source
+    );
+
+    compile_with_protox_and_siblings(
+        "veh.cluster.proto",
+        &generated.proto_source,
+        &[("veh.common.proto", &common_generated.proto_source)],
     );
 }
 
 #[test]
-fn ridl_std_duration_maps_onto_the_protobuf_well_known_type() {
-    // ridl.std is version-locked to the compiler binary and excluded from IR
-    // dumps, so it gets no emitted file of its own.
+fn ridl_std_uuid_inlines_to_string_with_no_import() {
+    let std = ridl_std_package();
     let package = struct_package_in(
         "veh.cluster",
-        "Window",
-        "span",
+        "Reading",
+        "id",
         1,
-        named_type("ridl.std.Duration"),
+        named_type("ridl.std.Uuid"),
     );
-    let generated = generate(&package).expect("generate");
+    let generated = generate_with(&package, &[&std]).expect("generate");
     assert!(
-        generated
-            .proto_source
-            .contains("import \"google/protobuf/duration.proto\";"),
+        !generated.proto_source.contains("import"),
         "got:\n{}",
         generated.proto_source
     );
     assert!(
-        generated
-            .proto_source
-            .contains("google.protobuf.Duration span = 1;"),
+        generated.proto_source.contains("string id = 1;"),
         "got:\n{}",
         generated.proto_source
     );
-    assert!(
-        !generated
-            .proto_source
-            .contains("import \"ridl.std.proto\";"),
-        "got:\n{}",
-        generated.proto_source
-    );
-    // protox bundles the well-known types, so this compiles standalone even
-    // though `ridl.std.proto` is not itself present in the temp directory.
     compile_with_protox("veh.cluster.proto", &generated.proto_source);
+}
+
+#[test]
+fn ridl_std_duration_and_timestamp_inline_to_their_backing_scalars() {
+    // Both are typl scalars (typl reference Appendix A: `type Duration : ms
+    // [...]`, `type Timestamp : integer [...]`), not messages, so mapping
+    // either onto `google.protobuf.Duration`/`Timestamp` — a seconds+nanos
+    // MESSAGE — would change the wire encoding relative to the typl
+    // declaration. Neither `google.protobuf` nor an `import` may appear.
+    let std = ridl_std_package();
+    let package = v2::Package {
+        name: "veh.cluster".to_string(),
+        decls: vec![v2::Decl {
+            name: "Window".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![
+                    field_member("span", 1, named_type("ridl.std.Duration")),
+                    field_member("recordedAt", 2, named_type("ridl.std.Timestamp")),
+                ],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let generated = generate_with(&package, &[&std]).expect("generate");
+    assert!(
+        !generated.proto_source.contains("google.protobuf"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        !generated.proto_source.contains("import"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("double span = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("uint64 recorded_at = 2;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.cluster.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_unresolvable_foreign_reference_is_refused() {
+    // No other package is given, so `veh.other.Missing` cannot be resolved —
+    // the one case here that must not fall back to emitting a name `protoc`
+    // would then fail to resolve, so it is the one case not run through
+    // `compile_with_protox`.
+    let package = struct_package_in(
+        "veh.cluster",
+        "Reading",
+        "value",
+        1,
+        named_type("veh.other.Missing"),
+    );
+    let error = generate_with(&package, &[]).expect_err("must refuse");
+    assert!(
+        error.message.contains("veh.other.Missing"),
+        "got: {}",
+        error.message
+    );
 }
 
 #[test]
@@ -1158,6 +1299,92 @@ fn struct_package_in(
             })),
             ..Default::default()
         }],
+        ..Default::default()
+    }
+}
+
+/// A package holding one named scalar `decl_name`, typed `td` — a foreign
+/// package a cross-package reference test resolves against, standing in for
+/// a package another test compiled through [`generate`] into its own
+/// `.proto` file.
+fn typedef_package(package_name: &str, decl_name: &str, td: v2::TypeDef) -> v2::Package {
+    v2::Package {
+        name: package_name.to_string(),
+        decls: vec![v2::Decl {
+            name: decl_name.to_string(),
+            kind: Some(v2::decl::Kind::TypeDef(td)),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+/// A stand-in for `ridl.std` (typl reference Appendix A): every one of its
+/// members is a named scalar, never a struct, enum or union, so a
+/// representative few — the identity type `Uuid`, and the two time types
+/// `Duration` and `Timestamp` the pre-rework version of this backend wrongly
+/// mapped onto a protobuf well-known type — are enough to exercise the
+/// inlining path the ruling on Task 6 established. Hand-built IR, like every
+/// other fixture in this file, rather than the real embedded asset: this
+/// crate does not depend on `ridl-core`, and does not need to for a
+/// structural fixture.
+fn ridl_std_package() -> v2::Package {
+    v2::Package {
+        name: "ridl.std".to_string(),
+        decls: vec![
+            // type Uuid : string [36 match UUID_PATTERN]
+            v2::Decl {
+                name: "Uuid".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                    backing: Some(v2::Backing {
+                        kind: Some(v2::backing::Kind::Primitive(
+                            v2::PrimitiveType::String as i32,
+                        )),
+                    }),
+                    constraint: Some(v2::Constraint {
+                        len_min: Some(36),
+                        len_max: Some(36),
+                        pattern_const: Some("UUID_PATTERN".to_string()),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            // type Duration : ms [0.0..9223372036854775807] — no step, so
+            // f64 (matching speed_type_def's derivation).
+            v2::Decl {
+                name: "Duration".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                    backing: Some(v2::Backing {
+                        kind: Some(v2::backing::Kind::Unit("ms".to_string())),
+                    }),
+                    constraint: Some(v2::Constraint {
+                        min: Some("0.0".to_string()),
+                        max: Some("9223372036854775807".to_string()),
+                        ..Default::default()
+                    }),
+                    width: Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32)),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            // type Timestamp : integer [0..9223372036854775807] — the range
+            // never goes negative, so an unsigned width.
+            v2::Decl {
+                name: "Timestamp".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                    constraint: Some(v2::Constraint {
+                        min: Some("0".to_string()),
+                        max: Some("9223372036854775807".to_string()),
+                        ..Default::default()
+                    }),
+                    width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::U64 as i32)),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+        ],
         ..Default::default()
     }
 }
