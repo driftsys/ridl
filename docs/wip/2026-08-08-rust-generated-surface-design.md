@@ -24,8 +24,8 @@ The interaction layer is the elaborate half.
 Reviewing that output for Rust idiom turned up defects at three levels, and the
 deepest is not an idiom question: the interaction layer cannot be connected to
 the runtime the platform plans to have, and the types do not carry the contract
-typl declares. That moves the question from "how should this be written" to "what
-should be generated, and in what order".
+typl declares. That moves the question from "how should this be written" to
+"what should be generated, and in what order".
 
 ## 2. What the backend emits today
 
@@ -47,9 +47,9 @@ impl Default for Speed {
 ```
 
 `Speed(9999.0)` and `Speed(f64::NAN)` both construct. The typl range, unit and
-step reach Rust as doc comments and nothing else, so the newtype supplies nominal
-typing and no invariant. typl exists to declare those constraints. None of them
-arrives.
+step reach Rust as doc comments and nothing else, so the newtype supplies
+nominal typing and no invariant. typl exists to declare those constraints. None
+of them arrives.
 
 Composite types keep the ridl spelling of their fields and carry no derives
 (`ridl_backend_rust__tests__appendix_a_rust_snapshot.snap`):
@@ -63,27 +63,27 @@ pub struct DoorPayload {
 ```
 
 `DoorPayload` cannot be printed, cloned, or compared. Enum variants come out as
-`FILTER_INVALID`. The corpus compile test concedes the naming in its own comment:
-the generated code "carries non-fatal lints".
+`FILTER_INVALID`. The corpus compile test concedes the naming in its own
+comment: the generated code "carries non-fatal lints".
 
 ### 2.2 The interaction vocabulary is regenerated per package
 
-`crates/ridl-backend-rust/src/interact.rs:81` emits `vocabulary()` once for every
-package that declares an interface or a service. Each package therefore gets its
-own `Provenance`, `SignalHandle`, `EventHandle`, `TimingConst` and
+`crates/ridl-backend-rust/src/interact.rs:81` emits `vocabulary()` once for
+every package that declares an interface or a service. Each package therefore
+gets its own `Provenance`, `SignalHandle`, `EventHandle`, `TimingConst` and
 `ContractStub`.
 
 A component consuming interfaces from two packages receives two unrelated
-`Provenance` enums and two unrelated `SignalHandle` traits. A helper generic over
-`SignalHandle` can be written against one of them and not the other.
+`Provenance` enums and two unrelated `SignalHandle` traits. A helper generic
+over `SignalHandle` can be written against one of them and not the other.
 
 This is what makes the layer unconnectable to `ridl-rt`. The family overview
 lists that runtime as planned and not started, and rsdl assigns per-target
 binding and glue code to it. A runtime crate cannot ship
-`impl SignalHandle<T> for Signal<T>`, because `SignalHandle` does not exist until
-codegen runs and then exists once per package. Codegen could emit those impls
-itself — the trait is local, so the orphan rule permits it — but the traits stay
-distinct and cross-package generic code stays impossible.
+`impl SignalHandle<T> for Signal<T>`, because `SignalHandle` does not exist
+until codegen runs and then exists once per package. Codegen could emit those
+impls itself — the trait is local, so the orphan rule permits it — but the
+traits stay distinct and cross-package generic code stays impossible.
 
 None of the vocabulary varies by contract. Runtime vocabulary that does not vary
 per contract does not belong in per-package generated code.
@@ -98,8 +98,8 @@ Two tests run `rustc` over generated output —
 Every trait, handle and constant above is covered by snapshot tests and by
 nothing else. That is consistent with
 [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
-which describes emitted Rust that `rustc` rejects as a shipped defect rather than
-a hypothetical one.
+which describes emitted Rust that `rustc` rejects as a shipped defect rather
+than a hypothetical one.
 
 ### 2.4 A discriminant beside data, in three places
 
@@ -111,8 +111,9 @@ The backend emits a tag next to optional data where Rust has a sum type:
 - `ContractStub` carries `kind: ContractKind` beside `uses_result: bool`, which
   is meaningful only for `Ensure`.
 - `SignalHandle::read` returns `(T, Provenance)`, so `let (v, _) = h.read();`
-  discards the provenance. ridl §4.5 exists to prevent a subscriber holding stale
-  last-good data without knowing it, and the signature permits exactly that.
+  discards the provenance. ridl §4.5 exists to prevent a subscriber holding
+  stale last-good data without knowing it, and the signature permits exactly
+  that.
 
 The third case also fails to accommodate ridl §3.1, which states that generated
 APIs expose value, provenance and envelope. An `Init` value was never published
@@ -141,8 +142,9 @@ Three artifacts, on two independent axes.
 
 The domain type is the hub. With several encodings, conversion routes through it
 — encoding A to domain to encoding B — so N encodings need N codecs, not N².
-That is what makes a generated gateway possible: a CAN frame arriving on one side
-and a proto message leaving the other, mediated by one validated representation.
+That is what makes a generated gateway possible: a CAN frame arriving on one
+side and a proto message leaving the other, mediated by one validated
+representation.
 
 Two properties follow from the IR rather than from choice:
 
@@ -164,9 +166,9 @@ Encoding is a property of the wire; representation is a library choice in a
 language.
 
 ridl generates the codec itself, straight from domain type to bytes, so no
-representation is chosen and none is imposed on the consumer. Interoperability is
-at the **bytes**, mediated by the emitted schema — our Rust codec and someone's
-protoc-generated Java interoperate without sharing a library.
+representation is chosen and none is imposed on the consumer. Interoperability
+is at the **bytes**, mediated by the emitted schema — our Rust codec and
+someone's protoc-generated Java interoperate without sharing a library.
 
 This is a smaller undertaking than it sounds, because it is not a protobuf
 library. The bulk of prost is schema parsing, descriptors, dynamic messages,
@@ -238,8 +240,8 @@ schemas and four codecs.
 
 **`--emit ir-json` stays where it is.** `--emit` today mixes languages (`rust`,
 `typescript`), a header (`c-header`) and IR encodings (`ir-json`, `ir-txtpb`,
-`ir-binpb`). Once `--emit` means "target language" the IR values do not belong on
-either axis. Moving them is a breaking change to a shipped CLI for a cosmetic
+`ir-binpb`). Once `--emit` means "target language" the IR values do not belong
+on either axis. Moving them is a breaking change to a shipped CLI for a cosmetic
 gain, so they stay and the exception is documented.
 
 ## 5. Phase 1 — types, payloads, codec
@@ -291,8 +293,8 @@ transform in `crates/ridl-ir/src/name.rs`. Both carry a prescribed obligation:
 - [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
   decision 4 excludes struct fields from the transform and from RIDL-149 until
   E9.8 "extends both the transform and this check to them in the commit that
-  starts projecting them, so that the rule and its application change in the same
-  commit". Phase 1 is that commit.
+  starts projecting them, so that the rule and its application change in the
+  same commit". Phase 1 is that commit.
 - Enum variant renaming meets driftsys/ridl#237: the Rust backend's union-arm
   transform already collides, so `foo_bar` and `fooBar` both emit `FooBar` and
   the file does not compile. Renaming variants does not create that defect but
@@ -306,10 +308,10 @@ that none is emitted today.
 
 ### 5.5 A compile gate, first
 
-Phase 1 adds a corpus entry containing interactions to the `rustc` tests of §2.3,
-so generated output is compiled rather than only compared to a snapshot. This is
-independent of every other decision here and is what makes the rest verifiable.
-It should land first.
+Phase 1 adds a corpus entry containing interactions to the `rustc` tests of
+§2.3, so generated output is compiled rather than only compared to a snapshot.
+This is independent of every other decision here and is what makes the rest
+verifiable. It should land first.
 
 ## 6. Phase 2 — client and server
 
@@ -325,8 +327,8 @@ a component against its contract.
 **Three of the five kinds are calls; two are not.** `query`, `command` and
 `event` map onto request/response, request-without-reply and server-streaming.
 `signal` and `fixed` do not: ridl §4.4 requires a retained last value and §4.5
-requires provenance, and a call has nowhere to hold either. The client owns state
-for those two kinds.
+requires provenance, and a call has nowhere to hold either. The client owns
+state for those two kinds.
 
 **Which means phase 2 converges on E9.11.** A stateful client half is a store; a
 server-side ordinal router is a dispatcher. That is what
@@ -355,9 +357,9 @@ third-party backend consumes the IR".
 Most of the request half exists.
 [ADR-0014](../decisions/ADR-0014-ir-encodings.md) made the IR a real protobuf
 with three encodings, ADR-0016 requires projections off it to be deterministic
-and total, and [ADR-0008](../decisions/ADR-0008-e2-execution.md) decision 9 keeps
-`ridlc` a pure source-to-IR function, which is the shape a plugin host wants
-underneath it. Missing: a response message, a discovery and invocation
+and total, and [ADR-0008](../decisions/ADR-0008-e2-execution.md) decision 9
+keeps `ridlc` a pure source-to-IR function, which is the shape a plugin host
+wants underneath it. Missing: a response message, a discovery and invocation
 convention, and version negotiation.
 
 The two CLI axes give two plugin kinds — `--wire someip` resolving to a wire
@@ -365,13 +367,13 @@ plugin, `--emit kotlin` to a language plugin — on protoc's `protoc-gen-*` nami
 pattern.
 
 **Specify the protocol; treat the mechanism as pluggable.** A plugin can then be
-a subprocess or a WebAssembly module, because the bytes are identical either way.
-Subprocess first: no new dependencies, works immediately. A wasm host earns real
-properties — sandboxing, one artifact per plugin rather than one per platform,
-and determinism that extends ADR-0016 property 1 from the projection to the whole
-generator — but it should arrive behind a feature flag, hosted in the `ridl`
-facade rather than in `ridlc`, and without betting on the Component Model before
-it settles.
+a subprocess or a WebAssembly module, because the bytes are identical either
+way. Subprocess first: no new dependencies, works immediately. A wasm host earns
+real properties — sandboxing, one artifact per plugin rather than one per
+platform, and determinism that extends ADR-0016 property 1 from the projection
+to the whole generator — but it should arrive behind a feature flag, hosted in
+the `ridl` facade rather than in `ridlc`, and without betting on the Component
+Model before it settles.
 
 **This forces the E4.5 encoding decision.**
 [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 9 names binary
@@ -382,12 +384,12 @@ consumer reads it today, so nothing breaks; the first plugin changes that.
 
 ## 8. What this settles about ADR-0013 open item 1
 
-That item asks whether the wire backend emit ceiling binds the language backends.
-The two phases answer it: phase 1 **is** that ceiling — shape plus identity, its
-decisions 2 and 3 — and phase 2 restores the interaction face on the grounds of
-its decision 1, that a backend is classified by what its target can represent and
-Rust can represent last-value, provenance and asynchronous calls. The sequence is
-the argument for why both hold.
+That item asks whether the wire backend emit ceiling binds the language
+backends. The two phases answer it: phase 1 **is** that ceiling — shape plus
+identity, its decisions 2 and 3 — and phase 2 restores the interaction face on
+the grounds of its decision 1, that a backend is classified by what its target
+can represent and Rust can represent last-value, provenance and asynchronous
+calls. The sequence is the argument for why both hold.
 
 ## 9. Open questions
 
@@ -409,9 +411,10 @@ the argument for why both hold.
    does not know the type at compile time. The gateway case of §3 pulls toward
    descriptors and the publication path pulls toward code.
 4. **Where the envelope sits on an invalid sample.** The `Sample` sketch in §2.4
-   gives `Invalid` an envelope without saying whose. ridl §4.5 says the malformed
-   value is not delivered but its invalidity is, which suggests the rejected
-   publication's rather than the last good one's. It is not stated anywhere.
+   gives `Invalid` an envelope without saying whose. ridl §4.5 says the
+   malformed value is not delivered but its invalidity is, which suggests the
+   rejected publication's rather than the last good one's. It is not stated
+   anywhere.
 5. **Whether `async fn` on a `command` is a conformance defect.** The shipped
    consumer trait declares `async fn set_gear(&self)`, so the application awaits
    the delivery acknowledgment. ridl §6.1 states the acknowledgment "carries no
@@ -434,9 +437,9 @@ the argument for why both hold.
   decision 7 on absence, open item 1
 - [ADR-0014](../decisions/ADR-0014-ir-encodings.md) — the IR encodings, decision
   9 on canonicity and decision 14 on the binary round-trip limit
-- [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md) —
-  the pinned name transform, RIDL-149, decision 4's exclusion of struct fields,
-  decision 6's projection properties
+- [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
+  — the pinned name transform, RIDL-149, decision 4's exclusion of struct
+  fields, decision 6's projection properties
 - [`typl-value-objects-design.md`](typl-value-objects-design.md) — the design of
   record for validating constructors and derives, which is phase 1's first half
   (Epic 10)
