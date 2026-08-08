@@ -70,6 +70,14 @@ by the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
   record. Roadmap: Epic 10.
+- **2026-08-08-rust-generated-surface-design.md** — what the code generators
+  emit and in what order. Three artifacts (domain types, wire schema, codec) on
+  two axes (language, encoding), a two-flag CLI, and two phases: validated types
+  plus their codec, then a client/server interaction face. Records four defects
+  in the shipped Rust backend as evidence, and proposes an answer to ADR-0013
+  open item 1. Depends on **typl-value-objects-design.md** for phase 1's
+  validation half. Roadmap: E4.5, E9.8–E9.11, Epic 10. **Not ratified** — seven
+  open questions, including whether codecs are code- or descriptor-driven.
 - **ridl-boundary-model-review.md** — spike record from the uxdl design review
   of 2026-08-03, on the finding that datum and referent come apart at every
   boundary with the non-software world. **Superseded by ADR-0012**, which was
