@@ -11,6 +11,7 @@
 //! descriptor would have addressed by index path through `SourceCodeInfo`.
 
 use ridl_ir::v2;
+use std::collections::HashMap;
 
 #[cfg(test)]
 mod tests;
@@ -95,21 +96,27 @@ fn check_field_number(owner: &str, name: &str, number: u32) -> Result<(), Genera
 /// Tier 1 (ADR-0013 decision 2): the typl surface. A struct becomes a
 /// `message`; a named scalar becomes no declaration of its own — it inlines
 /// to its backing scalar at each use site (design §3.1). An enum becomes a
-/// proto3 `enum` ([`emit_enum`]). A constant is not emitted (ADR-0013
-/// decision 5). An enum set becomes no declaration of its own either — like a
-/// named scalar, it resolves at each use site ([`named_field_type`]). Unions
-/// join in a later commit of this story; until then a declaration of that
-/// kind emits nothing here, and a field referencing one is refused by
-/// [`named_field_type`] rather than emitted as a type `protoc` cannot
-/// resolve.
+/// proto3 `enum` ([`emit_enum`]). A union becomes a `message` wrapping a
+/// `oneof` ([`emit_union`]). A constant is not emitted (ADR-0013 decision 5).
+/// An enum set becomes no declaration of its own either — like a named
+/// scalar, it resolves at each use site ([`named_field_type`]). An array
+/// becomes `repeated`, and a map becomes `map<K, V>` (both [`field_type_text`]
+/// through [`resolve_field_type`]). A tuple has no proto3 equivalent, so it
+/// induces a message of its own, collected into `tuples` during the walk and
+/// emitted by [`emit_induced_tuples`] after the declarations that reached it.
 fn emit_messages(out: &mut String, package: &v2::Package) -> Result<(), GenerateError> {
+    let mut tuples: Vec<InducedTuple> = Vec::new();
     for decl in &package.decls {
         match &decl.kind {
-            Some(v2::decl::Kind::StructDef(def)) => emit_struct(out, package, &decl.name, def)?,
+            Some(v2::decl::Kind::StructDef(def)) => {
+                emit_struct(out, package, &decl.name, def, &mut tuples)?;
+            }
             Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
+            Some(v2::decl::Kind::UnionDef(def)) => emit_union(out, package, &decl.name, def)?,
             _ => {}
         }
     }
+    emit_induced_tuples(out, package, &mut tuples)?;
     Ok(())
 }
 
@@ -188,6 +195,7 @@ fn emit_struct(
     package: &v2::Package,
     name: &str,
     def: &v2::StructDef,
+    tuples: &mut Vec<InducedTuple>,
 ) -> Result<(), GenerateError> {
     out.push_str(&format!("\nmessage {name} {{\n"));
     for member in &def.members {
@@ -197,7 +205,7 @@ fn emit_struct(
             }
             Some(v2::struct_member::Member::Field(field)) => {
                 check_field_number(name, &field.name, field.ordinal)?;
-                let (scalar, comment) = field_type_text(package, name, field)?;
+                let (scalar, comment) = field_type_text(package, name, field, tuples)?;
                 if let Some(comment) = comment {
                     out.push_str(&format!("  {comment}\n"));
                 }
@@ -218,39 +226,301 @@ fn emit_struct(
     Ok(())
 }
 
+/// One union as one `message` wrapping a `oneof` (design §3.1). An arm's
+/// field number is its typl §7.4 ordinal — an identity mapping — and an
+/// arm's name goes through the pinned transform, the same as a struct field
+/// (ADR-0016 decisions 1 and 2). A retired arm's `reserved N;` is emitted at
+/// the message level, outside the `oneof` body, because proto3 does not
+/// admit a `reserved` statement inside one. An arm carries no constraint
+/// comment: unlike a struct field, a `oneof` arm has no line of its own
+/// before it to hold one.
+fn emit_union(
+    out: &mut String,
+    package: &v2::Package,
+    name: &str,
+    def: &v2::UnionDef,
+) -> Result<(), GenerateError> {
+    out.push_str(&format!("\nmessage {name} {{\n  oneof value {{\n"));
+    for arm in &def.arms {
+        check_field_number(name, &arm.name, arm.ordinal)?;
+        let (scalar, _comment) = named_field_type(package, name, &arm.name, &arm.type_ref)?;
+        out.push_str(&format!(
+            "    {scalar} {} = {};\n",
+            ridl_ir::name::snake_case(&arm.name),
+            arm.ordinal
+        ));
+    }
+    out.push_str("  }\n");
+    for reserved in &def.reserved {
+        out.push_str(&format!("  reserved {};\n", reserved.ordinal));
+    }
+    out.push_str("}\n");
+    Ok(())
+}
+
 /// The proto3 type of one field, with the comment a named scalar leaves at
-/// its use site (design §3.2).
+/// its use site (design §3.2). `tuples` collects a tuple type reached along
+/// the way, for [`emit_induced_tuples`] to emit as a message after the
+/// declaration that reached it (proto3 has no tuple, design §3.1).
 fn field_type_text(
     package: &v2::Package,
     owner: &str,
     field: &v2::Field,
+    tuples: &mut Vec<InducedTuple>,
 ) -> Result<(String, Option<String>), GenerateError> {
-    let kind = field.r#type.as_ref().and_then(|ty| ty.kind.as_ref());
-    match kind {
+    let Some(ty) = field.r#type.as_ref() else {
+        return Err(GenerateError {
+            message: format!("{owner}.{} carries no type in the IR.", field.name),
+        });
+    };
+    let hint = format!("{owner}{}", type_name(&field.name));
+    resolve_field_type(package, owner, &field.name, &hint, ty, tuples)
+}
+
+/// The proto3 type at one field position, recursing into an array element, a
+/// map key and value, and — through [`field_type_text`] and
+/// [`emit_induced_tuple`] — a tuple field, every position typl gives a
+/// [`v2::FieldType`] of its own (typl §7, §11, §12).
+///
+/// `hint` is the CamelCase name a tuple reached at this exact position would
+/// take as a generated message (design §3.1): `<OwnerType><FieldName>` at
+/// the field itself, extended with `Element` for an array element and
+/// `Value` for a map value — proto3 forbids a map key from being a message,
+/// so a tuple never reaches the key position (TYPL-209 already requires an
+/// integral or string key, and [`map_key_text`] refuses the rest).
+fn resolve_field_type(
+    package: &v2::Package,
+    owner: &str,
+    field_name: &str,
+    hint: &str,
+    ty: &v2::FieldType,
+    tuples: &mut Vec<InducedTuple>,
+) -> Result<(String, Option<String>), GenerateError> {
+    match ty.kind.as_ref() {
         Some(v2::field_type::Kind::Primitive(primitive)) => {
             Ok((proto_primitive(*primitive).to_string(), None))
         }
         Some(v2::field_type::Kind::InlineScalar(td)) => Ok((proto_scalar(td).to_string(), None)),
         Some(v2::field_type::Kind::Named(reference)) => {
-            named_field_type(package, owner, &field.name, reference)
+            named_field_type(package, owner, field_name, reference)
+        }
+        Some(v2::field_type::Kind::Array(array)) => {
+            let element = array.element.as_ref().ok_or_else(|| GenerateError {
+                message: format!(
+                    "{owner}.{field_name} declares an array with no element type in the IR."
+                ),
+            })?;
+            let (element_text, comment) = resolve_field_type(
+                package,
+                owner,
+                field_name,
+                &format!("{hint}Element"),
+                element,
+                tuples,
+            )?;
+            Ok((format!("repeated {element_text}"), comment))
+        }
+        Some(v2::field_type::Kind::Map(map)) => {
+            let key = map.key.as_ref().ok_or_else(|| GenerateError {
+                message: format!("{owner}.{field_name} declares a map with no key type in the IR."),
+            })?;
+            let value = map.value.as_ref().ok_or_else(|| GenerateError {
+                message: format!(
+                    "{owner}.{field_name} declares a map with no value type in the IR."
+                ),
+            })?;
+            // proto3 forbids a map value from being `repeated` or another
+            // map — checked here, before resolving the value, so neither
+            // rejection reaches `protoc` as a schema it must itself refuse.
+            match value.kind.as_ref() {
+                Some(v2::field_type::Kind::Array(_)) => {
+                    return Err(GenerateError {
+                        message: format!(
+                            "{owner}.{field_name} maps to a repeated value, which proto3 \
+                             does not admit as a map value type."
+                        ),
+                    });
+                }
+                Some(v2::field_type::Kind::Map(_)) => {
+                    return Err(GenerateError {
+                        message: format!(
+                            "{owner}.{field_name} maps to another map, which proto3 does \
+                             not admit as a map value type."
+                        ),
+                    });
+                }
+                _ => {}
+            }
+            let key_text = map_key_text(package, owner, field_name, key)?;
+            let (value_text, comment) = resolve_field_type(
+                package,
+                owner,
+                field_name,
+                &format!("{hint}Value"),
+                value,
+                tuples,
+            )?;
+            Ok((format!("map<{key_text}, {value_text}>"), comment))
+        }
+        Some(v2::field_type::Kind::Tuple(tuple)) => {
+            tuples.push(InducedTuple {
+                name: hint.to_string(),
+                tuple: tuple.clone(),
+            });
+            Ok((hint.to_string(), None))
         }
         Some(_) => Err(GenerateError {
             message: format!(
-                "{owner}.{} has a type this backend does not project yet (E9.8 tier 1 \
-                 lands over several commits).",
-                field.name
+                "{owner}.{field_name} has a stream type, which this backend does not \
+                 project — tier 1 covers the typl surface only (ADR-0013 decision 2)."
             ),
         }),
         None => Err(GenerateError {
-            message: format!("{owner}.{} carries no type in the IR.", field.name),
+            message: format!("{owner}.{field_name} carries no type in the IR."),
         }),
     }
+}
+
+/// The proto3 scalars a map key may take: any integral or string type, never
+/// a floating-point type, `bytes`, or a message/enum name (the proto3
+/// language guide, "Maps"). typl admits a broader set at a map key position
+/// (typl §12.2, TYPL-209 — any primitive, or a named string type), so a key
+/// this backend resolves to a scalar outside this set is refused rather than
+/// emitted as a `map<...>` `protoc` rejects.
+const PROTO_MAP_KEY_SCALARS: [&str; 7] = [
+    "bool", "int64", "uint32", "uint64", "sint32", "sint64", "string",
+];
+
+fn map_key_text(
+    package: &v2::Package,
+    owner: &str,
+    field_name: &str,
+    key: &v2::FieldType,
+) -> Result<String, GenerateError> {
+    let text = match key.kind.as_ref() {
+        Some(v2::field_type::Kind::Primitive(primitive)) => proto_primitive(*primitive).to_string(),
+        Some(v2::field_type::Kind::Named(reference)) => {
+            named_field_type(package, owner, field_name, reference)?.0
+        }
+        _ => {
+            return Err(GenerateError {
+                message: format!(
+                    "{owner}.{field_name} uses a map key type proto3 cannot carry — a map \
+                     key must be an integral or string type."
+                ),
+            });
+        }
+    };
+    if PROTO_MAP_KEY_SCALARS.contains(&text.as_str()) {
+        Ok(text)
+    } else {
+        Err(GenerateError {
+            message: format!(
+                "{owner}.{field_name} uses `{text}` as a map key, which proto3 does not \
+                 admit — a map key must be an integral or string type."
+            ),
+        })
+    }
+}
+
+/// A tuple type reached while walking the package, to be emitted as a
+/// message after the declaration that reached it — proto3 has no tuple
+/// (design §3.1). Matches the pattern `ridl-backend-rust`'s `InducedTuple`
+/// uses: a tuple is anonymous in source, so it is collected into a flat
+/// worklist during the walk and drained afterwards ([`emit_induced_tuples`]),
+/// which is also where a tuple nested inside another tuple, an array element
+/// or a map value is found.
+#[derive(Debug, Clone)]
+struct InducedTuple {
+    /// The generated message name: `<OwnerType><FieldName>` in CamelCase, or
+    /// that name extended for a position reached through the field
+    /// ([`resolve_field_type`]).
+    name: String,
+    tuple: v2::TupleType,
+}
+
+/// Emits every tuple type the walk in [`emit_messages`] reached, as a
+/// message named for the path that reached it. The worklist is drained
+/// rather than iterated once: emitting one induced message's fields can
+/// discover a tuple nested inside it, which is appended to `tuples` and
+/// picked up by a later pass of this same loop.
+///
+/// Two different tuples reaching the same generated name is refused rather
+/// than resolved by picking one: nothing upstream keeps two field paths from
+/// mangling to the same CamelCase string, and there is no sound way to
+/// choose between two different message shapes for one name.
+fn emit_induced_tuples(
+    out: &mut String,
+    package: &v2::Package,
+    tuples: &mut Vec<InducedTuple>,
+) -> Result<(), GenerateError> {
+    let mut seen: HashMap<String, v2::TupleType> = HashMap::new();
+    let mut index = 0;
+    while index < tuples.len() {
+        let induced = tuples[index].clone();
+        index += 1;
+        if let Some(previous) = seen.get(&induced.name) {
+            if *previous != induced.tuple {
+                return Err(GenerateError {
+                    message: format!(
+                        "the generated message name {} is claimed by two different tuple \
+                         types; a tuple generates a message named for the path that reaches \
+                         it, and two different paths spelled one name here — rename a field \
+                         so they differ.",
+                        induced.name
+                    ),
+                });
+            }
+            continue;
+        }
+        seen.insert(induced.name.clone(), induced.tuple.clone());
+        emit_induced_tuple(out, package, &induced, tuples)?;
+    }
+    Ok(())
+}
+
+/// One induced tuple message: positional fields `field_1`, `field_2`, …
+/// numbered from 1 (design §3.1). A tuple field is always named in typl
+/// source (typl §11), but positional access is what a tuple actually offers,
+/// so the generated message uses the position rather than carry the source
+/// name onto the wire.
+fn emit_induced_tuple(
+    out: &mut String,
+    package: &v2::Package,
+    induced: &InducedTuple,
+    tuples: &mut Vec<InducedTuple>,
+) -> Result<(), GenerateError> {
+    out.push_str(&format!("\nmessage {} {{\n", induced.name));
+    for (index, field) in induced.tuple.fields.iter().enumerate() {
+        let ordinal = u32::try_from(index + 1).map_err(|_| GenerateError {
+            message: format!(
+                "{} has more tuple fields than fit a proto field number.",
+                induced.name
+            ),
+        })?;
+        let field_name = format!("field_{ordinal}");
+        check_field_number(&induced.name, &field_name, ordinal)?;
+        let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
+            message: format!("{}.{field_name} carries no type in the IR.", induced.name),
+        })?;
+        let hint = format!("{}Field{ordinal}", induced.name);
+        let (scalar, comment) =
+            resolve_field_type(package, &induced.name, &field_name, &hint, ty, tuples)?;
+        if let Some(comment) = comment {
+            out.push_str(&format!("  {comment}\n"));
+        }
+        out.push_str(&format!("  {scalar} {field_name} = {ordinal};\n"));
+    }
+    out.push_str("}\n");
+    Ok(())
 }
 
 /// A resolved named-type reference at a field position. A named scalar
 /// inlines to its backing scalar and leaves its name, unit, range and step
 /// as a comment; a struct reference names the message it becomes; an enum
-/// reference names the `enum` it becomes ([`emit_enum`]).
+/// reference names the `enum` it becomes ([`emit_enum`]); a union reference
+/// names the `message` it becomes ([`emit_union`]) — a union is legal
+/// wherever data is legal (typl §10), the same as a struct or an enum.
 fn named_field_type(
     package: &v2::Package,
     owner: &str,
@@ -273,10 +543,12 @@ fn named_field_type(
         Some(v2::decl::Kind::StructDef(_)) => Ok((decl.name.clone(), None)),
         Some(v2::decl::Kind::EnumDef(_)) => Ok((decl.name.clone(), None)),
         Some(v2::decl::Kind::EnumSetDef(esd)) => Ok(enum_set_field_type(esd)),
+        Some(v2::decl::Kind::UnionDef(_)) => Ok((decl.name.clone(), None)),
         _ => Err(GenerateError {
             message: format!(
-                "{owner}.{field_name} references `{reference}`, a declaration kind this \
-                 backend does not project yet (E9.8 tier 1 lands over several commits)."
+                "{owner}.{field_name} references `{reference}`, a declaration kind that \
+                 cannot be a field's type — only a named scalar, struct, enum, enum set or \
+                 union may be referenced from a field position."
             ),
         }),
     }

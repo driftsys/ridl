@@ -677,6 +677,235 @@ fn a_struct_field_number_in_the_protobuf_reserved_span_is_refused() {
     );
 }
 
+#[test]
+fn a_union_becomes_a_message_wrapping_a_oneof() {
+    // "Speed" and "GearIndex" must be declared for their arms to resolve —
+    // a union arm references a named type the same way a struct field does
+    // (typl §10.1, TYPL-204), and `named_field_type` refuses an
+    // undeclared reference. The union body itself carries no constraint
+    // comment (a `oneof` arm has no line of its own to hold one), so the
+    // two referenced types are given no unit or constraint here — the
+    // assertion below would otherwise have to account for one.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "GearIndex".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(gear_index_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Payload".to_string(),
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![
+                        v2::UnionArm {
+                            name: "speed".to_string(),
+                            ordinal: 1,
+                            type_ref: "Speed".to_string(),
+                            doc: String::new(),
+                        },
+                        v2::UnionArm {
+                            name: "gearIndex".to_string(),
+                            ordinal: 2,
+                            type_ref: "GearIndex".to_string(),
+                            doc: String::new(),
+                        },
+                    ],
+                    is_result: false,
+                    reserved: vec![v2::Reserved {
+                        ordinal: 3,
+                        ..Default::default()
+                    }],
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        generated.proto_source.contains(
+            "message Payload {\n  \
+             oneof value {\n    \
+             double speed = 1;\n    \
+             sint64 gear_index = 2;\n  \
+             }\n  \
+             reserved 3;\n}"
+        ),
+        "got:\n{}",
+        generated.proto_source
+    );
+
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_struct_field_typed_by_a_named_union_projects_and_compiles() {
+    // `named_field_type` must resolve a `UnionDef` reference the same way it
+    // resolves a struct or an enum: a union is legal wherever data is legal
+    // (typl §10), so a field typed by one must project rather than fail with
+    // "a declaration kind this backend does not project yet".
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "GearIndex".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(gear_index_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Payload".to_string(),
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![
+                        v2::UnionArm {
+                            name: "speed".to_string(),
+                            ordinal: 1,
+                            type_ref: "Speed".to_string(),
+                            doc: String::new(),
+                        },
+                        v2::UnionArm {
+                            name: "gearIndex".to_string(),
+                            ordinal: 2,
+                            type_ref: "GearIndex".to_string(),
+                            doc: String::new(),
+                        },
+                    ],
+                    is_result: false,
+                    reserved: Vec::new(),
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Reading".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("value", 1, named_type("Payload"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        generated.proto_source.contains("message Payload {"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("Payload value = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_array_field_is_repeated() {
+    let package = struct_package("Trace", "samples", 1, array_of(float64_type()));
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("repeated double samples = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_map_field_becomes_a_proto_map() {
+    let package = struct_package(
+        "Index",
+        "byName",
+        1,
+        map_of(v2::PrimitiveType::String, float64_type()),
+    );
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("map<string, double> by_name = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_map_key_type_proto3_cannot_carry_is_refused() {
+    // proto3 restricts a map key to an integral or string type. typl admits
+    // a bare `float` at a map key position (TYPL-209 accepts any
+    // primitive), so this is a real gap this backend must refuse rather
+    // than hand `protoc` a `map<double, ...>` it rejects.
+    let package = struct_package(
+        "Index",
+        "byReading",
+        1,
+        map_of(v2::PrimitiveType::Float, float64_type()),
+    );
+    let error = generate(&package).expect_err("must refuse");
+    assert!(error.message.contains("map key"), "got: {}", error.message);
+}
+
+#[test]
+fn a_map_value_that_is_itself_repeated_is_refused() {
+    // proto3 does not admit a `repeated` map value.
+    let package = struct_package(
+        "Index",
+        "byName",
+        1,
+        map_of(v2::PrimitiveType::String, array_of(float64_type())),
+    );
+    let error = generate(&package).expect_err("must refuse");
+    assert!(error.message.contains("repeated"), "got: {}", error.message);
+}
+
+#[test]
+fn a_tuple_field_induces_a_positional_message() {
+    // proto3 has no tuple, so one is generated, named for its owner and field.
+    let package = struct_package(
+        "Reading",
+        "bounds",
+        1,
+        tuple_of(vec![float64_type(), float64_type()]),
+    );
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        generated.proto_source.contains(
+            "message ReadingBounds {\n  \
+             double field_1 = 1;\n  \
+             double field_2 = 2;\n}"
+        ),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("ReadingBounds bounds = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
 /// A signal interaction at `ordinal`. The kind is immaterial to tier 2: the
 /// table is interface-wide and kind-blind (ridl §11, ADR-0013 decision 3).
 fn signal_decl(name: &str, ordinal: u32) -> v2::Decl {
@@ -764,5 +993,88 @@ fn speed_type_def() -> v2::TypeDef {
         }),
         width: Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32)),
         ..Default::default()
+    }
+}
+
+/// A signed 64-bit named scalar with no unit or constraint — enough to
+/// resolve to proto3's `sint64` (typl Appendix D) without leaving a
+/// constraint comment worth checking.
+fn gear_index_type_def() -> v2::TypeDef {
+    v2::TypeDef {
+        width: Some(v2::type_def::Width::IntWidth(v2::IntWidth::I64 as i32)),
+        ..Default::default()
+    }
+}
+
+/// A package holding one struct `name` with one field `field_name`, at
+/// `ordinal`, typed `r#type`.
+fn struct_package(
+    name: &str,
+    field_name: &str,
+    ordinal: u32,
+    r#type: v2::FieldType,
+) -> v2::Package {
+    v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: name.to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(field_name, ordinal, r#type)],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+/// A bounded array of `element` (typl §12.1). The bound is immaterial to
+/// this backend — proto3's `repeated` carries no bound — so an arbitrary
+/// non-degenerate one is used.
+fn array_of(element: v2::FieldType) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(element)),
+            min: 0,
+            max: 8,
+        }))),
+    }
+}
+
+/// A bounded map from a bare `key` primitive to `value` (typl §12.2). The
+/// bound is immaterial here for the same reason as [`array_of`].
+fn map_of(key: v2::PrimitiveType, value: v2::FieldType) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Primitive(key as i32)),
+            })),
+            value: Some(Box::new(value)),
+            min: 0,
+            max: 8,
+        }))),
+    }
+}
+
+/// An anonymous tuple of `fields`, in order (typl §11). Each tuple field
+/// needs a source name of its own (typl §11 — positional access is not
+/// permitted), but this backend generates positional `field_N` names
+/// regardless of it, so the source name here is arbitrary.
+fn tuple_of(fields: Vec<v2::FieldType>) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: fields
+                .into_iter()
+                .enumerate()
+                .map(|(index, r#type)| v2::TupleField {
+                    name: format!("f{index}"),
+                    r#type: Some(r#type),
+                })
+                .collect(),
+        })),
     }
 }
