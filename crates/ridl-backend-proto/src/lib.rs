@@ -35,6 +35,7 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let mut out = String::new();
     out.push_str("syntax = \"proto3\";\n\n");
     out.push_str(&format!("package {};\n", package.name));
+    emit_messages(&mut out, package)?;
     emit_identity_tables(&mut out, package)?;
     Ok(Generated { proto_source: out })
 }
@@ -89,6 +90,237 @@ fn check_field_number(owner: &str, name: &str, number: u32) -> Result<(), Genera
         });
     }
     Ok(())
+}
+
+/// Tier 1 (ADR-0013 decision 2): the typl surface. A struct becomes a
+/// `message`; a named scalar becomes no declaration of its own — it inlines
+/// to its backing scalar at each use site (design §3.1). A constant is not
+/// emitted (ADR-0013 decision 5). Enums, enum sets and unions join in later
+/// commits of this story; until then a declaration of one of those kinds
+/// emits nothing here, and a field referencing one is refused by
+/// [`named_field_type`] rather than emitted as a type `protoc` cannot
+/// resolve.
+fn emit_messages(out: &mut String, package: &v2::Package) -> Result<(), GenerateError> {
+    for decl in &package.decls {
+        if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
+            emit_struct(out, package, &decl.name, def)?;
+        }
+    }
+    Ok(())
+}
+
+/// One struct as one `message`: field numbers are the typl §7.4 ordinals, a
+/// tombstone emits proto `reserved`, and a `?` field takes the proto3
+/// `optional` keyword, because proto3 represents absence structurally
+/// (ADR-0013 decision 7). Field names go through the pinned transform —
+/// proto3's field namespace is snake_case, and RIDL-149 has already refused
+/// any package where two field names collide under it (ADR-0016 decision 4).
+fn emit_struct(
+    out: &mut String,
+    package: &v2::Package,
+    name: &str,
+    def: &v2::StructDef,
+) -> Result<(), GenerateError> {
+    out.push_str(&format!("\nmessage {name} {{\n"));
+    for member in &def.members {
+        match &member.member {
+            Some(v2::struct_member::Member::Reserved(reserved)) => {
+                out.push_str(&format!("  reserved {};\n", reserved.ordinal));
+            }
+            Some(v2::struct_member::Member::Field(field)) => {
+                check_field_number(name, &field.name, field.ordinal)?;
+                let (scalar, comment) = field_type_text(package, name, field)?;
+                if let Some(comment) = comment {
+                    out.push_str(&format!("  {comment}\n"));
+                }
+                let optional = match &field.r#type {
+                    Some(ty) if ty.optional => "optional ",
+                    _ => "",
+                };
+                out.push_str(&format!(
+                    "  {optional}{scalar} {} = {};\n",
+                    ridl_ir::name::snake_case(&field.name),
+                    field.ordinal
+                ));
+            }
+            None => {}
+        }
+    }
+    out.push_str("}\n");
+    Ok(())
+}
+
+/// The proto3 type of one field, with the comment a named scalar leaves at
+/// its use site (design §3.2).
+fn field_type_text(
+    package: &v2::Package,
+    owner: &str,
+    field: &v2::Field,
+) -> Result<(String, Option<String>), GenerateError> {
+    let kind = field.r#type.as_ref().and_then(|ty| ty.kind.as_ref());
+    match kind {
+        Some(v2::field_type::Kind::Primitive(primitive)) => {
+            Ok((proto_primitive(*primitive).to_string(), None))
+        }
+        Some(v2::field_type::Kind::InlineScalar(td)) => Ok((proto_scalar(td).to_string(), None)),
+        Some(v2::field_type::Kind::Named(reference)) => {
+            named_field_type(package, owner, &field.name, reference)
+        }
+        Some(_) => Err(GenerateError {
+            message: format!(
+                "{owner}.{} has a type this backend does not project yet (E9.8 tier 1 \
+                 lands over several commits).",
+                field.name
+            ),
+        }),
+        None => Err(GenerateError {
+            message: format!("{owner}.{} carries no type in the IR.", field.name),
+        }),
+    }
+}
+
+/// A resolved named-type reference at a field position. A named scalar
+/// inlines to its backing scalar and leaves its name, unit, range and step
+/// as a comment; a struct reference names the message it becomes.
+fn named_field_type(
+    package: &v2::Package,
+    owner: &str,
+    field_name: &str,
+    reference: &str,
+) -> Result<(String, Option<String>), GenerateError> {
+    let Some(decl) = package.decls.iter().find(|decl| decl.name == *reference) else {
+        return Err(GenerateError {
+            message: format!(
+                "{owner}.{field_name} references `{reference}`, which is not a declaration \
+                 of this package (cross-package references land later in E9.8)."
+            ),
+        });
+    };
+    match &decl.kind {
+        Some(v2::decl::Kind::TypeDef(td)) => Ok((
+            proto_scalar(td).to_string(),
+            Some(constraint_comment(&decl.name, td)),
+        )),
+        Some(v2::decl::Kind::StructDef(_)) => Ok((decl.name.clone(), None)),
+        _ => Err(GenerateError {
+            message: format!(
+                "{owner}.{field_name} references `{reference}`, a declaration kind this \
+                 backend does not project yet (E9.8 tier 1 lands over several commits)."
+            ),
+        }),
+    }
+}
+
+/// The proto3 scalar for a resolved typl width (typl Appendix D). proto3 has
+/// no `uint8`/`uint16` — varint keeps small values small — so both widen to
+/// `uint32`. A signed width means the declared range contains negatives, and
+/// such a range takes `sint32`/`sint64`, because plain `int32` varint costs
+/// 10 bytes for every negative value (ADR-0013 decision 4). A quantized
+/// float keeps its native form: the scaled-integer encoding of typl §4.3
+/// belongs to CAN/DBC and to SOME/IP per deployment, and a wire backend must
+/// not apply it unasked.
+fn proto_scalar(td: &v2::TypeDef) -> &'static str {
+    match &td.width {
+        Some(v2::type_def::Width::IntWidth(width)) => match v2::IntWidth::try_from(*width) {
+            Ok(v2::IntWidth::U8 | v2::IntWidth::U16 | v2::IntWidth::U32) => "uint32",
+            Ok(v2::IntWidth::U64) => "uint64",
+            Ok(v2::IntWidth::I8 | v2::IntWidth::I16 | v2::IntWidth::I32) => "sint32",
+            Ok(v2::IntWidth::I64) => "sint64",
+            _ => "int64",
+        },
+        Some(v2::type_def::Width::FloatWidth(width)) => match v2::FloatWidth::try_from(*width) {
+            Ok(v2::FloatWidth::F32) => "float",
+            _ => "double",
+        },
+        // No width table: boolean, string and bytes backings. A unit backing
+        // implies the float primitive (typl §5.1), so its width is always
+        // derived and never reaches this arm.
+        None => match td
+            .backing
+            .as_ref()
+            .and_then(|backing| backing.kind.as_ref())
+        {
+            Some(v2::backing::Kind::Primitive(primitive)) => {
+                match v2::PrimitiveType::try_from(*primitive) {
+                    Ok(v2::PrimitiveType::Boolean) => "bool",
+                    Ok(v2::PrimitiveType::Bytes) => "bytes",
+                    _ => "string",
+                }
+            }
+            _ => "string",
+        },
+    }
+}
+
+/// The proto3 scalar for a direct primitive use at a field position. A bare
+/// `integer` or `float` carries no derived width, so the full typl domain is
+/// emitted: int64 and float64 (typl §4).
+fn proto_primitive(primitive: i32) -> &'static str {
+    match v2::PrimitiveType::try_from(primitive) {
+        Ok(v2::PrimitiveType::Boolean) => "bool",
+        Ok(v2::PrimitiveType::Integer) => "int64",
+        Ok(v2::PrimitiveType::Float) => "double",
+        Ok(v2::PrimitiveType::Bytes) => "bytes",
+        _ => "string",
+    }
+}
+
+/// The constraint information proto3 has no construct for, as a comment
+/// (design §3.2). This is the only home for it: the alternative — a
+/// published options extension over `google.protobuf.FieldOptions` — was
+/// rejected for v0.1 because it serves a consumer that does not exist, and
+/// the IR is already the machine-readable contract.
+fn constraint_comment(declared: &str, td: &v2::TypeDef) -> String {
+    let mut form = Vec::new();
+    if let Some(v2::backing::Kind::Unit(unit)) = td.backing.as_ref().and_then(|b| b.kind.as_ref()) {
+        form.push(unit.clone());
+    }
+    if let Some(constraint) = &td.constraint {
+        let rendered = render_constraint(constraint);
+        if !rendered.is_empty() {
+            form.push(rendered);
+        }
+    }
+    if form.is_empty() {
+        format!("// {declared}")
+    } else {
+        format!("// {declared} — {}", form.join(" "))
+    }
+}
+
+/// The source form of a scalar constraint (typl §5.2–§5.5): the range
+/// bracket with its optional step, the length bracket, and the `match`
+/// pattern. The strings are canonical text already (ADR-0007 decision 9), so
+/// they are joined, never reformatted.
+fn render_constraint(constraint: &v2::Constraint) -> String {
+    let mut parts = Vec::new();
+    if constraint.min.is_some() || constraint.max.is_some() || constraint.step.is_some() {
+        let min = constraint.min.as_deref().unwrap_or("");
+        let max = constraint.max.as_deref().unwrap_or("");
+        let step = match &constraint.step {
+            Some(step) => format!(" step {step}"),
+            None => String::new(),
+        };
+        parts.push(format!("[{min}..{max}{step}]"));
+    }
+    match (constraint.len_min, constraint.len_max) {
+        // A fixed `[N]` constraint has len_min == len_max == N.
+        (Some(min), Some(max)) if min == max => parts.push(format!("[{min}]")),
+        (None, None) => {}
+        (min, max) => parts.push(format!(
+            "[{}..{}]",
+            min.map(|bound| bound.to_string()).unwrap_or_default(),
+            max.map(|bound| bound.to_string()).unwrap_or_default()
+        )),
+    }
+    // A pattern given by a named regex constant renders by that name, the
+    // way it was written (typl §5.3, §6.2).
+    if let Some(name) = &constraint.pattern_const {
+        parts.push(format!("match {name}"));
+    } else if let Some(pattern) = &constraint.pattern {
+        parts.push(format!("match {pattern}"));
+    }
+    parts.join(" ")
 }
 
 /// Tier 2 (ADR-0013 decision 3): one enum per interface shape, interface-wide

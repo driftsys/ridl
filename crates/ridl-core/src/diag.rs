@@ -623,9 +623,10 @@ diag_codes! {
         /// by the function. Its own code rather than RIDL-402 — that rule is
         /// the same name declared twice — because the remedy differs: these
         /// names are distinct in source and only their projections collide.
-        /// Scoped to the members of one interface and the parameters of one
-        /// interaction (decision 4); struct fields join when E9.8 projects
-        /// them. Emitted per-package by the checker (E9.7).
+        /// Scoped to the members of one interface, the parameters of one
+        /// interaction (decision 4), and the fields of one struct, which
+        /// joined in the commit where E9.8 started projecting them onto
+        /// proto3. Emitted per-package by the checker (E9.7).
         RIDL_149 = "RIDL-149", Error,
             "two names in one scope collide after the pinned name transform";
 

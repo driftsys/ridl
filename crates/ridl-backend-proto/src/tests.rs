@@ -148,6 +148,195 @@ fn an_ordinal_above_the_proto_ceiling_is_refused() {
     );
 }
 
+#[test]
+fn a_struct_emits_a_message_numbered_by_typl_ordinals() {
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "SensorReading".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![
+                    field_member("currentSpeed", 1, float64_type()),
+                    field_member("sensorId", 2, int64_type()),
+                    reserved_member(3),
+                ],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        generated.proto_source.contains(
+            "message SensorReading {\n  \
+         double current_speed = 1;\n  \
+         int64 sensor_id = 2;\n  \
+         reserved 3;\n}"
+        ),
+        "got:\n{}",
+        generated.proto_source
+    );
+
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment() {
+    // type Speed : km/h [0.0..250.0] — no step, so the checker derives f64
+    // (`scalar::derive_float_width` gives f32 only when a step is declared).
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Reading".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("value", 1, named_type("Speed"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+
+    // The named type does not become a declaration of its own: it inlines.
+    assert!(
+        !generated.proto_source.contains("message Speed"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated
+            .proto_source
+            .contains("// Speed — km/h [0.0..250.0]"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("double value = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_quantized_float_keeps_its_native_width() {
+    // type Speed : km/h [0.0..250.0 step 0.5] — the step makes the checker
+    // derive f32 (typl §4.3), and a wire backend keeps that native form: the
+    // scaled-integer encoding belongs to CAN/DBC and to SOME/IP per
+    // deployment, and must not be applied unasked (ADR-0013 decision 4).
+    let mut quantized = speed_type_def();
+    quantized
+        .constraint
+        .as_mut()
+        .expect("speed_type_def has a constraint")
+        .step = Some("0.5".to_string());
+    quantized.width = Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F32 as i32));
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(quantized)),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Reading".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("value", 1, named_type("Speed"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        generated
+            .proto_source
+            .contains("// Speed — km/h [0.0..250.0 step 0.5]"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    assert!(
+        generated.proto_source.contains("float value = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn an_optional_field_takes_the_proto3_optional_keyword() {
+    // ADR-0013 decision 7: proto3 represents absence structurally, so it does.
+    let mut ty = float64_type();
+    ty.optional = true;
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Reading".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member("value", 1, ty)],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .proto_source
+            .contains("optional double value = 1;"),
+        "got:\n{}",
+        generated.proto_source
+    );
+    compile_with_protox("veh.common.proto", &generated.proto_source);
+}
+
+#[test]
+fn a_struct_field_number_in_the_protobuf_reserved_span_is_refused() {
+    // The 19,000–19,999 span and the 536,870,911 ceiling constrain message
+    // field numbers, which is what a struct field becomes.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Wide".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member("far", 19_000, float64_type())],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let error = generate(&package).expect_err("must refuse");
+    assert!(error.message.contains("19000"), "got: {}", error.message);
+    assert!(
+        error.message.contains("reserved by protobuf"),
+        "got: {}",
+        error.message
+    );
+}
+
 /// A signal interaction at `ordinal`. The kind is immaterial to tier 2: the
 /// table is interface-wide and kind-blind (ridl §11, ADR-0013 decision 3).
 fn signal_decl(name: &str, ordinal: u32) -> v2::Decl {
@@ -166,6 +355,74 @@ fn reserved_decl(ordinal: u32) -> v2::Decl {
             ordinal,
             ..Default::default()
         })),
+        ..Default::default()
+    }
+}
+
+fn field_member(name: &str, ordinal: u32, r#type: v2::FieldType) -> v2::StructMember {
+    v2::StructMember {
+        member: Some(v2::struct_member::Member::Field(v2::Field {
+            name: name.to_string(),
+            ordinal,
+            r#type: Some(r#type),
+            ..Default::default()
+        })),
+    }
+}
+
+fn reserved_member(ordinal: u32) -> v2::StructMember {
+    v2::StructMember {
+        member: Some(v2::struct_member::Member::Reserved(v2::Reserved {
+            ordinal,
+            ..Default::default()
+        })),
+    }
+}
+
+/// A bare `float` field type — a direct primitive use, whose domain is
+/// float64 (typl §4).
+fn float64_type() -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Primitive(
+            v2::PrimitiveType::Float as i32,
+        )),
+    }
+}
+
+/// A bare `integer` field type — a direct primitive use, whose domain is
+/// int64 (typl §4).
+fn int64_type() -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Primitive(
+            v2::PrimitiveType::Integer as i32,
+        )),
+    }
+}
+
+fn named_type(name: &str) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Named(name.to_string())),
+    }
+}
+
+/// `type Speed : km/h [0.0..250.0]` as the checker lowers it: a unit backing
+/// (which implies the float primitive, typl §5.1), the canonical constraint
+/// strings, and the derived f64 width — no step is declared, and
+/// `scalar::derive_float_width` gives f32 only when one is.
+fn speed_type_def() -> v2::TypeDef {
+    v2::TypeDef {
+        backing: Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Unit("km/h".to_string())),
+        }),
+        constraint: Some(v2::Constraint {
+            min: Some("0.0".to_string()),
+            max: Some("250.0".to_string()),
+            ..Default::default()
+        }),
+        width: Some(v2::type_def::Width::FloatWidth(v2::FloatWidth::F64 as i32)),
         ..Default::default()
     }
 }
