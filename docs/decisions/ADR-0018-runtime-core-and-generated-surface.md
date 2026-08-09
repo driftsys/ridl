@@ -1,4 +1,4 @@
-# ADR-0017 — The runtime core, two encodings, and what the backends emit
+# ADR-0018 — The runtime core, two encodings, and what the backends emit
 
 ## Status
 
@@ -10,8 +10,15 @@ the way ADR-0013 binds what a backend may emit and ADR-0016 binds how identity
 projects.
 
 It **answers the interaction-face half of
-[ADR-0013](ADR-0013-codegen-backend-scope.md) open item 1** and **retires
-[ADR-0007](ADR-0007-e1-execution.md) decision 13's extern-C face**.
+[ADR-0013](ADR-0013-codegen-backend-scope.md) open item 1**, **retires
+[ADR-0007](ADR-0007-e1-execution.md) decision 13's extern-C face**, and
+**resolves the conflict ADR-0013's 2026-08-08 amendment records between its
+decision 2 and [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md)
+decision 10** (decision 18).
+
+It is numbered 0018 because [ADR-0017](ADR-0017-proto3-projection-rules.md) was
+accepted on 2026-08-08 from roadmap story E9.8 while this record was being
+drafted.
 
 Open item 1 asks whether the wire-backend emit ceiling binds the language
 backends, and it has two halves that resolve differently. Roadmap epic E10 and
@@ -126,6 +133,14 @@ be generated, and in what order", which is what this record answers.
    Both flags repeat and combine as a cartesian product. `--emit ir-json`,
    `ir-txtpb` and `ir-binpb` stay as a documented exception: the IR is the
    compiler's own artifact and sits on neither axis.
+
+   **This changes shipped behaviour.** Roadmap story E9.8 landed
+   `crates/ridl-backend-proto` with the schema on the `--emit` axis, as
+   `--emit proto`. That value moves to `--wire proto`, which is a breaking CLI
+   change taken deliberately while the CLI is pre-1.0 and there is one wire to
+   move. The alternative — leaving encodings on `--emit` — makes the axis mean
+   three unrelated things (a language, a wire schema, an IR encoding) and has no
+   place to put the codec, which is the product of the two.
 
 6. **Language scope narrows to Rust, TypeScript and Kotlin.** Rust is primary,
    with **optional** FFI wrappers built from opaque handles and accessors rather
@@ -283,21 +298,89 @@ be generated, and in what order", which is what this record answers.
     concern that hand-written components exercise as well as generated ones, and
     better for finding holes.
 
+18. **A wire backend emits one access service per provided interface, whose
+    methods are the access operations and not the interactions.** This resolves
+    the conflict [ADR-0013](ADR-0013-codegen-backend-scope.md)'s 2026-08-08
+    amendment records between its decision 2 ("no `service` block") and
+    [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decision 10
+    ("one service definition per provided interface"). E9.8 avoided it by
+    emitting neither; Epic 11 owns the dispatcher and cannot.
+
+    The service is **kind-blind and ordinal-keyed** — the same four operations
+    for every interface, with the interaction identified by ordinal in the
+    request:
+
+    ```text
+    Read(ordinal)        → Sample        signal, fixed
+    Subscribe(ordinal)   → stream Sample signal, event
+    Call(ordinal, args)  → Reply         query
+    Send(ordinal, args)  → Empty         command
+    ```
+
+    **What decision 2 forbids is a service that understates the contract**, and
+    that is what a per-interaction projection does:
+    `rpc CurrentSpeed(…) returns
+    (stream Speed)` has nowhere to put §4.4's
+    last value, §4.5's provenance or §3.1's envelope, so the schema claims less
+    than the contract promises. An access service has somewhere to put all three
+    — they are fields of `Sample`, and `Subscribe` is specified to deliver the
+    current value first. The semantics move into the messages, where proto3 can
+    carry them.
+
+    So decision 2 holds with its scope made explicit: **no service block that
+    projects interactions as RPC methods.** ADR-0016 decision 10 holds
+    unqualified — there is one service definition per provided interface, and
+    its members route by the interface's single ordinal sequence.
+
+    **It is optional and independent, and it is not generated.** Because the
+    operations are kind-blind, the schema does not vary by contract: it is one
+    published document, platform vocabulary in the same sense as the §3.1
+    envelope. So:
+
+    - **The default `--wire proto` emit is unchanged** — messages and the
+      ordinal identity table, exactly the two tiers E9.8 already ships. Nothing
+      in a generated package references the access schema or depends on gRPC.
+    - **A consumer opts in** by taking the published schema alongside the
+      generated messages, or **ignores it entirely** and writes their own
+      binding against the frame and the ordinal table. Both are first-class;
+      neither is the fallback.
+
+    That keeps decision 2's ceiling literally intact for everything the compiler
+    emits, and makes the service an addition a consumer chooses rather than a
+    surface the toolchain imposes.
+
+    Two consequences follow. gRPC becomes another **binding** of decision 7's
+    frame rather than a rival protocol — same ordinals, same envelope, same
+    provenance, over a transport with authentication, load balancing and tooling
+    in every language. And ADR-0013's stated negative consequence, that "a wire
+    target needs a binding to be useful", softens without being retracted: a
+    third party who wants one now has one, and a third party who wants their own
+    is no worse off than before.
+
+    On ADR-0016 decision 10: what it fixes is the **routing** — one service
+    definition per provided interface, members routed by that interface's single
+    ordinal sequence. That holds. The schema expressing the routing is shared
+    across interfaces because the operations are kind-blind; the routing itself
+    is per interface, which is what the decision is about.
+
 ## Alternatives considered
 
-| Candidate                                         | Verdict  | Reason                                                                                                                                                                                                                |
-| ------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repair the shipped interaction layer in place     | rejected | it cannot be connected to a runtime at all, and has never been compiled; repairing idiom on an unusable layer spends effort on something phase 2 replaces                                                             |
-| gRPC or ConnectRPC as the local bridge            | rejected | four of five interaction kinds lose a normative property, and the §3.1 envelope has nowhere to live — the mismatch ADR-0013 already documents, at the worst place                                                     |
-| `async fn` at the platform layer                  | rejected | bakes an execution model into layer 2, makes future size a compiler artifact against static sizing, and leaves certification of a generated state machine open                                                        |
-| Blocking calls at the platform layer              | rejected | excludes the browser outright — no blocking socket API, and the main thread may not block — and needs a thread per connection in the tooling plane                                                                    |
-| Descriptor-driven codec at endpoints              | rejected | pays interpretation on the publication path; the dynamic case the descriptors would serve is already served by the IR, which ships in three encodings                                                                 |
-| Delegate the codec to prost                       | rejected | serves exactly one wire; CAN and AUTOSAR Classic have no toolchain to delegate to, so the other targets stay unserved                                                                                                 |
-| A tagless positional encoding on the network      | rejected | 30–50% smaller on small messages, but any version skew between independently updated host and guest is fatal rather than survivable                                                                                   |
-| Full AIDL parcelables as the Android surface      | rejected | a fourth projection with ADR-0016's obligations, and two evolution systems over one contract that disagree about what is compatible                                                                                   |
-| A writable shared mapping across a trust boundary | rejected | bypasses every range and step check, and lets one writer corrupt the generation counter and the offsets every other reader depends on                                                                                 |
-| `repr(C)` for the store                           | deferred | verification is boundary-scoped rather than universal, build-then-flip is more robust to a writer crash than a seqlock, and vtables absorb the width flips of typl §17.11 — it survives only for the constrained tier |
-| Keep C as a language target                       | rejected | the emitted header cannot represent strings, optionals or collections, so it drops most of a realistic package; legacy interop is a wire concern                                                                      |
+| Candidate                                                | Verdict  | Reason                                                                                                                                                                                                                                                                                                 |
+| -------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Repair the shipped interaction layer in place            | rejected | it cannot be connected to a runtime at all, and has never been compiled; repairing idiom on an unusable layer spends effort on something phase 2 replaces                                                                                                                                              |
+| gRPC or ConnectRPC as the local host-to-guest bridge     | rejected | four of five interaction kinds lose a normative property, and the §3.1 envelope has nowhere to live — the mismatch ADR-0013 already documents, at the worst place. Decision 18's access service is a different thing: an optional remote surface whose methods are access operations, not interactions |
+| A proto `service` projecting interactions as RPC methods | rejected | `rpc CurrentSpeed(…) returns (stream Speed)` has nowhere to put §4.4's last value, §4.5's provenance or §3.1's envelope, so the schema claims less than the contract promises — the understatement decision 2 forbids                                                                                  |
+| Emitting a `service` for `query` and `command` only      | rejected | buys gRPC interop for two of five kinds at the cost of a schema that describes part of a contract, which is the same understatement in smaller form; decision 18 covers all five instead                                                                                                               |
+| Generating the access service per package                | rejected | the operations are kind-blind, so the schema does not vary by contract; generating it would produce N identical documents and make every package depend on a surface some consumers do not want                                                                                                        |
+| `async fn` at the platform layer                         | rejected | bakes an execution model into layer 2, makes future size a compiler artifact against static sizing, and leaves certification of a generated state machine open                                                                                                                                         |
+| Blocking calls at the platform layer                     | rejected | excludes the browser outright — no blocking socket API, and the main thread may not block — and needs a thread per connection in the tooling plane                                                                                                                                                     |
+| Descriptor-driven codec at endpoints                     | rejected | pays interpretation on the publication path; the dynamic case the descriptors would serve is already served by the IR, which ships in three encodings                                                                                                                                                  |
+| Delegate the codec to prost                              | rejected | serves exactly one wire; CAN and AUTOSAR Classic have no toolchain to delegate to, so the other targets stay unserved                                                                                                                                                                                  |
+| A tagless positional encoding on the network             | rejected | 30–50% smaller on small messages, but any version skew between independently updated host and guest is fatal rather than survivable                                                                                                                                                                    |
+| Full AIDL parcelables as the Android surface             | rejected | a fourth projection with ADR-0016's obligations, and two evolution systems over one contract that disagree about what is compatible                                                                                                                                                                    |
+| A writable shared mapping across a trust boundary        | rejected | bypasses every range and step check, and lets one writer corrupt the generation counter and the offsets every other reader depends on                                                                                                                                                                  |
+| `repr(C)` for the store                                  | deferred | verification is boundary-scoped rather than universal, build-then-flip is more robust to a writer crash than a seqlock, and vtables absorb the width flips of typl §17.11 — it survives only for the constrained tier                                                                                  |
+| Keep C as a language target                              | rejected | the emitted header cannot represent strings, optionals or collections, so it drops most of a realistic package; legacy interop is a wire concern                                                                                                                                                       |
 
 ## Consequences
 
@@ -355,11 +438,12 @@ be generated, and in what order", which is what this record answers.
 
 ## Documents amended
 
-| Document                                      | Change                                                                                                        |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| [ADR-0013](ADR-0013-codegen-backend-scope.md) | open item 1 answered by decision 15; decision 1's target list superseded by decision 6                        |
-| [ADR-0007](ADR-0007-e1-execution.md)          | decision 13's extern-C face retired by decision 6                                                             |
-| [`docs/ROADMAP.md`](../ROADMAP.md)            | a runtime epic at the ridl layer (decision 16); the E2 exit criterion annotated with decision 15's retraction |
+| Document                                                         | Change                                                                                                                                                                                                                       |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0013](ADR-0013-codegen-backend-scope.md)                    | open item 1's interaction-face half answered by decision 15; decision 1's target list superseded by decision 6; decision 2's scope made explicit by decision 18 — no service block that projects interactions as RPC methods |
+| [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) | decision 10 held unqualified by decision 18, which resolves its recorded conflict with ADR-0013 decision 2                                                                                                                   |
+| [ADR-0007](ADR-0007-e1-execution.md)                             | decision 13's extern-C face retired by decision 6                                                                                                                                                                            |
+| [`docs/ROADMAP.md`](../ROADMAP.md)                               | a runtime epic at the ridl layer (decision 16); the E2 exit criterion annotated with decision 15's retraction                                                                                                                |
 
 ## References
 

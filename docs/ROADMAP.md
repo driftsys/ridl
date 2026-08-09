@@ -14,7 +14,7 @@ The release boundary is **descriptive vs executable**:
   ecosystem). The SSOT for contracts at every boundary — system, person, and
   world — with codegen, LSP, diff, docs, schemas a non-Rust runtime can consume,
   and a runtime that consumes them. **E11 is in V1 by
-  [ADR-0017](decisions/ADR-0017-runtime-core-and-generated-surface.md) decision
+  [ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
   16**: without it V1 ships a compiler whose output nothing can run, which is
   what made the E2 interaction layer unimplementable.
 - **V2 — the system platform:** E5a · E6 · E7 (rmdl as a _language_ · rsdl ·
@@ -36,10 +36,12 @@ E0 → E1 → E2 → E10 → E11 → E9 → E3 → E5a → E6 → E7(rxdl) → E
           ╰──────── E4 (ecosystem), E8 (agents) thread ────────╯
 ```
 
-**E10 then E11, ahead of E9** — ADR-0017 sequences them: E10 gives the types
-their constraints and a compiling crate, E11 builds the runtime that consumes
-them, and E9's remaining projections (E9.8, E9.9, E9.11) then have somewhere to
-land. E10 no longer merely threads; E11 depends on it.
+**E10 then E11, ahead of E9's remainder** — ADR-0018 sequences them: E10 gives
+the types their constraints and a compiling crate, E11 builds the runtime that
+consumes them, and E9.9 and E9.11 then have somewhere to land. E9.8 already
+landed, so what remains of E9 is the FlatBuffers projection, the schema hash,
+the store and dispatcher, and the recorded general-form drift. E10 no longer
+merely threads; E11 depends on it.
 
 **E9 before E3** — both alter ridl's surface and IR, so they must not run
 concurrently, and E9 is the nearer-term product path: it is ridl used as the
@@ -176,7 +178,7 @@ snapshots and reachable from no command; the `--emit typescript` path landed
 afterwards, as a prerequisite for E3.3 (driftsys/ridl#172).
 
 **The interaction layer this epic shipped is retracted by
-[ADR-0017](decisions/ADR-0017-runtime-core-and-generated-surface.md) decision
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
 15.** The exit criterion above was met literally and by output that no runtime
 can implement: the interaction vocabulary is emitted once per package, so two
 packages produce two incompatible `Provenance` types and no runtime crate can
@@ -365,17 +367,24 @@ this story is tier 1 and tier 2, and nothing above them:** E9.8 emits no
 `service` block, leaving that to E9.11 rather than resolving the tension below
 as a side effect of adding a backend.
 
-**The conflict left for E9.11.** ADR-0013 decision 2 says a wire backend emits
-"no `service` block, no call face, no value store"; ADR-0016 decision 10
-describes the dispatcher as "one service definition per provided interface" — in
-proto3, a `service` block. E9.8 avoids the conflict by emitting neither. E9.11
-cannot: it is store-and-dispatcher generation, so it is where the first proto
-`service` block would be written, and the two readings must be reconciled by an
-ADR amendment before that story writes an emitter against either one. A second
-consequence for E9.11 to inherit: tier 2 emits only the ordinal enum and never
-an interaction's payload type, so no payload type reaches the import path today
-— the store and the dispatcher will need to import the payload types tier 2
-never touches.
+**The conflict left for E9.11 — now resolved by
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+18.** ADR-0013 decision 2 says a wire backend emits "no `service` block, no call
+face, no value store"; ADR-0016 decision 10 describes the dispatcher as "one
+service definition per provided interface" — in proto3, a `service` block. E9.8
+avoided the conflict by emitting neither, and E9.11 could not, so decision 18
+separates the two readings: **no service block that projects interactions as RPC
+methods** (decision 2's concern, since such a schema understates the contract),
+but one **access service** whose methods are kind-blind access operations keyed
+by ordinal, which carries §4.4's last value, §4.5's provenance and §3.1's
+envelope in its messages. That service is optional, independent of the generated
+package, and not generated at all — the operations do not vary by contract, so
+it is one published schema a consumer takes or ignores in favour of their own
+binding. The store and dispatcher work now sits in Epic 11. A second consequence
+for E9.11 to inherit: tier 2 emits only the ordinal enum and never an
+interaction's payload type, so no payload type reaches the import path today —
+the store and the dispatcher will need to import the payload types tier 2 never
+touches.
 
 **E9.9 to E9.12 are not in this block.** The IR is settled and E3 is unblocked;
 the FlatBuffers projection, the schema hash, the store and dispatcher, and the
@@ -416,7 +425,7 @@ a record — that ADR is still Proposed and already classifies backends by what
 they may emit, and this settles the **validator half** of its open item 1: a
 language backend emits constraint-checking constructors where a wire backend
 does not. The **interaction-face half** is settled the other way by
-[ADR-0017](decisions/ADR-0017-runtime-core-and-generated-surface.md) decision
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
 15, which retracts the shipped interaction layer and restores it as a client and
 a server in a second phase. The two are complementary — this epic is that
 record's phase 1, and E10.7's compiling crate is the compile gate the retraction
@@ -435,12 +444,12 @@ needs to be verifiable.
 | E10.9  | TypeScript vocabulary and factories                                               | the TS backend refuses an invalid value at construction           | L    |
 | E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
 
-## Epic 11 — `ridl-rt`, the runtime core ([ADR-0017](decisions/ADR-0017-runtime-core-and-generated-surface.md))
+## Epic 11 — `ridl-rt`, the runtime core ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md))
 
 **Milestone:** a generated contract runs. A provider publishes into a shared
 store, a consumer reads it coherently, and a call crosses a process boundary.
 **Value:** this is what makes V1 a platform rather than a code generator —
-ADR-0017 decision 16 records that without it V1 ships a compiler whose output no
+ADR-0018 decision 16 records that without it V1 ships a compiler whose output no
 runtime can consume, which is also why the E2 interaction layer was
 unimplementable. **Exit criteria:** the cruise-control package's signals
 round-trip through a shared-memory store between two processes on one node, with
@@ -449,14 +458,14 @@ the frame protocol; and the store layout is stable under a compatible change.
 
 **Sequencing.** E11.1 and E11.2 are specification and block the rest. The epic
 depends on E10 for types that carry their constraints, and on typl §17.11's
-deferred width floor — ADR-0017 decision 8 makes that a prerequisite rather than
+deferred width floor — ADR-0018 decision 8 makes that a prerequisite rather than
 a deferral, because widening a range flips the resolved width and shifts every
 subsequent slot offset.
 
 **Deliberately out of scope.** The rmdl language (E11.10 fixes the binding
 contract; hand-written components exercise it), the rsdl grammar (E11.6 defines
 the facts the generator needs, and rsdl becomes their authoring surface later
-per ADR-0017 decision 17), and phase 2's client and server, which follow this
+per ADR-0018 decision 17), and phase 2's client and server, which follow this
 epic.
 
 | ID     | Story                                                                                                                            | Done when                                                            | Size |

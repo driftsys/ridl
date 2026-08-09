@@ -25,7 +25,7 @@ outlives its first caller.
 plain string emission (TypeScript emitter), `insta` snapshots, `clap` (CLI).
 
 **Spec:**
-[`docs/decisions/ADR-0017-runtime-core-and-generated-surface.md`](../decisions/ADR-0017-runtime-core-and-generated-surface.md),
+[`docs/decisions/ADR-0018-runtime-core-and-generated-surface.md`](../decisions/ADR-0018-runtime-core-and-generated-surface.md),
 decisions 6 and 15. Where this plan and the record disagree, the record is
 authoritative.
 
@@ -34,7 +34,7 @@ authoritative.
 - **This is a deletion, not a refactor.** No behaviour is preserved and nothing
   is ported. A reviewer should be able to read the diff as removal plus the
   consequences of removal.
-- **The ADR lands first.** ADR-0017 is Proposed; this work cites it. If the
+- **The ADR lands first.** ADR-0018 is Proposed; this work cites it. If the
   record is rejected or amended, this plan changes with it.
 - **Conventional Commits**, linted by git-std against `.git-std.toml`. Scopes
   used here: `ridl-backend-rust`, `ridl-backend-ts`, `ridlc`, `ridl`, `docs`,
@@ -119,7 +119,7 @@ types and constants and nothing else.
 - [ ] Add a note to `docs/book/` wherever the generated interaction API is
       described as shipped, stating that the face is retracted and phase 2
       restores it. The book describes the system as built (AGENTS.md).
-- [ ] Close driftsys/ridl#236 as won't-fix, citing ADR-0017 decision 6 — the C
+- [ ] Close driftsys/ridl#236 as won't-fix, citing ADR-0018 decision 6 — the C
       header's type-name collision cannot occur once the header is gone.
 - [ ] Leave driftsys/ridl#237 open. The union-arm camel-caser is in
       `crates/ridl-backend-rust/src/lib.rs`, not in the interaction layer, and
@@ -132,7 +132,7 @@ types and constants and nothing else.
 ## Task 5 — Open the PR
 
 - [ ] `just verify`.
-- [ ] Open a draft PR citing ADR-0017 decisions 6 and 15, with Task 0's survey
+- [ ] Open a draft PR citing ADR-0018 decisions 6 and 15, with Task 0's survey
       in the body and an explicit list of what was removed against what was
       deliberately kept.
 - [ ] State plainly that this removes shipped surface and that E2's exit
