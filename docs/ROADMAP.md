@@ -17,8 +17,16 @@ SIL is a plugin's job
 9). The core carries the ordering and the comparison, never the standard's name.
 
 **A domain lives in its own repository.** `ridl-plugin-can`,
-`ridl-plugin-someip`, `ridl-automotive`, `ridl-avionics` — each a separate crate
-with its own lifecycle.
+`ridl-plugin-someip`, `ridl-plugin-dds`, `ridl-automotive`, `ridl-avionics`,
+`ridl-robotics` — each a separate crate with its own lifecycle.
+
+Robotics is worth naming because it is the domain that most tests whether the
+core is genuinely domain-agnostic. ROS 2 is DDS underneath, and DDS is one of
+the two targets ADR-0013 says maps _cleanly_ onto ridl's interaction model — it
+has a native primitive for continuous state with a retained current value, which
+is what ridl §4.4 requires and what proto3 lacks. A robotics plugin would
+therefore exercise the plugin protocol against a transport that fits better than
+the one core ships, which is the more informative test.
 
 **Domain specifics are requirement inputs, not backlog items.** They belong on
 this page only as the enablers that make them possible. CAN is why the store
@@ -29,6 +37,27 @@ counter. Each of those shaped the core and none of them is an epic here. The
 test for whether something belongs on this page is not "does a domain need it"
 but "would the core need it if no domain existed" — and if the answer is no,
 what belongs here is the **extension point**, not the extension.
+
+The domains in view are **automotive, avionics including drones, robotics, rail
+and medical**. Read as a set they settle two things the core had asserted rather
+than checked.
+
+**The assurance scale is right to be `0..N` rather than any standard's.** The
+five bring five differently shaped ladders — ASIL QM and A to D, CAL 1 to 4,
+DO-178C DAL A to E, EN 50128 SIL 1 to 4, IEC 62304 classes A to C. Different
+arities, different directions of severity, and in one case a three-point scale.
+No single borrowed vocabulary serves them, which is exactly the case
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision 9
+makes. Rail is the useful confirmation: EN 50128 says "safety integrity level"
+literally, so the core's name for that dimension is the general term rather than
+a loan from one field.
+
+**Two things they surface that the core does not yet answer.** ARINC 653's time
+and space partitioning is a standardised form of the protection domain rsdl is
+missing (ADR-0018 open item 1) — that concept should be designed against 653
+rather than invented. And IEC 62304 grades a _software item_, where ridl's
+labels sit on an interface, so the medical mapping has a granularity mismatch a
+plugin cannot paper over on its own.
 
 So ridl Appendix B's target list — SOME/IP, DDS, CAN/DBC, AIDL, JSON Schema — is
 a backlog of plugins elsewhere, and **none of it can start until the plugin
@@ -48,7 +77,7 @@ loop, so a rung is a port rather than a variant.
 | # | Platform                        | Role                   | Note                                                      |
 | - | ------------------------------- | ---------------------- | --------------------------------------------------------- |
 | 1 | Desktop (Linux, macOS, Windows) | tooling                | where the toolchain and the test plane run                |
-| 2 | Mobile                          | UI, bridges, demo      | the frame over a socket; not a production control surface |
+| 2 | Mobile — Android and web        | UI, bridges, demo      | the frame over a socket; not a production control surface |
 | 3 | Embedded Android                | production UI, tooling | native or JVM over AIDL/Binder — Kotlin is a real target  |
 | 4 | QNX 7.1                         | production             | the first serious real-time target                        |
 | 5 | FreeRTOS / SAFERTOS             | production             | where `repr(C)` may return as a store fallback            |
@@ -58,6 +87,23 @@ Rungs 1 to 4 have an MMU and can map a shared store, so ADR-0018 decision 8's
 FlatBuffers store holds across all of them. Rungs 5 and 6 are where its
 alternatives — `repr(C)` layout, re-attach instead of demand-paged growth — stop
 being hypothetical.
+
+**iOS is not a rung, and the reason is not that it is unimportant.** It appears
+in none of the target domains inside the system: automotive infotainment is
+Android Automotive, QNX or Linux; medical devices run an RTOS or Linux; avionics
+runs a DO-178C-qualified RTOS; and a robot runs Linux or an RTOS with its
+teleoperation surface on the web or a desktop. Where iOS does appear is the
+companion edge — a vehicle app, a patient-facing app for a pump or monitor, a
+tablet electronic flight bag — and that edge cannot consume the system's
+contracts as written, because a `signal @10ms` does not survive a cellular link
+and rsdl §8.2's RSDL-801 correctly refuses to deploy one that does not fit its
+bound.
+
+A companion therefore consumes a **derived, coarser contract** with its own
+freshness semantics. That is a modelling question before it is a platform one,
+and the case ADR-0012's correspondence obligations exist for. Whatever answers
+it will reach the companion as the frame over a socket, which is
+language-agnostic, so no layer-1 port is implied either way.
 
 The release boundary is **descriptive vs executable**:
 
