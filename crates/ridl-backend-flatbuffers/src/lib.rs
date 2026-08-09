@@ -239,7 +239,7 @@ fn emit_structs(
             }
             Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
             Some(v2::decl::Kind::UnionDef(def)) => {
-                emit_union(out, packages.package, &decl.name, def, names)?;
+                emit_union(out, packages, &decl.name, def, names, includes)?;
             }
             _ => {}
         }
@@ -302,9 +302,11 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
 /// member names are claimed in the union's own scope ([`Namespace`]),
 /// because the target scopes them like an enum's values and two arm names
 /// colliding under the transform would emit that same redefinition —
-/// ADR-0017 decision 5 places this guard in the backend. An arm whose
-/// target is not a table is refused before any of this
-/// ([`check_union_arm_target`]).
+/// ADR-0017 decision 5 places this guard in the backend. Each arm's target
+/// type is resolved through [`union_arm_type`] before any of this, the same
+/// resolver a struct field uses, so a foreign struct or union arm registers
+/// its include and is referenced by its qualified name rather than spliced
+/// in as `arm.type_ref` verbatim.
 ///
 /// A hand-rolled discriminant-plus-arms table is not an alternative: it
 /// cannot hold typl §10's guarantee that exactly one arm is active, because
@@ -313,10 +315,11 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
 /// same as a retired value in [`emit_enum`].
 fn emit_union(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     name: &str,
     def: &v2::UnionDef,
     names: &mut Namespace,
+    includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let union_name = format!("{name}Union");
     names.claim(
@@ -326,10 +329,10 @@ fn emit_union(
     let mut members = Namespace::members(&union_name);
     let mut arms: Vec<String> = Vec::new();
     for arm in &def.arms {
-        check_union_arm_target(package, name, arm)?;
+        let type_text = union_arm_type(packages, name, arm, includes)?;
         let member = ridl_ir::name::snake_case(&arm.name);
         members.claim(&member, &format!("arm `{}` of union `{name}`", arm.name))?;
-        arms.push(format!("{member}: {}", arm.type_ref));
+        arms.push(format!("{member}: {type_text}"));
     }
     out.push_str(&format!("\nunion {union_name} {{ {} }}\n", arms.join(", ")));
     out.push_str(&format!(
@@ -338,22 +341,25 @@ fn emit_union(
     Ok(())
 }
 
-/// Refuses a union arm whose target FlatBuffers cannot carry: a union
-/// member must be a table in this projection. A named scalar and an enum
-/// set inline at their use sites ([`named_field_type`]), so neither has a
-/// declaration for the union list to reference at all, and an enum has one
-/// but is not a table. A struct arm references its table, and a union arm
-/// references the target union's wrapper table — both are tables, so both
-/// pass. Resolution is same-package only, the standing caveat of this
-/// backend; an unresolved reference is emitted as written.
-fn check_union_arm_target(
-    package: &v2::Package,
+/// Resolves one union arm's target — local or foreign, through
+/// [`resolve_reference`], the same lookup [`named_field_type`] uses — and
+/// refuses it unless FlatBuffers can carry it: a union member must be a
+/// table in this projection. A named scalar and an enum set inline at their
+/// use sites, so neither has a declaration for the union list to reference at
+/// all, and an enum has one but is not a table. A struct arm resolves to its
+/// table, and a union arm resolves to the target union's wrapper table — both
+/// are tables, so both pass, qualified `pkg.Name` with `includes` gaining
+/// `pkg.fbs` when foreign ([`qualified_type_name`]), exactly as a struct
+/// field's reference is. An unresolvable arm target is refused by
+/// [`resolve_reference`] itself, naming the union and the arm.
+fn union_arm_type(
+    packages: Packages,
     union_name: &str,
     arm: &v2::UnionArm,
-) -> Result<(), GenerateError> {
-    let Some(decl) = package.decls.iter().find(|decl| decl.name == arm.type_ref) else {
-        return Ok(());
-    };
+    includes: &mut BTreeSet<String>,
+) -> Result<String, GenerateError> {
+    let (decl, foreign_package) =
+        resolve_reference(packages, union_name, &arm.name, &arm.type_ref)?;
     let refused = match &decl.kind {
         Some(v2::decl::Kind::TypeDef(_)) => {
             "a named scalar, which inlines to a bare scalar and has no declaration to reference"
@@ -362,7 +368,7 @@ fn check_union_arm_target(
         Some(v2::decl::Kind::EnumSetDef(_)) => {
             "an enum set, which inlines to an integer and has no declaration to reference"
         }
-        _ => return Ok(()),
+        _ => return Ok(qualified_type_name(decl, foreign_package, includes)),
     };
     Err(GenerateError {
         message: format!(
@@ -614,6 +620,52 @@ fn resolve_field_type(
     }
 }
 
+/// Resolves `reference` — a same-package bare `Name` or a cross-package fully
+/// qualified `pkg.Name` (`ridl_ir::v2::referenced_packages`'s doc comment
+/// states the canonical form) — to its declaration, and the crossed
+/// package's name when the reference was foreign. Shared by
+/// [`named_field_type`] and [`union_arm_type`]: a field position and a union
+/// arm each name a declaration the same way, and only what they do with the
+/// result differs. A foreign lookup walks `packages.others` for a package
+/// named `referenced_package` holding a declaration named `member`; a
+/// same-package lookup walks `packages.package` directly. Either miss is
+/// refused with a `GenerateError` naming `owner`, `member_name` and the
+/// unresolved reference, rather than left for the caller to notice.
+fn resolve_reference<'p, 'r>(
+    packages: Packages<'p>,
+    owner: &str,
+    member_name: &str,
+    reference: &'r str,
+) -> Result<(&'p v2::Decl, Option<&'r str>), GenerateError> {
+    match reference.rsplit_once('.') {
+        Some((referenced_package, member)) => packages
+            .others
+            .iter()
+            .find(|candidate| candidate.name == referenced_package)
+            .and_then(|candidate| candidate.decls.iter().find(|decl| decl.name == member))
+            .map(|decl| (decl, Some(referenced_package)))
+            .ok_or_else(|| GenerateError {
+                message: format!(
+                    "{owner}.{member_name} references `{reference}`, which cannot be \
+                     resolved — no package `{referenced_package}` with a declaration \
+                     named `{member}` was given to this backend."
+                ),
+            }),
+        None => packages
+            .package
+            .decls
+            .iter()
+            .find(|decl| decl.name == *reference)
+            .map(|decl| (decl, None))
+            .ok_or_else(|| GenerateError {
+                message: format!(
+                    "{owner}.{member_name} references `{reference}`, which is not a \
+                     declaration of this package."
+                ),
+            }),
+    }
+}
+
 /// A resolved named-type reference at a field position. A named scalar
 /// inlines to its FlatBuffers scalar and an enum set inlines to an integer —
 /// **whether the reference is local or foreign** (ADR-0017 decision 1),
@@ -638,15 +690,14 @@ fn resolve_field_type(
 /// A reference is cross-package exactly when it carries a `.` — the IR's
 /// canonical form gives a cross-package reference as the fully qualified
 /// `pkg.Name` and a same-package one as the bare `Name`, never an include
-/// alias (`ridl_ir::v2::referenced_packages`'s doc comment). A same-package
-/// reference is looked up in `packages.package`; a cross-package one is
-/// looked up in `packages.others`, the other packages this backend was
-/// given — this resolution has to happen before the inline-or-qualify
-/// decision above either way, because that decision depends on the
-/// referenced declaration's own kind. A foreign reference `others` cannot
-/// resolve — no package by that name is present, or it holds no declaration
-/// by that name — is refused rather than emitted as a name `flatc` would then
-/// fail to resolve.
+/// alias (`ridl_ir::v2::referenced_packages`'s doc comment). Resolution
+/// itself — same-package in `packages.package`, cross-package in
+/// `packages.others` — is [`resolve_reference`], shared with
+/// [`union_arm_type`]: which package a reference is resolved in front of does
+/// not change with what use it is put to afterward. A foreign reference
+/// `others` cannot resolve — no package by that name is present, or it holds
+/// no declaration by that name — is refused rather than emitted as a name
+/// `flatc` would then fail to resolve.
 ///
 /// Any other declaration kind is refused: only a named scalar, struct, enum,
 /// enum set or union is projected from a field position yet.
@@ -657,41 +708,7 @@ fn named_field_type(
     reference: &str,
     includes: &mut BTreeSet<String>,
 ) -> Result<(String, bool, Option<String>), GenerateError> {
-    let (decl, foreign_package) = match reference.rsplit_once('.') {
-        Some((referenced_package, member)) => {
-            let resolved = packages
-                .others
-                .iter()
-                .find(|candidate| candidate.name == referenced_package)
-                .and_then(|candidate| candidate.decls.iter().find(|decl| decl.name == member));
-            let Some(decl) = resolved else {
-                return Err(GenerateError {
-                    message: format!(
-                        "{owner}.{field_name} references `{reference}`, which cannot be \
-                         resolved — no package `{referenced_package}` with a declaration \
-                         named `{member}` was given to this backend."
-                    ),
-                });
-            };
-            (decl, Some(referenced_package))
-        }
-        None => {
-            let Some(decl) = packages
-                .package
-                .decls
-                .iter()
-                .find(|decl| decl.name == *reference)
-            else {
-                return Err(GenerateError {
-                    message: format!(
-                        "{owner}.{field_name} references `{reference}`, which is not a \
-                         declaration of this package."
-                    ),
-                });
-            };
-            (decl, None)
-        }
-    };
+    let (decl, foreign_package) = resolve_reference(packages, owner, field_name, reference)?;
     match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Ok((
             fbs_scalar(td).to_string(),

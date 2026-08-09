@@ -1221,3 +1221,129 @@ fn cross_package_dangling() -> v2::Package {
         ..Default::default()
     }
 }
+
+// A union arm resolves exactly the way a struct field does (`union_arm_type`
+// shares `resolve_reference` and `qualified_type_name` with
+// `named_field_type`): a foreign struct or union arm registers its include
+// and is referenced by its qualified name, rather than the raw `type_ref`
+// being spliced into the union list verbatim — which `flatc` and `planus`
+// both refuse to resolve without the include.
+
+#[test]
+fn a_union_arm_typed_by_a_foreign_struct_emits_the_include_and_the_qualified_name() {
+    let (cluster, common) = cross_package_union_arm();
+    let common_out = generate(&common).expect("generate common");
+    let generated = generate_with(&cluster, &[&common]).expect("generate");
+
+    assert!(
+        generated.fbs_source.contains("include \"veh.common.fbs\";"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        generated
+            .fbs_source
+            .contains("union PayloadUnion { setpoint: veh.common.Setpoint }"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+
+    // Compile the pair together so the include actually resolves.
+    compile_with_planus_and_siblings(
+        "veh.cluster.fbs",
+        &generated.fbs_source,
+        &[("veh.common.fbs", &common_out.fbs_source)],
+    );
+}
+
+#[test]
+fn an_unresolvable_union_arm_target_is_refused() {
+    let package = v2::Package {
+        name: "veh.cluster".to_string(),
+        decls: vec![union_decl("Payload", &[("other", 1, "veh.other.Missing")])],
+        ..Default::default()
+    };
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("veh.other"),
+        "got: {}",
+        error.message
+    );
+}
+
+/// `veh.common` declaring the struct `Setpoint`, and `veh.cluster` declaring
+/// a union `Payload` with one arm typed by it, plus a holder struct with a
+/// field of the union type — the fixture for
+/// [`a_union_arm_typed_by_a_foreign_struct_emits_the_include_and_the_qualified_name`].
+fn cross_package_union_arm() -> (v2::Package, v2::Package) {
+    let common = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Setpoint".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member("value", 1, float64_type())],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let cluster = v2::Package {
+        name: "veh.cluster".to_string(),
+        decls: vec![
+            union_decl("Payload", &[("setpoint", 1, "veh.common.Setpoint")]),
+            v2::Decl {
+                name: "Holder".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("payload", 1, named_type("Payload"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+    (cluster, common)
+}
+
+#[test]
+fn a_local_struct_reference_names_the_bare_declared_table() {
+    // Finding 2 (task 6 review): the `StructDef` arm added for the foreign
+    // case was exercised only through the foreign fixture — this pins the
+    // `foreign_package == None` branch of the same code path.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Setpoint".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("value", 1, float64_type())],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Reading".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("target", 1, named_type("Setpoint"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.fbs_source.contains("target: Setpoint (id: 0);"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        !generated.fbs_source.contains("include"),
+        "a same-package reference must not include:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
