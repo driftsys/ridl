@@ -1,0 +1,62 @@
+---
+source: crates/ridl-backend-flatbuffers/tests/corpus.rs
+expression: generated.fbs_source
+---
+namespace veh.cruise;
+
+enum EngageState : long {
+  OFF = 0,
+  ARMED = 1,
+  ACTIVE = 2,
+}
+
+table Setpoint {
+  // Speed — km/h [0..250 step 0.5]
+  desired: float (id: 0);
+  // Percent — [0..100]
+  tolerance: ubyte (id: 1);
+  // Delta — [-100..100]
+  trim: byte (id: 2);
+  reserved_4: ubyte (id: 3, deprecated);
+}
+
+table Telemetry {
+  // Speed — km/h [0..250 step 0.5]
+  history: [float] (id: 0);
+  by_id: [TelemetryByIdEntry] (id: 1);
+  bounds: TelemetryBounds (id: 2);
+  // LOW_FUEL = bit 0
+  // DOOR_AJAR = bit 1
+  active: ubyte (id: 3);
+}
+
+union CommandUnion { engage: Setpoint, disengage: CommandDisengageBox }
+
+table Command {
+  value: CommandUnion (id: 1);
+}
+
+table TelemetryByIdEntry {
+  key: string (id: 0);
+  // Speed — km/h [0..250 step 0.5]
+  value: float (id: 1);
+}
+
+table TelemetryBounds {
+  // Speed — km/h [0..250 step 0.5]
+  field_1: float (id: 0);
+  // Speed — km/h [0..250 step 0.5]
+  field_2: float (id: 1);
+}
+
+table CommandDisengageBox {
+  // Percent — [0..100]
+  value: ubyte (id: 0);
+}
+
+enum CruiseControlOrdinal : uint {
+  CURRENT_SPEED = 1,
+  MODE = 2,
+  WARNING = 3,
+  SET_TARGET = 4,
+}

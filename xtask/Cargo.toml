@@ -12,3 +12,8 @@ proc-macro2.workspace = true
 quote.workspace = true
 syn.workspace = true
 ungrammar.workspace = true
+
+# The dependency-boundary guard (tests/oracle_boundary.rs) parses
+# `cargo metadata`'s JSON output — test-only, so it is a dev-dependency.
+[dev-dependencies]
+serde_json.workspace = true

@@ -265,6 +265,76 @@ fn build_emit_proto_writes_the_backend_schema() {
     );
 }
 
+/// `build --emit flatbuffers` writes `<pkg-name>.fbs` holding the FlatBuffers
+/// backend's output for that package.
+///
+/// The FlatBuffers counterpart of [`build_emit_proto_writes_the_backend_schema`]:
+/// no `ridlc`-level integration test drove `--emit flatbuffers` before this
+/// one, even though the emit value has been wired since the backend crate was
+/// added — the wiring was exercised only through `ridl-backend-flatbuffers`'s
+/// own unit and corpus tests, never end to end through the CLI. The expected
+/// source is regenerated inside the test from the same entry over the public
+/// library path (`compile_workspace` then `ridl_backend_flatbuffers::generate`),
+/// so the assertion is byte equality against the backend rather than a
+/// restatement of whatever the emit happens to write.
+#[test]
+fn build_emit_flatbuffers_writes_the_backend_schema() {
+    // A bare named scalar alone would not do: like the proto3 backend, the
+    // FlatBuffers backend gives a named scalar no declaration of its own — it
+    // inlines only where a field references it (the design this crate's own
+    // `ridl-backend-flatbuffers` tests already pin) — so `SPEED_SOURCE` alone
+    // would emit nothing past the namespace header, and the equality below
+    // would prove nothing.
+    const FLATBUFFERS_SOURCE: &str = "package veh.common\n\
+         type Speed: km/h [0.0..250.0 step 0.5]\n\
+         struct Reading {\n  value: Speed\n}\n";
+
+    let dir = TempDir::new("build-flatbuffers");
+    dir.write("pkg/ridl.toml", PACKAGE_MANIFEST);
+    dir.write("pkg/speed.typl", FLATBUFFERS_SOURCE);
+    let out = TempDir::new("build-flatbuffers-out");
+    let entry = dir.path().join("pkg");
+
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        entry.as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "flatbuffers".as_ref(),
+    ]);
+    assert_eq!(code, 0, "a clean package must exit 0, stderr:\n{stderr}");
+
+    let written = std::fs::read_to_string(out.path().join("veh.common.fbs"))
+        .expect("flatbuffers writes <pkg-name>.fbs");
+
+    let mut db = ridl_core::RidlDatabase::default();
+    let checked = ridlc::compile_workspace(&mut db, &entry)
+        .expect("the fixture loads")
+        .checked;
+    let [package] = checked.as_slice() else {
+        panic!("the fixture is one package, got {}", checked.len());
+    };
+    let expected = ridl_backend_flatbuffers::generate(&package.ir)
+        .expect("the fixture generates a FlatBuffers schema")
+        .fbs_source;
+
+    assert!(
+        expected.contains("table Reading")
+            && expected.contains("// Speed — km/h [0..250 step 0.5]"),
+        "the fixture must generate a table with a constraint comment for Speed, or the \
+         equality below proves nothing, got:\n{expected}"
+    );
+    assert_eq!(
+        written, expected,
+        "the emitted file must hold the FlatBuffers backend's output"
+    );
+    assert!(
+        !out.path().join("veh.common.rs").exists(),
+        "flatbuffers alone writes no Rust file"
+    );
+}
+
 /// `build --help` offers exactly the artifacts [`ridlc::Emit`] defines, and the
 /// `--emit` summary line names every one of them.
 ///
@@ -294,7 +364,8 @@ fn build_help_documents_every_emit_value() {
             "ir-text",
             "ir-binary",
             "typescript",
-            "proto"
+            "proto",
+            "flatbuffers"
         ],
         "`--emit` must offer exactly these artifacts, help:\n{help}"
     );
@@ -436,7 +507,10 @@ fn build_ir_emits_write_no_standard_artifact() {
 fn every_emit_variant_is_classified() {
     for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
         let expected = match emit {
-            ridlc::Emit::Rust | ridlc::Emit::TypeScript | ridlc::Emit::Proto => false,
+            ridlc::Emit::Rust
+            | ridlc::Emit::TypeScript
+            | ridlc::Emit::Proto
+            | ridlc::Emit::Flatbuffers => false,
             ridlc::Emit::IrJson | ridlc::Emit::IrText | ridlc::Emit::IrBinary => true,
         };
         assert_eq!(
@@ -463,7 +537,10 @@ fn every_emit_variant_is_classified() {
 fn every_emit_variant_names_its_intended_suffix() {
     for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
         let expected = match emit {
-            ridlc::Emit::Rust | ridlc::Emit::TypeScript | ridlc::Emit::Proto => None,
+            ridlc::Emit::Rust
+            | ridlc::Emit::TypeScript
+            | ridlc::Emit::Proto
+            | ridlc::Emit::Flatbuffers => None,
             ridlc::Emit::IrJson => Some(".ir.json"),
             ridlc::Emit::IrText => Some(".ir.txtpb"),
             ridlc::Emit::IrBinary => Some(".ir.binpb"),

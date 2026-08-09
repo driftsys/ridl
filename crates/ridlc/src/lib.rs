@@ -302,6 +302,11 @@ pub enum Emit {
     /// A wire backend: the typl surface plus the interaction identity table,
     /// and nothing above them (ADR-0013 decision 2).
     Proto,
+    /// The FlatBuffers schema, written to `<base>.fbs`.
+    ///
+    /// A wire backend: the typl surface plus the interaction identity table,
+    /// and nothing above them (ADR-0013 decision 2).
+    Flatbuffers,
 }
 
 impl Emit {
@@ -352,7 +357,7 @@ impl Emit {
     )]
     pub const fn ir_dump_suffix(self) -> Option<&'static str> {
         match self {
-            Emit::Rust | Emit::TypeScript | Emit::Proto => None,
+            Emit::Rust | Emit::TypeScript | Emit::Proto | Emit::Flatbuffers => None,
             Emit::IrJson => Some(".ir.json"),
             Emit::IrText => Some(".ir.txtpb"),
             Emit::IrBinary => Some(".ir.binpb"),
@@ -763,6 +768,23 @@ fn write_emits(
         None
     };
 
+    let generated_flatbuffers = if emits.iter().any(|emit| matches!(emit, Emit::Flatbuffers)) {
+        match ridl_backend_flatbuffers::generate_with(ir, others) {
+            Ok(generated) => Some(generated),
+            Err(err) => {
+                diagnostics.push(error_diagnostic(
+                    "",
+                    err.message,
+                    FileId::DETACHED,
+                    TextRange::default(),
+                ));
+                None
+            }
+        }
+    } else {
+        None
+    };
+
     for emit in emits {
         // The wildcard-free discipline of `Emit::ir_dump_suffix` applies here
         // too: without it, a new emit could be classified in the table and
@@ -833,6 +855,11 @@ fn write_emits(
                         out_dir.join(format!("{base}.proto")),
                         &generated.proto_source,
                     )?;
+                }
+            }
+            Emit::Flatbuffers => {
+                if let Some(generated) = &generated_flatbuffers {
+                    std::fs::write(out_dir.join(format!("{base}.fbs")), &generated.fbs_source)?;
                 }
             }
         }

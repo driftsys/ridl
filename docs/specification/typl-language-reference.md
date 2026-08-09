@@ -1441,7 +1441,13 @@ the primary motivation for a future `wire` floor (§17.11); in v0.1 the
 `ridl-diff` gate is the sole guard. A struct whose fields are all fixed-width
 and non-optional may be emitted as a FlatBuffers `struct` (inline, zero
 indirection) instead of a `table`; the IR carries a `fixed_layout` flag for
-this.
+this. **The built FlatBuffers projection does not take that allowance**
+([ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 3):
+a FlatBuffers `struct` has a fixed inline layout and no vtable, so after a
+compatible field append a reader with the newer schema reads past what an older
+writer wrote and returns the appended field fabricated from padding, where a
+`table` reports it absent. Every struct is therefore emitted as a `table`. The
+`fixed_layout` flag stays in the IR for a target where a fixed layout is safe.
 
 **AUTOSAR Classic (ARXML).** The best structural fit: range → `DataConstr`,
 quantized float → LINEAR `CompuMethod` (factor = step, offset = min) — the

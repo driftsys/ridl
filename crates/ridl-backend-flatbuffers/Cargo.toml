@@ -1,5 +1,5 @@
 [package]
-name = "ridl-backend-proto"
+name = "ridl-backend-flatbuffers"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,15 +8,15 @@ repository.workspace = true
 [dependencies]
 ridl-ir = { path = "../ridl-ir" }
 
-# protox is TEST-ONLY and must stay here. It is the validity check of
-# ADR-0016's totality property, not part of emission: making it a normal
-# dependency would put a protobuf compiler and its whole dependency tree
-# into every downstream build — build weight and supply surface paid by
-# every consumer, for a guarantee none of them asked for. The boundary is
-# enforced by `xtask/tests/oracle_boundary.rs`.
+# planus-translation is TEST-ONLY and must stay here. It is the validity
+# oracle, not part of emission: making it a normal dependency would put a
+# parser generator and its whole dependency tree into every downstream
+# build — build weight and supply surface paid by every consumer, for a
+# guarantee none of them asked for. The boundary is enforced by
+# `xtask/tests/oracle_boundary.rs`.
 [dev-dependencies]
 insta.workspace = true
-protox.workspace = true
+planus-translation.workspace = true
 # The source-to-IR compile path for tests/corpus.rs (`ridlc::compile`) —
 # ridlc depends on this crate as a normal dependency, so this is a
 # dev-dependency cycle back to the crate under test. Cargo supports this: a

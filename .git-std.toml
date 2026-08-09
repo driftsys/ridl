@@ -41,6 +41,7 @@ scopes = [
   "ridl-backend-rust",
   "ridl-backend-ts",
   "ridl-backend-proto",
+  "ridl-backend-flatbuffers",
   "ridl-diff",
   "ridl-fmt",
   "xtask",

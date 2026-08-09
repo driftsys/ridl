@@ -111,7 +111,19 @@ test:
     fi
 
 # Check the compiler crates build for wasm32-unknown-unknown with fs/fetch
-# off (ADR-0007 decision 5) — the E4.4 browser playground guard.
+# off (ADR-0007 decision 5) — the E4.4 browser playground guard. The backend
+# crates are included so this recipe actually exercises them: previously it
+# checked a fixed non-backend list, so it never built ridl-backend-proto or
+# ridl-backend-flatbuffers and could not have caught a change to either.
+# Note: `cargo check` alone is not proof that a dev-only dependency (`protox`,
+# `planus-translation`) promoted to a normal one would be caught here — both
+# type-check cleanly for this target even as a normal dependency, because
+# wasm32-unknown-unknown carries `std::fs` as a compiling (if not
+# functioning) stub. This recipe covers the crates; it does not by itself
+# guarantee catching that specific mistake. The guarantee lives in
+# `xtask/tests/oracle_boundary.rs`, which reads the resolved dependency
+# graph's edge kind directly (`cargo test -p xtask`, part of `just test`)
+# and is what actually enforces that boundary.
 wasm-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -124,6 +136,8 @@ wasm-check:
         rustup target add wasm32-unknown-unknown
         cargo check --target wasm32-unknown-unknown \
             -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir \
+            -p ridl-backend-proto -p ridl-backend-flatbuffers \
+            -p ridl-backend-rust -p ridl-backend-ts \
             --no-default-features
     else
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."

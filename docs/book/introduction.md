@@ -29,8 +29,8 @@ Two layers of the family have a working toolchain in this repository:
   timing annotations, contracts, interfaces and services, a TypeScript code
   generator beside the Rust one, and `ridl diff`.
 
-`ridl build --emit` writes Rust source, TypeScript source, an extern-C header,
-a proto3 schema, or the IR as JSON.
+`ridl build --emit` writes Rust source, TypeScript source, a proto3 schema, a
+FlatBuffers schema, or the IR as JSON.
 
 **rxdl, rmdl, and rsdl are specified but not built.** Their language references
 are complete enough to design against, but no compiler accepts them and nothing

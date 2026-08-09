@@ -203,7 +203,8 @@ fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec
 /// carries everything needed (`Reserved.name` for struct and union bodies,
 /// `Reserved.value` for enum bodies). Recorded for a later epic rather than
 /// taken here, because E2.8b's normative table scopes its tombstone row to
-/// interactions.
+/// interactions. Do not close this alone: driftsys/ridl#302 records a
+/// FlatBuffers union-discriminant coupling that must move with it.
 fn diff_composite(
     path: &str,
     old_names: Vec<String>,
