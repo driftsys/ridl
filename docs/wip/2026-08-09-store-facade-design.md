@@ -1,12 +1,12 @@
 # The Store Facade — the generated interaction API in Rust and over the C ABI
 
-| Field     | Value                                                                                                                        |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| Status    | design, for review — nothing ratified                                                                                        |
-| Date      | 2026-08-09                                                                                                                   |
-| Origin    | what a consumer and a provider actually call, once a signal carries its envelope and a coherent set is observable            |
-| Scope     | the layering, the cell, the envelope fields per kind, provenance, numeric addressing, and the operation vocabulary           |
-| Companion | `2026-08-03-rpc-response-bound-design.md` §4.4 and `2026-08-03-schema-projection-design.md` §4 — the store this note faces   |
+| Field     | Value                                                                                                                      |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Status    | design, for review — nothing ratified                                                                                      |
+| Date      | 2026-08-09                                                                                                                 |
+| Origin    | what a consumer and a provider actually call, once a signal carries its envelope and a coherent set is observable          |
+| Scope     | the layering, the cell, the envelope fields per kind, provenance, numeric addressing, and the operation vocabulary         |
+| Companion | `2026-08-03-rpc-response-bound-design.md` §4.4 and `2026-08-03-schema-projection-design.md` §4 — the store this note faces |
 
 A bare section reference — §3.1, §4.4, §11 — is to the **ridl Language
 Reference**. References to this document are marked _above_ or _below_.
@@ -79,13 +79,13 @@ socket pump needs none.
 The numeric core is written once, by hand. Only the typed skins are generated.
 
 ```text
-  generated Rust facade              generated C header
-  (typed traits, structs)      (id constants, static inline wrappers)
-          |                                   |
-          |                        ridl_* extern "C" — hand-written
-          |                                   |
-          +--------- the store ---------------+
-                 cells, table, generation, binding
+generated Rust facade              generated C header
+(typed traits, structs)      (id constants, static inline wrappers)
+        |                                   |
+        |                        ridl_* extern "C" — hand-written
+        |                                   |
+        +--------- the store ---------------+
+               cells, table, generation, binding
 ```
 
 - **The store** — hand-written, generic, addressed by numeric id. It does not
@@ -206,11 +206,11 @@ two jobs.
 
 Three numbers, and they are not interchangeable.
 
-| Field         | Grain     | Job                                              |
-| ------------- | --------- | ------------------------------------------------ |
-| `timestamp`   | instance  | freshness, TTL, latency, `dt` in consumer math   |
-| `sequence`    | channel   | loss detection, deduplication, E2E protection    |
-| `generation`  | interface | which publication step this value belonged to    |
+| Field        | Grain     | Job                                            |
+| ------------ | --------- | ---------------------------------------------- |
+| `timestamp`  | instance  | freshness, TTL, latency, `dt` in consumer math |
+| `sequence`   | channel   | loss detection, deduplication, E2E protection  |
+| `generation` | interface | which publication step this value belonged to  |
 
 **`generation` is new.** It is the store-side counter ADR-0015 decision 11 and
 `2026-08-03-schema-projection-design.md` §4 already place on the inner table,
@@ -451,13 +451,13 @@ provider must not raise occurrences faster than `min`"); §5.1 has consumers
 **subscribe**. The backend already emits `publish_current_speed` and
 `raise_door_opened`.
 
-| Kind      | Consumer          | Provider  |
-| --------- | ----------------- | --------- |
-| `signal`  | `read`, `watch`   | `publish` |
-| `event`   | `subscribe`       | `raise`   |
-| `command` | `send`            | `serve`   |
-| `query`   | `request`         | `serve`   |
-| `fixed`   | `read`            | —         |
+| Kind      | Consumer        | Provider  |
+| --------- | --------------- | --------- |
+| `signal`  | `read`, `watch` | `publish` |
+| `event`   | `subscribe`     | `raise`   |
+| `command` | `send`          | `serve`   |
+| `query`   | `request`       | `serve`   |
+| `fixed`   | `read`          | —         |
 
 Four notes on the choices.
 
