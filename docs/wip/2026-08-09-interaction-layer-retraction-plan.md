@@ -1,9 +1,14 @@
 # Interaction Layer Retraction Implementation Plan
 
+**Status: executed 2026-08-09**, in commit `88adafb`. Every task below is done.
+Three things the survey found that this plan did not anticipate are recorded at
+the end, under "What execution changed"; read that section before treating any
+statement above it as current.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use
 > superpowers:subagent-driven-development (recommended) or
 > superpowers:executing-plans to implement this plan task-by-task. Steps use
-> checkbox (`- [ ]`) syntax for tracking.
+> checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Remove the generated interaction layer and the extern-C header from
 both language backends, so the surface that E10 and E11 build on is the typl
@@ -53,36 +58,36 @@ authoritative.
 
 ## Task 0 — Survey the blast radius
 
-- [ ] Grep for every reference to the emitted vocabulary and to the header
+- [x] Grep for every reference to the emitted vocabulary and to the header
       across `crates/`, `docs/`, and `editors/`: `SignalHandle`, `EventHandle`,
       `Provenance`, `TimingConst`, `ContractStub`, `RidlStream`, `c-header`,
       `CHeader`.
-- [ ] Record which of `ridl-lsp`'s features depend on the emitted layer as
+- [x] Record which of `ridl-lsp`'s features depend on the emitted layer as
       opposed to the IR. E2.10 shipped interaction hovers and timing display;
       those read the IR and should survive, but confirm rather than assume.
-- [ ] Check whether any verified fence in `docs/book/` names `c-header` or shows
+- [x] Check whether any verified fence in `docs/book/` names `c-header` or shows
       generated interaction code. Fences are compiled by
       `crates/ridl/tests/book_examples.rs`, which compiles `.ridl` source rather
       than inspecting generated output, so the expected answer is that only
       prose and the emit table mention it.
-- [ ] Write the findings into the PR description before deleting anything.
+- [x] Write the findings into the PR description before deleting anything.
 
 **Verify:** the survey names every file the later tasks touch.
 
 ## Task 1 — Remove the Rust interaction layer
 
-- [ ] Delete `crates/ridl-backend-rust/src/interact.rs` and its module
+- [x] Delete `crates/ridl-backend-rust/src/interact.rs` and its module
       declaration.
-- [ ] Delete the interaction snapshots under
+- [x] Delete the interaction snapshots under
       `crates/ridl-backend-rust/src/snapshots/` — the per-kind ones
       (`signal_carries_init_and_provenance`, `event_is_a_subscribe_only_handle`,
       `command_returns_unit_and_records_its_require`, the fallible-query,
       stream, `fixed`, services, RPC-bounds and visibility cases) and the
       interaction half of the Appendix A and Appendix B snapshots.
-- [ ] Delete the corresponding tests in `crates/ridl-backend-rust/src/tests.rs`,
+- [x] Delete the corresponding tests in `crates/ridl-backend-rust/src/tests.rs`,
       including the helpers that exist only for them (`interaction_package`,
       `rust_for_interaction`).
-- [ ] Confirm `InducedTuple` discovery still works for tuples reached through
+- [x] Confirm `InducedTuple` discovery still works for tuples reached through
       declarations. Tuples induced only by interaction positions disappear with
       the layer; tuples in declarations must not.
 
@@ -91,23 +96,23 @@ types and constants and nothing else.
 
 ## Task 2 — Remove the TypeScript interaction layer
 
-- [ ] Delete `crates/ridl-backend-ts/src/interact.rs` and `src/interact/`,
+- [x] Delete `crates/ridl-backend-ts/src/interact.rs` and `src/interact/`,
       including its snapshots and tests.
-- [ ] Remove the interaction half of the Appendix B TypeScript snapshot.
-- [ ] Confirm the type-layer snapshots are unchanged — a diff in those means
+- [x] Remove the interaction half of the Appendix B TypeScript snapshot.
+- [x] Confirm the type-layer snapshots are unchanged — a diff in those means
       something was shared that should not have been.
 
 **Verify:** `just test` passes; the TypeScript type snapshots show no diff.
 
 ## Task 3 — Remove the extern-C header
 
-- [ ] Delete `crates/ridl-backend-rust/src/c_header.rs` and its snapshots.
-- [ ] Remove `Emit::CHeader` from `crates/ridlc/src/lib.rs`, the `c-header` CLI
+- [x] Delete `crates/ridl-backend-rust/src/c_header.rs` and its snapshots.
+- [x] Remove `Emit::CHeader` from `crates/ridlc/src/lib.rs`, the `c-header` CLI
       value, and the branch in `run_build` that writes `<base>.h`.
-- [ ] Confirm `crates/ridl-ir/src/name.rs` is untouched and still used. ADR-0016
+- [x] Confirm `crates/ridl-ir/src/name.rs` is untouched and still used. ADR-0016
       decision 1 pinned the transform to this file's algorithm and decision 2
       moved it to `ridl-ir`; it is shared and must outlive the header.
-- [ ] Update the emit tables in `docs/book/getting-started.md` and the `--emit`
+- [x] Update the emit tables in `docs/book/getting-started.md` and the `--emit`
       help text.
 
 **Verify:** `just test`, `just lint` and `just book-check` pass;
@@ -116,26 +121,26 @@ types and constants and nothing else.
 
 ## Task 4 — Record the consequences
 
-- [ ] Add a note to `docs/book/` wherever the generated interaction API is
+- [x] Add a note to `docs/book/` wherever the generated interaction API is
       described as shipped, stating that the face is retracted and phase 2
       restores it. The book describes the system as built (AGENTS.md).
-- [ ] Close driftsys/ridl#236 as won't-fix, citing ADR-0018 decision 6 — the C
+- [x] Close driftsys/ridl#236 as won't-fix, citing ADR-0018 decision 6 — the C
       header's type-name collision cannot occur once the header is gone.
-- [ ] Leave driftsys/ridl#237 open. The union-arm camel-caser is in
+- [x] Leave driftsys/ridl#237 open. The union-arm camel-caser is in
       `crates/ridl-backend-rust/src/lib.rs`, not in the interaction layer, and
       E10's variant naming still walks into it.
-- [ ] Check whether any remaining diagnostic code became unreachable. RIDL-149
+- [x] Check whether any remaining diagnostic code became unreachable. RIDL-149
       stays — it is a `ridl-sem` rule about a package, not about a backend.
 
 **Verify:** `just build` passes end to end.
 
 ## Task 5 — Open the PR
 
-- [ ] `just verify`.
-- [ ] Open a draft PR citing ADR-0018 decisions 6 and 15, with Task 0's survey
+- [x] `just verify`.
+- [x] Open a draft PR citing ADR-0018 decisions 6 and 15, with Task 0's survey
       in the body and an explicit list of what was removed against what was
       deliberately kept.
-- [ ] State plainly that this removes shipped surface and that E2's exit
+- [x] State plainly that this removes shipped surface and that E2's exit
       criterion is retracted, so a reviewer does not have to infer it.
 
 ---
@@ -150,3 +155,40 @@ types and constants and nothing else.
   the plan should be amended before proceeding.
 - **It does not begin phase 2.** The client and server face is Epic 11's work,
   over a runtime that does not exist yet.
+
+---
+
+## What execution changed
+
+**`crates/ridlc/tests/parity.rs` went too — 1461 lines.** The plan did not name
+it. It was entirely interaction-scoped: it parsed generated Rust and TypeScript
+and asserted both carried the same faces, ordinals, tombstones, timing and
+contract stubs, and it existed because three E2 defects were each "one backend
+carried an IR fact the other dropped". Nothing it compares survives the
+retraction. **Roadmap story E10.11 is added to rebuild it over the type layer**,
+which is where E10 gives both backends a new comparable surface.
+
+**Two `services-workspace` proofs went rather than being repaired.**
+`services_workspace_composed_compiles_with_rustc` and its TypeScript counterpart
+proved cross-package references resolve — but in that corpus those references
+came only from interaction signatures and a service's inline shape. With the
+layer gone the composed source holds no cross-package reference at all, so both
+proofs were duplicates of the `workspace-two-members` pair.
+
+**The `veh-cluster` proofs stayed, with new anti-vacuity markers.** They named
+interaction faces; they now name a named scalar, a constant, an enum and a
+surviving cross-package reference, so each still refuses to compile nothing.
+
+**Task 0's premise was wrong on one point.** This plan and
+[ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md) both
+said the interaction layer was never compiled. It was:
+`crates/ridlc/tests/corpus.rs` runs `rustc` over the interaction-bearing corpora
+and `tsc` over the TypeScript, each with an anti-vacuity guard. The claim came
+from reading two of the four `rustc` tests. The record is corrected; the
+retraction rests on the vocabulary being emitted once per package, which
+compiling cannot detect.
+
+**Not verified:** `just book-check` never ran, because `mdbook` was not
+installed in the environment the work was done in. The book edits were table
+rows and prose with no `SUMMARY.md` or `{{#include}}` change, so the risk is low
+and unmeasured.
