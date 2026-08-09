@@ -139,7 +139,8 @@ types and constants and nothing else.
 - [x] `just verify`.
 - [x] Open a draft PR citing ADR-0018 decisions 6 and 15, with Task 0's survey
       in the body and an explicit list of what was removed against what was
-      deliberately kept.
+      deliberately kept. Landed in driftsys/ridl#241, which already existed for
+      the ADR and gained this work rather than a PR of its own.
 - [x] State plainly that this removes shipped surface and that E2's exit
       criterion is retracted, so a reviewer does not have to infer it.
 
