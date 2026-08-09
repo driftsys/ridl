@@ -38,6 +38,7 @@ pub fn generate_with(
     let _ = others;
     let mut out = String::new();
     out.push_str(&format!("namespace {};\n", package.name));
+    emit_structs(&mut out, package)?;
     emit_identity_tables(&mut out, package);
     Ok(Generated { fbs_source: out })
 }
@@ -63,6 +64,266 @@ fn type_name(dotted: &str) -> String {
 /// exactly one case algorithm in the toolchain (ADR-0016 decision 2).
 fn screaming_snake_case(name: &str) -> String {
     ridl_ir::name::snake_case(name).to_uppercase()
+}
+
+/// Tier 1 (ADR-0013 decision 2): walks every top-level declaration, emitting
+/// a `table` for each struct ([`emit_struct`]). A named scalar and an enum
+/// set inline at each use site instead of becoming a declaration of their
+/// own, the same as in `ridl-backend-proto`'s tier 1, and a constant is never
+/// emitted (ADR-0013 decision 5) — so a `TypeDef` or `ConstDef` declaration
+/// simply contributes nothing here. An enum, an enum set and a union are
+/// tier 1 as well, but are out of this task's scope; a later task adds their
+/// match arms alongside this one.
+fn emit_structs(out: &mut String, package: &v2::Package) -> Result<(), GenerateError> {
+    for decl in &package.decls {
+        if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
+            emit_struct(out, package, &decl.name, def)?;
+        }
+    }
+    Ok(())
+}
+
+/// One struct as one FlatBuffers `table`, one field per member, its `id` the
+/// typl ordinal minus one — FlatBuffers ids start at 0, typl ordinals at 1
+/// (typl §7.4). A field name goes through the pinned transform
+/// ([`ridl_ir::name::snake_case`]). A `Reserved` member holds its ordinal's
+/// slot as a placeholder field marked `deprecated`, so a later id never moves
+/// onto it; the placeholder's declared type is inert, because a deprecated
+/// field generates no accessor, so `ubyte` is used regardless of what was
+/// retired.
+///
+/// **`def.fixed_layout` is read nowhere in this function.** typl Appendix D
+/// permits a struct whose fields are all fixed-width and non-optional to be
+/// emitted as a FlatBuffers `struct` instead — inline, zero indirection.
+/// This backend never takes that allowance: appending a struct field is a
+/// compatible change in typl, and a FlatBuffers `struct` reads past what an
+/// older writer wrote after such an append, fabricating a value from padding,
+/// rather than reporting the new field absent — which makes ADR-0016
+/// decision 6 property 3 unsatisfiable, and silently. A `table` reports the
+/// field correctly absent, so every struct is emitted as one, whatever
+/// `fixed_layout` says.
+fn emit_struct(
+    out: &mut String,
+    package: &v2::Package,
+    name: &str,
+    def: &v2::StructDef,
+) -> Result<(), GenerateError> {
+    out.push_str(&format!("\ntable {name} {{\n"));
+    for member in &def.members {
+        match &member.member {
+            Some(v2::struct_member::Member::Field(field)) => {
+                let id = member_id(name, field.ordinal)?;
+                let field_name = ridl_ir::name::snake_case(&field.name);
+                let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
+                    message: format!("{name}.{} carries no type in the IR.", field.name),
+                })?;
+                let (scalar, comment) = resolve_field_type(package, name, &field.name, ty)?;
+                if let Some(comment) = comment {
+                    out.push_str(&format!("  {comment}\n"));
+                }
+                out.push_str(&format!("  {field_name}: {scalar} (id: {id});\n"));
+            }
+            Some(v2::struct_member::Member::Reserved(reserved)) => {
+                let id = member_id(name, reserved.ordinal)?;
+                out.push_str(&format!(
+                    "  reserved_{}: ubyte (id: {id}, deprecated);\n",
+                    reserved.ordinal
+                ));
+            }
+            None => {}
+        }
+    }
+    out.push_str("}\n");
+    Ok(())
+}
+
+/// The FlatBuffers `id` for one struct member: the typl ordinal minus one.
+/// Refused rather than subtracted with a wrapping or panicking underflow if
+/// the IR ever carries ordinal 0 — an ordinal typl itself never assigns
+/// (typl §7.4), so this is defensive against malformed IR, not a case
+/// reachable through the compiler.
+fn member_id(owner: &str, ordinal: u32) -> Result<u32, GenerateError> {
+    ordinal.checked_sub(1).ok_or_else(|| GenerateError {
+        message: format!(
+            "`{owner}` carries a struct member with ordinal 0, which FlatBuffers ids cannot \
+             represent — typl ordinals start at 1 (typl §7.4)."
+        ),
+    })
+}
+
+/// The FlatBuffers type at one field position — tier 1's data-only subset: a
+/// bare primitive resolves directly ([`fbs_primitive`]), and a named-type
+/// reference inlines a named scalar to its backing FlatBuffers scalar
+/// ([`named_field_type`]). A container field (array, map, tuple) or a
+/// stream is out of this task's scope; later tasks extend this match.
+fn resolve_field_type(
+    package: &v2::Package,
+    owner: &str,
+    field_name: &str,
+    ty: &v2::FieldType,
+) -> Result<(String, Option<String>), GenerateError> {
+    match ty.kind.as_ref() {
+        Some(v2::field_type::Kind::Primitive(primitive)) => {
+            Ok((fbs_primitive(*primitive).to_string(), None))
+        }
+        Some(v2::field_type::Kind::Named(reference)) => {
+            named_field_type(package, owner, field_name, reference)
+        }
+        _ => Err(GenerateError {
+            message: format!(
+                "{owner}.{field_name} uses a field type this tier does not project yet."
+            ),
+        }),
+    }
+}
+
+/// A resolved named-type reference at a field position, same-package only —
+/// [`generate_with`]'s `others` is not yet consulted here. A named scalar
+/// inlines to its FlatBuffers scalar and leaves its declared form as a
+/// comment on the line above it ([`fbs_scalar`], [`constraint_comment`]).
+/// Any other declaration kind is refused: only a named scalar is projected
+/// from a field position yet.
+fn named_field_type(
+    package: &v2::Package,
+    owner: &str,
+    field_name: &str,
+    reference: &str,
+) -> Result<(String, Option<String>), GenerateError> {
+    let Some(decl) = package.decls.iter().find(|decl| decl.name == *reference) else {
+        return Err(GenerateError {
+            message: format!(
+                "{owner}.{field_name} references `{reference}`, which is not a declaration \
+                 of this package."
+            ),
+        });
+    };
+    match &decl.kind {
+        Some(v2::decl::Kind::TypeDef(td)) => Ok((
+            fbs_scalar(td).to_string(),
+            Some(constraint_comment(reference, td)),
+        )),
+        _ => Err(GenerateError {
+            message: format!(
+                "{owner}.{field_name} references `{reference}`, a declaration kind this \
+                 tier does not project yet — only a named scalar may be referenced from a \
+                 field position here."
+            ),
+        }),
+    }
+}
+
+/// The FlatBuffers scalar for a direct primitive use at a field position. A
+/// bare `integer` or `float` carries no derived width, so the full typl
+/// domain is emitted: `long` and `double` (typl §4).
+fn fbs_primitive(primitive: i32) -> &'static str {
+    match v2::PrimitiveType::try_from(primitive) {
+        Ok(v2::PrimitiveType::Boolean) => "bool",
+        Ok(v2::PrimitiveType::Integer) => "long",
+        Ok(v2::PrimitiveType::Float) => "double",
+        Ok(v2::PrimitiveType::Bytes) => "[ubyte]",
+        _ => "string",
+    }
+}
+
+/// The FlatBuffers scalar for a resolved typl width (typl Appendix D).
+/// Unlike proto3's varint encoding, FlatBuffers stores every scalar at its
+/// declared byte width, so the full `uint8`..`uint64` palette is used rather
+/// than widened to the nearest transport-native size — the narrow width is
+/// real bytes saved on the wire, which is the reason to choose this target
+/// (ADR-0013 decision 4).
+fn fbs_scalar(td: &v2::TypeDef) -> &'static str {
+    match &td.width {
+        Some(v2::type_def::Width::IntWidth(width)) => match v2::IntWidth::try_from(*width) {
+            Ok(v2::IntWidth::U8) => "ubyte",
+            Ok(v2::IntWidth::U16) => "ushort",
+            Ok(v2::IntWidth::U32) => "uint",
+            Ok(v2::IntWidth::U64) => "ulong",
+            Ok(v2::IntWidth::I8) => "byte",
+            Ok(v2::IntWidth::I16) => "short",
+            Ok(v2::IntWidth::I32) => "int",
+            Ok(v2::IntWidth::I64) => "long",
+            _ => "long",
+        },
+        Some(v2::type_def::Width::FloatWidth(width)) => match v2::FloatWidth::try_from(*width) {
+            Ok(v2::FloatWidth::F32) => "float",
+            _ => "double",
+        },
+        // No width table: boolean, string and bytes backings. A unit backing
+        // implies the float primitive (typl §5.1), so its width is always
+        // derived and never reaches this arm.
+        None => match td
+            .backing
+            .as_ref()
+            .and_then(|backing| backing.kind.as_ref())
+        {
+            Some(v2::backing::Kind::Primitive(primitive)) => {
+                match v2::PrimitiveType::try_from(*primitive) {
+                    Ok(v2::PrimitiveType::Boolean) => "bool",
+                    Ok(v2::PrimitiveType::Bytes) => "[ubyte]",
+                    _ => "string",
+                }
+            }
+            _ => "string",
+        },
+    }
+}
+
+/// The constraint information FlatBuffers has no construct for, as a comment
+/// on the line above the field it describes (design mirrors
+/// `ridl-backend-proto`'s comment of the same purpose — the constraint text
+/// itself does not depend on the target).
+fn constraint_comment(declared: &str, td: &v2::TypeDef) -> String {
+    let mut form = Vec::new();
+    if let Some(v2::backing::Kind::Unit(unit)) = td.backing.as_ref().and_then(|b| b.kind.as_ref())
+    {
+        form.push(unit.clone());
+    }
+    if let Some(constraint) = &td.constraint {
+        let rendered = render_constraint(constraint);
+        if !rendered.is_empty() {
+            form.push(rendered);
+        }
+    }
+    if form.is_empty() {
+        format!("// {declared}")
+    } else {
+        format!("// {declared} — {}", form.join(" "))
+    }
+}
+
+/// The source form of a scalar constraint (typl §5.2–§5.5): the range
+/// bracket with its optional step, the length bracket, and the `match`
+/// pattern. The strings are canonical text already (ADR-0007 decision 9), so
+/// they are joined, never reformatted.
+fn render_constraint(constraint: &v2::Constraint) -> String {
+    let mut parts = Vec::new();
+    if constraint.min.is_some() || constraint.max.is_some() || constraint.step.is_some() {
+        let min = constraint.min.as_deref().unwrap_or("");
+        let max = constraint.max.as_deref().unwrap_or("");
+        let step = match &constraint.step {
+            Some(step) => format!(" step {step}"),
+            None => String::new(),
+        };
+        parts.push(format!("[{min}..{max}{step}]"));
+    }
+    match (constraint.len_min, constraint.len_max) {
+        // A fixed `[N]` constraint has len_min == len_max == N.
+        (Some(min), Some(max)) if min == max => parts.push(format!("[{min}]")),
+        (None, None) => {}
+        (min, max) => parts.push(format!(
+            "[{}..{}]",
+            min.map(|bound| bound.to_string()).unwrap_or_default(),
+            max.map(|bound| bound.to_string()).unwrap_or_default()
+        )),
+    }
+    // A pattern given by a named regex constant renders by that name, the
+    // way it was written (typl §5.3, §6.2).
+    if let Some(name) = &constraint.pattern_const {
+        parts.push(format!("match {name}"));
+    } else if let Some(pattern) = &constraint.pattern {
+        parts.push(format!("match {pattern}"));
+    }
+    parts.join(" ")
 }
 
 /// Tier 2 (ADR-0013 decision 2): one enum per interface shape, interface-wide
