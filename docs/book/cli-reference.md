@@ -304,12 +304,13 @@ Options:
 
       --emit <EMIT>
           Possible values:
-          - rust:       Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:    The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
-          - ir-text:    The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
-          - ir-binary:  The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
-          - typescript: Idiomatic TypeScript source, written to `<base>.ts`
-          - proto:      The proto3 schema, written to `<base>.proto`
+          - rust:        Idiomatic Rust source, written to `<base>.rs`
+          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
+          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
+          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
+          - typescript:  Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:       The proto3 schema, written to `<base>.proto`
+          - flatbuffers: The FlatBuffers schema, written to `<base>.fbs`
           
           [default: rust]
 
@@ -332,6 +333,13 @@ interaction identity table, one enum per interface giving each signal, event,
 command, query and fixed its ordinal. It emits no `service` block, no call
 face, and no value store; store and dispatcher generation is roadmap story
 E9.11, not this emit.
+
+**`flatbuffers` is the second wire backend**, with the same two tiers and the
+same ceiling. Its projection rules differ from proto3's where the targets
+differ — a union is isolated in a wrapper table, every struct is a `table`, a
+map is a vector of generated entry tables with no `(key)`, and enum values are
+not prefixed because FlatBuffers scopes them inside their enum — and are
+recorded in ADR-0018.
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —
@@ -949,15 +957,16 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`, `flatbuffers`
 
           Possible values:
-          - rust:       Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:    The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
-          - ir-text:    The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
-          - ir-binary:  The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
-          - typescript: Idiomatic TypeScript source, written to `<base>.ts`
-          - proto:      The proto3 schema, written to `<base>.proto`
+          - rust:        Idiomatic Rust source, written to `<base>.rs`
+          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
+          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
+          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
+          - typescript:  Idiomatic TypeScript source, written to `<base>.ts`
+          - proto:       The proto3 schema, written to `<base>.proto`
+          - flatbuffers: The FlatBuffers schema, written to `<base>.fbs`
           
           [default: rust]
 

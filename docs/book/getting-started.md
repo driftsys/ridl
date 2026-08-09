@@ -768,14 +768,15 @@ ridl build --emit rust --out-dir out
 `ridl build` compiles a workspace and writes one artifact per package. Seven
 emit targets exist today:
 
-| `--emit`     | Output               | Contents                                    |
-| ------------ | -------------------- | ------------------------------------------- |
-| `rust`       | `<package>.rs`       | idiomatic Rust source (the default)         |
-| `ir-json`    | `<package>.ir.json`  | the lowered IR v2 as exact-decimal JSON     |
-| `ir-text`    | `<package>.ir.txtpb` | the lowered IR v2 as prototext              |
-| `ir-binary`  | `<package>.ir.binpb` | the lowered IR v2 as protobuf binary        |
-| `typescript` | `<package>.ts`       | idiomatic TypeScript source                 |
-| `proto`      | `<package>.proto`    | the proto3 schema — types and the ordinals  |
+| `--emit`      | Output               | Contents                                       |
+| ------------- | -------------------- | ---------------------------------------------- |
+| `rust`        | `<package>.rs`       | idiomatic Rust source (the default)            |
+| `ir-json`     | `<package>.ir.json`  | the lowered IR v2 as exact-decimal JSON        |
+| `ir-text`     | `<package>.ir.txtpb` | the lowered IR v2 as prototext                 |
+| `ir-binary`   | `<package>.ir.binpb` | the lowered IR v2 as protobuf binary           |
+| `typescript`  | `<package>.ts`       | idiomatic TypeScript source                    |
+| `proto`       | `<package>.proto`    | the proto3 schema — types and the ordinals     |
+| `flatbuffers` | `<package>.fbs`      | the FlatBuffers schema — types and the ordinals |
 
 One more artifact joins them when a package names a type from `ridl.std` —
 `Duration` above does — because generated code refers to standard types by

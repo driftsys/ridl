@@ -27,7 +27,8 @@ and a reference of the form note §4.3 is to it.
 
 Five decisions are taken here: the union remedy (§3.1), the struct remedy
 (§3.2), the map remedy (§3.3), the width-floor closure (§4), and the validity
-oracle (§5).
+oracle (§5). Execution added a sixth — a union arm that is not itself a table is
+boxed rather than refused — recorded as an amendment inside §3.1.
 
 ## 2. Scope — the same ceiling E9.8 held
 
@@ -96,6 +97,26 @@ table VehicleStatusState {
 }
 ```
 
+**Amendment from execution (Task 7) — a union arm that is not itself a table is
+wrapped in a generated table.** This note as first written did not discuss arm
+kinds at all, and the plan built from it instructed the backend to refuse an arm
+typed by a named scalar, an enum or an enum set — a FlatBuffers union member
+must be a table, and none of the three has one. That instruction is
+**reversed**: such an arm becomes
+`table <Union><Arm>Box { value: <resolved
+type> (id: 0); }`, the same idiom this
+section already uses to isolate the union itself, with the wrapped field
+resolved exactly as an ordinary field would be — scalar or qualified name, the
+`= null` default of §3.6 when it applies, the constraint comment. A struct or
+union arm references its own table directly and gets no box.
+
+The reversal was right because refusing made a large class of **legal** typl
+unprojectable: typl §10 permits any named type as an arm, a named scalar is a
+named type — the cruise-control acceptance fixture itself declares
+`disengage : Percent` — and the target represents the arm fine with one more
+table. Verified in both `flatc` 25.12.19 and `planus` 1.3.0. Recorded as
+ADR-0018 decision 2.
+
 ### 3.2 A struct is always emitted as a table, never as a FlatBuffers struct
 
 typl Appendix D permits a struct whose fields are all fixed-width and
@@ -143,18 +164,30 @@ does not have.
 
 ### 3.4 The rest of the mapping
 
-| typl                     | FlatBuffers                                         |
-| ------------------------ | --------------------------------------------------- |
-| `TypeDef` (named scalar) | inlines to its backing scalar (ADR-0017 d1)         |
-| `StructDef`              | `table`, ids `= ordinal − 1` (§3.2)                 |
-| `EnumDef`                | `enum` with an explicit underlying type             |
-| `EnumSetDef`             | the resolved integer width, bits in a comment       |
-| `UnionDef`               | a wrapper table holding a native union (§3.1)       |
-| `ConstDef`               | not emitted (ADR-0013 decision 5)                   |
-| array                    | `[T]` vector                                        |
-| map                      | `[Entry]` vector of entry tables, no `(key)` (§3.3) |
-| tuple                    | a generated table with positional fields            |
-| `?` field                | table field absence — tables are natively sparse    |
+| typl                      | FlatBuffers                                         |
+| ------------------------- | --------------------------------------------------- |
+| `TypeDef` (named scalar)  | inlines to its backing scalar (ADR-0017 d1)         |
+| inline scalar (typl §5.2) | its resolved scalar, no comment (Task 7 note below) |
+| `StructDef`               | `table`, ids `= ordinal − 1` (§3.2)                 |
+| `EnumDef`                 | `enum` with an explicit underlying type             |
+| `EnumSetDef`              | the resolved integer width, bits in a comment       |
+| `UnionDef`                | a wrapper table holding a native union (§3.1)       |
+| `ConstDef`                | not emitted (ADR-0013 decision 5)                   |
+| array                     | `[T]` vector                                        |
+| map                       | `[Entry]` vector of entry tables, no `(key)` (§3.3) |
+| tuple                     | a generated table with positional fields            |
+| `?` field                 | table field absence — tables are natively sparse    |
+
+**Amendment from execution (Task 7) — the inline-scalar row was missing, in the
+code as well as here.** `resolve_field_type` as first written had no arm for the
+IR's `InlineScalar` kind, so a field written `radius : integer
+[0..100]`
+directly — the anonymous counterpart of a named scalar — was refused as
+unprojectable, though every other backend handles the kind. Task 7 found the gap
+while implementing the union-arm wrapper and fixed it in the same commit: the
+field resolves to its scalar with no constraint comment, mirroring
+`ridl-backend-proto`'s `InlineScalar` arm — an inline scalar names no type to
+hang a comment on, which is ADR-0017's open item 1, unchanged by this backend.
 
 ### 3.5 Name scopes differ from proto3, so the proto backend's guard is not reusable
 

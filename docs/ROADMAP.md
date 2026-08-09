@@ -527,9 +527,37 @@ interaction's payload type, so no payload type reaches the import path today —
 the store and the dispatcher will need to import the payload types tier 2 never
 touches.
 
-**E9.9 to E9.12 are not in this block.** The IR is settled and E3 is unblocked;
-the FlatBuffers projection, the schema hash, the store and dispatcher, and the
-recorded general form R5 drift remain. Consolidated debt: driftsys/ridl#218.
+**E9.9 landed 2026-08-09** as `ridl-backend-flatbuffers`, the second wire
+backend, under the same ceiling as E9.8: the typl surface plus the interaction
+identity table, no `service` block, no call face, no value store. Its rules are
+recorded in [ADR-0018](decisions/ADR-0018-flatbuffers-projection-rules.md),
+every one of them measured against `flatc` 25.12.19 and `planus` 1.3.0 rather
+than reasoned from the records: a union is isolated in a wrapper table holding a
+native union, a union arm that is not itself a table is boxed in a generated
+one, a struct is always a `table`, a map is a vector of entry tables with no
+`(key)`, the collision guard models FlatBuffers' own three name scopes, and a
+field whose enum declares no zero member takes `= null`. Two records were
+amended in consequence: typl Appendix D's fixed-layout `struct` allowance is not
+taken by this projection, because the form fabricates a value from padding after
+a compatible append; and ADR-0013 decision 6's width-floor precondition was
+closed by decision — `ridl-diff` remains the sole guard for v0.1, with the
+measured cost of always-widest (2.2× on an 8-signal table, 2.6× on a 7-field
+fixed-layout struct) and the forcing case that reopens typl §17.11 recorded in
+the amendment. Validity is established by compiling every emitted schema with
+`planus-translation`, which covers 100 % of the emitted surface, and the
+stability property is driven from `ridl-diff`'s classifier, where it
+additionally guards the `(deprecated)` slot filling.
+
+Two questions travel on to E9.11 from this story. The ADR-0013 decision 2 versus
+ADR-0016 decision 10 conflict over the `service` block is **still unresolved**:
+E9.9 avoided it the same way E9.8 did, by emitting neither, and E9.11 cannot
+avoid it. And `(key)` plus sorted-vector lookup is reopenable there, where a
+generated producer could hold the sortedness obligation the attribute implies
+and nothing in E9.9 could.
+
+**E9.10 to E9.12 are not in this block.** The IR is settled and E3 is unblocked;
+the schema hash, the store and dispatcher, and the recorded general form R5
+drift remain. Consolidated debt: driftsys/ridl#218.
 
 | ID    | Story                                                                                                                                                                                                                                                                                      | Done when                                                                                                                               | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---- |

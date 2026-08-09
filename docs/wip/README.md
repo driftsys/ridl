@@ -7,12 +7,13 @@ that are not yet ratified as normative references. They graduate into
 
 Superpowers specs and plans live here while an epic runs and are archived
 verbatim to [`../archive/`](../archive/) at epic close, or as a design/plan pair
-once the story they cover lands. **None is open.** The epic E2 plan was archived
-by the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
+once the story they cover lands. **The E9.9 pair below is the one still open**,
+archived when that story's gardening pass runs. The epic E2 plan was archived by
+the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
 2026-08-04, the E9.7 design/plan pair
 (`2026-08-05-projection-name-transform-{design,plan}.md`) on 2026-08-07, and the
-E9.8 pair (`2026-08-08-proto3-projection-{design,plan}.md`) on 2026-08-08 — E9.9
-to E9.11 still read the E9.8 design note, from the archive.
+E9.8 pair (`2026-08-08-proto3-projection-{design,plan}.md`) on 2026-08-08 —
+E9.10 and E9.11 still read the E9.8 design note, from the archive.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -77,7 +78,13 @@ to E9.11 still read the E9.8 design note, from the archive.
   because a FlatBuffers `struct` fabricates a value after a compatible append
   (typl Appendix D's `fixed_layout` allowance is withdrawn for this projection),
   and ADR-0013 decision 6's width-floor precondition is closed by decision, with
-  the measured cost of the alternative. Roadmap: E9.9.
+  the measured cost of the alternative. Roadmap: E9.9. **Ratified 2026-08-09**
+  as [ADR-0018](../decisions/ADR-0018-flatbuffers-projection-rules.md), which
+  also records the rule execution forced onto the design: a union arm that is
+  not itself a table is boxed in a generated one rather than refused (the design
+  note's §3.1 amendment). ADR-0013 decision 6 carries its closure as an
+  amendment in place. The pair stays here as the reasoning trail until the
+  story's gardening pass archives it.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

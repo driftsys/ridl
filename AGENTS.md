@@ -7,14 +7,14 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: twelve crates
+(ADRs), the implementation roadmap, and the compiler workspace: thirteen crates
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-backend-rust`, `ridl-backend-ts`,
-`ridl-backend-proto`, `ridl-diff`, and `ridl-fmt` — plus `xtask` at the root and
-the `editors/vscode` extension. The typl v0.1 toolchain (epic E1) and the ridl
-interface layer over it (epic E2) are built; the boundary model (epic E3),
-`rmdl`, and `rsdl` are sequenced in the roadmap. See
-`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
+`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, and `ridl-fmt` —
+plus `xtask` at the root and the `editors/vscode` extension. The typl v0.1
+toolchain (epic E1) and the ridl interface layer over it (epic E2) are built;
+the boundary model (epic E3), `rmdl`, and `rsdl` are sequenced in the roadmap.
+See `docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Read these before doing anything else in this repo:**
 
@@ -50,7 +50,11 @@ interface layer over it (epic E2) are built; the boundary model (epic E3),
   (the proto3 projection — how a foreign reference projects, where constraint
   information goes, and totality over names as well as numbers; read its
   decision 1 before writing another wire backend, because `generate_with` is the
-  API E9.9 and E9.11 inherit).
+  API E9.9 and E9.11 inherit), ADR-0018 (the FlatBuffers projection — a union
+  isolated in a wrapper table, a non-table union arm boxed, every struct a
+  `table`, a map with no `(key)`, the target's own name scopes, and `= null` on
+  a field whose enum declares no zero member; binds the FlatBuffers backend
+  only).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 

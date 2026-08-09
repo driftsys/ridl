@@ -15,6 +15,13 @@ binds the language backends is open** — see Open item 1.
 implemented" no longer holds for decision 2's two tiers. Decision 7's second
 class still has no backend in it.
 
+**Amendment (2026-08-09).** A FlatBuffers backend now exists —
+`crates/ridl-backend-flatbuffers`, built by roadmap story E9.9, its
+target-specific rules recorded in
+[ADR-0018](ADR-0018-flatbuffers-projection-rules.md). Decision 6's precondition
+was closed **by decision** rather than by a `wire` clause — see the amendment
+inside decision 6.
+
 **Decision 2 conflicts with
 [ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decision 10,
 and the conflict is unresolved.** Decision 2 says a wire backend emits "no
@@ -155,6 +162,21 @@ language layer at `int64`/`float64`.
    guard in v0.1 and defers an explicit width floor — a `wire` clause — to typl
    §17.11. That open question must be closed before a FlatBuffers backend ships,
    not after.
+
+   **Amendment (2026-08-09) — E9.9 closed the precondition by decision.**
+   `ridl-diff` remains the sole guard for v0.1: the gate classifies the width
+   flip as breaking and stops it, and no `wire` clause was added. The
+   alternative that would remove the hazard from the language — emitting the
+   widest width in each signedness class, so a widening can never flip anything
+   — was measured and rejected: 2.2× on an 8-signal table (44 → 96 bytes) and
+   2.6× on a 7-field fixed-layout struct (28 → 72 bytes). FlatBuffers has no
+   varint — a declared width is bytes on the wire, every message — so
+   always-widest gives up the property Appendix D calls the target's cleanest
+   advantage, on the target chosen precisely for byte efficiency. The forcing
+   case that reopens typl §17.11: a deployment that needs to widen a range on a
+   FlatBuffers-bound contract without a coordinated flag day. At that point the
+   `wire` clause can be designed against a real case, and its constraints are
+   already settled in §17.11.
 
 7. **Amendment (2026-08-07) — field absence is declared once and realised per
    target.** typl §7.1's `?` states that a field may carry no value. That is a
