@@ -48,9 +48,19 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: install prim
-        run: curl -fsSL https://raw.githubusercontent.com/driftsys/prim/main/install.sh | bash
+        # The release-asset path is rate limited when unauthenticated: GitHub
+        # allows 60 requests an hour per runner IP, which is shared, so the
+        # same commit can install cleanly and then 403 an hour later. The token
+        # raises that to 5000; the cargo fallback covers every other cause,
+        # since it builds from source and touches no release asset.
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/driftsys/prim/main/install.sh | bash \
+            || cargo install --git https://github.com/driftsys/prim --locked
+          command -v prim
         env:
           PRIM_INSTALL_DIR: /usr/local/bin
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -143,9 +153,12 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: install git-std
+        # Same rate-limit exposure as the prim install in the `markdown` job.
         run: curl -fsSL https://raw.githubusercontent.com/driftsys/git-std/main/install.sh | bash
         env:
           GIT_STD_INSTALL_DIR: /usr/local/bin
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # The recipe, not a `git std lint` line of its own. This step and the
       # `verify` recipe each held one before, and they already differed: this one
       # linted against the PR's base branch and `verify` against `main`, so they
