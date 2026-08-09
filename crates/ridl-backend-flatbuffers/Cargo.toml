@@ -10,7 +10,10 @@ ridl-ir = { path = "../ridl-ir" }
 
 # planus-translation is TEST-ONLY and must stay here. It is the validity
 # oracle, not part of emission: making it a normal dependency would put a
-# schema compiler in every build and break `just wasm-check`.
+# parser generator and its whole dependency tree into every downstream
+# build — build weight and supply surface paid by every consumer, for a
+# guarantee none of them asked for. The boundary is enforced by
+# `xtask/tests/oracle_boundary.rs`.
 [dev-dependencies]
 insta.workspace = true
 planus-translation.workspace = true

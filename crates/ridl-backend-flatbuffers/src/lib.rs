@@ -1188,7 +1188,7 @@ fn render_constraint(constraint: &v2::Constraint) -> String {
     parts.join(" ")
 }
 
-/// Tier 2 (ADR-0013 decision 2): one enum per interface shape, interface-wide
+/// Tier 2 (ADR-0013 decision 3): one enum per interface shape, interface-wide
 /// and kind-blind, matching ridl §11's single ordinal sequence.
 ///
 /// Two rules here differ from the proto3 backend's identity table.

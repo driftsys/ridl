@@ -10,8 +10,10 @@ ridl-ir = { path = "../ridl-ir" }
 
 # protox is TEST-ONLY and must stay here. It is the validity check of
 # ADR-0016's totality property, not part of emission: making it a normal
-# dependency would put a protobuf compiler in every build and break
-# `just wasm-check`.
+# dependency would put a protobuf compiler and its whole dependency tree
+# into every downstream build — build weight and supply surface paid by
+# every consumer, for a guarantee none of them asked for. The boundary is
+# enforced by `xtask/tests/oracle_boundary.rs`.
 [dev-dependencies]
 insta.workspace = true
 protox.workspace = true
