@@ -5,15 +5,22 @@
 //! and the interaction identity table — and nothing above them. No
 //! `rpc_service`, no reply carriers, no store.
 //!
-//! Four rules here differ from the proto3 backend and are not interchangeable
+//! Six rules here differ from the proto3 backend and are not interchangeable
 //! with it: a union is isolated in a wrapper table because a native union
 //! owns two id slots; a struct is always emitted as a `table` because a
 //! FlatBuffers `struct` fabricates a value after a compatible append; enum
 //! values are scoped to their enum rather than to the namespace, so no value
 //! prefixing is emitted and no zero member is synthesized into the
-//! declaration; and a table field whose enum declares no zero-valued member
+//! declaration; a table field whose enum declares no zero-valued member
 //! takes `= null`, because FlatBuffers gives every table field a default and
-//! cannot mark a scalar or enum field required in any case.
+//! cannot mark a scalar or enum field required in any case; a map becomes a
+//! vector of generated entry tables with no `(key)` attribute, because
+//! FlatBuffers has no map type and the attribute would oblige the producer
+//! to sort a container typl §12.2 gives no ordering; and the name guard
+//! models FlatBuffers' own scopes ([`Namespace`]), because proto3 scopes
+//! enum values as namespace siblings and this target does not.
+
+use std::collections::HashMap;
 
 use ridl_ir::v2;
 
@@ -39,11 +46,113 @@ pub fn generate_with(
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
     let _ = others;
+    // One namespace scope spans both walks, because the identity tables are
+    // namespace-level enums the same as the declared types: a declared type
+    // named `<Interface>Ordinal` and the generated identity table for
+    // `<Interface>` collide, and only a scope that has seen both can refuse
+    // it. Declared names are registered before any generated name, so a
+    // refusal always names the declaration as the first claimant.
+    let mut names = Namespace::types(&package.name);
+    claim_declared_names(&mut names, package)?;
     let mut out = String::new();
     out.push_str(&format!("namespace {};\n", package.name));
-    emit_structs(&mut out, package)?;
-    emit_identity_tables(&mut out, package);
+    emit_structs(&mut out, package, &mut names)?;
+    emit_identity_tables(&mut out, package, &mut names)?;
     Ok(Generated { fbs_source: out })
+}
+
+/// Registers every declared name that becomes a FlatBuffers declaration: a
+/// struct's table, an enum, and a union — whose wrapper table takes the
+/// declared name ([`emit_union`]). A named scalar, enum set or constant
+/// mints no FlatBuffers declaration ([`emit_structs`]), so their names stay
+/// free for a generated name to take.
+fn claim_declared_names(names: &mut Namespace, package: &v2::Package) -> Result<(), GenerateError> {
+    for decl in &package.decls {
+        match &decl.kind {
+            Some(v2::decl::Kind::StructDef(_)) => {
+                names.claim(&decl.name, &format!("struct `{}`", decl.name))?;
+            }
+            Some(v2::decl::Kind::EnumDef(_)) => {
+                names.claim(&decl.name, &format!("enum `{}`", decl.name))?;
+            }
+            Some(v2::decl::Kind::UnionDef(_)) => {
+                names.claim(&decl.name, &format!("union `{}`", decl.name))?;
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+/// One FlatBuffers name scope, tracking every name this backend emits into
+/// it so a second claim on one name is refused before the target sees the
+/// redefinition — ADR-0017 decision 4's totality obligation, modelled on
+/// this target's scopes. They are not proto3's: `ridl-backend-proto`'s
+/// `SymbolScope` registers enum values in its package scope, because proto3
+/// scopes them as siblings of their enum, and lifting it here would
+/// over-refuse. Verified against `flatc`, FlatBuffers gives this backend
+/// three scopes:
+///
+/// - the **namespace** — every table, struct, enum and union name shares one
+///   space (`flatc`: "datatype already exists"). Declared names register
+///   first ([`claim_declared_names`]), then every generated name: union
+///   declarations ([`emit_union`]), entry and tuple tables
+///   ([`emit_induced_tables`]), and identity-table enums
+///   ([`emit_identity_tables`]).
+/// - one **table's body** — its field names.
+/// - one **enum's body** — its value names. Two enums may each declare a
+///   value named `OK`, which is where FlatBuffers differs from proto3 and
+///   why no value is prefixed ([`emit_enum`]).
+struct Namespace {
+    /// Named in the refusal: ``namespace `veh.common` ``, ``table `Payload` ``
+    /// or ``enum `Gear` ``.
+    scope: String,
+    /// Each projected name, to the plain description of the construct that
+    /// claimed it — quoted back when a second claim on the name is refused.
+    claimed: HashMap<String, String>,
+}
+
+impl Namespace {
+    /// The namespace scope: every type name in one package's schema.
+    fn types(package: &str) -> Self {
+        Self {
+            scope: format!("namespace `{package}`"),
+            claimed: HashMap::new(),
+        }
+    }
+
+    /// One table's field-name scope.
+    fn fields(table: &str) -> Self {
+        Self {
+            scope: format!("table `{table}`"),
+            claimed: HashMap::new(),
+        }
+    }
+
+    /// One enum's value-name scope.
+    fn values(enum_name: &str) -> Self {
+        Self {
+            scope: format!("enum `{enum_name}`"),
+            claimed: HashMap::new(),
+        }
+    }
+
+    /// Registers the FlatBuffers name that `source` — a plain description
+    /// such as ``struct `Reading` `` — is about to emit. The second claim on
+    /// one name is refused with an error naming both claimants.
+    fn claim(&mut self, name: &str, source: &str) -> Result<(), GenerateError> {
+        if let Some(previous) = self.claimed.insert(name.to_string(), source.to_string()) {
+            return Err(GenerateError {
+                message: format!(
+                    "`{name}` is claimed twice in {}: once by {previous}, and again by \
+                     {source}. FlatBuffers rejects a name declared twice in one scope, so \
+                     rename one of the two so their projected names differ.",
+                    self.scope
+                ),
+            });
+        }
+        Ok(())
+    }
 }
 
 /// A dotted address becomes one CamelCase FlatBuffers identifier:
@@ -70,23 +179,33 @@ fn screaming_snake_case(name: &str) -> String {
 }
 
 /// Tier 1 (ADR-0013 decision 2): walks every top-level declaration, emitting
-/// a `table` for each struct ([`emit_struct`]) and an `enum` for each typl
-/// enum ([`emit_enum`]). A named scalar and an enum set inline at each use
+/// a `table` for each struct ([`emit_struct`]), an `enum` for each typl enum
+/// ([`emit_enum`]), and a union declaration plus its wrapper table for each
+/// union ([`emit_union`]). A named scalar and an enum set inline at each use
 /// site instead of becoming a declaration of their own, the same as in
 /// `ridl-backend-proto`'s tier 1, and a constant is never emitted (ADR-0013
 /// decision 5) — so a `TypeDef`, `EnumSetDef` or `ConstDef` declaration
-/// simply contributes nothing here. A union is tier 1 as well, but is out of
-/// this task's scope; a later task adds its match arm alongside these.
-fn emit_structs(out: &mut String, package: &v2::Package) -> Result<(), GenerateError> {
+/// simply contributes nothing here. The walk collects the tables a container
+/// field induces — a map's entry table and a tuple's positional table —
+/// which are emitted after the declarations that reached them
+/// ([`emit_induced_tables`]).
+fn emit_structs(
+    out: &mut String,
+    package: &v2::Package,
+    names: &mut Namespace,
+) -> Result<(), GenerateError> {
+    let mut induced: Vec<Induced> = Vec::new();
     for decl in &package.decls {
         match &decl.kind {
             Some(v2::decl::Kind::StructDef(def)) => {
-                emit_struct(out, package, &decl.name, def)?;
+                emit_struct(out, package, &decl.name, def, &mut induced)?;
             }
-            Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def),
+            Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
+            Some(v2::decl::Kind::UnionDef(def)) => emit_union(out, &decl.name, def, names)?,
             _ => {}
         }
     }
+    emit_induced_tables(out, package, &mut induced, names)?;
     Ok(())
 }
 
@@ -102,12 +221,61 @@ fn emit_structs(out: &mut String, package: &v2::Package) -> Result<(), GenerateE
 /// IR, and narrowing to the smallest type that fits the declared values would
 /// make the underlying type a function of those values — a later value could
 /// then widen it, which is a wire change under an otherwise compatible edit.
-fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) {
+///
+/// Each value name is claimed in the enum's own scope ([`Namespace`]): typl
+/// source cannot declare one name twice, but IR handed to this backend
+/// directly can, and the target rejects the repeat.
+fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), GenerateError> {
+    let mut values = Namespace::values(name);
     out.push_str(&format!("\nenum {name} : long {{\n"));
     for value in &def.values {
+        values.claim(
+            &value.name,
+            &format!("value `{}` of enum `{name}`", value.name),
+        )?;
         out.push_str(&format!("  {} = {},\n", value.name, value.value));
     }
     out.push_str("}\n");
+    Ok(())
+}
+
+/// One union as two declarations (typl §10): `union <Name>Union` listing the
+/// arm types, and the wrapper `table <Name>` holding it — the declared name
+/// goes to the wrapper, because the wrapper is what a field position
+/// references ([`named_field_type`]).
+///
+/// The wrapper exists because a native union owns TWO id slots: a union
+/// field declared `(id: N)` puts its hidden `_type` discriminant at `N - 1`
+/// and the value at `N`. A native union placed in an ordinal-owned slot
+/// would therefore shift every later field's id, and `flatc` refuses the
+/// schema ("field id's must be consecutive from 0"). The wrapper takes one
+/// slot in its parent and keeps the union's two inside its own id space,
+/// where contiguity binds nothing else — so the value field is `(id: 1)`,
+/// not 0, because the implicit `_type` takes 0 (verified against `flatc`
+/// 25.12.19).
+///
+/// A hand-rolled discriminant-plus-arms table is not an alternative: it
+/// cannot hold typl §10's guarantee that exactly one arm is active, because
+/// nothing ties the discriminant to the arm that is set. A retired arm
+/// ([`v2::UnionDef::reserved`]) contributes nothing to the union list, the
+/// same as a retired value in [`emit_enum`].
+fn emit_union(
+    out: &mut String,
+    name: &str,
+    def: &v2::UnionDef,
+    names: &mut Namespace,
+) -> Result<(), GenerateError> {
+    let union_name = format!("{name}Union");
+    names.claim(
+        &union_name,
+        &format!("the union declaration generated for union `{name}`"),
+    )?;
+    let arms: Vec<&str> = def.arms.iter().map(|arm| arm.type_ref.as_str()).collect();
+    out.push_str(&format!("\nunion {union_name} {{ {} }}\n", arms.join(", ")));
+    out.push_str(&format!(
+        "\ntable {name} {{\n  value: {union_name} (id: 1);\n}}\n"
+    ));
+    Ok(())
 }
 
 /// One struct as one FlatBuffers `table`, one field per member, its `id` the
@@ -129,48 +297,92 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) {
 /// decision 6 property 3 unsatisfiable, and silently. A `table` reports the
 /// field correctly absent, so every struct is emitted as one, whatever
 /// `fixed_layout` says.
+///
+/// A field's projected name is claimed in the table's own scope
+/// ([`Namespace`]): two source names colliding under the pinned transform
+/// would emit a field redefinition the target rejects. The retired-slot
+/// placeholders claim their names too — a live field spelling
+/// `reserved_<N>` after the transform is the same redefinition. A table a
+/// field's type induces — a map's entry table, a tuple's positional table —
+/// is collected into `induced` under the name `<Owner><Field>` in CamelCase,
+/// and emitted after the declaration walk ([`emit_induced_tables`]).
 fn emit_struct(
     out: &mut String,
     package: &v2::Package,
     name: &str,
     def: &v2::StructDef,
+    induced: &mut Vec<Induced>,
 ) -> Result<(), GenerateError> {
+    let mut fields = Namespace::fields(name);
     out.push_str(&format!("\ntable {name} {{\n"));
     for member in &def.members {
         match &member.member {
             Some(v2::struct_member::Member::Field(field)) => {
                 let id = member_id(name, field.ordinal)?;
                 let field_name = ridl_ir::name::snake_case(&field.name);
+                fields.claim(
+                    &field_name,
+                    &format!("field `{}` of struct `{name}`", field.name),
+                )?;
                 let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
                     message: format!("{name}.{} carries no type in the IR.", field.name),
                 })?;
-                let (scalar, needs_null_default, comment) =
-                    resolve_field_type(package, name, &field.name, ty)?;
-                if let Some(comment) = comment {
-                    out.push_str(&format!("  {comment}\n"));
-                }
-                // `flatc` refuses a field whose implicit default of 0 is not
-                // a member of its enum. This applies whether or not the typl
-                // field is optional: FlatBuffers cannot mark a scalar or
-                // enum field `required` in any case, so `= null` is the
-                // rendering that never fabricates a reading.
-                let default_clause = if needs_null_default { " = null" } else { "" };
-                out.push_str(&format!(
-                    "  {field_name}: {scalar}{default_clause} (id: {id});\n"
-                ));
+                let hint = format!("{name}{}", type_name(&field.name));
+                let (type_text, needs_null_default, comment) =
+                    resolve_field_type(package, name, &field.name, &hint, ty, induced)?;
+                push_field(
+                    out,
+                    &field_name,
+                    &type_text,
+                    needs_null_default,
+                    comment,
+                    id,
+                );
             }
             Some(v2::struct_member::Member::Reserved(reserved)) => {
                 let id = member_id(name, reserved.ordinal)?;
-                out.push_str(&format!(
-                    "  reserved_{}: ubyte (id: {id}, deprecated);\n",
-                    reserved.ordinal
-                ));
+                let placeholder = format!("reserved_{}", reserved.ordinal);
+                fields.claim(
+                    &placeholder,
+                    &format!(
+                        "the placeholder holding retired ordinal {} of struct `{name}`",
+                        reserved.ordinal
+                    ),
+                )?;
+                out.push_str(&format!("  {placeholder}: ubyte (id: {id}, deprecated);\n"));
             }
             None => {}
         }
     }
     out.push_str("}\n");
     Ok(())
+}
+
+/// One table field line: the constraint comment on its own line above when
+/// the resolved type carries one, then `name: type (id: N);` with `= null`
+/// between the type and the id clause when the type calls for it. Shared by
+/// the declared tables ([`emit_struct`]) and the generated ones
+/// ([`emit_tuple_table`], [`emit_entry_table`]), whose fields are ordinary
+/// table fields.
+fn push_field(
+    out: &mut String,
+    field_name: &str,
+    type_text: &str,
+    needs_null_default: bool,
+    comment: Option<String>,
+    id: u32,
+) {
+    if let Some(comment) = comment {
+        out.push_str(&format!("  {comment}\n"));
+    }
+    // `flatc` refuses a field whose implicit default of 0 is not a member of
+    // its enum. This applies whether or not the typl field is optional:
+    // FlatBuffers cannot mark a scalar or enum field `required` in any case,
+    // so `= null` is the rendering that never fabricates a reading.
+    let default_clause = if needs_null_default { " = null" } else { "" };
+    out.push_str(&format!(
+        "  {field_name}: {type_text}{default_clause} (id: {id});\n"
+    ));
 }
 
 /// The FlatBuffers `id` for one struct member: the typl ordinal minus one.
@@ -187,19 +399,32 @@ fn member_id(owner: &str, ordinal: u32) -> Result<u32, GenerateError> {
     })
 }
 
-/// The FlatBuffers type at one field position — tier 1's data-only subset: a
-/// bare primitive resolves directly ([`fbs_primitive`]), and a named-type
-/// reference inlines a named scalar, enum or enum set to its backing
-/// FlatBuffers type ([`named_field_type`]). The middle element of the result
-/// is whether the field needs an explicit `= null` default (only ever true
-/// for an enum reference — see [`emit_struct`]); a container field (array,
-/// map, tuple) or a stream is out of this task's scope, and later tasks
-/// extend this match.
+/// The FlatBuffers type at one field position — tier 1's typl surface: a
+/// bare primitive resolves directly ([`fbs_primitive`]); a named-type
+/// reference resolves through [`named_field_type`]; an array is `[T]`; a map
+/// is a vector of a generated entry table ([`emit_entry_table`]); and a
+/// tuple induces a positional table ([`emit_tuple_table`]). A stream is
+/// refused: tier 1 covers the typl surface only (ADR-0013 decision 2).
+///
+/// `hint` is the CamelCase name a table induced at this exact position would
+/// take: `<OwnerType><FieldName>` at the field itself, extended with
+/// `Element` for an array element, `Key`/`Value` for a map's positions and
+/// `Field<N>` for a tuple field — so a generated name always spells the path
+/// that reached it. An induced table is pushed onto `induced` and emitted
+/// after the declaration walk ([`emit_induced_tables`]).
+///
+/// The middle element of the result is whether the field needs an explicit
+/// `= null` default (only ever true for an enum reference — see
+/// [`push_field`]). At a vector-element position it is dropped, never
+/// forwarded: only a table field carries a default in FlatBuffers, and a
+/// vector element must not inherit one.
 fn resolve_field_type(
     package: &v2::Package,
     owner: &str,
     field_name: &str,
+    hint: &str,
     ty: &v2::FieldType,
+    induced: &mut Vec<Induced>,
 ) -> Result<(String, bool, Option<String>), GenerateError> {
     match ty.kind.as_ref() {
         Some(v2::field_type::Kind::Primitive(primitive)) => {
@@ -207,6 +432,67 @@ fn resolve_field_type(
         }
         Some(v2::field_type::Kind::Named(reference)) => {
             named_field_type(package, owner, field_name, reference)
+        }
+        Some(v2::field_type::Kind::Array(array)) => {
+            let element = array.element.as_ref().ok_or_else(|| GenerateError {
+                message: format!(
+                    "{owner}.{field_name} declares an array with no element type in the IR."
+                ),
+            })?;
+            // FlatBuffers has no vector of vectors, and both of these would
+            // emit one: a nested array directly, and a map because a map is
+            // itself projected as a vector of entry tables. Checked here so
+            // neither rejection reaches the target as a schema it must
+            // refuse (ADR-0017 decision 4's totality obligation).
+            match element.kind.as_ref() {
+                Some(v2::field_type::Kind::Array(_)) => {
+                    return Err(GenerateError {
+                        message: format!(
+                            "{owner}.{field_name} is an array of arrays, which FlatBuffers \
+                             cannot carry — a vector's element cannot itself be a vector. \
+                             Wrap the inner array in a struct."
+                        ),
+                    });
+                }
+                Some(v2::field_type::Kind::Map(_)) => {
+                    return Err(GenerateError {
+                        message: format!(
+                            "{owner}.{field_name} is an array of maps, which FlatBuffers \
+                             cannot carry — a map is projected as a vector of entry tables, \
+                             and a vector's element cannot itself be a vector. Wrap the map \
+                             in a struct."
+                        ),
+                    });
+                }
+                _ => {}
+            }
+            // The element's `= null` marker is dropped, never forwarded: a
+            // vector element carries no per-element default — only a table
+            // field does.
+            let (element_text, _needs_null_default, comment) = resolve_field_type(
+                package,
+                owner,
+                field_name,
+                &format!("{hint}Element"),
+                element,
+                induced,
+            )?;
+            Ok((format!("[{element_text}]"), false, comment))
+        }
+        Some(v2::field_type::Kind::Map(map)) => {
+            let entry_name = format!("{hint}Entry");
+            induced.push(Induced {
+                name: entry_name.clone(),
+                kind: InducedKind::Entry(map.as_ref().clone()),
+            });
+            Ok((format!("[{entry_name}]"), false, None))
+        }
+        Some(v2::field_type::Kind::Tuple(tuple)) => {
+            induced.push(Induced {
+                name: hint.to_string(),
+                kind: InducedKind::Tuple(tuple.clone()),
+            });
+            Ok((hint.to_string(), false, None))
         }
         _ => Err(GenerateError {
             message: format!(
@@ -234,8 +520,12 @@ fn resolve_field_type(
 /// resolves to the FlatBuffers scalar for its declared width, with its bit
 /// names and positions as a comment ([`enum_set_field_type`]).
 ///
-/// Any other declaration kind is refused: only a named scalar, enum or enum
-/// set is projected from a field position yet.
+/// A union resolves to its wrapper table's name — the declared name — so the
+/// field takes exactly one id slot in its parent; the two slots a native
+/// union owns live inside the wrapper ([`emit_union`]).
+///
+/// Any other declaration kind is refused: only a named scalar, enum, enum
+/// set or union is projected from a field position yet.
 fn named_field_type(
     package: &v2::Package,
     owner: &str,
@@ -264,11 +554,12 @@ fn named_field_type(
             let (scalar, comment) = enum_set_field_type(esd);
             Ok((scalar, false, comment))
         }
+        Some(v2::decl::Kind::UnionDef(_)) => Ok((decl.name.clone(), false, None)),
         _ => Err(GenerateError {
             message: format!(
                 "{owner}.{field_name} references `{reference}`, a declaration kind this \
-                 tier does not project yet — only a named scalar, enum or enum set may be \
-                 referenced from a field position here."
+                 tier does not project yet — only a named scalar, enum, enum set or union \
+                 may be referenced from a field position here."
             ),
         }),
     }
@@ -299,6 +590,176 @@ fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
         Some(lines.join("\n  "))
     };
     (scalar.to_string(), comment)
+}
+
+/// A table a container field induces while walking the package — a tuple's
+/// positional table or a map's entry table — emitted after the declaration
+/// that reached it, since neither exists as a declaration in source. Matches
+/// the worklist pattern `ridl-backend-proto`'s `InducedTuple` uses; the kind
+/// travels along because this backend generates entry tables too, which
+/// proto3's native `map<K, V>` never needs.
+#[derive(Debug, Clone)]
+struct Induced {
+    /// The generated table name: the [`resolve_field_type`] `hint` for a
+    /// tuple, or that hint plus `Entry` for a map.
+    name: String,
+    kind: InducedKind,
+}
+
+/// The container that induced a generated table, carrying the type to emit
+/// it from — compared whole when two paths reach one name
+/// ([`emit_induced_tables`]).
+#[derive(Debug, Clone, PartialEq)]
+enum InducedKind {
+    Tuple(v2::TupleType),
+    Entry(v2::MapType),
+}
+
+/// Emits every table the walk in [`emit_structs`] induced, named for the
+/// path that reached it. The worklist is drained rather than iterated once:
+/// emitting one induced table's fields can discover a container nested
+/// inside it, which is appended to `induced` and picked up by a later pass
+/// of this same loop.
+///
+/// Two different container types reaching one generated name is refused
+/// rather than resolved by picking one: nothing upstream keeps two field
+/// paths from mangling to the same CamelCase string, and there is no sound
+/// way to choose between two different table shapes for one name. Identical
+/// claims collapse to one emission. The generated name is also claimed in
+/// the namespace scope, because nothing keeps a field path from mangling to
+/// a name the package already declares — `ReadingBounds` induced at
+/// `Reading.bounds` beside a declared `ReadingBounds` — and that is a
+/// redefinition the target rejects ([`Namespace`]).
+fn emit_induced_tables(
+    out: &mut String,
+    package: &v2::Package,
+    induced: &mut Vec<Induced>,
+    names: &mut Namespace,
+) -> Result<(), GenerateError> {
+    let mut seen: HashMap<String, InducedKind> = HashMap::new();
+    let mut index = 0;
+    while index < induced.len() {
+        let item = induced[index].clone();
+        index += 1;
+        if let Some(previous) = seen.get(&item.name) {
+            if *previous != item.kind {
+                return Err(GenerateError {
+                    message: format!(
+                        "the generated table name {} is claimed by two different container \
+                         types; a container generates a table named for the field path that \
+                         reaches it, and two different paths spelled one name here — rename \
+                         a field so they differ.",
+                        item.name
+                    ),
+                });
+            }
+            continue;
+        }
+        seen.insert(item.name.clone(), item.kind.clone());
+        match &item.kind {
+            InducedKind::Tuple(tuple) => {
+                names.claim(
+                    &item.name,
+                    "a table generated for a tuple, named for the field path that reaches it",
+                )?;
+                emit_tuple_table(out, package, &item.name, tuple, induced)?;
+            }
+            InducedKind::Entry(map) => {
+                names.claim(
+                    &item.name,
+                    "an entry table generated for a map, named for the field path that \
+                     reaches it",
+                )?;
+                emit_entry_table(out, package, &item.name, map, induced)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// One induced tuple table: positional fields `field_1`, `field_2`, … with
+/// ids from 0 (mirrors `ridl-backend-proto`'s `emit_induced_tuple`). A tuple
+/// field is always named in typl source (typl §11), but positional access is
+/// what a tuple actually offers, so the generated table uses the position
+/// rather than carry the source name onto the wire.
+fn emit_tuple_table(
+    out: &mut String,
+    package: &v2::Package,
+    name: &str,
+    tuple: &v2::TupleType,
+    induced: &mut Vec<Induced>,
+) -> Result<(), GenerateError> {
+    out.push_str(&format!("\ntable {name} {{\n"));
+    for (index, field) in tuple.fields.iter().enumerate() {
+        let position = index + 1;
+        let field_name = format!("field_{position}");
+        let id = u32::try_from(index).map_err(|_| GenerateError {
+            message: format!("{name} has more tuple fields than a FlatBuffers id can carry."),
+        })?;
+        let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
+            message: format!("{name}.{field_name} carries no type in the IR."),
+        })?;
+        let hint = format!("{name}Field{position}");
+        let (type_text, needs_null_default, comment) =
+            resolve_field_type(package, name, &field_name, &hint, ty, induced)?;
+        push_field(
+            out,
+            &field_name,
+            &type_text,
+            needs_null_default,
+            comment,
+            id,
+        );
+    }
+    out.push_str("}\n");
+    Ok(())
+}
+
+/// One entry table for a map field: `key` at id 0, `value` at id 1, both
+/// ordinary table fields — a value typed by an enum with no zero member
+/// takes `= null` here the same as anywhere else ([`push_field`]).
+///
+/// FlatBuffers has no map type, so a map is a vector of these (typl §12.2).
+/// The `(key)` attribute is deliberately NOT emitted: it obliges the
+/// producer to write the vector sorted and nothing checks that at read
+/// time, while typl §12.2 gives a map no ordering at all — and `planus`
+/// cannot parse the attribute, which would put the map path outside the
+/// validity oracle.
+fn emit_entry_table(
+    out: &mut String,
+    package: &v2::Package,
+    name: &str,
+    map: &v2::MapType,
+    induced: &mut Vec<Induced>,
+) -> Result<(), GenerateError> {
+    let key = map.key.as_ref().ok_or_else(|| GenerateError {
+        message: format!("{name} is generated for a map that carries no key type in the IR."),
+    })?;
+    let value = map.value.as_ref().ok_or_else(|| GenerateError {
+        message: format!("{name} is generated for a map that carries no value type in the IR."),
+    })?;
+    out.push_str(&format!("\ntable {name} {{\n"));
+    let (key_text, key_needs_null, key_comment) =
+        resolve_field_type(package, name, "key", &format!("{name}Key"), key, induced)?;
+    push_field(out, "key", &key_text, key_needs_null, key_comment, 0);
+    let (value_text, value_needs_null, value_comment) = resolve_field_type(
+        package,
+        name,
+        "value",
+        &format!("{name}Value"),
+        value,
+        induced,
+    )?;
+    push_field(
+        out,
+        "value",
+        &value_text,
+        value_needs_null,
+        value_comment,
+        1,
+    );
+    out.push_str("}\n");
+    Ok(())
 }
 
 /// The FlatBuffers scalar for a direct primitive use at a field position. A
@@ -425,19 +886,42 @@ fn render_constraint(constraint: &v2::Constraint) -> String {
 /// contributes no member at all: a FlatBuffers enum declaration has no
 /// `reserved` construct, and this table is a name-to-number map rather than
 /// a wire layout, so a gap in the numbering is simply a gap.
-fn emit_identity_tables(out: &mut String, package: &v2::Package) {
+///
+/// The generated enum name is claimed in the namespace scope — a declared
+/// type spelling `<Interface>Ordinal` collides with it — and each member is
+/// claimed in the enum's own scope, because two interaction names colliding
+/// under SCREAMING_SNAKE would emit a value redefinition the target rejects
+/// ([`Namespace`]).
+fn emit_identity_tables(
+    out: &mut String,
+    package: &v2::Package,
+    names: &mut Namespace,
+) -> Result<(), GenerateError> {
     for shape in package.shapes() {
         let enum_name = format!("{}Ordinal", type_name(shape.name));
+        names.claim(
+            &enum_name,
+            &format!(
+                "the identity table generated for interface `{}`",
+                shape.name
+            ),
+        )?;
+        let mut values = Namespace::values(&enum_name);
         out.push_str(&format!("\nenum {enum_name} : uint {{\n"));
         for decl in &shape.interface.interactions {
             if matches!(decl.kind, Some(v2::decl::Kind::ReservedSlot(_))) {
                 continue;
             }
             let member = screaming_snake_case(&decl.name);
+            values.claim(
+                &member,
+                &format!("interaction `{}` of interface `{}`", decl.name, shape.name),
+            )?;
             out.push_str(&format!("  {member} = {},\n", decl.ordinal));
         }
         out.push_str("}\n");
     }
+    Ok(())
 }
 
 /// [`generate_with`] with no other packages — the single-package case. A

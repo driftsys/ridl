@@ -379,6 +379,311 @@ fn an_enum_set_becomes_an_integer_with_its_bits_in_a_comment() {
     compile_with_planus("veh.common.fbs", &generated.fbs_source);
 }
 
+#[test]
+fn a_union_is_isolated_in_a_wrapper_table() {
+    // A native union owns TWO id slots (a hidden _type plus the value), so
+    // one in an ordinal-owned slot shifts every later id. The wrapper takes
+    // one slot in the parent and keeps the union's two in its own id space.
+    let package = union_and_field(
+        "Payload",
+        vec![("speed", 1, "Speed"), ("gearIndex", 2, "GearIndex")],
+    );
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        generated
+            .fbs_source
+            .contains("union PayloadUnion { Speed, GearIndex }"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        generated
+            .fbs_source
+            .contains("table Payload {\n  value: PayloadUnion (id: 1);\n}"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn a_union_field_takes_exactly_one_slot_in_its_parent() {
+    let package = struct_with_union_between_scalars();
+    let generated = generate(&package).expect("generate");
+    // before: id 0, union: id 1, after: id 2 — the mapping is intact.
+    assert!(
+        generated.fbs_source.contains("after: long (id: 2);"),
+        "the union must not consume its neighbour's slot:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn an_array_field_is_a_vector() {
+    let package = struct_package("Trace", "samples", 1, array_of(float64_type()));
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.fbs_source.contains("samples: [double] (id: 0);"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn a_map_field_is_a_vector_of_entry_tables_with_no_key_attribute() {
+    // FlatBuffers has no map. (key) is deliberately NOT emitted: it obliges
+    // the producer to sort, and typl §12.2 gives a map no ordering.
+    let package = struct_package(
+        "Index",
+        "byName",
+        1,
+        map_of(v2::PrimitiveType::String, float64_type()),
+    );
+    let generated = generate(&package).expect("generate");
+
+    assert!(
+        generated.fbs_source.contains("table IndexByNameEntry {"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        generated
+            .fbs_source
+            .contains("by_name: [IndexByNameEntry] (id: 0);"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        !generated.fbs_source.contains("(key)"),
+        "(key) must not be emitted:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn a_tuple_field_induces_a_positional_table() {
+    let package = struct_package(
+        "Reading",
+        "bounds",
+        1,
+        tuple_of(vec![float64_type(), float64_type()]),
+    );
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.fbs_source.contains(
+            "table ReadingBounds {\n  field_1: double (id: 0);\n  field_2: double (id: 1);\n}"
+        ),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn a_generated_name_colliding_with_a_declared_type_is_refused() {
+    // Wrapper tables and entry tables mint names into the namespace scope,
+    // which FlatBuffers shares across tables, structs, enums and unions —
+    // `flatc` rejects a repeat with "datatype already exists".
+    //
+    // Here a declared struct `ReadingBounds` collides with the table induced
+    // by the tuple field `bounds` on struct `Reading`, whose generated name
+    // is `<Owner><Field>` = `ReadingBounds`.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Reading".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member(
+                        "bounds",
+                        1,
+                        tuple_of(vec![float64_type(), float64_type()]),
+                    )],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "ReadingBounds".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("x", 1, float64_type())],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("ReadingBounds"),
+        "got: {}",
+        error.message
+    );
+}
+
+/// A package with one struct `struct_name` holding one field — the generic
+/// single-field fixture the container tests share.
+fn struct_package(
+    struct_name: &str,
+    field_name: &str,
+    ordinal: u32,
+    ty: v2::FieldType,
+) -> v2::Package {
+    v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: struct_name.to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(field_name, ordinal, ty)],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+/// A bounded array of `element` (typl §12.1). Bounds are mandatory in the IR
+/// (TYPL-201) but land nowhere in this projection, so the fixture picks
+/// arbitrary ones.
+fn array_of(element: v2::FieldType) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+            element: Some(Box::new(element)),
+            min: 0,
+            max: 16,
+        }))),
+    }
+}
+
+/// A bounded map from primitive `key` to `value` (typl §12.2). Bounds are
+/// entry counts, mandatory in the IR (TYPL-202) and unused here.
+fn map_of(key: v2::PrimitiveType, value: v2::FieldType) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+            key: Some(Box::new(v2::FieldType {
+                optional: false,
+                kind: Some(v2::field_type::Kind::Primitive(key as i32)),
+            })),
+            value: Some(Box::new(value)),
+            min: 0,
+            max: 64,
+        }))),
+    }
+}
+
+/// An inline tuple whose fields take the given types, named `f1`, `f2`, … —
+/// the names are immaterial: the generated table is positional (typl §11).
+fn tuple_of(types: Vec<v2::FieldType>) -> v2::FieldType {
+    v2::FieldType {
+        optional: false,
+        kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+            fields: types
+                .into_iter()
+                .enumerate()
+                .map(|(index, ty)| v2::TupleField {
+                    name: format!("f{}", index + 1),
+                    r#type: Some(ty),
+                })
+                .collect(),
+        })),
+    }
+}
+
+/// A one-field struct declaration named `name`. A FlatBuffers union member
+/// must be a table, so union fixtures declare each arm target as a struct.
+fn arm_struct(name: &str) -> v2::Decl {
+    v2::Decl {
+        name: name.to_string(),
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member("value", 1, float64_type())],
+            fixed_layout: false,
+        })),
+        ..Default::default()
+    }
+}
+
+/// A union declaration named `name`, its arms as `(name, ordinal, type_ref)`
+/// triples (typl §10).
+fn union_decl(name: &str, arms: &[(&str, u32, &str)]) -> v2::Decl {
+    v2::Decl {
+        name: name.to_string(),
+        kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+            arms: arms
+                .iter()
+                .map(|(arm_name, ordinal, type_ref)| v2::UnionArm {
+                    name: arm_name.to_string(),
+                    ordinal: *ordinal,
+                    type_ref: type_ref.to_string(),
+                    doc: String::new(),
+                })
+                .collect(),
+            is_result: false,
+            reserved: Vec::new(),
+        })),
+        ..Default::default()
+    }
+}
+
+/// A package with a union named `name`, one struct declaration per arm
+/// target so the schema compiles, and one struct holding a field of the
+/// union type at ordinal 1 — enough to exercise the wrapper emission and the
+/// use-site reference together.
+fn union_and_field(name: &str, arms: Vec<(&str, u32, &str)>) -> v2::Package {
+    let mut decls: Vec<v2::Decl> = arms
+        .iter()
+        .map(|(_, _, type_ref)| arm_struct(type_ref))
+        .collect();
+    decls.push(union_decl(name, &arms));
+    decls.push(v2::Decl {
+        name: "Holder".to_string(),
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member("payload", 1, named_type(name))],
+            fixed_layout: false,
+        })),
+        ..Default::default()
+    });
+    v2::Package {
+        name: "veh.common".to_string(),
+        decls,
+        ..Default::default()
+    }
+}
+
+/// A scalar at ordinal 1, a union-typed field at ordinal 2 and a scalar at
+/// ordinal 3 — the arrangement that proves a union reference takes exactly
+/// one id slot in its parent.
+fn struct_with_union_between_scalars() -> v2::Package {
+    v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            arm_struct("Speed"),
+            union_decl("Payload", &[("speed", 1, "Speed")]),
+            v2::Decl {
+                name: "Frame".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![
+                        field_member("before", 1, int64_type()),
+                        field_member("payload", 2, named_type("Payload")),
+                        field_member("after", 3, int64_type()),
+                    ],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    }
+}
+
 fn field_member(name: &str, ordinal: u32, r#type: v2::FieldType) -> v2::StructMember {
     v2::StructMember {
         member: Some(v2::struct_member::Member::Field(v2::Field {
