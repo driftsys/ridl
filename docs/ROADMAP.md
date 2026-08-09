@@ -7,16 +7,112 @@ Companion to
 and exit criteria; **Stories** are the work items under it. Sizing is rough (S ≈
 days, M ≈ 1–2 weeks, L ≈ 3–6 weeks) and relative, not a schedule.
 
+## What this repository is, and is not
+
+**The core is domain-agnostic.** No automotive, avionics or medical vocabulary
+belongs in it. Assurance is three ordered scales — safety integrity, cyber
+threat, privacy — as ridl levels `0..N`, and the mapping to ASIL, CAL, DAL or
+SIL is a plugin's job
+([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+9). The core carries the ordering and the comparison, never the standard's name.
+
+**A domain lives in its own repository.** `ridl-plugin-can`,
+`ridl-plugin-someip`, `ridl-plugin-dds`, `ridl-automotive`, `ridl-avionics`,
+`ridl-robotics` — each a separate crate with its own lifecycle.
+
+Robotics is worth naming because it is the domain that most tests whether the
+core is genuinely domain-agnostic. ROS 2 is DDS underneath, and DDS is one of
+the two targets ADR-0013 says maps _cleanly_ onto ridl's interaction model — it
+has a native primitive for continuous state with a retained current value, which
+is what ridl §4.4 requires and what proto3 lacks. A robotics plugin would
+therefore exercise the plugin protocol against a transport that fits better than
+the one core ships, which is the more informative test.
+
+**Domain specifics are requirement inputs, not backlog items.** They belong on
+this page only as the enablers that make them possible. CAN is why the store
+must carry scaled integers and why ADR-0013 decision 7's in-band sentinel
+exists; SOME/IP's field-with-notifier is why ridl §4.4's last-value is normative
+rather than a convenience; AUTOSAR E2E is why ridl §3.1's envelope carries a
+counter. Each of those shaped the core and none of them is an epic here. The
+test for whether something belongs on this page is not "does a domain need it"
+but "would the core need it if no domain existed" — and if the answer is no,
+what belongs here is the **extension point**, not the extension.
+
+The domains in view are **automotive, avionics including drones, robotics, rail
+and medical**. Read as a set they settle two things the core had asserted rather
+than checked.
+
+**The assurance scale is right to be `0..N` rather than any standard's.** The
+five bring five differently shaped ladders — ASIL QM and A to D, CAL 1 to 4,
+DO-178C DAL A to E, EN 50128 SIL 1 to 4, IEC 62304 classes A to C. Different
+arities, different directions of severity, and in one case a three-point scale.
+No single borrowed vocabulary serves them, which is exactly the case
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision 9
+makes. Rail is the useful confirmation: EN 50128 says "safety integrity level"
+literally, so the core's name for that dimension is the general term rather than
+a loan from one field.
+
+**Two things they surface that the core does not yet answer.** ARINC 653's time
+and space partitioning is a standardised form of the protection domain rsdl is
+missing (ADR-0018 open item 1) — that concept should be designed against 653
+rather than invented. And IEC 62304 grades a _software item_, where ridl's
+labels sit on an interface, so the medical mapping has a granularity mismatch a
+plugin cannot paper over on its own.
+
+So ridl Appendix B's target list — SOME/IP, DDS, CAN/DBC, AIDL, JSON Schema — is
+a backlog of plugins elsewhere, and **none of it can start until the plugin
+protocol exists**. That is the sequencing consequence: E4.5 moves onto the
+critical path, out of the ecosystem tail where it sat behind a browser
+playground.
+
+What stays in core: the two encodings ADR-0018 decision 3 fixes — proto3 for the
+network and FlatBuffers for memory — because they are how the runtime talks to
+itself and to a generic consumer, not a domain's choice.
+
+## The platform ladder
+
+Ordered. Each rung is a layer-1 implementation of four traits plus a driving
+loop, so a rung is a port rather than a variant.
+
+| # | Platform                                | Role                   | Note                                                              |
+| - | --------------------------------------- | ---------------------- | ----------------------------------------------------------------- |
+| 1 | Desktop (Linux, macOS, Windows)         | tooling and simulation | the toolchain, the test plane, and the emulation and twin servers |
+| 2 | Mobile — Android and web                | UI, bridges, demo      | the frame over a socket; not a production control surface         |
+| 3 | Embedded Android                        | production UI, tooling | native or JVM over AIDL/Binder — Kotlin is a real target          |
+| 4 | QNX 7.1                                 | production             | the first serious real-time target                                |
+| 5 | Edge and IoT gateway (ARM Linux, Yocto) | **speculative**        | no confirmed requirement; near-free to add if one appears         |
+| 6 | FreeRTOS / SAFERTOS                     | production             | where `repr(C)` may return as a store fallback                    |
+| 7 | Baremetal, WAMR                         | production             | the most interesting and the latest                               |
+
+Rungs 1 to 5 have an MMU and can map a shared store, so ADR-0018 decision 8's
+FlatBuffers store holds across all of them. Rungs 6 and 7 are where its
+alternatives — `repr(C)` layout, re-attach instead of demand-paged growth — stop
+being hypothetical.
+
+**Rung 5 is recorded as speculative rather than planned.** No target in view
+requires it today, and it is listed only so the ladder is honest about where
+such a device would sit if one appeared. It is kept separate from baremetal
+because the two cost very differently: an edge gateway on ARM Linux is the same
+four traits and the same driving loop as rung 1 with a different target triple,
+where baremetal under WAMR has no MMU, no filesystem, and needs the store's
+alternatives rather than merely permitting them. Nothing on this page depends on
+rung 5 and no story assumes it.
+
 The release boundary is **descriptive vs executable**:
 
-- **V1 — the contract platform:** E0–E4 plus E9 and E10 (typl · ridl · the
-  boundary model · wire projection · value objects · ecosystem). The SSOT for
-  contracts at every boundary — system, person, and world — with codegen, LSP,
-  diff, docs, and schemas a non-Rust runtime can consume.
-- **V2 — the system platform:** E5a · E6 · E7 (rmdl as a _language_ · rsdl ·
-  rxdl). The whole architecture becomes describable and checkable — behaviour,
-  assembly, deployment, and domain vocabulary — with **nothing executing yet**.
-  rmdl's expressions and equations reach the IR; no code is generated from them.
+- **V1 — the contract platform:** E0–E4 plus E9, E10, E11 and E12 (typl · ridl ·
+  the boundary model · wire projection · value objects · the runtime core · the
+  tooling plane · ecosystem). The SSOT for contracts at every boundary — system,
+  person, and world — with codegen, LSP, diff, docs, schemas a non-Rust runtime
+  can consume, a runtime that consumes them, and the plugin protocol every
+  domain extends through. **E11 is in V1 by ADR-0018 decision 16**: without it
+  V1 ships a compiler whose output nothing can run, which is what made the E2
+  interaction layer unimplementable.
+- **V2 — the system platform:** E5a · E6 · E7 · E13 (rmdl as a _language_ · rsdl
+  · rxdl · the gateway). The whole architecture becomes describable and
+  checkable — behaviour, assembly, deployment, and domain vocabulary — with
+  **nothing executing yet**. rmdl's expressions and equations reach the IR; no
+  code is generated from them.
 - **V3 — the executable platform:** E5b and E7's ecosystem tail. The compute
   runtime, codegen, oracle, replay, and deductive proof. The ambitious,
   higher-risk half, deferred until the architecture above it is settled.
@@ -28,9 +124,29 @@ evals, and (V3) the behaviour oracle and subagent.
 **Sequence:**
 
 ```text
-E0 → E1 → E2 → E9 → E3 → E5a → E6 → E7(rxdl) → E5b → E7(ecosystem)
-          ╰──── E4 (ecosystem), E8 (agents), E10 (typl value objects) thread ────╯
+E0 → E1 → E2 → E10 → E4.5 → E11 → E12 → E9 → E3 → E5a → E6 → E13 → E7(rxdl)
+                                                         → E5b → E7(ecosystem)
+          ╰──────── E4 (rest of ecosystem), E8 (agents) thread ────────╯
 ```
+
+**E4.5 is pulled out of Epic 4 and put on the critical path.** Four things now
+depend on the plugin protocol: every domain extension, which lives in another
+repository; every wire beyond the two core encodings; the gateway's descriptor;
+and the contract-generic half of the tooling plane. It was scheduled behind the
+browser playground, which nothing depends on.
+
+**E10 → E4.5 → E11 → E12, ahead of E9's remainder.** E10 gives the types their
+constraints and a compiling crate; E4.5 opens the extension seam; E11 builds the
+runtime; E12 is the first consumer that is not the compiler itself. E9.8 landed,
+and E9.11's store and dispatcher moved into E11 as ADR-0018 decision 16
+requires, so what remains of E9 is the FlatBuffers schema projection, the schema
+hash, and the recorded general-form drift.
+
+**Two prerequisites block work already scheduled**, and neither is an epic: typl
+§17.11's deferred width floor blocks E11.2, because widening a range flips the
+resolved width and shifts every slot offset after it; and E3.1 plus ADR-0008
+decision 3's deferred `labels` promotion block every derivation over assurance
+levels, since `SIL_B` and `CAL_2` are free-form tokens today.
 
 **E9 before E3** — both alter ridl's surface and IR, so they must not run
 concurrently, and E9 is the nearer-term product path: it is ridl used as the
@@ -79,6 +195,41 @@ one. `<` is the near miss: the diagnostic showcase writes it, but that package
 compiles with errors, so its IR, Rust, and TypeScript snapshots are one-line
 placeholders and nothing pins a lowered form. Widen the corpus before
 restructuring, so the restructuring has something to regress against.
+
+## Tracker correspondence
+
+**This document is the source of truth. The issue tracker mirrors it, one issue
+per story, titled `E<epic>.<story> — <story text>`.** A story's issue carries
+its `Done when` and size verbatim from the table here, plus whatever cross-story
+dependency is worth stating on the issue itself. When the two disagree, this
+document is right and the issue is stale.
+
+That direction matters because the tracker has drifted from here twice, and both
+times the drift was silent. The stories were imported in one pass on 2026-07-18
+and not maintained: E0 through E2 shipped without their issues being closed, and
+ADR-0012 and the rsdl reference then changed what several open issues meant
+while their titles stayed as written. A story issue is therefore never evidence
+about what the design is — only about what work is outstanding.
+
+**Reconciled 2026-08-09.** 44 issues closed (E0.1–E2.11 as delivered; the five
+retired `uxdl` stories and the C header defect as not planned), 12 retitled
+where a row changed meaning, and 56 opened for the stories that never had one —
+E3, E6.2/E6.4/E6.6–E6.9, E7.6–E7.9, E9.9/E9.10/E9.12, E10, E11, E12 and E13. The
+reasoning is on the two epic debt roll-ups, driftsys/ridl#135 and
+driftsys/ridl#172, which stay open because they hold carried findings the
+stories did not deliver.
+
+Two conventions worth keeping, both learned from the reconciliation:
+
+- **Closing a story issue never rewrites its body.** The GitHub update API
+  replaces the body wholesale, so an explanation written onto a story destroys
+  the description that is its historical record. Explanations go on the epic
+  roll-up.
+- **A retired story is closed as _not planned_, not as completed**, with the ADR
+  that retired it named on the issue. A reader landing on a closed issue should
+  not have to guess which of the two happened.
+
+Milestones exist for E0 through E8 only; the epics added since have none.
 
 ---
 
@@ -164,13 +315,25 @@ diagnostic codes RIDL-111 and RIDL-142 — reserved by d21 and still unminted.
 `ridlc build` emits Rust, the extern-C header, IR JSON, and TypeScript. The epic
 itself shipped the TypeScript backend as a library only, pinned by the corpus
 snapshots and reachable from no command; the `--emit typescript` path landed
-afterwards, as a prerequisite for E3.3 (driftsys/ridl#172). E2 also paid three
-codes of the E1 debt [ADR-0007](decisions/ADR-0007-e1-execution.md) d10
-recorded: TYPL-301, TYPL-303, and TYPL-304 ship, emitted by the parser once the
-family grammar made the constructs they reject parseable, each with a showcase
-entry. E2.10's "alias-not-required" row needed no new work — TYPL-008 has
-covered it from the resolver since E1. The consolidated E2 debt roll-up is
-**#172**, on the E1 (#135) pattern.
+afterwards, as a prerequisite for E3.3 (driftsys/ridl#172).
+
+**The interaction layer this epic shipped is retracted by
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+15.** The exit criterion above was met literally and by output that no runtime
+can implement: the interaction vocabulary is emitted once per package, so two
+packages produce two incompatible `Provenance` types and no runtime crate can
+implement a trait that does not exist until codegen runs. The layer does compile
+— `corpus.rs` runs `rustc` and `tsc` over it with anti-vacuity guards — but
+compiling proves syntax, not that anything can implement it. Epic 11 restores
+the face as a client and a server over a runtime that exists.
+
+E2 also paid three codes of the E1 debt
+[ADR-0007](decisions/ADR-0007-e1-execution.md) d10 recorded: TYPL-301, TYPL-303,
+and TYPL-304 ship, emitted by the parser once the family grammar made the
+constructs they reject parseable, each with a showcase entry. E2.10's
+"alias-not-required" row needed no new work — TYPL-008 has covered it from the
+resolver since E1. The consolidated E2 debt roll-up is **#172**, on the E1
+(#135) pattern.
 
 | ID    | Story                                                                                                                                                   | Done when                                                               | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---- |
@@ -345,36 +508,43 @@ this story is tier 1 and tier 2, and nothing above them:** E9.8 emits no
 `service` block, leaving that to E9.11 rather than resolving the tension below
 as a side effect of adding a backend.
 
-**The conflict left for E9.11.** ADR-0013 decision 2 says a wire backend emits
-"no `service` block, no call face, no value store"; ADR-0016 decision 10
-describes the dispatcher as "one service definition per provided interface" — in
-proto3, a `service` block. E9.8 avoids the conflict by emitting neither. E9.11
-cannot: it is store-and-dispatcher generation, so it is where the first proto
-`service` block would be written, and the two readings must be reconciled by an
-ADR amendment before that story writes an emitter against either one. A second
-consequence for E9.11 to inherit: tier 2 emits only the ordinal enum and never
-an interaction's payload type, so no payload type reaches the import path today
-— the store and the dispatcher will need to import the payload types tier 2
-never touches.
+**The conflict left for E9.11 — now resolved by
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+18.** ADR-0013 decision 2 says a wire backend emits "no `service` block, no call
+face, no value store"; ADR-0016 decision 10 describes the dispatcher as "one
+service definition per provided interface" — in proto3, a `service` block. E9.8
+avoided the conflict by emitting neither, and E9.11 could not, so decision 18
+separates the two readings: **no service block that projects interactions as RPC
+methods** (decision 2's concern, since such a schema understates the contract),
+but one **access service** whose methods are kind-blind access operations keyed
+by ordinal, which carries §4.4's last value, §4.5's provenance and §3.1's
+envelope in its messages. That service is optional, independent of the generated
+package, and not generated at all — the operations do not vary by contract, so
+it is one published schema a consumer takes or ignores in favour of their own
+binding. The store and dispatcher work now sits in Epic 11. A second consequence
+for E9.11 to inherit: tier 2 emits only the ordinal enum and never an
+interaction's payload type, so no payload type reaches the import path today —
+the store and the dispatcher will need to import the payload types tier 2 never
+touches.
 
 **E9.9 to E9.12 are not in this block.** The IR is settled and E3 is unblocked;
 the FlatBuffers projection, the schema hash, the store and dispatcher, and the
 recorded general form R5 drift remain. Consolidated debt: driftsys/ridl#218.
 
-| ID    | Story                                                                                                                                                                                                                                                                 | Done when                                                                                                                               | Size |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E9.1  | `ridl-ir` serialization rewrite — the emitted `.ir.json` is a serde rendering of Rust structs, not protobuf JSON, so no non-Rust protobuf runtime can parse it (ADR-0014)                                                                                             | a non-Rust protobuf runtime parses the emitted IR                                                                                       | L    |
-| E9.2  | Two new emit values — prototext and binary — alongside canonical protobuf JSON                                                                                                                                                                                        | all three encodings round-trip to the same IR                                                                                           | M    |
-| E9.3  | The latent emit-filter defect the new emits expose (§5.1 of the encodings note)                                                                                                                                                                                       | the filter is correct for every emit value                                                                                              | S    |
-| E9.4  | **RPC bounds and the response bound** — ridl §9 gains its RPC column; RIDL-112 minted for a missing bound; RIDL-106 narrows to `fixed`; RIDL-103 widens (ADR-0015)                                                                                                    | an RPC declares a response bound; an undeclared one warns, profile-escalable                                                            | M    |
-| E9.5  | The **coherence rule** — coherence is implicit and the interface is the generation unit — as normative prose in ridl §14                                                                                                                                              | the rule is stated where the service definition it keys on lives                                                                        | S    |
-| E9.6  | **Multi-interface services** — `ServiceDef` carries several interfaces; ordinals stay per-interface keyed by name; addressing stays flat; duplicate member is an error                                                                                                | a service composes two interfaces; reordering the list leaves transport identity untouched and diffs as breaking (ADR-0015 decision 19) | L    |
-| E9.7  | The **projection contract** and its pinned name transform — the collision rule (RIDL-149) replaces the injectivity requirement; the divergent `interact.rs` implementation is deleted in favour of `c_header.rs`'s; specified with E4.5's stability policy (ADR-0016) | one transform, in `ridl-ir`; a package whose member or parameter names collide after it is rejected                                     | M    |
-| E9.8  | **proto3 projection** — schemas from IR identity, per ADR-0013's shape-and-identity ceiling                                                                                                                                                                           | the cruise-control package emits valid proto3                                                                                           | L    |
-| E9.9  | **FlatBuffers projection** — the column Appendix B was missing                                                                                                                                                                                                        | the cruise-control package emits a valid FlatBuffers schema                                                                             | L    |
-| E9.10 | The **schema hash over the IR**, not over the emitted schema                                                                                                                                                                                                          | two targets of one IR agree on identity                                                                                                 | M    |
-| E9.11 | **Store and dispatcher generation** — the store a table of fields including `fixed`; the dispatcher a routing table keyed by ordinal, not a nested message                                                                                                            | both generate and round-trip for the cruise-control package                                                                             | L    |
-| E9.12 | Drift the design surfaced: general-form R5's postfix order contradicts the shipped grammar (`@timing` is last, not before attributes); `InterfaceDef`/`ServiceDef` gain the `AttrBlock` the deferred `labels`/`deprecated` promotion also needs                       | R5 matches `family.ungram`; one grammar edit serves both                                                                                | S    |
+| ID    | Story                                                                                                                                                                                                                                                                                      | Done when                                                                                                                               | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E9.1  | `ridl-ir` serialization rewrite — the emitted `.ir.json` is a serde rendering of Rust structs, not protobuf JSON, so no non-Rust protobuf runtime can parse it (ADR-0014)                                                                                                                  | a non-Rust protobuf runtime parses the emitted IR                                                                                       | L    |
+| E9.2  | Two new emit values — prototext and binary — alongside canonical protobuf JSON                                                                                                                                                                                                             | all three encodings round-trip to the same IR                                                                                           | M    |
+| E9.3  | The latent emit-filter defect the new emits expose (§5.1 of the encodings note)                                                                                                                                                                                                            | the filter is correct for every emit value                                                                                              | S    |
+| E9.4  | **RPC bounds and the response bound** — ridl §9 gains its RPC column; RIDL-112 minted for a missing bound; RIDL-106 narrows to `fixed`; RIDL-103 widens (ADR-0015)                                                                                                                         | an RPC declares a response bound; an undeclared one warns, profile-escalable                                                            | M    |
+| E9.5  | The **coherence rule** — coherence is implicit and the interface is the generation unit — as normative prose in ridl §14                                                                                                                                                                   | the rule is stated where the service definition it keys on lives                                                                        | S    |
+| E9.6  | **Multi-interface services** — `ServiceDef` carries several interfaces; ordinals stay per-interface keyed by name; addressing stays flat; duplicate member is an error                                                                                                                     | a service composes two interfaces; reordering the list leaves transport identity untouched and diffs as breaking (ADR-0015 decision 19) | L    |
+| E9.7  | The **projection contract** and its pinned name transform — the collision rule (RIDL-149) replaces the injectivity requirement; the divergent `interact.rs` implementation is deleted in favour of `c_header.rs`'s; specified with E4.5's stability policy (ADR-0016)                      | one transform, in `ridl-ir`; a package whose member or parameter names collide after it is rejected                                     | M    |
+| E9.8  | **proto3 projection** — schemas from IR identity, per ADR-0013's shape-and-identity ceiling                                                                                                                                                                                                | the cruise-control package emits valid proto3                                                                                           | L    |
+| E9.9  | **FlatBuffers projection** — the column Appendix B was missing. The _schema_ emit; the FlatBuffers _codec_ for the store and queue is E11.7                                                                                                                                                | the cruise-control package emits a valid FlatBuffers schema                                                                             | L    |
+| E9.10 | The **schema hash over the IR**, not over the emitted schema                                                                                                                                                                                                                               | two targets of one IR agree on identity                                                                                                 | M    |
+| E9.11 | **Moved to Epic 11** by [ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision 16 — the store is E11.2 and the dispatcher is E11.4, because both are the runtime's shape rather than a wire projection. The row stays so the identifier keeps meaning what it meant | — see E11.2 and E11.4                                                                                                                   | —    |
+| E9.12 | Drift the design surfaced: general-form R5's postfix order contradicts the shipped grammar (`@timing` is last, not before attributes); `InterfaceDef`/`ServiceDef` gain the `AttrBlock` the deferred `labels`/`deprecated` promotion also needs                                            | R5 matches `family.ungram`; one grammar edit serves both                                                                                | S    |
 
 ## Epic 10 — typl value objects
 
@@ -393,21 +563,113 @@ TypeScript, and `--emit rust` writes a crate that compiles.
 already task-decomposed. It amends
 **[ADR-0013](decisions/ADR-0013-codegen-backend-scope.md)** rather than minting
 a record — that ADR is still Proposed and already classifies backends by what
-they may emit, and this settles its open item 1 (whether the wire-backend
-ceiling binds the language backends too).
+they may emit, and this settles the **validator half** of its open item 1: a
+language backend emits constraint-checking constructors where a wire backend
+does not. The **interaction-face half** is settled the other way by
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+15, which retracts the shipped interaction layer and restores it as a client and
+a server in a second phase. The two are complementary — this epic is that
+record's phase 1, and E10.7's compiling crate is the compile gate the retraction
+needs to be verifiable.
 
-| ID     | Story                                                                             | Done when                                                         | Size |
-| ------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
-| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing" | both backends agree on which types need a fallible constructor    | M    |
-| E10.2  | The Rust `ConstraintError` vocabulary                                             | one error type carries every constraint failure                   | S    |
-| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                       | an out-of-range value is unconstructible                          | L    |
-| E10.4  | Vacuous named scalars — infallible construction                                   | a type that constrains nothing takes no fallible path             | M    |
-| E10.5  | `TryFrom<i64>` for enum and enum set                                              | an undefined discriminant is rejected                             | M    |
-| E10.6  | Sound derives — no derive that could reconstruct an invalid value                 | no path bypasses the validating seam                              | M    |
-| E10.7  | `--emit rust` writes a compiling crate                                            | the emitted crate builds standalone                               | M    |
-| E10.8  | Pattern validation behind a `validate-pattern` feature                            | regex constraints check without forcing the dependency            | M    |
-| E10.9  | TypeScript vocabulary and factories                                               | the TS backend refuses an invalid value at construction           | L    |
-| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
+| ID     | Story                                                                                                                                                                                                                                                                                   | Done when                                                         | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
+| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing"                                                                                                                                                                                                       | both backends agree on which types need a fallible constructor    | M    |
+| E10.2  | The Rust `ConstraintError` vocabulary                                                                                                                                                                                                                                                   | one error type carries every constraint failure                   | S    |
+| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                                                                                                                                                                                                                             | an out-of-range value is unconstructible                          | L    |
+| E10.4  | Vacuous named scalars — infallible construction                                                                                                                                                                                                                                         | a type that constrains nothing takes no fallible path             | M    |
+| E10.5  | `TryFrom<i64>` for enum and enum set                                                                                                                                                                                                                                                    | an undefined discriminant is rejected                             | M    |
+| E10.6  | Sound derives — no derive that could reconstruct an invalid value                                                                                                                                                                                                                       | no path bypasses the validating seam                              | M    |
+| E10.7  | `--emit rust` writes a compiling crate                                                                                                                                                                                                                                                  | the emitted crate builds standalone                               | M    |
+| E10.8  | Pattern validation behind a `validate-pattern` feature                                                                                                                                                                                                                                  | regex constraints check without forcing the dependency            | M    |
+| E10.9  | TypeScript vocabulary and factories                                                                                                                                                                                                                                                     | the TS backend refuses an invalid value at construction           | L    |
+| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification                                                                                                                                                                                                                     | the decision is recorded and a constraint change classifies right | S    |
+| E10.11 | **Rebuild cross-backend parity over the type layer** — `crates/ridlc/tests/parity.rs` was deleted with the interaction layer it compared ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision 15), and this epic gives both backends a new comparable surface | one assertion relates both backends over the whole corpus again   | M    |
+
+## Epic 11 — `ridl-rt`, the runtime core ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md))
+
+**Milestone:** a generated contract runs. A provider publishes into a shared
+store, a consumer reads it coherently, and a call crosses a process boundary.
+**Value:** this is what makes V1 a platform rather than a code generator —
+ADR-0018 decision 16 records that without it V1 ships a compiler whose output no
+runtime can consume, which is also why the E2 interaction layer was
+unimplementable. **Exit criteria:** the cruise-control package's signals
+round-trip through a shared-memory store between two processes on one node, with
+a hand-written provider and consumer; the same contract reaches a Deno tool over
+the frame protocol; and the store layout is stable under a compatible change.
+
+**Sequencing.** E11.1 and E11.2 are specification and block the rest. The epic
+depends on E10 for types that carry their constraints, and on typl §17.11's
+deferred width floor — ADR-0018 decision 8 makes that a prerequisite rather than
+a deferral, because widening a range flips the resolved width and shifts every
+subsequent slot offset.
+
+**Deliberately out of scope.** The rmdl language (E11.10 fixes the binding
+contract; hand-written components exercise it), the rsdl grammar (E11.6 defines
+the facts the generator needs, and rsdl becomes their authoring surface later
+per ADR-0018 decision 17), and phase 2's client and server, which follow this
+epic.
+
+| ID     | Story                                                                                                                            | Done when                                                            | Size |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---- |
+| E11.1  | The frame and control-plane specification — ordinal, kind, envelope, provenance, correlation; `attach`/`subscribe`/`read`/`call` | one document a second implementation could be written from           | M    |
+| E11.2  | The store layout projection — region per interface, slot offsets from ordinals, the three counters                               | layout is deterministic, total, and stable under a compatible change | L    |
+| E11.3  | Platform traits (`Socket`, `Region`, `Notify`, `Clock`) and the reference Linux implementation                                   | the four traits plus a driving loop run the core                     | M    |
+| E11.4  | The sans-IO core — seqlock discipline, subscription table, envelope stamping, `poll` returning a deadline                        | the core runs with no executor, no sockets and no real time in tests | L    |
+| E11.5  | The ring and its derived depth — rate floor × service period × target jitter, with the rsdl override                             | an underivable or infeasible depth fails the build                   | M    |
+| E11.6  | The deployment-facts schema — placement, target properties, wiring, protection domains, reservations, service periods            | a hand-written descriptor drives generation end to end               | L    |
+| E11.7  | FlatBuffers codec for the store and the queue                                                                                    | a payload round-trips through a mapped slot                          | L    |
+| E11.8  | proto3 codec plus byte-level conformance against a `protoc`-generated implementation                                             | our bytes parse there and its bytes parse here                       | L    |
+| E11.9  | The socket binding and the Deno tooling client                                                                                   | a tool subscribes and renders a live signal                          | M    |
+| E11.10 | The component binding contract — activation, input read, output publish, what a step means                                       | a hand-written provider and consumer compile against it and run      | M    |
+| E11.11 | Memory feasibility as a deploy-time check, sibling to RSDL-801                                                                   | a deployment exceeding the target's declared budget fails the build  | S    |
+
+---
+
+## Epic 12 — The tooling plane ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md))
+
+**Milestone:** the first consumers of the platform that are not the compiler.
+**Value:** observability, emulation and test-harness drivers were each
+identified as missing when the architecture was written — the specifications
+reference observability hooks (ridl §10.3, §3.1 spans) and a replay harness
+(E5.10) without any story building them. **Exit criteria:** a Deno tool
+subscribes to a running store and renders a live signal with its provenance; a
+hand-written emulator stands in for a provider and the consumer cannot tell; a
+harness drives a system under test and asserts against the contract.
+
+**The plane splits in two.** A **contract-specific** tool — a driver for one
+contract, an emulator for one component — takes generated TypeScript types with
+the Rust codec behind wasm. A **contract-generic** tool — an observability
+server that must display a contract it was not built against — loads the IR at
+runtime and decodes with the descriptor-driven engine. Only the first needs a
+backend; the second needs E4.5.
+
+**The twin is a smaller step than it sounds, because the store already is one.**
+ADR-0018 decision 8's store holds the current value of every signal in an
+interface with its provenance and envelope — a twin of that interface at an
+instant. A twin of a _system_ is the union of those stores, retained over time
+and queryable. So E12.10 adds aggregation, history and query to something E11
+already builds, rather than modelling state a second time.
+
+Emulation and twins are why rung 1's role is simulation as well as tooling: the
+servers run on a desk, and a system under test should not be able to tell them
+from the real providers.
+
+**Platform rungs 1 and 2.** Desktop for the tooling itself, mobile for the UI
+and bridge demonstrations.
+
+| ID     | Story                                                                                                                                    | Done when                                                                            | Size |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---- |
+| E12.1  | The TypeScript surface — generated types and interfaces, with the Rust codec reached through wasm                                        | a Deno program constructs and validates a payload without a TS codec                 | L    |
+| E12.2  | Observability server — subscribe by ordinal, render value, provenance and envelope                                                       | a live signal is displayed with its provenance distinguishable                       | L    |
+| E12.3  | Contract-generic decoding — load the IR at runtime, decode against it with the descriptor engine                                         | a contract the tool was not built against is displayed correctly                     | L    |
+| E12.4  | Emulator — a hand-written provider standing in for a component, driven by the contract                                                   | a consumer cannot distinguish the emulator from the real provider                    | M    |
+| E12.5  | Test-harness drivers — drive a system under test, assert against contract terms                                                          | a `require` violation is reported against the contract, not the transport            | M    |
+| E12.6  | Trace capture and replay over the frame                                                                                                  | a captured session replays and produces an identical trace                           | M    |
+| E12.7  | Embedded web UI — the person boundary rendered in a webview, honouring §3.4 availability and RIDL-505                                    | a control is disabled before use rather than failing on use                          | L    |
+| E12.8  | Emulation server — host many contract-conformant providers at once, with lifecycle and addressing, rather than one hand-written stand-in | a system under test binds to emulated providers it cannot distinguish from real ones | L    |
+| E12.9  | Scenario scripting — drive a signal along a declared profile, inject an invalid value, withdraw a provider                               | a §4.5 invalid transition and a provider loss are both reproducible on demand        | M    |
+| E12.10 | Digital twin server — aggregate stores across components, retain history, answer queries over it                                         | the state of a whole system at a past instant is answerable                          | L    |
 
 ---
 
@@ -475,6 +737,30 @@ components — composition and deployment as two regions of one grammar (rsdl §
 | E6.9  | Bundles: versioned distribution artifacts, `tier` dependency gating (rsdl §9, RSDL-901)                                                                                                   | bundle manifests emitted for the cruise-control system                       | M    |
 | E6.10 | Topology + integration-artifact emission                                                                                                                                                  | deployable manifest/topology generated                                       | M    |
 | E6.11 | Test topology as a `deployment`: injectors/oracle swapped in (rsdl §2)                                                                                                                    | rest-bus-style test deployment derived                                       | M    |
+
+## Epic 13 — The gateway ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md))
+
+**Milestone:** one contract, two encodings, traffic crossing between them.
+**Value:** this is what a single source of truth buys that a schema language
+does not — the mapping is derived rather than hand-maintained, and rsdl §8.2's
+feasibility check catches an infeasible bridge at build time rather than in the
+vehicle. **Exit criteria:** a bridge carries signals between two encodings with
+provenance and envelope preserved end to end, and a timing-infeasible bridge
+fails the build.
+
+**The engine is core; the wires are plugins.** A gateway is two codecs plus a
+routing decision. The codecs for the core encodings are E11's; a bridge to CAN
+or SOME/IP is that plugin's, and this epic is what those plugins bridge
+_through_. It is in V2 because the routing decision needs the topology rsdl
+carries — which components, which links, which protection domains.
+
+| ID    | Story                                                                                                  | Done when                                                        | Size |
+| ----- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- | ---- |
+| E13.1 | The domain-mediated bridge — decode, validate, re-encode, as the correctness oracle                    | a payload crosses two encodings and round-trips                  | M    |
+| E13.2 | Generated streaming transcoders, with the equivalence test against E13.1                               | the fast path and the reference produce identical bytes          | L    |
+| E13.3 | Quantization across a bridge — a scaled value keeps its resolution and says so                         | a coarse source does not appear precise downstream               | M    |
+| E13.4 | Feasibility — a bridge whose added latency breaks a staleness bound fails the build (RSDL-801 sibling) | an infeasible bridge is a deploy-time error                      | M    |
+| E13.5 | The descriptor a contract-generic gateway consumes, shared with E12.3                                  | one engine serves the gateway and the generic observability tool | L    |
 
 ## Epic 7 — rxdl & Executable-Platform Ecosystem — split into two phases
 
@@ -585,14 +871,23 @@ _Layer extensions & packaging (V2)_
 
 ## Milestone summary
 
-| Epic | Milestone               | Release                                                                       |
-| ---- | ----------------------- | ----------------------------------------------------------------------------- |
-| E0   | Walking skeleton        | internal — IR/query graph proven                                              |
-| E1   | typl schema language    | **v0.1 preview**                                                              |
-| E2   | ridl contract boundary  | v0.x — RIDL-as-today + diff gate                                              |
-| E3   | boundary model          | v0.x — person and world boundaries (ADR-0012)                                 |
-| E4   | V1 ecosystem            | **V1.0 — the contract platform**                                              |
-| E5   | rmdl behaviour + oracle | v2.0-alpha — executable models, replay                                        |
-| E6   | rsdl assembly           | v2.0-beta — deployable systems                                                |
-| E7   | rxdl + V2 ecosystem     | **V2.0 — the executable platform**                                            |
-| E8   | agent enablement        | threads V1→V2 (skill+rules & evals in V1; MCP by E2; oracle & subagent in V2) |
+| Epic | Milestone                   | Release                                                                       |
+| ---- | --------------------------- | ----------------------------------------------------------------------------- |
+| E0   | Walking skeleton            | internal — IR/query graph proven                                              |
+| E1   | typl schema language        | **v0.1 preview**                                                              |
+| E2   | ridl contract boundary      | v0.x — RIDL-as-today + diff gate                                              |
+| E10  | typl value objects          | v0.x — types that cannot hold an invalid value                                |
+| E4.5 | IR plugin protocol          | v0.x — the extension seam every domain reaches through                        |
+| E11  | `ridl-rt`, the runtime core | v0.x — generated contracts run                                                |
+| E12  | the tooling plane           | v0.x — observability, emulation, harness drivers                              |
+| E9   | wire SSOT                   | v0.x — schema projections and the schema hash                                 |
+| E3   | boundary model              | v0.x — person and world boundaries (ADR-0012)                                 |
+| E4   | V1 ecosystem (rest)         | **V1.0 — the contract platform**                                              |
+| E5   | rmdl behaviour + oracle     | v2.0-alpha — executable models, replay                                        |
+| E6   | rsdl assembly               | v2.0-beta — deployable systems                                                |
+| E13  | the gateway                 | v2.0-beta — one contract, two encodings                                       |
+| E7   | rxdl + V2 ecosystem         | **V2.0 — the executable platform**                                            |
+| E8   | agent enablement            | threads V1→V2 (skill+rules & evals in V1; MCP by E2; oracle & subagent in V2) |
+
+Rows are in sequence order, not numeric order — the numbering is identity, as
+the note at the top of this page explains.

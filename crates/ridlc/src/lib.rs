@@ -270,8 +270,6 @@ pub fn compile_workspace(db: &mut RidlDatabase, entry: &Path) -> std::io::Result
 pub enum Emit {
     /// Idiomatic Rust source, written to `<base>.rs`.
     Rust,
-    /// The extern-C header, written to `<base>.h`.
-    CHeader,
     /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`.
     IrJson,
     /// The lowered IR v2 as prototext, written to `<base>.ir.txtpb`.
@@ -354,7 +352,7 @@ impl Emit {
     )]
     pub const fn ir_dump_suffix(self) -> Option<&'static str> {
         match self {
-            Emit::Rust | Emit::CHeader | Emit::TypeScript | Emit::Proto => None,
+            Emit::Rust | Emit::TypeScript | Emit::Proto => None,
             Emit::IrJson => Some(".ir.json"),
             Emit::IrText => Some(".ir.txtpb"),
             Emit::IrBinary => Some(".ir.binpb"),
@@ -713,9 +711,7 @@ fn write_emits(
     emits: &[Emit],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> std::io::Result<()> {
-    let need_codegen = emits
-        .iter()
-        .any(|emit| matches!(emit, Emit::Rust | Emit::CHeader));
+    let need_codegen = emits.iter().any(|emit| matches!(emit, Emit::Rust));
     let generated = if need_codegen {
         match ridl_backend_rust::generate(ir) {
             Ok(generated) => Some(generated),
@@ -780,11 +776,6 @@ fn write_emits(
             Emit::Rust => {
                 if let Some(generated) = &generated {
                     std::fs::write(out_dir.join(format!("{base}.rs")), &generated.rust_source)?;
-                }
-            }
-            Emit::CHeader => {
-                if let Some(generated) = &generated {
-                    std::fs::write(out_dir.join(format!("{base}.h")), &generated.c_header)?;
                 }
             }
             Emit::IrJson => match ridl_ir::v2::to_json_pretty(ir) {

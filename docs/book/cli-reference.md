@@ -305,7 +305,6 @@ Options:
       --emit <EMIT>
           Possible values:
           - rust:       Idiomatic Rust source, written to `<base>.rs`
-          - c-header:   The extern-C header, written to `<base>.h`
           - ir-json:    The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
           - ir-text:    The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
           - ir-binary:  The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
@@ -950,11 +949,10 @@ Options:
           The directory to write generated artifacts into
 
       --emit <EMIT>
-          The artifacts to emit: `rust` (default), `c-header`, `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`
+          The artifacts to emit: `rust` (default), `ir-json`, `ir-text`, `ir-binary`, `typescript`, `proto`
 
           Possible values:
           - rust:       Idiomatic Rust source, written to `<base>.rs`
-          - c-header:   The extern-C header, written to `<base>.h`
           - ir-json:    The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
           - ir-text:    The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
           - ir-binary:  The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`

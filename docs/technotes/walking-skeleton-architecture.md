@@ -116,15 +116,14 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   `ridl diff` reads.
 
 - **`crates/ridl-backend-rust`** — one IR v2 package to
-  `Generated { rust_source, c_header }`. Rust is built as a `quote` token stream
-  and formatted with `prettyplease`: named scalar types become
+  `Generated { rust_source }`. Rust is built as a `quote` token stream and
+  formatted with `prettyplease`: named scalar types become
   `#[repr(transparent)]` newtypes, and structs whose IR `fixed_layout` flag
-  holds become `#[repr(C)]`. The C header is rendered from a `minijinja`
-  template; shapes with no fixed C ABI are listed in a trailing header comment
-  rather than mis-mapped (ADR-0007 decision 13). Codegen is total — failures
-  return `GenerateError`, never panic. E2 added `interact.rs`: interfaces,
-  services, and the five interaction kinds, with `internal` declarations mapping
-  to `pub(crate)` (ADR-0008 decision 7).
+  holds become `#[repr(C)]`. Codegen is total — failures return `GenerateError`,
+  never panic. E2's `interact.rs` and the extern-C header are gone:
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+  decisions 15 and 6 retract the interaction layer, restoring it in a second
+  phase as a client and a server over `ridl-rt`, and drop C as a target.
 
 - **`crates/ridl-backend-ts`** — the second backend, and the reason IR
   neutrality is a demonstrated property rather than a claim (ADR-0008 decision
@@ -158,9 +157,9 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   checker's `resolutions` and the lowered `std_ir`, so a workflow crate does not
   have to restate the compiler's load-and-resolve loop (ADR-0008 decision 15).
   Both backends are ordinary dependencies here: `ridlc build --emit` offers
-  `rust`, `c-header`, the three IR encodings of ADR-0014 decision 4 (`ir-json`,
-  `ir-text`, `ir-binary`), and `typescript`, so the second backend over one IR
-  is reachable from the command line and not only from the corpus runner's
+  `rust`, the three IR encodings of ADR-0014 decision 4 (`ir-json`, `ir-text`,
+  `ir-binary`), `typescript` and `proto`, so the second backend over one IR is
+  reachable from the command line and not only from the corpus runner's
   snapshots. The two language emits are independent — each backend generates
   from the same IR on its own, and one that cannot render a package skips only
   its own artifact.

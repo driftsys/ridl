@@ -5,8 +5,8 @@
 //! typl surface, and the interaction identity table — and nothing above them.
 //! No `service` block, no call face, no value store.
 //!
-//! Text is written directly rather than through a `FileDescriptorProto`,
-//! matching `c_header.rs`. The constraint information typl carries and proto3
+//! Text is written directly rather than through a `FileDescriptorProto`. The
+//! constraint information typl carries and proto3
 //! cannot represent — units, ranges, steps — is emitted as comments, which a
 //! descriptor would have addressed by index path through `SourceCodeInfo`.
 //!

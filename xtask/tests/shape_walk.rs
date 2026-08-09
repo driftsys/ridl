@@ -63,29 +63,9 @@ const ALLOWED: &[Allowed] = &[
               store is the complete set",
     },
     Allowed {
-        path: "crates/ridl-backend-rust/src/c_header.rs",
-        lines: 1,
-        why: "a comment-only listing of what the C ABI does not express — it \
-              names interfaces and services without descending into either, so \
-              an inline shape has nothing to contribute",
-    },
-    Allowed {
-        path: "crates/ridl-backend-rust/src/interact.rs",
-        lines: 1,
-        why: "an emptiness test over BOTH stores (`interfaces.is_empty() && \
-              services.is_empty()`), which is not a walk; a package holding \
-              only reference-form services has no shapes but still emits its \
-              service table",
-    },
-    Allowed {
         path: "crates/ridl-backend-rust/src/tests.rs",
         lines: 1,
         why: "a test asserting how many named interfaces one fixture lowers to",
-    },
-    Allowed {
-        path: "crates/ridl-backend-ts/src/interact.rs",
-        lines: 1,
-        why: "the same emptiness test as the Rust backend's",
     },
     Allowed {
         path: "crates/ridl-core/src/package.rs",
@@ -132,12 +112,6 @@ const ALLOWED: &[Allowed] = &[
         path: "crates/ridlc/tests/corpus.rs",
         lines: 1,
         why: "a test reading one slot out of a single-interface fixture",
-    },
-    Allowed {
-        path: "crates/ridlc/tests/parity.rs",
-        lines: 4,
-        why: "a counter field that happens to be named `interfaces`, not an IR \
-              access",
     },
     Allowed {
         path: "crates/ridlc/tests/totality.rs",
