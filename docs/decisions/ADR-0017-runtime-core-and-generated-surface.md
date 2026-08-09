@@ -9,8 +9,17 @@ ship today. It is not epic-scoped: it binds every backend and the runtime, in
 the way ADR-0013 binds what a backend may emit and ADR-0016 binds how identity
 projects.
 
-It **answers [ADR-0013](ADR-0013-codegen-backend-scope.md) open item 1** and
-**retires [ADR-0007](ADR-0007-e1-execution.md) decision 13's extern-C face**.
+It **answers the interaction-face half of
+[ADR-0013](ADR-0013-codegen-backend-scope.md) open item 1** and **retires
+[ADR-0007](ADR-0007-e1-execution.md) decision 13's extern-C face**.
+
+Open item 1 asks whether the wire-backend emit ceiling binds the language
+backends, and it has two halves that resolve differently. Roadmap epic E10 and
+its plan of record settle the **validator** half — a language backend emits
+constraint-checking constructors where a wire backend does not — and amend
+ADR-0013 to say so. This record settles the **interaction face** half, and
+settles it the other way for now: the face is retracted and restored in a second
+phase (decision 15). The two are complementary and neither supersedes the other.
 
 Its reasoning trail is
 [`docs/wip/2026-08-08-runtime-and-codegen-architecture.md`](../wip/2026-08-08-runtime-and-codegen-architecture.md),
@@ -226,9 +235,12 @@ be generated, and in what order", which is what this record answers.
     MMU fall back to re-attach.
 
 15. **The interaction layer is retracted from the language backends, and
-    restored in a second phase as a client and a server.** This answers
-    [ADR-0013](ADR-0013-codegen-backend-scope.md) open item 1 by sequencing
-    rather than by argument.
+    restored in a second phase as a client and a server.** This answers the
+    interaction-face half of [ADR-0013](ADR-0013-codegen-backend-scope.md) open
+    item 1 by sequencing rather than by argument. The validator half is settled
+    the other way by roadmap epic E10, which this record does not disturb: types
+    that carry their constraints are phase 1's substance, not something the
+    ceiling removes.
 
     **Phase 1 is that ADR's ceiling** — shape and identity, its decisions 2 and
     3 — with the types finally carrying their typl contract: a private field and

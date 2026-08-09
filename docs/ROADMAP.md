@@ -9,10 +9,14 @@ days, M ≈ 1–2 weeks, L ≈ 3–6 weeks) and relative, not a schedule.
 
 The release boundary is **descriptive vs executable**:
 
-- **V1 — the contract platform:** E0–E4 plus E9 and E10 (typl · ridl · the
-  boundary model · wire projection · value objects · ecosystem). The SSOT for
-  contracts at every boundary — system, person, and world — with codegen, LSP,
-  diff, docs, and schemas a non-Rust runtime can consume.
+- **V1 — the contract platform:** E0–E4 plus E9, E10 and E11 (typl · ridl · the
+  boundary model · wire projection · value objects · the runtime core ·
+  ecosystem). The SSOT for contracts at every boundary — system, person, and
+  world — with codegen, LSP, diff, docs, schemas a non-Rust runtime can consume,
+  and a runtime that consumes them. **E11 is in V1 by
+  [ADR-0017](decisions/ADR-0017-runtime-core-and-generated-surface.md) decision
+  16**: without it V1 ships a compiler whose output nothing can run, which is
+  what made the E2 interaction layer unimplementable.
 - **V2 — the system platform:** E5a · E6 · E7 (rmdl as a _language_ · rsdl ·
   rxdl). The whole architecture becomes describable and checkable — behaviour,
   assembly, deployment, and domain vocabulary — with **nothing executing yet**.
@@ -28,9 +32,14 @@ evals, and (V3) the behaviour oracle and subagent.
 **Sequence:**
 
 ```text
-E0 → E1 → E2 → E9 → E3 → E5a → E6 → E7(rxdl) → E5b → E7(ecosystem)
-          ╰──── E4 (ecosystem), E8 (agents), E10 (typl value objects) thread ────╯
+E0 → E1 → E2 → E10 → E11 → E9 → E3 → E5a → E6 → E7(rxdl) → E5b → E7(ecosystem)
+          ╰──────── E4 (ecosystem), E8 (agents) thread ────────╯
 ```
+
+**E10 then E11, ahead of E9** — ADR-0017 sequences them: E10 gives the types
+their constraints and a compiling crate, E11 builds the runtime that consumes
+them, and E9's remaining projections (E9.8, E9.9, E9.11) then have somewhere to
+land. E10 no longer merely threads; E11 depends on it.
 
 **E9 before E3** — both alter ridl's surface and IR, so they must not run
 concurrently, and E9 is the nearer-term product path: it is ridl used as the
@@ -164,13 +173,24 @@ diagnostic codes RIDL-111 and RIDL-142 — reserved by d21 and still unminted.
 `ridlc build` emits Rust, the extern-C header, IR JSON, and TypeScript. The epic
 itself shipped the TypeScript backend as a library only, pinned by the corpus
 snapshots and reachable from no command; the `--emit typescript` path landed
-afterwards, as a prerequisite for E3.3 (driftsys/ridl#172). E2 also paid three
-codes of the E1 debt [ADR-0007](decisions/ADR-0007-e1-execution.md) d10
-recorded: TYPL-301, TYPL-303, and TYPL-304 ship, emitted by the parser once the
-family grammar made the constructs they reject parseable, each with a showcase
-entry. E2.10's "alias-not-required" row needed no new work — TYPL-008 has
-covered it from the resolver since E1. The consolidated E2 debt roll-up is
-**#172**, on the E1 (#135) pattern.
+afterwards, as a prerequisite for E3.3 (driftsys/ridl#172).
+
+**The interaction layer this epic shipped is retracted by
+[ADR-0017](decisions/ADR-0017-runtime-core-and-generated-surface.md) decision
+15.** The exit criterion above was met literally and by output that no runtime
+can implement: the interaction vocabulary is emitted once per package, so two
+packages produce two incompatible `Provenance` types and no runtime crate can
+implement a trait that does not exist until codegen runs. No test compiles it
+either — both `rustc` corpora are `.typl`-only. Epic 11 restores the face as a
+client and a server over a runtime that exists.
+
+E2 also paid three codes of the E1 debt
+[ADR-0007](decisions/ADR-0007-e1-execution.md) d10 recorded: TYPL-301, TYPL-303,
+and TYPL-304 ship, emitted by the parser once the family grammar made the
+constructs they reject parseable, each with a showcase entry. E2.10's
+"alias-not-required" row needed no new work — TYPL-008 has covered it from the
+resolver since E1. The consolidated E2 debt roll-up is **#172**, on the E1
+(#135) pattern.
 
 | ID    | Story                                                                                                                                                   | Done when                                                               | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ---- |
@@ -393,8 +413,14 @@ TypeScript, and `--emit rust` writes a crate that compiles.
 already task-decomposed. It amends
 **[ADR-0013](decisions/ADR-0013-codegen-backend-scope.md)** rather than minting
 a record — that ADR is still Proposed and already classifies backends by what
-they may emit, and this settles its open item 1 (whether the wire-backend
-ceiling binds the language backends too).
+they may emit, and this settles the **validator half** of its open item 1: a
+language backend emits constraint-checking constructors where a wire backend
+does not. The **interaction-face half** is settled the other way by
+[ADR-0017](decisions/ADR-0017-runtime-core-and-generated-surface.md) decision
+15, which retracts the shipped interaction layer and restores it as a client and
+a server in a second phase. The two are complementary — this epic is that
+record's phase 1, and E10.7's compiling crate is the compile gate the retraction
+needs to be verifiable.
 
 | ID     | Story                                                                             | Done when                                                         | Size |
 | ------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
@@ -408,6 +434,44 @@ ceiling binds the language backends too).
 | E10.8  | Pattern validation behind a `validate-pattern` feature                            | regex constraints check without forcing the dependency            | M    |
 | E10.9  | TypeScript vocabulary and factories                                               | the TS backend refuses an invalid value at construction           | L    |
 | E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
+
+## Epic 11 — `ridl-rt`, the runtime core ([ADR-0017](decisions/ADR-0017-runtime-core-and-generated-surface.md))
+
+**Milestone:** a generated contract runs. A provider publishes into a shared
+store, a consumer reads it coherently, and a call crosses a process boundary.
+**Value:** this is what makes V1 a platform rather than a code generator —
+ADR-0017 decision 16 records that without it V1 ships a compiler whose output no
+runtime can consume, which is also why the E2 interaction layer was
+unimplementable. **Exit criteria:** the cruise-control package's signals
+round-trip through a shared-memory store between two processes on one node, with
+a hand-written provider and consumer; the same contract reaches a Deno tool over
+the frame protocol; and the store layout is stable under a compatible change.
+
+**Sequencing.** E11.1 and E11.2 are specification and block the rest. The epic
+depends on E10 for types that carry their constraints, and on typl §17.11's
+deferred width floor — ADR-0017 decision 8 makes that a prerequisite rather than
+a deferral, because widening a range flips the resolved width and shifts every
+subsequent slot offset.
+
+**Deliberately out of scope.** The rmdl language (E11.10 fixes the binding
+contract; hand-written components exercise it), the rsdl grammar (E11.6 defines
+the facts the generator needs, and rsdl becomes their authoring surface later
+per ADR-0017 decision 17), and phase 2's client and server, which follow this
+epic.
+
+| ID     | Story                                                                                                                            | Done when                                                            | Size |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---- |
+| E11.1  | The frame and control-plane specification — ordinal, kind, envelope, provenance, correlation; `attach`/`subscribe`/`read`/`call` | one document a second implementation could be written from           | M    |
+| E11.2  | The store layout projection — region per interface, slot offsets from ordinals, the three counters                               | layout is deterministic, total, and stable under a compatible change | L    |
+| E11.3  | Platform traits (`Socket`, `Region`, `Notify`, `Clock`) and the reference Linux implementation                                   | the four traits plus a driving loop run the core                     | M    |
+| E11.4  | The sans-IO core — seqlock discipline, subscription table, envelope stamping, `poll` returning a deadline                        | the core runs with no executor, no sockets and no real time in tests | L    |
+| E11.5  | The ring and its derived depth — rate floor × service period × target jitter, with the rsdl override                             | an underivable or infeasible depth fails the build                   | M    |
+| E11.6  | The deployment-facts schema — placement, target properties, wiring, protection domains, reservations, service periods            | a hand-written descriptor drives generation end to end               | L    |
+| E11.7  | FlatBuffers codec for the store and the queue                                                                                    | a payload round-trips through a mapped slot                          | L    |
+| E11.8  | proto3 codec plus byte-level conformance against a `protoc`-generated implementation                                             | our bytes parse there and its bytes parse here                       | L    |
+| E11.9  | The socket binding and the Deno tooling client                                                                                   | a tool subscribes and renders a live signal                          | M    |
+| E11.10 | The component binding contract — activation, input read, output publish, what a step means                                       | a hand-written provider and consumer compile against it and run      | M    |
+| E11.11 | Memory feasibility as a deploy-time check, sibling to RSDL-801                                                                   | a deployment exceeding the target's declared budget fails the build  | S    |
 
 ---
 
