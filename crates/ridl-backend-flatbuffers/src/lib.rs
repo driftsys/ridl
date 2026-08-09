@@ -363,8 +363,7 @@ fn fbs_scalar(td: &v2::TypeDef) -> &'static str {
 /// itself does not depend on the target).
 fn constraint_comment(declared: &str, td: &v2::TypeDef) -> String {
     let mut form = Vec::new();
-    if let Some(v2::backing::Kind::Unit(unit)) = td.backing.as_ref().and_then(|b| b.kind.as_ref())
-    {
+    if let Some(v2::backing::Kind::Unit(unit)) = td.backing.as_ref().and_then(|b| b.kind.as_ref()) {
         form.push(unit.clone());
     }
     if let Some(constraint) = &td.constraint {
