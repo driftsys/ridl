@@ -196,6 +196,41 @@ compiles with errors, so its IR, Rust, and TypeScript snapshots are one-line
 placeholders and nothing pins a lowered form. Widen the corpus before
 restructuring, so the restructuring has something to regress against.
 
+## Tracker correspondence
+
+**This document is the source of truth. The issue tracker mirrors it, one issue
+per story, titled `E<epic>.<story> — <story text>`.** A story's issue carries
+its `Done when` and size verbatim from the table here, plus whatever cross-story
+dependency is worth stating on the issue itself. When the two disagree, this
+document is right and the issue is stale.
+
+That direction matters because the tracker has drifted from here twice, and both
+times the drift was silent. The stories were imported in one pass on 2026-07-18
+and not maintained: E0 through E2 shipped without their issues being closed, and
+ADR-0012 and the rsdl reference then changed what several open issues meant
+while their titles stayed as written. A story issue is therefore never evidence
+about what the design is — only about what work is outstanding.
+
+**Reconciled 2026-08-09.** 44 issues closed (E0.1–E2.11 as delivered; the five
+retired `uxdl` stories and the C header defect as not planned), 12 retitled
+where a row changed meaning, and 56 opened for the stories that never had one —
+E3, E6.2/E6.4/E6.6–E6.9, E7.6–E7.9, E9.9/E9.10/E9.12, E10, E11, E12 and E13. The
+reasoning is on the two epic debt roll-ups, driftsys/ridl#135 and
+driftsys/ridl#172, which stay open because they hold carried findings the
+stories did not deliver.
+
+Two conventions worth keeping, both learned from the reconciliation:
+
+- **Closing a story issue never rewrites its body.** The GitHub update API
+  replaces the body wholesale, so an explanation written onto a story destroys
+  the description that is its historical record. Explanations go on the epic
+  roll-up.
+- **A retired story is closed as _not planned_, not as completed**, with the ADR
+  that retired it named on the issue. A reader landing on a closed issue should
+  not have to guess which of the two happened.
+
+Milestones exist for E0 through E8 only; the epics added since have none.
+
 ---
 
 # V1 — The Contract Platform
