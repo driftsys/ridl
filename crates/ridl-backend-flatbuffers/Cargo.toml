@@ -1,0 +1,17 @@
+[package]
+name = "ridl-backend-flatbuffers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+ridl-ir = { path = "../ridl-ir" }
+
+# planus-translation is TEST-ONLY and must stay here. It is the validity
+# oracle, not part of emission: making it a normal dependency would put a
+# schema compiler in every build and break `just wasm-check`.
+[dev-dependencies]
+insta.workspace = true
+planus-translation.workspace = true
+tempfile = "3.15.0"

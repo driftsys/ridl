@@ -42,7 +42,7 @@ enum Command {
         #[arg(long)]
         out_dir: PathBuf,
         /// The artifacts to emit: `rust` (default), `ir-json`, `ir-text`,
-        /// `ir-binary`, `typescript`, `proto`.
+        /// `ir-binary`, `typescript`, `proto`, `flatbuffers`.
         #[arg(long, value_delimiter = ',', default_value = "rust")]
         emit: Vec<Emit>,
         /// Verify remote imports against `ridl.lock` without fetching or
