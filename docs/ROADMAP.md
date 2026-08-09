@@ -7,20 +7,73 @@ Companion to
 and exit criteria; **Stories** are the work items under it. Sizing is rough (S ≈
 days, M ≈ 1–2 weeks, L ≈ 3–6 weeks) and relative, not a schedule.
 
+## What this repository is, and is not
+
+**The core is domain-agnostic.** No automotive, avionics or medical vocabulary
+belongs in it. Assurance is three ordered scales — safety integrity, cyber
+threat, privacy — as ridl levels `0..N`, and the mapping to ASIL, CAL, DAL or
+SIL is a plugin's job
+([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+9). The core carries the ordering and the comparison, never the standard's name.
+
+**A domain lives in its own repository.** `ridl-plugin-can`,
+`ridl-plugin-someip`, `ridl-automotive`, `ridl-avionics` — each a separate crate
+with its own lifecycle.
+
+**Domain specifics are requirement inputs, not backlog items.** They belong on
+this page only as the enablers that make them possible. CAN is why the store
+must carry scaled integers and why ADR-0013 decision 7's in-band sentinel
+exists; SOME/IP's field-with-notifier is why ridl §4.4's last-value is normative
+rather than a convenience; AUTOSAR E2E is why ridl §3.1's envelope carries a
+counter. Each of those shaped the core and none of them is an epic here. The
+test for whether something belongs on this page is not "does a domain need it"
+but "would the core need it if no domain existed" — and if the answer is no,
+what belongs here is the **extension point**, not the extension.
+
+So ridl Appendix B's target list — SOME/IP, DDS, CAN/DBC, AIDL, JSON Schema — is
+a backlog of plugins elsewhere, and **none of it can start until the plugin
+protocol exists**. That is the sequencing consequence: E4.5 moves onto the
+critical path, out of the ecosystem tail where it sat behind a browser
+playground.
+
+What stays in core: the two encodings ADR-0018 decision 3 fixes — proto3 for the
+network and FlatBuffers for memory — because they are how the runtime talks to
+itself and to a generic consumer, not a domain's choice.
+
+## The platform ladder
+
+Ordered. Each rung is a layer-1 implementation of four traits plus a driving
+loop, so a rung is a port rather than a variant.
+
+| # | Platform                        | Role                   | Note                                                      |
+| - | ------------------------------- | ---------------------- | --------------------------------------------------------- |
+| 1 | Desktop (Linux, macOS, Windows) | tooling                | where the toolchain and the test plane run                |
+| 2 | Mobile                          | UI, bridges, demo      | the frame over a socket; not a production control surface |
+| 3 | Embedded Android                | production UI, tooling | native or JVM over AIDL/Binder — Kotlin is a real target  |
+| 4 | QNX 7.1                         | production             | the first serious real-time target                        |
+| 5 | FreeRTOS / SAFERTOS             | production             | where `repr(C)` may return as a store fallback            |
+| 6 | Edge, baremetal, WAMR           | production             | the most interesting and the latest                       |
+
+Rungs 1 to 4 have an MMU and can map a shared store, so ADR-0018 decision 8's
+FlatBuffers store holds across all of them. Rungs 5 and 6 are where its
+alternatives — `repr(C)` layout, re-attach instead of demand-paged growth — stop
+being hypothetical.
+
 The release boundary is **descriptive vs executable**:
 
-- **V1 — the contract platform:** E0–E4 plus E9, E10 and E11 (typl · ridl · the
-  boundary model · wire projection · value objects · the runtime core ·
-  ecosystem). The SSOT for contracts at every boundary — system, person, and
-  world — with codegen, LSP, diff, docs, schemas a non-Rust runtime can consume,
-  and a runtime that consumes them. **E11 is in V1 by
-  [ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
-  16**: without it V1 ships a compiler whose output nothing can run, which is
-  what made the E2 interaction layer unimplementable.
-- **V2 — the system platform:** E5a · E6 · E7 (rmdl as a _language_ · rsdl ·
-  rxdl). The whole architecture becomes describable and checkable — behaviour,
-  assembly, deployment, and domain vocabulary — with **nothing executing yet**.
-  rmdl's expressions and equations reach the IR; no code is generated from them.
+- **V1 — the contract platform:** E0–E4 plus E9, E10, E11 and E12 (typl · ridl ·
+  the boundary model · wire projection · value objects · the runtime core · the
+  tooling plane · ecosystem). The SSOT for contracts at every boundary — system,
+  person, and world — with codegen, LSP, diff, docs, schemas a non-Rust runtime
+  can consume, a runtime that consumes them, and the plugin protocol every
+  domain extends through. **E11 is in V1 by ADR-0018 decision 16**: without it
+  V1 ships a compiler whose output nothing can run, which is what made the E2
+  interaction layer unimplementable.
+- **V2 — the system platform:** E5a · E6 · E7 · E13 (rmdl as a _language_ · rsdl
+  · rxdl · the gateway). The whole architecture becomes describable and
+  checkable — behaviour, assembly, deployment, and domain vocabulary — with
+  **nothing executing yet**. rmdl's expressions and equations reach the IR; no
+  code is generated from them.
 - **V3 — the executable platform:** E5b and E7's ecosystem tail. The compute
   runtime, codegen, oracle, replay, and deductive proof. The ambitious,
   higher-risk half, deferred until the architecture above it is settled.
@@ -32,16 +85,29 @@ evals, and (V3) the behaviour oracle and subagent.
 **Sequence:**
 
 ```text
-E0 → E1 → E2 → E10 → E11 → E9 → E3 → E5a → E6 → E7(rxdl) → E5b → E7(ecosystem)
-          ╰──────── E4 (ecosystem), E8 (agents) thread ────────╯
+E0 → E1 → E2 → E10 → E4.5 → E11 → E12 → E9 → E3 → E5a → E6 → E13 → E7(rxdl)
+                                                         → E5b → E7(ecosystem)
+          ╰──────── E4 (rest of ecosystem), E8 (agents) thread ────────╯
 ```
 
-**E10 then E11, ahead of E9's remainder** — ADR-0018 sequences them: E10 gives
-the types their constraints and a compiling crate, and E11 builds the runtime
-that consumes them. E9.8 landed, and E9.11's store and dispatcher moved into E11
-as its decision 16 requires, so what remains of E9 is the FlatBuffers schema
-projection, the schema hash, and the recorded general-form drift. E10 no longer
-merely threads; E11 depends on it.
+**E4.5 is pulled out of Epic 4 and put on the critical path.** Four things now
+depend on the plugin protocol: every domain extension, which lives in another
+repository; every wire beyond the two core encodings; the gateway's descriptor;
+and the contract-generic half of the tooling plane. It was scheduled behind the
+browser playground, which nothing depends on.
+
+**E10 → E4.5 → E11 → E12, ahead of E9's remainder.** E10 gives the types their
+constraints and a compiling crate; E4.5 opens the extension seam; E11 builds the
+runtime; E12 is the first consumer that is not the compiler itself. E9.8 landed,
+and E9.11's store and dispatcher moved into E11 as ADR-0018 decision 16
+requires, so what remains of E9 is the FlatBuffers schema projection, the schema
+hash, and the recorded general-form drift.
+
+**Two prerequisites block work already scheduled**, and neither is an epic: typl
+§17.11's deferred width floor blocks E11.2, because widening a range flips the
+resolved width and shifts every slot offset after it; and E3.1 plus ADR-0008
+decision 3's deferred `labels` promotion block every derivation over assurance
+levels, since `SIL_B` and `CAL_2` are free-form tokens today.
 
 **E9 before E3** — both alter ridl's surface and IR, so they must not run
 concurrently, and E9 is the nearer-term product path: it is ridl used as the
@@ -486,6 +552,39 @@ epic.
 
 ---
 
+## Epic 12 — The tooling plane ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md))
+
+**Milestone:** the first consumers of the platform that are not the compiler.
+**Value:** observability, emulation and test-harness drivers were each
+identified as missing when the architecture was written — the specifications
+reference observability hooks (ridl §10.3, §3.1 spans) and a replay harness
+(E5.10) without any story building them. **Exit criteria:** a Deno tool
+subscribes to a running store and renders a live signal with its provenance; a
+hand-written emulator stands in for a provider and the consumer cannot tell; a
+harness drives a system under test and asserts against the contract.
+
+**The plane splits in two.** A **contract-specific** tool — a driver for one
+contract, an emulator for one component — takes generated TypeScript types with
+the Rust codec behind wasm. A **contract-generic** tool — an observability
+server that must display a contract it was not built against — loads the IR at
+runtime and decodes with the descriptor-driven engine. Only the first needs a
+backend; the second needs E4.5.
+
+**Platform rungs 1 and 2.** Desktop for the tooling itself, mobile for the UI
+and bridge demonstrations.
+
+| ID    | Story                                                                                                 | Done when                                                                 | Size |
+| ----- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---- |
+| E12.1 | The TypeScript surface — generated types and interfaces, with the Rust codec reached through wasm     | a Deno program constructs and validates a payload without a TS codec      | L    |
+| E12.2 | Observability server — subscribe by ordinal, render value, provenance and envelope                    | a live signal is displayed with its provenance distinguishable            | L    |
+| E12.3 | Contract-generic decoding — load the IR at runtime, decode against it with the descriptor engine      | a contract the tool was not built against is displayed correctly          | L    |
+| E12.4 | Emulator — a hand-written provider standing in for a component, driven by the contract                | a consumer cannot distinguish the emulator from the real provider         | M    |
+| E12.5 | Test-harness drivers — drive a system under test, assert against contract terms                       | a `require` violation is reported against the contract, not the transport | M    |
+| E12.6 | Trace capture and replay over the frame                                                               | a captured session replays and produces an identical trace                | M    |
+| E12.7 | Embedded web UI — the person boundary rendered in a webview, honouring §3.4 availability and RIDL-505 | a control is disabled before use rather than failing on use               | L    |
+
+---
+
 # V2 — The Executable Platform
 
 ## Epic 5 — rmdl (Behaviour) — split into two phases
@@ -550,6 +649,30 @@ components — composition and deployment as two regions of one grammar (rsdl §
 | E6.9  | Bundles: versioned distribution artifacts, `tier` dependency gating (rsdl §9, RSDL-901)                                                                                                   | bundle manifests emitted for the cruise-control system                       | M    |
 | E6.10 | Topology + integration-artifact emission                                                                                                                                                  | deployable manifest/topology generated                                       | M    |
 | E6.11 | Test topology as a `deployment`: injectors/oracle swapped in (rsdl §2)                                                                                                                    | rest-bus-style test deployment derived                                       | M    |
+
+## Epic 13 — The gateway ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md))
+
+**Milestone:** one contract, two encodings, traffic crossing between them.
+**Value:** this is what a single source of truth buys that a schema language
+does not — the mapping is derived rather than hand-maintained, and rsdl §8.2's
+feasibility check catches an infeasible bridge at build time rather than in the
+vehicle. **Exit criteria:** a bridge carries signals between two encodings with
+provenance and envelope preserved end to end, and a timing-infeasible bridge
+fails the build.
+
+**The engine is core; the wires are plugins.** A gateway is two codecs plus a
+routing decision. The codecs for the core encodings are E11's; a bridge to CAN
+or SOME/IP is that plugin's, and this epic is what those plugins bridge
+_through_. It is in V2 because the routing decision needs the topology rsdl
+carries — which components, which links, which protection domains.
+
+| ID    | Story                                                                                                  | Done when                                                        | Size |
+| ----- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- | ---- |
+| E13.1 | The domain-mediated bridge — decode, validate, re-encode, as the correctness oracle                    | a payload crosses two encodings and round-trips                  | M    |
+| E13.2 | Generated streaming transcoders, with the equivalence test against E13.1                               | the fast path and the reference produce identical bytes          | L    |
+| E13.3 | Quantization across a bridge — a scaled value keeps its resolution and says so                         | a coarse source does not appear precise downstream               | M    |
+| E13.4 | Feasibility — a bridge whose added latency breaks a staleness bound fails the build (RSDL-801 sibling) | an infeasible bridge is a deploy-time error                      | M    |
+| E13.5 | The descriptor a contract-generic gateway consumes, shared with E12.3                                  | one engine serves the gateway and the generic observability tool | L    |
 
 ## Epic 7 — rxdl & Executable-Platform Ecosystem — split into two phases
 
@@ -660,14 +783,23 @@ _Layer extensions & packaging (V2)_
 
 ## Milestone summary
 
-| Epic | Milestone               | Release                                                                       |
-| ---- | ----------------------- | ----------------------------------------------------------------------------- |
-| E0   | Walking skeleton        | internal — IR/query graph proven                                              |
-| E1   | typl schema language    | **v0.1 preview**                                                              |
-| E2   | ridl contract boundary  | v0.x — RIDL-as-today + diff gate                                              |
-| E3   | boundary model          | v0.x — person and world boundaries (ADR-0012)                                 |
-| E4   | V1 ecosystem            | **V1.0 — the contract platform**                                              |
-| E5   | rmdl behaviour + oracle | v2.0-alpha — executable models, replay                                        |
-| E6   | rsdl assembly           | v2.0-beta — deployable systems                                                |
-| E7   | rxdl + V2 ecosystem     | **V2.0 — the executable platform**                                            |
-| E8   | agent enablement        | threads V1→V2 (skill+rules & evals in V1; MCP by E2; oracle & subagent in V2) |
+| Epic | Milestone                   | Release                                                                       |
+| ---- | --------------------------- | ----------------------------------------------------------------------------- |
+| E0   | Walking skeleton            | internal — IR/query graph proven                                              |
+| E1   | typl schema language        | **v0.1 preview**                                                              |
+| E2   | ridl contract boundary      | v0.x — RIDL-as-today + diff gate                                              |
+| E10  | typl value objects          | v0.x — types that cannot hold an invalid value                                |
+| E4.5 | IR plugin protocol          | v0.x — the extension seam every domain reaches through                        |
+| E11  | `ridl-rt`, the runtime core | v0.x — generated contracts run                                                |
+| E12  | the tooling plane           | v0.x — observability, emulation, harness drivers                              |
+| E9   | wire SSOT                   | v0.x — schema projections and the schema hash                                 |
+| E3   | boundary model              | v0.x — person and world boundaries (ADR-0012)                                 |
+| E4   | V1 ecosystem (rest)         | **V1.0 — the contract platform**                                              |
+| E5   | rmdl behaviour + oracle     | v2.0-alpha — executable models, replay                                        |
+| E6   | rsdl assembly               | v2.0-beta — deployable systems                                                |
+| E13  | the gateway                 | v2.0-beta — one contract, two encodings                                       |
+| E7   | rxdl + V2 ecosystem         | **V2.0 — the executable platform**                                            |
+| E8   | agent enablement            | threads V1→V2 (skill+rules & evals in V1; MCP by E2; oracle & subagent in V2) |
+
+Rows are in sequence order, not numeric order — the numbering is identity, as
+the note at the top of this page explains.
