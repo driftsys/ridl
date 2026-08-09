@@ -74,51 +74,29 @@ itself and to a generic consumer, not a domain's choice.
 Ordered. Each rung is a layer-1 implementation of four traits plus a driving
 loop, so a rung is a port rather than a variant.
 
-| # | Platform                                | Role                             | Note                                                             |
-| - | --------------------------------------- | -------------------------------- | ---------------------------------------------------------------- |
-| 1 | Desktop (Linux, macOS, Windows)         | tooling                          | where the toolchain and the test plane run                       |
-| 2 | Mobile — Android and web                | UI, bridges, demo                | the frame over a socket; not a production control surface        |
-| 3 | Embedded Android                        | production UI, tooling           | native or JVM over AIDL/Binder — Kotlin is a real target         |
-| 4 | QNX 7.1                                 | production                       | the first serious real-time target                               |
-| 5 | Edge and IoT gateway (ARM Linux, Yocto) | production, headless or local UI | where the gateway runs; technically near-free once rung 1 exists |
-| 6 | FreeRTOS / SAFERTOS                     | production                       | where `repr(C)` may return as a store fallback                   |
-| 7 | Baremetal, WAMR                         | production                       | the most interesting and the latest                              |
+| # | Platform                                | Role                   | Note                                                              |
+| - | --------------------------------------- | ---------------------- | ----------------------------------------------------------------- |
+| 1 | Desktop (Linux, macOS, Windows)         | tooling and simulation | the toolchain, the test plane, and the emulation and twin servers |
+| 2 | Mobile — Android and web                | UI, bridges, demo      | the frame over a socket; not a production control surface         |
+| 3 | Embedded Android                        | production UI, tooling | native or JVM over AIDL/Binder — Kotlin is a real target          |
+| 4 | QNX 7.1                                 | production             | the first serious real-time target                                |
+| 5 | Edge and IoT gateway (ARM Linux, Yocto) | **speculative**        | no confirmed requirement; near-free to add if one appears         |
+| 6 | FreeRTOS / SAFERTOS                     | production             | where `repr(C)` may return as a store fallback                    |
+| 7 | Baremetal, WAMR                         | production             | the most interesting and the latest                               |
 
 Rungs 1 to 5 have an MMU and can map a shared store, so ADR-0018 decision 8's
 FlatBuffers store holds across all of them. Rungs 6 and 7 are where its
 alternatives — `repr(C)` layout, re-attach instead of demand-paged growth — stop
 being hypothetical.
 
-**Edge is split out from baremetal because they cost differently.** An edge or
-IoT gateway on ARM Linux is the same four traits and the same driving loop as
-rung 1 with a different target triple: near-free once the desktop layer exists.
-Baremetal under WAMR is the hard rung — no MMU, no filesystem, and the store's
-alternatives become necessary rather than optional. Grouping them made the cheap
-one look as expensive as the hard one, so its position on this ladder is a
-product-priority choice rather than a technical constraint.
-
-It is also **where Epic 13 lives in production**: a gateway bridging a field bus
-to a network is what these devices are for. The headless and local-UI variants
-split the tooling plane rather than the runtime — a headless gateway makes
-E12.2's remote observability the only window into it, and one with a panel is
-E12.7's embedded web UI on a smaller screen.
-
-**iOS is not a rung, and the reason is not that it is unimportant.** It appears
-in none of the target domains inside the system: automotive infotainment is
-Android Automotive, QNX or Linux; medical devices run an RTOS or Linux; avionics
-runs a DO-178C-qualified RTOS; and a robot runs Linux or an RTOS with its
-teleoperation surface on the web or a desktop. Where iOS does appear is the
-companion edge — a vehicle app, a patient-facing app for a pump or monitor, a
-tablet electronic flight bag — and that edge cannot consume the system's
-contracts as written, because a `signal @10ms` does not survive a cellular link
-and rsdl §8.2's RSDL-801 correctly refuses to deploy one that does not fit its
-bound.
-
-A companion therefore consumes a **derived, coarser contract** with its own
-freshness semantics. That is a modelling question before it is a platform one,
-and the case ADR-0012's correspondence obligations exist for. Whatever answers
-it will reach the companion as the frame over a socket, which is
-language-agnostic, so no layer-1 port is implied either way.
+**Rung 5 is recorded as speculative rather than planned.** No target in view
+requires it today, and it is listed only so the ladder is honest about where
+such a device would sit if one appeared. It is kept separate from baremetal
+because the two cost very differently: an edge gateway on ARM Linux is the same
+four traits and the same driving loop as rung 1 with a different target triple,
+where baremetal under WAMR has no MMU, no filesystem, and needs the store's
+alternatives rather than merely permitting them. Nothing on this page depends on
+rung 5 and no story assumes it.
 
 The release boundary is **descriptive vs executable**:
 
@@ -631,18 +609,32 @@ server that must display a contract it was not built against — loads the IR at
 runtime and decodes with the descriptor-driven engine. Only the first needs a
 backend; the second needs E4.5.
 
+**The twin is a smaller step than it sounds, because the store already is one.**
+ADR-0018 decision 8's store holds the current value of every signal in an
+interface with its provenance and envelope — a twin of that interface at an
+instant. A twin of a _system_ is the union of those stores, retained over time
+and queryable. So E12.10 adds aggregation, history and query to something E11
+already builds, rather than modelling state a second time.
+
+Emulation and twins are why rung 1's role is simulation as well as tooling: the
+servers run on a desk, and a system under test should not be able to tell them
+from the real providers.
+
 **Platform rungs 1 and 2.** Desktop for the tooling itself, mobile for the UI
 and bridge demonstrations.
 
-| ID    | Story                                                                                                 | Done when                                                                 | Size |
-| ----- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | ---- |
-| E12.1 | The TypeScript surface — generated types and interfaces, with the Rust codec reached through wasm     | a Deno program constructs and validates a payload without a TS codec      | L    |
-| E12.2 | Observability server — subscribe by ordinal, render value, provenance and envelope                    | a live signal is displayed with its provenance distinguishable            | L    |
-| E12.3 | Contract-generic decoding — load the IR at runtime, decode against it with the descriptor engine      | a contract the tool was not built against is displayed correctly          | L    |
-| E12.4 | Emulator — a hand-written provider standing in for a component, driven by the contract                | a consumer cannot distinguish the emulator from the real provider         | M    |
-| E12.5 | Test-harness drivers — drive a system under test, assert against contract terms                       | a `require` violation is reported against the contract, not the transport | M    |
-| E12.6 | Trace capture and replay over the frame                                                               | a captured session replays and produces an identical trace                | M    |
-| E12.7 | Embedded web UI — the person boundary rendered in a webview, honouring §3.4 availability and RIDL-505 | a control is disabled before use rather than failing on use               | L    |
+| ID     | Story                                                                                                                                    | Done when                                                                            | Size |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | ---- |
+| E12.1  | The TypeScript surface — generated types and interfaces, with the Rust codec reached through wasm                                        | a Deno program constructs and validates a payload without a TS codec                 | L    |
+| E12.2  | Observability server — subscribe by ordinal, render value, provenance and envelope                                                       | a live signal is displayed with its provenance distinguishable                       | L    |
+| E12.3  | Contract-generic decoding — load the IR at runtime, decode against it with the descriptor engine                                         | a contract the tool was not built against is displayed correctly                     | L    |
+| E12.4  | Emulator — a hand-written provider standing in for a component, driven by the contract                                                   | a consumer cannot distinguish the emulator from the real provider                    | M    |
+| E12.5  | Test-harness drivers — drive a system under test, assert against contract terms                                                          | a `require` violation is reported against the contract, not the transport            | M    |
+| E12.6  | Trace capture and replay over the frame                                                                                                  | a captured session replays and produces an identical trace                           | M    |
+| E12.7  | Embedded web UI — the person boundary rendered in a webview, honouring §3.4 availability and RIDL-505                                    | a control is disabled before use rather than failing on use                          | L    |
+| E12.8  | Emulation server — host many contract-conformant providers at once, with lifecycle and addressing, rather than one hand-written stand-in | a system under test binds to emulated providers it cannot distinguish from real ones | L    |
+| E12.9  | Scenario scripting — drive a signal along a declared profile, inject an invalid value, withdraw a provider                               | a §4.5 invalid transition and a provider loss are both reproducible on demand        | M    |
+| E12.10 | Digital twin server — aggregate stores across components, retain history, answer queries over it                                         | the state of a whole system at a past instant is answerable                          | L    |
 
 ---
 
