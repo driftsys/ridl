@@ -331,15 +331,15 @@ surface — structs, enums, enum sets and unions, projected to proto3 messages
 and enums, with named-scalar constraints carried as comments — plus the
 interaction identity table, one enum per interface giving each signal, event,
 command, query and fixed its ordinal. It emits no `service` block, no call
-face, and no value store; store and dispatcher generation is roadmap story
-E9.11, not this emit.
+face, and no value store; store and dispatcher generation is roadmap stories
+E11.2 and E11.4 (ADR-0018 decision 16), not this emit.
 
 **`flatbuffers` is the second wire backend**, with the same two tiers and the
 same ceiling. Its projection rules differ from proto3's where the targets
 differ — a union is isolated in a wrapper table, every struct is a `table`, a
 map is a vector of generated entry tables with no `(key)`, and enum values are
 not prefixed because FlatBuffers scopes them inside their enum — and are
-recorded in ADR-0018.
+recorded in ADR-0019.
 
 **It writes** one file per package per `--emit` target, under `--out-dir`
 (`out` by default), and — exactly like [`ridl check`](#ridl-check) —

@@ -137,10 +137,10 @@ browser playground, which nothing depends on.
 
 **E10 → E4.5 → E11 → E12, ahead of E9's remainder.** E10 gives the types their
 constraints and a compiling crate; E4.5 opens the extension seam; E11 builds the
-runtime; E12 is the first consumer that is not the compiler itself. E9.8 landed,
-and E9.11's store and dispatcher moved into E11 as ADR-0018 decision 16
-requires, so what remains of E9 is the FlatBuffers schema projection, the schema
-hash, and the recorded general-form drift.
+runtime; E12 is the first consumer that is not the compiler itself. E9.8 and
+E9.9 landed, and E9.11's store and dispatcher moved into E11 as ADR-0018
+decision 16 requires, so what remains of E9 is the schema hash and the recorded
+general-form drift.
 
 **Two prerequisites block work already scheduled**, and neither is an epic: typl
 §17.11's deferred width floor blocks E11.2, because widening a range flips the
@@ -530,7 +530,7 @@ touches.
 **E9.9 landed 2026-08-09** as `ridl-backend-flatbuffers`, the second wire
 backend, under the same ceiling as E9.8: the typl surface plus the interaction
 identity table, no `service` block, no call face, no value store. Its rules are
-recorded in [ADR-0018](decisions/ADR-0018-flatbuffers-projection-rules.md),
+recorded in [ADR-0019](decisions/ADR-0019-flatbuffers-projection-rules.md),
 every one of them measured against `flatc` 25.12.19 and `planus` 1.3.0 rather
 than reasoned from the records: a union is isolated in a wrapper table holding a
 native union, a union arm that is not itself a table is boxed in a generated
@@ -546,20 +546,23 @@ fixed-layout struct) and the forcing case that reopens typl §17.11 recorded in
 the amendment. Validity is established by compiling every emitted schema with
 `planus-translation`, which parses every construct this projection emits but not
 every name — a name that reaches one of the nine words `planus` reserves is
-emitted as-is, accepted by `flatc`, and not checked by the oracle (ADR-0018
+emitted as-is, accepted by `flatc`, and not checked by the oracle (ADR-0019
 decision 7) — and the stability property is driven from `ridl-diff`'s
 classifier, where it additionally guards the `(deprecated)` slot filling.
 
-Two questions travel on to E9.11 from this story. The ADR-0013 decision 2 versus
-ADR-0016 decision 10 conflict over the `service` block is **still unresolved**:
-E9.9 avoided it the same way E9.8 did, by emitting neither, and E9.11 cannot
-avoid it. And `(key)` plus sorted-vector lookup is reopenable there, where a
+Two questions this story would have passed to E9.11 are already settled above.
+The ADR-0013 decision 2 versus ADR-0016 decision 10 conflict over the `service`
+block — which E9.9 avoided the same way E9.8 did, by emitting neither — is
+resolved by ADR-0018 decision 18, exactly as the E9.8 section records: decision
+2 holds with its scope made explicit, decision 10 holds unqualified. And `(key)`
+plus sorted-vector lookup is reopenable in E11.7, the FlatBuffers codec, where a
 generated producer could hold the sortedness obligation the attribute implies
-and nothing in E9.9 could.
+and nothing in E9.9 could (ADR-0018 decision 16 moved that work into Epic 11).
 
-**E9.10 to E9.12 are not in this block.** The IR is settled and E3 is unblocked;
-the schema hash, the store and dispatcher, and the recorded general form R5
-drift remain. Consolidated debt: driftsys/ridl#218.
+**E9.10 and E9.12 are not in this block.** The IR is settled and E3 is
+unblocked; the schema hash and the recorded general form R5 drift remain, and
+the store and dispatcher sit in Epic 11 (ADR-0018 decision 16). Consolidated
+debt: driftsys/ridl#218.
 
 | ID    | Story                                                                                                                                                                                                                                                                                      | Done when                                                                                                                               | Size |
 | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ---- |

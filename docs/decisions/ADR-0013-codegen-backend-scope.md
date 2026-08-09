@@ -18,20 +18,22 @@ class still has no backend in it.
 **Amendment (2026-08-09).** A FlatBuffers backend now exists —
 `crates/ridl-backend-flatbuffers`, built by roadmap story E9.9, its
 target-specific rules recorded in
-[ADR-0018](ADR-0018-flatbuffers-projection-rules.md). Decision 6's precondition
+[ADR-0019](ADR-0019-flatbuffers-projection-rules.md). Decision 6's precondition
 was closed **by decision** rather than by a `wire` clause — see the amendment
 inside decision 6.
 
-**Decision 2 conflicts with
-[ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decision 10,
-and the conflict is unresolved.** Decision 2 says a wire backend emits "no
-`service` block"; ADR-0016 decision 10 describes the dispatcher as "one service
-definition per provided interface", which on proto3 is a `service` block. E9.8
-avoided the collision by emitting neither, which the roadmap supports because
-E9.11 owns the store and the dispatcher. **E9.11 cannot avoid it** and must
-resolve it by amending one of the two records before writing an emitter against
-either reading. [ADR-0017](ADR-0017-proto3-projection-rules.md) records the
-rules E9.8 needed that neither record supplied.
+**Decision 2's conflict with
+[ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) decision 10 is
+resolved by [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision
+18.** Decision 2 says a wire backend emits "no `service` block"; ADR-0016
+decision 10 describes the dispatcher as "one service definition per provided
+interface", which on proto3 is a `service` block. E9.8 and E9.9 avoided the
+collision by emitting neither. ADR-0018 decision 18 separates the two readings:
+decision 2 holds with its scope made explicit — no service block that projects
+interactions as RPC methods — and decision 10 holds unqualified, satisfied by
+the access service that record defines.
+[ADR-0017](ADR-0017-proto3-projection-rules.md) records the rules E9.8 needed
+that neither record supplied.
 
 ## Context
 

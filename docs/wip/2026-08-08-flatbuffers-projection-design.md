@@ -115,7 +115,7 @@ unprojectable: typl §10 permits any named type as an arm, a named scalar is a
 named type — the cruise-control acceptance fixture itself declares
 `disengage : Percent` — and the target represents the arm fine with one more
 table. Verified in both `flatc` 25.12.19 and `planus` 1.3.0. Recorded as
-ADR-0018 decision 2.
+ADR-0019 decision 2.
 
 ### 3.2 A struct is always emitted as a table, never as a FlatBuffers struct
 
@@ -305,7 +305,7 @@ also reserves nine words that `flatc` treats as contextual identifiers (`table`,
 `root_type`, `attribute`, and six more), so an emitted name that reaches one —
 including a name the pinned transform manufactures, `rootType` → `root_type` —
 is valid for `flatc` but not checked by the oracle. Found at the branch's final
-review; recorded in ADR-0018 decision 7.
+review; recorded in ADR-0019 decision 7.
 
 Also: golden snapshots pin the emitted text; the stability property is driven
 from `ridl-diff`'s classifier as E9.8's is, and here it additionally guards the

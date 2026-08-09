@@ -13,7 +13,8 @@ the E2 gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on
 2026-08-04, the E9.7 design/plan pair
 (`2026-08-05-projection-name-transform-{design,plan}.md`) on 2026-08-07, and the
 E9.8 pair (`2026-08-08-proto3-projection-{design,plan}.md`) on 2026-08-08 —
-E9.10 and E9.11 still read the E9.8 design note, from the archive.
+E9.10 and the Epic 11 stories that absorbed E9.11 (E11.2 and E11.4, ADR-0018
+decision 16) still read the E9.8 design note, from the archive.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -65,8 +66,9 @@ E9.10 and E9.11 still read the E9.8 design note, from the archive.
   [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
   which corrects three of its statements — the transform choice, the injectivity
   requirement, and the inline-shape unification. This note stays as the
-  reasoning trail for E9.9–E9.11, which have not landed yet. Its own corrections
-  were written up as a dedicated design/plan pair for E9.7
+  reasoning trail for E9.10 and the Epic 11 stories that absorbed E9.11, which
+  have not landed yet — E9.9 landed 2026-08-09 with its own pair below. Its own
+  corrections were written up as a dedicated design/plan pair for E9.7
   (`2026-08-05-projection-name-transform-{design,plan}.md`), archived once that
   story landed — see [`../archive/README.md`](../archive/README.md).
 - **2026-08-08-flatbuffers-projection-design.md** and
@@ -79,7 +81,7 @@ E9.10 and E9.11 still read the E9.8 design note, from the archive.
   (typl Appendix D's `fixed_layout` allowance is withdrawn for this projection),
   and ADR-0013 decision 6's width-floor precondition is closed by decision, with
   the measured cost of the alternative. Roadmap: E9.9. **Ratified 2026-08-09**
-  as [ADR-0018](../decisions/ADR-0018-flatbuffers-projection-rules.md), which
+  as [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md), which
   also records the rule execution forced onto the design: a union arm that is
   not itself a table is boxed in a generated one rather than refused (the design
   note's §3.1 amendment). ADR-0013 decision 6 carries its closure as an

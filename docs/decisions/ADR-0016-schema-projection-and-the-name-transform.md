@@ -37,13 +37,17 @@ record does not supply, and notes that enum value names and union arm names
 began projecting through the pinned transform under decision 4's backend check
 rather than under RIDL-149.
 
-**Decision 10 conflicts with [ADR-0013](ADR-0013-codegen-backend-scope.md)
-decision 2, and the conflict is unresolved.** Decision 10 describes the
-dispatcher as "one service definition per provided interface", which on proto3
-is a `service` block; ADR-0013 decision 2 says a wire backend emits none. E9.8
-avoided the collision by emitting neither. E9.11 cannot, and must resolve it by
-amending one of the two records before writing an emitter against either
-reading.
+**Decision 10's conflict with [ADR-0013](ADR-0013-codegen-backend-scope.md)
+decision 2 is resolved by
+[ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 18.**
+Decision 10 describes the dispatcher as "one service definition per provided
+interface", which on proto3 is a `service` block; ADR-0013 decision 2 says a
+wire backend emits none. E9.8 and E9.9 avoided the collision by emitting
+neither. ADR-0018 decision 18 separates the two readings: decision 2 holds with
+its scope made explicit — no service block that projects interactions as RPC
+methods — and decision 10 holds unqualified, satisfied by the access service
+that record defines. The store and dispatcher themselves sit in Epic 11 stories
+E11.2 and E11.4 (ADR-0018 decision 16).
 
 ## Context
 

@@ -1442,7 +1442,7 @@ the primary motivation for a future `wire` floor (§17.11); in v0.1 the
 and non-optional may be emitted as a FlatBuffers `struct` (inline, zero
 indirection) instead of a `table`; the IR carries a `fixed_layout` flag for
 this. **The built FlatBuffers projection does not take that allowance**
-([ADR-0018](../decisions/ADR-0018-flatbuffers-projection-rules.md) decision 3):
+([ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md) decision 3):
 a FlatBuffers `struct` has a fixed inline layout and no vtable, so after a
 compatible field append a reader with the newer schema reads past what an older
 writer wrote and returns the appended field fabricated from padding, where a

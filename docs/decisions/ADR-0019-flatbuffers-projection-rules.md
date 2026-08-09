@@ -1,4 +1,4 @@
-# ADR-0018 — The FlatBuffers projection: the union wrapper, the table form, and the target's own scopes
+# ADR-0019 — The FlatBuffers projection: the union wrapper, the table form, and the target's own scopes
 
 ## Status
 
@@ -34,6 +34,12 @@ backend may emit (its decision 6, amended in place, records how E9.9 closed the
 width-floor precondition), ADR-0016 fixes how identity projects, ADR-0017 fixes
 the foreign-reference and name-totality rules this backend inherits, and this
 record fills the gaps that are properties of one target.
+[ADR-0018](ADR-0018-runtime-core-and-generated-surface.md), accepted the same
+day, is orthogonal to this record: its decision 18 resolves the ADR-0013
+decision 2 versus ADR-0016 decision 10 conflict over the `service` block, and
+its decision 16 moves the store and dispatcher into Epic 11 — both bear on where
+the questions this record leaves open are answered, not on the projection rules
+below.
 
 ## Context
 
@@ -210,7 +216,7 @@ refused.
 | A hand-rolled discriminant-plus-arms table (note §4.4's remedy)   | superseded | cannot hold typl §10's exactly-one-arm guarantee — `flatc` accepts a discriminant naming one arm while another is set, and one with no arm set — and saves nothing: wire cost measured identical (80 bytes both) |
 | Refusing a named scalar, enum or enum set union arm               | reversed   | typl §10 permits any named type as an arm; the refusal made legal typl unprojectable where the target represents it fine with one more table (decision 2)                                                        |
 | The FlatBuffers `struct` form for a `fixed_layout` struct         | rejected   | after a compatible field append, v1 data read with the v2 schema returns the appended field fabricated from padding — ADR-0016 decision 6 property 3 fails silently                                              |
-| Emitting `(key)` on the map entry's key field                     | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — reopenable in E9.11 (see Open)                                                   |
+| Emitting `(key)` on the map entry's key field                     | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — reopenable in E11.7 (see Open)                                                   |
 | Lifting `ridl-backend-proto`'s `SymbolScope`                      | rejected   | its package scope registers enum values, because proto3 scopes them as namespace siblings; FlatBuffers scopes them inside the enum, so the lift would over-refuse                                                |
 | Defaulting a zero-less enum field to its lowest declared value    | rejected   | a truncated or malformed buffer would read silently as that value — a fabricated reading, where `= null` surfaces absence as absence                                                                             |
 | Refusing or escaping a name that reaches a `planus` reserved word | rejected   | the schema is valid FlatBuffers — `flatc` accepts all nine words — so a refusal would let a test dependency constrain the language, and an escape would fork the pinned transform (decision 7)                   |
@@ -252,11 +258,13 @@ refused.
 
 ## Open
 
-1. **`(key)` and sorted-vector lookup, in E9.11.** A generated producer could
+1. **`(key)` and sorted-vector lookup, in E11.7.** A generated producer could
    hold the sortedness obligation the attribute implies, which is what decision
-   4 found missing. Taking it would also want a contract-level statement that
-   the map is ordered — which typl does not have — and a validity oracle that
-   parses the attribute, which `planus` today does not.
+   4 found missing — that producer is the FlatBuffers codec, story E11.7, since
+   [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 16 moved
+   E9.11's scope into Epic 11. Taking it would also want a contract-level
+   statement that the map is ordered — which typl does not have — and a validity
+   oracle that parses the attribute, which `planus` today does not.
 2. **The `fixed_layout` flag has no consumer.** Decision 3 leaves it in the IR
    for a target where a fixed layout is safe — one whose schema evolution is
    closed, or a deployment that pins both schema versions. The first backend
@@ -280,5 +288,6 @@ refused.
   exactly-one-arm guarantee), §12.2 (maps carry no ordering), Appendix D (the
   transport width table, and the `struct` allowance decision 3 amends)
 - [`docs/ROADMAP.md`](../ROADMAP.md) — E9.9 (the story this record comes from),
-  E9.11 (the store and dispatcher, where the Open item 1 question reopens)
+  E11.7 (the FlatBuffers codec, where the Open item 1 question reopens —
+  ADR-0018 decision 16 moved E9.11's store and dispatcher into Epic 11)
 - `crates/ridl-backend-flatbuffers/src/lib.rs` — the implementation

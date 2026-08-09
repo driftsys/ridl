@@ -50,11 +50,17 @@ See `docs/technotes/walking-skeleton-architecture.md` for the as-built map.
   (the proto3 projection — how a foreign reference projects, where constraint
   information goes, and totality over names as well as numbers; read its
   decision 1 before writing another wire backend, because `generate_with` is the
-  API E9.9 and E9.11 inherit), ADR-0018 (the FlatBuffers projection — a union
-  isolated in a wrapper table, a non-table union arm boxed, every struct a
-  `table`, a map with no `(key)`, the target's own name scopes, and `= null` on
-  a field whose enum declares no zero member; binds the FlatBuffers backend
-  only).
+  API every later wire backend inherits), ADR-0018 (the runtime core, two
+  encodings, and what the backends emit — _proposed_; retracts the interaction
+  layer the language backends shipped and restores it as a later phase, retires
+  the extern-C face, fixes proto3 and FlatBuffers as the two core encodings,
+  moves the store and dispatcher into Epic 11, and resolves the service-block
+  conflict between ADR-0013 decision 2 and ADR-0016 decision 10; binds every
+  backend and the runtime — read it before writing anything about what a backend
+  emits), ADR-0019 (the FlatBuffers projection — a union isolated in a wrapper
+  table, a non-table union arm boxed, every struct a `table`, a map with no
+  `(key)`, the target's own name scopes, and `= null` on a field whose enum
+  declares no zero member; binds the FlatBuffers backend only).
 - `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
   (executable platform) release split.
 
