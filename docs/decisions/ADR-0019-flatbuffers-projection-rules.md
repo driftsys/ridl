@@ -13,7 +13,7 @@ seven are FlatBuffers-scoped; none binds another backend.
 
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
-[`docs/wip/2026-08-08-flatbuffers-projection-design.md`](../wip/2026-08-08-flatbuffers-projection-design.md)
+[`docs/archive/2026-08-08-flatbuffers-projection-design.md`](../archive/2026-08-08-flatbuffers-projection-design.md)
 (archived at story close, the way E9.8's pair was); read the design note as a
 design, not as a description of what shipped — decision 2 below records a rule
 the note did not state and execution had to.
@@ -273,7 +273,7 @@ refused.
 
 ## References
 
-- [`docs/wip/2026-08-08-flatbuffers-projection-design.md`](../wip/2026-08-08-flatbuffers-projection-design.md)
+- [`docs/archive/2026-08-08-flatbuffers-projection-design.md`](../archive/2026-08-08-flatbuffers-projection-design.md)
   — the reasoning trail, including the measurements each decision cites; read as
   a design, not as what shipped
 - [ADR-0013](ADR-0013-codegen-backend-scope.md) — the emit ceiling (decision 2),

@@ -79,6 +79,28 @@ provenance. Nothing here is normative — the current references live in
   types, a mapping execution implemented and then reverted — the reversal and
   its reasoning are in the design note's blast-radius section.
 
+- **2026-08-08-flatbuffers-projection-design.md** and
+  **2026-08-08-flatbuffers-projection-plan.md** — the design/plan pair for
+  roadmap story E9.9, the second wire backend (`ridl-backend-flatbuffers`): the
+  same two-tier ceiling E9.8 held, projected onto a target whose constructs
+  differ from proto3's, with every structural claim verified against `flatc`
+  25.12.19 and `planus` 1.3.0 rather than reasoned from the records. Archived as
+  a pair once E9.9 landed. The gardened record is
+  [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md), which
+  records the story's seven projection rules and cites the design note as the
+  reasoning trail; the two amendments live in the records they amend — ADR-0013
+  decision 6 carries the width-floor closure in place, and typl Appendix D
+  records that this projection does not take its fixed-layout `struct` allowance
+  — and the roadmap's E9.9 status paragraph carries the rest. Read the plan as a
+  plan, not as a description: its Task 9 mints the record as ADR-0018, a number
+  [the runtime-core record](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+  took before this branch merged, so the record shipped as ADR-0019; and the
+  plan predates two of the record's decisions — the union-arm box (decision 2,
+  which reversed an instruction to refuse a non-table arm) and the planus
+  reserved-word ruling (decision 7, from the branch's final review) — the first
+  recorded as an amendment inside the design note's §3.1, the second noted in
+  its §5.
+
 - **2026-07-19-e2-ridl-interface-layer-plan.md** — the epic E2 (ridl, the
   interface layer) implementation plan, archived verbatim from `docs/wip/` once
   the epic landed. As with E0 and E1, the roadmap's Epic 2 section plus

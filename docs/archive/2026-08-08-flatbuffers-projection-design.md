@@ -10,7 +10,7 @@ record and a compiler disagreed, the compiler won and the record is amended
 below.
 
 Throughout, "the note" is
-[`2026-08-03-schema-projection-design.md`](2026-08-03-schema-projection-design.md),
+[`2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md),
 and a reference of the form note §4.3 is to it.
 
 ## 1. What is already decided, and by what
