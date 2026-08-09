@@ -1,0 +1,11 @@
+---
+source: crates/ridl-backend-flatbuffers/tests/corpus.rs
+expression: vehicle_out.fbs_source
+---
+include "proto.parts.fbs";
+namespace proto.vehicle;
+
+table Axle {
+  wheel: proto.parts.Wheel (id: 0);
+  grade: proto.parts.Grade (id: 1);
+}

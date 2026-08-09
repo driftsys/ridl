@@ -1403,7 +1403,9 @@ version = "0.0.0"
 dependencies = [
  "insta",
  "planus-translation",
+ "ridl-core",
  "ridl-ir",
+ "ridlc",
  "tempfile",
 ]
 

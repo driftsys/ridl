@@ -1,0 +1,14 @@
+---
+source: crates/ridl-backend-flatbuffers/tests/corpus.rs
+expression: parts_out.fbs_source
+---
+namespace proto.parts;
+
+table Wheel {
+  radius: ubyte (id: 0);
+}
+
+enum Grade : long {
+  A = 0,
+  B = 1,
+}

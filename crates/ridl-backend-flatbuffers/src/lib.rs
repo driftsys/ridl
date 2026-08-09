@@ -239,7 +239,15 @@ fn emit_structs(
             }
             Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
             Some(v2::decl::Kind::UnionDef(def)) => {
-                emit_union(out, packages, &decl.name, def, names, includes)?;
+                emit_union(
+                    out,
+                    packages,
+                    &decl.name,
+                    def,
+                    names,
+                    &mut induced,
+                    includes,
+                )?;
             }
             _ => {}
         }
@@ -306,7 +314,9 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
 /// type is resolved through [`union_arm_type`] before any of this, the same
 /// resolver a struct field uses, so a foreign struct or union arm registers
 /// its include and is referenced by its qualified name rather than spliced
-/// in as `arm.type_ref` verbatim.
+/// in as `arm.type_ref` verbatim; a named-scalar, enum, or enum-set arm gets
+/// a generated wrapper table ([`union_arm_type`]), added to `induced` and
+/// emitted alongside the tuple and map-entry tables ([`emit_induced_tables`]).
 ///
 /// A hand-rolled discriminant-plus-arms table is not an alternative: it
 /// cannot hold typl §10's guarantee that exactly one arm is active, because
@@ -319,6 +329,7 @@ fn emit_union(
     name: &str,
     def: &v2::UnionDef,
     names: &mut Namespace,
+    induced: &mut Vec<Induced>,
     includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let union_name = format!("{name}Union");
@@ -329,7 +340,7 @@ fn emit_union(
     let mut members = Namespace::members(&union_name);
     let mut arms: Vec<String> = Vec::new();
     for arm in &def.arms {
-        let type_text = union_arm_type(packages, name, arm, includes)?;
+        let type_text = union_arm_type(packages, name, arm, induced, includes)?;
         let member = ridl_ir::name::snake_case(&arm.name);
         members.claim(&member, &format!("arm `{}` of union `{name}`", arm.name))?;
         arms.push(format!("{member}: {type_text}"));
@@ -342,42 +353,71 @@ fn emit_union(
 }
 
 /// Resolves one union arm's target — local or foreign, through
-/// [`resolve_reference`], the same lookup [`named_field_type`] uses — and
-/// refuses it unless FlatBuffers can carry it: a union member must be a
-/// table in this projection. A named scalar and an enum set inline at their
-/// use sites, so neither has a declaration for the union list to reference at
-/// all, and an enum has one but is not a table. A struct arm resolves to its
-/// table, and a union arm resolves to the target union's wrapper table — both
-/// are tables, so both pass, qualified `pkg.Name` with `includes` gaining
-/// `pkg.fbs` when foreign ([`qualified_type_name`]), exactly as a struct
-/// field's reference is. An unresolvable arm target is refused by
-/// [`resolve_reference`] itself, naming the union and the arm.
+/// [`resolve_reference`], the same lookup [`named_field_type`] uses — to the
+/// FlatBuffers name the union list references.
+///
+/// A struct or union arm resolves directly to its own table — a struct's
+/// table, or the target union's wrapper table — qualified `pkg.Name` with
+/// `includes` gaining `pkg.fbs` when foreign ([`qualified_type_name`]),
+/// exactly as a struct field's reference is.
+///
+/// A named scalar, an enum, or an enum set has no table of its own: each
+/// inlines to a bare scalar at an ordinary field position
+/// ([`named_field_type`]), and a FlatBuffers union member must be a table.
+/// Rather than refuse the arm — typl §10 permits any named type here, and a
+/// named scalar is a named type, so refusing made a large class of legal
+/// typl unprojectable on this target — a one-field wrapper table is
+/// generated: `table <Union><Arm>Box { value: <resolved type> (id: 0); }`,
+/// the same idiom [`emit_union`] already uses to isolate the union itself.
+/// The wrapped field's type, `= null` default and constraint comment are
+/// resolved by [`named_field_type`] exactly as an ordinary field's would be
+/// — a foreign enum arm registers its include through that same call. The
+/// wrapper is collected into `induced` and emitted after the declaration
+/// walk, alongside the tuple and map-entry tables ([`emit_induced_tables`]),
+/// and claimed in the namespace scope there the same way theirs are — a
+/// generated box name colliding with a declared type is still refused.
+///
+/// An unresolvable arm target is refused by [`resolve_reference`] itself,
+/// naming the union and the arm; any other declaration kind (a constant, an
+/// interaction) is refused here, since typl §10 never puts one behind a
+/// union arm.
 fn union_arm_type(
     packages: Packages,
     union_name: &str,
     arm: &v2::UnionArm,
+    induced: &mut Vec<Induced>,
     includes: &mut BTreeSet<String>,
 ) -> Result<String, GenerateError> {
     let (decl, foreign_package) =
         resolve_reference(packages, union_name, &arm.name, &arm.type_ref)?;
-    let refused = match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(_)) => {
-            "a named scalar, which inlines to a bare scalar and has no declaration to reference"
+    match &decl.kind {
+        Some(v2::decl::Kind::StructDef(_)) | Some(v2::decl::Kind::UnionDef(_)) => {
+            Ok(qualified_type_name(decl, foreign_package, includes))
         }
-        Some(v2::decl::Kind::EnumDef(_)) => "an enum, which is not a table",
-        Some(v2::decl::Kind::EnumSetDef(_)) => {
-            "an enum set, which inlines to an integer and has no declaration to reference"
+        Some(v2::decl::Kind::TypeDef(_))
+        | Some(v2::decl::Kind::EnumDef(_))
+        | Some(v2::decl::Kind::EnumSetDef(_)) => {
+            let (type_text, needs_null_default, comment) =
+                named_field_type(packages, union_name, &arm.name, &arm.type_ref, includes)?;
+            let box_name = format!("{union_name}{}Box", type_name(&arm.name));
+            induced.push(Induced {
+                name: box_name.clone(),
+                kind: InducedKind::Box {
+                    type_text,
+                    needs_null_default,
+                    comment,
+                },
+            });
+            Ok(box_name)
         }
-        _ => return Ok(qualified_type_name(decl, foreign_package, includes)),
-    };
-    Err(GenerateError {
-        message: format!(
-            "union `{union_name}` arm `{}` is typed by `{}`, {refused} — a FlatBuffers \
-             union member must be a table, so the arm is refused rather than emitted as \
-             a schema the target rejects.",
-            arm.name, arm.type_ref
-        ),
-    })
+        _ => Err(GenerateError {
+            message: format!(
+                "union `{union_name}` arm `{}` is typed by `{}`, a declaration kind this \
+                 tier does not project yet.",
+                arm.name, arm.type_ref
+            ),
+        }),
+    }
 }
 
 /// One struct as one FlatBuffers `table`, one field per member, its `id` the
@@ -533,6 +573,16 @@ fn resolve_field_type(
     match ty.kind.as_ref() {
         Some(v2::field_type::Kind::Primitive(primitive)) => {
             Ok((fbs_primitive(*primitive).to_string(), false, None))
+        }
+        // An inline constrained scalar, e.g. `integer [0..100]` (typl §5.2,
+        // Appendix B) — the anonymous counterpart of a named scalar. It has
+        // no name of its own to comment with, so — mirroring
+        // `ridl-backend-proto`'s `InlineScalar` arm — it resolves to its
+        // scalar with no comment, unlike a named scalar reference
+        // ([`named_field_type`]), which comments the constraint under the
+        // name that carries it.
+        Some(v2::field_type::Kind::InlineScalar(td)) => {
+            Ok((fbs_scalar(td).to_string(), false, None))
         }
         Some(v2::field_type::Kind::Named(reference)) => {
             named_field_type(packages, owner, field_name, reference, includes)
@@ -795,27 +845,39 @@ fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
     (scalar.to_string(), comment)
 }
 
-/// A table a container field induces while walking the package — a tuple's
-/// positional table or a map's entry table — emitted after the declaration
-/// that reached it, since neither exists as a declaration in source. Matches
-/// the worklist pattern `ridl-backend-proto`'s `InducedTuple` uses; the kind
-/// travels along because this backend generates entry tables too, which
-/// proto3's native `map<K, V>` never needs.
+/// A table a container field or a union arm induces while walking the
+/// package — a tuple's positional table, a map's entry table, or a union
+/// arm's wrapper box — emitted after the declaration that reached it, since
+/// none of the three exists as a declaration in source. Matches the
+/// worklist pattern `ridl-backend-proto`'s `InducedTuple` uses; the kind
+/// travels along because this backend generates entry and box tables too,
+/// which proto3 never needs — it has a native `map<K, V>` and no union arm
+/// this tier ever refuses.
 #[derive(Debug, Clone)]
 struct Induced {
     /// The generated table name: the [`resolve_field_type`] `hint` for a
-    /// tuple, or that hint plus `Entry` for a map.
+    /// tuple, that hint plus `Entry` for a map, or `<Union><Arm>Box` for a
+    /// union arm ([`union_arm_type`]).
     name: String,
     kind: InducedKind,
 }
 
-/// The container that induced a generated table, carrying the type to emit
-/// it from — compared whole when two paths reach one name
+/// The container that induced a generated table, carrying what is needed to
+/// emit it — compared whole when two paths reach one name
 /// ([`emit_induced_tables`]).
 #[derive(Debug, Clone, PartialEq)]
 enum InducedKind {
     Tuple(v2::TupleType),
     Entry(v2::MapType),
+    /// A union arm's wrapper, holding the already-resolved `value` field —
+    /// the same triple [`resolve_field_type`] and [`named_field_type`]
+    /// return: the FlatBuffers type, whether it needs `= null`, and the
+    /// constraint comment, if any ([`union_arm_type`]).
+    Box {
+        type_text: String,
+        needs_null_default: bool,
+        comment: Option<String>,
+    },
 }
 
 /// Emits every table the walk in [`emit_structs`] induced, named for the
@@ -876,9 +938,46 @@ fn emit_induced_tables(
                 )?;
                 emit_entry_table(out, packages, &item.name, map, induced, includes)?;
             }
+            InducedKind::Box {
+                type_text,
+                needs_null_default,
+                comment,
+            } => {
+                names.claim(
+                    &item.name,
+                    "a wrapper table generated for a union arm whose target is not itself a \
+                     table",
+                )?;
+                emit_box_table(
+                    out,
+                    &item.name,
+                    type_text,
+                    *needs_null_default,
+                    comment.clone(),
+                );
+            }
         }
     }
     Ok(())
+}
+
+/// One induced union-arm wrapper table: a single `value` field at id 0,
+/// holding what [`union_arm_type`] already resolved — the FlatBuffers type,
+/// the `= null` default and the constraint comment an ordinary field
+/// carries at this same position ([`push_field`]). Nothing here can itself
+/// induce a further table: the three kinds this wraps — a named scalar, an
+/// enum, an enum set — each resolve to a scalar or an enum reference, never
+/// a container, so `induced` is not threaded through.
+fn emit_box_table(
+    out: &mut String,
+    name: &str,
+    type_text: &str,
+    needs_null_default: bool,
+    comment: Option<String>,
+) {
+    out.push_str(&format!("\ntable {name} {{\n"));
+    push_field(out, "value", type_text, needs_null_default, comment, 0);
+    out.push_str("}\n");
 }
 
 /// One induced tuple table: positional fields `field_1`, `field_2`, … with

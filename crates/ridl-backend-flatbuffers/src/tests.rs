@@ -1,39 +1,13 @@
 use crate::{generate, generate_with};
 use ridl_ir::v2;
 
-/// Compiles `source` as a FlatBuffers schema with planus, panicking with the
-/// compiler's own message on failure. This is the story's acceptance check:
-/// every test that emits a schema runs it through here.
-pub(crate) fn compile_with_planus(file_name: &str, source: &str) {
-    let dir = tempfile::tempdir().expect("temp dir");
-    let path = dir.path().join(file_name);
-    std::fs::write(&path, source).expect("write schema");
-    if planus_translation::translate_files(&[path]).is_none() {
-        panic!("emitted schema is not a valid FlatBuffers schema:\n\n{source}");
-    }
-}
-
-/// [`compile_with_planus`], with `siblings` written into the same temp
-/// directory first — for a schema whose `include` names another package's
-/// own generated file, which must exist for `planus` to resolve it.
-/// `siblings` is `(file_name, source)` pairs. Every test that produces a
-/// schema calls one of these two harnesses, so a broken include cannot hide
-/// behind a skipped validity check.
-pub(crate) fn compile_with_planus_and_siblings(
-    entry_file: &str,
-    entry_source: &str,
-    siblings: &[(&str, &str)],
-) {
-    let dir = tempfile::tempdir().expect("temp dir");
-    for (file_name, source) in siblings {
-        std::fs::write(dir.path().join(file_name), source).expect("write sibling schema");
-    }
-    let path = dir.path().join(entry_file);
-    std::fs::write(&path, entry_source).expect("write schema");
-    if planus_translation::translate_files(&[path]).is_none() {
-        panic!("emitted schema is not a valid FlatBuffers schema:\n\n{entry_source}");
-    }
-}
+// `compile_with_planus` and `compile_with_planus_and_siblings` live in
+// `tests/support/mod.rs`, loaded here by path so the unit tests and
+// `tests/corpus.rs` (an integration test, which cannot see this `#[cfg(test)]`
+// module) share one definition rather than carrying two copies.
+#[path = "../tests/support/mod.rs"]
+mod support;
+use support::{compile_with_planus, compile_with_planus_and_siblings};
 
 fn package(name: &str) -> v2::Package {
     v2::Package {
@@ -580,10 +554,12 @@ fn an_array_of_a_bytes_backed_scalar_is_refused() {
 }
 
 #[test]
-fn a_union_arm_typed_by_a_named_scalar_is_refused() {
-    // A named scalar inlines at its use sites, so no FlatBuffers
-    // declaration exists for the union list to reference — flatc: "type
-    // referenced but not defined".
+fn a_union_arm_typed_by_a_named_scalar_gets_a_wrapper_table() {
+    // A named scalar inlines at its use sites, so it has no FlatBuffers
+    // declaration of its own for the union list to reference. Rather than
+    // refuse the arm, a one-field wrapper table is generated — typl §10
+    // permits any named type here, and the target represents this fine with
+    // one more table.
     let package = v2::Package {
         name: "veh.common".to_string(),
         decls: vec![
@@ -597,35 +573,84 @@ fn a_union_arm_typed_by_a_named_scalar_is_refused() {
         ..Default::default()
     };
 
-    let error = generate(&package).expect_err("must refuse");
-    assert!(error.message.contains("`speed`"), "got: {}", error.message);
-    assert!(error.message.contains("`Speed`"), "got: {}", error.message);
+    let generated = generate(&package).expect("generate");
     assert!(
-        error.message.contains("named scalar"),
-        "got: {}",
-        error.message
+        generated
+            .fbs_source
+            .contains("union PayloadUnion { speed: PayloadSpeedBox }"),
+        "got:\n{}",
+        generated.fbs_source
     );
+    assert!(
+        generated.fbs_source.contains(
+            "table PayloadSpeedBox {\n  // Speed — km/h [0.0..250.0]\n  value: double (id: 0);\n}"
+        ),
+        "the wrapper's value field must carry Speed's constraint comment, got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
 }
 
 #[test]
-fn a_union_arm_typed_by_an_enum_is_refused() {
+fn a_union_arm_typed_by_an_enum_without_a_zero_member_gets_a_wrapper_table_with_null() {
     // An enum has a declaration, but a FlatBuffers union member must be a
-    // table.
+    // table, so the arm is wrapped the same as a named scalar's. The
+    // wrapper's `value` field needs the same `= null` treatment as an
+    // ordinary enum-typed field when the enum declares no zero member
+    // (`push_field`) — flatc refuses a field whose implicit default of 0 is
+    // not part of the referenced enum, and the wrapper's field is no
+    // exception.
     let mut package = enum_package("Gear", vec![("PARK", 1)]);
     package
         .decls
         .push(union_decl("Payload", &[("gear", 1, "Gear")]));
 
-    let error = generate(&package).expect_err("must refuse");
-    assert!(error.message.contains("`gear`"), "got: {}", error.message);
-    assert!(error.message.contains("`Gear`"), "got: {}", error.message);
-    assert!(error.message.contains("enum"), "got: {}", error.message);
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .fbs_source
+            .contains("union PayloadUnion { gear: PayloadGearBox }"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        generated
+            .fbs_source
+            .contains("table PayloadGearBox {\n  value: Gear = null (id: 0);\n}"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
 }
 
 #[test]
-fn a_union_arm_typed_by_an_enum_set_is_refused() {
-    // An enum set inlines to an integer at its use sites, so no FlatBuffers
-    // declaration exists for the union list to reference.
+fn a_union_arm_typed_by_an_enum_declaring_zero_gets_a_wrapper_table_with_no_null() {
+    // The other side of the `= null` rule the previous test pins: an enum
+    // that does declare a zero-valued member needs no `= null` on the
+    // wrapper's `value` field, the same as an ordinary enum-typed field
+    // (`a_field_typed_by_an_enum_declaring_zero_needs_no_null`).
+    let mut package = enum_package("Mode", vec![("OFF", 0), ("ON", 1)]);
+    package
+        .decls
+        .push(union_decl("Payload", &[("mode", 1, "Mode")]));
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .fbs_source
+            .contains("table PayloadModeBox {\n  value: Mode (id: 0);\n}"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn a_union_arm_typed_by_an_enum_set_gets_a_wrapper_table() {
+    // An enum set inlines to an integer at its use sites, so it has no
+    // FlatBuffers declaration of its own — wrapped the same as a named
+    // scalar and an enum, keeping the bit-position comment on the wrapper's
+    // `value` field.
     let package = v2::Package {
         name: "veh.common".to_string(),
         decls: vec![
@@ -643,18 +668,22 @@ fn a_union_arm_typed_by_an_enum_set_is_refused() {
         ..Default::default()
     };
 
-    let error = generate(&package).expect_err("must refuse");
+    let generated = generate(&package).expect("generate");
     assert!(
-        error.message.contains("`warnings`"),
-        "got: {}",
-        error.message
+        generated
+            .fbs_source
+            .contains("union PayloadUnion { warnings: PayloadWarningsBox }"),
+        "got:\n{}",
+        generated.fbs_source
     );
     assert!(
-        error.message.contains("`Warnings`"),
-        "got: {}",
-        error.message
+        generated.fbs_source.contains(
+            "table PayloadWarningsBox {\n  // LOW_FUEL = bit 0\n  value: ubyte (id: 0);\n}"
+        ),
+        "got:\n{}",
+        generated.fbs_source
     );
-    assert!(error.message.contains("enum set"), "got: {}", error.message);
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
 }
 
 #[test]
