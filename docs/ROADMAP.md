@@ -74,19 +74,34 @@ itself and to a generic consumer, not a domain's choice.
 Ordered. Each rung is a layer-1 implementation of four traits plus a driving
 loop, so a rung is a port rather than a variant.
 
-| # | Platform                        | Role                   | Note                                                      |
-| - | ------------------------------- | ---------------------- | --------------------------------------------------------- |
-| 1 | Desktop (Linux, macOS, Windows) | tooling                | where the toolchain and the test plane run                |
-| 2 | Mobile — Android and web        | UI, bridges, demo      | the frame over a socket; not a production control surface |
-| 3 | Embedded Android                | production UI, tooling | native or JVM over AIDL/Binder — Kotlin is a real target  |
-| 4 | QNX 7.1                         | production             | the first serious real-time target                        |
-| 5 | FreeRTOS / SAFERTOS             | production             | where `repr(C)` may return as a store fallback            |
-| 6 | Edge, baremetal, WAMR           | production             | the most interesting and the latest                       |
+| # | Platform                                | Role                             | Note                                                             |
+| - | --------------------------------------- | -------------------------------- | ---------------------------------------------------------------- |
+| 1 | Desktop (Linux, macOS, Windows)         | tooling                          | where the toolchain and the test plane run                       |
+| 2 | Mobile — Android and web                | UI, bridges, demo                | the frame over a socket; not a production control surface        |
+| 3 | Embedded Android                        | production UI, tooling           | native or JVM over AIDL/Binder — Kotlin is a real target         |
+| 4 | QNX 7.1                                 | production                       | the first serious real-time target                               |
+| 5 | Edge and IoT gateway (ARM Linux, Yocto) | production, headless or local UI | where the gateway runs; technically near-free once rung 1 exists |
+| 6 | FreeRTOS / SAFERTOS                     | production                       | where `repr(C)` may return as a store fallback                   |
+| 7 | Baremetal, WAMR                         | production                       | the most interesting and the latest                              |
 
-Rungs 1 to 4 have an MMU and can map a shared store, so ADR-0018 decision 8's
-FlatBuffers store holds across all of them. Rungs 5 and 6 are where its
+Rungs 1 to 5 have an MMU and can map a shared store, so ADR-0018 decision 8's
+FlatBuffers store holds across all of them. Rungs 6 and 7 are where its
 alternatives — `repr(C)` layout, re-attach instead of demand-paged growth — stop
 being hypothetical.
+
+**Edge is split out from baremetal because they cost differently.** An edge or
+IoT gateway on ARM Linux is the same four traits and the same driving loop as
+rung 1 with a different target triple: near-free once the desktop layer exists.
+Baremetal under WAMR is the hard rung — no MMU, no filesystem, and the store's
+alternatives become necessary rather than optional. Grouping them made the cheap
+one look as expensive as the hard one, so its position on this ladder is a
+product-priority choice rather than a technical constraint.
+
+It is also **where Epic 13 lives in production**: a gateway bridging a field bus
+to a network is what these devices are for. The headless and local-UI variants
+split the tooling plane rather than the runtime — a headless gateway makes
+E12.2's remote observability the only window into it, and one with a panel is
+E12.7's embedded web UI on a smaller screen.
 
 **iOS is not a rung, and the reason is not that it is unimportant.** It appears
 in none of the target domains inside the system: automotive infotainment is
