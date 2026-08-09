@@ -107,10 +107,10 @@ built that cannot project.
 
 **This resolves ADR-0013 open item 1 for the C header**, in the direction
 decision 1's own test points. A backend's ceiling follows from what its target
-can represent, and C represents an opaque handle, a cell, and a function pointer.
-The header's present line — `not represented in the C ABI — interactions are a
-binding concern, not a data layout` — is replaced. The genuine limit stays and
-is stated in §10 below.
+can represent, and C represents an opaque handle, a cell, and a function
+pointer. The header's present refusal —
+`interactions are a binding concern, not a data layout` — is replaced. The
+genuine limit stays and is stated in §10 below.
 
 ## 5. The cell
 
@@ -228,8 +228,8 @@ coexistence is answered by the snapshot of §9, not by comparing cells.
 **None of the three is the seqlock counter.** A seqlock counter counts writes
 into one block of memory. When propagation drops a sample the sender's sequence
 advances and a receiving store's seqlock does not, so a reader trusting the
-seqlock as the frame number sees a contiguous run and concludes nothing was
-lost — which is the detection §3.1 promises and AUTOSAR E2E consumes.
+seqlock as the frame number sees a contiguous run and concludes nothing was lost
+— which is the detection §3.1 promises and AUTOSAR E2E consumes.
 
 The jobs differ per kind:
 
@@ -283,11 +283,11 @@ provenance is what says so.
 **Validation happens at publish.** The provider's store checks the payload
 against the typl constraints and, on violation, keeps the value, marks the
 channel invalid, and stamps the transition. §4.5 gives no error channel back to
-the publisher — it is "a provider bug surfacing through telemetry" — so `publish`
-still succeeds and the observability hook is where it surfaces. A `watch`
-callback fires on the transition, because §4.5 propagates invalidity "to every
-subscriber like any other state change"; the callback contract must say so,
-since the value is unchanged and the wakeup otherwise looks spurious.
+the publisher — it is "a provider bug surfacing through telemetry" — so
+`publish` still succeeds and the observability hook is where it surfaces. A
+`watch` callback fires on the transition, because §4.5 propagates invalidity "to
+every subscriber like any other state change"; the callback contract must say
+so, since the value is unchanged and the wakeup otherwise looks spurious.
 
 ### 7.1 The Rust reading is a sum type, not a pair
 
@@ -304,13 +304,13 @@ pub enum Reading<T> {
 }
 ```
 
-The shipped `fn read(&self) -> (T, Provenance)` permits `let (speed, _) =
-h.read();`, which is the silent-stale-data failure §4.5 exists to prevent,
-available in one keystroke. A sum type makes the value unreachable without
-naming the case, so §4.4's "consumers that must not act on a mere init value can
-tell" becomes must tell rather than may tell. It also gives each state exactly
-its own data, which removes the fields that would otherwise sit unused: no
-transition timestamp on a live cell, no envelope on an init value.
+The shipped `fn read(&self) -> (T, Provenance)` permits
+`let (speed, _) = h.read();`, which is the silent-stale-data failure §4.5 exists
+to prevent, available in one keystroke. A sum type makes the value unreachable
+without naming the case, so §4.4's "consumers that must not act on a mere init
+value can tell" becomes must tell rather than may tell. It also gives each state
+exactly its own data, which removes the fields that would otherwise sit unused:
+no transition timestamp on a live cell, no envelope on an init value.
 
 **The C side cannot express this**, and the asymmetry is honest — the ABI
 erases, the Rust skin refines. C receives a flat struct and a documented
@@ -340,8 +340,8 @@ interval between samples, not the nominal period — §4's "the latest sample is
 the truth; intermediate samples may be missed" means the observed interval is
 often not the declared one, and integrating with the declared period is wrong by
 exactly the amount the timestamp would have told you. §3.1 makes the arithmetic
-sound: `int64` microseconds on the PTP epoch, TAI, "continuous, leap-second-free,
-monotonic", stamped at the sender and never re-stamped.
+sound: `int64` microseconds on the PTP epoch, TAI, "continuous,
+leap-second-free, monotonic", stamped at the sender and never re-stamped.
 
 Two consequences for a consumer computing an interval. `Init` carries no
 envelope, so the first reading after subscribing has no predecessor and the
@@ -433,15 +433,15 @@ symptom. So `ridl_attach` carries a digest over the identity table — names,
 identifiers, kinds, and payload sizes — and a mismatch refuses.
 
 This does not reopen §11's rejection of an in-language version block. §11
-rejected a **hand-maintained** version pair inside the source as "a second source
-of truth that drifts". A digest derived by the backend from the contract is the
-move `ridl-diff` already makes.
+rejected a **hand-maintained** version pair inside the source as "a second
+source of truth that drifts". A digest derived by the backend from the contract
+is the move `ridl-diff` already makes.
 
 The digest is **per interface**, and the addressing shape decides it rather than
 a separate argument: the identifier's high half selects the interface, so a
-store holds a digest per interface slot and checks on first use of any identifier
-in that slot. Interfaces version independently, and ADR-0015 makes the interface
-the generation unit.
+store holds a digest per interface slot and checks on first use of any
+identifier in that slot. Interfaces version independently, and ADR-0015 makes
+the interface the generation unit.
 
 ## 9. The operation vocabulary
 
@@ -481,9 +481,9 @@ dispatcher. A third meaning as a verb is the collision test that rejected
 so it rides `read` with no watch and no publish side.
 
 **The verbs are the C core's, not the typed layer's.** At the typed layer the
-interaction name already is the method: the backend generates `async fn
-set_gear(...)` on the consumer and `async fn on_set_gear(...)` on the provider,
-with no verb prefix.
+interaction name already is the method: the backend generates
+`async fn set_gear(...)` on the consumer and `async fn on_set_gear(...)` on the
+provider, with no verb prefix.
 
 ```c
 typedef uint64_t ridl_sub;
@@ -544,17 +544,17 @@ shape is right rather than a coincidence. It is also the only operation that
 answers whether a set of values coexisted, per §6 above.
 
 **Two `serve` functions, not one.** The handler signatures differ — a command
-handler returns nothing, a query handler must produce a reply — and with a single
-registration taking an untyped function pointer, registering a command handler
-against a query ordinal compiles cleanly and corrupts the stack when the runtime
-calls it. Distinct typedefs make the compiler catch it; the ordinal's kind in the
-table catches the rest at registration rather than at first call.
+handler returns nothing, a query handler must produce a reply — and with a
+single registration taking an untyped function pointer, registering a command
+handler against a query ordinal compiles cleanly and corrupts the stack when the
+runtime calls it. Distinct typedefs make the compiler catch it; the ordinal's
+kind in the table catches the rest at registration rather than at first call.
 
 **The `int32_t` status is never a functional error.** §10.1 makes functional
 errors data: a fallible query returns `T | E` and the error arm travels in the
 reply payload. The status is Stratum 3 — unknown identifier, size mismatch,
-wrong kind, throttled, no provider. A `DiagError` arriving as a status code would
-collapse the three strata of §10.1 to §10.3 into one.
+wrong kind, throttled, no provider. A `DiagError` arriving as a status code
+would collapse the three strata of §10.1 to §10.3 into one.
 
 ## 10. The write side
 
@@ -573,8 +573,8 @@ behave differently, breaking the transport-invisible property of §3. And the
 language already has the construct for needing to know: §6.1's `command`, whose
 acknowledgment is exactly this.
 
-**`ridl_send` returning does not mean the command executed.** ADR-0015 decision 3
-makes a command's `max` a response bound on acceptance, and §6.1's delivery
+**`ridl_send` returning does not mean the command executed.** ADR-0015 decision
+3 makes a command's `max` a response bound on acceptance, and §6.1's delivery
 acknowledgment is runtime-internal. §6.1 gives the answer for a caller who needs
 the outcome: use a `query`.
 
@@ -626,10 +626,10 @@ Four, independent of whether this design is adopted. Each is worth an issue.
    occurrence has no channel state, and §5 does not say what happens when an
    event's payload violates its typl constraints. Dropping it and letting the
    consumer see a sequence gap is the only behaviour consistent with §5's
-   no-cache rule — and it reuses §3.1's "sequence gaps make loss detectable" — at
-   the cost that a consumer cannot distinguish a provider emitting a bad payload
-   from a dropped occurrence without telemetry. The reference should say so
-   either way.
+   no-cache rule — and it reuses §3.1's "sequence gaps make loss detectable" —
+   at the cost that a consumer cannot distinguish a provider emitting a bad
+   payload from a dropped occurrence without telemetry. The reference should say
+   so either way.
 3. **Freshness is evaluated and unreportable.** §9 makes `max` a contract term
    and ADR-0015 decision 11 has the store evaluate each cell against it, but no
    API surface carries the verdict and no provenance value expresses it (§7.2).
