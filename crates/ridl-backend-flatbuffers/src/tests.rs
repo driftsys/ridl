@@ -1,4 +1,4 @@
-use crate::generate;
+use crate::{generate, generate_with};
 use ridl_ir::v2;
 
 /// Compiles `source` as a FlatBuffers schema with planus, panicking with the
@@ -10,6 +10,28 @@ pub(crate) fn compile_with_planus(file_name: &str, source: &str) {
     std::fs::write(&path, source).expect("write schema");
     if planus_translation::translate_files(&[path]).is_none() {
         panic!("emitted schema is not a valid FlatBuffers schema:\n\n{source}");
+    }
+}
+
+/// [`compile_with_planus`], with `siblings` written into the same temp
+/// directory first — for a schema whose `include` names another package's
+/// own generated file, which must exist for `planus` to resolve it.
+/// `siblings` is `(file_name, source)` pairs. Every test that produces a
+/// schema calls one of these two harnesses, so a broken include cannot hide
+/// behind a skipped validity check.
+pub(crate) fn compile_with_planus_and_siblings(
+    entry_file: &str,
+    entry_source: &str,
+    siblings: &[(&str, &str)],
+) {
+    let dir = tempfile::tempdir().expect("temp dir");
+    for (file_name, source) in siblings {
+        std::fs::write(dir.path().join(file_name), source).expect("write sibling schema");
+    }
+    let path = dir.path().join(entry_file);
+    std::fs::write(&path, entry_source).expect("write schema");
+    if planus_translation::translate_files(&[path]).is_none() {
+        panic!("emitted schema is not a valid FlatBuffers schema:\n\n{entry_source}");
     }
 }
 
@@ -1055,6 +1077,147 @@ fn enum_set_and_field(name: &str, bits: Vec<(&str, i64)>) -> v2::Package {
                 ..Default::default()
             },
         ],
+        ..Default::default()
+    }
+}
+
+// ADR-0017 decision 1, inherited from the proto3 backend: a named scalar
+// inlines whether it is local or foreign, so it is never included — there is
+// no declaration for another file to hold. An include appears only for a
+// foreign struct, enum or union: the kinds that emit a FlatBuffers
+// declaration another file can reference. `compile_with_planus_and_siblings`
+// writes the referenced package's own generated schema into the same temp
+// directory first, so the emitted include is checked to actually resolve —
+// not only to contain the expected text.
+
+#[test]
+fn a_foreign_named_scalar_inlines_with_no_include() {
+    // ADR-0017 decision 1: a named scalar inlines whether local or foreign,
+    // so it is never included — there is no declaration to include.
+    let (cluster, common) = cross_package_scalar();
+    let generated = generate_with(&cluster, &[&common]).expect("generate");
+    assert!(
+        !generated.fbs_source.contains("include"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        generated.fbs_source.contains("value: double (id: 0);"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.cluster.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn a_foreign_table_reference_emits_an_include_and_the_qualified_name() {
+    let (cluster, common) = cross_package_struct();
+    let common_out = generate(&common).expect("generate common");
+    let generated = generate_with(&cluster, &[&common]).expect("generate");
+
+    assert!(
+        generated.fbs_source.contains("include \"veh.common.fbs\";"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        generated.fbs_source.contains("veh.common.Setpoint"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+
+    // Compile the pair together so the include actually resolves.
+    compile_with_planus_and_siblings(
+        "veh.cluster.fbs",
+        &generated.fbs_source,
+        &[("veh.common.fbs", &common_out.fbs_source)],
+    );
+}
+
+#[test]
+fn an_unresolvable_foreign_reference_is_refused() {
+    let cluster = cross_package_dangling();
+    let error = generate(&cluster).expect_err("must refuse");
+    assert!(
+        error.message.contains("veh.other"),
+        "got: {}",
+        error.message
+    );
+}
+
+/// `veh.common` declaring the named scalar `Speed`, and `veh.cluster`
+/// referencing it from a struct field — the fixture for
+/// [`a_foreign_named_scalar_inlines_with_no_include`].
+fn cross_package_scalar() -> (v2::Package, v2::Package) {
+    let common = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Speed".to_string(),
+            kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let cluster = v2::Package {
+        name: "veh.cluster".to_string(),
+        decls: vec![v2::Decl {
+            name: "Reading".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member("value", 1, named_type("veh.common.Speed"))],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    (cluster, common)
+}
+
+/// `veh.common` declaring the struct `Setpoint` — a table — and
+/// `veh.cluster` referencing it from a struct field — the fixture for
+/// [`a_foreign_table_reference_emits_an_include_and_the_qualified_name`].
+fn cross_package_struct() -> (v2::Package, v2::Package) {
+    let common = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: "Setpoint".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member("value", 1, float64_type())],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    let cluster = v2::Package {
+        name: "veh.cluster".to_string(),
+        decls: vec![v2::Decl {
+            name: "Reading".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member("target", 1, named_type("veh.common.Setpoint"))],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+    (cluster, common)
+}
+
+/// `veh.cluster` referencing a declaration in `veh.other`, a package never
+/// given to the backend — the fixture for
+/// [`an_unresolvable_foreign_reference_is_refused`].
+fn cross_package_dangling() -> v2::Package {
+    v2::Package {
+        name: "veh.cluster".to_string(),
+        decls: vec![v2::Decl {
+            name: "Reading".to_string(),
+            kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member("other", 1, named_type("veh.other.Missing"))],
+                fixed_layout: false,
+            })),
+            ..Default::default()
+        }],
         ..Default::default()
     }
 }

@@ -20,7 +20,7 @@
 //! models FlatBuffers' own scopes ([`Namespace`]), because proto3 scopes
 //! enum values as namespace siblings and this target does not.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use ridl_ir::v2;
 
@@ -40,12 +40,22 @@ pub struct GenerateError {
 }
 
 /// Generates the FlatBuffers schema for `package`, resolving foreign
-/// references against `others` (ADR-0017 decision 1).
+/// references against `others` (ADR-0017 decision 1): a foreign named scalar
+/// or enum set inlines exactly as a local one does — there is no declaration
+/// to reference, so no include is ever emitted for one — while a foreign
+/// struct, enum or union emits `include "<package>.fbs";` and is referenced
+/// by its fully qualified `<package>.<Name>` ([`named_field_type`]). The
+/// include block is collected into a `BTreeSet<String>` so it is
+/// deterministic, and is written before the declarations are, into `body`,
+/// so the set is complete before the include block is rendered — and the
+/// include block itself is written before the `namespace` line, which is
+/// what FlatBuffers requires.
 pub fn generate_with(
     package: &v2::Package,
     others: &[&v2::Package],
 ) -> Result<Generated, GenerateError> {
-    let _ = others;
+    let packages = Packages { package, others };
+    let mut includes: BTreeSet<String> = BTreeSet::new();
     // One namespace scope spans both walks, because the identity tables are
     // namespace-level enums the same as the declared types: a declared type
     // named `<Interface>Ordinal` and the generated identity table for
@@ -54,11 +64,28 @@ pub fn generate_with(
     // refusal always names the declaration as the first claimant.
     let mut names = Namespace::types(&package.name);
     claim_declared_names(&mut names, package)?;
+
+    let mut body = String::new();
+    emit_structs(&mut body, packages, &mut names, &mut includes)?;
+    emit_identity_tables(&mut body, package, &mut names)?;
+
     let mut out = String::new();
+    for include in &includes {
+        out.push_str(&format!("include \"{include}\";\n"));
+    }
     out.push_str(&format!("namespace {};\n", package.name));
-    emit_structs(&mut out, package, &mut names)?;
-    emit_identity_tables(&mut out, package, &mut names)?;
+    out.push_str(&body);
     Ok(Generated { fbs_source: out })
+}
+
+/// The package being generated, plus every other package it might
+/// cross-reference — both read-only for the whole declaration walk, so they
+/// travel together as one bundle rather than as two positional parameters
+/// repeated at every call site (mirrors `ridl-backend-proto`'s `Packages`).
+#[derive(Clone, Copy)]
+struct Packages<'a> {
+    package: &'a v2::Package,
+    others: &'a [&'a v2::Package],
 }
 
 /// Registers every declared name that becomes a FlatBuffers declaration: a
@@ -200,23 +227,24 @@ fn screaming_snake_case(name: &str) -> String {
 /// ([`emit_induced_tables`]).
 fn emit_structs(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     names: &mut Namespace,
+    includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let mut induced: Vec<Induced> = Vec::new();
-    for decl in &package.decls {
+    for decl in &packages.package.decls {
         match &decl.kind {
             Some(v2::decl::Kind::StructDef(def)) => {
-                emit_struct(out, package, &decl.name, def, &mut induced)?;
+                emit_struct(out, packages, &decl.name, def, &mut induced, includes)?;
             }
             Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
             Some(v2::decl::Kind::UnionDef(def)) => {
-                emit_union(out, package, &decl.name, def, names)?;
+                emit_union(out, packages.package, &decl.name, def, names)?;
             }
             _ => {}
         }
     }
-    emit_induced_tables(out, package, &mut induced, names)?;
+    emit_induced_tables(out, packages, &mut induced, names, includes)?;
     Ok(())
 }
 
@@ -376,10 +404,11 @@ fn check_union_arm_target(
 /// and emitted after the declaration walk ([`emit_induced_tables`]).
 fn emit_struct(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     name: &str,
     def: &v2::StructDef,
     induced: &mut Vec<Induced>,
+    includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let mut fields = Namespace::fields(name);
     out.push_str(&format!("\ntable {name} {{\n"));
@@ -397,7 +426,7 @@ fn emit_struct(
                 })?;
                 let hint = format!("{name}{}", type_name(&field.name));
                 let (type_text, needs_null_default, comment) =
-                    resolve_field_type(package, name, &field.name, &hint, ty, induced)?;
+                    resolve_field_type(packages, name, &field.name, &hint, ty, induced, includes)?;
                 push_field(
                     out,
                     &field_name,
@@ -487,19 +516,20 @@ fn member_id(owner: &str, ordinal: u32) -> Result<u32, GenerateError> {
 /// forwarded: only a table field carries a default in FlatBuffers, and a
 /// vector element must not inherit one.
 fn resolve_field_type(
-    package: &v2::Package,
+    packages: Packages,
     owner: &str,
     field_name: &str,
     hint: &str,
     ty: &v2::FieldType,
     induced: &mut Vec<Induced>,
+    includes: &mut BTreeSet<String>,
 ) -> Result<(String, bool, Option<String>), GenerateError> {
     match ty.kind.as_ref() {
         Some(v2::field_type::Kind::Primitive(primitive)) => {
             Ok((fbs_primitive(*primitive).to_string(), false, None))
         }
         Some(v2::field_type::Kind::Named(reference)) => {
-            named_field_type(package, owner, field_name, reference)
+            named_field_type(packages, owner, field_name, reference, includes)
         }
         Some(v2::field_type::Kind::Array(array)) => {
             let element = array.element.as_ref().ok_or_else(|| GenerateError {
@@ -538,12 +568,13 @@ fn resolve_field_type(
             // vector element carries no per-element default — only a table
             // field does.
             let (element_text, _needs_null_default, comment) = resolve_field_type(
-                package,
+                packages,
                 owner,
                 field_name,
                 &format!("{hint}Element"),
                 element,
                 induced,
+                includes,
             )?;
             // The kind checks above cannot see an element that *resolves*
             // to a vector: `bytes` — bare or behind a named scalar — maps
@@ -583,43 +614,83 @@ fn resolve_field_type(
     }
 }
 
-/// A resolved named-type reference at a field position, same-package only —
-/// [`generate_with`]'s `others` is not yet consulted here.
+/// A resolved named-type reference at a field position. A named scalar
+/// inlines to its FlatBuffers scalar and an enum set inlines to an integer —
+/// **whether the reference is local or foreign** (ADR-0017 decision 1),
+/// because neither ever becomes a declaration of its own for another file to
+/// include ([`fbs_scalar`], [`constraint_comment`], [`enum_set_field_type`]).
+/// `ridl.std` is not a special case of this: every one of its members is a
+/// named scalar (typl reference Appendix A), so it always takes this same
+/// inlining path.
 ///
-/// A named scalar inlines to its FlatBuffers scalar and leaves its declared
-/// form as a comment on the line above it ([`fbs_scalar`],
-/// [`constraint_comment`]).
+/// A struct, enum or union reference names the table, enum or wrapper table
+/// it becomes — a struct as its table ([`emit_struct`]), an enum as its own
+/// declared name ([`emit_enum`]), a union as its wrapper table's declared
+/// name ([`emit_union`]) — and each of those three is qualified
+/// `pkg.Name` when foreign, with `includes` gaining `pkg.fbs`
+/// ([`qualified_type_name`]): they are the only typl kinds this backend gives
+/// a declaration of their own, so they are the only case an include is
+/// needed. An enum reference also reports whether the field needs `= null`:
+/// `flatc` requires every table field to carry a default, and refuses one
+/// whose implicit default of 0 is not a member of the referenced enum — so
+/// this is true exactly when the enum declares no zero-valued member.
 ///
-/// An enum resolves to its own declared name ([`emit_enum`]), and reports
-/// whether the field needs `= null`: `flatc` requires every table field to
-/// carry a default, and refuses one whose implicit default of 0 is not a
-/// member of the referenced enum — so this is true exactly when the enum
-/// declares no zero-valued member.
+/// A reference is cross-package exactly when it carries a `.` — the IR's
+/// canonical form gives a cross-package reference as the fully qualified
+/// `pkg.Name` and a same-package one as the bare `Name`, never an include
+/// alias (`ridl_ir::v2::referenced_packages`'s doc comment). A same-package
+/// reference is looked up in `packages.package`; a cross-package one is
+/// looked up in `packages.others`, the other packages this backend was
+/// given — this resolution has to happen before the inline-or-qualify
+/// decision above either way, because that decision depends on the
+/// referenced declaration's own kind. A foreign reference `others` cannot
+/// resolve — no package by that name is present, or it holds no declaration
+/// by that name — is refused rather than emitted as a name `flatc` would then
+/// fail to resolve.
 ///
-/// An enum set has no declaration of its own — a FlatBuffers enum field
-/// holds one value and cannot represent a combination of bits — so it
-/// resolves to the FlatBuffers scalar for its declared width, with its bit
-/// names and positions as a comment ([`enum_set_field_type`]).
-///
-/// A union resolves to its wrapper table's name — the declared name — so the
-/// field takes exactly one id slot in its parent; the two slots a native
-/// union owns live inside the wrapper ([`emit_union`]).
-///
-/// Any other declaration kind is refused: only a named scalar, enum, enum
-/// set or union is projected from a field position yet.
+/// Any other declaration kind is refused: only a named scalar, struct, enum,
+/// enum set or union is projected from a field position yet.
 fn named_field_type(
-    package: &v2::Package,
+    packages: Packages,
     owner: &str,
     field_name: &str,
     reference: &str,
+    includes: &mut BTreeSet<String>,
 ) -> Result<(String, bool, Option<String>), GenerateError> {
-    let Some(decl) = package.decls.iter().find(|decl| decl.name == *reference) else {
-        return Err(GenerateError {
-            message: format!(
-                "{owner}.{field_name} references `{reference}`, which is not a declaration \
-                 of this package."
-            ),
-        });
+    let (decl, foreign_package) = match reference.rsplit_once('.') {
+        Some((referenced_package, member)) => {
+            let resolved = packages
+                .others
+                .iter()
+                .find(|candidate| candidate.name == referenced_package)
+                .and_then(|candidate| candidate.decls.iter().find(|decl| decl.name == member));
+            let Some(decl) = resolved else {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} references `{reference}`, which cannot be \
+                         resolved — no package `{referenced_package}` with a declaration \
+                         named `{member}` was given to this backend."
+                    ),
+                });
+            };
+            (decl, Some(referenced_package))
+        }
+        None => {
+            let Some(decl) = packages
+                .package
+                .decls
+                .iter()
+                .find(|decl| decl.name == *reference)
+            else {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} references `{reference}`, which is not a \
+                         declaration of this package."
+                    ),
+                });
+            };
+            (decl, None)
+        }
     };
     match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Ok((
@@ -627,22 +698,56 @@ fn named_field_type(
             false,
             Some(constraint_comment(reference, td)),
         )),
+        Some(v2::decl::Kind::StructDef(_)) => Ok((
+            qualified_type_name(decl, foreign_package, includes),
+            false,
+            None,
+        )),
         Some(v2::decl::Kind::EnumDef(def)) => {
             let zero_declared = def.values.iter().any(|value| value.value == 0);
-            Ok((decl.name.clone(), !zero_declared, None))
+            Ok((
+                qualified_type_name(decl, foreign_package, includes),
+                !zero_declared,
+                None,
+            ))
         }
         Some(v2::decl::Kind::EnumSetDef(esd)) => {
             let (scalar, comment) = enum_set_field_type(esd);
             Ok((scalar, false, comment))
         }
-        Some(v2::decl::Kind::UnionDef(_)) => Ok((decl.name.clone(), false, None)),
+        Some(v2::decl::Kind::UnionDef(_)) => Ok((
+            qualified_type_name(decl, foreign_package, includes),
+            false,
+            None,
+        )),
         _ => Err(GenerateError {
             message: format!(
                 "{owner}.{field_name} references `{reference}`, a declaration kind this \
-                 tier does not project yet — only a named scalar, enum, enum set or union \
-                 may be referenced from a field position here."
+                 tier does not project yet — only a named scalar, struct, enum, enum set or \
+                 union may be referenced from a field position here."
             ),
         }),
+    }
+}
+
+/// The FlatBuffers name of a resolved struct, enum or union reference: the
+/// bare declaration name for a same-package reference, or `pkg.Name` for a
+/// foreign one, with `includes` gaining that package's
+/// `include "pkg.fbs";` line (mirrors `ridl-backend-proto`'s
+/// `qualified_message_name`). This only ever names the declaration — a
+/// constraint comment and the `= null` default decision are each the calling
+/// arm's own concern in [`named_field_type`].
+fn qualified_type_name(
+    decl: &v2::Decl,
+    foreign_package: Option<&str>,
+    includes: &mut BTreeSet<String>,
+) -> String {
+    match foreign_package {
+        Some(referenced_package) => {
+            includes.insert(format!("{referenced_package}.fbs"));
+            format!("{referenced_package}.{}", decl.name)
+        }
+        None => decl.name.clone(),
     }
 }
 
@@ -713,9 +818,10 @@ enum InducedKind {
 /// redefinition the target rejects ([`Namespace`]).
 fn emit_induced_tables(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     induced: &mut Vec<Induced>,
     names: &mut Namespace,
+    includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let mut seen: HashMap<String, InducedKind> = HashMap::new();
     let mut index = 0;
@@ -743,7 +849,7 @@ fn emit_induced_tables(
                     &item.name,
                     "a table generated for a tuple, named for the field path that reaches it",
                 )?;
-                emit_tuple_table(out, package, &item.name, tuple, induced)?;
+                emit_tuple_table(out, packages, &item.name, tuple, induced, includes)?;
             }
             InducedKind::Entry(map) => {
                 names.claim(
@@ -751,7 +857,7 @@ fn emit_induced_tables(
                     "an entry table generated for a map, named for the field path that \
                      reaches it",
                 )?;
-                emit_entry_table(out, package, &item.name, map, induced)?;
+                emit_entry_table(out, packages, &item.name, map, induced, includes)?;
             }
         }
     }
@@ -765,10 +871,11 @@ fn emit_induced_tables(
 /// rather than carry the source name onto the wire.
 fn emit_tuple_table(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     name: &str,
     tuple: &v2::TupleType,
     induced: &mut Vec<Induced>,
+    includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     out.push_str(&format!("\ntable {name} {{\n"));
     for (index, field) in tuple.fields.iter().enumerate() {
@@ -782,7 +889,7 @@ fn emit_tuple_table(
         })?;
         let hint = format!("{name}Field{position}");
         let (type_text, needs_null_default, comment) =
-            resolve_field_type(package, name, &field_name, &hint, ty, induced)?;
+            resolve_field_type(packages, name, &field_name, &hint, ty, induced, includes)?;
         push_field(
             out,
             &field_name,
@@ -808,10 +915,11 @@ fn emit_tuple_table(
 /// validity oracle.
 fn emit_entry_table(
     out: &mut String,
-    package: &v2::Package,
+    packages: Packages,
     name: &str,
     map: &v2::MapType,
     induced: &mut Vec<Induced>,
+    includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let key = map.key.as_ref().ok_or_else(|| GenerateError {
         message: format!("{name} is generated for a map that carries no key type in the IR."),
@@ -820,16 +928,24 @@ fn emit_entry_table(
         message: format!("{name} is generated for a map that carries no value type in the IR."),
     })?;
     out.push_str(&format!("\ntable {name} {{\n"));
-    let (key_text, key_needs_null, key_comment) =
-        resolve_field_type(package, name, "key", &format!("{name}Key"), key, induced)?;
+    let (key_text, key_needs_null, key_comment) = resolve_field_type(
+        packages,
+        name,
+        "key",
+        &format!("{name}Key"),
+        key,
+        induced,
+        includes,
+    )?;
     push_field(out, "key", &key_text, key_needs_null, key_comment, 0);
     let (value_text, value_needs_null, value_comment) = resolve_field_type(
-        package,
+        packages,
         name,
         "value",
         &format!("{name}Value"),
         value,
         induced,
+        includes,
     )?;
     push_field(
         out,
