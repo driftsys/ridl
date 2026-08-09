@@ -41,9 +41,9 @@ A named scalar becomes a newtype with a public field:
 pub struct Speed(pub f64);
 ```
 
-`Speed(9999.0)` and `Speed(f64::NAN)` both construct, so the typl range, unit and
-step reach Rust as doc comments and nothing else. Composite types keep the ridl
-spelling of their fields (`pub sensorId: i64`), enum variants come out
+`Speed(9999.0)` and `Speed(f64::NAN)` both construct, so the typl range, unit
+and step reach Rust as doc comments and nothing else. Composite types keep the
+ridl spelling of their fields (`pub sensorId: i64`), enum variants come out
 `FILTER_INVALID`, and no type carries any derive — `DoorPayload` cannot be
 printed, cloned or compared.
 
@@ -80,9 +80,9 @@ never published and has no envelope, which a flat pair can only express as
 ### 2.5 The extern-C header is layout-only
 
 It emits fixed-layout structs and drops every type with a string, an optional or
-a collection, and every interface. For a realistic package that is one struct and
-one enum retained, three structs and the whole interface dropped. No `extern "C"`
-functions are emitted to match it.
+a collection, and every interface. For a realistic package that is one struct
+and one enum retained, three structs and the whole interface dropped. No
+`extern "C"` functions are emitted to match it.
 
 ## 3. The layered architecture
 
@@ -115,29 +115,31 @@ and the caller's poller honours that.
 
 Three properties follow. One layer 2 drives from an epoll loop, an RTOS task, a
 browser callback or a Tokio task without change. A `poll` does bounded work, so
-worst-case execution time is arguable. And tests need no executor, no sockets and
-no real time — which is what E5.10's native-versus-wasm trace equality requires.
+worst-case execution time is arguable. And tests need no executor, no sockets
+and no real time — which is what E5.10's native-versus-wasm trace equality
+requires.
 
-The decisive property is asymmetry: **a sans-IO core can present an async face; an
-async core cannot present a sans-IO face.** An async wrapper is a thin adapter;
-the reverse needs an executor, which is the dependency being avoided. An async
-wrapper ships for the Tokio and Deno side.
+The decisive property is asymmetry: **a sans-IO core can present an async face;
+an async core cannot present a sans-IO face.** An async wrapper is a thin
+adapter; the reverse needs an executor, which is the dependency being avoided.
+An async wrapper ships for the Tokio and Deno side.
 
-Per-OS optimisation — `io_uring`, busy-polling, batched syscalls, interrupt-driven
-loops — happens in the driving loop, so layer 2 neither changes nor needs
-reverification.
+Per-OS optimisation — `io_uring`, busy-polling, batched syscalls,
+interrupt-driven loops — happens in the driving loop, so layer 2 neither changes
+nor needs reverification.
 
 ## 4. What the SSOT computes
 
-- slot sizes and offsets, region size per interface, generation counter placement
+- slot sizes and offsets, region size per interface, generation counter
+  placement
 - the channel inventory: how many, frame size, direction, ring depth
 - frame codecs, wire codecs, bridge transcoders
 - the control-plane message set and subscription table shape
 - the total memory budget
 
 That last item earns its own check. rsdl §8.2's RSDL-801 already makes a timing
-infeasibility a deploy-time error; memory infeasibility should be its sibling — a
-deployment needing more store than the target declares fails the build.
+infeasibility a deploy-time error; memory infeasibility should be its sibling —
+a deployment needing more store than the target declares fails the build.
 
 ## 5. Two encodings
 
@@ -152,10 +154,11 @@ FlatBuffers.
 | CAN, SOME/IP, DDS, WebSocket, wasm | proto3      |
 
 proto3 is chosen for the network because it is compact and schema-evolvable at
-once: a tagless positional encoding would be 30–50% smaller on small messages but
-cannot survive version skew, and the guest updates independently of the host.
-FlatBuffers is chosen for memory because Binder's single copy into a mapped
-buffer and an mmap'd store both give the receiver a buffer it can read in place.
+once: a tagless positional encoding would be 30–50% smaller on small messages
+but cannot survive version skew, and the guest updates independently of the
+host. FlatBuffers is chosen for memory because Binder's single copy into a
+mapped buffer and an mmap'd store both give the receiver a buffer it can read in
+place.
 
 The codec is generated, not delegated to a third-party library, so
 `--emit rust --wire proto` produces code with no external crates. It is a
@@ -165,15 +168,15 @@ messages, no schema parsing.
 Interoperability is at the **bytes**, mediated by the emitted schema. Our codec
 and someone's `protoc`-generated Java interoperate without sharing a library.
 That places one obligation: byte-level conformance must be tested against a
-`protoc`-generated implementation, or the emitted schema is a claim rather than a
-guarantee.
+`protoc`-generated implementation, or the emitted schema is a claim rather than
+a guarantee.
 
 ### 5.1 Encoding and representation are different axes
 
 proto3-in-Rust is prost's structs, rust-protobuf's, or quick-protobuf's — same
 encoding, different types. Encoding belongs to the wire; representation is a
-library choice. Generating the codec ourselves means no representation is imposed
-on the consumer, and the CLI needs only two axes.
+library choice. Generating the codec ourselves means no representation is
+imposed on the consumer, and the CLI needs only two axes.
 
 ## 6. The CLI
 
@@ -212,8 +215,8 @@ payload_len  varint
 payload      bytes    in the encoding for this path
 ```
 
-The header carries what proto3 and AIDL both lack — the envelope and provenance —
-and the payload stays in an encoding that already exists.
+The header carries what proto3 and AIDL both lack — the envelope and provenance
+— and the payload stays in an encoding that already exists.
 
 The control plane is uniform across bindings:
 
@@ -289,19 +292,19 @@ Because its members are computed together. An rmdl step produces one consistent
 set from one input snapshot, and the seqlock brackets exactly that step.
 
 Stated at the ridl layer this is an obligation, not a reference to rmdl: an
-interface's members are published as a consistent set and observed as one sample.
-An rmdl provider satisfies it structurally; a driver or hand-written component
-must satisfy it some other way. A single-signal publication is trivially
-coherent, so the model degrades correctly where no step exists.
+interface's members are published as a consistent set and observed as one
+sample. An rmdl provider satisfies it structurally; a driver or hand-written
+component must satisfy it some other way. A single-signal publication is
+trivially coherent, so the model degrades correctly where no step exists.
 
 ## 9. Trust, assurance, and access
 
 ### 9.1 Three dimensions, ridl levels, domain names in plugins
 
 Safety integrity, cyber threat and privacy are each an ordered scale `0..N`
-defined by ridl. The mapping to ASIL, CAL, DAL, SIL or a medical class belongs to
-a domain plugin, following ADR-0012 decision 7's model of a domain extension as a
-spelling table plus backends with no core semantics.
+defined by ridl. The mapping to ASIL, CAL, DAL, SIL or a medical class belongs
+to a domain plugin, following ADR-0012 decision 7's model of a domain extension
+as a spelling table plus backends with no core semantics.
 
 The core needs only the ordering and the comparison. It never needs to know a
 level is spelled ASIL-D.
@@ -334,19 +337,20 @@ the generation counter and every other reader. Hence the pipe.
 
 **Verification happens once, at the boundary, on the trusted side.** The owner
 verifies the incoming buffer and validates the values before writing the store,
-so no downstream consumer verifies anything. That is far better than every reader
-verifying forever, and it is why the cross-zone hop is worth its cost.
+so no downstream consumer verifies anything. That is far better than every
+reader verifying forever, and it is why the cross-zone hop is worth its cost.
 
-Cross-zone publication needs two things a raw pipe does not give: **coalescing**,
-because a signal is state and a FIFO backlog delivers samples that are already
-superseded (latest-wins per ordinal at the publisher), and **grouping**, because
-a step's outputs must be applied under one generation increment.
+Cross-zone publication needs two things a raw pipe does not give:
+**coalescing**, because a signal is state and a FIFO backlog delivers samples
+that are already superseded (latest-wins per ordinal at the publisher), and
+**grouping**, because a step's outputs must be applied under one generation
+increment.
 
 ### 9.3 Privacy is runtime and revocable
 
 Safety and cyber levels are deployment facts. Privacy is not: consent is granted
-and withdrawn, and guest mode, valet mode and driver identity all change it while
-the system runs.
+and withdrawn, and guest mode, valet mode and driver identity all change it
+while the system runs.
 
 **A mapping is a capability, and capabilities are not revocable.** Once a
 consumer maps a region there is no mechanism to take it back. Therefore:
@@ -418,22 +422,22 @@ compiler whose output no runtime can consume.
 **Phase 1 — types, payloads, codec.** Constraints enforced in the type (private
 field, `TryFrom`, `new_unchecked` for the decoder — the same operation as
 ADR-0013 decision 4's width narrowing). Derives. Rust naming. The types induced
-by interactions: tuple returns, inline `T | E` unions, request shapes. The proto3
-projection and the codec.
+by interactions: tuple returns, inline `T | E` unions, request shapes. The
+proto3 projection and the codec.
 
 Phase 1 adds a corpus entry containing interactions to the `rustc` tests of §2.3
-**first**, since it depends on no decision here and is what makes everything else
-verifiable.
+**first**, since it depends on no decision here and is what makes everything
+else verifiable.
 
 **Phase 2 — client and server.** A concrete client generic over a transport, and
-a server trait the provider implements. `query`, `command` and `event` are calls;
-`signal` and `fixed` are the store. Which is why phase 2 converges on E9.11
-rather than being a third answer: a stateful client half is a store, a
+a server trait the provider implements. `query`, `command` and `event` are
+calls; `signal` and `fixed` are the store. Which is why phase 2 converges on
+E9.11 rather than being a third answer: a stateful client half is a store, a
 server-side ordinal router is a dispatcher.
 
-Async touches two of five kinds. `signal`, `event` and `fixed` are not calls, and
-`command` is fire-and-forget by §6.1 — so the shipped `async fn set_gear(&self)`
-is a conformance question, listed below.
+Async touches two of five kinds. `signal`, `event` and `fixed` are not calls,
+and `command` is fire-and-forget by §6.1 — so the shipped
+`async fn set_gear(&self)` is a conformance question, listed below.
 
 The two phases also answer ADR-0013 open item 1: phase 1 is the wire ceiling,
 phase 2 restores the interaction face on the grounds of decision 1, that a
@@ -445,23 +449,25 @@ backend is classified by what its target can represent.
    `[0..300]` flips `uint8` to `uint16`, and loosening a string bound does the
    same — both shift every subsequent offset in a laid-out store. ADR-0013
    decision 6 already required this closed before a FlatBuffers backend ships.
-2. **E3.1 plus the deferred label promotion.** `SIL_B`, `CAL_2` and `PRIVATE` are
-   free-form tokens; ADR-0008 decision 3 deferred promoting `labels` to
+2. **E3.1 plus the deferred label promotion.** `SIL_B`, `CAL_2` and `PRIVATE`
+   are free-form tokens; ADR-0008 decision 3 deferred promoting `labels` to
    attributes. The assurance dimensions need structure — a declared dimension,
    scale and direction — plus a diff category, where both raising and lowering a
    level are breaking.
-3. **rsdl has no protection-domain concept.** §7 places components on targets but
-   nothing says two components share a memory protection domain, which is the
-   partition boundary §9.2's write mode derives from.
+3. **rsdl has no protection-domain concept.** §7 places components on targets
+   but nothing says two components share a memory protection domain, which is
+   the partition boundary §9.2's write mode derives from.
 4. **Whether the assurance zone is one attribute or two.** Safety and cyber
    collapse for the write-mode decision but partition the system differently —
    safety by criticality, security by exposure. A QM infotainment stack is the
    highest-value attack surface in the vehicle.
-5. **Scoping.** Which deployment tiers, whether AAOS is a target, whether Classic
-   AUTOSAR is. Several decisions above — `repr(C)` as a constrained-tier fallback,
-   wasm viability, the FFI wrapper's value — resolve once these are answered.
-6. **Byte-level conformance testing** against a `protoc`-generated implementation:
-   packed repeated scalars, canonical field ordering, malformed-input robustness.
+5. **Scoping.** Which deployment tiers, whether AAOS is a target, whether
+   Classic AUTOSAR is. Several decisions above — `repr(C)` as a constrained-tier
+   fallback, wasm viability, the FFI wrapper's value — resolve once these are
+   answered.
+6. **Byte-level conformance testing** against a `protoc`-generated
+   implementation: packed repeated scalars, canonical field ordering,
+   malformed-input robustness.
 7. **Unknown fields on decode.** proto3 preserves them for proxy round-trip;
    carrying fields the contract does not describe is arguably wrong for an SSOT,
    but dropping them breaks the gateway case.
@@ -484,8 +490,8 @@ backend is classified by what its target can represent.
   9 on canonicity and decision 14 on the binary round-trip limit
 - [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md) — the
   coherence rule and the RPC response bound
-- [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md) —
-  the pinned transform, RIDL-149, decision 4's field exclusion, decision 6's
+- [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
+  — the pinned transform, RIDL-149, decision 4's field exclusion, decision 6's
   projection properties, decision 8 on deployment facts, decision 9 on `fixed`
 - [`2026-08-03-schema-projection-design.md`](2026-08-03-schema-projection-design.md)
   — the store and dispatcher shapes phase 2 converges on
