@@ -314,8 +314,26 @@ be generated, and in what order", which is what this record answers.
     Read(ordinal)        → Sample        signal, fixed
     Subscribe(ordinal)   → stream Sample signal, event
     Call(ordinal, args)  → Reply         query
-    Send(ordinal, args)  → Empty         command
+    Send(ordinal, args)  → Empty         command — see the delivery note below
     ```
+
+    **`Send` returns `Empty` on acceptance and a transport status on
+    non-delivery**, and the two are different channels. ridl §6.1 makes a
+    command fallible in exactly two ways — Stratum 2, a negative acknowledgment
+    for an invalid payload or a failed precondition, and Stratum 3, undelivered
+    after the ack times out — and says both are "visible to the calling runtime,
+    none to the contract". So the failure must not be a field of the reply
+    message, which would make it a contract value and violate RIDL-104; it
+    belongs in gRPC's native error channel, which is where ADR-0013 already
+    places an error arm on a wire target.
+
+    That also bounds the retry policy rather than leaving it a magic number.
+    §9.3's `max` on a command is a response bound **on acceptance**, so a
+    runtime retrying with backoff must exhaust its attempts within that bound:
+    the budget derives from the declared bound and the link's round trip, and
+    reaching it is the Stratum 3 detection. A caller learns that delivery
+    failed; it never learns an execution outcome, which §6.1 keeps out of the
+    contract and routes back as state.
 
     **What decision 2 forbids is a service that understates the contract**, and
     that is what a per-interaction projection does:
@@ -426,9 +444,15 @@ be generated, and in what order", which is what this record answers.
    and dropping them breaks the gateway case decision 13 supports.
 4. **Whose envelope an invalid sample carries** — the rejected publication's or
    the last good value's. ridl §4.5 implies the former and states neither.
-5. **Whether `async fn` on a `command` is a conformance defect.** The shipped
-   consumer trait has the application await an acknowledgment ridl §6.1 says is
-   not application-visible and §6.2 says application code stays uninvolved in.
+5. **Whether `async fn` on a `command` is a conformance defect** — narrowed by
+   decision 18 but not closed. The shipped consumer trait has the application
+   await an acknowledgment ridl §6.1 says is not application-visible. Decision
+   18 settles the analogous question for the access service: awaiting _delivery_
+   is legitimate, because non-delivery is a Stratum 3 detection the runtime owes
+   the caller, while the acceptance value itself never becomes a contract
+   return. What remains open is whether a generated Rust `async fn` returning
+   `()` states that distinction clearly enough, or whether the signature should
+   carry a runtime delivery result instead.
 6. **The interface-granularity rule is unstated in ridl §14.** Splitting an
    interface splits the computation that produces it; nothing says so.
 7. **Scoping.** Which deployment tiers are targets, and whether Android
