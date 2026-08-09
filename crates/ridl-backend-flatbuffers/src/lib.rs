@@ -137,6 +137,15 @@ impl Namespace {
         }
     }
 
+    /// One union's member-name scope — the alias names, which the target
+    /// scopes like an enum's values ([`emit_union`]).
+    fn members(union_name: &str) -> Self {
+        Self {
+            scope: format!("union `{union_name}`"),
+            claimed: HashMap::new(),
+        }
+    }
+
     /// Registers the FlatBuffers name that `source` — a plain description
     /// such as ``struct `Reading` `` — is about to emit. The second claim on
     /// one name is refused with an error naming both claimants.
@@ -201,7 +210,9 @@ fn emit_structs(
                 emit_struct(out, package, &decl.name, def, &mut induced)?;
             }
             Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def)?,
-            Some(v2::decl::Kind::UnionDef(def)) => emit_union(out, &decl.name, def, names)?,
+            Some(v2::decl::Kind::UnionDef(def)) => {
+                emit_union(out, package, &decl.name, def, names)?;
+            }
             _ => {}
         }
     }
@@ -240,9 +251,9 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
 }
 
 /// One union as two declarations (typl §10): `union <Name>Union` listing the
-/// arm types, and the wrapper `table <Name>` holding it — the declared name
-/// goes to the wrapper, because the wrapper is what a field position
-/// references ([`named_field_type`]).
+/// arms, and the wrapper `table <Name>` holding it — the declared name goes
+/// to the wrapper, because the wrapper is what a field position references
+/// ([`named_field_type`]).
 ///
 /// The wrapper exists because a native union owns TWO id slots: a union
 /// field declared `(id: N)` puts its hidden `_type` discriminant at `N - 1`
@@ -254,6 +265,19 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
 /// not 0, because the implicit `_type` takes 0 (verified against `flatc`
 /// 25.12.19).
 ///
+/// Every arm is emitted with FlatBuffers union alias syntax —
+/// `member: Type` — accepted by both `flatc` 25.12.19 and `planus`, so the
+/// form stays inside the validity oracle. The member name is the typl arm
+/// name through the pinned transform, not the type name, which keeps two
+/// arms sharing one type distinct — a union listing one type twice without
+/// aliases is refused by the target ("enum value already exists"). The
+/// member names are claimed in the union's own scope ([`Namespace`]),
+/// because the target scopes them like an enum's values and two arm names
+/// colliding under the transform would emit that same redefinition —
+/// ADR-0017 decision 5 places this guard in the backend. An arm whose
+/// target is not a table is refused before any of this
+/// ([`check_union_arm_target`]).
+///
 /// A hand-rolled discriminant-plus-arms table is not an alternative: it
 /// cannot hold typl §10's guarantee that exactly one arm is active, because
 /// nothing ties the discriminant to the arm that is set. A retired arm
@@ -261,6 +285,7 @@ fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) -> Result<(), Gene
 /// same as a retired value in [`emit_enum`].
 fn emit_union(
     out: &mut String,
+    package: &v2::Package,
     name: &str,
     def: &v2::UnionDef,
     names: &mut Namespace,
@@ -270,12 +295,55 @@ fn emit_union(
         &union_name,
         &format!("the union declaration generated for union `{name}`"),
     )?;
-    let arms: Vec<&str> = def.arms.iter().map(|arm| arm.type_ref.as_str()).collect();
+    let mut members = Namespace::members(&union_name);
+    let mut arms: Vec<String> = Vec::new();
+    for arm in &def.arms {
+        check_union_arm_target(package, name, arm)?;
+        let member = ridl_ir::name::snake_case(&arm.name);
+        members.claim(&member, &format!("arm `{}` of union `{name}`", arm.name))?;
+        arms.push(format!("{member}: {}", arm.type_ref));
+    }
     out.push_str(&format!("\nunion {union_name} {{ {} }}\n", arms.join(", ")));
     out.push_str(&format!(
         "\ntable {name} {{\n  value: {union_name} (id: 1);\n}}\n"
     ));
     Ok(())
+}
+
+/// Refuses a union arm whose target FlatBuffers cannot carry: a union
+/// member must be a table in this projection. A named scalar and an enum
+/// set inline at their use sites ([`named_field_type`]), so neither has a
+/// declaration for the union list to reference at all, and an enum has one
+/// but is not a table. A struct arm references its table, and a union arm
+/// references the target union's wrapper table — both are tables, so both
+/// pass. Resolution is same-package only, the standing caveat of this
+/// backend; an unresolved reference is emitted as written.
+fn check_union_arm_target(
+    package: &v2::Package,
+    union_name: &str,
+    arm: &v2::UnionArm,
+) -> Result<(), GenerateError> {
+    let Some(decl) = package.decls.iter().find(|decl| decl.name == arm.type_ref) else {
+        return Ok(());
+    };
+    let refused = match &decl.kind {
+        Some(v2::decl::Kind::TypeDef(_)) => {
+            "a named scalar, which inlines to a bare scalar and has no declaration to reference"
+        }
+        Some(v2::decl::Kind::EnumDef(_)) => "an enum, which is not a table",
+        Some(v2::decl::Kind::EnumSetDef(_)) => {
+            "an enum set, which inlines to an integer and has no declaration to reference"
+        }
+        _ => return Ok(()),
+    };
+    Err(GenerateError {
+        message: format!(
+            "union `{union_name}` arm `{}` is typed by `{}`, {refused} — a FlatBuffers \
+             union member must be a table, so the arm is refused rather than emitted as \
+             a schema the target rejects.",
+            arm.name, arm.type_ref
+        ),
+    })
 }
 
 /// One struct as one FlatBuffers `table`, one field per member, its `id` the
@@ -477,6 +545,19 @@ fn resolve_field_type(
                 element,
                 induced,
             )?;
+            // The kind checks above cannot see an element that *resolves*
+            // to a vector: `bytes` — bare or behind a named scalar — maps
+            // to `[ubyte]` ([`fbs_primitive`], [`fbs_scalar`]), so the
+            // resolved text is checked too.
+            if element_text.starts_with('[') {
+                return Err(GenerateError {
+                    message: format!(
+                        "{owner}.{field_name} is an array whose element resolves to \
+                         `{element_text}`, itself a FlatBuffers vector — a vector's \
+                         element cannot be a vector. Wrap the element in a struct."
+                    ),
+                });
+            }
             Ok((format!("[{element_text}]"), false, comment))
         }
         Some(v2::field_type::Kind::Map(map)) => {
@@ -645,7 +726,7 @@ fn emit_induced_tables(
             if *previous != item.kind {
                 return Err(GenerateError {
                     message: format!(
-                        "the generated table name {} is claimed by two different container \
+                        "the generated table name `{}` is claimed by two different container \
                          types; a container generates a table named for the field path that \
                          reaches it, and two different paths spelled one name here — rename \
                          a field so they differ.",

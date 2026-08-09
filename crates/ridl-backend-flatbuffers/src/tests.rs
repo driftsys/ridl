@@ -390,10 +390,12 @@ fn a_union_is_isolated_in_a_wrapper_table() {
     );
     let generated = generate(&package).expect("generate");
 
+    // Alias syntax: the member name is the typl arm name through the pinned
+    // transform, so two arms may share one type without colliding.
     assert!(
         generated
             .fbs_source
-            .contains("union PayloadUnion { Speed, GearIndex }"),
+            .contains("union PayloadUnion { speed: Speed, gear_index: GearIndex }"),
         "got:\n{}",
         generated.fbs_source
     );
@@ -525,6 +527,140 @@ fn a_generated_name_colliding_with_a_declared_type_is_refused() {
         "got: {}",
         error.message
     );
+}
+
+#[test]
+fn an_array_of_a_bytes_backed_scalar_is_refused() {
+    // `bytes` maps to `[ubyte]`, itself a vector, so an array of a
+    // bytes-backed named scalar would emit `[[ubyte]]` — a nested vector
+    // both compilers refuse. The guard must read the resolved element text,
+    // not only the element's IR kind.
+    let mut package = struct_package("Chunked", "chunks", 1, array_of(named_type("Blob")));
+    package.decls.insert(
+        0,
+        v2::Decl {
+            name: "Blob".to_string(),
+            kind: Some(v2::decl::Kind::TypeDef(v2::TypeDef {
+                backing: Some(v2::Backing {
+                    kind: Some(v2::backing::Kind::Primitive(
+                        v2::PrimitiveType::Bytes as i32,
+                    )),
+                }),
+                ..Default::default()
+            })),
+            ..Default::default()
+        },
+    );
+
+    let error = generate(&package).expect_err("must refuse");
+    assert!(error.message.contains("chunks"), "got: {}", error.message);
+    assert!(error.message.contains("[ubyte]"), "got: {}", error.message);
+}
+
+#[test]
+fn a_union_arm_typed_by_a_named_scalar_is_refused() {
+    // A named scalar inlines at its use sites, so no FlatBuffers
+    // declaration exists for the union list to reference — flatc: "type
+    // referenced but not defined".
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Speed".to_string(),
+                kind: Some(v2::decl::Kind::TypeDef(speed_type_def())),
+                ..Default::default()
+            },
+            union_decl("Payload", &[("speed", 1, "Speed")]),
+        ],
+        ..Default::default()
+    };
+
+    let error = generate(&package).expect_err("must refuse");
+    assert!(error.message.contains("`speed`"), "got: {}", error.message);
+    assert!(error.message.contains("`Speed`"), "got: {}", error.message);
+    assert!(
+        error.message.contains("named scalar"),
+        "got: {}",
+        error.message
+    );
+}
+
+#[test]
+fn a_union_arm_typed_by_an_enum_is_refused() {
+    // An enum has a declaration, but a FlatBuffers union member must be a
+    // table.
+    let mut package = enum_package("Gear", vec![("PARK", 1)]);
+    package
+        .decls
+        .push(union_decl("Payload", &[("gear", 1, "Gear")]));
+
+    let error = generate(&package).expect_err("must refuse");
+    assert!(error.message.contains("`gear`"), "got: {}", error.message);
+    assert!(error.message.contains("`Gear`"), "got: {}", error.message);
+    assert!(error.message.contains("enum"), "got: {}", error.message);
+}
+
+#[test]
+fn a_union_arm_typed_by_an_enum_set_is_refused() {
+    // An enum set inlines to an integer at its use sites, so no FlatBuffers
+    // declaration exists for the union list to reference.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Warnings".to_string(),
+                kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                    backing_enum: None,
+                    bits: enum_values(vec![("LOW_FUEL", 0)]),
+                    width: v2::IntWidth::U8 as i32,
+                })),
+                ..Default::default()
+            },
+            union_decl("Payload", &[("warnings", 1, "Warnings")]),
+        ],
+        ..Default::default()
+    };
+
+    let error = generate(&package).expect_err("must refuse");
+    assert!(
+        error.message.contains("`warnings`"),
+        "got: {}",
+        error.message
+    );
+    assert!(
+        error.message.contains("`Warnings`"),
+        "got: {}",
+        error.message
+    );
+    assert!(error.message.contains("enum set"), "got: {}", error.message);
+}
+
+#[test]
+fn two_union_arms_sharing_one_type_emit_distinct_member_names() {
+    // Without aliases a union listing one type twice is refused by the
+    // target ("enum value already exists"); the alias names keep the two
+    // arms distinct.
+    let package = v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            arm_struct("Speed"),
+            union_decl(
+                "Position",
+                &[("current", 1, "Speed"), ("target", 2, "Speed")],
+            ),
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .fbs_source
+            .contains("union PositionUnion { current: Speed, target: Speed }"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
 }
 
 /// A package with one struct `struct_name` holding one field — the generic
