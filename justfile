@@ -120,7 +120,10 @@ test:
 # type-check cleanly for this target even as a normal dependency, because
 # wasm32-unknown-unknown carries `std::fs` as a compiling (if not
 # functioning) stub. This recipe covers the crates; it does not by itself
-# guarantee catching that specific mistake.
+# guarantee catching that specific mistake. The guarantee lives in
+# `xtask/tests/oracle_boundary.rs`, which reads the resolved dependency
+# graph's edge kind directly (`cargo test -p xtask`, part of `just test`)
+# and is what actually enforces that boundary.
 wasm-check:
     #!/usr/bin/env bash
     set -euo pipefail
