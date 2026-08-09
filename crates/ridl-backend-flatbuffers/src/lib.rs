@@ -5,12 +5,15 @@
 //! and the interaction identity table — and nothing above them. No
 //! `rpc_service`, no reply carriers, no store.
 //!
-//! Three rules here differ from the proto3 backend and are not
-//! interchangeable with it: a union is isolated in a wrapper table because a
-//! native union owns two id slots; a struct is always emitted as a `table`
-//! because a FlatBuffers `struct` fabricates a value after a compatible
-//! append; and enum values are scoped to their enum rather than to the
-//! namespace, so no value prefixing is emitted.
+//! Four rules here differ from the proto3 backend and are not interchangeable
+//! with it: a union is isolated in a wrapper table because a native union
+//! owns two id slots; a struct is always emitted as a `table` because a
+//! FlatBuffers `struct` fabricates a value after a compatible append; enum
+//! values are scoped to their enum rather than to the namespace, so no value
+//! prefixing is emitted and no zero member is synthesized into the
+//! declaration; and a table field whose enum declares no zero-valued member
+//! takes `= null`, because FlatBuffers gives every table field a default and
+//! cannot mark a scalar or enum field required in any case.
 
 use ridl_ir::v2;
 
@@ -67,20 +70,44 @@ fn screaming_snake_case(name: &str) -> String {
 }
 
 /// Tier 1 (ADR-0013 decision 2): walks every top-level declaration, emitting
-/// a `table` for each struct ([`emit_struct`]). A named scalar and an enum
-/// set inline at each use site instead of becoming a declaration of their
-/// own, the same as in `ridl-backend-proto`'s tier 1, and a constant is never
-/// emitted (ADR-0013 decision 5) — so a `TypeDef` or `ConstDef` declaration
-/// simply contributes nothing here. An enum, an enum set and a union are
-/// tier 1 as well, but are out of this task's scope; a later task adds their
-/// match arms alongside this one.
+/// a `table` for each struct ([`emit_struct`]) and an `enum` for each typl
+/// enum ([`emit_enum`]). A named scalar and an enum set inline at each use
+/// site instead of becoming a declaration of their own, the same as in
+/// `ridl-backend-proto`'s tier 1, and a constant is never emitted (ADR-0013
+/// decision 5) — so a `TypeDef`, `EnumSetDef` or `ConstDef` declaration
+/// simply contributes nothing here. A union is tier 1 as well, but is out of
+/// this task's scope; a later task adds its match arm alongside these.
 fn emit_structs(out: &mut String, package: &v2::Package) -> Result<(), GenerateError> {
     for decl in &package.decls {
-        if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind {
-            emit_struct(out, package, &decl.name, def)?;
+        match &decl.kind {
+            Some(v2::decl::Kind::StructDef(def)) => {
+                emit_struct(out, package, &decl.name, def)?;
+            }
+            Some(v2::decl::Kind::EnumDef(def)) => emit_enum(out, &decl.name, def),
+            _ => {}
         }
     }
     Ok(())
+}
+
+/// One enum as one FlatBuffers `enum` (typl §8): values keep their explicitly
+/// assigned numbers, unprefixed and in declaration order, because FlatBuffers
+/// scopes an enum's values inside the enum rather than as siblings of it —
+/// two typl enums in one package may each declare a value named `OK` without
+/// conflict, unlike proto3. A `Reserved` retired value ([`v2::EnumDef::reserved`])
+/// contributes nothing: FlatBuffers has no `reserved` construct for an enum
+/// declaration.
+///
+/// The underlying type is always `long`. `EnumValue.value` is `int64` in the
+/// IR, and narrowing to the smallest type that fits the declared values would
+/// make the underlying type a function of those values — a later value could
+/// then widen it, which is a wire change under an otherwise compatible edit.
+fn emit_enum(out: &mut String, name: &str, def: &v2::EnumDef) {
+    out.push_str(&format!("\nenum {name} : long {{\n"));
+    for value in &def.values {
+        out.push_str(&format!("  {} = {},\n", value.name, value.value));
+    }
+    out.push_str("}\n");
 }
 
 /// One struct as one FlatBuffers `table`, one field per member, its `id` the
@@ -117,11 +144,20 @@ fn emit_struct(
                 let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
                     message: format!("{name}.{} carries no type in the IR.", field.name),
                 })?;
-                let (scalar, comment) = resolve_field_type(package, name, &field.name, ty)?;
+                let (scalar, needs_null_default, comment) =
+                    resolve_field_type(package, name, &field.name, ty)?;
                 if let Some(comment) = comment {
                     out.push_str(&format!("  {comment}\n"));
                 }
-                out.push_str(&format!("  {field_name}: {scalar} (id: {id});\n"));
+                // `flatc` refuses a field whose implicit default of 0 is not
+                // a member of its enum. This applies whether or not the typl
+                // field is optional: FlatBuffers cannot mark a scalar or
+                // enum field `required` in any case, so `= null` is the
+                // rendering that never fabricates a reading.
+                let default_clause = if needs_null_default { " = null" } else { "" };
+                out.push_str(&format!(
+                    "  {field_name}: {scalar}{default_clause} (id: {id});\n"
+                ));
             }
             Some(v2::struct_member::Member::Reserved(reserved)) => {
                 let id = member_id(name, reserved.ordinal)?;
@@ -153,18 +189,21 @@ fn member_id(owner: &str, ordinal: u32) -> Result<u32, GenerateError> {
 
 /// The FlatBuffers type at one field position — tier 1's data-only subset: a
 /// bare primitive resolves directly ([`fbs_primitive`]), and a named-type
-/// reference inlines a named scalar to its backing FlatBuffers scalar
-/// ([`named_field_type`]). A container field (array, map, tuple) or a
-/// stream is out of this task's scope; later tasks extend this match.
+/// reference inlines a named scalar, enum or enum set to its backing
+/// FlatBuffers type ([`named_field_type`]). The middle element of the result
+/// is whether the field needs an explicit `= null` default (only ever true
+/// for an enum reference — see [`emit_struct`]); a container field (array,
+/// map, tuple) or a stream is out of this task's scope, and later tasks
+/// extend this match.
 fn resolve_field_type(
     package: &v2::Package,
     owner: &str,
     field_name: &str,
     ty: &v2::FieldType,
-) -> Result<(String, Option<String>), GenerateError> {
+) -> Result<(String, bool, Option<String>), GenerateError> {
     match ty.kind.as_ref() {
         Some(v2::field_type::Kind::Primitive(primitive)) => {
-            Ok((fbs_primitive(*primitive).to_string(), None))
+            Ok((fbs_primitive(*primitive).to_string(), false, None))
         }
         Some(v2::field_type::Kind::Named(reference)) => {
             named_field_type(package, owner, field_name, reference)
@@ -178,17 +217,31 @@ fn resolve_field_type(
 }
 
 /// A resolved named-type reference at a field position, same-package only —
-/// [`generate_with`]'s `others` is not yet consulted here. A named scalar
-/// inlines to its FlatBuffers scalar and leaves its declared form as a
-/// comment on the line above it ([`fbs_scalar`], [`constraint_comment`]).
-/// Any other declaration kind is refused: only a named scalar is projected
-/// from a field position yet.
+/// [`generate_with`]'s `others` is not yet consulted here.
+///
+/// A named scalar inlines to its FlatBuffers scalar and leaves its declared
+/// form as a comment on the line above it ([`fbs_scalar`],
+/// [`constraint_comment`]).
+///
+/// An enum resolves to its own declared name ([`emit_enum`]), and reports
+/// whether the field needs `= null`: `flatc` requires every table field to
+/// carry a default, and refuses one whose implicit default of 0 is not a
+/// member of the referenced enum — so this is true exactly when the enum
+/// declares no zero-valued member.
+///
+/// An enum set has no declaration of its own — a FlatBuffers enum field
+/// holds one value and cannot represent a combination of bits — so it
+/// resolves to the FlatBuffers scalar for its declared width, with its bit
+/// names and positions as a comment ([`enum_set_field_type`]).
+///
+/// Any other declaration kind is refused: only a named scalar, enum or enum
+/// set is projected from a field position yet.
 fn named_field_type(
     package: &v2::Package,
     owner: &str,
     field_name: &str,
     reference: &str,
-) -> Result<(String, Option<String>), GenerateError> {
+) -> Result<(String, bool, Option<String>), GenerateError> {
     let Some(decl) = package.decls.iter().find(|decl| decl.name == *reference) else {
         return Err(GenerateError {
             message: format!(
@@ -200,16 +253,52 @@ fn named_field_type(
     match &decl.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Ok((
             fbs_scalar(td).to_string(),
+            false,
             Some(constraint_comment(reference, td)),
         )),
+        Some(v2::decl::Kind::EnumDef(def)) => {
+            let zero_declared = def.values.iter().any(|value| value.value == 0);
+            Ok((decl.name.clone(), !zero_declared, None))
+        }
+        Some(v2::decl::Kind::EnumSetDef(esd)) => {
+            let (scalar, comment) = enum_set_field_type(esd);
+            Ok((scalar, false, comment))
+        }
         _ => Err(GenerateError {
             message: format!(
                 "{owner}.{field_name} references `{reference}`, a declaration kind this \
-                 tier does not project yet — only a named scalar may be referenced from a \
-                 field position here."
+                 tier does not project yet — only a named scalar, enum or enum set may be \
+                 referenced from a field position here."
             ),
         }),
     }
+}
+
+/// The FlatBuffers scalar and use-site comment for an enum set (mirrors
+/// `ridl-backend-proto`'s `enum_set_field_type`). A FlatBuffers enum field
+/// holds one value, and an enum set is a combination of bits, so it gains no
+/// declaration of its own — like a named scalar, it resolves at each use
+/// site instead. The scalar is [`fbs_scalar`] at the enum set's declared
+/// width; the bit names and positions become one comment line each, in the
+/// form `LOW_FUEL = bit 0`. Emitting a FlatBuffers enum here instead would
+/// imply a guarantee the target does not make (ADR-0013 decision 2): one
+/// enum field holds one value, never a combination of bits.
+fn enum_set_field_type(esd: &v2::EnumSetDef) -> (String, Option<String>) {
+    let scalar = fbs_scalar(&v2::TypeDef {
+        width: Some(v2::type_def::Width::IntWidth(esd.width)),
+        ..Default::default()
+    });
+    let lines: Vec<String> = esd
+        .bits
+        .iter()
+        .map(|bit| format!("// {} = bit {}", bit.name, bit.value))
+        .collect();
+    let comment = if lines.is_empty() {
+        None
+    } else {
+        Some(lines.join("\n  "))
+    };
+    (scalar.to_string(), comment)
 }
 
 /// The FlatBuffers scalar for a direct primitive use at a field position. A

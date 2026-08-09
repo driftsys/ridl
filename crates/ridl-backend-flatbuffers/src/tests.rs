@@ -318,6 +318,67 @@ fn a_named_scalar_inlines_and_leaves_its_constraint_in_a_comment() {
     compile_with_planus("veh.common.fbs", &generated.fbs_source);
 }
 
+#[test]
+fn an_enum_keeps_its_values_unprefixed_with_an_explicit_underlying_type() {
+    let package = enum_package("GearPosition", vec![("PARK", 1), ("DRIVE", 2)]);
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated
+            .fbs_source
+            .contains("enum GearPosition : long {\n  PARK = 1,\n  DRIVE = 2,\n}"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn a_field_typed_by_an_enum_without_a_zero_member_takes_null() {
+    // flatc: "default value of `0` for field `g` is not part of enum `Gear`".
+    // FlatBuffers cannot mark a scalar or enum field required either, so
+    // `= null` is the honest rendering — it never fabricates a reading.
+    let package = enum_and_field("Gear", vec![("PARK", 1)], "g");
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.fbs_source.contains("g: Gear = null (id: 0);"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn a_field_typed_by_an_enum_declaring_zero_needs_no_null() {
+    let package = enum_and_field("Mode", vec![("OFF", 0), ("ON", 1)], "m");
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.fbs_source.contains("m: Mode (id: 0);"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+#[test]
+fn an_enum_set_becomes_an_integer_with_its_bits_in_a_comment() {
+    // A FlatBuffers enum field holds one value, so it cannot represent a
+    // combination of bits. Emitting one would imply a guarantee the target
+    // does not make (ADR-0013 decision 2).
+    let package = enum_set_and_field("Warnings", vec![("LOW_FUEL", 0), ("DOOR_AJAR", 1)]);
+    let generated = generate(&package).expect("generate");
+    assert!(
+        !generated.fbs_source.contains("enum Warnings"),
+        "an enum set must not become a FlatBuffers enum:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        generated.fbs_source.contains("LOW_FUEL = bit 0"),
+        "got:\n{}",
+        generated.fbs_source
+    );
+    compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
 fn field_member(name: &str, ordinal: u32, r#type: v2::FieldType) -> v2::StructMember {
     v2::StructMember {
         member: Some(v2::struct_member::Member::Field(v2::Field {
@@ -477,6 +538,82 @@ fn widths_package() -> v2::Package {
     v2::Package {
         name: "veh.common".to_string(),
         decls,
+        ..Default::default()
+    }
+}
+
+/// One `(name, value)` pair per enum value or enum-set bit — `EnumValue` is
+/// the shared IR type for both (typl §8, §9.1).
+fn enum_values(values: Vec<(&str, i64)>) -> Vec<v2::EnumValue> {
+    values
+        .into_iter()
+        .map(|(name, value)| v2::EnumValue {
+            name: name.to_string(),
+            value,
+            doc: String::new(),
+        })
+        .collect()
+}
+
+/// A package with one top-level enum declaration named `name`, its values in
+/// declaration order.
+fn enum_package(name: &str, values: Vec<(&str, i64)>) -> v2::Package {
+    v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![v2::Decl {
+            name: name.to_string(),
+            kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                values: enum_values(values),
+                reserved: Vec::new(),
+            })),
+            ..Default::default()
+        }],
+        ..Default::default()
+    }
+}
+
+/// [`enum_package`] plus one struct with a single field of that enum type at
+/// ordinal 1, named `field_name` — enough to exercise the enum-typed field's
+/// default-value rule.
+fn enum_and_field(enum_name: &str, values: Vec<(&str, i64)>, field_name: &str) -> v2::Package {
+    let mut package = enum_package(enum_name, values);
+    package.decls.push(v2::Decl {
+        name: "Holder".to_string(),
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(field_name, 1, named_type(enum_name))],
+            fixed_layout: false,
+        })),
+        ..Default::default()
+    });
+    package
+}
+
+/// A package with one top-level standalone enum-set declaration named
+/// `name`, its bits in declaration order, plus one struct with a single
+/// field of that enum-set type at ordinal 1 — enough to exercise the
+/// no-declaration, comment-only use-site rule.
+fn enum_set_and_field(name: &str, bits: Vec<(&str, i64)>) -> v2::Package {
+    v2::Package {
+        name: "veh.common".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: name.to_string(),
+                kind: Some(v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+                    backing_enum: None,
+                    bits: enum_values(bits),
+                    width: v2::IntWidth::U8 as i32,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Holder".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("warnings", 1, named_type(name))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
         ..Default::default()
     }
 }
