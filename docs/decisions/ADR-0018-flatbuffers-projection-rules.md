@@ -2,13 +2,14 @@
 
 ## Status
 
-Accepted — 2026-08-09. Scope: six rules the second wire backend needed and no
+Accepted — 2026-08-09. Scope: seven rules the second wire backend needed and no
 earlier record supplied — where a typl union lives when the target's native
 union owns two id slots, what a union arm that is not itself a table becomes,
 which of `table` and `struct` a typl struct projects to, what a map becomes on a
-target with no map type, whose name scopes the collision guard models, and what
-default an enum-typed field carries when its enum declares no zero member. All
-six are FlatBuffers-scoped; none binds another backend.
+target with no map type, whose name scopes the collision guard models, what
+default an enum-typed field carries when its enum declares no zero member, and
+what happens to a name that reaches a word the validity oracle reserves. All
+seven are FlatBuffers-scoped; none binds another backend.
 
 Written from roadmap story E9.9, which built `crates/ridl-backend-flatbuffers`.
 The reasoning trail is
@@ -75,6 +76,13 @@ siblings of their enum. FlatBuffers does not.
 `flatc` refuses a field whose implicit default of 0 is not a member of its enum,
 and refuses `required` on any scalar or enum field, so some rendering had to be
 chosen for a field typed by a zero-less enum.
+
+A seventh question arrived at the branch's final review: **the validity oracle's
+grammar is narrower than the reference compiler's.** `planus` reserves nine
+words that `flatc` treats as contextual identifiers, an emitted name can reach
+one through five positions, and the pinned transform can manufacture one from a
+name that never contained it. No record said whether such a schema is emitted or
+refused.
 
 ## Decision
 
@@ -171,17 +179,41 @@ chosen for a field typed by a zero-less enum.
    already not representable on this target, and surfacing absence beats
    inventing a value.
 
+7. **A name that reaches a word the validity oracle reserves is emitted as-is,
+   never refused.** `planus` 1.3.0 reserves nine words that `flatc` 25.12.19
+   treats as contextual identifiers — `table`, `namespace`, `attribute`,
+   `include`, `root_type`, `rpc_service`, `file_extension`, `file_identifier`,
+   `native_include`. They reach an emitted schema through five positions — a
+   table field name, a union arm alias, an enum value name, a declared type
+   name, and a namespace segment — and the pinned transform (ADR-0016 decision
+   2) can manufacture one: a field written `rootType : integer [0..10]` emits
+   `root_type`. Measured in all five positions: `flatc` accepts every one of the
+   nine, and `planus` rejects each with "unrecognized token".
+
+   The emitted schema is therefore valid FlatBuffers; it is the oracle that is
+   narrower than the reference compiler. Refusing would let a test dependency
+   constrain what the language can express — rejecting a contract over a field
+   the author spelled `rootType` — which fails ADR-0016 decision 6's totality
+   property the same way the refusal decision 2 reversed did. No renaming or
+   escaping is applied either: the pinned transform is the whole of the name
+   projection (ADR-0016 decision 2), and a target-specific escape would fork it.
+   The cost this accepts is recorded under Consequences: such a name is emitted
+   and is not checked by the oracle, and a consumer whose toolchain is
+   planus-based cannot compile the schema. Ruled by the repository owner at the
+   branch's final review.
+
 ## Alternatives considered
 
-| Candidate                                                       | Verdict    | Reason                                                                                                                                                                                                           |
-| --------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A native union in the ordinal-owned slot                        | rejected   | a union field owns two id slots, shifting every later field; `flatc` refuses the schema ("field id's must be consecutive from 0")                                                                                |
-| A hand-rolled discriminant-plus-arms table (note §4.4's remedy) | superseded | cannot hold typl §10's exactly-one-arm guarantee — `flatc` accepts a discriminant naming one arm while another is set, and one with no arm set — and saves nothing: wire cost measured identical (80 bytes both) |
-| Refusing a named scalar, enum or enum set union arm             | reversed   | typl §10 permits any named type as an arm; the refusal made legal typl unprojectable where the target represents it fine with one more table (decision 2)                                                        |
-| The FlatBuffers `struct` form for a `fixed_layout` struct       | rejected   | after a compatible field append, v1 data read with the v2 schema returns the appended field fabricated from padding — ADR-0016 decision 6 property 3 fails silently                                              |
-| Emitting `(key)` on the map entry's key field                   | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — reopenable in E9.11 (see Open)                                                   |
-| Lifting `ridl-backend-proto`'s `SymbolScope`                    | rejected   | its package scope registers enum values, because proto3 scopes them as namespace siblings; FlatBuffers scopes them inside the enum, so the lift would over-refuse                                                |
-| Defaulting a zero-less enum field to its lowest declared value  | rejected   | a truncated or malformed buffer would read silently as that value — a fabricated reading, where `= null` surfaces absence as absence                                                                             |
+| Candidate                                                         | Verdict    | Reason                                                                                                                                                                                                           |
+| ----------------------------------------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A native union in the ordinal-owned slot                          | rejected   | a union field owns two id slots, shifting every later field; `flatc` refuses the schema ("field id's must be consecutive from 0")                                                                                |
+| A hand-rolled discriminant-plus-arms table (note §4.4's remedy)   | superseded | cannot hold typl §10's exactly-one-arm guarantee — `flatc` accepts a discriminant naming one arm while another is set, and one with no arm set — and saves nothing: wire cost measured identical (80 bytes both) |
+| Refusing a named scalar, enum or enum set union arm               | reversed   | typl §10 permits any named type as an arm; the refusal made legal typl unprojectable where the target represents it fine with one more table (decision 2)                                                        |
+| The FlatBuffers `struct` form for a `fixed_layout` struct         | rejected   | after a compatible field append, v1 data read with the v2 schema returns the appended field fabricated from padding — ADR-0016 decision 6 property 3 fails silently                                              |
+| Emitting `(key)` on the map entry's key field                     | deferred   | obliges the producer to sort, unchecked at read time, asserting an ordering typl §12.2 never states; `planus` cannot parse it — reopenable in E9.11 (see Open)                                                   |
+| Lifting `ridl-backend-proto`'s `SymbolScope`                      | rejected   | its package scope registers enum values, because proto3 scopes them as namespace siblings; FlatBuffers scopes them inside the enum, so the lift would over-refuse                                                |
+| Defaulting a zero-less enum field to its lowest declared value    | rejected   | a truncated or malformed buffer would read silently as that value — a fabricated reading, where `= null` surfaces absence as absence                                                                             |
+| Refusing or escaping a name that reaches a `planus` reserved word | rejected   | the schema is valid FlatBuffers — `flatc` accepts all nine words — so a refusal would let a test dependency constrain the language, and an escape would fork the pinned transform (decision 7)                   |
 
 ## Consequences
 
@@ -190,10 +222,18 @@ chosen for a field typed by a zero-less enum.
   target itself (decision 1); an appended field reads as absent rather than as a
   value invented from padding (decision 3); a missing enum value reads as
   missing (decision 6).
-- **Positive — `planus` validates 100 % of the emitted surface.** Its two
-  parsing gaps against `flatc` — `(key)` and fixed-length arrays — both fall
-  outside what this projection emits, by decision 4 and decision 3 respectively,
-  so the validity oracle covers every path the backend can take.
+- **Positive — `planus` validates every emitted construct.** Its two parsing
+  gaps against `flatc` at the construct level — `(key)` and fixed-length arrays
+  — both fall outside what this projection emits, by decision 4 and decision 3
+  respectively. The oracle's remaining gap is in the identifier dimension, not
+  the construct dimension: a name that reaches one of the nine words decision 7
+  lists is emitted, accepted by `flatc`, and not checked by `planus`.
+- **Negative — a schema whose names reach a `planus` reserved word is valid but
+  outside the oracle, and a planus-based consumer cannot compile it.** Decision
+  7 keeps the projection total; the price is that the oracle does not cover such
+  a schema, and interoperating with a consumer that generates its code with
+  `planus` requires avoiding the nine words in the five positions decision 7
+  lists — including a name the transform manufactures, such as `rootType`.
 - **Negative — indirection is paid for evolvability.** Every union costs a
   wrapper table, every non-table arm costs a box, and every struct pays the
   vtable and one indirection the `struct` form would have avoided. That is the
@@ -204,8 +244,8 @@ chosen for a field typed by a zero-less enum.
   a faithfulness loss, though not a new one: the target cannot express a
   required scalar or enum field at all.
 - **Negative — a map lookup is linear.** With no `(key)` there is no generated
-  `LookupByKey` and no binary search. The Open item names the story that may buy
-  it back.
+  `LookupByKey` and no binary search. The Open item names the story that may
+  restore it.
 - **Neutral — two scope models exist by design, not by drift.** The proto
   backend's `SymbolScope` and this backend's `Namespace` each model their own
   target's scopes, and merging them would misdescribe one target or the other.

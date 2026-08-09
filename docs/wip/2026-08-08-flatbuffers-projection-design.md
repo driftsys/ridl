@@ -298,9 +298,14 @@ It was chosen after measuring its coverage against `flatc`, not assumed:
 
 Both gaps fall outside what this projection emits — `(key)` by §3.3 and fixed
 arrays because they are legal only inside a FlatBuffers `struct`, which §3.2
-never emits. **So `planus` validates 100 % of the emitted surface**, which is
-the property that matters: E9.8's costliest defect lived in the one path a test
-was told not to validate.
+never emits. **So `planus` validates every emitted construct**, which is the
+property that matters: E9.8's costliest defect lived in the one path a test was
+told not to validate. The coverage is per-construct, not per-schema: `planus`
+also reserves nine words that `flatc` treats as contextual identifiers (`table`,
+`root_type`, `attribute`, and six more), so an emitted name that reaches one —
+including a name the pinned transform manufactures, `rootType` → `root_type` —
+is valid for `flatc` but not checked by the oracle. Found at the branch's final
+review; recorded in ADR-0018 decision 7.
 
 Also: golden snapshots pin the emitted text; the stability property is driven
 from `ridl-diff`'s classifier as E9.8's is, and here it additionally guards the

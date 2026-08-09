@@ -544,9 +544,11 @@ closed by decision — `ridl-diff` remains the sole guard for v0.1, with the
 measured cost of always-widest (2.2× on an 8-signal table, 2.6× on a 7-field
 fixed-layout struct) and the forcing case that reopens typl §17.11 recorded in
 the amendment. Validity is established by compiling every emitted schema with
-`planus-translation`, which covers 100 % of the emitted surface, and the
-stability property is driven from `ridl-diff`'s classifier, where it
-additionally guards the `(deprecated)` slot filling.
+`planus-translation`, which parses every construct this projection emits but not
+every name — a name that reaches one of the nine words `planus` reserves is
+emitted as-is, accepted by `flatc`, and not checked by the oracle (ADR-0018
+decision 7) — and the stability property is driven from `ridl-diff`'s
+classifier, where it additionally guards the `(deprecated)` slot filling.
 
 Two questions travel on to E9.11 from this story. The ADR-0013 decision 2 versus
 ADR-0016 decision 10 conflict over the `service` block is **still unresolved**:
