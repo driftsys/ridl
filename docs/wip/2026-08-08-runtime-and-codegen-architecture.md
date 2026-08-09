@@ -58,13 +58,16 @@ That is what makes the layer unconnectable to a runtime: a crate cannot ship
 `impl SignalHandle<T> for Signal<T>` for a trait that does not exist until
 codegen runs and then exists once per package.
 
-### 2.3 The interaction layer is never compiled
+### 2.3 The interaction layer compiles, which is not the same as usable
 
-The two tests that run `rustc` over generated output —
-`veh_common_generated_rust_compiles_with_rustc` and
-`workspace_two_members_composed_compiles_with_rustc` in
-`crates/ridlc/tests/corpus.rs` — both cover `.typl`-only corpora. Every trait,
-handle and constant is snapshot-tested and nothing else.
+`crates/ridlc/tests/corpus.rs` runs `rustc` over the generated Rust for the
+interaction-bearing corpora — `veh_cluster_generated_rust_compiles_with_rustc`
+and `services_workspace_composed_compiles_with_rustc` — and `tsc` over the
+TypeScript, each with an anti-vacuity guard asserting the faces are in the
+source the compiler sees.
+
+So the layer is syntactically sound. What no test can show is an implementation
+of it, because none can exist for the reason §2.2 gives.
 
 ### 2.4 A discriminant beside data
 

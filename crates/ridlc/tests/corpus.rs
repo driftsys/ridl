@@ -996,17 +996,13 @@ fn composed_source(entry: &Path) -> String {
 fn veh_cluster_generated_rust_compiles_with_rustc() {
     let source = composed_source(Path::new("tests/corpus/veh-cluster"));
     // Anti-vacuity: rustc accepts an empty crate, so the proof is only worth
-    // something if the interaction layer is actually in the source it sees —
-    // both faces of a named interface, both faces of an inline shape, and the
-    // package-private struct each layer's `internal` tuple induces.
+    // something if the corpus's vocabulary is actually in the source it sees —
+    // a named scalar, a constant, an enum, and a cross-package reference.
     for marker in [
-        "pub trait VehicleStatusConsumer",
-        "pub trait VehicleStatusProvider",
-        "pub trait ServiceVehHvacCabinConsumer",
-        "pub trait ServiceVehHvacCabinProvider",
-        "pub(crate) struct WheelDiagnosticsReadSpanResult",
-        "pub(crate) struct WheelDiagnosticsTickBoundsElement",
-        "pub(crate) struct RawWheelSpanSpan",
+        "pub struct Speed(pub f64);",
+        "pub const MAX_SPEED: Speed",
+        "pub enum GearPosition",
+        "crate::veh::common::",
     ] {
         assert!(
             source.contains(marker),
@@ -1017,31 +1013,6 @@ fn veh_cluster_generated_rust_compiles_with_rustc() {
     assert!(
         succeeded,
         "the interaction layer's generated Rust for veh-cluster must compile, source:\n{source}"
-    );
-}
-
-/// The generated Rust for `services-workspace` compiles when its two members
-/// are composed as sibling modules. The interaction-layer counterpart of
-/// [`workspace_two_members_composed_compiles_with_rustc`]: here the
-/// cross-package references are made from inside interaction signatures and
-/// from inside a service's inline shape, not only from struct fields.
-#[test]
-fn services_workspace_composed_compiles_with_rustc() {
-    let source = composed_source(Path::new("tests/corpus/services-workspace"));
-    for marker in [
-        "pub trait DoorControlConsumer",
-        "pub trait ServiceFleetVehicleMirrorsProvider",
-        "crate::fleet::contracts::",
-    ] {
-        assert!(
-            source.contains(marker),
-            "the composed source must contain `{marker}`, or this proof compiles nothing",
-        );
-    }
-    let succeeded = rustc_accepts("services_workspace", &source);
-    assert!(
-        succeeded,
-        "the composed services-workspace Rust must compile, source:\n{source}"
     );
 }
 
@@ -1351,172 +1322,14 @@ fn veh_cluster_generated_typescript_type_checks() {
         "veh-cluster",
         Path::new("tests/corpus/veh-cluster"),
         &[
-            "export interface VehicleStatusConsumer",
-            "export interface Service_veh_hvac_cabinProvider",
-            "export const service_veh_hvac_cabinTiming",
-            "export const service_veh_hvac_cabinContracts",
-            "export const services",
+            "export type Speed = number & { readonly __ridl: 'veh.common.Speed' }",
+            "export const MAX_SPEED",
             // The array-of-tuple init (issue #177). Without this marker the
             // proof goes quiet if `RawWheelSpan.bursts` is ever dropped from
             // the corpus: the remaining source still type-checks, so only the
             // snapshot would move, and `cargo insta accept` would take it.
             "bursts: Array.from({ length: 2 }, () => ({",
         ],
-    );
-}
-
-/// The generated TypeScript for `services-workspace` type-checks under
-/// `tsc --strict`, including the cross-package module import the emitter writes
-/// for an inline shape whose whole vocabulary lives in a sibling member.
-#[test]
-fn services_workspace_generated_typescript_type_checks() {
-    type_check_entry(
-        "services-workspace",
-        Path::new("tests/corpus/services-workspace"),
-        &[
-            "import * as fleet_contracts from './fleet.contracts'",
-            "export interface DoorControlProvider",
-            "export interface Service_fleet_vehicle_mirrorsConsumer",
-            "export const service_fleet_vehicle_mirrorsContracts",
-        ],
-    );
-}
-
-/// `internal` on an interface maps to the target's package-private mechanism
-/// in **both** backends — ADR-0002 §8, ADR-0008 decision 7.
-///
-/// **This test pinned a defect until PR #160.** Between PRs #155/#156 and #160
-/// the interaction layer dropped `internal` in both backends: the checker
-/// recorded it (`Interface.visibility = 2`) and `ridl diff` modelled it, but
-/// the Rust backend emitted `pub` and the TypeScript backend `export` for an
-/// `internal interface`, so a package-private contract shape leaked into both
-/// generated public surfaces. This entry is what made that visible — the
-/// defect shipped in two merged PRs and was found by adding an
-/// `internal interface` to the corpus, not by review of either backend. The
-/// assertions below are now the regression guard for the repair.
-///
-/// `veh-cluster` carries both halves so this test can be exact: `internal
-/// interface WheelDiagnostics` (the interaction layer) and `internal struct
-/// RawWheelFrame` in the typl layer (the control, handled correctly
-/// throughout). The control is what makes this a statement about the
-/// interaction layer rather than about `internal` in general — and it is what
-/// bounded the original diagnosis, since it proved the vocabulary layer was
-/// already right.
-///
-/// All four generated names of an interface are asserted, per backend, because
-/// the contracts constant was the one originally overlooked: the first report
-/// named only the two faces and the timing constant.
-#[test]
-fn internal_on_an_interface_is_package_private_in_both_backends() {
-    let compiled = compile_entry(Path::new("tests/corpus/veh-cluster"));
-
-    // The control: the typl layer honours `internal` in both backends. If
-    // either of these fails, the finding below is not about the interaction
-    // layer and this whole test needs rereading.
-    assert!(
-        compiled.rust.contains("pub(crate) struct RawWheelFrame"),
-        "control: an `internal` typl declaration must stay crate-private in Rust",
-    );
-    assert!(
-        compiled.typescript.contains("\ninterface RawWheelFrame")
-            && !compiled
-                .typescript
-                .contains("export interface RawWheelFrame"),
-        "control: an `internal` typl declaration must stay unexported in TypeScript",
-    );
-
-    // Rust. `WheelDiagnostics` is declared `internal`, so all **six** of the
-    // names it generates are `pub(crate)` — the two faces, the two metadata
-    // constants, and the structs induced by its two tuple positions: a query's
-    // tuple return and a `fixed` payload's array element (issue #167). The
-    // typl-layer tuples beside it (`RawWheelSpan.span` and the element of
-    // `RawWheelSpan.bursts`) are in the same list: a tuple has no visibility of
-    // its own, so it takes the one of the declaration that induced it,
-    // whichever layer that declaration is in.
-    for item in [
-        "pub(crate) trait WheelDiagnosticsConsumer",
-        "pub(crate) trait WheelDiagnosticsProvider",
-        "pub(crate) const WHEEL_DIAGNOSTICS_TIMING",
-        "pub(crate) const WHEEL_DIAGNOSTICS_CONTRACTS",
-        "pub(crate) struct WheelDiagnosticsReadSpanResult",
-        "pub(crate) struct WheelDiagnosticsTickBoundsElement",
-        "pub(crate) struct RawWheelSpanSpan",
-        "pub(crate) struct RawWheelSpanBurstsElement",
-    ] {
-        assert!(
-            compiled.rust.contains(item),
-            "an `internal` interface must generate `{item}` (ADR-0008 decision 7)",
-        );
-    }
-    // ... and none of them under the `pub` spelling this test used to pin.
-    // `pub(crate) trait X` does not contain `pub trait X`, so these are genuine
-    // negatives rather than restatements of the assertions above.
-    for leaked in [
-        "pub trait WheelDiagnosticsConsumer",
-        "pub trait WheelDiagnosticsProvider",
-        "pub const WHEEL_DIAGNOSTICS_TIMING",
-        "pub const WHEEL_DIAGNOSTICS_CONTRACTS",
-        "pub struct WheelDiagnosticsReadSpanResult",
-        "pub struct WheelDiagnosticsTickBoundsElement",
-        "pub struct RawWheelSpanSpan",
-        "pub struct RawWheelSpanBurstsElement",
-    ] {
-        assert!(
-            !compiled.rust.contains(leaked),
-            "an `internal` interface must not generate `{leaked}` — that is the \
-             pre-#160 defect this entry was added to catch",
-        );
-    }
-    // The regression direction for the induced struct: a PUBLIC declaration's
-    // tuple still generates a `pub` struct. `veh.hvac.cabin` is a public
-    // service whose inline shape returns a tuple, and `SensorBounds.range` is a
-    // public typl struct's tuple field — one per layer, matching the two
-    // package-private ones above.
-    for item in [
-        "pub struct ServiceVehHvacCabinGetBoundsResult",
-        "pub struct SensorBoundsRange",
-    ] {
-        assert!(
-            compiled.rust.contains(item),
-            "a public declaration's tuple must still generate `{item}`",
-        );
-    }
-
-    // TypeScript. The same four names, none of them exported.
-    for item in [
-        "\ninterface WheelDiagnosticsConsumer",
-        "\ninterface WheelDiagnosticsProvider",
-        "\nconst wheelDiagnosticsTiming",
-        "\nconst wheelDiagnosticsContracts",
-    ] {
-        assert!(
-            compiled.typescript.contains(item),
-            "an `internal` interface must generate `{}` unexported (ADR-0008 decision 7)",
-            item.trim_start(),
-        );
-    }
-    for leaked in [
-        "export interface WheelDiagnosticsConsumer",
-        "export interface WheelDiagnosticsProvider",
-        "export const wheelDiagnosticsTiming",
-        "export const wheelDiagnosticsContracts",
-    ] {
-        assert!(
-            !compiled.typescript.contains(leaked),
-            "an `internal` interface must not generate `{leaked}` — that is the \
-             pre-#160 defect this entry was added to catch",
-        );
-    }
-
-    // The public shape beside it, so the two are known to differ in source and
-    // to be identical in output — which is the finding, stated as an assertion
-    // rather than left to a reader comparing two snapshot regions.
-    assert!(
-        compiled.rust.contains("pub trait WheelSummaryConsumer")
-            && compiled
-                .typescript
-                .contains("export interface WheelSummaryConsumer"),
-        "the public `WheelSummary` is the comparison point for `WheelDiagnostics`",
     );
 }
 
@@ -1678,51 +1491,6 @@ fn tombstones_hold_their_ordinals_in_both_interaction_stores() {
         (last.name.as_str(), last.ordinal),
         ("wheelSlipRate", 5),
         "a tombstone must consume an ordinal slot",
-    );
-}
-
-/// The synthesized transport identity of an inline `T | E` return has two
-/// shapes, and a registry keys a wire contract on the string (ADR-0008
-/// decision 4), so both belong in the golden record:
-///
-/// - **bare**, when both arms are declared in the same package;
-/// - **fully qualified**, when they are imported from another package.
-///
-/// The third assertion is the stability property: an import *alias* is a
-/// source-level convenience and must be canonicalized away, so a consumer
-/// cannot change a wire identity by renaming its own import.
-#[test]
-fn transport_identity_carries_both_arm_spellings() {
-    let rust = compile_entry(Path::new("tests/corpus/services-workspace")).rust;
-
-    for (property, identity) in [
-        (
-            "same-package arms stay bare",
-            "transport identity: DoorControl#4:DoorReport|DoorFault",
-        ),
-        (
-            "cross-package arms are fully qualified",
-            "transport identity: fleet.vehicle.mirrors#5:fleet.contracts.DoorReport|fleet.contracts.DoorFault",
-        ),
-        (
-            "an import alias is canonicalized away",
-            "transport identity: fleet.vehicle.mirrors#6:fleet.contracts.DoorReport|fleet.legacy.DoorFault",
-        ),
-    ] {
-        assert!(
-            rust.contains(identity),
-            "{property}: `{identity}` is not in the generated Rust",
-        );
-    }
-
-    // The alias is genuinely written in source — otherwise the third assertion
-    // above proves nothing about canonicalization.
-    let source = std::fs::read_to_string("tests/corpus/services-workspace/vehicle/publish.ridl")
-        .expect("the publishing member is readable");
-    assert!(
-        source.contains("import fleet.legacy.DoorFault as LegacyFault")
-            && source.contains(": DoorReport | LegacyFault"),
-        "the aliased arm must be written through its alias in source",
     );
 }
 

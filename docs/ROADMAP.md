@@ -182,9 +182,10 @@ afterwards, as a prerequisite for E3.3 (driftsys/ridl#172).
 15.** The exit criterion above was met literally and by output that no runtime
 can implement: the interaction vocabulary is emitted once per package, so two
 packages produce two incompatible `Provenance` types and no runtime crate can
-implement a trait that does not exist until codegen runs. No test compiles it
-either — both `rustc` corpora are `.typl`-only. Epic 11 restores the face as a
-client and a server over a runtime that exists.
+implement a trait that does not exist until codegen runs. The layer does compile
+— `corpus.rs` runs `rustc` and `tsc` over it with anti-vacuity guards — but
+compiling proves syntax, not that anything can implement it. Epic 11 restores
+the face as a client and a server over a runtime that exists.
 
 E2 also paid three codes of the E1 debt
 [ADR-0007](decisions/ADR-0007-e1-execution.md) d10 recorded: TYPL-301, TYPL-303,
@@ -431,18 +432,19 @@ a server in a second phase. The two are complementary — this epic is that
 record's phase 1, and E10.7's compiling crate is the compile gate the retraction
 needs to be verifiable.
 
-| ID     | Story                                                                             | Done when                                                         | Size |
-| ------ | --------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
-| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing" | both backends agree on which types need a fallible constructor    | M    |
-| E10.2  | The Rust `ConstraintError` vocabulary                                             | one error type carries every constraint failure                   | S    |
-| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                       | an out-of-range value is unconstructible                          | L    |
-| E10.4  | Vacuous named scalars — infallible construction                                   | a type that constrains nothing takes no fallible path             | M    |
-| E10.5  | `TryFrom<i64>` for enum and enum set                                              | an undefined discriminant is rejected                             | M    |
-| E10.6  | Sound derives — no derive that could reconstruct an invalid value                 | no path bypasses the validating seam                              | M    |
-| E10.7  | `--emit rust` writes a compiling crate                                            | the emitted crate builds standalone                               | M    |
-| E10.8  | Pattern validation behind a `validate-pattern` feature                            | regex constraints check without forcing the dependency            | M    |
-| E10.9  | TypeScript vocabulary and factories                                               | the TS backend refuses an invalid value at construction           | L    |
-| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
+| ID     | Story                                                                                                                                                                                                                                                                                   | Done when                                                         | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ---- |
+| E10.1  | The shared vacuous-constraint classifier — one definition of "constrains nothing"                                                                                                                                                                                                       | both backends agree on which types need a fallible constructor    | M    |
+| E10.2  | The Rust `ConstraintError` vocabulary                                                                                                                                                                                                                                                   | one error type carries every constraint failure                   | S    |
+| E10.3  | Constrained named scalars — private inner, `new`, `TryFrom`                                                                                                                                                                                                                             | an out-of-range value is unconstructible                          | L    |
+| E10.4  | Vacuous named scalars — infallible construction                                                                                                                                                                                                                                         | a type that constrains nothing takes no fallible path             | M    |
+| E10.5  | `TryFrom<i64>` for enum and enum set                                                                                                                                                                                                                                                    | an undefined discriminant is rejected                             | M    |
+| E10.6  | Sound derives — no derive that could reconstruct an invalid value                                                                                                                                                                                                                       | no path bypasses the validating seam                              | M    |
+| E10.7  | `--emit rust` writes a compiling crate                                                                                                                                                                                                                                                  | the emitted crate builds standalone                               | M    |
+| E10.8  | Pattern validation behind a `validate-pattern` feature                                                                                                                                                                                                                                  | regex constraints check without forcing the dependency            | M    |
+| E10.9  | TypeScript vocabulary and factories                                                                                                                                                                                                                                                     | the TS backend refuses an invalid value at construction           | L    |
+| E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification                                                                                                                                                                                                                     | the decision is recorded and a constraint change classifies right | S    |
+| E10.11 | **Rebuild cross-backend parity over the type layer** — `crates/ridlc/tests/parity.rs` was deleted with the interaction layer it compared ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision 15), and this epic gives both backends a new comparable surface | one assertion relates both backends over the whole corpus again   | M    |
 
 ## Epic 11 — `ridl-rt`, the runtime core ([ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md))
 

@@ -49,11 +49,6 @@
 //! declaration names are CamelCase or SCREAMING_SNAKE (typl §15.1), which no
 //! all-lowercase TypeScript reserved word collides with, and property names
 //! admit any identifier, reserved words included.
-//!
-//! The ridl interaction layer — interfaces, interactions, and services — is
-//! emitted into the same module by [`interact`].
-
-mod interact;
 
 use ridl_ir::v2;
 use std::cell::RefCell;
@@ -91,7 +86,6 @@ pub fn generate(package: &v2::Package) -> Result<GeneratedTs, GenerateError> {
     for decl in &package.decls {
         emit_decl(&ctx, decl, &mut blocks)?;
     }
-    blocks.extend(interact::emit_package(&ctx, package)?);
 
     let mut source = String::new();
     let imports = ctx.imports.borrow();

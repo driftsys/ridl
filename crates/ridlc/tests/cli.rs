@@ -139,29 +139,6 @@ fn build_emit_ir_json_is_exact_decimal() {
     );
 }
 
-/// `build --emit c-header` writes `<pkg-name>.h`.
-#[test]
-fn build_emit_c_header_writes_header() {
-    let dir = TempDir::new("build-h");
-    dir.write("pkg/ridl.toml", PACKAGE_MANIFEST);
-    dir.write("pkg/speed.typl", SPEED_SOURCE);
-    let out = TempDir::new("build-h-out");
-
-    let (code, _) = ridlc(&[
-        "build".as_ref(),
-        dir.path().join("pkg").as_os_str(),
-        "--out-dir".as_ref(),
-        out.path().as_os_str(),
-        "--emit".as_ref(),
-        "c-header".as_ref(),
-    ]);
-    assert_eq!(code, 0);
-
-    let header = std::fs::read_to_string(out.path().join("veh.common.h"))
-        .expect("c-header writes <pkg-name>.h");
-    assert!(!header.is_empty(), "the header must not be empty");
-}
-
 /// `build --emit typescript` writes `<pkg-name>.ts` holding the TypeScript
 /// backend's output for that package.
 ///
@@ -313,7 +290,6 @@ fn build_help_documents_every_emit_value() {
         listed,
         [
             "rust",
-            "c-header",
             "ir-json",
             "ir-text",
             "ir-binary",
@@ -460,10 +436,7 @@ fn build_ir_emits_write_no_standard_artifact() {
 fn every_emit_variant_is_classified() {
     for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
         let expected = match emit {
-            ridlc::Emit::Rust
-            | ridlc::Emit::CHeader
-            | ridlc::Emit::TypeScript
-            | ridlc::Emit::Proto => false,
+            ridlc::Emit::Rust | ridlc::Emit::TypeScript | ridlc::Emit::Proto => false,
             ridlc::Emit::IrJson | ridlc::Emit::IrText | ridlc::Emit::IrBinary => true,
         };
         assert_eq!(
@@ -490,10 +463,7 @@ fn every_emit_variant_is_classified() {
 fn every_emit_variant_names_its_intended_suffix() {
     for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
         let expected = match emit {
-            ridlc::Emit::Rust
-            | ridlc::Emit::CHeader
-            | ridlc::Emit::TypeScript
-            | ridlc::Emit::Proto => None,
+            ridlc::Emit::Rust | ridlc::Emit::TypeScript | ridlc::Emit::Proto => None,
             ridlc::Emit::IrJson => Some(".ir.json"),
             ridlc::Emit::IrText => Some(".ir.txtpb"),
             ridlc::Emit::IrBinary => Some(".ir.binpb"),

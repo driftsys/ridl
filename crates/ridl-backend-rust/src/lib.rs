@@ -10,8 +10,7 @@
 //! structs, enums, and Rust `enum` unions.
 //!
 //! Rust source is built as a [`proc_macro2::TokenStream`] with `quote` and
-//! formatted with `prettyplease`, never by shelling out to `rustfmt`. The C
-//! header is rendered from a `minijinja` template (`templates/c_header.j2`).
+//! formatted with `prettyplease`, never by shelling out to `rustfmt`.
 //!
 //! Default derivation follows the leaf-recursion rule: an `impl Default` is
 //! emitted for a type only when every field it transitively contains is
@@ -25,15 +24,12 @@ use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
-mod c_header;
 mod defaults;
-mod interact;
 
-/// The two generated artifacts for one package: Rust source and the C header.
+/// The generated artifact for one package: Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Generated {
     pub rust_source: String,
-    pub c_header: String,
 }
 
 /// A failure to generate code from a package.
@@ -64,12 +60,6 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     for decl in &package.decls {
         items.push(emit_decl(&ctx, decl, &mut tuples));
     }
-
-    // Interfaces and services follow the vocabulary they are written over, so
-    // the generated module reads in the same order as the contract (E2 task
-    // 15). Interaction positions can introduce tuple types of their own, which
-    // join the same worklist.
-    items.push(interact::emit(package, &mut tuples)?);
 
     // Tuple types generate a named nested struct each (typl §11). Process the
     // worklist: emitting a tuple struct's fields can discover further nested
@@ -103,7 +93,6 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 
     Ok(Generated {
         rust_source: prettyplease::unparse(&file),
-        c_header: c_header::render(package)?,
     })
 }
 

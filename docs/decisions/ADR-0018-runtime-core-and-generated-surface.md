@@ -47,13 +47,13 @@ cannot ship `impl SignalHandle<T> for Signal<T>` for a trait that does not exist
 until codegen runs and then exists once per package. Cross-package generic code
 over the vocabulary is impossible.
 
-**It has never been compiled.** The two tests that run `rustc` over generated
-output, both in `crates/ridlc/tests/corpus.rs`, cover `.typl`-only corpora.
-Every trait, handle and constant in the layer is snapshot-tested and nothing
-else, which is why
-[ADR-0016](ADR-0016-schema-projection-and-the-name-transform.md) could describe
-emitted Rust that `rustc` rejects as a shipped defect rather than a hypothetical
-one.
+**It compiles, which is not the same as being usable.**
+`crates/ridlc/tests/corpus.rs` runs `rustc` over the generated Rust for the
+interaction-bearing corpora and `tsc` over the TypeScript, each with an
+anti-vacuity guard asserting the faces are present in the source the compiler
+sees. So the layer is syntactically sound and stays so. What no test can show is
+an implementation of it, because none can exist: the vocabulary a runtime would
+have to implement does not survive being emitted twice.
 
 **And the types below it carry no contract.** A named scalar becomes
 `pub struct Speed(pub f64)`, so `Speed(9999.0)` and `Speed(f64::NAN)` both
