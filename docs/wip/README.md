@@ -88,6 +88,14 @@ archive.
   [`2026-09-08-roadmap-simplification.md`](../archive/2026-09-08-roadmap-simplification.md),
   now archived; its S-15 and S-17 are applied by the roadmap rewrite, and it
   feeds the ADR amendments. **Not ratified.**
+- **2026-09-12-rsdl-rewrite-decisions.md** — the decisions the rsdl rewrite
+  starts from: a lone service stands for an implicit component; no process and
+  no scheduling facts, placement is an instance on a machine; multiplicity is an
+  `instances` attribute with a unit instance, redundancy derived from it;
+  crossing kinds only, transport and fabric are configuration, posture reserved;
+  attributes as the backend escape hatch; one interface-id registry per catalog
+  on the ridl side; cross-catalog references allowed with the hash over the
+  closure. Amends `2026-09-08-topology-vocabulary.md` §7. **Not ratified.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
