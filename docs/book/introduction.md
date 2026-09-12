@@ -34,7 +34,10 @@ FlatBuffers schema, or the IR as JSON.
 
 **rxdl, rmdl, and rsdl are specified but not built.** Their language references
 are complete enough to design against, but no compiler accepts them and nothing
-in this book describes them as usable. They are sequenced in the roadmap.
+in this book describes them as usable. rsdl is sequenced in the roadmap's step
+1; rmdl is parked, with no implementation scheduled; rxdl keeps only its
+unrestricted profile, narrowed to types, interfaces and wiring, scheduled in
+step 2.
 
 **There is no runtime.** The transport bindings, the delivery semantics, and the
 provider-side contract enforcement are all specified and none of them are
@@ -63,8 +66,10 @@ repository:
   gate parity).
 - **Technotes** — `docs/technotes/`: informative architecture notes, which bind
   nothing.
-- **Roadmap** — `docs/ROADMAP.md`: the epics, stories, and the V1/V2 release
-  split.
+- **Roadmap** — `docs/ROADMAP.md`: the forward plan — the two steps the
+  2026-09-12 re-scope sets, the parked blocks with the observation that reopens
+  each, and the milestone summary. What has already shipped is in
+  `docs/archive/roadmap-landed-record.md`.
 - **Archive** — `docs/archive/`: superseded documents, and the plans of the
   epics that have landed.
 

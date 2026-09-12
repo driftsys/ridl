@@ -3,7 +3,7 @@
 Status: working note, 2026-09-08. Fixes the words for the layer between a
 contract and the hardware it runs on: what is shipped, what runs it, what
 executes, what is addressed, what is contracted. Extracted from
-[`2026-09-08-roadmap-simplification.md`](2026-09-08-roadmap-simplification.md)
+[`2026-09-08-roadmap-simplification.md`](../archive/2026-09-08-roadmap-simplification.md)
 rules S-34 to S-50, which reached these by argument; this note states the
 results and the tests they have to pass.
 

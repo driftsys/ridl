@@ -58,7 +58,8 @@ xtask/                          Workspace automation (ungrammar codegen, drift c
 Cargo.toml                      Cargo workspace root
 rust-toolchain.toml             The pinned Rust toolchain (ADR-0009)
 docs/
-├── ROADMAP.md                  Implementation backlog — epics, stories, V1/V2 release plan
+├── ROADMAP.md                  Forward plan — epics, stories, the two-step release
+│                               plan; what has shipped is in docs/archive/roadmap-landed-record.md
 ├── book/                       mdBook source (just book) — introduction, reading guide, getting started
 │                               Its `ridl` examples are compiled by crates/ridl/tests/book_examples.rs
 │                               Published to https://driftsys.github.io/ridl/ on every push to main

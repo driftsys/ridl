@@ -2,7 +2,7 @@
 
 Status: working note, 2026-09-12. Not ratified. This note records the decisions
 of the 2026-09-12 re-scoping session. It supersedes the scope parts of
-[`2026-09-08-roadmap-simplification.md`](2026-09-08-roadmap-simplification.md)
+[`2026-09-08-roadmap-simplification.md`](../archive/2026-09-08-roadmap-simplification.md)
 (that note's D-1, S-27, S-28, SR-X3 and SR-X9 are answered here) and it feeds
 two later changes: the roadmap rewrite, and a new decision record plus in-place
 amendments to

@@ -22,8 +22,8 @@ transport.
 
 ## 0. What this descopes, and what survives
 
-    reasoning trail  docs/wip/2026-09-08-roadmap-simplification.md, which
-                     reaches the same place from the plan's side: S-18
+    reasoning trail  docs/archive/2026-09-08-roadmap-simplification.md,
+                     which reaches the same place from the plan's side: S-18
                      fixes the language order typl -> ridl -> rsdl ->
                      rmdl, S-19 parks the engine block as a block, S-22
                      recasts the codecs as backend stories, and S-23 adds

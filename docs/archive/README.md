@@ -144,3 +144,17 @@ provenance. Nothing here is normative — the current references live in
   [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md),
   which renamed the crate to `ridl-rt` and extended the note. Archived with the
   consumer project's names replaced by generic wording.
+- **2026-09-08-roadmap-simplification.md** — the plan behind the re-scope: 102
+  stories and roughly 220 person-weeks against one part-time author, so the note
+  argues the roadmap was serving a public language platform and one system's
+  SSOT at once and should choose the second. Archived by the roadmap rewrite,
+  which applies its S-15 (split the roadmap into a forward plan and a landed
+  record) and its S-17 (narrow the platform ladder), and which supersedes its
+  sequencing with the two steps the 2026-09-12 design note sets. Its S-16 — one
+  issue per epic rather than one per story — was considered and not adopted; the
+  tracker still mirrors one issue per story. Kept for the reasoning trail: the
+  parked blocks, and the observation that reopens each, are carried into the
+  roadmap's own parked table.
+- **roadmap-landed-record.md** — the delivery narratives and story tables for
+  Epics 0, 1, 2 and 9, extracted from `docs/ROADMAP.md` by the same rewrite so
+  that the roadmap holds the forward plan alone. History, not a plan.
