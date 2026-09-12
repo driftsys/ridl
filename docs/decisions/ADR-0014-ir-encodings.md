@@ -14,7 +14,7 @@ else in ADR-0004 §4 stands: protobuf compiled with `prost` remains the canonica
 IR, and the rejected alternatives remain rejected.
 
 The reasoning trail is
-[`docs/wip/2026-08-03-ir-protobuf-encodings-design.md`](../wip/2026-08-03-ir-protobuf-encodings-design.md),
+[`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md),
 which carries the measurements and the API confirmations this record summarises.
 This ADR was accepted under the delegated authority recorded in
 [ADR-0005](ADR-0005-agent-enablement.md)'s working model — the design note was
@@ -435,7 +435,7 @@ trigger rather than this cost, with the measurement recorded there.**
 
 ## References
 
-- [`docs/wip/2026-08-03-ir-protobuf-encodings-design.md`](../wip/2026-08-03-ir-protobuf-encodings-design.md)
+- [`docs/archive/2026-08-03-ir-protobuf-encodings-design.md`](../archive/2026-08-03-ir-protobuf-encodings-design.md)
   — the design note this record ratifies
 - [ADR-0004](ADR-0004-implementation-sequencing-and-stack.md) §4 — the IR
   serialization decision whose rendering clause this supersedes

@@ -22,7 +22,7 @@ parameters of one interaction.
 **Design of record:**
 [`2026-08-05-projection-name-transform-design.md`](2026-08-05-projection-name-transform-design.md),
 which corrects
-[`2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md).
+[`2026-08-03-schema-projection-design.md`](2026-08-03-schema-projection-design.md).
 
 ## Global Constraints
 
@@ -83,7 +83,7 @@ Follow the house structure, which ADR-0015 shows: `# ADR-NNNN — <title>`, then
 
 `## Status` must say: Accepted, dated 2026-08-05; scope is the projection from
 IR identity to a target's namespace; it binds every backend that projects, not
-one epic; it ratifies `docs/wip/2026-08-03-schema-projection-design.md` and
+one epic; it ratifies `docs/archive/2026-08-03-schema-projection-design.md` and
 corrects three of its statements; it does not supersede ADR-0013, which
 classifies what a backend may emit rather than how identity projects.
 

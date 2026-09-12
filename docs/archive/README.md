@@ -38,8 +38,8 @@ provenance. Nothing here is normative — the current references live in
   [ADR-0014](../decisions/ADR-0014-ir-encodings.md),
   [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md), the
   roadmap's Epic 9 status paragraph, and the ridl reference sections each story
-  amended. The four design notes it was written from stay in `docs/wip/`: three
-  are ratified and kept as the reasoning trail, and the fourth
+  amended. The four design notes it was written from are archived below: three
+  as the reasoning trail, and the fourth
   (`2026-08-03-schema-projection-design.md`) covers E9.7 to E9.11, which this
   block did not run.
 
@@ -50,7 +50,7 @@ provenance. Nothing here is normative — the current references live in
   `snake_case` implementations, its injectivity requirement was unsatisfiable by
   any case-folding transform, and the shipped Rust backend already emitted
   non-compiling output on colliding names. Archived as a pair once E9.7 landed,
-  unlike the schema-projection note itself, which stays in `docs/wip/` as the
+  unlike the schema-projection note itself, which is archived below as the
   reasoning trail for the E9.8–E9.11 stories it still covers. The gardened
   record is
   [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
@@ -65,8 +65,8 @@ provenance. Nothing here is normative — the current references live in
   the RIDL-149 extension to struct fields that ADR-0016 decision 4 bound to the
   commit that starts projecting them. Archived as a pair once E9.8 landed;
   E9.9's FlatBuffers projection and E9.11's store and dispatcher still read the
-  design note, now from here, beside the parent schema-projection note that
-  stays in `docs/wip/`. The gardened records are the roadmap's Epic 9 status
+  design note, now from here, beside the parent schema-projection note, also
+  archived below. The gardened records are the roadmap's Epic 9 status
   paragraphs — which also carry the ADR-0013 decision 2 versus ADR-0016 decision
   10 conflict left for E9.11, and the payload-type imports that story inherits —
   the ridl reference's RIDL-149 row, and the CLI reference's `proto` emit. The
@@ -113,3 +113,34 @@ provenance. Nothing here is normative — the current references live in
   cites the pre-#181 crate paths (`backends/typescript`, `tools/diff`), and
   several of its statements about the repository were overtaken by its own
   execution.
+
+- **2026-08-03-ir-protobuf-encodings-design.md** — design note on the IR's own
+  protobuf encodings, gardened into
+  [ADR-0014](../decisions/ADR-0014-ir-encodings.md). Archived verbatim.
+- **2026-08-03-multi-interface-services-design.md** — design note on composing
+  multiple interfaces into one service, gardened into
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md). Archived
+  verbatim.
+- **2026-08-03-rpc-response-bound-design.md** — design note on the RPC response
+  bound, gardened into
+  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md). Archived
+  verbatim.
+- **2026-08-03-schema-projection-design.md** — design note on schema projection
+  and the pinned name transform, gardened into
+  [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md).
+  Archived verbatim.
+- **2026-08-08-runtime-and-codegen-architecture.md** — the reasoning trail of
+  [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md), which
+  is still Proposed. Archived verbatim; ADR-0018 is to be amended from the
+  2026-09-12 session's design note rather than from this one; that amendment is
+  not yet written.
+- **2026-08-09-interaction-layer-retraction-plan.md** — the plan executed by
+  pull request #241. Archived verbatim.
+- **ridl-boundary-model-review.md** — superseded by
+  [ADR-0012](../decisions/ADR-0012-interaction-boundary-model.md); its own
+  header lists the claims it got wrong. Archived verbatim.
+- **2026-09-08-ridl-abi-design.md** — the first draft of the runtime-library
+  design under the name `ridl-abi`; superseded the same day by
+  [`docs/wip/2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md),
+  which renamed the crate to `ridl-rt` and extended the note. Archived with the
+  consumer project's names replaced by generic wording.

@@ -10,7 +10,7 @@ way ADR-0013 binds what a backend may emit and ADR-0014 binds how the IR is
 encoded.
 
 It ratifies the schema-projection note,
-[`docs/wip/2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md),
+[`docs/archive/2026-08-03-schema-projection-design.md`](../archive/2026-08-03-schema-projection-design.md),
 and corrects three of its statements. The corrections' reasoning trail is
 [`docs/archive/2026-08-05-projection-name-transform-design.md`](../archive/2026-08-05-projection-name-transform-design.md),
 which carries the measurements this record summarises. Throughout this record,
@@ -289,7 +289,7 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
 
 ## References
 
-- [`docs/wip/2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md)
+- [`docs/archive/2026-08-03-schema-projection-design.md`](../archive/2026-08-03-schema-projection-design.md)
   — the note this record ratifies and corrects
 - [`docs/archive/2026-08-05-projection-name-transform-design.md`](../archive/2026-08-05-projection-name-transform-design.md)
   — the corrections' reasoning trail, with the measurements

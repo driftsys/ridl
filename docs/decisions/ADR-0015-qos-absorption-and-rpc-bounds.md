@@ -12,9 +12,9 @@ Supersedes nothing. It answers ridl §17.5 open question 5 (QoS), closes ridl
 ridl §17.2 (interaction-set reuse) than the candidate recorded there.
 
 The reasoning trail is two design notes —
-[`docs/wip/2026-08-03-rpc-response-bound-design.md`](../wip/2026-08-03-rpc-response-bound-design.md),
+[`docs/archive/2026-08-03-rpc-response-bound-design.md`](../archive/2026-08-03-rpc-response-bound-design.md),
 which decides the composition in its §11.1, and
-[`docs/wip/2026-08-03-multi-interface-services-design.md`](../wip/2026-08-03-multi-interface-services-design.md),
+[`docs/archive/2026-08-03-multi-interface-services-design.md`](../archive/2026-08-03-multi-interface-services-design.md),
 which is the design pass that decision called for. Both are ratified here.
 
 **Why one record rather than two.** The response-bound note names ADR-0015 as
@@ -560,9 +560,9 @@ indistinguishable, so no claim about any of the three can be exercised.
 
 ## References
 
-- [`docs/wip/2026-08-03-rpc-response-bound-design.md`](../wip/2026-08-03-rpc-response-bound-design.md)
+- [`docs/archive/2026-08-03-rpc-response-bound-design.md`](../archive/2026-08-03-rpc-response-bound-design.md)
   and
-  [`docs/wip/2026-08-03-multi-interface-services-design.md`](../wip/2026-08-03-multi-interface-services-design.md)
+  [`docs/archive/2026-08-03-multi-interface-services-design.md`](../archive/2026-08-03-multi-interface-services-design.md)
   — the design notes this record ratifies
 - [ADR-0008](ADR-0008-e2-execution.md) — decision 4 (fallible transport
   identity), decision 8 (IR field numbers are the compatibility contract),
