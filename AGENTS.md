@@ -87,7 +87,7 @@ member; rsdl is the apex.
 
 ## Commands
 
-    just fmt             reformat connective tissue with prim + fix Markdown
+    just fmt             reformat connective tissue with prim
     just check           lint gate — prim fmt --check + prim lint (no writes)
     just toolchain-check the running toolchain is the one rust-toolchain.toml pins
     just gate-parity     CI invokes every member of just build
