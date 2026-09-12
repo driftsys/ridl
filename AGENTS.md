@@ -74,7 +74,8 @@ stays a Proposed draft with no implementation. See
   compiler — read it before writing a backend or a runtime library, and read its
   **Documents amended** table: ADR-0018's decisions 3, 6 and 15 rest on this
   record, its decisions 16 and 17 on the re-scope's other decisions, and
-  ADR-0013's target list changes with them).
+  ADR-0013's target list and ADR-0007 decision 13 change with them — the last is
+  the only one of these that changes shipped code).
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

@@ -218,9 +218,10 @@ be generated, and in what order", which is what this record answers.
    Kotlin runtime plus a generated verifier for a payload that is not `Inline`
    (RA-29, and §9's third way out), a generated proto3 decoder, and the faces —
    beside a hand-written Kotlin runtime library. **TypeScript's half stands and
-   becomes specific**: ADR-0020 decisions 6 and 7 reach the codec through the
-   wasm build of the `ridl-rt` library, and ADR-0020 decision 2 fixes
-   FlatBuffers as the encoding at that boundary.
+   becomes specific**: ADR-0020 decision 7 reaches the codec through the
+   generated Rust for the package compiled to `wasm32` against `ridl-rt` — not
+   through a `ridl-rt` library build, which carries no per-type codec — and
+   ADR-0020 decision 2 fixes FlatBuffers as the encoding at that boundary.
 
    **C stays dropped as a language target.** ADR-0020 decision 1 brings a C
    header back as one artifact of the `repr(C)` payload encoding, which is the

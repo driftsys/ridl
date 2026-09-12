@@ -170,25 +170,35 @@ as its public contract.
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
    each runtime is its own crate or package.
 
-   | Crate or package                           | Holds                                                                              | Depends on                                      |
-   | ------------------------------------------ | ---------------------------------------------------------------------------------- | ----------------------------------------------- |
-   | `ridl-rt`                                  | the library of decision 5                                                          | the FlatBuffers runtime, only under its feature |
-   | `ridl-loopback`                            | the in-process reference runtime — every port over a queue and a map, and no IO    | `ridl-rt`                                       |
-   | `ridl-transport-ws`                        | the ports over a WebSocket, proto3-framed; the default of the getting-started path | `ridl-rt` and a WebSocket crate                 |
-   | the TypeScript runtime package (name open) | the `ridl-rt` wasm module plus the port interfaces spelled in TypeScript           | the wasm artifact                               |
-   | the TypeScript WebSocket package           | the same binding for Deno and the browser                                          | the runtime package                             |
+   | Crate or package                           | Holds                                                                                              | Depends on                                      |
+   | ------------------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+   | `ridl-rt`                                  | the library of decision 5                                                                          | the FlatBuffers runtime, only under its feature |
+   | `ridl-loopback`                            | the in-process reference runtime — every port over a queue and a map, and no IO                    | `ridl-rt`                                       |
+   | `ridl-transport-ws`                        | the ports over a WebSocket, proto3-framed; the default of the getting-started path                 | `ridl-rt` and a WebSocket crate                 |
+   | the TypeScript runtime package (name open) | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec | nothing outside itself                          |
+   | the TypeScript WebSocket package           | the same binding for Deno and the browser                                                          | the runtime package                             |
 
    Generated Rust links `ridl-rt`, generated TypeScript imports the runtime
    package, and neither ever names a transport.
 
 7. **TypeScript is the same three layers, and the WebSocket transport is
-   mandatory nowhere.** The runtime package carries the wasm codec and the port
-   interfaces; the generated faces sit on it; the transport is a separate
-   package. The WebSocket transport is what the getting-started path uses and
-   what a remote server or an emulator links by default, and nothing links it
-   unless it asks. This confirms ADR-0018 decision 6 for TypeScript — generated
-   types and faces, the codec reached through wasm — and settles the encoding at
-   that boundary by decision 2.
+   mandatory nowhere.** The runtime package carries the port interfaces and the
+   loader; the generated faces sit on it; the transport is a separate package.
+
+   **The wasm codec is per package, not a library build.** ADR-0018 decision 4
+   makes the codec a serializer for known types — no descriptors, no dynamic
+   messages, no schema parsing — and the ridl-rt design note emits the encoding
+   impls and the typl constraint checks per type into the generated package. A
+   wasm build of `ridl-rt` alone therefore carries no codec for any package's
+   types and could encode nothing. What decision 2 calls the codec is **the
+   generated Rust for that package, compiled to `wasm32` and linking
+   `ridl-rt`**, shipped beside the generated TypeScript that calls it. That is
+   also what makes decision 2's no-skew argument hold: both artifacts come from
+   one `ridlc` run over one IR. The WebSocket transport is what the
+   getting-started path uses and what a remote server or an emulator links by
+   default, and nothing links it unless it asks. This confirms ADR-0018 decision
+   6 for TypeScript — generated types and faces, the codec reached through wasm
+   — and settles the encoding at that boundary by decision 2.
 
    Shipping faces and a frame with no transport was rejected because two
    emulators written by two people would then share no transport and the
@@ -312,7 +322,13 @@ as its public contract.
 3. **Which wasm runtime `ridlc` embeds** for the second host of decision 10, and
    whether the export signature can be identical to the process host's stdin and
    stdout framing.
-4. **Whether the lowered model is a public artifact.** Decision 9 puts it in
+4. **Who compiles a package's wasm codec.** Decision 7 makes it the generated
+   Rust compiled to `wasm32`, which needs a Rust toolchain and the
+   `wasm32-unknown-unknown` target. Whether that is the TypeScript consumer's
+   step, a `ridlc` step, or an artifact published beside the package is not
+   settled, and roadmap story E12.1's "a Deno program constructs and validates a
+   payload without a TypeScript codec" depends on the answer.
+5. **Whether the lowered model is a public artifact.** Decision 9 puts it in
    ADR-0014's canonical encoding on the wire to a plugin, which makes it a
    versioned surface; whether it is also emittable by a `ridlc` subcommand for a
    plugin author to inspect is not settled.

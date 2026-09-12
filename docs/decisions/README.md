@@ -3,7 +3,9 @@
 - **ADR-0002 — Module system.** `package` / `import` / `as` / `internal`, the
   manifest, lockfile, and resolver.
 - **ADR-0004 — Implementation sequencing and stack.** The build order and
-  technology choices (companion to the roadmap).
+  technology choices (companion to the roadmap). Amended 2026-09-12: §1's
+  sequencing and the V1/V2 release definitions are superseded by the roadmap's
+  two steps.
 - **ADR-0005 — Agent enablement.** Enabling AI agents to author and evolve RIDL.
 - **ADR-0006 — Walking-skeleton execution.** E0-scoped execution decisions
   (workspace layout, protox, deferred crates.io reservation).
@@ -124,8 +126,10 @@
   `generate(CodegenRequest) -> CodegenResponse`, fed by a lowering step that
   derives the shared semantics once in the compiler. Not epic-scoped: it binds
   every backend this workspace or the ecosystem grows, and the runtime material
-  in every language. Amends ADR-0018 decisions 3, 6 and 15, and ADR-0013's
-  target list.
+  in every language. Amends ADR-0018 decisions 3, 6 and 15, ADR-0013's target
+  list, and ADR-0007 decision 13 — the last of those is the only amendment in
+  the set that changes shipped code, because the Rust backend emits `#[repr(C)]`
+  on fixed-layout structs today.
 
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012

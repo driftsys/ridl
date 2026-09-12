@@ -101,7 +101,8 @@ docs/
     ├── ADR-0016-schema-projection-and-the-name-transform.md
     ├── ADR-0017-proto3-projection-rules.md
     ├── ADR-0018-runtime-core-and-generated-surface.md
-    └── ADR-0019-flatbuffers-projection-rules.md
+    ├── ADR-0019-flatbuffers-projection-rules.md
+    └── ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
 ```
 
 ## Where to start

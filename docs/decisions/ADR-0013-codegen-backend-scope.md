@@ -111,7 +111,9 @@ language layer at `int64`/`float64`.
    - **language backends in this workspace:** Rust and TypeScript.
    - **language backends outside it:** Kotlin, as the out-of-tree
      `ridlc-gen-kotlin` plugin sequenced after the current release. C++ has no
-     plan and is removed from the list rather than deferred.
+     plan and is removed from the list rather than deferred; typl Appendix D
+     keeps its C++ column as the width rule an out-of-tree plugin would follow,
+     and that column is not a statement that a C++ backend is planned.
    - **wire backends in this workspace:** proto3
      ([ADR-0017](ADR-0017-proto3-projection-rules.md)) and FlatBuffers
      ([ADR-0019](ADR-0019-flatbuffers-projection-rules.md)) are built; roadmap
@@ -299,9 +301,10 @@ language layer at `int64`/`float64`.
    already do. Recorded as open because it was not settled when this ADR was
    drafted.
 2. **Where a `ServiceStore` lives if it is built.** The candidates are the
-   `ridl-rt` runtime specification and the reflection interface of ridl open
-   question 7. Whatever the home, its slot keys must be the interaction ordinals
-   of decision 3, so that one contract has one identity space.
+   `ridl-engine` specification (the `ridl-rt` runtime specification as this
+   record first named it) and the reflection interface of ridl open question 7.
+   Whatever the home, its slot keys must be the interaction ordinals of decision
+   3, so that one contract has one identity space.
 3. **The concrete form of the identity table per language.** A Rust `enum` with
    explicit discriminants, a set of associated constants, or a lookup table;
    likewise for TypeScript. Decision 3 fixes the content and the numbering, not

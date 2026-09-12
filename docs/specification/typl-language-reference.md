@@ -408,6 +408,11 @@ and FlatBuffers keep native `float`/`double`. See Appendix D.
 Bound is in characters; encoding (ASCII, UTF-8, UTF-16) is a codegen concern per
 target. Default `[0..256]` when unspecified (warning).
 
+**§17.13 revises both halves of the first sentence** and is where the current
+rule is stated: a character is a Unicode scalar value, and every encoding
+carries a `string` as UTF-8 rather than choosing per target. Until the
+finalization pass moves that text here, §17.13 governs.
+
 ### 4.5 Bytes
 
 Bound is in bytes; constraint syntax mirrors `string` but has no `match`.
@@ -1179,14 +1184,16 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
     wanted integer or a missing `.0`. Recorded in
     [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
     §3.10.
-13. **What a `string` is made of, and how it is encoded.** §5 calls a `string` a
-    character sequence and bounds it in characters, and says neither what a
-    character is nor how a value reaches a buffer. The rule to record, as
-    normative text in §5 rather than as a deferral: a `string` is a sequence of
-    Unicode scalar values, and `string [N]` bounds the count of scalar values —
-    not graphemes, which are unbounded, and not bytes, which `bytes` already
-    counts; every encoding carries it as UTF-8, while the in-memory
-    representation stays the language's own (UTF-8 in Rust, UTF-16 in
+13. **What a `string` is made of, and how it is encoded.** §4's primitives table
+    calls a `string` a character sequence, §4.4 bounds it in characters, and
+    neither says what a character is; §4.4 does answer how a value reaches a
+    buffer, and answers it the other way — "encoding (ASCII, UTF-8, UTF-16) is a
+    codegen concern per target" — which is the statement this item replaces. The
+    rule to record, as normative text in §4 rather than as a deferral: a
+    `string` is a sequence of Unicode scalar values, and `string [N]` bounds the
+    count of scalar values — not graphemes, which are unbounded, and not bytes,
+    which `bytes` already counts; every encoding carries it as UTF-8, while the
+    in-memory representation stays the language's own (UTF-8 in Rust, UTF-16 in
     TypeScript, Kotlin and C#) and the codec converts at the buffer, as every
     proto and FlatBuffers runtime on those platforms already does; and the byte
     capacity of `string [N]` is 4·N, which is UTF-16's worst case as well, so
@@ -1199,9 +1206,9 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
     decision 4's rule that interoperability is at the bytes, mediated by the
     emitted schema. Per target it is one sentence in
     [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md) and one in
-    [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md); the
-    fixed-capacity form, and whether a terminator is guaranteed for a C reader,
-    belong to the `repr(C)` projection record
+    [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md), neither
+    of which carries it yet; the fixed-capacity form, and whether a terminator
+    is guaranteed for a C reader, belong to the `repr(C)` projection record
     ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
     decision 4). One rule is not a projection rule: a JavaScript string may hold
     a lone surrogate, which `TextEncoder` replaces with U+FFFD and a wasm codec
@@ -1451,7 +1458,11 @@ typl owns the **type layer** of every backend; interaction/behaviour codegen is
 specified by the higher profiles. Width mapping is resolved once by the compiler
 and passed to all backends (§4.2, §4.3, §9.3).
 
-**Language layer** — always widest:
+**Language layer** — always widest. The columns are the width rule per language,
+not a list of planned backends: Rust and TypeScript are built, Kotlin is an
+out-of-tree plugin, and C++ has no plan
+([ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 1, as
+amended 2026-09-12).
 
 | Canonical   | Rust  | Kotlin   | C++       | TypeScript         |
 | ----------- | ----- | -------- | --------- | ------------------ |

@@ -347,10 +347,11 @@ Two corrections the first consumer's sketch exposed:
   `CoherentSignals::read_coherent` in that note's §6.1, not as a ninth core
   port. ADR-0015 **decision 10** separates production coherence, which decision
   9 makes implicit, from delivery coherence, which depends on the binding — ridl
-  §14.5's table gives per-field only on SOME/IP and per-message only on
-  proto3/gRPC. A runtime over such a binding cannot pin, so by §6.1's own test a
-  core port would be one every such runtime has to fake. The portable answer
-  decision 10 already names is the struct idiom of ridl §17.3.
+  §14.5's table gives per-field only on SOME/IP, and ridl Appendix B's
+  per-target matrix gives per-message only on proto3/gRPC. A runtime over such a
+  binding cannot pin, so by §6.1's own test a core port would be one every such
+  runtime has to fake. The portable answer decision 10 already names is the
+  struct idiom of ridl §17.3.
 - **`commit` takes no `now`.** §6 and §8 write
   `commit(&mut self, now:
   Timestamp)`; the note's own RA-28 says no port takes

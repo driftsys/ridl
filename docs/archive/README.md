@@ -131,9 +131,9 @@ provenance. Nothing here is normative — the current references live in
   Archived verbatim.
 - **2026-08-08-runtime-and-codegen-architecture.md** — the reasoning trail of
   [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md), which
-  is still Proposed. Archived verbatim; ADR-0018 is to be amended from the
-  2026-09-12 session's design note rather than from this one; that amendment is
-  not yet written.
+  is still Proposed. Archived verbatim; ADR-0018 was amended from the 2026-09-12
+  session's design note rather than from this one, on 2026-09-12 — its decisions
+  3, 6, 15, 16 and 17, plus the `ridl-rt` name collision.
 - **2026-08-09-interaction-layer-retraction-plan.md** — the plan executed by
   pull request #241. Archived verbatim.
 - **ridl-boundary-model-review.md** — superseded by
