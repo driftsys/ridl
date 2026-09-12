@@ -16,10 +16,10 @@ v1 and an out-of-band descriptor. S-34 records why that decision is not open:
 rsdl §3.1 defines a component by the rmdl model it applies, so the concept the
 requirement leans on hardest is downstream of the language S-25 defers. S-34 to
 S-50 carry the fourth: the rsdl vocabulary rules, later consolidated into
-[`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md), and
-S-36 reopens D-1. Rule numbers are cited by
-[`2026-09-08-ridl-rt-design.md`](2026-09-08-ridl-rt-design.md) §0 and do not
-move; where a later rule supersedes an earlier one it says so.
+[`2026-09-08-topology-vocabulary.md`](../wip/2026-09-08-topology-vocabulary.md),
+and S-36 reopens D-1. Rule numbers are cited by
+[`2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md) §0 and do
+not move; where a later rule supersedes an earlier one it says so.
 
 **Name.** That note takes `ridl-rt` for the **library** every generated package
 links. This note used it for the **engine**. The library keeps the name; the
@@ -599,7 +599,7 @@ gateway is two codecs and a routing decision, and neither codec is written.
 
     NOTE  S-34 to S-50 below reached the topology vocabulary by argument
           over several passes. The results are now stated as a reference in
-          [`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md),
+          [`2026-09-08-topology-vocabulary.md`](../wip/2026-09-08-topology-vocabulary.md),
           rules V-01..V-21, which is the document to read and cite. These
           rules stay as the reasoning trail and as the roadmap consequences
           they were written for; where the two differ, the vocabulary note

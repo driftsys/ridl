@@ -60,41 +60,6 @@ still read the E9.8 design note, from the archive.
   measurement. Rules `RA-01..35`, nine opens. First implementation is the first
   runtime, from the first consumer. **Not ratified** — and the ADR-0018
   amendment it implies (RA-X10) is not written.
-- **2026-09-08-roadmap-simplification.md** — the plan, not the design. 102
-  stories and roughly 220 person-weeks remain against one part-time author, so
-  the note argues the roadmap is serving a public language platform and one
-  system's SSOT at once and should choose the second. Parks E3.4-E3.6, most of
-  E4, all of E12, E13 and E7, and eleven of E8, keeping every identifier and
-  giving each parked block the evidence that reopens it. **Revised four times on
-  the day.** The language order is typl -> ridl -> rsdl -> rmdl (S-18);
-  `ridl-engine` — store, seqlock, sans-IO core, platform traits — parks as a
-  block (S-19), which
-  [`2026-09-08-ridl-rt-design.md`](2026-09-08-ridl-rt-design.md) §0 reaches from
-  the design side and grounds better, as a scope decision rather than a
-  sequencing one. rmdl is finalised as a draft and not implemented (S-25); code
-  generation narrows to Rust (S-26); Kotlin becomes a plugin, which returns
-  **E4.5b, the plugin protocol, to the critical path** (S-27); TypeScript
-  through wasm is ADR-0018 decision 6's existing answer (S-28); the finish test
-  for typl and ridl becomes a stabilisation loop over a real contract rather
-  than a date (S-29); the generated gateway is held off (S-30). **D-1 (S-33) is
-  the open decision**: rsdl v1 (7 stories, 9.5 weeks) or an out-of-band
-  deployment descriptor (2 stories, 3.0 weeks) for the service/interface/machine
-  relations the emitter needs to derive interfacing rules — recommended the
-  descriptor, under one constraint, _out-of-band authoring, in-band
-  representation_, so `ridl diff` still classifies it. **S-34** hardens that
-  from a recommendation into the only available path: rsdl §3.1 defines a
-  component by the rmdl model it applies, rsdl §7 makes a target logical and
-  never addressed where the requirement wants machine identity, and ADR-0018
-  opens 1 and 7 already record the same doubt. **S-35** adopts the settled
-  vocabulary instead — machine / service / interface, with `vm` rejected because
-  the QNX host is a machine too — so the descriptor adds one noun to what ridl
-  §14 already owns. Leaves 30 stories and 47 weeks with the consumer's runtime
-  as the first and only runtime. Rules P-1..P-6, S-01..S-50, A-1..A-4, D-1
-  (reopened by S-36; S-34 to S-50 are consolidated in the topology-vocabulary
-  note). **Not ratified**; twelve opens, including whether the public-platform
-  goal is deferred or abandoned (SR-X1), that one implementation now validates
-  the whole trait layer (SR-X6), and what a breaking _deployment_ change is
-  (SR-X10).
 - **2026-09-08-topology-vocabulary.md** — the nouns for the layer between a
   contract and the hardware: distribution, machine, process, component, service,
   interface, member, catalog, with one question each (V-01) and only addressed
@@ -119,8 +84,9 @@ still read the E9.8 design note, from the archive.
   WebSocket transport; the codegen plugin system with Kotlin as the first plugin
   after the release), the decisions with their alternatives, and the open items
   it carries. Supersedes the scope parts of
-  `2026-09-08-roadmap-simplification.md`; feeds the roadmap rewrite and the ADR
-  amendments. **Not ratified.**
+  [`2026-09-08-roadmap-simplification.md`](../archive/2026-09-08-roadmap-simplification.md),
+  now archived; its S-15 and S-17 are applied by the roadmap rewrite, and it
+  feeds the ADR amendments. **Not ratified.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

@@ -13,8 +13,9 @@ under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, and `ridl-fmt` —
 plus `xtask` at the root and the `editors/vscode` extension. The typl v0.1
 toolchain (epic E1) and the ridl interface layer over it (epic E2) are built;
-the boundary model (epic E3), `rmdl`, and `rsdl` are sequenced in the roadmap.
-See `docs/technotes/walking-skeleton-architecture.md` for the as-built map.
+the boundary model (epic E3) and `rsdl` are sequenced in the roadmap, and `rmdl`
+stays a Proposed draft with no implementation. See
+`docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Read these before doing anything else in this repo:**
 
@@ -61,8 +62,11 @@ See `docs/technotes/walking-skeleton-architecture.md` for the as-built map.
   table, a non-table union arm boxed, every struct a `table`, a map with no
   `(key)`, the target's own name scopes, and `= null` on a field whose enum
   declares no zero member; binds the FlatBuffers backend only).
-- `docs/ROADMAP.md` — the epics, stories, and the V1 (contract platform) / V2
-  (executable platform) release split.
+- `docs/ROADMAP.md` — the forward plan: the two steps the 2026-09-12 re-scope
+  sets (step 1, rsdl finalized plus the Rust runtime and codegen; step 2,
+  TypeScript and the codegen plugin system), the parked blocks with the
+  observation that reopens each, and the milestone summary. What has already
+  shipped is in `docs/archive/roadmap-landed-record.md`.
 
 These are living records. A decision that changes one is recorded there directly
 — don't silently diverge from it.
