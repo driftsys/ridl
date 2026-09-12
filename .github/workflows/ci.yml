@@ -61,15 +61,6 @@ jobs:
           PRIM_INSTALL_DIR: /usr/local/bin
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: install markdownlint-cli
-        run: npm install --global markdownlint-cli
-      # Exclusions come from .markdownlintignore, which markdownlint auto-detects.
-      # This job used to add `--ignore book --ignore node_modules` on top; that
-      # file's own header explains why the flag form does not work, and the two
-      # lists were free to disagree.
       - run: just check
 
   book:
@@ -134,8 +125,8 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: just wasm-check
 
-  convco:
-    name: convco
+  commit-lint:
+    name: commit-lint
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
@@ -185,12 +176,13 @@ jobs:
   # `!cancelled() && needs.ci.result == 'success'` rather than the event and ref
   # tests alone. An `if:` holding no status check function gets an implicit
   # `success()`, and that implicit test reads the whole ancestor chain rather
-  # than the named dependency: `convco` does not run on a push, `ci` survives its
-  # skip through `if: always()` and reports success, and the skip still reaches
-  # this job. The first merge of this workflow proved it — every gate job green,
-  # `ci` green, `pages` skipped, nothing published. Naming a status function is
-  # what replaces the implicit test, and `needs.ci.result` then has to be
-  # asserted here, because nothing else still checks that the gate passed.
+  # than the named dependency: `commit-lint` does not run on a push, `ci`
+  # survives its skip through `if: always()` and reports success, and the skip
+  # still reaches this job. The first merge of this workflow proved it — every
+  # gate job green, `ci` green, `pages` skipped, nothing published. Naming a
+  # status function is what replaces the implicit test, and `needs.ci.result`
+  # then has to be asserted here, because nothing else still checks that the
+  # gate passed.
   #
   # `workflow_dispatch` is accepted alongside `push` so the site can be
   # republished without a commit — the same reason the workflow accepts a manual
@@ -239,8 +231,8 @@ jobs:
     name: ci
     if: always()
     # Every job, so a red anywhere fails the aggregate. "skipped" is accepted:
-    # convco only runs on pull requests.
-    needs: [markdown, book, rust, wasm, convco]
+    # commit-lint only runs on pull requests.
+    needs: [markdown, book, rust, wasm, commit-lint]
     runs-on: ubuntu-latest
     steps:
       - name: check required jobs

@@ -87,8 +87,8 @@ member; rsdl is the apex.
 
 ## Commands
 
-    just fmt             reformat connective tissue with prim + fix Markdown
-    just check           lint gate — prim fmt --check + markdownlint (no writes)
+    just fmt             reformat connective tissue with prim
+    just check           lint gate — prim fmt --check + prim lint (no writes)
     just toolchain-check the running toolchain is the one rust-toolchain.toml pins
     just gate-parity     CI invokes every member of just build
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
@@ -125,8 +125,8 @@ remains in the workflow is tool installation and job plumbing, never a gate
 command. Adding a check means adding a recipe, adding it to `build`, and adding
 `run: just <recipe>` to the workflow — `just gate-parity` fails until the last
 of those is done. When CI needs a variant of a check, give the recipe a
-parameter and pass it (as `convco` does with `just lint-commits <base>`); do not
-write a second copy of the command into the workflow (ADR-0009).
+parameter and pass it (as `commit-lint` does with `just lint-commits <base>`);
+do not write a second copy of the command into the workflow (ADR-0009).
 
 `gate-parity` covers only the members of `build`. `verify` and `lint-commits`
 are outside its reach, which is where the workflow and the justfile last drifted
@@ -143,7 +143,13 @@ apart unnoticed — check those two by reading when you touch either file.
 - **prim owns the connective tissue** (Markdown/JSON/YAML/TOML) — it honors
   `.editorconfig` only, no per-tool config. `.primignore` is the escape hatch
   for files that must stay byte-exact.
-- **markdownlint** enforces Markdown style (`.markdownlint.json`).
+- **`prim lint` enforces Markdown content rules at its floor tier** — the 12
+  always-on defect rules (a broken in-document anchor, an undefined reference, a
+  malformed table, and the like — not cross-file link resolution, which
+  `just link-check` covers); this repo does not opt into prim's strict
+  (convention) tier. prim has no autofixable content rules yet — `prim fix` is
+  currently identical to `prim fmt` — so a floor-tier finding is repaired by
+  hand.
 - **Every `ridl`/`typl` fenced block in `docs/book/` is compiled** by
   `crates/ridl/tests/book_examples.rs`, and must draw no diagnostic its fence
   does not name — nor name one it does not draw. A verified block declares its

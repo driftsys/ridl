@@ -125,16 +125,15 @@ This repository follows the driftsys house style. After cloning, run
 [prim](https://github.com/driftsys/prim) (the connective-tissue formatter for
 Markdown/JSON/YAML/TOML), then wires up the repo-local hooks in `.githooks/`. It
 also installs the Rust toolchain `rust-toolchain.toml` pins, and reports any
-other tool the gate needs — `just`, `rustup`, mdBook, markdownlint — that it
-cannot find.
+other tool the gate needs — `just`, `rustup`, mdBook — that it cannot find.
 
 The task runner is [`just`](https://github.com/casey/just):
 
 | recipe                 | what it does                                                                                                                                                  |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `just`                 | list the recipes                                                                                                                                              |
-| `just fmt`             | reformat the connective tissue with prim, fix Markdown                                                                                                        |
-| `just check`           | lint gate — `prim fmt --check` + markdownlint, no writes                                                                                                      |
+| `just fmt`             | reformat the connective tissue with prim                                                                                                                      |
+| `just check`           | lint gate — `prim fmt --check` + `prim lint`, no writes                                                                                                       |
 | `just toolchain-check` | the running toolchain is the one `rust-toolchain.toml` pins                                                                                                   |
 | `just gate-parity`     | CI invokes every member of `just build`                                                                                                                       |
 | `just fmt-check`       | `cargo fmt --all --check` (no writes)                                                                                                                         |
