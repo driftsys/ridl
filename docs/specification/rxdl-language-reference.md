@@ -28,7 +28,7 @@ Version: 0.1.0 — Draft
 >
 > **Specified, not built.** No compiler in this repository accepts rxdl. This
 > reference lands as normative with epic E7a; ridl's boundary-model core (E3) is
-> its precondition. See `docs/ROADMAP.md`.
+> its precondition. E3.4 is parked; see `docs/archive/roadmap-landed-record.md`.
 
 ---
 

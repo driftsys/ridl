@@ -12,14 +12,21 @@ narratives for Epics 0, 1, 2 and 9 — is in
 [the landed record](archive/roadmap-landed-record.md). The scope below was set
 by the re-scope of 2026-09-12, recorded in
 [`2026-09-12-release-scope-and-plugin-system-design.md`](wip/2026-09-12-release-scope-and-plugin-system-design.md):
-§1 is the scope, §3 the thirteen decisions with the alternatives each rejected,
-§4 the open items it carries.
+§1 is the scope, §3 the thirteen decisions, most with the alternative each
+rejected, §4 the open items it carries.
 
 The plan runs in two steps. **Step 1** finalizes rsdl, builds the runtime
-library, clears the typl debt, and finalizes the Rust codegen with its two
+library, clears the typl debt, and finalizes the Rust codegen with its three
 payload codecs. **Step 2** adds the TypeScript framework and the codegen plugin
 system. Kotlin, the first external plugin, follows step 2 because it depends on
 the backend contract.
+
+**Supersedes
+[ADR-0004](decisions/ADR-0004-implementation-sequencing-and-stack.md)'s
+sequencing and its release definitions.** ADR-0004 sequenced E5 (rmdl) before E6
+(rsdl) and defined two releases, V1 the contract platform and V2 the executable
+platform. This plan runs rsdl first and replaces the two releases with the two
+steps above. ADR-0004 is not yet amended to record either change.
 
 ## What this repository is, and is not
 
@@ -82,7 +89,9 @@ outside this workspace can be generated until it lands.
 What stays in core: the payload encodings the re-scope fixes — **proto3** for
 the network, **FlatBuffers** for memory, and **`repr(C)`** as the third, added
 by the 2026-09-12 note §3.3. They are how the runtime talks to itself and to a
-generic consumer, not a domain's choice.
+generic consumer, not a domain's choice. ADR-0018 decision 3 still reads "two
+encodings and no more"; the record that amends it is not yet written, so this
+page and that decision disagree until it is.
 
 ## The platform ladder
 
@@ -107,6 +116,10 @@ without an MMU would need `repr(C)` layout and re-attach instead of demand-paged
 growth — which is one reason `repr(C)` is now a payload encoding in its own
 right rather than a contingency.
 
+The roadmap-simplification note's S-17 narrowed the ladder to three rungs —
+desktop, embedded Android, QNX 7.1. This page keeps four: mobile stays, because
+this release ships for it.
+
 ## Tracker correspondence
 
 **This document is the source of truth. The issue tracker mirrors it, one issue
@@ -122,14 +135,15 @@ design is — only about what work is outstanding.
 **Reconciled 2026-09-12, with the re-scope.** 61 issues closed as not planned —
 the rmdl implementation epic, the engine block, the tooling plane beyond the two
 re-homed stories, the gateway, rxdl's ecosystem half and its domain spellings,
-E3.4–E3.6, E4.1–E4.4, Epic 10's TypeScript half and the parity story, nine
-parked agent-enablement stories, and two rsdl forms the rewrite drops. Each
-carries a comment naming the decision that parks it and the observation that
-reopens it. One issue closed as completed (E9.9, delivered by #303). Milestone
-E5 closed; milestone E7 stays open holding E7.1 alone. Two specification defects
-recorded during the pass were filed rather than lost: driftsys/ridl#308 (the
-envelope sequence number has no caller scope) and driftsys/ridl#309 (an invalid
-event payload has no defined behaviour).
+E3.4–E3.6, E4.1–E4.4, E10.9 and E10.11 (Epic 10's TypeScript vocabulary and its
+parity story), E10.8 (closed in error; see Epic 10), nine parked
+agent-enablement stories, and two rsdl forms the rewrite drops. Each carries a
+comment naming the decision that parks it and the observation that reopens it.
+One issue closed as completed (E9.9, delivered by #303). Milestone E5 closed;
+milestone E7 stays open holding E7.1 alone. Two specification defects recorded
+during the pass were filed rather than lost: driftsys/ridl#308 (the envelope
+sequence number has no caller scope) and driftsys/ridl#309 (an invalid event
+payload has no defined behaviour).
 
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
@@ -161,9 +175,10 @@ the ports. This is the library generated code links, not an engine: the store,
 the seqlock, the sans-IO session, the platform traits and the scheduler are
 outside this repository (§3.7) and reopened by rmdl.
 
-**Then the typl debt**, then the Rust codegen finalized with its two payload
-codecs, proto3 and FlatBuffers. `repr(C)` is the third payload encoding (§3.3)
-and its layout rules are an open item of the ADR-0018 amendments.
+**Then the typl debt**, then the Rust codegen finalized with its three payload
+codecs, proto3, FlatBuffers and `repr(C)`. `repr(C)` is the third payload
+encoding (§3.3); its layout rules are decided in a projection record of the
+shape of ADR-0017 and ADR-0019, written when the backend is.
 
 **Sequence.**
 
@@ -171,7 +186,7 @@ and its layout rules are an open item of the ADR-0018 amendments.
 E6 rsdl finalized and lowered to the IR
       → E11.0 ridl-rt → E11.1 frame spec → E11.9 transport and loopback
             → typl debt (E14 dispositions · E10 value objects)
-                  → Rust codegen finalized → E11.7 FlatBuffers · E11.8 proto3
+                  → Rust codegen finalized → E11.7 FlatBuffers · E11.8 proto3 · E11.12 repr(C)
         ╰────────────── E3.1–E3.3 · E9.10 · E9.12 · E8 thread ──────────────╯
 ```
 
@@ -179,7 +194,9 @@ E6 rsdl finalized and lowered to the IR
 §17.11's deferred width floor, because widening a range flips the resolved
 width; and E3.1 plus ADR-0008 decision 3's deferred `labels` promotion, which
 block every derivation over assurance levels, since `SIL_B` and `CAL_2` are
-free-form tokens today. Both are inside the typl debt above.
+free-form tokens today. The width floor is inside the typl debt above, as E14.1;
+the second is not — E3.1 sits in the Epic 3 thread that runs beside this step,
+and the grammar edit the `labels` promotion needs is E9.12.
 
 ## Epic 6 — rsdl, rewritten as a language
 
@@ -196,13 +213,15 @@ step and no TOML descriptor as the user-facing surface (§3.1). Story E11.6, the
 hand-written deployment-facts schema, closed as superseded.
 
 **The specification is being authored now**, and it decides the story breakdown.
-The existing E6 story rows are written against the previous grammar; they are
-left as they are and refiled in one pass when the specification lands, so that
-the rewrite is not made to inherit a breakdown built for the grammar it
-replaces. The one open question the rewrite confirms against the first system is
-rsdl's noun set: the topology-vocabulary note's §7 keeps `component` and the
+The eleven existing E6 story rows were written against the previous grammar;
+they are preserved verbatim under "Parked stories (unscheduled)" in
+[the landed record](archive/roadmap-landed-record.md#parked-stories-unscheduled)
+and are refiled in one pass when the rsdl specification lands, so that the
+rewrite is not made to inherit a breakdown built for the grammar it replaces.
+The one open question the rewrite confirms against the first system is rsdl's
+noun set: the topology-vocabulary note's §7 keeps `component` and the
 roadmap-simplification note's S-36 dropped it; the vocabulary note is later and
-wins.
+takes precedence.
 
 ## Epic 11 — the runtime library and the frame
 
@@ -211,9 +230,10 @@ contract crosses a process boundary. **Value:** every codegen ecosystem has a
 runtime library its generated code links — `prost`, `serde`, the `flatbuffers`
 runtime — and without one, generated code either carries its own copy of the
 envelope and the provenance rules or invents them per project. **Exit
-criteria:** a generated package links `ridl-rt` and reads a sample with its
+criteria:** a hand-written program links `ridl-rt` and reads a sample with its
 provenance, freshness and envelope, and the same contract reaches a second
-process over the WebSocket transport.
+process over the WebSocket transport. The generated-package form of the same
+read is what the Rust codegen section later in this step demonstrates.
 
 **The engine is not here.** The store, the seqlock, the sans-IO session, the
 subscription table, the platform traits, the scheduler and the ring depth are
@@ -221,9 +241,15 @@ outside this repository (§3.7), parked as `ridl-engine` and reopened by rmdl.
 This epic builds the library, the frame specification and the transport — not a
 runtime that owns them. The first runtime is the consumer's.
 
+**Three rows are redefined under their identifiers.** E11.1, E11.7 and E11.8
+were written for the engine block — the control plane, the store and the queue —
+which the re-scope moved out of this repository (§3.7). The re-scope redefines
+them as the frame specification and two of the payload codecs, keeping the
+identifiers; their issues are retitled to match.
+
 | ID    | Story                                                                                                                       | Done when                                                                                                   | Size |
 | ----- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---- |
-| E11.0 | `ridl-rt` — identity, the envelope, `Provenance`/`Freshness`/`Sample`, `Payload<E>`, the interaction descriptors, the ports | a generated package links it and reads a sample with its provenance                                         | L    |
+| E11.0 | `ridl-rt` — identity, the envelope, `Provenance`/`Freshness`/`Sample`, `Payload<E>`, the interaction descriptors, the ports | a hand-written program links it and reads a sample with its provenance                                      | L    |
 | E11.1 | The frame specification — a logical frame with one binding per encoding; ordinal, kind, envelope, provenance, correlation   | one document a second implementation could be written from                                                  | M    |
 | E11.9 | `ridl-transport-ws` — the WebSocket transport crate, plus the in-process loopback runtime for tests                         | a contract reaches a second process over the transport, and the loopback runs the same tests with no socket | M    |
 
@@ -239,7 +265,7 @@ deferred to a named version, and both references drop "Draft".
 | ----- | --------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ---- |
 | E14.1 | typl §17 disposition pass, including §17.11's width floor and the two new rows (§3.10, §3.11) | every open question is resolved or deferred to a named version | M    |
 | E14.2 | ridl §17 disposition pass                                                                     | as above, and the QoS and bound terms agree with ADR-0015      | M    |
-| E14.3 | Both references drop "Draft"; the rxdl reference gains its status line                        | no reference in `docs/specification/` is marked Draft          | S    |
+| E14.3 | Both references drop "Draft"; the rxdl reference gains its status line                        | neither the typl nor the ridl reference is marked Draft        | S    |
 
 ## Epic 10 — typl value objects
 
@@ -250,9 +276,11 @@ documentation across every backend", while no language backend emits a
 validator. **Exit criteria:** a constrained named scalar cannot be constructed
 out of range in Rust, and `--emit rust` writes a crate that compiles.
 
-**The TypeScript half moved to step 2.** E10.8, E10.9 and E10.11 were written
-against the previous backend shape and are closed; TypeScript's value layer is
-part of the TypeScript work in step 2.
+**The TypeScript half moved to step 2.** E10.9 and E10.11 were written against
+the previous backend shape and are closed; TypeScript's value layer is part of
+the TypeScript work in step 2. E10.8 is a Rust story and stays in this epic; its
+issue, driftsys/ridl#253, was closed in error during the re-scope pass and is
+being reopened.
 
 Design and plan of record:
 [`typl-value-objects-design.md`](wip/typl-value-objects-design.md) and
@@ -267,7 +295,11 @@ Design and plan of record:
 | E10.5  | `TryFrom<i64>` for enum and enum set                                              | an undefined discriminant is rejected                             | M    |
 | E10.6  | Sound derives — no derive that could reconstruct an invalid value                 | no path bypasses the validating seam                              | M    |
 | E10.7  | `--emit rust` writes a compiling crate                                            | the emitted crate builds standalone                               | M    |
+| E10.8  | Pattern validation behind a `validate-pattern` feature                            | regex constraints check without forcing the dependency            | M    |
 | E10.10 | Amend ADR-0013 and typl §5.7; verify the `ridl-diff` classification               | the decision is recorded and a constraint change classifies right | S    |
+
+E10.1's `Done when` names both backends. The TypeScript backend arrives in step
+2, so that criterion completes then; the Rust half completes here.
 
 **Carried typl defects**, to be cleared in this step: driftsys/ridl#245 (a
 name-based `reserved` in an enum body is accepted with no defined meaning),
@@ -277,16 +309,24 @@ name-transform collision rather than a duplicate).
 
 ## Rust codegen, finalized
 
-**Milestone:** the Rust backend emits a complete, compiling surface with both
-payload codecs. **Exit criteria:** a generated package links `ridl-rt`,
+**Milestone:** the Rust backend emits a complete, compiling surface with all
+three payload codecs. **Exit criteria:** a generated package links `ridl-rt`,
 constructs and validates its types, and round-trips a payload through
-FlatBuffers and through proto3, with byte-level conformance against a
-`protoc`-generated implementation.
+FlatBuffers, through proto3 and through the `repr(C)` layout, with byte-level
+conformance against a `protoc`-generated implementation for proto3.
 
-| ID    | Story                                                                                            | Done when                                      | Size |
-| ----- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------- | ---- |
-| E11.7 | The FlatBuffers payload codec                                                                    | a payload round-trips through the library      | L    |
-| E11.8 | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation | our bytes parse there and its bytes parse here | L    |
+**E11.12 is a new identifier**, the next free one in Epic 11, for the `repr(C)`
+payload codec the 2026-09-12 note §3.3 adds. Its layout rules — the
+fixed-capacity layout of a bounded string, optional and collection, the string
+capacity and terminator, alignment and endianness — are its prerequisite, and
+they belong in a projection record of the shape of ADR-0017 and ADR-0019,
+written when the backend is (§3.3), not in the ADR-0018 amendments.
+
+| ID     | Story                                                                                                                                                                                               | Done when                                                                             | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---- |
+| E11.7  | The FlatBuffers payload codec                                                                                                                                                                       | a payload round-trips through the library                                             | L    |
+| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                    | our bytes parse there and its bytes parse here                                        | L    |
+| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type | a payload round-trips through the layout struct, and the emitted header compiles as C | L    |
 
 **Known defects to clear with this work:** driftsys/ridl#243 (a struct field
 name is emitted verbatim, so generated Rust draws `non_snake_case`),
@@ -317,12 +357,12 @@ compatible.
 ## Epic 9 — wire SSOT, remaining
 
 **Milestone:** the schema projections are complete and the general-form drift is
-recorded. The projections themselves landed; see the landed record.
+removed. The projections themselves landed; see the landed record.
 
-| ID    | Story                                                         | Done when                                    | Size |
-| ----- | ------------------------------------------------------------- | -------------------------------------------- | ---- |
-| E9.10 | The schema hash over the IR, not over the emitted schema      | one hash is stable across both wire backends | M    |
-| E9.12 | General-form R5 postfix order contradicts the shipped grammar | the general form and the grammar agree       | S    |
+| ID    | Story                                                                                                                                                                                                                                           | Done when                                                | Size |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------- | ---- |
+| E9.10 | The **schema hash over the IR**, not over the emitted schema                                                                                                                                                                                    | two targets of one IR agree on identity                  | M    |
+| E9.12 | Drift the design surfaced: general-form R5's postfix order contradicts the shipped grammar (`@timing` is last, not before attributes); `InterfaceDef`/`ServiceDef` gain the `AttrBlock` the deferred `labels`/`deprecated` promotion also needs | R5 matches `family.ungram`; one grammar edit serves both | S    |
 
 ## Epic 8 — agent enablement ([ADR-0005](decisions/ADR-0005-agent-enablement.md))
 
@@ -331,17 +371,19 @@ recorded. The projections themselves landed; see the landed record.
 `ridl_check`/`ridl_explain`/`ridl_diff` and the IR-query tools back a
 verify/evolve loop.
 
-**Six stories, not seventeen.** E8.4 and E8.8 onwards are parked; what remains
+**Six stories here, not seventeen.** E8.4 and E8.8 onwards are parked, with one
+exception: E8.15, the rsdl skill profile (driftsys/ridl#87), stays open and
+waits for Epic 6's specification, which decides its content. What remains here
 is the knowledge layer and the MCP over the compiler.
 
-| ID   | Story                                                                                     | Rides | Done when                                                               | Size |
-| ---- | ----------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------- | ---- |
-| E8.1 | Rules file — always-on constraints distilled from the doctrines and the error diagnostics | E1    | every rule cites a diagnostic code or doctrine                          | S    |
-| E8.2 | Skill v0 (typl) — decision tables and worked examples                                     | E1    | authors valid `.typl`; content traceable to the typl reference          | M    |
-| E8.3 | Skill extended to the ridl `interact` core                                                | E2    | covers ridl reference §3–§10; the corpus example round-trips clean      | M    |
-| E8.5 | MCP server skeleton — a thin binary over the shared salsa crates                          | E2    | the server starts and answers one tool call                             | M    |
-| E8.6 | Verify/evolve tools — `ridl_check`, `ridl_explain`, `ridl_diff`                           | E2    | coded diagnostics and fix-its reach the agent verbatim                  | M    |
-| E8.7 | Grounding / IR-query tools — `ridl_describe_type`, `ridl_list_interactions`               | E2    | an agent answers a question about a contract without reading the source | M    |
+| ID   | Story                                                                                                                                                                                                                                     | Rides | Done when                                                                                                   | Size |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------- | ---- |
+| E8.1 | Rules file — 10–20 always-on "never/always" constraints, distilled from doctrines + the _error_ diagnostics (no semicolons, named-typl payloads, errors-as-data, command≠query, no inheritance, no upward refs, append-only + `reserved`) | E1    | every rule cites a diagnostic code or doctrine; loads in Claude Code/Cursor/Cowork                          | S    |
+| E8.2 | Skill v0 (typl) — dense decision tables + worked examples for types/ranges/units/evolution, per `skill-ridl-authoring-outline.md`                                                                                                         | E1    | authors valid `.typl`; content traceable to the typl reference                                              | M    |
+| E8.3 | Skill extended to the ridl `interact` core — 5-kind selection table, timing, errors-as-data / `T\|E`, common-mistakes table keyed to codes                                                                                                | E2    | covers ridl ref §3–§10; cruise-control example round-trips clean (`.rxdl` descriptive form once E3.5 lands) | M    |
+| E8.5 | MCP server skeleton — thin binary over the shared salsa crates, sibling of the LSP, **no second parser**; stdio transport                                                                                                                 | E2    | server starts, advertises tools, shares the compiler crates                                                 | M    |
+| E8.6 | Verify/evolve tools — `ridl_check` (coded diagnostics + **fix-its verbatim**), `ridl_explain` (error index), `ridl_diff` (0/1/2 + breaking list)                                                                                          | E2    | outputs are byte-identical to CLI/LSP (one diagnostic SSOT)                                                 | M    |
+| E8.7 | Grounding / IR-query tools — `ridl_describe_type`, `ridl_list_interactions`, `ridl_resolve`                                                                                                                                               | E2    | return real IR data; agent cites existing symbols, not hallucinated ones                                    | M    |
 
 ---
 
@@ -393,7 +435,7 @@ byte-identical output to the in-process path.
 | E4.5a | IR stability policy and the canonical encoding — driftsys/ridl#231 is its first item                                                               | the policy names a canonical encoding that round-trips every IR the front end admits | M    |
 | E4.5b | The lowering step, the backend contract (`generate(CodegenRequest) → CodegenResponse`), and the process host; both in-tree backends ported onto it | `ridlc-gen-ts` through the process host is byte-identical to the in-process path     | L    |
 | E4.6  | `ridl init`/`ridl new` scaffolding + `ridl vendor` (air-gap)                                                                                       | scaffolds a valid workspace; vendors deps                                            | S    |
-| E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                     | a colliding key across profiles fails CI                                             | S    |
+| E4.7  | Governance CI: keyword-registry collision test, and the E3.1 attribute registry enforced in CI                                                     | colliding key across profiles fails CI                                               | S    |
 
 **The lowering step is the reason the contract is worth having.** Each backend
 re-derives the same semantics from the raw IR today — the name transforms, the
@@ -404,6 +446,19 @@ every backend mostly a printer. A plugin over the raw IR would re-implement all
 of it a third time (§3.8, alternative (a)). Porting the two in-tree backends
 onto the contract is part of E4.5b, and for Rust that is a second pass over what
 step 1 finalized.
+
+## Epic 7 — the `.rxdl` unrestricted profile, trimmed
+
+**Milestone:** types, interfaces and wiring compile from one file. The row runs
+after rsdl has landed, because wiring is rsdl's layer. It is narrower than the
+original E7.1, which also admitted the model layer and lifted the domain
+restriction; the model layer and the domain spellings wait for rmdl (§3.2), so
+the row does not depend on the parked E3.4. Issue driftsys/ridl#68 is retitled
+to match.
+
+| ID   | Story                                                                                                                                                                      | Done when                                                                                            | Size |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ---- |
+| E7.1 | `.rxdl` unrestricted profile, narrowed: typl, ridl and rsdl declarations in one file — no model layer, no domain spellings; per-package tightening enforced in `ridl.toml` | a file mixing types, interfaces and wiring compiles; a package that tightens rejects what it forbids | M    |
 
 ---
 
@@ -428,21 +483,23 @@ because such a reader has no verifier and no typl constraint checks (§3.13).
 
 # Parked, and what reopens each
 
-Every parked story keeps its row, its `Done when` and its size in the landed
-record and in its closed issue. Each block has one line saying what reopens it,
-so that reopening is an observation rather than an argument.
+Every parked story keeps its row, its `Done when` and its size under "Parked
+stories (unscheduled)" in
+[the landed record](archive/roadmap-landed-record.md#parked-stories-unscheduled)
+and in its closed issue. Each block has one line saying what reopens it, so that
+reopening is an observation rather than an argument.
 
 | Parked                                   | Reopened by                                                                           |
 | ---------------------------------------- | ------------------------------------------------------------------------------------- |
 | E3.4–E3.6                                | a contract at the person or world boundary that must diff                             |
 | E4.1–E4.4                                | a second organisation adopting the language                                           |
 | E5 (rmdl implementation)                 | its draft finalised and rsdl shipped, or a consumer whose behaviour must be generated |
-| E7 (rxdl's ecosystem half and spellings) | E3.4 landing, plus a domain that wants its own spellings                              |
+| E7 (rxdl's ecosystem half and spellings) | rmdl — rxdl's backend and its domain spellings are reopened with it                   |
 | `ridl-engine`                            | rmdl — execution is its subject                                                       |
 | E12.2                                    | the runtime library — there is nothing to observe without it                          |
 | E12.3                                    | E4.5b, plus a contract-generic consumer                                               |
 | E12.5–E12.10                             | a test plane with an owner                                                            |
-| E13 (the gateway)                        | two encodings in one deployed system                                                  |
+| E13 (the gateway)                        | a second consumer                                                                     |
 | E8 parked stories                        | a regression the kept six did not catch                                               |
 | The plugin protocol's wasm host          | the browser playground                                                                |
 
@@ -450,22 +507,26 @@ so that reopening is an observation rather than an argument.
 
 # Milestone summary
 
-| Epic | Milestone                  | Step                                                         |
-| ---- | -------------------------- | ------------------------------------------------------------ |
-| E0   | walking skeleton           | landed — internal                                            |
-| E1   | typl schema language       | landed — **v0.1 preview**                                    |
-| E2   | ridl contract boundary     | landed — v0.x                                                |
-| E9   | wire SSOT                  | landed in part — schema projections; hash remains            |
-| E6   | rsdl, rewritten            | **step 1** — a system is described and lowered to the IR     |
-| E11  | the runtime library        | **step 1** — generated code links a library                  |
-| E14  | typl and ridl finalization | **step 1** — the references stop being drafts                |
-| E10  | typl value objects         | **step 1** — types that cannot hold an invalid value         |
-| —    | Rust codegen finalized     | **step 1** — both payload codecs, byte-conformant            |
-| E3   | boundary model, core       | **step 1** — the attribute layer enforced                    |
-| E8   | agent enablement           | **step 1** — threads alongside                               |
-| E12  | the TypeScript framework   | **step 2** — a second language, and an emulator              |
-| E4.5 | the plugin protocol        | **step 2** — the extension seam every domain reaches through |
-| —    | Kotlin, the first plugin   | after step 2                                                 |
+| Epic | Milestone                    | Step                                                                               |
+| ---- | ---------------------------- | ---------------------------------------------------------------------------------- |
+| E0   | walking skeleton             | landed — internal                                                                  |
+| E1   | typl schema language         | landed — **v0.1 preview**                                                          |
+| E2   | ridl contract boundary       | landed — v0.x                                                                      |
+| E9   | wire SSOT                    | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
+| E6   | rsdl, rewritten              | **step 1** — a system is described and lowered to the IR                           |
+| E11  | the runtime library          | **step 1** — generated code links a library                                        |
+| E14  | typl and ridl finalization   | **step 1** — the references stop being drafts                                      |
+| E10  | typl value objects           | **step 1** — types that cannot hold an invalid value                               |
+| none | Rust codegen finalized       | **step 1** — the three payload codecs, byte-conformant                             |
+| E3   | boundary model, core         | **step 1** — the attribute layer enforced                                          |
+| E8   | agent enablement             | **step 1** — threads alongside                                                     |
+| E12  | the TypeScript framework     | **step 2** — a second language, and an emulator                                    |
+| E4.5 | the plugin protocol          | **step 2** — the extension seam every domain reaches through                       |
+| E7   | the `.rxdl` profile, trimmed | **step 2** — types, interfaces and wiring in one file                              |
+| none | Kotlin, the first plugin     | after step 2                                                                       |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
-tracker section above explains.
+tracker section above explains. Two rows have no epic: the Rust codegen section
+is a section of this page holding three Epic 11 stories (E11.7, E11.8, E11.12),
+and Kotlin is a plugin written outside this workspace with no story identifier
+here.

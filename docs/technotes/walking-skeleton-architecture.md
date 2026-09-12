@@ -5,12 +5,12 @@ choices, see [ADR-0008](../decisions/ADR-0008-e2-execution.md),
 [ADR-0007](../decisions/ADR-0007-e1-execution.md),
 [ADR-0004](../decisions/ADR-0004-implementation-sequencing-and-stack.md), and
 [ADR-0002](../decisions/ADR-0002-module-system.md); for the requirements, see
-[`docs/ROADMAP.md`](../ROADMAP.md) epics E1 and E2. This note exists for whoever
-picks up the next epic: it records the workspace map, the end-to-end pipeline,
-and the seams a newcomer or the E3 implementer needs to know about — as they
-actually landed in the merged code (E1 as PRs #107–#133, E2 as PRs #136–#181),
-not as planned. Where it disagrees with an ADR or the roadmap, the ADR/roadmap
-is normative and this note is stale.
+[the landed record](../archive/roadmap-landed-record.md), epics E1 and E2. This
+note exists for whoever picks up the next epic: it records the workspace map,
+the end-to-end pipeline, and the seams a newcomer or the E3 implementer needs to
+know about — as they actually landed in the merged code (E1 as PRs #107–#133, E2
+as PRs #136–#181), not as planned. Where it disagrees with an ADR or the
+roadmap, the ADR/roadmap is normative and this note is stale.
 
 The file has been rewritten as-built at each epic close. The first version
 described the epic E0 walking skeleton, which the filename still carries; E1
@@ -264,8 +264,8 @@ deliberately. All are closed:
   stack these choices refine.
 - [ADR-0002](../decisions/ADR-0002-module-system.md) — the module semantics the
   resolver implements.
-- [`docs/ROADMAP.md`](../ROADMAP.md), Epics 1 and 2 — the stories this
-  architecture satisfies.
+- [`docs/archive/roadmap-landed-record.md`](../archive/roadmap-landed-record.md),
+  Epics 1 and 2 — the stories this architecture satisfies.
 - `docs/archive/2026-07-18-e1-typl-tooling-spine-plan.md` and
   `docs/archive/2026-07-19-e2-ridl-interface-layer-plan.md` — the archived
   execution plans.
