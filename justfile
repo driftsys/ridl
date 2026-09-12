@@ -26,7 +26,9 @@ fmt:
     prim .
 
 # Lint gate — no writes: prim fmt --check (formatting) + prim lint (content,
-# floor tier — the 12 always-on defect rules; see driftsys/prim AD-0012).
+# floor tier — the 12 always-on defect rules). See the driftsys/prim
+# repository's own decision record 0012 (its "AD-" prefix, not this
+# repository's unrelated ADR-0012) for the floor/strict split.
 check:
     prim fmt --check .
     prim lint .

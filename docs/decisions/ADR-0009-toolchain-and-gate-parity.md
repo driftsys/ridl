@@ -168,6 +168,13 @@ prediction.
    form is unreliable. With CI invoking `just check`, the flags have no place
    left to live.
 
+   _Amended (2026-09-12):_ markdownlint-cli is retired in favor of
+   `prim
+   lint`, which honors `.gitignore`/`.ignore`/`.primignore` on its own.
+   `.markdownlintignore` is deleted with nothing replacing it; the exclusions it
+   held (`book/`, `node_modules/`, `target/`) were already covered by
+   `.gitignore`.
+
 10. **The three tools this ADR puts on the default path are guarded, and a
     missing one fails the gate — it never skips a member.** `book-check` checks
     for `mdbook`, `toolchain-check` checks for `rustc`, and `wasm-check` already
@@ -182,6 +189,11 @@ prediction.
     what is decided here is that a recipe this ADR adds does not join them. A
     gate that quietly weakens itself when a tool is absent is the defect this
     ADR is about, so no guard downgrades to a warning or a skip.
+
+    _Amended (2026-09-12):_ `markdownlint` is gone from `check` — it now shells
+    out to `prim` twice (`fmt --check`, then `lint`), unguarded the same way.
+    The property this decision describes is unchanged: one tool, still
+    unguarded, still predating this ADR.
 
 11. **`just toolchain-check` compares versions.** It reads the `channel` from
     `rust-toolchain.toml` and fails when `rustc --version` reports a different
@@ -206,6 +218,10 @@ prediction.
     repository should not make for them. Naming them up front is the
     reconciliation — silence was the previous behaviour, and silence is what let
     mdBook become a gate requirement nothing told a contributor about.
+
+    _Amended (2026-09-12):_ `markdownlint` is dropped from the check, since
+    markdownlint-cli is retired. `./bootstrap` now names three tools from two
+    ecosystems — `just`, `rustup`, `mdbook` — not four from three.
 
 13. **What `just book-check` catches is a `SUMMARY.md` parse check, not "the
     book compiles".** Measured against mdBook 0.4.52 on this book:
@@ -246,12 +262,12 @@ prediction.
 - Negative / accepted: pinning to an exact version means the repository no
   longer discovers a new stable release by failing. It discovers it when someone
   bumps the pin, and the bump PR carries whatever repairs the new release wants.
-- Negative / accepted: markdownlint-cli is still unpinned on both sides — CI
-  installs the latest, a contributor has whatever their package manager gave
-  them. Its findings are style findings that `just fmt` repairs, so the exposure
-  is a failing `just check` rather than a wrong artifact, and pinning it would
-  need a version in a file that no ecosystem here reads. Recorded as known and
-  not closed.
+- Negative / accepted, closed 2026-09-12: markdownlint-cli was still unpinned on
+  both sides — CI installed the latest, a contributor had whatever their package
+  manager gave them. Closed by retiring markdownlint-cli outright: `just check`
+  now runs `prim lint .` (prim's floor tier) instead, and prim was already
+  unpinned on both sides by decision 8, so this is not a new instance of that
+  gap.
 - Review hook: every decision above is reversible by editing one file. The
   maintainer can veto any of them by reopening this ADR.
 
