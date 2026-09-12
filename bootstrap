@@ -9,12 +9,12 @@
 #
 # It then installs the pinned Rust toolchain named in rust-toolchain.toml, if
 # rustup is present, and checks for every other tool `just build` shells out to.
-# It does not install those: `just`, mdBook, and markdownlint-cli come from
-# three different package ecosystems, and writing into a contributor's global
-# npm, cargo, or system prefix is a choice this script should not make for them.
-# It names each missing tool with the command that installs it and exits
-# non-zero, so a fresh clone reports what the gate needs up front instead of
-# failing part-way through a gate run (ADR-0009).
+# It does not install those: `just` and mdBook come from two different package
+# ecosystems, and writing into a contributor's global cargo or system prefix is
+# a choice this script should not make for them. It names each missing tool
+# with the command that installs it and exits non-zero, so a fresh clone
+# reports what the gate needs up front instead of failing part-way through a
+# gate run (ADR-0009).
 
 set -euo pipefail
 
@@ -68,7 +68,6 @@ log "checking the tools 'just build' requires"
 require just "see https://just.systems/man/en/packages.html"
 require rustup "see https://rustup.rs — it is what applies rust-toolchain.toml"
 require mdbook "cargo install mdbook --locked"
-require markdownlint "npm install --global markdownlint-cli"
 
 if [ "$missing" -ne 0 ]; then
   log "'just build' cannot run until the tools listed above are installed"

@@ -21,17 +21,15 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 default:
     @just --list
 
-# Reformat the connective tissue (Markdown/JSON/YAML/TOML) in place with prim,
-# then auto-fix Markdown style findings. Exclusions live in .markdownlintignore,
-# which markdownlint auto-detects — see that file for why not `--ignore`.
+# Reformat the connective tissue (Markdown/JSON/YAML/TOML) in place with prim.
 fmt:
     prim .
-    markdownlint '**/*.md' --fix
 
-# Lint gate — no writes: prim fmt --check (formatting) + markdownlint (style).
+# Lint gate — no writes: prim fmt --check (formatting) + prim lint (content,
+# floor tier — the 12 always-on defect rules; see driftsys/prim AD-0012).
 check:
     prim fmt --check .
-    markdownlint '**/*.md'
+    prim lint .
 
 # Check that the rustc about to run is the version rust-toolchain.toml pins.
 #
@@ -144,7 +142,7 @@ wasm-check:
     fi
 
 # Check Rust formatting without writing. Separate from `just fmt`, which owns
-# the connective tissue (prim + markdownlint) and does not touch Rust.
+# the connective tissue (prim) and does not touch Rust.
 # ADR-0008 decision 11 names `cargo fmt --all --check` in the merge gate; until
 # issue #182 it sat in no recipe, so the gate a contributor runs did not enforce
 # it. Run `cargo fmt --all` to repair what this reports.
@@ -388,12 +386,12 @@ book-build:
 #
 # The range is taken against the remote-tracking ref because a local branch goes
 # stale relative to the remote; an empty range is benign and handled rather than
-# failed. The base is a parameter so that CI's convco job, which lints against
-# whatever branch a PR targets, and `verify`, which lints against `main`, run
-# this one definition rather than each holding its own `git std lint` line. They
-# held two before, and the two already differed: the workflow's read
-# `origin/$base_ref..HEAD` and the recipe's read `origin/main..HEAD`, so they
-# agreed only for PRs based on `main`.
+# failed. The base is a parameter so that CI's commit-lint job, which lints
+# against whatever branch a PR targets, and `verify`, which lints against
+# `main`, run this one definition rather than each holding its own `git std
+# lint` line. They held two before, and the two already differed: the
+# workflow's read `origin/$base_ref..HEAD` and the recipe's read
+# `origin/main..HEAD`, so they agreed only for PRs based on `main`.
 #
 # This is the one gate command `gate-parity` cannot watch, because `verify` is
 # not a dependency of `build` — which is exactly why the two copies drifted
@@ -422,8 +420,8 @@ release:
     git std bump
 
 # Set up a clone or worktree: git-std, prim, the git hooks, the Rust toolchain
-# rust-toolchain.toml pins, and a report on any of the four tools the gate needs
-# (just, rustup, mdbook, markdownlint) that bootstrap cannot find.
+# rust-toolchain.toml pins, and a report on any of the three tools the gate
+# needs (just, rustup, mdbook) that bootstrap cannot find.
 install:
     ./bootstrap
 
