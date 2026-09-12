@@ -11,8 +11,8 @@ review.
 It refines ADR-0008 decision 11, which names five commands as the merge gate, by
 fixing what those commands run against. It changes none of them.
 
-Decisions 9, 10, and 12, and one accepted consequence, carry a 2026-09-12
-amendment, dated in its own text, for the markdownlint-cli retirement.
+Decisions 5, 9, 10, and 12, and two accepted consequences, carry 2026-09-12
+amendments, dated in their own text, for the markdownlint-cli retirement.
 
 ## Context
 
@@ -274,17 +274,21 @@ prediction.
   it; decision 8 pins only `mdbook` and `just`. This is not a new gap, but it is
   a wider one: prim's unpinned version used to decide formatting only, and now
   also decides which Markdown defects `prim lint` can find at all. Accepted
-  without a version floor, on the same terms decision 8 already accepted for
-  every tool it does not name.
+  without a version floor — decision 8 does not extend that far, so there is no
+  existing acceptance to lean on; this tool is simply left unpinned, like every
+  other one decision 8 does not name.
 - Negative / accepted, 2026-09-12: adopting prim's floor tier instead of its
-  strict tier drops nine rules markdownlint's default set ran that prim's floor
-  tier does not: MD001, MD024, MD026, MD033, MD053, MD059, MD067, MD073, MD080
-  (the last has no markdownlint equivalent; it is prim-only). Measured by adding
-  `prim_mdlint_strict = true` to a copy of this tree: 45 findings, none from
-  those nine except MD080 (3, all in `docs/archive/roadmap-landed-record.md`) —
-  the rest are MD040 (34), MD025 (5), MD036 (2), MD041 (1), all four already
-  disabled under the retired `.markdownlint.json`. Reaching that retired
-  policy's exact enforcement level would cost one `.editorconfig` block
+  strict tier drops enforcement of six rules markdownlint's default set ran —
+  MD001, MD024, MD026, MD033, MD053, MD059 — plus three prim/rumdl-only strict-
+  tier extensions markdownlint never had at all: MD067, MD073, MD080. Measured
+  by adding `prim_mdlint_strict = true` to a copy of this tree: 45 findings,
+  none from those nine except MD080 (3, all in
+  `docs/archive/roadmap-landed-record.md`) — the rest are MD040 (34), MD025 (5),
+  MD036 (2), MD041 (1), all four already disabled under the retired
+  `.markdownlint.json`. Reaching a similar level — not the retired policy
+  exactly, since `prim_mdlint_disable` cannot restore that file's
+  `MD024: siblings_only` or `MD033: allowed_elements` narrowing, and strict mode
+  additionally runs MD067/MD073 — would cost one `.editorconfig` block
   (`prim_mdlint_strict = true` plus `prim_mdlint_disable` naming those four) and
   three archived-file heading edits — not adopted here; recorded so the
   reduction reads as a choice, not an oversight.

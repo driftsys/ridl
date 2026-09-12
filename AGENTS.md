@@ -147,8 +147,9 @@ apart unnoticed — check those two by reading when you touch either file.
   always-on defect rules (a broken in-document anchor, an undefined reference, a
   malformed table, and the like — not cross-file link resolution, which
   `just link-check` covers); this repo does not opt into prim's strict
-  (convention) tier. `prim fix` exists for autofixable content findings but is
-  not wired into `just fmt`; a floor-tier finding is repaired by hand.
+  (convention) tier. prim has no autofixable content rules yet — `prim fix` is
+  currently identical to `prim fmt` — so a floor-tier finding is repaired by
+  hand.
 - **Every `ridl`/`typl` fenced block in `docs/book/` is compiled** by
   `crates/ridl/tests/book_examples.rs`, and must draw no diagnostic its fence
   does not name — nor name one it does not draw. A verified block declares its
