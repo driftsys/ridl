@@ -1,6 +1,6 @@
 # Simplifying the roadmap and the feature set
 
-Status: working note, 2026-09-08, **revised three times the same day after
+Status: working note, 2026-09-08, **revised four times the same day after
 review**. S-01 to S-17 are the first pass. S-18 to S-23 carry the first
 revision: the language order is typl -> ridl -> rsdl -> rmdl (S-18) and the
 engine — store, seqlock, sans-IO core, platform traits — parks as a block
@@ -14,7 +14,7 @@ service comes from which component, publishes which interface, on which machine,
 and which service consumes it — are scoped by **D-1**, a decision between rsdl
 v1 and an out-of-band descriptor. S-34 records why that decision is not open:
 rsdl §3.1 defines a component by the rmdl model it applies, so the concept the
-requirement leans on hardest is downstream of the language S-25 defers. S-36 to
+requirement leans on hardest is downstream of the language S-25 defers. S-34 to
 S-50 carry the fourth: the rsdl vocabulary rules, later consolidated into
 [`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md), and
 S-36 reopens D-1. Rule numbers are cited by
@@ -335,7 +335,7 @@ gateway is two codecs and a routing decision, and neither codec is written.
                   two stories and six weeks leave the release as well, the
                   exit criterion loses its codec clause, and a consumer
                   encodes with its own adapters (the first runtime already
-                  has `har-signal`'s `Pod` and `Fb`). That is a coherent
+                  has its own `Pod` and `Fb` adapters). That is a coherent
                   release too, and a smaller one; it is not what this note
                   currently plans.
     S-31  NARROW  **rsdl v1 is scoped by its sentence, not by its
@@ -539,7 +539,7 @@ gateway is two codecs and a routing decision, and neither codec is written.
                   hash therefore makes every service in a catalog deploy in
                   lockstep with every other — which is exactly the
                   independence being asked for, lost. Hash at the
-                  **interface**, which is already the unit ADR-0018 §8
+                  **interface**, which is already the unit ADR-0018 decision 8
                   gives a region to, and the lockstep shrinks to the
                   interface that actually changed. Corollary, and the same
                   move the consumer's vocabulary made for `machine_id`: **a

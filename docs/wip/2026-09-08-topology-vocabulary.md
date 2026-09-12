@@ -208,15 +208,16 @@ timing protection, which is ADR-0018 open item 1 word for word.
 
 ## 6. Catalogs
 
-the consumer's catalog record §2 and §5 already settle this; restated because it
-interlocks with the rest.
+The consumer's catalog record (§2 and §5) already settles this; restated because
+it interlocks with the rest.
 
 A catalog has three identities and only one appears in a frame: **name**
 (reverse-DNS, used by attach, SELinux and manifests), **hash** (u64 over the
 compiled catalog — this is the version), and **slot** (u8, assigned per
 connection, the only one in the frame). Interface ids are allocated **within** a
 catalog and the routing key is (slot, interface, member), which is what makes
-catalogs independent with no global allocator — the consumer's catalog record.
+catalogs independent with no global allocator — a property the consumer's
+catalog record already fixes.
 
     V-15  MUST   A catalog is declared **in ridl**, because it owns an id
                  space and a hash and both are compiler concerns, and
@@ -249,12 +250,12 @@ catalogs independent with no global allocator — the consumer's catalog record.
                  the right closure.
 
 Consequences already in the ABI: one region per catalog, each its own memfd with
-its own SELinux label (the consumer's catalog record); the attach list is the
-grant list, so the permission boundary, the mapping set and the routing
-namespace are one list rather than three that drift (the consumer's catalog
-record); and a shared catalog is never specialised per deployment — programme
-content is a separate catalog alongside (the consumer's catalog record), which
-is exactly how a framework catalog and two programme catalogs compose.
+its own SELinux label (as the consumer's catalog record already requires); the
+attach list is the grant list, so the permission boundary, the mapping set and
+the routing namespace are one list rather than three that drift; and a shared
+catalog is never specialised per deployment — programme content is a separate
+catalog alongside, which is exactly how a framework catalog and two programme
+catalogs compose.
 
 ## 7. What rsdl is left with
 
@@ -331,7 +332,7 @@ naming pass.
 
 ## 9. Open
 
-**V-X1 — cross-catalog references.** the consumer's catalog record: may a
+**V-X1 — cross-catalog references.** The consumer's catalog record asks: may a
 payload in one catalog name a type in another? "Easy at compiler-design time,
 awful to retrofit. A question for ridl, not answerable here." A framework
 catalog whose types two programme catalogs use hits this on day one, so V-16's

@@ -445,7 +445,7 @@ would.
         /// Over the IR of this interface: what a peer compares to detect
         /// UNKNOWN_INTERACTION (§10.2) and what a store header records.
         const HASH: u64;
-        /// ADR-0018 decision 8: one region per provided interface; coherence declared.
+        /// ADR-0018 decision 8: one region per provided interface; coherence derived by the emitter.
         const COHERENT: bool;
         const MEMBERS: &'static [Member];
     }

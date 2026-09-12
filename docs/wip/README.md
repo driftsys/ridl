@@ -65,8 +65,8 @@ still read the E9.8 design note, from the archive.
   the note argues the roadmap is serving a public language platform and one
   system's SSOT at once and should choose the second. Parks E3.4-E3.6, most of
   E4, all of E12, E13 and E7, and eleven of E8, keeping every identifier and
-  giving each parked block the evidence that reopens it. **Revised three times
-  on the day.** The language order is typl -> ridl -> rsdl -> rmdl (S-18);
+  giving each parked block the evidence that reopens it. **Revised four times on
+  the day.** The language order is typl -> ridl -> rsdl -> rmdl (S-18);
   `ridl-engine` — store, seqlock, sans-IO core, platform traits — parks as a
   block (S-19), which
   [`2026-09-08-ridl-rt-design.md`](2026-09-08-ridl-rt-design.md) §0 reaches from
@@ -124,6 +124,7 @@ still read the E9.8 design note, from the archive.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
-  record. Roadmap: Epic 10. ridl-boundary-model-review.md, superseded by
-  ADR-0012, is archived too — see
-  [`../archive/README.md`](../archive/README.md).
+  record. Roadmap: Epic 10.
+
+ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
+[`../archive/README.md`](../archive/README.md).
