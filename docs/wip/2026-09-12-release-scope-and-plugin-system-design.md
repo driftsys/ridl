@@ -159,6 +159,17 @@ roadmap stories E12.1 (the TypeScript surface) and E12.4 (an emulator), re-homed
 under the TypeScript work. Roadmap E11.9 becomes the transport crate and
 package.
 
+_Where it landed (2026-09-12, writing the record):_ "the wasm build of the
+runtime library" in §1 and in this section's first sentence is wrong, and
+ADR-0020 decision 7 corrects it. ADR-0018 decision 4 makes the codec a
+serializer for known types, and the ridl-rt note emits the encoding impls and
+the typl constraint checks per type into the generated package, so a wasm build
+of `ridl-rt` alone carries no codec for any package's types. The codec is the
+generated Rust for the package compiled to `wasm32` against `ridl-rt`; the
+TypeScript runtime package carries the port interfaces and the loader. Decision
+2's no-skew argument is unaffected — both artifacts still come from one `ridlc`
+run over one IR.
+
 Alternatives: (a) faces and frame only, no transport — rejected because then two
 emulators written by two people share no transport, and the TypeScript backend
 has no end-to-end test in this repository; (b) faces only, no frame
@@ -332,7 +343,10 @@ surrogate, which `TextEncoder` silently replaces, so the binding checks
 well-formedness before encoding and rejects.
 
 New row for typl §17; disposed of in the finalization pass as normative text in
-§5.
+**§4** — §5 above is wrong. The sentences this rule replaces are the primitives
+table's "character sequence" and §4.4's "encoding (ASCII, UTF-8, UTF-16) is a
+codegen concern per target", both in §4; §4.4 is also the standing statement
+this rule contradicts, and it now points at §17.13.
 
 ### 3.12 Amendments to the ridl-rt design note
 

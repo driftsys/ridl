@@ -1212,8 +1212,12 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
     ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
     decision 4). One rule is not a projection rule: a JavaScript string may hold
     a lone surrogate, which `TextEncoder` replaces with U+FFFD and a wasm codec
-    cannot see, so the TypeScript runtime package checks well-formedness before
-    encoding and rejects. Recorded in
+    cannot see, so the TypeScript runtime package checks well-formedness at its
+    boundary, before handing the string to the codec, and rejects. That check is
+    the one encoding-aware thing that package carries; every per-type encoding
+    impl and every typl constraint check lives in the generated package
+    ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+    decision 7). Recorded in
     [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
     §3.11.
 

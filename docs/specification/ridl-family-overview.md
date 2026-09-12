@@ -186,7 +186,7 @@ By home; see each reference for full statements.
   — where the backend may choose, `?` needs no syntax)** · byte order home ·
   canonical encoding · **explicit wire-width floor (deferred `wire` clause,
   §17.11)** · **integer-backed unit types (§17.12)** · **what a `string` is made
-  of and how it is encoded (§17.13 — to be resolved as normative text in §5 by
+  of and how it is encoded (§17.13 — to be resolved as normative text in §4 by
   the finalization pass, not deferred)**
 - **ridl §17**: selective broadcasts · actions/long-operations idiom ·
   mid-stream invalid policy · reflection service · failure-management spec (with

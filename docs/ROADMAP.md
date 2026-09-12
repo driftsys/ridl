@@ -327,11 +327,11 @@ decision 4 places them in a projection record of the shape of ADR-0017 and
 ADR-0019, written when the backend is — not in that record and not in the
 ADR-0018 amendments.
 
-| ID     | Story                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                    | Size |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                    | L    |
-| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                                                                                                                    | our bytes parse there and its bytes parse here                                                                                               | L    |
-| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries a layout attribute | L    |
+| ID     | Story                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                   | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
+| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                                                                                                                    | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
+| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
 
 **Known defects to clear with this work:** driftsys/ridl#243 (a struct field
 name is emitted verbatim, so generated Rust draws `non_snake_case`),
@@ -405,18 +405,22 @@ TypeScript codec, and an emulator written in TypeScript stands in for a provider
 without the consumer distinguishing it.
 
 The TypeScript side is the same three layers as Rust: the runtime package (the
-wasm build of `ridl-rt` plus the port interfaces), the generated faces, and a
-separate transport package. The WebSocket transport is what the getting-started
-path uses and what a remote server or an emulator links by default; nothing
-links it unless asked (§3.5).
+port interfaces spelled in TypeScript, plus the loader that instantiates a
+package's wasm codec), the generated faces, and a separate transport package.
+The codec itself is per package — the generated Rust compiled to `wasm32`
+against `ridl-rt`, not a build of that library, which carries no per-type codec
+([ADR-0020](decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 7). The WebSocket transport is what the getting-started path uses and
+what a remote server or an emulator links by default; nothing links it unless
+asked (§3.5).
 
 **Two stories keep their E12 identifiers**, because identifiers are identity —
 they are re-homed here, not renumbered.
 
-| ID    | Story                                                                                                               | Done when                                                                    | Size |
-| ----- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
-| E12.1 | The TypeScript surface — generated types and faces, the codec reached through the wasm build of the runtime library | a Deno program constructs and validates a payload without a TypeScript codec | L    |
-| E12.4 | Emulator — a hand-written provider standing in for a component, driven by the contract                              | a consumer cannot distinguish the emulator from the real provider            | M    |
+| ID    | Story                                                                                                                                                                       | Done when                                                                    | Size |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
+| E12.1 | The TypeScript surface — generated types and faces, the codec reached through the package's own generated Rust compiled to `wasm32` against `ridl-rt` (ADR-0020 decision 7) | a Deno program constructs and validates a payload without a TypeScript codec | L    |
+| E12.4 | Emulator — a hand-written provider standing in for a component, driven by the contract                                                                                      | a consumer cannot distinguish the emulator from the real provider            | M    |
 
 **The encoding at the codec-in-wasm boundary is FlatBuffers.** ADR-0018 decision
 3 put proto3 on the wasm guest boundary because a guest updates independently of
