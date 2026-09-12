@@ -144,8 +144,11 @@ apart unnoticed — check those two by reading when you touch either file.
   `.editorconfig` only, no per-tool config. `.primignore` is the escape hatch
   for files that must stay byte-exact.
 - **`prim lint` enforces Markdown content rules at its floor tier** — the 12
-  always-on defect rules (broken links, malformed tables, and the like); this
-  repo does not opt into prim's strict (convention) tier.
+  always-on defect rules (a broken in-document anchor, an undefined reference, a
+  malformed table, and the like — not cross-file link resolution, which
+  `just link-check` covers); this repo does not opt into prim's strict
+  (convention) tier. `prim fix` exists for autofixable content findings but is
+  not wired into `just fmt`; a floor-tier finding is repaired by hand.
 - **Every `ridl`/`typl` fenced block in `docs/book/` is compiled** by
   `crates/ridl/tests/book_examples.rs`, and must draw no diagnostic its fence
   does not name — nor name one it does not draw. A verified block declares its

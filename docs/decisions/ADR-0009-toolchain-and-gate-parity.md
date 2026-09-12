@@ -11,6 +11,9 @@ review.
 It refines ADR-0008 decision 11, which names five commands as the merge gate, by
 fixing what those commands run against. It changes none of them.
 
+Decisions 9, 10, and 12, and one accepted consequence, carry a 2026-09-12
+amendment, dated in its own text, for the markdownlint-cli retirement.
+
 ## Context
 
 ADR-0006 decision 8 made the gate local while CI is stuck, and ADR-0008 decision
@@ -111,8 +114,9 @@ prediction.
    is tool installation and job plumbing; no gate command is written there.
 
    When CI needs a variant of a check, the recipe takes a parameter and CI
-   passes it. That is how the fifth instance was closed: the `convco` job held
-   its own `git std lint --range origin/$base_ref..HEAD` and `verify` held
+   passes it. That is how the fifth instance was closed: the `convco` job
+   (renamed `commit-lint` on 2026-09-12) held its own
+   `git std lint --range origin/$base_ref..HEAD` and `verify` held
    `origin/main..HEAD`, so the two had **already** drifted and agreed only for
    PRs based on `main`. Both now invoke `just lint-commits`, whose base is a
    parameter defaulting to `main`. This one was found in review of the commit
@@ -265,9 +269,25 @@ prediction.
 - Negative / accepted, closed 2026-09-12: markdownlint-cli was still unpinned on
   both sides — CI installed the latest, a contributor had whatever their package
   manager gave them. Closed by retiring markdownlint-cli outright: `just check`
-  now runs `prim lint .` (prim's floor tier) instead, and prim was already
-  unpinned on both sides by decision 8, so this is not a new instance of that
-  gap.
+  now runs `prim lint .` (prim's floor tier) instead. prim was already unpinned
+  on both sides before this change — for `fmt` — but decision 8 does not cover
+  it; decision 8 pins only `mdbook` and `just`. This is not a new gap, but it is
+  a wider one: prim's unpinned version used to decide formatting only, and now
+  also decides which Markdown defects `prim lint` can find at all. Accepted
+  without a version floor, on the same terms decision 8 already accepted for
+  every tool it does not name.
+- Negative / accepted, 2026-09-12: adopting prim's floor tier instead of its
+  strict tier drops nine rules markdownlint's default set ran that prim's floor
+  tier does not: MD001, MD024, MD026, MD033, MD053, MD059, MD067, MD073, MD080
+  (the last has no markdownlint equivalent; it is prim-only). Measured by adding
+  `prim_mdlint_strict = true` to a copy of this tree: 45 findings, none from
+  those nine except MD080 (3, all in `docs/archive/roadmap-landed-record.md`) —
+  the rest are MD040 (34), MD025 (5), MD036 (2), MD041 (1), all four already
+  disabled under the retired `.markdownlint.json`. Reaching that retired
+  policy's exact enforcement level would cost one `.editorconfig` block
+  (`prim_mdlint_strict = true` plus `prim_mdlint_disable` naming those four) and
+  three archived-file heading edits — not adopted here; recorded so the
+  reduction reads as a choice, not an oversight.
 - Review hook: every decision above is reversible by editing one file. The
   maintainer can veto any of them by reopening this ADR.
 
