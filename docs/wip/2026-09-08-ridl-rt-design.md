@@ -445,7 +445,7 @@ would.
         /// Over the IR of this interface: what a peer compares to detect
         /// UNKNOWN_INTERACTION (§10.2) and what a store header records.
         const HASH: u64;
-        /// ADR-0018 §8: one region per provided interface; coherence declared.
+        /// ADR-0018 decision 8: one region per provided interface; coherence declared.
         const COHERENT: bool;
         const MEMBERS: &'static [Member];
     }
@@ -497,7 +497,7 @@ stores; it never resolves a type. The generated binding is what turns a
             -> Result<RawSample, ReadError>;
         // RawSample { provenance, cause, freshness, envelope, len } — the
         // runtime resolves the timing, not the binding (RA-33).
-        /// Interface generation for a coherent read (ADR-0018 §8): read gen,
+        /// Interface generation for a coherent read (ADR-0018 decision 8): read gen,
         /// read slots, read gen, retry on change. Only meaningful when the
         /// interface declares `COHERENT`.
         fn generation(&self, iface: InterfaceId) -> u64;

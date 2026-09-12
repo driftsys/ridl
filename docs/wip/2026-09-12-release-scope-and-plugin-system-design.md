@@ -49,10 +49,10 @@ with a hand-written Kotlin runtime library. See §3.9.
 
 ## 2. Ordering principle
 
-The three bullets of §1 replace the roadmap-simplification note's P-1 ("one
-consumer orders the backlog") as the ordering principle. The first consumer
-remains the validation of every runtime-facing decision, and its needs enter
-this note as the generic requirements of §3.13.
+The scope of §1 replaces the roadmap-simplification note's P-1 ("one consumer
+orders the backlog") as the ordering principle. The first consumer remains the
+validation of every runtime-facing decision, and its needs enter this note as
+the generic requirements of §3.13.
 
 ## 3. Decisions
 
@@ -82,8 +82,8 @@ the IR (§3.13).
 The rxdl reference stays in `docs/specification/` and keeps its place in the
 family. Its unrestricted profile covers types, interfaces and wiring in one
 file; the model layer of that profile, and the domain spellings and their
-bindings (roadmap E7.2–E7.9), wait for rmdl. The reference gains a status line
-saying so.
+bindings (roadmap E7.7–E7.9), together with E7's ecosystem half (E7.2–E7.6),
+wait for rmdl. The reference gains a status line saying so.
 
 Alternative: archive the reference next to the retired uxdl reference — rejected
 because rxdl is not retired, only partly deferred.
@@ -106,9 +106,9 @@ then have to live in the C subset (no `String`, no `Vec`, no `Option<T>`, no
 enum with data), every Rust consumer would pay that representation including the
 ones that only speak proto3, and a typl §17.11 width change would move every
 field after it in every consumer's struct. ADR-0007 decision 13 did this for
-scalars and ADR-0018 retired it because the header could not carry strings,
-optionals or collections; ADR-0018 decision 6 rejects exposed layout at the FFI
-for the same reason.
+fixed-layout structs (scalar newtypes got `#[repr(transparent)]`) and ADR-0018
+retired it because the header could not carry strings, optionals or collections;
+ADR-0018 decision 6 rejects exposed layout at the FFI for the same reason.
 
 This amends ADR-0018 decision 3 ("two encodings and no more"). The projection
 rules — the fixed-capacity layout of a bounded string, optional and collection,
@@ -295,7 +295,7 @@ Alternative: an explicit backing keyword on unit types — rejected because
 TYPL-105 already makes the flip explicit, and the rule is the one every language
 uses for `1` versus `1.0`. The wire question ("can a float unit be sent as an
 integer") was already answered by the width derivation from range and step (typl
-reference §5.6, ADR-0013 decision 7).
+reference §5.6, ADR-0013 decision 6).
 
 New row for typl §17; disposed of in the finalization pass as a v0.2 syntax
 change. Corpus check when implemented: any unit type written with integer
@@ -338,9 +338,10 @@ New row for typl §17; disposed of in the finalization pass as normative text in
 
 Two corrections the first consumer's sketch exposed:
 
-- **A ninth port, `Snapshot`.** A `coherent` interface (ADR-0015's coherence
-  rule, ridl §14.5) needs pinned-generation multi-reads. The note alludes to it
-  in RA-28 and never defines it; §6 gains it.
+- **A ninth port, `Snapshot`.** An interface read under the coherence rule
+  (ADR-0015 decision 9, ridl §14.5 — coherence is implicit, never declared)
+  needs pinned-generation multi-reads. The note alludes to it in RA-28 and never
+  defines it; §6 gains it.
 - **`commit` takes no `now`.** §6 and §8 write
   `commit(&mut self, now:
   Timestamp)`; the note's own RA-28 says no port takes

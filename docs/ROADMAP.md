@@ -421,7 +421,8 @@ canonical protobuf JSON that a non-Rust runtime parses, projects to proto3 and
 FlatBuffers schemas, and generates a store and dispatcher whose identity is
 stable under `ridl-diff`.
 
-**Design of record** — four notes in `docs/wip/`, all sharing one origin:
+**Design of record** — four notes, archived in `docs/archive/` once their
+records were ratified, all sharing one origin:
 [`2026-08-03-ir-protobuf-encodings-design.md`](archive/2026-08-03-ir-protobuf-encodings-design.md)
 ·
 [`2026-08-03-rpc-response-bound-design.md`](archive/2026-08-03-rpc-response-bound-design.md)

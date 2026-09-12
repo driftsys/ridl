@@ -57,7 +57,7 @@ still read the E9.8 design note, from the archive.
   walkable store rather than an interaction semantic. Structural verification
   stays flatc's and ridl emits only the typl checks; nothing on the path needs
   `unsafe`; `Access::CHECKED` defaults true and is skipped only on a
-  measurement. Rules `RA-01..35`, ten opens. First implementation is the first
+  measurement. Rules `RA-01..35`, nine opens. First implementation is the first
   runtime, from the first consumer. **Not ratified** — and the ADR-0018
   amendment it implies (RA-X10) is not written.
 - **2026-09-08-roadmap-simplification.md** — the plan, not the design. 102
@@ -89,10 +89,12 @@ still read the E9.8 design note, from the archive.
   vocabulary instead — machine / service / interface, with `vm` rejected because
   the QNX host is a machine too — so the descriptor adds one noun to what ridl
   §14 already owns. Leaves 30 stories and 47 weeks with the consumer's runtime
-  as the first and only runtime. Rules P-1..P-6, S-01..S-35, A-1..A-4, D-1.
-  **Not ratified**; eleven opens, including whether the public-platform goal is
-  deferred or abandoned (SR-X1), that one implementation now validates the whole
-  trait layer (SR-X6), and what a breaking _deployment_ change is (SR-X10).
+  as the first and only runtime. Rules P-1..P-6, S-01..S-50, A-1..A-4, D-1
+  (reopened by S-36; S-34 to S-50 are consolidated in the topology-vocabulary
+  note). **Not ratified**; twelve opens, including whether the public-platform
+  goal is deferred or abandoned (SR-X1), that one implementation now validates
+  the whole trait layer (SR-X6), and what a breaking _deployment_ change is
+  (SR-X10).
 - **2026-09-08-topology-vocabulary.md** — the nouns for the layer between a
   contract and the hardware: distribution, machine, process, component, service,
   interface, member, catalog, with one question each (V-01) and only addressed
@@ -102,14 +104,14 @@ still read the E9.8 design note, from the archive.
   sync or async pump — which corrects rsdl §1.3, whose three properties belong
   to three different levels, and drops composites. Machine is verified against
   AUTOSAR Adaptive ("quasi a virtualized ECU-HW"); a `target` is not one, and
-  `RTE` names the layer `ridl-rt` occupies. Restates `catalog-abi.md` §2/§5 and
-  adds: a catalog is declared in ridl because it owns an id space and a hash,
-  one package one catalog, ids allocated-and-recorded per package, and a
-  generation filter produces a view and never a catalog. Leaves rsdl with four
-  declarations plus a lock. Full mapping table to Adaptive, Classic and OSGi,
-  and the rejected names with their reasons. **Not ratified**; six opens,
-  including ABI-X2's cross-catalog references and what a breaking _deployment_
-  change is.
+  `RTE` names the layer `ridl-rt` occupies. Restates the consumer's catalog
+  record §2/§5 and adds: a catalog is declared in ridl because it owns an id
+  space and a hash, one package one catalog, ids allocated-and-recorded per
+  package, and a generation filter produces a view and never a catalog. Leaves
+  rsdl with four declarations plus a lock. Full mapping table to Adaptive,
+  Classic and OSGi, and the rejected names with their reasons. **Not ratified**;
+  six opens, including the cross-catalog references question and what a breaking
+  _deployment_ change is.
 - **2026-09-12-release-scope-and-plugin-system-design.md** — the design note of
   the 2026-09-12 re-scoping session: the release scope (typl, ridl, rsdl
   finalized; rmdl deferred; Rust with three payload encodings and TypeScript
@@ -122,15 +124,6 @@ still read the E9.8 design note, from the archive.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
-  record. Roadmap: Epic 10.
-- **2026-08-08-rust-generated-surface-design.md** — what the code generators
-  emit and in what order. Three artifacts (domain types, wire schema, codec) on
-  two axes (language, encoding), a two-flag CLI, and two phases: validated types
-  plus their codec, then a client/server interaction face. Records four defects
-  in the shipped Rust backend as evidence, and proposes an answer to ADR-0013
-  open item 1. Depends on **typl-value-objects-design.md** for phase 1's
-  validation half. Roadmap: E4.5, E9.8–E9.11, Epic 10. **Not ratified** — seven
-  open questions, including whether codecs are code- or descriptor-driven.
-
-ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
-[`../archive/README.md`](../archive/README.md).
+  record. Roadmap: Epic 10. ridl-boundary-model-review.md, superseded by
+  ADR-0012, is archived too — see
+  [`../archive/README.md`](../archive/README.md).

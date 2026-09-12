@@ -39,7 +39,7 @@ is the record and this note is the proposal.
 
 V-02 is the rule that keeps recurring. It was decided independently for
 `machine_id` (the first consumer's topology naming, because placement is what
-changes between v1 and v2), for the catalog name (`catalog-abi.md` ABI-02,
+changes between v1 and v2), for the catalog name (the consumer's catalog record,
 because a global catalog-id registry is the coordination independent catalogs
 exist to avoid), and for bundles and components here. Four derivations of one
 rule.
@@ -208,7 +208,7 @@ timing protection, which is ADR-0018 open item 1 word for word.
 
 ## 6. Catalogs
 
-`interfaces/catalog-abi.md` §2 and §5 already settle this; restated because it
+the consumer's catalog record §2 and §5 already settle this; restated because it
 interlocks with the rest.
 
 A catalog has three identities and only one appears in a frame: **name**
@@ -216,19 +216,19 @@ A catalog has three identities and only one appears in a frame: **name**
 compiled catalog — this is the version), and **slot** (u8, assigned per
 connection, the only one in the frame). Interface ids are allocated **within** a
 catalog and the routing key is (slot, interface, member), which is what makes
-catalogs independent with no global allocator — ABI-03.
+catalogs independent with no global allocator — the consumer's catalog record.
 
     V-15  MUST   A catalog is declared **in ridl**, because it owns an id
                  space and a hash and both are compiler concerns, and
                  because `ridl diff` must classify a change to it. It
                  cannot come from a build flag: membership from a glob
-                 renumbers silently and ABI-01's "one name, one set of
+                 renumbers silently and the consumer's catalog record's "one name, one set of
                  contents" has nothing to anchor to.
     V-16  SHOULD One package, one catalog, named for the package. ADR-0002
                  already makes package↔directory normative and package
                  names are already reverse-DNS, so the rule adds no syntax.
                  Catalog granularity then equals package granularity, and
-                 ABI-07's guidance — finer costs file descriptors, coarser
+                 the consumer's catalog record's guidance — finer costs file descriptors, coarser
                  costs a permission boundary that cannot be drawn later —
                  says erring fine is the safe direction.
     V-17  MUST   Interface ids within a catalog are **allocated and
@@ -249,11 +249,12 @@ catalogs independent with no global allocator — ABI-03.
                  the right closure.
 
 Consequences already in the ABI: one region per catalog, each its own memfd with
-its own SELinux label (ABI-07); the attach list is the grant list, so the
-permission boundary, the mapping set and the routing namespace are one list
-rather than three that drift (ABI-08); and a shared catalog is never specialised
-per deployment — programme content is a separate catalog alongside (ABI-09),
-which is exactly how a framework catalog and two programme catalogs compose.
+its own SELinux label (the consumer's catalog record); the attach list is the
+grant list, so the permission boundary, the mapping set and the routing
+namespace are one list rather than three that drift (the consumer's catalog
+record); and a shared catalog is never specialised per deployment — programme
+content is a separate catalog alongside (the consumer's catalog record), which
+is exactly how a framework catalog and two programme catalogs compose.
 
 ## 7. What rsdl is left with
 
@@ -330,10 +331,10 @@ naming pass.
 
 ## 9. Open
 
-**V-X1 — cross-catalog references.** `catalog-abi.md` ABI-X2: may a payload in
-one catalog name a type in another? "Easy at compiler-design time, awful to
-retrofit. A question for ridl, not answerable here." A framework catalog whose
-types two programme catalogs use hits this on day one, so V-16's
+**V-X1 — cross-catalog references.** the consumer's catalog record: may a
+payload in one catalog name a type in another? "Easy at compiler-design time,
+awful to retrofit. A question for ridl, not answerable here." A framework
+catalog whose types two programme catalogs use hits this on day one, so V-16's
 one-package-one-catalog rule makes it urgent rather than hypothetical.
 
 **V-X2 — whether a service number is needed at all on this transport.** The
