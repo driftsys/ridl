@@ -55,15 +55,26 @@ stays a Proposed draft with no implementation. See
   encodings, and what the backends emit — _proposed_; retracts the interaction
   layer the language backends shipped and restores it as a later phase, retires
   the extern-C face, fixes proto3 and FlatBuffers as the two core encodings —
-  the 2026-09-12 re-scope adds `repr(C)` as a third, with the ADR-0018 amendment
-  for it still to be written — moves the store and dispatcher into Epic 11, and
-  resolves the service-block conflict between ADR-0013 decision 2 and ADR-0016
-  decision 10; binds every backend and the runtime — read it before writing
-  anything about what a backend emits), ADR-0019 (the FlatBuffers projection — a
-  union isolated in a wrapper table, a non-table union arm boxed, every struct a
+  the 2026-09-12 re-scope adds `repr(C)` as a third and ADR-0020 amends decision
+  3 in place — moves the store and dispatcher into Epic 11, and resolves the
+  service-block conflict between ADR-0013 decision 2 and ADR-0016 decision 10;
+  binds every backend and the runtime, and carries a 2026-09-12 amendment on
+  decisions 3, 6, 15, 16 and 17 plus a record-wide note that `ridl-rt` names the
+  engine here and the library everywhere else — read it before writing anything
+  about what a backend emits), ADR-0019 (the FlatBuffers projection — a union
+  isolated in a wrapper table, a non-table union arm boxed, every struct a
   `table`, a map with no `(key)`, the target's own name scopes, and `= null` on
   a field whose enum declares no zero member; binds the FlatBuffers backend
-  only).
+  only), ADR-0020 (the third payload encoding, the runtime layering and the
+  codegen plugin system — _proposed_; `repr(C)` joins proto3 and FlatBuffers and
+  the encoding matrix settles the codec-in-wasm boundary as FlatBuffers,
+  `ridl-rt` is one crate with one cargo feature per encoding and the runtimes
+  live outside it, and a backend becomes an executable over
+  `generate(CodegenRequest) -> CodegenResponse` fed by a lowering step in the
+  compiler — read it before writing a backend or a runtime library, and read its
+  **Documents amended** table: ADR-0018's decisions 3, 6 and 15 rest on this
+  record, its decisions 16 and 17 on the re-scope's other decisions, and
+  ADR-0013's target list changes with them).
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

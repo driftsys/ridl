@@ -1,6 +1,6 @@
 # The RIDL Family — Overview and Index
 
-**One platform, five languages, one grammar.** This is the entry-point document:
+**One platform, four languages, one grammar.** This is the entry-point document:
 the map, the shared doctrines, the reading paths, the decision ledger, and the
 index of open questions. It contains no normative language rules of its own —
 every rule lives in exactly one reference, cited from here.
@@ -26,25 +26,25 @@ One grammar, one toolchain, one IR; each language is a **profile** selected by
 file extension (`.typl` `.ridl` `.rmdl` `.rsdl`, plus `.rxdl` the
 **unrestricted** profile — any layer and any interaction domain). ridl describes
 every boundary through five interaction families (ADR-0012); rxdl adds readable
-spellings for the non-dispatch ones and no semantics; rmdl computes
-contract-blind reactions; rsdl components bind them to contracts and wire
-instances — rsdl never stands alone.
+spellings for the non-dispatch ones and no semantics, and those spellings wait
+for rmdl (see the inventory below); rmdl computes contract-blind reactions; rsdl
+components bind them to contracts and wire instances — rsdl never stands alone.
 
 ## 2. Document Inventory
 
-| Document                       | Version   | Status            | Owns                                                                                                                                                                                             |
-| ------------------------------ | --------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Concept note — the RIDL family | draft     | direction-setting | motivation, cores, profiles, platform/repo/IR model, naming ledger                                                                                                                               |
-| ADR-0002 — module system       | accepted  | normative         | `package`/`import`/`as`/`internal`, manifest, lockfile, resolver                                                                                                                                 |
-| **typl Language Reference**    | 0.1 draft | normative         | vocabulary layer + family lexicon, keyword registry (§1.4), evolution model (§7.4)                                                                                                               |
-| **ridl Language Reference**    | 0.2 draft | normative         | interaction layer + interact-core semantics: envelope, timing, init/invalid channels, errors, streams                                                                                            |
-| **rxdl Language Reference**    | 0.1 draft | draft, E7a        | the unrestricted profile and the domain spellings; adds no semantics (ADR-0012)                                                                                                                  |
-| **rmdl Language Reference**    | 0.1 draft | normative         | behaviour layer: functions, models, steps/timeline semantics, flow stdlib                                                                                                                        |
-| **rsdl Language Reference**    | 0.1 draft | normative         | architecture layer: components (situated reactions), providing/requiring services, application-notation wiring, composition + deployment regions, transport/posture derivation, bundles          |
-| **expr-core Specification**    | 0.1 draft | normative         | the full contract-term grammar: the guaranteed subset (V1, E2 — normative as implemented) + the function layer (V2, E5.1 — forward-looking), typing rules, evaluation domains, RIDL-306 boundary |
-| ADR-0003 — the family decision | —         | **not started**   | freezes §1 and the ledger below in ADR form                                                                                                                                                      |
-| IR specification               | —         | not started       | serialization, plugin protocol, diff categories, canonical encoding                                                                                                                              |
-| ridl-rt runtime specification  | —         | not started       | scheduler/timeline, acks, quarantine, lag metrics, supervision hooks                                                                                                                             |
+| Document                       | Version   | Status            | Owns                                                                                                                                                                                                                           |
+| ------------------------------ | --------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Concept note — the RIDL family | draft     | direction-setting | motivation, cores, profiles, platform/repo/IR model, naming ledger                                                                                                                                                             |
+| ADR-0002 — module system       | accepted  | normative         | `package`/`import`/`as`/`internal`, manifest, lockfile, resolver                                                                                                                                                               |
+| **typl Language Reference**    | 0.1 draft | normative         | vocabulary layer + family lexicon, keyword registry (§1.4), evolution model (§7.4)                                                                                                                                             |
+| **ridl Language Reference**    | 0.2 draft | normative         | interaction layer + interact-core semantics: envelope, timing, init/invalid channels, errors, streams                                                                                                                          |
+| **rxdl Language Reference**    | 0.1 draft | draft — E7.1 only | the unrestricted profile and the domain spellings; adds no semantics (ADR-0012). in scope: types, interfaces and wiring in one file (roadmap E7.1, not built). The model layer, the spellings and their bindings wait for rmdl |
+| **rmdl Language Reference**    | 0.1 draft | normative         | behaviour layer: functions, models, steps/timeline semantics, flow stdlib                                                                                                                                                      |
+| **rsdl Language Reference**    | 0.1 draft | normative         | architecture layer: components (situated reactions), providing/requiring services, application-notation wiring, composition + deployment regions, transport/posture derivation, bundles                                        |
+| **expr-core Specification**    | 0.1 draft | normative         | the full contract-term grammar: the guaranteed subset (V1, E2 — normative as implemented) + the function layer (V2, E5.1 — forward-looking), typing rules, evaluation domains, RIDL-306 boundary                               |
+| ADR-0003 — the family decision | —         | **not started**   | freezes §1 and the ledger below in ADR form                                                                                                                                                                                    |
+| IR specification               | —         | not started       | serialization, plugin protocol, diff categories, canonical encoding                                                                                                                                                            |
+| `ridl-engine` specification    | —         | not started       | scheduler/timeline, acks, quarantine, lag metrics, supervision hooks — the engine, parked outside this repository; `ridl-rt` now names the runtime library instead                                                             |
 
 Superseded: RIDL Language Reference v0.1 (split into typl + ridl v0.2); markspec
 typl/uxil (prior work, mapped in the typl/rxdl appendices); uxdl v0.1 (retired
@@ -133,7 +133,7 @@ Each doctrine is normative **where cited**; this list is the index.
   §14 → rmdl §3.2, §6.4, §8 → rsdl §5.3, §8, §10 → the diagnostics tables of
   each reference.
 
-## 5. Decision Ledger (design sessions, July 2026)
+## 5. Decision Ledger (design sessions, July 2026 onward)
 
 Chronological; each recorded in full where cited.
 
@@ -171,6 +171,9 @@ Chronological; each recorded in full where cited.
 | 30 | Bundle collapsed to one concept (spk/apk dropped — Android's, not ours); platform-vs-app is a `tier` attribute                                                                                                                                                                                                                                                                                         | rsdl §9                                |
 | 31 | **Init syntax unified to bare `= value`** (typl types/fields, ridl signal overrides, uxdl display overrides); `default` keyword retired; `init` kept as rmdl's alone (memory seed `init x = value`). **`wire` clause + ten width names dropped** from v0.1 — width is range-inferred and unwritable; the explicit width **floor** deferred to typl §17.11 (`ridl-diff` gate covers the flip meanwhile) | typl §5.6/§5.8, ridl §4.4, typl §17.11 |
 | 32 | **`ridl.std` scoped by a stated inclusion criterion**: only definitions fixed by a cross-industry standard whose meaning is domain-independent, because the package is implicitly imported into every file of every profile. The ISO 3779 `Vin` type and `VIN_PATTERN` constant are removed as automotive — inherited unexamined from RIDL v0.1, and the only members bound to one industry            | typl App. A                            |
+| 33 | **rsdl is rewritten as a language, not replaced by a descriptor schema**: it lowers to the IR the way ridl does, the IR _is_ the deployment schema, and there is no TOML descriptor as the user-facing surface. Reverses ADR-0018 decision 17's schema-first sequencing; roadmap story E11.6 closes as superseded                                                                                      | ADR-0018 d17, re-scope note §3.1       |
+| 34 | **rxdl stays, trimmed**: the unrestricted profile covers types, interfaces and wiring in one file; the model layer of that profile, the domain spellings and the bindings they generate wait for rmdl. Not retired, only partly deferred                                                                                                                                                               | rxdl §1                                |
+| 35 | **A third payload encoding, `repr(C)`**, beside proto3 and FlatBuffers, chosen by what a consumer can link rather than by a tier; the domain types do not carry it, and a C header is one of its artifacts rather than a language target                                                                                                                                                               | ADR-0020 d1–d4                         |
 
 ## 6. Open Questions — Consolidated Index
 
@@ -182,7 +185,9 @@ By home; see each reference for full statements.
   sentinels **(narrowed by ADR-0013 decision 7 to the standards-conformance case
   — where the backend may choose, `?` needs no syntax)** · byte order home ·
   canonical encoding · **explicit wire-width floor (deferred `wire` clause,
-  §17.11)**
+  §17.11)** · **integer-backed unit types (§17.12)** · **what a `string` is made
+  of and how it is encoded (§17.13 — to be resolved as normative text in §5 by
+  the finalization pass, not deferred)**
 - **ridl §17**: selective broadcasts · actions/long-operations idiom ·
   mid-stream invalid policy · reflection service · failure-management spec (with
   safety/HA properties direction) — the QoS boundary question is answered by the
@@ -205,8 +210,10 @@ By home; see each reference for full statements.
   matching · end-to-end timing composition · bundle dependency/versioning ·
   resilience realization · global service catalog scoping · service-number
   allocation (tag-based transports; ADR-0016)
-- **Cross-cutting, unhomed**: IR stability policy (blocks `ridl-diff` contract
-  and plugin protocol) · UCUM→AUTOSAR unit mapping table · bridge authentication
+- **Cross-cutting, unhomed**: IR stability policy (blocks the `ridl-diff`
+  contract and the plugin protocol — roadmap story E4.5a, made a prerequisite by
+  [ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+  decision 12) · UCUM→AUTOSAR unit mapping table · bridge authentication
   (concept note)
 
 ## 7. Shared Diagnostic Namespaces — `FORM-` and `MANI-`

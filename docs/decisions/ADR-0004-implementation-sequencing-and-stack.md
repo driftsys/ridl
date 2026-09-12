@@ -19,6 +19,34 @@ places by ADR-0012 and by the rmdl phase split recorded in `docs/ROADMAP.md`:
 Epic and story numbers are unchanged; only their order is. The stack decisions
 (§2 onward) are unaffected.
 
+**Amended 2026-09-12** — §1's sequencing and its release definitions are
+superseded by [`docs/ROADMAP.md`](../ROADMAP.md), rewritten from the re-scope
+recorded in
+[`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md).
+Two things change.
+
+1. **rsdl runs before rmdl, and rmdl has no implementation in view.** The
+   2026-08-03 amendment above already moved rsdl ahead of rmdl's runtime; the
+   roadmap now runs rsdl ahead of rmdl entirely. rmdl stays a Proposed draft,
+   and the epics that depend on it are parked with the observation that reopens
+   each.
+2. **The two releases are replaced by two steps.** "V1 the contract platform"
+   and "V2 the executable platform" no longer name anything the roadmap plans.
+   Step 1 finalizes rsdl, builds the `ridl-rt` runtime library, clears the typl
+   debt and finalizes the Rust codegen with its three payload encodings
+   ([ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md));
+   step 2 adds the TypeScript framework and the codegen plugin system. Kotlin,
+   as the first external plugin, follows step 2.
+
+The forward-compatibility constraint of §1 is unaffected: the `expr`/function
+core is still shared, and rmdl's function layer still extends the same grammar
+whenever rmdl is built. The expr-core specification keeps its own V1 and V2
+labels, which name the two layers it defines — the guaranteed subset of E2 and
+the function layer of E5.1 — and not the two releases this amendment retires;
+that document needs no sweep. The stack decisions (§2 onward) remain unaffected,
+and [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 16's own
+V1 framing is amended in that record for the same reason.
+
 Assumes ADR-0002 (module system) as accepted and ADR-0003 (the family decision —
 profiles, cores, platform model) as the direction of record even though 0003 is
 not yet written; this ADR depends only on the concept note's §7–§8 conclusions,

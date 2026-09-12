@@ -330,13 +330,13 @@ Five primitive types. Primitives are lowercase keywords — visually distinct fr
 `CamelCase` named types. They serve as backing types in `type` definitions;
 direct use as field types is restricted (§15.3).
 
-| Primitive | Meaning                                                  | Constraint                        |
-| --------- | -------------------------------------------------------- | --------------------------------- |
-| `boolean` | logical true/false                                       | none                              |
-| `integer` | whole number — width inferred from range                 | recommended — profile may require |
-| `float`   | real number — width inferred from range and step         | recommended — profile may require |
-| `string`  | character sequence — default `[0..256]` if unspecified   | recommended — profile may require |
-| `bytes`   | opaque binary buffer — default `[0..256]` if unspecified | recommended — profile may require |
+| Primitive | Meaning                                                         | Constraint                        |
+| --------- | --------------------------------------------------------------- | --------------------------------- |
+| `boolean` | logical true/false                                              | none                              |
+| `integer` | whole number — width inferred from range                        | recommended — profile may require |
+| `float`   | real number — width inferred from range and step                | recommended — profile may require |
+| `string`  | character sequence — default `[0..256]` if unspecified (§17.13) | recommended — profile may require |
+| `bytes`   | opaque binary buffer — default `[0..256]` if unspecified        | recommended — profile may require |
 
 ### 4.1 Boolean
 
@@ -1158,6 +1158,57 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
     practice and can shape the exact rules (e.g. whether the floor should also
     be declarable per-field, and how it interacts with the scaled-integer wire
     form of quantized floats).
+12. **Integer-backed unit types.** A unit type's backing is the literal type of
+    its range: integer literals give an integer backing, float literals give a
+    float backing, and a unit type with no range keeps today's float default, so
+    a range-less declaration is unchanged. A unit type whose range is written
+    with integer literals does change backing, which is what the corpus check
+    below is for. `Latency : ms [0..5000]` is then an integer type carrying a
+    unit, and `Timestamp : us` and `Duration : ms` become declarable in typl as
+    the integers a runtime library already makes them. The grammar already
+    distinguishes `int_lit` from `float_lit`, and TYPL-105 already rejects a
+    `step` whose literal type differs from the range's, so a backing cannot flip
+    unnoticed by editing one number wherever a `step` is declared; where none
+    is, `ridl-diff` is what sees the change, because the backing reaches the IR.
+    The domain type, the width and every encoding follow the rules plain
+    `integer` already has, and the unit algebra of §17.5 is untouched. An
+    explicit backing keyword was rejected: TYPL-105 already makes the flip
+    explicit, and this is the rule every language uses for `1` against `1.0`.
+    Disposition: a v0.2 syntax change. The corpus check when it is implemented
+    is that every unit type written with integer literals today is either a
+    wanted integer or a missing `.0`. Recorded in
+    [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
+    §3.10.
+13. **What a `string` is made of, and how it is encoded.** §5 calls a `string` a
+    character sequence and bounds it in characters, and says neither what a
+    character is nor how a value reaches a buffer. The rule to record, as
+    normative text in §5 rather than as a deferral: a `string` is a sequence of
+    Unicode scalar values, and `string [N]` bounds the count of scalar values —
+    not graphemes, which are unbounded, and not bytes, which `bytes` already
+    counts; every encoding carries it as UTF-8, while the in-memory
+    representation stays the language's own (UTF-8 in Rust, UTF-16 in
+    TypeScript, Kotlin and C#) and the codec converts at the buffer, as every
+    proto and FlatBuffers runtime on those platforms already does; and the byte
+    capacity of `string [N]` is 4·N, which is UTF-16's worst case as well, so
+    UTF-8 costs nothing at the maximum. UTF-16 on the wire was rejected: proto3
+    `string` must be UTF-8 and FlatBuffers `string` is UTF-8, so a UTF-16 wire
+    means emitting `bytes` and `[ushort]` in the schemas, and a consumer
+    generated from those schemas sees an opaque byte field where the contract
+    says text, which breaks
+    [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+    decision 4's rule that interoperability is at the bytes, mediated by the
+    emitted schema. Per target it is one sentence in
+    [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md) and one in
+    [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md); the
+    fixed-capacity form, and whether a terminator is guaranteed for a C reader,
+    belong to the `repr(C)` projection record
+    ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+    decision 4). One rule is not a projection rule: a JavaScript string may hold
+    a lone surrogate, which `TextEncoder` replaces with U+FFFD and a wasm codec
+    cannot see, so the TypeScript runtime package checks well-formedness before
+    encoding and rejects. Recorded in
+    [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
+    §3.11.
 
 ---
 

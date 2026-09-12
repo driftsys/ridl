@@ -91,6 +91,42 @@
   schema-projection note and corrects three of its statements. Not epic-scoped:
   it binds every backend that projects.
 
+- **ADR-0017 — The proto3 projection.** The rules the first wire backend needed
+  that no earlier record supplied: how a foreign reference projects, where
+  constraint information goes, and totality over names as well as over field
+  numbers. Its decision 1 fixes `generate_with` as the API every later wire
+  backend inherits. Scoped to proto3, but read decision 1 before writing another
+  wire backend.
+
+- **ADR-0018 — The runtime core, two encodings, and what the backends emit.**
+  _Proposed._ Retracts the interaction layer the language backends shipped and
+  restores it as a later phase, retires the extern-C face, fixes the payload
+  encodings, moves the store and the dispatcher into Epic 11, and resolves the
+  service-block conflict between ADR-0013 decision 2 and ADR-0016 decision 10.
+  Not epic-scoped: it binds every backend and the runtime. Amended 2026-09-12 on
+  decisions 3, 6, 15, 16 and 17, and on the name `ridl-rt`, which now belongs to
+  the library rather than to the engine; decisions 3, 6 and 15 rest on ADR-0020,
+  and decisions 16 and 17 on the re-scope's other decisions.
+
+- **ADR-0019 — The FlatBuffers projection.** Seven rules the second wire backend
+  needed: a union isolated in a wrapper table, a non-table union arm boxed,
+  every typl struct a `table`, a map with no `(key)`, the target's own name
+  scopes, `= null` on a field whose enum declares no zero member, and a name
+  that reaches a word the validity oracle reserves emitted as it stands. All
+  seven are FlatBuffers-scoped; none binds another backend.
+
+- **ADR-0020 — The third payload encoding, the runtime layering, and the codegen
+  plugin system.** _Proposed._ `repr(C)` joins proto3 and FlatBuffers as a
+  payload encoding, and the encoding matrix settles the codec-in-wasm boundary
+  as FlatBuffers; `ridl-rt` is one `no_std` crate with one cargo feature per
+  encoding, with the runtimes and the transports outside it in both Rust and
+  TypeScript; and a backend becomes an executable over
+  `generate(CodegenRequest) -> CodegenResponse`, fed by a lowering step that
+  derives the shared semantics once in the compiler. Not epic-scoped: it binds
+  every backend this workspace or the ecosystem grows, and the runtime material
+  in every language. Amends ADR-0018 decisions 3, 6 and 15, and ADR-0013's
+  target list.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.
