@@ -10,7 +10,7 @@ nothing above them. It is the first time a ridl name reaches a deployed
 contract, which is why E9.7 had to land first.
 
 Throughout, "the note" is
-[`2026-08-03-schema-projection-design.md`](../wip/2026-08-03-schema-projection-design.md),
+[`2026-08-03-schema-projection-design.md`](2026-08-03-schema-projection-design.md),
 and a reference of the form note §4.1 is to it. Language-reference sections are
 named in full (ridl §11, typl §7.4, typl Appendix D).
 

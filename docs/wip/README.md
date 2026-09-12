@@ -36,41 +36,89 @@ still read the E9.8 design note, from the archive.
 - **skill-ridl-authoring-outline.md** — outline for the agent-authoring skill
   (see ADR-0005). Forward-looking: the skill it outlines is roadmap story E8.2,
   which has not been built.
-- **2026-08-03-ir-protobuf-encodings-design.md** — the emitted `.ir.json` is a
-  serde rendering of Rust structs, not protobuf JSON, so no non-Rust protobuf
-  runtime can parse it. Proposes canonical protobuf JSON plus prototext and
-  binary emits, and **ADR-0014**, superseding ADR-0004 §4's rendering clause.
-  Roadmap: E9.1–E9.3. **Ratified 2026-08-04** as
-  [ADR-0014](../decisions/ADR-0014-ir-encodings.md); this note stays as the
-  reasoning trail, including the measurements the record summarises.
-- **2026-08-03-rpc-response-bound-design.md** — the first pass at ridl §17.5
-  open question 5. Finds that ridl _absorbs_ QoS rather than excluding it, and
-  proposes RPC bounds with a response bound, the coherence rule, and
-  **ADR-0015**. Roadmap: E9.4, E9.5, E9.12. Its ADR was renumbered from 0013,
-  which was taken before it was written — see the note in §8. **Ratified
-  2026-08-04** as
-  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md), together
-  with the multi-interface note below; the record's Status says why the two
-  became one record rather than two.
-- **2026-08-03-multi-interface-services-design.md** — lifts the one-interface
-  restriction on `ServiceDef`, with per-interface ordinals keyed by name, flat
-  addressing preserved, three diagnostics, and five diff categories. The design
-  pass §11.1 of the RPC note called for. Roadmap: E9.6. **Ratified 2026-08-04**
-  as decisions 12 to 19 of
-  [ADR-0015](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md). That
-  record's decision 20, retiring the `Service` message's `oneof` field numbers,
-  is new there rather than ratified from this note — see its Status.
-- **2026-08-03-schema-projection-design.md** — the identity chain from ridl to
-  proto3 and FlatBuffers, the projection contract, and the generated store and
-  dispatcher shapes. Roadmap: E9.7–E9.11. **Ratified 2026-08-05** as
-  [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md),
-  which corrects three of its statements — the transform choice, the injectivity
-  requirement, and the inline-shape unification. This note stays as the
-  reasoning trail for E9.10 and the Epic 11 stories that absorbed E9.11, which
-  have not landed yet — E9.9 landed 2026-08-09 and its own pair is now in the
-  archive. Its own corrections were written up as a dedicated design/plan pair
-  for E9.7 (`2026-08-05-projection-name-transform-{design,plan}.md`), archived
-  once that story landed — see [`../archive/README.md`](../archive/README.md).
+- Four 2026-08-03 design notes (ir-protobuf-encodings, rpc-response-bound,
+  multi-interface-services, schema-projection) are archived, gardened into
+  ADR-0014, ADR-0015 and ADR-0016 — see
+  [`../archive/README.md`](../archive/README.md) for what each became.
+- **2026-09-08-ridl-rt-design.md** — proposes `ridl-rt`, the runtime library
+  every generated package links, and records a **scope decision**: ridl owns
+  types, interactions and system, and descopes the engine. The store, the
+  seqlock, the frame protocol, the subscription table, the platform traits and
+  the sans-IO session leave for external packages, to be revisited when rmdl
+  lands, because they are deployment decisions rather than language ones and
+  execution is rmdl's subject. §0 lists which ADR-0018 decisions survive (3, 4,
+  5, 6, 13, 15, 17, 18), which leave (2, 7, 8, 11, 12, 16) and which split (10),
+  and Epic 11 collapses to this library, the two codecs and the deployment
+  schema. The library itself: identity and the §3.1 envelope, `Provenance` +
+  `Freshness` + `Sample`, `Payload<E: Encoding>` with `verify`/`decode`
+  separated behind a private-constructor `Ref`, `Inline` for one-size payloads,
+  per-kind interaction descriptors, and seven pulled ports — with `scan` and
+  `generation` demoted to a `ScannableSignals` extension because they presume a
+  walkable store rather than an interaction semantic. Structural verification
+  stays flatc's and ridl emits only the typl checks; nothing on the path needs
+  `unsafe`; `Access::CHECKED` defaults true and is skipped only on a
+  measurement. Rules `RA-01..35`, ten opens. First implementation is the first
+  runtime, from the first consumer. **Not ratified** — and the ADR-0018
+  amendment it implies (RA-X10) is not written.
+- **2026-09-08-roadmap-simplification.md** — the plan, not the design. 102
+  stories and roughly 220 person-weeks remain against one part-time author, so
+  the note argues the roadmap is serving a public language platform and one
+  system's SSOT at once and should choose the second. Parks E3.4-E3.6, most of
+  E4, all of E12, E13 and E7, and eleven of E8, keeping every identifier and
+  giving each parked block the evidence that reopens it. **Revised three times
+  on the day.** The language order is typl -> ridl -> rsdl -> rmdl (S-18);
+  `ridl-engine` — store, seqlock, sans-IO core, platform traits — parks as a
+  block (S-19), which
+  [`2026-09-08-ridl-rt-design.md`](2026-09-08-ridl-rt-design.md) §0 reaches from
+  the design side and grounds better, as a scope decision rather than a
+  sequencing one. rmdl is finalised as a draft and not implemented (S-25); code
+  generation narrows to Rust (S-26); Kotlin becomes a plugin, which returns
+  **E4.5b, the plugin protocol, to the critical path** (S-27); TypeScript
+  through wasm is ADR-0018 decision 6's existing answer (S-28); the finish test
+  for typl and ridl becomes a stabilisation loop over a real contract rather
+  than a date (S-29); the generated gateway is held off (S-30). **D-1 (S-33) is
+  the open decision**: rsdl v1 (7 stories, 9.5 weeks) or an out-of-band
+  deployment descriptor (2 stories, 3.0 weeks) for the service/interface/machine
+  relations the emitter needs to derive interfacing rules — recommended the
+  descriptor, under one constraint, _out-of-band authoring, in-band
+  representation_, so `ridl diff` still classifies it. **S-34** hardens that
+  from a recommendation into the only available path: rsdl §3.1 defines a
+  component by the rmdl model it applies, rsdl §7 makes a target logical and
+  never addressed where the requirement wants machine identity, and ADR-0018
+  opens 1 and 7 already record the same doubt. **S-35** adopts the settled
+  vocabulary instead — machine / service / interface, with `vm` rejected because
+  the QNX host is a machine too — so the descriptor adds one noun to what ridl
+  §14 already owns. Leaves 30 stories and 47 weeks with the consumer's runtime
+  as the first and only runtime. Rules P-1..P-6, S-01..S-35, A-1..A-4, D-1.
+  **Not ratified**; eleven opens, including whether the public-platform goal is
+  deferred or abandoned (SR-X1), that one implementation now validates the whole
+  trait layer (SR-X6), and what a breaking _deployment_ change is (SR-X10).
+- **2026-09-08-topology-vocabulary.md** — the nouns for the layer between a
+  contract and the hardware: distribution, machine, process, component, service,
+  interface, member, catalog, with one question each (V-01) and only addressed
+  things carrying wire identity (V-02). Three trees rather than one hierarchy;
+  offer a service, consume an interface; generation follows imports while wiring
+  follows `requires`. A component is a sans-IO synchronous step machine with a
+  sync or async pump — which corrects rsdl §1.3, whose three properties belong
+  to three different levels, and drops composites. Machine is verified against
+  AUTOSAR Adaptive ("quasi a virtualized ECU-HW"); a `target` is not one, and
+  `RTE` names the layer `ridl-rt` occupies. Restates `catalog-abi.md` §2/§5 and
+  adds: a catalog is declared in ridl because it owns an id space and a hash,
+  one package one catalog, ids allocated-and-recorded per package, and a
+  generation filter produces a view and never a catalog. Leaves rsdl with four
+  declarations plus a lock. Full mapping table to Adaptive, Classic and OSGi,
+  and the rejected names with their reasons. **Not ratified**; six opens,
+  including ABI-X2's cross-catalog references and what a breaking _deployment_
+  change is.
+- **2026-09-12-release-scope-and-plugin-system-design.md** — the design note of
+  the 2026-09-12 re-scoping session: the release scope (typl, ridl, rsdl
+  finalized; rmdl deferred; Rust with three payload encodings and TypeScript
+  through wasm; the runtime library, a frame specification and an optional
+  WebSocket transport; the codegen plugin system with Kotlin as the first plugin
+  after the release), the decisions with their alternatives, and the open items
+  it carries. Supersedes the scope parts of
+  `2026-09-08-roadmap-simplification.md`; feeds the roadmap rewrite and the ADR
+  amendments. **Not ratified.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
@@ -83,9 +131,6 @@ still read the E9.8 design note, from the archive.
   open item 1. Depends on **typl-value-objects-design.md** for phase 1's
   validation half. Roadmap: E4.5, E9.8–E9.11, Epic 10. **Not ratified** — seven
   open questions, including whether codecs are code- or descriptor-driven.
-- **ridl-boundary-model-review.md** — spike record from the uxdl design review
-  of 2026-08-03, on the finding that datum and referent come apart at every
-  boundary with the non-software world. **Superseded by ADR-0012**, which was
-  written from it and is authoritative wherever the two disagree. Kept for the
-  reasoning trail — the arguments, the retractions, and the falsification tests.
-  Its own header lists the three claims in it that are known to be wrong.
+
+ridl-boundary-model-review.md, superseded by ADR-0012, is archived too — see
+[`../archive/README.md`](../archive/README.md).

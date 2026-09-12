@@ -39,7 +39,7 @@ which weakens "which files contain executable behaviour?" as a filesystem query;
 per-package restriction is the mitigation the concept note already prescribes.
 
 The exploration that produced it is recorded in
-`docs/wip/ridl-boundary-model-review.md`; where that record and this ADR
+`docs/archive/ridl-boundary-model-review.md`; where that record and this ADR
 disagree, this ADR is authoritative.
 
 ## Context
@@ -450,7 +450,8 @@ Recorded rather than decided; none blocks the core work.
 
 ## References
 
-- `docs/wip/ridl-boundary-model-review.md` — the review this decision comes from
+- `docs/archive/ridl-boundary-model-review.md` — the review this decision comes
+  from
 - `docs/specification/rxdl-language-reference.md` — the spelling layer this
   decision leaves over
 - `docs/archive/uxdl-language-reference-v0.1.md` — retired by decision 1

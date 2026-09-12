@@ -29,7 +29,7 @@ settles it the other way for now: the face is retracted and restored in a second
 phase (decision 15). The two are complementary and neither supersedes the other.
 
 Its reasoning trail is
-[`docs/wip/2026-08-08-runtime-and-codegen-architecture.md`](../wip/2026-08-08-runtime-and-codegen-architecture.md),
+[`docs/archive/2026-08-08-runtime-and-codegen-architecture.md`](../archive/2026-08-08-runtime-and-codegen-architecture.md),
 which carries the evidence this record summarises.
 
 ## Context
@@ -471,7 +471,7 @@ be generated, and in what order", which is what this record answers.
 
 ## References
 
-- [`docs/wip/2026-08-08-runtime-and-codegen-architecture.md`](../wip/2026-08-08-runtime-and-codegen-architecture.md)
+- [`docs/archive/2026-08-08-runtime-and-codegen-architecture.md`](../archive/2026-08-08-runtime-and-codegen-architecture.md)
   — the reasoning trail, with the evidence
 - [ADR-0012](ADR-0012-interaction-boundary-model.md) — decision 7, the model
   decision 9 follows for domain extensions
