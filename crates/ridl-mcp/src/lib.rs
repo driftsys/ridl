@@ -133,14 +133,11 @@ impl ServerHandler for RidlMcp {
 }
 
 /// Serves the MCP protocol over this process's stdin and stdout until the
-/// client disconnects, reporting this crate's own version.
-pub async fn serve_stdio() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    serve_stdio_with_version(None).await
-}
-
-/// [`serve_stdio`], reporting `version` instead of this crate's own version
-/// when one is given — the `ridl` binary passes its build version here, so
-/// `ridl mcp` and `ridl lsp` agree.
+/// client disconnects, reporting `version` instead of this crate's own
+/// version when one is given — the `ridl` binary passes its build version
+/// here, so `ridl mcp` and `ridl lsp` agree. `None` is this crate's own
+/// version, `RidlMcp::new`'s default; the `ridl` binary is this function's
+/// only caller today, and it always passes `Some`.
 pub async fn serve_stdio_with_version(
     version: Option<&str>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
