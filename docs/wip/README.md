@@ -126,6 +126,10 @@ archive.
   composite body reorder gets its own diff category instead of the
   `constraint_changed` fallback (driftsys/ridl#314). The interface level of the
   same rule waits for the lock file of the rsdl note's D-7. **Not started.**
+- **2026-09-13-baseline-gate-plan.md** — the three-task plan for that design:
+  the gate and RIDL-408 in `crates/ridl`, the explicit-baseline input error, and
+  the `member_reordered` category in `crates/ridl-diff`. Two pull requests, the
+  crates being disjoint. **Not started.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
