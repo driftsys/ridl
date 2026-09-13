@@ -254,7 +254,8 @@ backend. The family overview's doctrine 18 keeps its first half (a `service` is
 posture-neutral), marks the derivation deferred inline — the overview's own form
 for a deferral, as doctrines 5 and 15 use it — and re-cites the reserved section
 instead of "rsdl §8"; every other site that cites "rsdl §8" for posture
-derivation does the same (§4).
+derivation does the same, and the open-question index entry, which cites rsdl
+§13, is marked deferred (§4).
 
 **Rejected.** (a) A `transport { ... }` table in the grammar: one transport
 family exists. (b) Dropping the word posture: the Classic-to-Adaptive migration
@@ -342,9 +343,9 @@ checked in, written only by `ridl lock`:
   Their numbers are inlay hints, as decided.
 - **A service's interface list becomes a set.** Order carries no wire meaning,
   so ADR-0015 decision 15's slot model on that list retires with RIDL-146 to
-  RIDL-148, together with decision 19's `ServiceShape*` diff categories and
-  decision 24's rules behind RIDL-147 and RIDL-148; an interface has exactly one
-  number, from its catalog.
+  RIDL-148, together with decision 18's RIDL-146 (RIDL-144 and RIDL-145 stay),
+  decision 19's `ServiceShape*` diff categories and decision 24's rules behind
+  RIDL-147 and RIDL-148; an interface has exactly one number, from its catalog.
 - **The catalog hash is derived**, over the interfaces, their numbers, and the
   types they reach (D-8).
 
@@ -364,7 +365,8 @@ has none. (h) A hybrid of inferred and explicit numbers: unstable under a merge.
 **Defect found in the current crates, filed as driftsys/ridl#315.**
 `ridl
 baseline` publishes a removed interaction with no `reserved` tombstone (it
-runs no desk check; RIDL-407 belongs to `ridl check --baseline`, and is a
+runs no desk check; RIDL-407 belongs to `ridl check`, which reads
+`.ridl/baseline/` at the workspace root or the `--baseline` path, and is a
 warning), a later append reuses the ordinal, and `ridl diff` reports the append
 as compatible. The baseline gate above closes it at both levels. Swapping two
 struct fields is reported breaking only through the `constraint_changed`
@@ -445,18 +447,24 @@ Under D-1 a system of hand-written services is a list of service names.
   §4.3 gains the three rsdl keys; §6.3 extends to interface numbers (D-7).
 - **Family overview** doctrines 16 and 17: "provides/requires services" becomes
   "offers services and requires interfaces" (D-9); doctrine 18, the inventory
-  row that gives rsdl "transport/posture derivation", ledger row 28 and the
-  open-question index: posture derivation marked deferred, the reserved section
-  re-cited in place of "rsdl §8" (D-5).
+  row that gives rsdl "transport/posture derivation" and ledger row 28: posture
+  derivation marked deferred, the reserved section re-cited in place of "rsdl
+  §8"; the open-question index entry, under rsdl §13, marked deferred (D-5); the
+  inventory row's "providing/requiring services", ledger row 27's
+  `provides`/`requires` boundary and ledger row 29's declared redundancy:
+  reworded to the new surface (D-3, D-4, D-9).
 - **ridl reference**: §11 gains the baseline gate; §14.5 amended — its
   "components _provide_" wording (D-9), the "declared redundancy" paragraph
   under "Composing interfaces" (D-3 and D-4 reverse it: one offering component
   per service, redundancy derived from instances), and ADR-0015 decisions 15,
-  17, 19 and 24 (D-7); §14.6 wording and the glossary entry for _service_ (D-9);
-  the posture sentences of §14.5, the transport and feasibility paragraph, and
-  the glossary entries _service_ and _posture_ re-cite the reserved section and
-  mark the derivation deferred (D-5); V-X1 disposition (D-8).
+  17, 18 (RIDL-146 only), 19 and 24 (D-7); §14.6 wording and the glossary entry
+  for _service_ (D-9); the posture sentences of §14.5, the transport and
+  feasibility paragraph, and the glossary entries _service_ and _posture_
+  re-cite the reserved section and mark the derivation deferred (D-5); V-X1
+  disposition (D-8).
 - **ADR-0010**: the `lock` subcommand and `lock merge` follow its conventions.
+- **ADR-0011 and ADR-0018**: each cites rsdl §8 for a matter other than posture;
+  both citations are re-pointed when the rewrite renumbers the section.
 - **Roadmap**: the E6 stories left untouched by the re-scope are refiled against
   this note once the rewrite starts.
 
@@ -478,5 +486,6 @@ this note as
 first ranked the carriers and found the reuse defect above; the second simulated
 the merges with git and found the union-driver resurrection and the "next free
 number" hole that `next` closes. Their measurements are the basis of D-7's
-rejections; their recommendation (the stamped attribute) was overridden by the
-§6.3 consistency argument, recorded above.
+rejections; the first's recommendation (the stamped attribute) was overridden by
+the §6.3 consistency argument, recorded above; the second's lock model is D-7 as
+written.
