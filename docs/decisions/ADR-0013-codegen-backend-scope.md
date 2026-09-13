@@ -15,6 +15,10 @@ binds the language backends is open** — see Open item 1.
 implemented" no longer holds for decision 2's two tiers. Decision 7's second
 class still has no backend in it.
 
+**Amendment (2026-09-12).** Decision 1's target list changes again, and this
+time the shape of the list changes with it: a language backend need not live in
+this workspace — see the amendment inside decision 1.
+
 **Amendment (2026-08-09).** A FlatBuffers backend now exists —
 `crates/ridl-backend-flatbuffers`, built by roadmap story E9.9, its
 target-specific rules recorded in
@@ -97,6 +101,31 @@ language layer at `int64`/`float64`.
    describing bytes in transit (proto3, FlatBuffers, and the remaining targets
    of typl Appendix D and ridl Appendix B). The class fixes both the emit
    ceiling and the width layer.
+
+   **Amendment (2026-09-12) — the classification stands; the list is no longer a
+   list of crates in this workspace.**
+   [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+   decisions 8 to 11 make a backend an executable over a published contract, so
+   a language backend may live anywhere. The list reads, as of this amendment:
+
+   - **language backends in this workspace:** Rust and TypeScript.
+   - **language backends outside it:** Kotlin, as the out-of-tree
+     `ridlc-gen-kotlin` plugin sequenced after the current release. C++ has no
+     plan and is removed from the list rather than deferred; typl Appendix D
+     keeps its C++ column as the width rule an out-of-tree plugin would follow,
+     and that column is not a statement that a C++ backend is planned.
+   - **wire backends in this workspace:** proto3
+     ([ADR-0017](ADR-0017-proto3-projection-rules.md)) and FlatBuffers
+     ([ADR-0019](ADR-0019-flatbuffers-projection-rules.md)) are built; roadmap
+     story E11.12 adds the C header of ADR-0020 decision 1's `repr(C)` payload
+     encoding, which describes bytes at a fixed layout and is therefore wire
+     rather than language. The remaining typl Appendix D and ridl Appendix B
+     targets are unchanged.
+
+   Whichever side of the workspace boundary a backend sits on, its class fixes
+   the same emit ceiling and the same width layer;
+   [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 6's
+   supersession of the original list is itself superseded here.
 
 2. **A wire backend emits shape and identity, and no interaction face.** Two
    tiers, and nothing above them:
@@ -272,9 +301,10 @@ language layer at `int64`/`float64`.
    already do. Recorded as open because it was not settled when this ADR was
    drafted.
 2. **Where a `ServiceStore` lives if it is built.** The candidates are the
-   `ridl-rt` runtime specification and the reflection interface of ridl open
-   question 7. Whatever the home, its slot keys must be the interaction ordinals
-   of decision 3, so that one contract has one identity space.
+   `ridl-engine` specification (the `ridl-rt` runtime specification as this
+   record first named it) and the reflection interface of ridl open question 7.
+   Whatever the home, its slot keys must be the interaction ordinals of decision
+   3, so that one contract has one identity space.
 3. **The concrete form of the identity table per language.** A Rust `enum` with
    explicit discriminants, a set of associated constants, or a lookup table;
    likewise for TypeScript. Decision 3 fixes the content and the numbering, not

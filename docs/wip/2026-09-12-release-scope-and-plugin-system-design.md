@@ -159,6 +159,17 @@ roadmap stories E12.1 (the TypeScript surface) and E12.4 (an emulator), re-homed
 under the TypeScript work. Roadmap E11.9 becomes the transport crate and
 package.
 
+_Where it landed (2026-09-12, writing the record):_ "the wasm build of the
+runtime library" in §1 and in this section's first sentence is wrong, and
+ADR-0020 decision 7 corrects it. ADR-0018 decision 4 makes the codec a
+serializer for known types, and the ridl-rt note emits the encoding impls and
+the typl constraint checks per type into the generated package, so a wasm build
+of `ridl-rt` alone carries no codec for any package's types. The codec is the
+generated Rust for the package compiled to `wasm32` against `ridl-rt`; the
+TypeScript runtime package carries the port interfaces and the loader. Decision
+2's no-skew argument is unaffected — both artifacts still come from one `ridlc`
+run over one IR.
+
 Alternatives: (a) faces and frame only, no transport — rejected because then two
 emulators written by two people share no transport, and the TypeScript backend
 has no end-to-end test in this repository; (b) faces only, no frame
@@ -332,7 +343,10 @@ surrogate, which `TextEncoder` silently replaces, so the binding checks
 well-formedness before encoding and rejects.
 
 New row for typl §17; disposed of in the finalization pass as normative text in
-§5.
+**§4** — §5 above is wrong. The sentences this rule replaces are the primitives
+table's "character sequence" and §4.4's "encoding (ASCII, UTF-8, UTF-16) is a
+codegen concern per target", both in §4; §4.4 is also the standing statement
+this rule contradicts, and it now points at §17.13.
 
 ### 3.12 Amendments to the ridl-rt design note
 
@@ -342,6 +356,16 @@ Two corrections the first consumer's sketch exposed:
   (ADR-0015 decision 9, ridl §14.5 — coherence is implicit, never declared)
   needs pinned-generation multi-reads. The note alludes to it in RA-28 and never
   defines it; §6 gains it.
+
+  _Where it landed (2026-09-12, writing the amendment):_ as the extension
+  `CoherentSignals::read_coherent` in that note's §6.1, not as a ninth core
+  port. ADR-0015 **decision 10** separates production coherence, which decision
+  9 makes implicit, from delivery coherence, which depends on the binding — ridl
+  §14.5's table gives per-field only on SOME/IP, and ridl Appendix B's
+  per-target matrix gives per-message only on proto3/gRPC. A runtime over such a
+  binding cannot pin, so by §6.1's own test a core port would be one every such
+  runtime has to fake. The portable answer decision 10 already names is the
+  struct idiom of ridl §17.3.
 - **`commit` takes no `now`.** §6 and §8 write
   `commit(&mut self, now:
   Timestamp)`; the note's own RA-28 says no port takes

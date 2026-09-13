@@ -26,7 +26,9 @@ the backend contract.
 sequencing and its release definitions.** ADR-0004 sequenced E5 (rmdl) before E6
 (rsdl) and defined two releases, V1 the contract platform and V2 the executable
 platform. This plan runs rsdl first and replaces the two releases with the two
-steps above. ADR-0004 is not yet amended to record either change.
+steps above. ADR-0004 records both changes in its 2026-09-12 amendment, and
+[ADR-0018](decisions/ADR-0018-runtime-core-and-generated-surface.md) decision
+16's own V1 framing is amended there for the same reason.
 
 ## What this repository is, and is not
 
@@ -89,9 +91,10 @@ outside this workspace can be generated until it lands.
 What stays in core: the payload encodings the re-scope fixes — **proto3** for
 the network, **FlatBuffers** for memory, and **`repr(C)`** as the third, added
 by the 2026-09-12 note §3.3. They are how the runtime talks to itself and to a
-generic consumer, not a domain's choice. ADR-0018 decision 3 still reads "two
-encodings and no more"; the record that amends it is not yet written, so this
-page and that decision disagree until it is.
+generic consumer, not a domain's choice. ADR-0018 decision 3's "two encodings
+and no more" is amended in place by
+[ADR-0020](decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decisions 1 and 2, which carry the matrix all three encodings sit in.
 
 ## The platform ladder
 
@@ -319,14 +322,16 @@ conformance against a `protoc`-generated implementation for proto3.
 payload codec the 2026-09-12 note §3.3 adds. Its layout rules — the
 fixed-capacity layout of a bounded string, optional and collection, the string
 capacity and terminator, alignment and endianness — are its prerequisite, and
-they belong in a projection record of the shape of ADR-0017 and ADR-0019,
-written when the backend is (§3.3), not in the ADR-0018 amendments.
+[ADR-0020](decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 4 places them in a projection record of the shape of ADR-0017 and
+ADR-0019, written when the backend is — not in that record and not in the
+ADR-0018 amendments.
 
-| ID     | Story                                                                                                                                                                                               | Done when                                                                             | Size |
-| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ---- |
-| E11.7  | The FlatBuffers payload codec                                                                                                                                                                       | a payload round-trips through the library                                             | L    |
-| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                    | our bytes parse there and its bytes parse here                                        | L    |
-| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type | a payload round-trips through the layout struct, and the emitted header compiles as C | L    |
+| ID     | Story                                                                                                                                                                                                                                                                                               | Done when                                                                                                                                                                                                                   | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.7  | The FlatBuffers payload codec                                                                                                                                                                                                                                                                       | a payload round-trips through the library                                                                                                                                                                                   | L    |
+| E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                                                                                                                    | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
+| E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
 
 **Known defects to clear with this work:** driftsys/ridl#243 (a struct field
 name is emitted verbatim, so generated Rust draws `non_snake_case`),
@@ -400,25 +405,32 @@ TypeScript codec, and an emulator written in TypeScript stands in for a provider
 without the consumer distinguishing it.
 
 The TypeScript side is the same three layers as Rust: the runtime package (the
-wasm build of `ridl-rt` plus the port interfaces), the generated faces, and a
-separate transport package. The WebSocket transport is what the getting-started
-path uses and what a remote server or an emulator links by default; nothing
-links it unless asked (§3.5).
+port interfaces spelled in TypeScript, plus the loader that instantiates a
+package's wasm codec), the generated faces, and a separate transport package.
+The codec itself is per package — the generated Rust compiled to `wasm32`
+against `ridl-rt`, not a build of that library, which carries no per-type codec
+([ADR-0020](decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 7). The WebSocket transport is what the getting-started path uses and
+what a remote server or an emulator links by default; nothing links it unless
+asked (§3.5).
 
 **Two stories keep their E12 identifiers**, because identifiers are identity —
 they are re-homed here, not renumbered.
 
-| ID    | Story                                                                                                               | Done when                                                                    | Size |
-| ----- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
-| E12.1 | The TypeScript surface — generated types and faces, the codec reached through the wasm build of the runtime library | a Deno program constructs and validates a payload without a TypeScript codec | L    |
-| E12.4 | Emulator — a hand-written provider standing in for a component, driven by the contract                              | a consumer cannot distinguish the emulator from the real provider            | M    |
+| ID    | Story                                                                                                                                                                       | Done when                                                                    | Size |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | ---- |
+| E12.1 | The TypeScript surface — generated types and faces, the codec reached through the package's own generated Rust compiled to `wasm32` against `ridl-rt` (ADR-0020 decision 7) | a Deno program constructs and validates a payload without a TypeScript codec | L    |
+| E12.4 | Emulator — a hand-written provider standing in for a component, driven by the contract                                                                                      | a consumer cannot distinguish the emulator from the real provider            | M    |
 
-**Carried open item:** the encoding at the codec-in-wasm boundary. ADR-0018
-decision 3 puts proto3 on the wasm guest boundary because a guest updates
-independently of its host, but a codec compiled to wasm and its TypeScript host
-are generated together and have no version skew, which decision 3's own rule
-classifies as within a node — and therefore FlatBuffers. Settled in the ADR-0018
-amendments.
+**The encoding at the codec-in-wasm boundary is FlatBuffers.** ADR-0018 decision
+3 put proto3 on the wasm guest boundary because a guest updates independently of
+its host, but a codec compiled to wasm and its TypeScript host are generated
+together and have no version skew, which decision 3's own rule classifies as
+within a node.
+[ADR-0020](decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 2 settles it that way, so a TypeScript consumer reads the buffer in
+place through generated accessors and no materialized object crosses the wasm
+boundary on a read.
 
 ## Epic 4 — the plugin protocol and the scaffolding
 

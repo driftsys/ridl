@@ -139,6 +139,20 @@ at epic close) and cites these decisions by number.
     constants, and fixed-layout structs; shapes with no C ABI representation are
     listed in a header comment rather than silently dropped.
 
+    **Amendment (2026-09-12) — the `#[repr(C)]` half is retired too.**
+    [ADR-0018](ADR-0018-runtime-core-and-generated-surface.md) decision 6
+    retired the C header and the extern-C face of this decision, and left the
+    attributes in place; the Rust backend has emitted `#[repr(C)]` for every
+    `fixed_layout` struct ever since (`crates/ridl-backend-rust/src/lib.rs`,
+    `emit_struct`).
+    [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+    decision 3 retires that half as well: a domain type carries no layout
+    attribute, because the layout belongs to the separate `#[repr(C)]` struct of
+    that record's decision 1 and the generated codec between the two.
+    `#[repr(transparent)]` on a scalar newtype stands, because it constrains
+    nothing. Removing the attribute from the domain types is roadmap story
+    E11.12's, with the `repr(C)` backend that replaces it.
+
 14. **Release, tagging, and publishing are maintainer acts.** The E1 milestone
     is the v0.1 preview, but the agent does not run `just release`, push tags,
     or publish to crates.io or the VS Code marketplace (same principle as

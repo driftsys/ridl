@@ -20,6 +20,22 @@ Nothing here is implemented. The first implementation is the first runtime,
 built by the first consumer, which implements these ports over its own store and
 transport.
 
+**Amended 2026-09-12** in four places. Three come from
+[`2026-09-12-release-scope-and-plugin-system-design.md`](2026-09-12-release-scope-and-plugin-system-design.md)
+§3.12: **the coherent multi-read is defined** (§1.1, §6.1, RA-36) — RA-28
+alluded to it and nothing defined it. It lands as the extension
+`CoherentSignals` rather than as a ninth core port, because ADR-0015 decision 10
+makes delivery coherence binding-dependent and §6.1's own test puts anything a
+runtime would have to fake outside the core. **`commit` takes no `now`** (§6,
+§8): RA-28 says no port takes one, and the publisher stamps through the `Clock`
+port. **A generated accessor takes no `now`** (§8): §10 already records that
+deletion, and the two `Client` signatures still carried the parameter. The
+fourth comes from that note's §3.9: **§9's hybrid JNI proposal is superseded.**
+The library's placement is now
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decisions 5 and 6 — one crate, one cargo feature per encoding, the runtimes
+outside it — and RA-X10 is discharged by that record's amendments to ADR-0018.
+
 ## 0. What this descopes, and what survives
 
     reasoning trail  docs/archive/2026-09-08-roadmap-simplification.md,
@@ -79,6 +95,11 @@ outside ridl — which is already how the first consumer works, since its store
 ABI is an agreement between it and whatever generated its blob, not a ridl
 document.
 
+**Amended 2026-09-12.** The survival list above was written against ADR-0018 as
+it stood. Its decisions 3, 6, 15, 16 and 17 now carry a 2026-09-12 amendment of
+their own, and decision 6 is the one this note's §9 already disputed — read them
+before relying on a row here.
+
 ## 1. Why a separate library
 
 ADR-0018 found that the shipped interaction layer emitted its vocabulary once
@@ -136,7 +157,7 @@ the same file is a bug waiting to be written. So the crate is modules with short
 names inside them, the `io::Error` idiom:
 
     ridl_rt::
-        encoding::   Encoding · FlatBuffers · Proto3
+        encoding::   Encoding · FlatBuffers · Proto3 · ReprC
         payload::    Payload · Inline · Ref · Constrained
                      EncodeError · VerifyError · Violation · Rule
         sample::     Provenance · Cause · Freshness · Sample · Envelope
@@ -146,6 +167,7 @@ names inside them, the `io::Error` idiom:
                      Kind · Family
         port::       SignalReader · SignalWriter · EventSource · EventSink
                      Caller · Handler · FixedReader · Clock
+                     ScannableSignals · CoherentSignals   (extensions, §6.1)
         strata::     Contract · Transport · CallError · Ack · Outcome
 
     fn verify(buf: &[u8]) -> Result<payload::Ref<'_, Self, E>, payload::VerifyError>;
@@ -471,7 +493,9 @@ own with flow control, and nothing in the first consumer needs one.
 
 The contract's five kinds become seven ports, because a signal has a reading
 side and a writing side, an event a source and a sink, and a call a caller and a
-handler, while `fixed` has only a reader. Every port is **pulled**: a method
+handler, while `fixed` has only a reader. `Clock`, which the envelope is stamped
+from, is an eighth that no kind produces. Two further traits are **extensions**
+rather than core ports, and §6.1 says why. Every port is **pulled**: a method
 returns at once with a value, a correlation or `None`, and something outside
 this crate — the runtime's loop, a blocking face, an async face — decides how to
 wait. That is ADR-0018 decision 2 at the trait layer.
@@ -497,9 +521,10 @@ stores; it never resolves a type. The generated binding is what turns a
             -> Result<RawSample, ReadError>;
         // RawSample { provenance, cause, freshness, envelope, len } — the
         // runtime resolves the timing, not the binding (RA-33).
-        /// Interface generation for a coherent read (ADR-0018 decision 8): read gen,
-        /// read slots, read gen, retry on change. Only meaningful when the
-        /// interface declares `COHERENT`.
+        /// Interface generation (ADR-0018 decision 8) — the mechanism behind
+        /// `CoherentSignals::read_coherent` (§6.1), not a recipe for a caller:
+        /// a binding never runs the read-gen/read-slots/read-gen loop itself
+        /// (RA-36). Only meaningful where the descriptor's `COHERENT` holds.
         fn generation(&self, iface: InterfaceId) -> u64;
         /// Everything that moved past `marks`, ordinals only; updates `marks`.
         fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize;
@@ -513,7 +538,8 @@ stores; it never resolves a type. The generated binding is what turns a
     /// Signals, provider side. `set` stages a value; `invalidate` stages the
     /// §4.5 transition; `touch` re-affirms without a value (the provider's side
     /// of `MAX`); `commit` publishes everything staged, per interface under
-    /// one generation increment and one envelope stamp, and wakes
+    /// one generation increment and one envelope stamp taken from the
+    /// runtime's own `Clock` (RA-28), and wakes
     /// consumers once for the whole batch. `commit` cannot fail: a
     /// last-value store has no queue to overflow. A provider that owns
     /// several interfaces uses one writer; the generated `Publisher` is
@@ -522,7 +548,7 @@ stores; it never resolves a type. The generated binding is what turns a
         fn set(&mut self, iface: InterfaceId, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError>;
         fn invalidate(&mut self, iface: InterfaceId, ord: Ordinal, cause: Cause);
         fn touch(&mut self, iface: InterfaceId, ord: Ordinal);
-        fn commit(&mut self, now: Timestamp);
+        fn commit(&mut self);
     }
     pub enum WriteError { TooLarge { cap: usize }, NotOwner, Detached }
 
@@ -619,6 +645,12 @@ built from them:
                   declared fallback. Everything timing-related, and
                   everything about the slot's own state, is the
                   runtime's.
+    RA-36  MUST   A binding never emulates a coherent multi-read by
+                  looping over `SignalReader::read`. Pinning is the
+                  runtime's, so a binding that needs one bounds on
+                  `CoherentSignals` (§6.1) and a contract that needs the
+                  guarantee under every binding uses the struct idiom
+                  instead (ridl §17.3, ADR-0015 decision 10).
     RA-28  MUST   No port and no generated accessor takes `now`. The
                   runtime holds the `Clock` port, whose implementation
                   knows the platform time base; asking a caller to
@@ -627,7 +659,7 @@ built from them:
                   pinned to one instant takes a snapshot, which is the
                   object a `coherent` interface needs anyway.
 
-### 6.1 Two of these are not language semantics
+### 6.1 Three extensions, not language semantics
 
 With the engine descoped, the ports have to be re-read with one question:
 **would every implementation have this, or only a mapped-store one?**
@@ -638,7 +670,7 @@ With the engine descoped, the ports have to be re-read with one question:
 shim, an rmdl host and a shared-memory cockpit all must present them, however
 differently they are built.
 
-Two are not:
+Two methods already above are not:
 
     SignalReader::generation(iface) -> u64      presumes a per-interface
                                                 counter in a shared region
@@ -655,6 +687,35 @@ them but to place them honestly:
     pub trait ScannableSignals: SignalReader {
         fn generation(&self, iface: InterfaceId) -> u64;
         fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize;
+    }
+
+The third is the coherent multi-read RA-28 sends a caller to, and it fails the
+same test for the same reason. Coherence at the interface grain is implicit and
+never declared (ADR-0015 decision 9, ridl §14.5), but that rule is about
+**production**: ADR-0015 decision 10 separates it from delivery coherence, which
+depends on the binding — one versioned block on shared memory, GROUP-scope
+PRESENTATION with `coherent_access` on DDS, **per-field only on SOME/IP**. A
+runtime over a per-field binding cannot pin anything, and a loop over `read`
+would present the method without the semantic. So the pinned read is an
+extension, and the portable answer for a contract that needs the guarantee under
+every binding is the struct idiom — one payload on one channel is atomic
+everywhere (ridl §17.3, ADR-0015 decision 10).
+
+    /// Extension: implementations that can pin one interface generation
+    /// across several reads. Not part of the interaction semantics; a
+    /// runtime whose binding delivers per field may omit it.
+    pub trait CoherentSignals: SignalReader {
+        /// Answers every ordinal in `ords` from one publication set. Packs the
+        /// slots into `out` back to back and writes one `RawSample` per
+        /// requested ordinal into `samples`, in the order of `ords`;
+        /// `samples[i].len` is the length of the i-th slot. Returns the bytes
+        /// written to `out`. `Err(Short { needed })` reports the capacity the
+        /// whole set needs in `out`, so a caller sizes once; `samples` shorter
+        /// than `ords`, or an ordinal no descriptor carries, is
+        /// `Err(UnknownInteraction)`.
+        fn read_coherent(&self, iface: InterfaceId, ords: &[Ordinal],
+                         out: &mut [u8], samples: &mut [RawSample])
+            -> Result<usize, ReadError>;
     }
 
 A generated client bounds on `SignalReader`; a generated _frame-path_ client,
@@ -730,9 +791,12 @@ the Rust emitter writes, in one file per package:
 
         /// Consumer face: generic over the ports it needs and nothing else.
         pub struct Client<'a, P: SignalReader + EventSource + Caller> { p: &'a P, buf: .. }
+        // A coherent multi-read is a separate generated method on a client
+        // bounded on `CoherentSignals` (§6.1, RA-19, RA-36) — not a bound
+        // every client carries, because not every binding can pin.
         impl<'a, P: ..> Client<'a, P> {
-            pub fn speed(&self, now: Timestamp) -> Sample<Speed>;          // read + verify|trust + decode
-            pub fn gear(&self, now: Timestamp) -> Sample<Gear>;
+            pub fn speed(&self) -> Sample<Speed>;          // read + verify|trust + decode
+            pub fn gear(&self) -> Sample<Gear>;
             pub fn next_shift_done(&mut self) -> Option<(ShiftInfo, Envelope)>;
             pub fn set_gear(&mut self, g: Gear) -> Result<Correlation, CallError>;   // require, encode, Caller::command
             pub fn average_speed(&mut self, window: Duration) -> Result<Correlation, CallError>;
@@ -756,7 +820,7 @@ the Rust emitter writes, in one file per package:
             pub fn gear(&mut self, v: Gear);
             pub fn invalidate_speed(&mut self, cause: Cause);
             pub fn shift_done(&mut self, e: ShiftInfo) -> Result<(), RaiseError>;
-            pub fn commit(&mut self, now: Timestamp);
+            pub fn commit(&mut self);
         }
     }
 
@@ -787,6 +851,18 @@ the frame budget; a native codec where the store is mapped.** And ridl owes a
 **Kotlin codec emitter**, not only a types emitter. That is the real cost of the
 Kotlin story and belongs on the roadmap explicitly rather than being discovered
 by the first consumer.
+
+**Superseded 2026-09-12** — the hybrid above is dropped and the JNI half with
+it, per
+[`2026-09-12-release-scope-and-plugin-system-design.md`](2026-09-12-release-scope-and-plugin-system-design.md)
+§3.9: Kotlin is generated by an out-of-tree `ridlc-gen-kotlin` plugin over the
+backend contract of
+[ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md),
+so the codec emitter this section asks for is that plugin's, and once it exists
+there is no Rust codec left for a Kotlin consumer to reach. No JNI binding is
+planned, and RA-30 stands. The rest of this section — the four language
+decisions, the missing Kotlin verifier and the consequence for §7 — is what the
+plugin has to satisfy, and it is unchanged.
 
 Four things the language decides rather than the design:
 

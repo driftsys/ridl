@@ -447,7 +447,7 @@ that produced it:
    need; E5.1 extends it in place.
 3. **An external assertion language** (OCL, JML-style clauses, CEL, or any
    embedded third-party expression language). Rejected: the one-grammar doctrine
-   — one platform, five languages, **one grammar**, one IR. A second expression
+   — one platform, four languages, **one grammar**, one IR. A second expression
    language would double the lexicon for non-programmer audiences, break the
    multi-execution story (the same term must run in the rmdl oracle, which
    speaks this grammar natively), and pull a foreign toolchain inside the ISO

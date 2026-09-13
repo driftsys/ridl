@@ -58,9 +58,11 @@ archive.
   walkable store rather than an interaction semantic. Structural verification
   stays flatc's and ridl emits only the typl checks; nothing on the path needs
   `unsafe`; `Access::CHECKED` defaults true and is skipped only on a
-  measurement. Rules `RA-01..35`, nine opens. First implementation is the first
-  runtime, from the first consumer. **Not ratified** — and the ADR-0018
-  amendment it implies (RA-X10) is not written.
+  measurement. Rules `RA-01..36`, nine opens. First implementation is the first
+  runtime, from the first consumer. **Not ratified** — but the ADR-0018
+  amendment it implies (RA-X10) is written: that record's 2026-09-12 amendments
+  retire the `ridl-rt` name collision and amend its decisions 3, 6, 15, 16
+  and 17. Amended 2026-09-12 in four places (see its own header).
 - **2026-09-08-topology-vocabulary.md** — the nouns for the layer between a
   contract and the hardware: distribution, machine, process, component, service,
   interface, member, catalog, with one question each (V-01) and only addressed
