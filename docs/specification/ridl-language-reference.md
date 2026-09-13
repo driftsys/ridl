@@ -1106,12 +1106,15 @@ interface VehicleStatus {
 ```
 
 - **Publication enforces the tombstone.** `ridl baseline` refuses to replace a
-  published baseline when the replacement drops an interaction that the baseline
-  declares and the source does not retire with `reserved` — **RIDL-408**, exit
-  1, nothing written. The published snapshot is the only record that the ordinal
-  was taken, so publication is the last point at which the removal can be
-  refused. RIDL-407 is unchanged: it remains the desk-time warning that an
-  ordinal moved, emitted by `ridl check`, and it neither classifies nor gates.
+  published baseline when the replacement drops an interaction the baseline
+  declares in any of three shapes — **RIDL-408**, exit 1, nothing written: the
+  interaction is gone with no `reserved` line at all; it is retired with a
+  `reserved` line, but at an ordinal other than the one it held; or the baseline
+  already retired it and the source has dropped the `reserved` line. The
+  published snapshot is the only record that the ordinal was taken, so
+  publication is the last point at which the removal can be refused. RIDL-407 is
+  unchanged: it remains the desk-time warning that an ordinal moved, emitted by
+  `ridl check`, and it neither classifies nor gates.
 - Transport IDs derive deterministically from ordinals (e.g. SOME/IP: method ID
   = ordinal for RPC kinds, event ID = ordinal with the event flag bit; Appendix
   B) — readable from source, no sidecar state
@@ -1602,7 +1605,7 @@ either direction.
 | RIDL-405 | one `error` type shared across unrelated failure domains — it is the failure arm of queries in 3 or more interaction scopes (heuristic)                                                                                                                                                                                                             | info     |
 | RIDL-406 | payload field duplicating envelope metadata (§3.1) — a `signal` or `event` payload struct declaring `timestamp`, `time`, `seq`, `seqNo`, `sequence`, `sequenceNumber`, `frameCounter`, or `frameNo`; domain time or a domain counter distinct from transport metadata is legitimate                                                                 | info     |
 | RIDL-407 | interaction ordinal changed against the published baseline (§11) — the desk-time drift check, emitted by `ridl check`, never by `ridlc`                                                                                                                                                                                                             | warning  |
-| RIDL-408 | interaction removed without a `reserved` tombstone, refused at publication (§11) — emitted by `ridl baseline` alone, which refuses to replace a baseline whose record of the ordinal would be lost                                                                                                                                                  | error    |
+| RIDL-408 | interaction removed with no tombstone, retired with a tombstone at an ordinal other than its own, or whose existing tombstone was dropped, refused at publication (§11) — emitted by `ridl baseline` alone, which refuses to replace a baseline whose record of the ordinal would be lost                                                           | error    |
 | RIDL-140 | duplicate `service` name across the system — the service catalog is a flat global namespace                                                                                                                                                                                                                                                         | error    |
 | RIDL-141 | `service` names a type that is not an `interface`, and has no inline shape                                                                                                                                                                                                                                                                          | error    |
 | RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                                                                                                                                                                                                                           | error    |
