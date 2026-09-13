@@ -89,7 +89,14 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    The claim is scoped to these eight, constructed this way, on this date — not
    asserted as a property that holds by design of every subcommand a future PR
    might add. A ninth subcommand earns a row here when it is added and checked,
-   not by inheriting this table.
+   not by inheriting this table. The same discipline applies within a cell: the
+   `ridl baseline` exit-1 cell's `reserved`-tombstone clause did not exist on
+   2026-07-27 and is not covered by that date. It was added on 2026-09-13, when
+   `ridl baseline` gained the RIDL-408 publication gate, and verified the same
+   way as the original eight cells — by direct construction against the built
+   `ridl` binary, on that date — via
+   `baseline_refuses_to_publish_an_untombstoned_removal` in
+   `crates/ridl/tests/baseline_gate.rs`, which asserts the refusal exits 1.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 
