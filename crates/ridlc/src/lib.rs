@@ -12,6 +12,12 @@
 //! [`CompileOutput::sources`] and decides what a non-empty diagnostic list
 //! means.
 //!
+//! [`check_source`] is [`compile`]'s check-only sibling over the same
+//! single-file front end — parse, resolve, check, no Rust generation —
+//! returned as a [`CliRun`] rather than a [`CompileOutput`]. It is the
+//! single-file oracle `ridl mcp`'s `ridl_check` tool and
+//! `ridl check --format json` both call.
+//!
 //! [`compile_workspace`] is the same pipeline over the loaded package model —
 //! a `.typl` file, a package directory, or a workspace root ([`load_workspace`])
 //! — returning the per-package IR and the merged, render-ready diagnostics
@@ -140,8 +146,8 @@ pub fn check_source(path: &str, text: &str) -> CliRun {
 /// the path's file stem — the loader's single-file rule (E1.3).
 ///
 /// The package-scoped passes stamp their spans with a [`FileId`] indexing the
-/// package's files in order; [`remap_diagnostics`] rewrites them onto this
-/// function's own [`SourceMap`] before they are merged.
+/// package's files in order; [`remap_diagnostics`] rewrites them onto the
+/// [`SourceMap`] `front_end` created, before they are merged.
 pub fn compile(path: &str, text: &str) -> CompileOutput {
     let FrontEnd {
         mut diagnostics,
@@ -420,8 +426,9 @@ impl Emit {
     }
 }
 
-/// The render-ready result of a [`run_check`] or [`run_build`] command: the
-/// merged diagnostics and the source map they point into.
+/// The render-ready result of a [`run_check`] or [`run_build`] command, or of
+/// [`check_source`] (not a command): the merged diagnostics and the source
+/// map they point into.
 pub struct CliRun {
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
