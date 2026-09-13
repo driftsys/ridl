@@ -1,0 +1,39 @@
+---
+source: crates/ridl-core/src/diag.rs
+expression: "to_json(&[diagnostic], &sources)"
+---
+[
+  {
+    "code": "TYPL-009",
+    "severity": "error",
+    "message": "expected a type",
+    "span": {
+      "path": "a.typl",
+      "start": {
+        "line": 2,
+        "column": 1
+      },
+      "end": {
+        "line": 2,
+        "column": 8
+      }
+    },
+    "fixes": [
+      {
+        "label": "give `X` a backing type",
+        "replacement": "type X: integer",
+        "span": {
+          "path": "a.typl",
+          "start": {
+            "line": 2,
+            "column": 1
+          },
+          "end": {
+            "line": 2,
+            "column": 8
+          }
+        }
+      }
+    ]
+  }
+]

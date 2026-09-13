@@ -959,8 +959,8 @@ impl SourceMap {
     }
 }
 
-/// A 1-based line and column. The column counts Unicode scalar values, not
-/// bytes, so a caller who supplied the source text can index into it.
+/// A 1-based line and column. The column counts Unicode scalar values — Rust
+/// `char`s — not UTF-8 bytes and not the UTF-16 code units LSP positions use.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct LineCol {
     pub line: u32,
@@ -986,7 +986,9 @@ pub fn line_col(text: &str, offset: TextSize) -> LineCol {
 }
 
 /// A span in the JSON diagnostic contract: the file's path as registered in the
-/// [`SourceMap`] and 1-based start and end positions.
+/// [`SourceMap`] and 1-based start and end positions. `end` is exclusive: the
+/// position one past the last character in the span, not the position of the
+/// last character itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct JsonSpan {
     pub path: String,
@@ -1005,6 +1007,9 @@ pub struct JsonFixIt {
 /// One diagnostic in the JSON contract `ridl check --format json` and the MCP
 /// `ridl_check` tool emit. This is the first agent-facing diagnostic contract
 /// (ADR-0005 §7): a change to its shape is a change to an external contract.
+/// `code` passes the diagnostic's [`DiagCode`] through verbatim, including the
+/// empty string a diagnostic with no assigned catalogue code carries; the
+/// field is always present, never omitted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct JsonDiagnostic {
     pub code: String,
@@ -1927,8 +1932,8 @@ mod json_tests {
         let diagnostic = Diagnostic {
             // A real catalogued code, not a fabricated literal: the
             // `codes_written_as_string_literals_are_all_catalogued` workspace
-            // scan (line ~1505) rejects any `PREFIX-NNN` string literal that
-            // is not in a catalogue, including one written in a test fixture.
+            // scan rejects any `PREFIX-NNN` string literal that is not in a
+            // catalogue, including one written in a test fixture.
             code: DiagCode::TYPL_009,
             severity: Severity::Error,
             message: "expected a type".to_string(),
@@ -1957,11 +1962,41 @@ mod json_tests {
         assert_eq!(first.fixes[0].span, first.span);
     }
 
+    /// The struct-field assertions in the test above are checked against
+    /// `JsonDiagnostic` itself and stay green through a consistent field
+    /// rename or an added `#[serde(rename = ...)]` on the struct. This
+    /// snapshot instead pins the serialized JSON key names — the actual wire
+    /// contract the MCP `ridl_check` tool and `ridl check --format json` are
+    /// both required to emit identically.
+    #[test]
+    fn to_json_snapshot_pins_the_wire_key_names() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("a.typl", "package p\ntype X:\n");
+        let span = Span {
+            file,
+            range: TextRange::new(TextSize::from(10), TextSize::from(17)),
+        };
+        let diagnostic = Diagnostic {
+            code: DiagCode::TYPL_009,
+            severity: Severity::Error,
+            message: "expected a type".to_string(),
+            primary: span,
+            labels: Vec::new(),
+            fixits: vec![FixIt {
+                span,
+                replacement: "type X: integer".to_string(),
+                label: "give `X` a backing type".to_string(),
+            }],
+        };
+
+        insta::assert_json_snapshot!(to_json(&[diagnostic], &sources));
+    }
+
     #[test]
     fn to_json_tolerates_a_span_on_an_unknown_file() {
         let sources = SourceMap::new();
         let diagnostic = Diagnostic {
-            code: DiagCode("MANI-101"),
+            code: DiagCode::MANI_101,
             severity: Severity::Warning,
             message: "detached".to_string(),
             primary: Span {
