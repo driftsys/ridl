@@ -34,6 +34,18 @@ const TIMEOUT: Duration = Duration::from_secs(20);
 /// `FORM-101`, "expected a backing type", line 2 column 8, no fix-its.
 const BROKEN_TYPL: &str = "package p\ntype X:";
 
+/// One typl source yielding three diagnostics of three kinds, used by the
+/// CLI/MCP agreement test only.
+///
+/// Measured against the built binary: `FORM-101` (error, line 4, the
+/// missing backing type — again with no trailing newline, for the reason
+/// given on [`BROKEN_TYPL`]), `TYPL-103` (warning, line 2, `string` without
+/// bounds) and `TYPL-104` (error, line 3, minimum above maximum), reported in
+/// that order — the parse error first, then the semantic pass by line. Three
+/// entries of two severities, not in line order, so a tool that truncated or
+/// reordered its diagnostics would no longer agree with the CLI.
+const THREE_KINDS_TYPL: &str = "package p\ntype Tag : string\ntype Bad : integer [10..5]\ntype X:";
+
 // ---------------------------------------------------------------------------
 // `ridl mcp`
 // ---------------------------------------------------------------------------
@@ -149,7 +161,7 @@ async fn ridl_check_and_check_format_json_agree() {
     tokio::time::timeout(TIMEOUT, async {
         // The CLI side.
         let dir = TempDir::new("agree");
-        let path = dir.write("agree.typl", BROKEN_TYPL);
+        let path = dir.write("agree.typl", THREE_KINDS_TYPL);
         let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
             .args(["check", "--format", "json"])
             .arg(&path)
@@ -164,14 +176,20 @@ async fn ridl_check_and_check_format_json_agree() {
 
         // The MCP side.
         let client = connect().await;
-        let mut mcp = call_ridl_check(&client, BROKEN_TYPL, "typl").await;
+        let mut mcp = call_ridl_check(&client, THREE_KINDS_TYPL, "typl").await;
         client.cancel().await.expect("shutdown");
         // The tool wraps its array in an object; the CLI prints the bare array.
         let mut mcp = mcp["diagnostics"].take();
 
+        // At least two on each side, or the equality below would pass over
+        // a tool that truncated its diagnostics to the first one.
         assert!(
-            cli.as_array().is_some_and(|array| !array.is_empty()),
-            "the fixture must produce at least one diagnostic, or this proves nothing: {cli}"
+            cli.as_array().is_some_and(|array| array.len() >= 2),
+            "the fixture must produce at least two diagnostics, or this proves nothing: {cli}"
+        );
+        assert!(
+            mcp.as_array().is_some_and(|array| array.len() >= 2),
+            "the tool must report at least two diagnostics, or this proves nothing: {mcp}"
         );
         blank_span_paths(&mut cli);
         blank_span_paths(&mut mcp);
