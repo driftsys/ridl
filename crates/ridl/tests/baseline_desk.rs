@@ -717,7 +717,7 @@ fn check_reports_a_baseline_subdirectory_it_cannot_read() {
 /// snapshots sit two or more levels down does. Naming it with an explicit
 /// `--baseline` is an input error (driftsys/ridl#235), not the silent skip an
 /// absent flag gets — pinned separately by
-/// `auto_discovery_with_no_baseline_stays_silent`.
+/// `auto_discovery_of_an_empty_baseline_directory_stays_silent`.
 #[test]
 fn check_refuses_an_empty_baseline_directory() {
     let dir = TempDir::new("emptydir");
@@ -1287,20 +1287,31 @@ fn an_explicit_baseline_holding_no_snapshot_is_an_input_error() {
     );
 }
 
-/// Auto-discovery keeps its silent skip. With no flag and no published
-/// baseline, `ridl check` behaves as it did before the baseline command
-/// existed, which is the property `baseline_location` documents.
+/// Auto-discovery keeps its silent skip even once the empty-baseline refusal
+/// exists. `.ridl/baseline/` — the exact location `default_baseline_dir`
+/// computes — is created but never published into, so `baseline_location`
+/// discovers it and hands `load_baseline` `explicit == false`. With no flag to
+/// blame for the empty result, "no baseline published yet" stays legitimate,
+/// exactly as it did before this task added the refusal — pinned separately,
+/// for an explicit `--baseline` naming the same kind of empty directory, by
+/// `check_refuses_an_empty_baseline_directory`.
+///
+/// This is the test that actually exercises `load_baseline`'s `explicit`
+/// guard: unlike a workspace with no `.ridl/baseline/` directory at all
+/// (`check_without_a_baseline_is_unchanged`), where `baseline_location`
+/// returns `None` and `load_baseline` is never called, an empty *existing*
+/// directory reaches the guard and depends on `explicit` being `false` to
+/// stay silent.
 #[test]
-fn auto_discovery_with_no_baseline_stays_silent() {
+fn auto_discovery_of_an_empty_baseline_directory_stays_silent() {
     let dir = TempDir::new("empty-auto");
     let root = package_workspace(&dir, BASE);
+    std::fs::create_dir_all(root.join(".ridl").join("baseline"))
+        .expect("create the empty baseline directory");
 
     let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
 
-    assert_eq!(
-        code, 0,
-        "a clean check with no baseline succeeds:\n{stderr}"
-    );
+    assert_eq!(code, 0, "a clean check with no baseline succeeds:\n{stderr}");
     assert!(
         stdout.is_empty() && stderr.is_empty(),
         "no baseline means no drift report at all:\nstdout: {stdout}\nstderr: {stderr}",
