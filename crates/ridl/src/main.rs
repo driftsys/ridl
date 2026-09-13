@@ -628,7 +628,10 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
 /// asking for a baseline that is not there is a mistake worth hearing about.
 /// Auto-discovery is the silent path: with no flag and no `.ridl/baseline/`
 /// directory, `ridl check` behaves exactly as it did before this command
-/// existed.
+/// existed. The returned `bool` says which path found the location — `true`
+/// for an explicit `--baseline`, `false` for auto-discovery — which
+/// [`load_baseline`] needs to tell an explicit path that names an empty
+/// baseline from a workspace that has not published one yet.
 fn baseline_location(
     entry: &Path,
     flag: Option<&Path>,
@@ -689,7 +692,10 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
 /// The workspace is compiled a second time here, through
 /// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
 /// does not hand back the IR. The cost is paid only when a baseline is actually
-/// present, and never on a run that already failed.
+/// present, and never on a run that already failed. `explicit` is passed
+/// straight through to [`load_baseline`], which it uses to tell an explicit
+/// `--baseline` holding no snapshot (a refusal) from an auto-discovered
+/// directory holding none (a silent skip).
 fn desk_check(
     entry: &Path,
     location: &Path,
@@ -863,13 +869,15 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
 /// Loads the baseline packages: every `.ir.json` in a directory, in file-name
 /// order, or the single file `location` names.
 ///
-/// Two directory shapes are refused rather than read as an *empty* baseline,
-/// because skipping either silently would report a clean desk check that ran
-/// against nothing: one holding IR artifacts but no `.ir.json` (issue #218
-/// item 4), and one whose `.ir.json` snapshots sit a level below it (issue
-/// #230). A directory with neither keeps yielding an empty baseline — that is
-/// the ordinary "no baseline published yet" state, and [`desk_check`] skips
-/// it silently.
+/// Three directory shapes are refused rather than read as an *empty*
+/// baseline, because skipping any of them silently would report a clean desk
+/// check that ran against nothing: one holding IR artifacts but no `.ir.json`
+/// (issue #218 item 4), one whose `.ir.json` snapshots sit a level below it
+/// (issue #230), and, when `explicit` is true, any other directory that
+/// yields no snapshot at all (driftsys/ridl#235). A directory that fits none
+/// of the three and was found by auto-discovery (`explicit` false) keeps
+/// yielding an empty baseline — that is the ordinary "no baseline published
+/// yet" state, and [`desk_check`] skips it silently.
 fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
         let snapshots = snapshot_files(location)?;
