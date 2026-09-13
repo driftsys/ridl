@@ -7,18 +7,24 @@ quick fixes, hovers, ordinal inlay hints, navigation, completion, and rename.
 This extension covers the `typl` and `ridl` languages. One server serves both:
 the compiler selects the profile from the file extension, so a `.ridl` interface
 and the `.typl` vocabulary it imports are checked together. The remaining family
-languages (`uxdl`, `rmdl`, `rsdl`) are sequenced separately in
+languages (`rxdl`, `rmdl`, `rsdl`) are sequenced separately in
 `docs/ROADMAP.md`.
 
 ## Install
 
-From the VS Code Marketplace or Open VSX, search "RIDL". The extension bundles
-the `ridl` binary and runs it as `ridl lsp` (the language server) and `ridl mcp`
-(the MCP server Copilot sees). Nothing else to install.
+The extension is not published yet — building it from source (below) is how to
+install it today.
 
-To use `ridl` from a terminal, Claude Code, or Codex as well, run the command
-**RIDL: Install ridl to PATH**, or use the installer script from the repository
-root (`install.sh` / `install.ps1`).
+Marketplace and Open VSX publishing is deferred to a maintainer act, like the
+crates.io release, and is not part of this build. Once a maintainer publishes a
+release, search "RIDL" on the VS Code Marketplace or Open VSX; the published
+extension bundles the `ridl` binary and runs it as `ridl lsp` (the language
+server) and `ridl mcp` (the MCP server Copilot sees). That release will also add
+an installer script at the repository root (`install.sh` / `install.ps1`);
+neither exists in this branch yet.
+
+Once the extension is installed, by whichever route, run the command **RIDL:
+Install ridl to PATH** to use `ridl` from a terminal, Claude Code, or Codex too.
 
 ## Build from source
 

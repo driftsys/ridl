@@ -446,15 +446,15 @@ vscode-verify:
     trap 'rm -rf "$scratch"' EXIT
     npx vsce package --out "$scratch/ridl-vscode.vsix"
     listing="$(npx vsce ls)"
-    if printf '%s\n' "$listing" | grep -q '^src/'; then
+    if grep -q '^src/' <<<"$listing"; then
         echo "vscode-verify: src/ would ship in the VSIX — check .vscodeignore" >&2
         exit 1
     fi
-    if printf '%s\n' "$listing" | grep -q '\.test\.js$'; then
+    if grep -q '\.test\.js$' <<<"$listing"; then
         echo "vscode-verify: a compiled test file would ship in the VSIX — check .vscodeignore" >&2
         exit 1
     fi
-    echo "vscode-verify: packaged $scratch/ridl-vscode.vsix"
+    echo "vscode-verify: packaged ok"
 
 # Build the extension for this machine: a release build of ridl copied into
 # editors/vscode/bin/, then `vsce package`. Local testing only — the release
