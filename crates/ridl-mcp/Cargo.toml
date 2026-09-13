@@ -17,7 +17,9 @@ ridlc = { path = "../ridlc" }
 rmcp.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-# Named here rather than taken from `rmcp`'s own feature set: `serve_stdio`
-# relies on the stdio driver (`io-std`) and on the runtime that drives the
-# task `rmcp` spawns (`rt`).
+# `serve_stdio` needs the stdio driver (`io-std`) and the runtime that drives
+# the task `rmcp` spawns (`rt`). `rmcp`'s own feature set supplies both today,
+# so this line is not what makes the crate build; it states the requirement
+# here so a later `rmcp` release that stops enabling them fails as a missing
+# feature rather than as an unexplained error in this crate.
 tokio.workspace = true

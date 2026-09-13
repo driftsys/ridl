@@ -9,7 +9,7 @@
 use ridl_core::diag::{JsonDiagnostic, to_json};
 use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
-use rmcp::model::{CallToolResult, ContentBlock, ServerCapabilities, ServerInfo};
+use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo};
 use rmcp::schemars::JsonSchema;
 use rmcp::transport::stdio;
 use rmcp::{ErrorData, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
@@ -88,16 +88,14 @@ impl RidlMcp {
 
     #[tool(
         name = "ridl_check",
-        description = "Type-check one typl or ridl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim."
+        description = "Type-check one typl or ridl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. Every span reports the path `input.typl` or `input.ridl`, a fixed synthetic name for the text you supplied rather than a file on disk."
     )]
     fn ridl_check(
         &self,
         Parameters(params): Parameters<CheckParams>,
     ) -> Result<CallToolResult, ErrorData> {
         let output = check(&params);
-        let text = serde_json::to_string(&output)
-            .map_err(|error| ErrorData::internal_error(error.to_string(), None))?;
-        Ok(CallToolResult::success(vec![ContentBlock::text(text)]))
+        Ok(CallToolResult::success(vec![ContentBlock::json(&output)?]))
     }
 }
 
@@ -106,10 +104,16 @@ impl RidlMcp {
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for RidlMcp {
     fn get_info(&self) -> ServerInfo {
-        ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "RIDL compiler tools. Call ridl_check with a source text and a profile \
+        ServerInfo::new(ServerCapabilities::builder().enable_tools().build())
+            // Without this, `ServerInfo::new` keeps
+            // `Implementation::from_build_env()`, whose `env!` calls expand
+            // inside rmcp: every host would display and log this server as
+            // `rmcp` at the SDK's version. The `env!` below expands here.
+            .with_server_info(Implementation::new("ridl-mcp", env!("CARGO_PKG_VERSION")))
+            .with_instructions(
+                "RIDL compiler tools. Call ridl_check with a source text and a profile \
                  (typl or ridl) to get coded diagnostics with fix-its.",
-        )
+            )
     }
 }
 
@@ -199,6 +203,34 @@ mod tests {
             .map(|tool| tool.name.to_string())
             .collect();
         assert_eq!(names, vec!["ridl_check".to_string()]);
+    }
+
+    #[test]
+    fn the_server_announces_itself_rather_than_the_sdk() {
+        let info = RidlMcp::new().get_info();
+        // rmcp's own default is `Implementation::from_build_env()`, which
+        // reports the SDK's crate name and version, not this crate's.
+        assert_eq!(info.server_info.name, "ridl-mcp");
+        assert_eq!(info.server_info.version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn the_tool_returns_the_check_output_as_one_json_text_block() {
+        let server = RidlMcp::new();
+        let result = server
+            .ridl_check(Parameters(CheckParams {
+                source: BROKEN_TYPL.to_string(),
+                profile: Profile::Typl,
+            }))
+            .expect("the tool succeeds");
+        assert_eq!(result.is_error, Some(false));
+        let [ContentBlock::Text(block)] = result.content.as_slice() else {
+            panic!("expected exactly one text content block");
+        };
+        let value: serde_json::Value =
+            serde_json::from_str(&block.text).expect("the block holds JSON");
+        assert_eq!(value["diagnostics"][0]["code"], json!("FORM-101"));
+        assert_eq!(value["diagnostics"][0]["span"]["path"], json!("input.typl"));
     }
 
     #[test]

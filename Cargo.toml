@@ -73,11 +73,13 @@ sha2 = "0.10.9"
 syn = { version = "2.0.119", features = ["full"] }
 tar = "0.4.44"
 # The async runtime the MCP SDK runs on — the first async code in this
-# workspace, reached only through `ridl mcp`. Every feature this workspace
-# relies on is named here rather than left to feature unification with
-# `rmcp`: `io-std` for the stdio transport's `Stdin`/`Stdout`, `rt` and
-# `rt-multi-thread` for the task `rmcp`'s service loop spawns, and `macros`
-# for the `#[tokio::main]` that enters the runtime in the `ridl` binary.
+# workspace, reached only through `ridl mcp`. `rmcp` happens to enable
+# `io-std`, `rt` and `macros` today through its own feature set; naming them
+# here makes them this workspace's stated requirement rather than an
+# inherited side effect that a future `rmcp` release could withdraw.
+# `io-std` is the stdio transport's `Stdin`/`Stdout`, `rt` the runtime that
+# drives the task `rmcp` spawns, `rt-multi-thread` the flavour the `ridl`
+# binary builds, and `macros` its `#[tokio::main]`.
 tokio = { version = "1.53.1", features = [
   "io-std",
   "macros",
