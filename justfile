@@ -357,8 +357,11 @@ gate-parity:
 # fixture release reached through a file:// URL — curl reads file://, so no
 # server is needed. A dry run alone (RIDL_INSTALL_DRY_RUN=1) exercises neither
 # the checksum nor the extraction, the two steps that matter most in a script
-# users pipe straight into `bash`. Not exercised here: install.ps1 — there is
-# no PowerShell interpreter on this machine or in CI.
+# users pipe straight into `bash`. Also runs install.ps1's own dry run behind
+# a `command -v pwsh` guard: ubuntu-latest, where this recipe runs in CI,
+# ships PowerShell 7 as `pwsh`, so this is the one place install.ps1 is
+# parsed at all. The guard skips that part, rather than failing the recipe,
+# on a machine — such as the one this was developed on — with no pwsh.
 install-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -370,6 +373,18 @@ install-check:
     version="editor-v0.0.0-install-check"
     url="$(RIDL_VERSION="$version" RIDL_INSTALL_DRY_RUN=1 bash install.sh)"
     tarball="$(basename "$url")"
+
+    if command -v pwsh >/dev/null 2>&1; then
+        ps1_url="$(pwsh -NoProfile -Command '$env:RIDL_VERSION="editor-v0.1.0"; $env:RIDL_INSTALL_DRY_RUN="1"; ./install.ps1')"
+        expected="https://github.com/driftsys/ridl/releases/download/editor-v0.1.0/ridl-x86_64-pc-windows-msvc.tar.gz"
+        if [ "$ps1_url" != "$expected" ]; then
+            echo "install-check: install.ps1 dry run printed '$ps1_url', expected '$expected'" >&2
+            exit 1
+        fi
+        echo "install-check: install.ps1 dry run verified ($ps1_url)"
+    else
+        echo "install-check: pwsh not installed — install.ps1 dry run skipped"
+    fi
 
     # Build the fixture release: <version>/<tarball> plus its .sha256. The
     # "binary" is a tiny script that prints a recognisable version line.
@@ -384,9 +399,10 @@ install-check:
     fi
     rm "$reldir/ridl"
 
-    # A good install: the binary lands in a fresh directory, executable, and
-    # matches the fixture's own output.
-    install1="$scratch/install1"
+    # A good install: the binary lands in a fresh directory — its name
+    # holding a space, the quoting risk both scripts are most exposed to —
+    # executable, and matching the fixture's own output.
+    install1="$scratch/ridl install 1"
     RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
         RIDL_INSTALL_DIR="$install1" bash install.sh
     if [ ! -x "$install1/ridl" ]; then
@@ -400,20 +416,38 @@ install-check:
     fi
     echo "install-check: good install verified ($install1/ridl)"
 
-    # A corrupted download: the checksum must reject it, and nothing lands.
-    printf 'corrupt' >> "$reldir/$tarball"
-    install2="$scratch/install2"
+    # A corrupted download: different content than the original .sha256
+    # describes, but still a well-formed tarball. Appending garbage bytes
+    # instead would also make some `tar` implementations refuse to extract
+    # the archive at all, which would let this test pass for the wrong
+    # reason — rejected by extraction, not by the checksum, which is exactly
+    # the failure mode a checksum test exists to rule out. Keeping the
+    # original .sha256 and replacing only the tarball's content isolates the
+    # checksum step as the one thing that can reject this.
+    printf '#!/bin/sh\necho "ridl tampered"\n' > "$reldir/ridl"
+    chmod +x "$reldir/ridl"
+    (cd "$reldir" && tar czf "$tarball" ridl)
+    rm "$reldir/ridl"
+    install2="$scratch/ridl install 2"
     if RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
         RIDL_INSTALL_DIR="$install2" bash install.sh 2>"$scratch/tamper.err"; then
         echo "install-check: installer succeeded against a corrupted tarball" >&2
         exit 1
     fi
     cat "$scratch/tamper.err" >&2
+    # Names the step that rejected the download, rather than trusting that
+    # something did: sha256sum and shasum both write this line to stderr on
+    # a checksum mismatch, and nothing else in install.sh's output can match
+    # it, so its presence pins the failure to the checksum step specifically.
+    if ! grep -qi "did not match" "$scratch/tamper.err"; then
+        echo "install-check: installer rejected the download, but not visibly because of the checksum" >&2
+        exit 1
+    fi
     if [ -e "$install2/ridl" ]; then
         echo "install-check: a corrupted download still installed a binary" >&2
         exit 1
     fi
-    echo "install-check: tamper case correctly rejected and installed nothing"
+    echo "install-check: tamper case correctly rejected by the checksum and installed nothing"
 
 # Full local gate: confirm the toolchain and CI wiring, check Rust formatting,
 # build the docs book, compile the code, run the tests, lint the Rust, check the
@@ -429,7 +463,7 @@ install-check:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity fmt-check book-check link-check compile test lint wasm-check install-check check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check compile test lint wasm-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

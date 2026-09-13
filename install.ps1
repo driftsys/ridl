@@ -56,8 +56,15 @@ function Main {
         Invoke-WebRequest -Uri $url -OutFile (Join-Path $tmp $tarball) -UseBasicParsing
         Invoke-WebRequest -Uri "$url.sha256" -OutFile (Join-Path $tmp "$tarball.sha256") -UseBasicParsing
         Test-Checksum -File (Join-Path $tmp $tarball) -ChecksumFile (Join-Path $tmp "$tarball.sha256")
-        # Windows 10 1803+ ships bsdtar as tar.exe.
+        # Windows 10 1803+ ships bsdtar as tar.exe. $ErrorActionPreference does
+        # not apply to a native command's own exit code, so it is checked here
+        # directly — otherwise a failed or partial extraction would go
+        # unnoticed and either error confusingly at Move-Item or, worse, move
+        # a truncated binary onto the user's PATH.
         tar -xzf (Join-Path $tmp $tarball) -C $tmp
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "tar extraction failed with exit code $LASTEXITCODE"
+        }
         New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
         Move-Item -LiteralPath (Join-Path $tmp $Binary) -Destination (Join-Path $InstallDir $Binary) -Force
         Write-Host "Installed $(Join-Path $InstallDir $Binary)"

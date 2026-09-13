@@ -70,8 +70,12 @@ main() {
   tmpbin=""
   # Cleans up the download staging directory and, if the atomic install below
   # was interrupted after claiming a temporary name inside INSTALL_DIR, that
-  # temporary file too.
-  trap 'rm -rf "${tmpdir:-}" "${tmpbin:-}"' EXIT
+  # temporary file too. INT and TERM are trapped as well as EXIT: without
+  # them, an interrupt (Ctrl-C) between the mktemp that claims the temporary
+  # name and the final rename would kill the script by the signal's default
+  # disposition, which bypasses the EXIT trap entirely and leaves the hidden
+  # temporary file behind.
+  trap 'rm -rf "${tmpdir:-}" "${tmpbin:-}"' EXIT INT TERM
   curl -fsSL "$url" -o "$tmpdir/$tarball"
   curl -fsSL "$url.sha256" -o "$tmpdir/$tarball.sha256"
   (cd "$tmpdir" && if command -v sha256sum >/dev/null; then sha256sum -c "$tarball.sha256"; else shasum -a 256 -c "$tarball.sha256"; fi)
