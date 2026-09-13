@@ -535,7 +535,7 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 
 /// Compares the baseline about to be replaced against the snapshots just built
 /// and records a RIDL-408 for every interaction the replacement would drop with
-/// no `reserved` tombstone. Returns whether any was recorded.
+/// no `reserved` tombstone in its own slot. Returns whether any was recorded.
 ///
 /// The published snapshots are read flat from `out_dir`, which is exactly where
 /// [`publish_baseline`] writes them. This deliberately does not go through
@@ -564,22 +564,24 @@ fn untombstoned_removals(
     let fresh = load_snapshots(&snapshot_files(staging)?)?;
 
     let report = ridl_diff::diff_sets(&published, &fresh);
-    let index = DeclIndex::build(entry);
+    // Parsing every source file is wasted work on the common republish that
+    // carries no removal at all, so the index is built only once the first
+    // `InteractionRemoved` is actually met.
+    let mut index: Option<DeclIndex> = None;
     let mut refusals = Vec::new();
     for change in &report.changes {
         if change.category != ridl_diff::Category::InteractionRemoved {
             continue;
         }
-        let name = change.path.rsplit('/').next().unwrap_or(&change.path);
+        let name = change
+            .path
+            .rsplit_once('/')
+            .map_or(change.path.as_str(), |(_, name)| name);
+        let index = index.get_or_insert_with(|| DeclIndex::build(entry));
         refusals.push(Diagnostic {
             code: DiagCode::RIDL_408,
             severity: Severity::Error,
-            message: format!(
-                "`{name}` is gone from the source but the baseline being replaced still \
-                 declares it. Publishing would free its ordinal for a later interaction \
-                 to reuse, with nothing left to record that it was ever taken. Retire it \
-                 in place with `reserved {name}`."
-            ),
+            message: untombstoned_removal_message(name, change, &published),
             primary: index.span_of(&change.path, &mut run.sources),
             labels: Vec::new(),
             fixits: Vec::new(),
@@ -588,6 +590,77 @@ fn untombstoned_removals(
     let refused = !refusals.is_empty();
     run.diagnostics.extend(refusals);
     Ok(refused)
+}
+
+/// The RIDL-408 message for one `InteractionRemoved` change, worded for the
+/// shape `ridl_diff::walk` emitted it in (ridl-diff/src/walk.rs:339-398):
+///
+/// - a **misplaced tombstone** — the source retires the interaction, but not
+///   at its own ordinal — is told apart by `change.after`, which only this
+///   shape carries (the tombstone's own ordinal);
+/// - a **bare removal** and a **dropped tombstone** both carry no
+///   `change.after`, so they are told apart by asking the published IR
+///   itself whether it already reserved the name — never by reading the
+///   words in `change.before`, which is display text `ridl_diff` owns and may
+///   reword.
+fn untombstoned_removal_message(
+    name: &str,
+    change: &ridl_diff::Change,
+    published: &[ridl_ir::v2::Package],
+) -> String {
+    if change.after.is_some() {
+        format!(
+            "The source retires `{name}` with a tombstone, but not at the ordinal the \
+             interaction held. A tombstone must hold the retired interaction's own ordinal \
+             (ridl §11); otherwise the surviving interactions slide into the freed slot. Move \
+             `reserved {name}` back to that position."
+        )
+    } else if published_reserves(published, &change.path) {
+        format!(
+            "The baseline being replaced records `{name}` as retired, but the source has \
+             dropped the tombstone. A tombstone is a permanent reservation (ridl §11). Put \
+             `reserved {name}` back at its position."
+        )
+    } else {
+        format!(
+            "`{name}` is gone from the source but the baseline being replaced still declares \
+             it. Publishing would free its ordinal for a later interaction to reuse, with \
+             nothing left to record that it was ever taken. Retire it in place with `reserved \
+             {name}`."
+        )
+    }
+}
+
+/// Whether the published IR already retires the interaction a
+/// `<package>/<container>/<name>` diff path names — a `reserved <name>`
+/// tombstone already present in the baseline being replaced.
+///
+/// This reads the same shape `ridl_diff`'s own `reserved_names` walk reads
+/// (`Interface::interactions`, a `Decl` whose `kind` is `ReservedSlot`), so
+/// telling a bare removal from a dropped tombstone never depends on the
+/// wording of a `Change`'s rendered `before`/`after` text. The container is
+/// found through `Package::shapes`, which yields a top-level interface and an
+/// inline-form service's own shape alike — the two containers `ridl_diff`'s
+/// interaction walk is ever called on.
+fn published_reserves(published: &[ridl_ir::v2::Package], path: &str) -> bool {
+    let mut parts = path.split('/');
+    let (Some(pkg), Some(container), Some(name)) = (parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    let Some(package) = published.iter().find(|package| package.name == pkg) else {
+        return false;
+    };
+    let Some(shape) = package.shapes().find(|shape| shape.name == container) else {
+        return false;
+    };
+    shape.interface.interactions.iter().any(|decl| {
+        matches!(
+            &decl.kind,
+            Some(ridl_ir::v2::decl::Kind::ReservedSlot(reserved))
+                if reserved.name.as_deref() == Some(name)
+        )
+    })
 }
 
 /// The directory the snapshots are built into before they are published: a
