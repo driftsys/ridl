@@ -528,10 +528,12 @@ clean:
     rm -rf book target
 
 # Verify the VS Code extension packages: compile, unit tests, and a `vsce
-# package` with no bundled binary (a fresh checkout has no bin/, and the
-# manifest does not reference it). Invoked by vscode-verify.yaml on pull
-# requests that touch editors/vscode. Not a member of `build`, so gate-parity
-# does not cover it; the workflow is the only caller besides a contributor.
+# package` against a placeholder bin/ridl staged just for this check, so a
+# .vscodeignore mistake that drops the binary is caught here instead of in a
+# release, where it would ship five VSIXs with no binary at all. Invoked by
+# vscode-verify.yaml on pull requests that touch editors/vscode. Not a member
+# of `build`, so gate-parity does not cover it; the workflow is the only
+# caller besides a contributor.
 vscode-verify:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -539,9 +541,18 @@ vscode-verify:
     npm ci
     npm test
     scratch="$(mktemp -d)"
-    trap 'rm -rf "$scratch"' EXIT
+    # The trap removes the scratch directory and the placeholder binary even
+    # when a check below fails.
+    trap 'rm -rf "$scratch" bin/ridl; rmdir bin 2>/dev/null || true' EXIT
+    mkdir -p bin
+    printf '#!/bin/sh\necho placeholder\n' > bin/ridl
+    chmod +x bin/ridl
     npx vsce package --out "$scratch/ridl-vscode.vsix"
     listing="$(npx vsce ls)"
+    if ! grep -qx 'bin/ridl' <<<"$listing"; then
+        echo "vscode-verify: bin/ridl is missing from the VSIX — check .vscodeignore" >&2
+        exit 1
+    fi
     if grep -q '^src/' <<<"$listing"; then
         echo "vscode-verify: src/ would ship in the VSIX — check .vscodeignore" >&2
         exit 1
