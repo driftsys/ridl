@@ -37,15 +37,17 @@ Run `git branch --show-current` before every commit and every push.
 
 Read for every stage:
 - docs/wip/2026-09-12-rsdl-rewrite-decisions.md — all 523 lines: §2 the
-  language (:47), §3 decisions (:133), D-7 identity (:286-330, owned by lane
-  L), D-11 (:443-459), §4 amendments (:460-492), §5 open (:503)
+  language (:47), §3 decisions (:133), D-7 identity (:286-399, owned by lane
+  L), D-11 (:443-459), §4 amendments (:460-501), §5 open (:503)
 - docs/wip/2026-09-08-topology-vocabulary.md
 - docs/specification/rsdl-language-reference.md — v0.1.0, 815 lines, to be
   rewritten
 - docs/wip/family-general-form.md — §4.8 attributes, §6.3 numbers
 - docs/specification/ridl-family-overview.md — doctrine 18
 - docs/specification/ridl-language-reference.md — §14.5 and §14.6
-- docs/decisions/ADR-0002-module-system.md — one system per workspace
+- the rule "one system per workspace": the decisions note (:430) and the
+  old reference (:316) attribute it to ADR-0002, which does not state it;
+  the new reference states the rule without that citation
 - docs/wip/2026-09-13-runtime-descriptors-design.md — what the system
   descriptor needs from the lowering
 - docs/ROADMAP.md — Epic 6
@@ -75,9 +77,10 @@ and not as a protobuf schema. Cite the lock once, as an input to the
 lowering; lane L specifies it.
 Apply the §4 amendments in the same pull request, split this way: items
 about identity, the lock, RIDL-146 to RIDL-148 or ADR-0015 belong to lane
-L — leave them. Roadmap edits belong to B2. Edits to the ridl reference and
-to ADR-0010 wait for G1, because the baseline gate session changes both; if
-G1 does not hold yet, list them on #328 for B2. Apply everything else.
+L — leave them. Roadmap edits belong to B2. Edits to the ridl reference wait for G1, because the baseline gate
+session changes it. Edits to ADR-0010 wait for G1 and G2, because both
+running sessions change it. If a gate does not hold yet, list those edits
+on #328 for B2. Apply everything else.
 Docs-only pull request, `docs(rsdl): rewrite the rsdl reference`. Run
 /review <PR> (the docs-only lane), fix, pass 2, `just verify`, merge.
 

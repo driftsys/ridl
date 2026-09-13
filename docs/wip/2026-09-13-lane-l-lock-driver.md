@@ -38,8 +38,8 @@ origin/main inside the same worktree. Never enter another session's worktree.
 Run `git branch --show-current` before every commit and every push.
 
 Read for every stage:
-- docs/wip/2026-09-12-rsdl-rewrite-decisions.md — D-7 (:286-330), and the
-  §4 amendment items (:460-492) about identity and the lock
+- docs/wip/2026-09-12-rsdl-rewrite-decisions.md — D-7 (:286-399), and the
+  §4 amendment items (:460-501) about identity and the lock
 - docs/wip/2026-09-12-interface-id-study.md and -2.md
 - `git show b1c43fa` — the commit that settled D-7's two internal tensions
 - docs/decisions/ADR-0002-module-system.md — ridl.lock is per workspace; the
@@ -65,7 +65,10 @@ Its FIRST section fixes the identity widths, and Sebastien approves that
 section before you write the rest. The records disagree today:
 docs/wip/2026-09-08-ridl-rt-design.md:205-208 proposes u16 for Ordinal,
 InterfaceId and ServiceId; crates/ridl-ir/proto/ridl/ir/v2/ir.proto:87
-carries every ordinal as uint32; docs/wip/2026-09-12-interface-id-study.md
+carries every ordinal as uint32;
+docs/wip/2026-09-13-catalog-descriptor-plan.md:296, :306 and :319 already
+write uint32 for the ordinal and the interface number, so that plan's
+Task 1 schema changes if the width does; docs/wip/2026-09-12-interface-id-study.md
 :114-115 reports the vocabulary note's slot u8 and hash u64; D-7 and the
 runtime descriptors design state no width. Decide the interface number
 width, the member ordinal width, and whether a service number exists in
@@ -103,12 +106,14 @@ tasks of the catalog descriptor plan (#324) — neither has a place in the
 roadmap today; ask Sebastien which epic they sit under, and check
 docs/archive/roadmap-landed-record.md so no row reuses a parked identifier;
 (3) P-5: #243 and #237 move to Epic 10's carried defects;
-(4) P-6: E14.2 after the lock, E14.3 last.
+(4) P-6: E14.2 after the lock, and E14.3 after E14.1 and E14.2; the Rust
+codegen, finalized, still follows the typl debt.
 Then prepare the story issues for the new rows, check the list, and give it
 to a Sonnet subagent to file. `docs(roadmap): ...`. /review, merge.
 
 == L4 — the implementation (branch feat/ridl-lock) ==
-Gates: L2 merged, G1 (both baseline gate pull requests merged). Check with
+Gates: L2 merged, G1 (both baseline gate pull requests merged), G2 (#327
+merged; it also changes diag.rs, main.rs, cli-reference.md and ADR-0010). Check with
 the plan's §5 commands; if a gate does not hold, report which and stop.
 superpowers:subagent-driven-development over the L2 plan. `just build`
 green after every task; `cargo fmt --all` before every Rust commit. /review
@@ -123,7 +128,8 @@ blocks. Walk it with Sebastien one row at a time. Each question is resolved
 version. The QoS and bound terms must agree with ADR-0015. Docs-only pull
 request, `docs(ridl): ...`. Run sdd-gardening over lane L's design and plan
 in this pull request. /review, merge.
-E14.3 (#320: the typl and ridl references drop "Draft") is done by whichever
+E14.3 (#320: both references drop "Draft", and the rxdl reference gains
+its status line) is done by whichever
 lane merges second: lane C's C1 or this stage.
 The lane then hands over to executing #324, after Sebastien confirms the
 seven dispositions that plan takes.

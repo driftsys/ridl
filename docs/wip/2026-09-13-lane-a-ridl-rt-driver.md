@@ -97,8 +97,8 @@ files, and names its implementer model (see Model routing in
 docs/wip/2026-09-13-lane-a-ridl-rt-driver.md). One task registers the crate:
 workspace members, a `ridl-rt` scope in .git-std.toml, the crate list and
 count in AGENTS.md. The last task meets E11.0's done-when: a hand-written
-program links ridl-rt and reads a sample with its provenance, freshness and
-envelope. Docs-only pull request, /review, merge.
+program links ridl-rt and reads a sample with its provenance (the
+E11.0 row in docs/ROADMAP.md). Docs-only pull request, /review, merge.
 
 == A3 — the crate (branch feat/ridl-rt) ==
 Gates: A2 merged, G2 (#327 merged), GW. Check them with the commands in the

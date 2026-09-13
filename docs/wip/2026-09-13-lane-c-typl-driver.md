@@ -55,8 +55,8 @@ Read for every stage:
 - issues #318, #246-#255, #243, #237, #244, #203, #245
 
 == C1 — E14.1, the typl §17 pass (branch docs/typl-open-questions) ==
-Draft a table with one row per §17 item (13 items) and one per re-scope row
-(§3.10, §3.11): what it asks, the options, a recommendation, and what it
+Draft a table with one row per §17 item (13 items; items 12 and 13
+are the rows the re-scope added from §3.10 and §3.11): what it asks, the options, a recommendation, and what it
 blocks. Put §17.11 first. Lane A's RA-X7 (docs/wip/2026-09-08-ridl-rt-design.md
 §11) and E11.12 depend on it. Add a row for #245: is a name-based
 `reserved` legal in an enum body, and if so what does it guarantee. Walk the
@@ -66,7 +66,8 @@ version. When §17.11 is decided, post the decision on #328. File an issue
 for each resolved question that needs code. Docs-only pull request,
 `docs(typl): ...`. Run /review <PR> (the docs-only lane), fix, pass 2,
 `just verify`, merge.
-E14.3 (#320: the typl and ridl references drop "Draft") is done by whichever
+E14.3 (#320: both references drop "Draft", and the rxdl reference gains
+its status line) is done by whichever
 lane merges second: this stage or lane L's L5.
 
 == C2 — the Epic 10 plan refresh (branch docs/typl-value-objects-refresh) ==
@@ -88,7 +89,8 @@ Every task stays test first and names its model. Docs-only pull request,
 /review, merge.
 
 == C3 — defects (one branch and one pull request each) ==
-Gate: G1 (the baseline gate session changes crates/ridl-core/src/diag.rs).
+Gates: G1 and G2 (both running sessions change
+crates/ridl-core/src/diag.rs).
 - #244: exact-duplicate struct fields and parameters report RIDL-149, a
   name-transform collision, instead of a duplicate. Test first.
 - #203: a user package named ridl.std compiles clean and its artifact is

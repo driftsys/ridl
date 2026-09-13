@@ -35,21 +35,24 @@ Agreed with Sebastien on 2026-09-13.
 - **P-1 "Publish `ridl-rt`" means a crates.io release of 0.1.0.** The agent
   builds E11.0 and prepares the release. Sebastien runs `cargo publish`, because
   release, tagging and publishing are maintainer acts
-  (`docs/decisions/ADR-0007-e1-execution.md:156`). The release waits for two
-  things: E11.0's done-when (a hand-written program links the crate and reads a
-  sample with its provenance), and lane L's approved identity widths (P-2). 0.1
-  leaves out `Inline` payloads (the note's RA-X7, which depends on typl §17.11)
-  and streams (RA-X1). Every other crate stays at version 0.0.0. `ridl-rt` gets
-  its own version and its own tag.
+  (`docs/decisions/ADR-0007-e1-execution.md`, decision 14). The release waits
+  for two things: E11.0's done-when (a hand-written program links the crate and
+  reads a sample with its provenance), and lane L's approved identity widths
+  (P-2). 0.1 leaves out `Inline` payloads (the note's RA-X7, which depends on
+  typl §17.11) and streams (RA-X1). Every other crate stays at version 0.0.0.
+  `ridl-rt` gets its own version and its own tag.
 - **P-2 Lane L decides the identity widths, and lane A uses them.** The widths
   are open and the records disagree: the `ridl-rt` note proposes `u16` for
   `Ordinal`, `InterfaceId` and `ServiceId`
   (`docs/wip/2026-09-08-ridl-rt-design.md:205-208`), the IR carries every
-  ordinal as `uint32` (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:87`), and D-7
-  and the runtime descriptors design state no width. D-7 owns numbering, so the
-  first section of lane L's design fixes the widths. Lane A writes the rest of
-  its spec in the meantime and does not fix its identity types until Sebastien
-  has approved that section.
+  ordinal as `uint32` (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:87`), the
+  catalog descriptor plan's schema already writes `uint32` for the ordinal and
+  the interface number (`docs/wip/2026-09-13-catalog-descriptor-plan.md:296`,
+  `:306`, `:319`), and D-7 and the runtime descriptors design state no width. If
+  lane L chooses a different width, that plan's Task 1 schema changes with it.
+  D-7 owns numbering, so the first section of lane L's design fixes the widths.
+  Lane A writes the rest of its spec in the meantime and does not fix its
+  identity types until Sebastien has approved that section.
 - **P-3 `ridl-rt` runs beside rsdl and the lock, not after rsdl.** The roadmap's
   step 1 sequence puts E6 before E11.0. E11.0 needs only the identity widths
   from D-7, and nothing from the rsdl language. The roadmap pull request (lane
@@ -60,17 +63,22 @@ Agreed with Sebastien on 2026-09-13.
   that hash. Anything that writes a hash or a golden file before the lock lands
   would be written twice.
 - **P-5 Lane C takes #243 and #237 from "Rust codegen, finalized".** Epic 10
-  Tasks 3 and 6 rewrite the same struct and union emission, so the snapshots
-  change once instead of twice. #302 stays where it is, because it is a wire
-  discriminant question, not a naming question. The roadmap pull request records
-  the move.
-- **P-6 E14.2 is the last stage of lane L, and E14.3 is the last item of step
-  1.** The lock retires RIDL-146, RIDL-147 and RIDL-148 and amends ADR-0015, and
-  several ridl §17 questions rest on those. E14.3 is one small edit once E14.1
-  and E14.2 have both merged.
-- **P-7 One driver session per lane, at most three lanes waiting for Sebastien
-  at a time.** Lanes A, B and L start now. Lane C starts when gate G1 or G2
-  holds (§5), which is when one of the two sessions already running finishes.
+  Task 6 (sound derives) changes the struct and union declarations that #243 and
+  #237 are about, and Task 3 changes the named-scalar emission in the same
+  emitter, so the snapshots change once instead of twice. #302 stays where it
+  is, because it is a wire discriminant question, not a naming question. The
+  roadmap pull request records the move.
+- **P-6 E14.2 is the last stage of lane L, and E14.3 is the last item of the
+  typl debt.** The lock retires RIDL-146, RIDL-147 and RIDL-148 and amends
+  ADR-0015, and ridl §17 questions that cite ADR-0015 may change with it. E14.3
+  is one small edit once E14.1 and E14.2 have both merged. The Rust codegen,
+  finalized, still follows the typl debt in step 1, as the roadmap's sequence
+  says.
+- **P-7 One driver session per stage, at most three lanes waiting for Sebastien
+  at a time.** A lane runs one stage at a time, with one exception: lane C's C1
+  and C2 are independent and may run as two sessions at once, each in its own
+  worktree. Lanes A, B and L start now. Lane C starts when gate G1 or G2 holds
+  (§5), which is when one of the two sessions already running finishes.
 
 ### Alternatives considered
 
@@ -83,9 +91,12 @@ Agreed with Sebastien on 2026-09-13.
   dependency is the identity widths.
 - **Publish `ridl-rt` only after the Rust codegen links it.** Rejected. A 0.x
   version permits a breaking 0.2, which the codegen work is expected to cause.
-  Step 2 needs a published crate (ADR-0020 decision 7, at
-  `docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md:191`),
-  and an early release gets feedback from outside the repository earlier.
+  In step 2, the generated Rust of each package is compiled to `wasm32` and
+  links `ridl-rt` (ADR-0020 decision 7, at
+  `docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md:191`).
+  A consumer that builds that outside this repository needs the crate from a
+  registry. That is this plan's inference, not a statement of ADR-0020. An early
+  release also gets feedback from outside the repository earlier.
 - **E14.2 in lane C.** Rejected by P-6.
 
 ## 3. Sessions already running
@@ -93,10 +104,10 @@ Agreed with Sebastien on 2026-09-13.
 Two sessions were running when this plan was written. No lane enters their
 worktrees, checks out their branches, or runs a formatter in their directories.
 
-| Session          | Branch and worktree                                                                                         | Files it changes                                                                                                                                                                                                                 |
-| ---------------- | ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1 tooling       | `feat/ridl-mcp-v0`, `.claude/worktrees/feat+ridl-mcp-v0`, PR #327                                           | `crates/ridl`, `ridl-core`, `ridl-lsp`, the new `ridl-mcp`, `ridlc`, `editors/vscode`, `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `justfile`, `.github/`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `docs/ROADMAP.md`, ADRs |
-| S2 baseline gate | `baseline-tombstone-gate`, `.claude/worktrees/baseline-tombstone-gate`; two pull requests (its design, D-6) | `crates/ridl/src/main.rs`, `ridl-core/src/diag.rs` (RIDL-408), `ridl-diff` (`MemberReordered`), ADR-0010, the ridl reference, `docs/book/cli-reference.md`                                                                       |
+| Session          | Branch and worktree                                                                                         | Files it changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1 tooling       | `feat/ridl-mcp-v0`, `.claude/worktrees/feat+ridl-mcp-v0`, PR #327                                           | `crates/ridl` (including `src/main.rs` and `tests/`), `crates/ridl-core/src/diag.rs` and its snapshot, `ridl-lsp`, the new `ridl-mcp`, `crates/ridlc/src/lib.rs` and `tests/`, `editors/vscode`, `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `justfile`, `.github/workflows/`, `.gitignore`, `install.sh`, `install.ps1`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `docs/ROADMAP.md`, `docs/book/cli-reference.md`, `docs/technotes/`, `docs/archive/`, ADR-0005, ADR-0007, ADR-0010 |
+| S2 baseline gate | `baseline-tombstone-gate`, `.claude/worktrees/baseline-tombstone-gate`; two pull requests (its design, D-6) | `crates/ridl/src/main.rs`, `crates/ridl/tests/` (`baseline_gate.rs` new, `baseline_desk.rs`), `crates/ridl-core/src/diag.rs` (RIDL-408), `crates/ridlc/tests/corpus.rs` (the RIDL-408 catalogue row), `ridl-diff` (`MemberReordered`), ADR-0010, the ridl reference, `docs/book/cli-reference.md`                                                                                                                                                                                         |
 
 S2's design and plan are on its local branch and not on `main`. A lane reads
 them with
@@ -105,8 +116,9 @@ never by checking the branch out.
 
 ## 4. The lanes
 
-Each stage ends with a pull request. The model named is the one that does the
-stage's main work. The driver of every lane is Opus.
+Each stage ends with at least one pull request: C3 opens one per defect, and C4
+one per Epic 10 story. The model named is the one that does the stage's main
+work. The driver of every lane is Opus.
 
 ### Lane A — `ridl-rt` 0.1.0
 
@@ -140,13 +152,13 @@ and needs no chapter of its own.
 
 Driver prompt: `2026-09-13-lane-l-lock-driver.md`.
 
-| Stage | Work                                                                                                                                                                                                                                 | Model                                                                                            | Starts when   |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------- |
-| L1    | Design: the identity widths first (P-2), then the lock file, `ridl lock`, provisional numbering, `ridl lock merge`, the baseline refusal at the interface level, the retirement of RIDL-146 to RIDL-148, and the ADR-0015 amendments | Fable                                                                                            | now           |
-| L2    | Implementation plan                                                                                                                                                                                                                  | Fable                                                                                            | L1 merged     |
-| L3    | Roadmap pull request: P-3 and P-5, rows for the lock block and the catalog descriptor, and their story issues                                                                                                                        | Opus for the roadmap, Sonnet for the issues                                                      | L2 merged, G2 |
-| L4    | Implementation                                                                                                                                                                                                                       | Fable for numbering, merge and diff; Opus for the command; Sonnet for sweeping the retired codes | L2 merged, G1 |
-| L5    | E14.2 (#319), the ridl §17 disposition pass                                                                                                                                                                                          | Fable drafts, Sebastien decides                                                                  | L4 merged     |
+| Stage | Work                                                                                                                                                                                                                                 | Model                                                                                            | Starts when       |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------ | ----------------- |
+| L1    | Design: the identity widths first (P-2), then the lock file, `ridl lock`, provisional numbering, `ridl lock merge`, the baseline refusal at the interface level, the retirement of RIDL-146 to RIDL-148, and the ADR-0015 amendments | Fable                                                                                            | now               |
+| L2    | Implementation plan                                                                                                                                                                                                                  | Fable                                                                                            | L1 merged         |
+| L3    | Roadmap pull request: P-3 and P-5, rows for the lock block and the catalog descriptor, and their story issues                                                                                                                        | Opus for the roadmap, Sonnet for the issues                                                      | L2 merged, G2     |
+| L4    | Implementation                                                                                                                                                                                                                       | Fable for numbering, merge and diff; Opus for the command; Sonnet for sweeping the retired codes | L2 merged, G1, G2 |
+| L5    | E14.2 (#319), the ridl §17 disposition pass                                                                                                                                                                                          | Fable drafts, Sebastien decides                                                                  | L4 merged         |
 
 Hands over to the execution of #324, after Sebastien confirms the seven
 dispositions that plan takes.
@@ -155,14 +167,15 @@ dispositions that plan takes.
 
 Driver prompt: `2026-09-13-lane-c-typl-driver.md`. Stories: #318, #246 to #255.
 
-| Stage | Work                                                                                                                                                                                         | Model                                                                                       | Starts when   |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------- |
-| C1    | E14.1: one disposition per typl §17 question (13 items) and for the two rows the re-scope added (§3.10, §3.11 of the release-scope note), §17.11 first, including the decision #245 asks for | Fable drafts, Sebastien decides                                                             | G1 or G2      |
-| C2    | Bring `docs/wip/typl-value-objects-plan.md` up to date with the code: Task 9 (TypeScript) moves to step 2, and a task is added for #243 and #237                                             | Sonnet checks each reference, Opus edits                                                    | G1 or G2      |
-| C3    | Defects #244 and #203; #245 once C1 has decided it                                                                                                                                           | Sonnet for #244, Opus for #203                                                              | G1            |
-| C4    | Epic 10 Tasks 1 to 8 and 10, plus the #243 and #237 task                                                                                                                                     | Fable for Tasks 3 and 6 and the naming task; Opus for 1, 7, 8 and 10; Sonnet for 2, 4 and 5 | C2 merged, G2 |
+| Stage | Work                                                                                                                                                                                                                  | Model                                                                                       | Starts when   |
+| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------- |
+| C1    | E14.1: one disposition per typl §17 question (13 items; items 12 and 13 are the two rows the re-scope added, from §3.10 and §3.11 of the release-scope note), §17.11 first, plus a row for the decision #245 asks for | Fable drafts, Sebastien decides                                                             | G1 or G2      |
+| C2    | Bring `docs/wip/typl-value-objects-plan.md` up to date with the code: Task 9 (TypeScript) moves to step 2, and a task is added for #243 and #237                                                                      | Sonnet checks each reference, Opus edits                                                    | G1 or G2      |
+| C3    | Defects #244 and #203; #245 once C1 has decided it                                                                                                                                                                    | Sonnet for #244, Opus for #203                                                              | G1, G2        |
+| C4    | Epic 10 Tasks 1 to 8 and 10, plus the #243 and #237 task                                                                                                                                                              | Fable for Tasks 3 and 6 and the naming task; Opus for 1, 7, 8 and 10; Sonnet for 2, 4 and 5 | C2 merged, G2 |
 
-E14.3 (#320) follows C1 and L5.
+E14.3 (#320: both references drop "Draft", and the rxdl reference gains its
+status line) follows C1 and L5.
 
 ## 5. Gates
 
@@ -188,17 +201,18 @@ below is the expected merge order, not a queue: a lane may go before its turn
 when no other open pull request changes the file, and it says so on the
 coordination issue before it pushes.
 
-| File                                                     | Order                                                 |
-| -------------------------------------------------------- | ----------------------------------------------------- |
-| `crates/ridlc/src/lib.rs` (the `Emit` enum)              | S1 → C4 Task 7 → #324 → B4                            |
-| `crates/ridl-core/src/diag.rs`                           | S2 → L4 → C3 → B3                                     |
-| `crates/ridl-diff/`                                      | S2 → L4                                               |
-| `crates/ridl/src/main.rs`                                | S1 and S2 → L4 (`ridl lock`) → #324 (`ridl describe`) |
-| `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `AGENTS.md` | S1 → A3 (the new crate) → the next new crate          |
-| `docs/ROADMAP.md`                                        | S1 → L3 → B2                                          |
-| `docs/specification/ridl-language-reference.md`          | S2 → B1 (§4 census items) → L4 → L5                   |
-| `docs/specification/typl-language-reference.md`          | C1 → C4 Task 10                                       |
-| `docs/book/cli-reference.md`                             | S2 → L4 → #324                                        |
+| File                                                     | Order                                                                              |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `crates/ridlc/src/lib.rs` (the `Emit` enum)              | S1 → C4 Task 7 → #324 → B4                                                         |
+| `crates/ridl-core/src/diag.rs`                           | S1 and S2 → L4 → C3 → B3                                                           |
+| `crates/ridl-diff/`                                      | S2 → L4                                                                            |
+| `crates/ridl/src/main.rs`                                | S1 and S2 → L4 (`ridl lock`) → #324 (`ridl describe`)                              |
+| `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `AGENTS.md` | S1 → A3 (the new crate) → the next new crate                                       |
+| `docs/ROADMAP.md`                                        | S1 → L3 → B2                                                                       |
+| `docs/specification/ridl-language-reference.md`          | S2 → B1 (§4 census items) → L4 → L5 → E14.3                                        |
+| `docs/specification/typl-language-reference.md`          | C1 → C4 Task 10 → E14.3                                                            |
+| `docs/book/cli-reference.md`                             | S1 and S2 → L4 → #324                                                              |
+| `docs/decisions/ADR-0010-cli-conventions.md`             | S1 and S2 → B1 or B2 (§4 census items) → L4 (`ridl lock`) → #324 (`ridl describe`) |
 
 ## 7. Rules every lane follows
 
