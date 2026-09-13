@@ -97,6 +97,27 @@ interface VehicleStatus {
 }
 ";
 
+/// Four events, published as the baseline for the two-removal test below.
+const FOUR: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+  event doorAjar: DoorState @[100ms..1s]
+}
+";
+
+/// `doorClosed` and `doorLocked` both deleted outright, neither with a
+/// tombstone. Two refusals from one run, not one.
+const TWO_BARE_REMOVALS: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorAjar: DoorState @[100ms..1s]
+}
+";
+
 /// The published baseline is the only record that a removed interaction's
 /// ordinal was ever taken. Replacing it with a snapshot that drops the
 /// interaction with no tombstone destroys that record, so publication refuses.
@@ -190,5 +211,31 @@ fn the_first_publication_is_never_refused() {
     assert!(
         !stderr.contains("RIDL-408"),
         "a first publication draws no refusal:\n{stderr}",
+    );
+}
+
+/// The gate reports every untombstoned removal it finds in one run, not just
+/// the first, so one run tells the author the whole correction.
+#[test]
+fn a_refusal_names_every_untombstoned_removal_in_one_run() {
+    let dir = TempDir::new("gate-reports-all");
+    let root = package_workspace(&dir, FOUR);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", TWO_BARE_REMOVALS);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "a refused publication is a negative answer, not a tool failure:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("doorClosed"),
+        "the refusal names the first removed interaction:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("doorLocked"),
+        "the refusal names the second removed interaction, not just the first:\n{stderr}",
     );
 }
