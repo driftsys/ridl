@@ -264,7 +264,7 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
 /// `ridl diff` never emits a diff report over a snapshot it could not build.
 fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     if is_ir_json(entry) {
-        return load_snapshots(&[entry.to_path_buf()]);
+        return load_snapshots(&[entry.to_path_buf()], None);
     }
 
     // The other IR encodings are refused by name, before the source
@@ -282,7 +282,7 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     if entry.is_dir() {
         let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
-            return load_snapshots(&snapshots);
+            return load_snapshots(&snapshots, None);
         }
         // Two directory shapes are described rather than compiled: one
         // holding IR artifacts and no `.ir.json` — a snapshot directory in an
@@ -557,11 +557,11 @@ fn untombstoned_removals(
     if !out_dir.is_dir() {
         return Ok(false);
     }
-    let published = load_snapshots(&snapshot_files(out_dir)?)?;
+    let published = load_snapshots(&snapshot_files(out_dir)?, Some(PUBLISHED_PARSE_REMEDY))?;
     if published.is_empty() {
         return Ok(false);
     }
-    let fresh = load_snapshots(&snapshot_files(staging)?)?;
+    let fresh = load_snapshots(&snapshot_files(staging)?, None)?;
 
     let report = ridl_diff::diff_sets(&published, &fresh);
     // Parsing every source file is wasted work on the common republish that
@@ -681,16 +681,33 @@ fn staging_dir(out_dir: &Path) -> PathBuf {
 /// `staging`, dropping any snapshot whose package the workspace no longer
 /// declares. Only `.ir.json` files are touched: `out_dir` may be a directory a
 /// user pointed `--out` at, and nothing else in it is this command's to delete.
+///
+/// The fresh snapshots move in first, each rename replacing the stale file of
+/// the same name, and only then are the stale snapshots no fresh one replaced
+/// removed. A failure part-way — a rename refused, a disk that fills — leaves
+/// `out_dir` holding one snapshot per package, some fresh and some stale,
+/// which the next run compares against package by package. The other order,
+/// delete then move, left `out_dir` empty after the same failure, and an
+/// empty directory is a first publication to [`untombstoned_removals`]: the
+/// next run would have skipped the gate.
 fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(out_dir)?;
-    for stale in ir_json_files(out_dir)? {
-        std::fs::remove_file(stale)?;
-    }
+    let mut published = BTreeSet::new();
     for fresh in ir_json_files(staging)? {
         let name = fresh
             .file_name()
-            .expect("a listed snapshot path has a file name");
-        std::fs::rename(&fresh, out_dir.join(name))?;
+            .expect("a listed snapshot path has a file name")
+            .to_os_string();
+        std::fs::rename(&fresh, out_dir.join(&name))?;
+        published.insert(name);
+    }
+    for stale in ir_json_files(out_dir)? {
+        if stale
+            .file_name()
+            .is_some_and(|name| !published.contains(name))
+        {
+            std::fs::remove_file(stale)?;
+        }
     }
     std::fs::remove_dir_all(staging)
 }
@@ -985,7 +1002,7 @@ fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Pac
     } else {
         vec![location.to_path_buf()]
     };
-    load_snapshots(&files)
+    load_snapshots(&files, None)
 }
 
 /// An explicit `--baseline` path that holds no snapshot at the depth the loader
@@ -1133,30 +1150,48 @@ fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, ExitCode> {
     })
 }
 
+/// The remedy [`untombstoned_removals`] appends when the snapshot it cannot
+/// parse is the published baseline `ridl baseline` is about to replace.
+///
+/// The file stays fail-closed rather than being overwritten: a baseline that
+/// cannot be read cannot be shown safe to replace, and replacing it would
+/// destroy whatever ordinal record it held without any report — the exact
+/// failure the gate exists to prevent. The reader cannot tell a damaged file
+/// from one a toolchain with a different IR schema wrote (`from_json` rejects
+/// an unknown field, ADR-0014 decision 14, and a snapshot carries no schema
+/// marker), so the remedy names both causes. Neither branch tells the author
+/// to delete the record unread: the second has the toolchain that wrote the
+/// snapshot check the source against it first, and only then replaces it.
+const PUBLISHED_PARSE_REMEDY: &str = "the file is left as it is, because a record that cannot be \
+     read cannot be shown safe to replace. If the file is damaged, restore it from version \
+     control or resolve the merge conflict left in it. If a toolchain with a different IR schema \
+     wrote it, check the source against it with that toolchain (`ridl check --baseline`), then \
+     remove the file and run `ridl baseline` with this one";
+
 /// Deserializes every snapshot in `files`. One that cannot be read or parsed is
 /// exit 2 — a comparison against half a baseline would be a lie about what is
 /// published. This is shared by `ridl check --baseline` (through
-/// [`load_baseline`]) and `ridl baseline` (through [`untombstoned_removals`]),
-/// so a file this refuses is either the published or the freshly built side of
-/// either command.
+/// [`load_baseline`], where the file may be the single `.ir.json` the flag
+/// names), `ridl diff` (through [`load_diff_side`], for either side) and
+/// `ridl baseline` (through [`untombstoned_removals`], for the published and
+/// the freshly built side alike).
 ///
-/// A file that cannot be parsed stays fail-closed rather than being silently
-/// overwritten: a baseline that cannot be read cannot be shown safe to
-/// replace, and replacing it would destroy whatever ordinal record it held
-/// with no one seeing it — the exact failure this whole gate exists to
-/// prevent. What the message adds over a bare parse error is the way out.
-fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+/// `parse_remedy`, when given, finishes the parse-error message. Only the
+/// caller knows which file it handed over, so only the caller can say what to
+/// do about it: the published baseline gets [`PUBLISHED_PARSE_REMEDY`], and
+/// every other input gets the bare parse error, because "remove the file"
+/// would be wrong advice for a diff input or a `--baseline` path.
+fn load_snapshots(
+    files: &[PathBuf],
+    parse_remedy: Option<&str>,
+) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let mut packages = Vec::new();
     for file in files {
         match ridl_diff::load_ir_json(file) {
             Ok(package) => packages.push(package),
             Err(err @ ridl_diff::LoadError::Parse(_)) => {
-                eprintln!(
-                    "error: {}: {err}; restore the file (for example from version control, or \
-                     by resolving a merge conflict left in it), or delete it and run \
-                     `ridl baseline` again — deleting it discards the record it held",
-                    file.display()
-                );
+                let remedy = parse_remedy.map_or(String::new(), |remedy| format!("; {remedy}"));
+                eprintln!("error: {}: {err}{remedy}", file.display());
                 return Err(ExitCode::from(2));
             }
             Err(err) => {

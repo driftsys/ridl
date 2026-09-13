@@ -134,6 +134,19 @@ interface VehicleStatus {
 }
 ";
 
+/// `THREE` under the package name `veh.other`, with the manifest to match:
+/// a republish of this workspace over a `veh.cluster` baseline writes a
+/// fresh snapshot under a new file name and drops the stale one.
+const RENAMED_MANIFEST: &str = "[package]\nname = \"veh.other\"\nversion = \"1.0.0\"\n";
+const RENAMED_THREE: &str = "package veh.other
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
 /// The published baseline is the only record that a removed interaction's
 /// ordinal was ever taken. Replacing it with a snapshot that drops the
 /// interaction with no tombstone destroys that record, so publication refuses.
@@ -199,6 +212,47 @@ fn a_refused_publication_leaves_the_baseline_byte_identical() {
         "a refused publication removes the staging directory it built, not just the files it \
          declines to move: {}",
         staging.display(),
+    );
+}
+
+/// A publication that fails part-way must not leave the output directory
+/// holding no snapshot: an empty directory is a first publication to the
+/// gate, so the next run would compare against nothing and publish whatever
+/// it was handed. The fresh snapshots move in before the stale ones are
+/// removed, so the failure here — the fresh snapshot's destination blocked by
+/// a directory of the same name, which refuses the rename — leaves the stale
+/// `veh.cluster.ir.json` where it was.
+#[test]
+fn a_failed_publication_keeps_the_stale_snapshot() {
+    let dir = TempDir::new("gate-partial-publish");
+    let root = package_workspace(&dir, THREE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+    let published = root.join(".ridl").join("baseline");
+
+    dir.write("ridl.toml", RENAMED_MANIFEST);
+    dir.write("cluster.ridl", RENAMED_THREE);
+    std::fs::create_dir_all(published.join("veh.other.ir.json"))
+        .expect("block the fresh snapshot's destination with a directory");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "a snapshot that cannot be moved into place is a tool failure:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("cannot publish the baseline"),
+        "the failure is reported:\n{stderr}",
+    );
+    assert!(
+        published.join("veh.cluster.ir.json").is_file(),
+        "the stale snapshot survives a publication that failed before it was replaced; \
+         without it the next run reads an empty directory as a first publication",
+    );
+    assert!(
+        !root.join(".ridl").join(".baseline.staging").exists(),
+        "the staging directory is removed after the failure",
     );
 }
 
@@ -379,9 +433,11 @@ fn baseline_refuses_a_dropped_tombstone() {
 
 /// A published `.ir.json` that cannot be parsed stays fail-closed: it cannot
 /// be shown safe to replace, and replacing it would destroy whatever ordinal
-/// record it held with no one seeing it — the exact failure the gate exists
-/// to prevent (Ruling 18). Republishing over it exits 2, names the remedy,
-/// and touches the corrupt file not at all.
+/// record it held without any report — the exact failure the gate exists to
+/// prevent (baseline gate design §3, "a published snapshot that cannot be
+/// parsed", with the remedy amended under D-5). Republishing over it exits 2,
+/// names the remedy, touches the corrupt file not at all, and removes the
+/// staging directory the compile wrote before the gate ran.
 #[test]
 fn baseline_refuses_to_republish_over_a_corrupt_snapshot() {
     let dir = TempDir::new("gate-corrupt-snapshot");
@@ -403,13 +459,26 @@ fn baseline_refuses_to_republish_over_a_corrupt_snapshot() {
         "a published snapshot that cannot be parsed cannot be shown safe to replace:\n{stderr}",
     );
     assert!(
-        stderr.contains("restore the file") && stderr.contains("delete it and run `ridl baseline`"),
-        "the message names the remedy:\n{stderr}",
+        stderr.contains("restore it from version control")
+            && stderr.contains("check the source against it with that toolchain"),
+        "the message names a remedy for each cause it cannot tell apart — a damaged file, and \
+         a snapshot another toolchain wrote:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("delete it"),
+        "the remedy never tells the author to discard the record unread:\n{stderr}",
     );
     let after =
         std::fs::read_to_string(&snapshot).expect("the corrupt file is still readable, untouched");
     assert_eq!(
         after, corrupt,
         "a refused publication rewrites nothing, corrupt or not",
+    );
+    let staging = root.join(".ridl").join(".baseline.staging");
+    assert!(
+        !staging.exists(),
+        "an exit-2 refusal removes the staging directory the compile wrote, exactly as an \
+         exit-1 refusal does: {}",
+        staging.display(),
     );
 }
