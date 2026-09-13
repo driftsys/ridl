@@ -74,6 +74,71 @@ test("performCopy creates the directory, copies, and sets the mode", async () =>
   }
 });
 
+test("performCopy leaves no temporary file in the target directory after success", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ridl-install-"));
+  try {
+    const source = path.join(dir, "ridl");
+    await fs.writeFile(source, "#!/bin/sh\necho ridl\n");
+    const plan = {
+      source,
+      targetDir: path.join(dir, "target", "bin"),
+      target: path.join(dir, "target", "bin", "ridl"),
+      binaryName: "ridl",
+      chmod: process.platform !== "win32",
+    };
+    await performCopy(plan);
+    const entries = await fs.readdir(plan.targetDir);
+    assert.deepEqual(entries, ["ridl"]);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("performCopy on a missing source rejects and leaves no temporary file", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ridl-install-"));
+  try {
+    const plan = {
+      source: path.join(dir, "does-not-exist"),
+      targetDir: path.join(dir, "target", "bin"),
+      target: path.join(dir, "target", "bin", "ridl"),
+      binaryName: "ridl",
+      chmod: process.platform !== "win32",
+    };
+    await assert.rejects(() => performCopy(plan));
+    // `fs.mkdir` may have created the directory before the copy failed; either
+    // way, no temporary (or final) file should be left inside it.
+    const entries = await fs
+      .readdir(plan.targetDir)
+      .catch((error) => (error.code === "ENOENT" ? [] : Promise.reject(error)));
+    assert.deepEqual(entries, []);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("performCopy replaces a pre-existing target instead of rewriting it in place", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "ridl-install-"));
+  try {
+    const source = path.join(dir, "ridl");
+    await fs.writeFile(source, "new contents");
+    const targetDir = path.join(dir, "target", "bin");
+    await fs.mkdir(targetDir, { recursive: true });
+    const target = path.join(targetDir, "ridl");
+    await fs.writeFile(target, "old contents");
+    const beforeIno = (await fs.stat(target)).ino;
+    const plan = { source, targetDir, target, binaryName: "ridl", chmod: process.platform !== "win32" };
+    await performCopy(plan);
+    const copied = await fs.readFile(target, "utf8");
+    assert.equal(copied, "new contents");
+    if (process.platform !== "win32") {
+      const afterIno = (await fs.stat(target)).ino;
+      assert.notEqual(afterIno, beforeIno);
+    }
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
+});
+
 test("parseVersionOutput takes the token after the program name", () => {
   assert.equal(parseVersionOutput("ridl editor-v0.1.0\n"), "editor-v0.1.0");
   assert.equal(parseVersionOutput("ridl 0.0.0"), "0.0.0");
