@@ -118,6 +118,14 @@ archive.
   catalog hash, the proto3 and FlatBuffers size bounds, the lowering,
   `ridlc build --emit catalog` and `ridl describe`. The system descriptor waits
   for the rsdl rewrite. **Not started.**
+- **2026-09-13-baseline-gate-design.md** — the disposition of three filed
+  defects against shipped crates: `ridl baseline` refuses to publish an
+  interaction removed without a `reserved` tombstone (new RIDL-408, exit 1,
+  driftsys/ridl#315); an explicit `--baseline` path holding no snapshot is an
+  input error instead of a silent pass (driftsys/ridl#235, #234); and a
+  composite body reorder gets its own diff category instead of the
+  `constraint_changed` fallback (driftsys/ridl#314). The interface level of the
+  same rule waits for the lock file of the rsdl note's D-7. **Not started.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
