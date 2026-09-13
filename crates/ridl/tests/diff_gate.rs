@@ -291,13 +291,15 @@ fn explain_member_reordered_states_its_detail_and_its_limit() {
         stdout.starts_with("member_reordered\n") && stdout.contains("breaking"),
         "the row is headed by the category and names its verdict, stdout:\n{stdout}"
     );
+    // The row is wrapped for the terminal; the assertions read its sentences,
+    // not its line breaks.
+    let text = stdout.split_whitespace().collect::<Vec<_>>().join(" ");
     assert!(
-        stdout.contains("old\n              and new ordinal")
-            && stdout.contains("old and new position"),
+        text.contains("old and new ordinal") && text.contains("old and new position"),
         "the row states what the detail carries for each composite kind, stdout:\n{stdout}"
     );
     assert!(
-        stdout.contains("same member names"),
+        text.contains("same member names"),
         "the row states when the category is reported, stdout:\n{stdout}"
     );
 }
