@@ -212,7 +212,7 @@ fn explain_prints_the_rule_row_for_a_category() {
 /// Every category a report can print is explainable, so a reader can always take
 /// a word out of the output and ask what it means. The list is the crate's own
 /// `CATEGORIES`, so a category added to the enum is checked here without a
-/// second list to keep in step.
+/// second list to maintain.
 #[test]
 fn every_reported_category_is_explainable() {
     for known in ridl_diff::CATEGORIES {
@@ -225,6 +225,81 @@ fn every_reported_category_is_explainable() {
             "{category} printed the wrong row, stdout:\n{stdout}"
         );
     }
+}
+
+/// The category words are the report's stable vocabulary — the `category`
+/// field of the JSON schema and the argument `--explain` takes — so a renamed
+/// variant must fail here rather than reach a consumer. This list is a second
+/// copy on purpose: the test above reads `CATEGORIES` and so covers a new
+/// variant by itself, but pins no spelling. A new category is added here in
+/// the order `CATEGORIES` declares it, which is the order the unknown-category
+/// error prints.
+#[test]
+fn the_category_spellings_are_pinned() {
+    let rendered: Vec<&str> = ridl_diff::CATEGORIES
+        .into_iter()
+        .map(ridl_diff::category_word)
+        .collect();
+    assert_eq!(
+        rendered,
+        [
+            "decl_added",
+            "decl_removed",
+            "member_reordered",
+            "interaction_appended",
+            "interaction_inserted",
+            "interaction_reordered",
+            "interaction_removed",
+            "interaction_retired",
+            "kind_changed",
+            "payload_changed",
+            "return_changed",
+            "params_changed",
+            "timing_changed",
+            "rpc_bound_changed",
+            "contract_changed",
+            "width_changed",
+            "constraint_changed",
+            "init_changed",
+            "reserved_name_redeclared",
+            "service_changed",
+            "service_shape_appended",
+            "service_shape_inserted",
+            "service_shape_reordered",
+            "service_shape_removed",
+            "service_shape_retired",
+            "doc_only",
+            "visibility_changed",
+        ],
+        "a category word is part of the stable report schema"
+    );
+}
+
+/// The `member_reordered` row states what its detail carries — the ordinal for
+/// a struct field or union arm, the position for an enum value or enum-set bit
+/// — and the limit of the category: it is reported only when both bodies hold
+/// the same member names.
+#[test]
+fn explain_member_reordered_states_its_detail_and_its_limit() {
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        "--explain".as_ref(),
+        "member_reordered".as_ref(),
+    ]);
+    assert_eq!(code, 0, "explaining a known category exits 0:\n{stderr}");
+    assert!(
+        stdout.starts_with("member_reordered\n") && stdout.contains("breaking"),
+        "the row is headed by the category and names its verdict, stdout:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("old\n              and new ordinal")
+            && stdout.contains("old and new position"),
+        "the row states what the detail carries for each composite kind, stdout:\n{stdout}"
+    );
+    assert!(
+        stdout.contains("same member names"),
+        "the row states when the category is reported, stdout:\n{stdout}"
+    );
 }
 
 /// An unknown category is a usage error, and the message lists what is valid.
