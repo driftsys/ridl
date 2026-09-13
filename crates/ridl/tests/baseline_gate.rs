@@ -1,7 +1,8 @@
-//! Integration tests for the baseline publication gate (docs/ROADMAP.md epic
-//! E2.9, general form §6.3): `ridl baseline` refusing to replace a published
-//! snapshot when the replacement drops an interaction the snapshot still
-//! declares and the source does not retire with a `reserved` tombstone.
+//! Integration tests for the baseline publication gate
+//! (docs/wip/2026-09-13-baseline-gate-design.md, general form §6.3): `ridl
+//! baseline` refusing to replace a published snapshot when the replacement
+//! drops an interaction the snapshot still declares and the source does not
+//! retire it with a `reserved` tombstone at its own ordinal.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -118,6 +119,21 @@ interface VehicleStatus {
 }
 ";
 
+/// `doorClosed` retired, but `reserved doorClosed` sits last rather than at
+/// ordinal 2, the slot `doorClosed` held in `THREE`. `diff_interface`
+/// (ridl-diff/src/walk.rs:339-363) emits this as `InteractionRemoved` with a
+/// `change.after` carrying the tombstone's own ordinal (3), which is the one
+/// `InteractionRemoved` emission that carries an `after` at all — the
+/// structural signal message (b) is selected on.
+const MISPLACED_TOMBSTONE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+  reserved doorClosed
+}
+";
+
 /// The published baseline is the only record that a removed interaction's
 /// ordinal was ever taken. Replacing it with a snapshot that drops the
 /// interaction with no tombstone destroys that record, so publication refuses.
@@ -147,6 +163,11 @@ fn baseline_refuses_to_publish_an_untombstoned_removal() {
         stderr.contains("reserved doorClosed"),
         "the message names the line that would sanction the removal:\n{stderr}",
     );
+    assert!(
+        stderr.contains("is gone from the source"),
+        "a bare removal draws message (a), not the misplaced- or dropped-tombstone wording:\n\
+         {stderr}",
+    );
 }
 
 /// The refused run must leave the published record exactly as it was. An exit
@@ -171,6 +192,14 @@ fn a_refused_publication_leaves_the_baseline_byte_identical() {
 
     let after = std::fs::read(&snapshot).expect("the published snapshot survives the refusal");
     assert_eq!(before, after, "a refused publication rewrites nothing",);
+
+    let staging = root.join(".ridl").join(".baseline.staging");
+    assert!(
+        !staging.exists(),
+        "a refused publication removes the staging directory it built, not just the files it \
+         declines to move: {}",
+        staging.display(),
+    );
 }
 
 /// The sanctioned retirement is the whole point of the tombstone, so it must
@@ -182,6 +211,12 @@ fn baseline_publishes_a_tombstoned_removal() {
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "the first baseline is written: {stderr}");
 
+    let snapshot = root
+        .join(".ridl")
+        .join("baseline")
+        .join("veh.cluster.ir.json");
+    let before = std::fs::read(&snapshot).expect("the first published snapshot is readable");
+
     dir.write("cluster.ridl", TOMBSTONED_REMOVAL);
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
 
@@ -192,6 +227,13 @@ fn baseline_publishes_a_tombstoned_removal() {
     assert!(
         !stderr.contains("RIDL-408"),
         "the sanctioned path draws no refusal:\n{stderr}",
+    );
+
+    let after = std::fs::read(&snapshot).expect("the republished snapshot is readable");
+    assert_ne!(
+        before, after,
+        "the sanctioned path still publishes: the snapshot must now record `doorClosed` as \
+         retired, not read back as the untouched first publication",
     );
 }
 
@@ -211,6 +253,37 @@ fn the_first_publication_is_never_refused() {
     assert!(
         !stderr.contains("RIDL-408"),
         "a first publication draws no refusal:\n{stderr}",
+    );
+}
+
+/// Design section 3 defines a first publication as "the output directory is
+/// absent, or holds no snapshot" — the second half of that sentence is
+/// distinct from the first: an *existing, empty* `.ridl/baseline/` reaches
+/// `untombstoned_removals`'s `out_dir.is_dir()` check as `true` and only then
+/// meets `published.is_empty()`, which the test above never exercises because
+/// it never creates the directory at all. This pins that the empty-but-present
+/// shape is still a first publication, not something to compare against.
+#[test]
+fn an_existing_empty_baseline_directory_is_still_a_first_publication() {
+    let dir = TempDir::new("gate-empty-dir-first");
+    let root = package_workspace(&dir, THREE);
+    let published = root.join(".ridl").join("baseline");
+    std::fs::create_dir_all(&published).expect("create the empty baseline directory");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "an empty output directory is a first publication, not something to compare against:\n\
+         {stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-408"),
+        "a first publication draws no refusal:\n{stderr}",
+    );
+    assert!(
+        published.join("veh.cluster.ir.json").is_file(),
+        "the snapshot is written into the directory that was already there",
     );
 }
 
@@ -237,5 +310,106 @@ fn a_refusal_names_every_untombstoned_removal_in_one_run() {
     assert!(
         stderr.contains("doorLocked"),
         "the refusal names the second removed interaction, not just the first:\n{stderr}",
+    );
+}
+
+/// A tombstone that retires the right name at the wrong ordinal is still a
+/// refusal: `reserved doorClosed` in `MISPLACED_TOMBSTONE` holds ordinal 3,
+/// not the ordinal 2 `doorClosed` held in the published baseline, so the
+/// surviving interactions would slide into the freed slot (ridl §11). This is
+/// message (b), never message (a) — the source does retire the name, just
+/// not in the slot it must hold.
+#[test]
+fn baseline_refuses_a_tombstone_at_the_wrong_ordinal() {
+    let dir = TempDir::new("gate-misplaced-tombstone");
+    let root = package_workspace(&dir, THREE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", MISPLACED_TOMBSTONE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "a tombstone at the wrong ordinal is still a refusal:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("RIDL-408"),
+        "the refusal carries its code:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("not at the ordinal the interaction held"),
+        "message (b) is drawn — the source retires the name, just not in place:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("is gone from the source"),
+        "message (a)'s wording must not fire when the source does retire the name:\n{stderr}",
+    );
+}
+
+/// A tombstone already recorded in the baseline being replaced, dropped from
+/// the source, is a refusal too: a tombstone is a permanent reservation
+/// (ridl §11), so deleting the `reserved` line does not un-retire the slot.
+/// This is message (c), never message (a) — the source never held the
+/// interaction live at all here, only its retirement, and the retirement is
+/// what was dropped.
+#[test]
+fn baseline_refuses_a_dropped_tombstone() {
+    let dir = TempDir::new("gate-dropped-tombstone");
+    let root = package_workspace(&dir, TOMBSTONED_REMOVAL);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", BARE_REMOVAL);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "dropping an already-published tombstone is still a refusal:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("RIDL-408"),
+        "the refusal carries its code:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("dropped the tombstone"),
+        "message (c) is drawn — the baseline being replaced already retired the name:\n{stderr}",
+    );
+}
+
+/// A published `.ir.json` that cannot be parsed stays fail-closed: it cannot
+/// be shown safe to replace, and replacing it would destroy whatever ordinal
+/// record it held with no one seeing it — the exact failure the gate exists
+/// to prevent (Ruling 18). Republishing over it exits 2, names the remedy,
+/// and touches the corrupt file not at all.
+#[test]
+fn baseline_refuses_to_republish_over_a_corrupt_snapshot() {
+    let dir = TempDir::new("gate-corrupt-snapshot");
+    let root = package_workspace(&dir, THREE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    let snapshot = root
+        .join(".ridl")
+        .join("baseline")
+        .join("veh.cluster.ir.json");
+    let corrupt = "<<<<<<< HEAD\n";
+    std::fs::write(&snapshot, corrupt).expect("overwrite the published snapshot with garbage");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "a published snapshot that cannot be parsed cannot be shown safe to replace:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("restore the file") && stderr.contains("delete it and run `ridl baseline`"),
+        "the message names the remedy:\n{stderr}",
+    );
+    let after =
+        std::fs::read_to_string(&snapshot).expect("the corrupt file is still readable, untouched");
+    assert_eq!(
+        after, corrupt,
+        "a refused publication rewrites nothing, corrupt or not",
     );
 }
