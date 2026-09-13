@@ -145,3 +145,121 @@ fn an_in_place_change_still_reports_constraint_changed() {
         "nothing moved, so nothing reorders:\n{out}",
     );
 }
+
+/// Three fields. `latch` sits second on both sides.
+const THREE_FIELDS: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  door: DoorState
+  latch: DoorState
+  window: DoorState
+}
+";
+
+/// `door` and `latch` swap places and, in the same edit, `window` changes type
+/// in place.
+const SWAPPED_AND_RETYPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  latch: DoorState
+  door: DoorState
+  window: Count
+}
+";
+
+const GEARS: &str = "package veh.cluster
+enum GearPosition {
+  PARK = 0
+  DRIVE = 1
+  REVERSE = 2
+}
+";
+
+/// `PARK` and `DRIVE` swap places in the text. Every value is unchanged.
+const GEARS_REORDERED: &str = "package veh.cluster
+enum GearPosition {
+  DRIVE = 1
+  PARK = 0
+  REVERSE = 2
+}
+";
+
+/// `PARK` and `DRIVE` swap places in the text and, in the same edit, `REVERSE`
+/// takes a new value while keeping its position.
+const GEARS_REORDERED_AND_REVALUED: &str = "package veh.cluster
+enum GearPosition {
+  DRIVE = 1
+  PARK = 0
+  REVERSE = 5
+}
+";
+
+/// A reorder that arrives in the same edit as an in-place change reports both:
+/// the moved members as `member_reordered`, and the container as
+/// `constraint_changed` for the content that changed. Reporting the reorder
+/// alone would hide the retype.
+#[test]
+fn a_reorder_with_an_in_place_change_reports_both() {
+    let dir = TempDir::new("reorder-and-retype");
+    let old = workspace(&dir, "old", THREE_FIELDS);
+    let new = workspace(&dir, "new", SWAPPED_AND_RETYPED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/door")
+            && out.contains("member_reordered veh.cluster/Report/latch"),
+        "both moved members are reported:\n{out}",
+    );
+    assert!(
+        out.contains("constraint_changed veh.cluster/Report\n"),
+        "the in-place retype is reported on the container as well:\n{out}",
+    );
+}
+
+/// An enum value's number is explicit content, not a position. A reorder that
+/// also changes a value reports the container as `constraint_changed`.
+#[test]
+fn an_enum_reorder_with_a_changed_value_reports_constraint_changed() {
+    let dir = TempDir::new("enum-reorder-revalue");
+    let old = workspace(&dir, "old", GEARS);
+    let new = workspace(&dir, "new", GEARS_REORDERED_AND_REVALUED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a changed enum value is a wire break:\n{out}");
+    assert!(
+        out.contains("constraint_changed veh.cluster/GearPosition\n"),
+        "the changed value is reported on the container:\n{out}",
+    );
+}
+
+/// A textual reorder of an enum with every value unchanged is reported as
+/// `member_reordered` — conservatively, because the walk compares positions,
+/// not the explicit values — and nothing else: the values did not change, so
+/// no `constraint_changed` is reported.
+#[test]
+fn an_enum_reorder_with_unchanged_values_reports_only_member_reordered() {
+    let dir = TempDir::new("enum-reorder");
+    let old = workspace(&dir, "old", GEARS);
+    let new = workspace(&dir, "new", GEARS_REORDERED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is reported breaking:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/GearPosition/PARK")
+            && out.contains("member_reordered veh.cluster/GearPosition/DRIVE"),
+        "both moved values are reported:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "no value changed, so nothing is reported on the container:\n{out}",
+    );
+}
