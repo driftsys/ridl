@@ -1311,7 +1311,10 @@ fn auto_discovery_of_an_empty_baseline_directory_stays_silent() {
 
     let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
 
-    assert_eq!(code, 0, "a clean check with no baseline succeeds:\n{stderr}");
+    assert_eq!(
+        code, 0,
+        "a clean check with no baseline succeeds:\n{stderr}"
+    );
     assert!(
         stdout.is_empty() && stderr.is_empty(),
         "no baseline means no drift report at all:\nstdout: {stdout}\nstderr: {stderr}",
