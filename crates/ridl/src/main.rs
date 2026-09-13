@@ -47,7 +47,11 @@ use ridlc::{CliRun, Emit};
 use rowan::{TextRange, TextSize};
 
 #[derive(Parser)]
-#[command(name = "ridl", about = "The RIDL toolchain", version)]
+#[command(
+    name = "ridl",
+    about = "The RIDL toolchain",
+    version = env!("RIDL_BUILD_VERSION")
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -216,7 +220,9 @@ fn main() -> ExitCode {
 /// being unable to answer rather than a negative answer.
 fn run_lsp() -> ExitCode {
     let (connection, io_threads) = lsp_server::Connection::stdio();
-    if let Err(err) = ridl_lsp::server::run(connection) {
+    if let Err(err) =
+        ridl_lsp::server::run_with_version(connection, Some(env!("RIDL_BUILD_VERSION")))
+    {
         eprintln!("error: {err}");
         return ExitCode::from(2);
     }

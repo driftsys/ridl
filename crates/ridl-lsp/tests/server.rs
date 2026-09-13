@@ -1385,6 +1385,32 @@ fn advertises_the_inlay_hint_capability() {
     server.join().expect("thread joins").expect("clean exit");
 }
 
+/// `initialize`'s result reports `serverInfo` with the given version when the
+/// server is started through `run_with_version` — the entry point `ridl lsp`
+/// uses to report its build version (docs/wip/2026-09-13-vscode-extension-
+/// distribution-design.md, "Versioning"). Every other test in this file
+/// starts the server through the version-less `run`.
+#[test]
+fn initialize_reports_the_server_version_when_given_one() {
+    let (server_side, client) = Connection::memory();
+    let server = std::thread::spawn(move || {
+        ridl_lsp::server::run_with_version(server_side, Some("editor-v1.2.3"))
+    });
+
+    request::<lt::request::Initialize>(&client, 1, lt::InitializeParams::default());
+    notify::<lt::notification::Initialized>(&client, lt::InitializedParams {});
+    let response = next_response(&client);
+    let result: lt::InitializeResult =
+        serde_json::from_value(response.response_result.expect("initialize succeeds"))
+            .expect("a valid InitializeResult");
+    let server_info = result.server_info.expect("serverInfo is present");
+    assert_eq!(server_info.name, "ridl-lsp");
+    assert_eq!(server_info.version.as_deref(), Some("editor-v1.2.3"));
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
 /// The §7.4 tombstone struct: the two live fields render their derived
 /// ordinals, and the reserved slot between them is counted, so `speed` is `#3`,
 /// not `#2` — a reorder is visibly a renumbering (general form §6.3).
