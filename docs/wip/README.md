@@ -105,6 +105,13 @@ archive.
   **2026-09-12-interface-id-study-2.md** — the two identity study reports that
   note's D-7 summarises, kept verbatim; the first ranked the carriers, the
   second simulated the merges and the diff. **Not ratified.**
+- **2026-09-13-runtime-descriptors-design.md** — the two files an engine reads:
+  a catalog descriptor per package (interfaces with frozen numbers, members with
+  ordinal, kind, bounds and a max-size table per payload per encoding) and a
+  self-contained system descriptor per deployment (producers, placements, links
+  with crossing kinds, routing table, grants, the attribute map). Both
+  FlatBuffers, lowered from the protobuf IR, which ADR-0014 keeps for the
+  toolchain. **Not ratified.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
