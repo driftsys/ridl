@@ -45,6 +45,13 @@ for snapshots.
 - `planus-translation` and `planus-codegen` are `xtask` dependencies only;
   `ridl-descriptor` depends on the `planus` runtime alone (the boundary
   rationale in `xtask/tests/oracle_boundary.rs`).
+- Every walk over a package's interfaces goes through `Package::shapes()`
+  (`crates/ridl-ir/src/lib.rs:452`): a `service` with an inline body carries its
+  `Interface` in its shape list, outside `Package.interfaces`, and the item
+  `InterfaceShape<'_>` carries the identity `name` (the interface's own, or the
+  owning service's dotted global name) beside `interface: &Interface`. The
+  corpus fixture `baseline-corpus/cluster.ridl` has one of each, so it yields
+  two shapes.
 - `ridl-descriptor` joins the `wasm-check` list in `justfile` and must compile
   for `wasm32-unknown-unknown` with `--no-default-features`: no file I/O inside
   the crate; `ridlc` and `ridl` do the reading and writing.
@@ -68,14 +75,16 @@ design.
   value is `catalog` and the artifact is `<base>.catalog.binfb`, following
   ADR-0014 decision 4 (plain-English flag value, encoding-bearing extension, as
   `.ir.binpb`).
-- **Interface numbers before the lock file exists:** every interface is
-  provisional, numbered 1.. in declaration order (rsdl note D-7: "after the
-  frozen ones, in a deterministic order"); the retired list is empty. The
-  lock-file reader replaces `number_interfaces` later and nothing else changes.
+- **Interface numbers before the lock file exists:** every interface shape is
+  provisional, numbered 1.. in `Package::shapes()` order — the declared
+  interfaces in source order, then the inline shapes of the services (rsdl note
+  D-7: "after the frozen ones, in a deterministic order"); the retired list is
+  empty. The lock-file reader replaces `number_interfaces` later and nothing
+  else changes.
 - **Catalog hash:** SHA-256 over the canonical protobuf binary of a reduced
-  package (the interfaces, the reachable type declarations with canonical names,
-  doc strings blanked) followed by the numbering. Derived, never recorded (rsdl
-  note D-7, D-8).
+  package (every interface shape under its identity name, the reachable type
+  declarations with canonical names, doc strings blanked) followed by the
+  numbering. Derived, never recorded (rsdl note D-7, D-8).
 - **`repr(C)` column:** present in the `Encoding` enum, absent in every
   payload's size list until E11.12 defines the C-representable layout; the
   reader treats a missing entry as "the toolchain cannot size this payload for
@@ -111,12 +120,13 @@ crates/ridl-descriptor/
 xtask/src/descriptor.rs       `generate`, `write_generated`, drift test
 xtask/src/main.rs             the `descriptor-codegen` task
 crates/ridlc/src/lib.rs       `Emit::Catalog`, the `write_emits` arm
-crates/ridlc/tests/cli.rs     `--emit catalog` writes `<base>.catalog.binfb`
 crates/ridl/src/main.rs       `Command::Describe`, `run_describe`
-crates/ridl/tests/describe_cli.rs   exit codes, JSON snapshot, byte stability
+crates/ridl/tests/describe_cli.rs   `--emit catalog` writes `<base>.catalog.binfb`;
+                                    exit codes, JSON snapshot, byte stability
 docs/decisions/ADR-0010-cli-conventions.md   the `ridl describe` exit-code row
 docs/book/cli-reference.md    `--emit catalog`, `ridl describe`
-AGENTS.md, README.md, CONTRIBUTING.md, .git-std.toml, Cargo.toml, justfile
+AGENTS.md, README.md, docs/technotes/walking-skeleton-architecture.md,
+.git-std.toml, Cargo.toml, justfile
 ```
 
 Types that cross task boundaries (defined once, used verbatim later):
@@ -167,7 +177,7 @@ pub fn to_json(catalog: CatalogRef<'_>) -> planus::Result<serde_json::Value>;
 - Modify: `xtask/src/main.rs:13-24` (the task match)
 - Modify: `xtask/Cargo.toml:9-14` (dependencies)
 - Modify: `Cargo.toml:16-67` (workspace dependencies: `planus`,
-  `planus-codegen`)
+  `planus-codegen`; the `planus-translation` comment at `:31-33`)
 - Modify: `.git-std.toml:13-52` (scope `ridl-descriptor`)
 - Modify: `justfile:137-140` (the `wasm-check` crate list)
 - Test: `crates/ridl-descriptor/tests/round_trip.rs`
@@ -189,9 +199,14 @@ planus = "1.3.0"
 planus-codegen = "1.3.0"
 ```
 
-(`planus-translation = "1.3.0"` is already there.) In `.git-std.toml`, add
-`"ridl-descriptor",` to `scopes` after `"ridl-ir",`. In `justfile`, in the
-`wasm-check` recipe, change the crate list to:
+(`planus-translation = "1.3.0"` is already there; its comment,
+`Cargo.toml:31-33`, says "a dev-dependency only" — rewrite it: "a dev-dependency
+of the FlatBuffers backend, and a normal dependency of `xtask` alone, which
+generates `ridl-descriptor`'s accessors from it;
+`xtask/tests/oracle_boundary.rs` keeps it out of the backend's normal
+dependencies".) In `.git-std.toml`, add `"ridl-descriptor",` to `scopes` after
+`"ridl-ir",`. In `justfile`, in the `wasm-check` recipe, change the crate list
+to:
 
 ```
 -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir -p ridl-descriptor \
@@ -237,10 +252,12 @@ sha2.workspace = true
 
 namespace ridl.descriptor;
 
-// The five interaction kinds of ridl §3.2.
+// The five interaction kinds: the table under ridl §3, "The Interaction Model".
 enum Kind : ubyte { Signal = 0, Event = 1, Command = 2, Query = 3, Fixed = 4 }
 
-// The core encodings of ADR-0018 decision 1. A new encoding is appended.
+// The core encodings: proto3 and FlatBuffers (ADR-0018 decision 3) and
+// repr(C) (ADR-0020 decision 1, via ADR-0018's 2026-09-12 amendment). A new
+// encoding is appended.
 enum Encoding : ubyte { Proto3 = 0, FlatBuffers = 1, ReprC = 2 }
 
 // ridl §9 timing, as the IR carries it (ridl.ir.v2.TimingMode).
@@ -808,7 +825,10 @@ git commit -m "feat(ridl-descriptor): verify a descriptor before the first read"
 - Modify: `crates/ridl-descriptor/src/lib.rs` (add `pub mod number;`)
 
 **Interfaces:**
-- Consumes: `ridl_ir::v2::Package` (`interfaces: Vec<Interface>`, each with `name: String`).
+- Consumes: `ridl_ir::v2::Package` through `Package::shapes()`
+  (`crates/ridl-ir/src/lib.rs:452`), whose item `InterfaceShape<'_>` carries the
+  identity `name: &str` — a declared interface's own name, or the owning
+  service's dotted global name for an inline shape.
 - Produces: `pub struct Numbered { pub name: String, pub number: u32, pub provisional: bool }` and `pub fn number_interfaces(package: &Package) -> Vec<Numbered>` — the only place a number is assigned; the lock-file reader of rsdl note D-7 replaces this function's body later.
 
 - [ ] **Step 1: Write the failing tests**
@@ -817,7 +837,8 @@ git commit -m "feat(ridl-descriptor): verify a descriptor before the first read"
 
 ```rust
 //! Interface numbers (rsdl note D-7). No lock file exists yet, so every
-//! number is provisional: 1.. in declaration order, which is D-7's
+//! number is provisional: 1.. in `Package::shapes()` order — the declared
+//! interfaces, then the inline shapes of the services — which is D-7's
 //! "after the frozen ones, in a deterministic order" with zero frozen ones.
 //! When `ridl lock` lands, this function reads the lock first and numbers
 //! only the interfaces the lock does not hold; nothing downstream changes.
@@ -835,7 +856,7 @@ pub struct Numbered {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ridl_ir::v2::Interface;
+    use ridl_ir::v2::{service_shape, Interface, Service, ServiceShape};
 
     fn package(names: &[&str]) -> Package {
         Package {
@@ -849,6 +870,19 @@ mod tests {
         }
     }
 
+    /// A `service` with an inline body: its `Interface` lives in the shape
+    /// list, not in `Package::interfaces`, and its own `name` is empty.
+    fn inline_service(name: &str) -> Service {
+        Service {
+            name: name.to_owned(),
+            shapes: vec![ServiceShape {
+                id: 1,
+                kind: Some(service_shape::Kind::Inline(Interface::default())),
+            }],
+            ..Default::default()
+        }
+    }
+
     #[test]
     fn numbers_follow_declaration_order_from_one() {
         let numbered = number_interfaces(&package(&["B", "A", "C"]));
@@ -858,6 +892,19 @@ mod tests {
                 Numbered { name: "B".to_owned(), number: 1, provisional: true },
                 Numbered { name: "A".to_owned(), number: 2, provisional: true },
                 Numbered { name: "C".to_owned(), number: 3, provisional: true },
+            ]
+        );
+    }
+
+    #[test]
+    fn an_inline_service_shape_is_numbered_after_the_declared_interfaces() {
+        let mut package = package(&["A"]);
+        package.services.push(inline_service("p.hvac"));
+        assert_eq!(
+            number_interfaces(&package),
+            vec![
+                Numbered { name: "A".to_owned(), number: 1, provisional: true },
+                Numbered { name: "p.hvac".to_owned(), number: 2, provisional: true },
             ]
         );
     }
@@ -879,15 +926,15 @@ Expected: compile error, `number_interfaces` not found.
 Insert above the `#[cfg(test)]` module:
 
 ```rust
-/// Numbers every interface of `package`. Provisional, 1-based, declaration
-/// order, until a lock file exists.
+/// Numbers every interface shape of `package` — the declared interfaces,
+/// then the inline shapes of the services, in [`Package::shapes`] order.
+/// Provisional, 1-based, until a lock file exists.
 pub fn number_interfaces(package: &Package) -> Vec<Numbered> {
     package
-        .interfaces
-        .iter()
+        .shapes()
         .enumerate()
-        .map(|(index, interface)| Numbered {
-            name: interface.name.clone(),
+        .map(|(index, shape)| Numbered {
+            name: shape.name.to_owned(),
             number: u32::try_from(index + 1).expect("fewer than 2^32 interfaces"),
             provisional: true,
         })
@@ -900,7 +947,7 @@ Add `pub mod number;` to `lib.rs`.
 - [ ] **Step 4: Run the tests**
 
 Run: `cargo test -p ridl-descriptor --locked number`
-Expected: 2 tests PASS.
+Expected: 3 tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -919,7 +966,7 @@ git commit -m "feat(ridl-descriptor): number interfaces provisionally in declara
 
 **Interfaces:**
 
-- Consumes: `Numbered` (Task 3);
+- Consumes: `Numbered` (Task 3); `Package::shapes()` (the walk Task 3 numbers);
   `ridl_ir::v2::{Package, Decl, FieldType, StructDef, UnionDef, TypeDef, EnumSetDef, ConstDef}`
   and the oneofs `decl::Kind`, `field_type::Kind`, `stream_type::Element`,
   `return_type::Kind`; `ridl_ir::v2::to_binary`.
@@ -931,9 +978,9 @@ git commit -m "feat(ridl-descriptor): number interfaces provisionally in declara
 The IR references a type by name string everywhere: `SignalDef.payload`,
 `EventDef.payload`, `FieldType::Named`, `UnionArm.type_ref`,
 `ConstDef.type_ref`, `EnumSetDef.backing_enum`, `Constraint.pattern_const`,
-`StreamType::Named`, `FallibleType.ok`/`err`, `TypeDef.backing.unit`. A
-cross-package name is `pkg.Name`; a same-package name is bare (`ir.proto`
-header).
+`StreamType::Named`, `FallibleType.ok`/`err` (`TypeDef.backing.unit` is a UCUM
+unit expression, not a reference — `ir.proto:146-150`). A cross-package name is
+`pkg.Name`; a same-package name is bare (`ir.proto` header).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -946,8 +993,8 @@ mod tests {
     use super::*;
     use crate::number::number_interfaces;
     use ridl_ir::v2::{
-        decl, field_type, Decl, Field, FieldType, Interface, SignalDef, StructDef, StructMember,
-        struct_member, TypeDef,
+        decl, field_type, service_shape, Decl, Field, FieldType, Interface, Service, ServiceShape,
+        SignalDef, StructDef, StructMember, struct_member, TypeDef,
     };
 
     fn named(name: &str) -> FieldType {
@@ -985,6 +1032,19 @@ mod tests {
             name: name.to_owned(),
             ordinal: 1,
             kind: Some(decl::Kind::SignalDef(SignalDef { payload: payload.to_owned(), ..Default::default() })),
+            ..Default::default()
+        }
+    }
+
+    /// A `service` with an inline body carrying `interactions`; its
+    /// `Interface` lives in the shape list, not in `Package::interfaces`.
+    fn inline_service(name: &str, interactions: Vec<Decl>) -> Service {
+        Service {
+            name: name.to_owned(),
+            shapes: vec![ServiceShape {
+                id: 1,
+                kind: Some(service_shape::Kind::Inline(Interface { interactions, ..Default::default() })),
+            }],
             ..Default::default()
         }
     }
@@ -1064,6 +1124,17 @@ mod tests {
         renumbered[0].number = 7;
         assert_ne!(catalog_hash(&p, &[&fw], &renumbered), hash_of(&p, &fw));
     }
+
+    #[test]
+    fn an_inline_service_shape_reaches_its_types_and_moves_the_hash() {
+        let (mut p, fw) = fixture();
+        p.interfaces.clear();
+        let before = hash_of(&p, &fw);
+        p.services.push(inline_service("p.hvac", vec![signal("temp", "Point")]));
+        let reached: Vec<String> = reachable_decls(&p, &[&fw]).into_keys().collect();
+        assert_eq!(reached, vec!["Coord", "Point", "fw.Unit"]);
+        assert_ne!(hash_of(&p, &fw), before);
+    }
 }
 ```
 
@@ -1104,8 +1175,8 @@ pub fn reachable_decls<'a>(package: &'a Package, others: &[&'a Package]) -> BTre
     }
 
     let mut pending: Vec<String> = Vec::new();
-    for interface in &package.interfaces {
-        collect_interface(interface, &mut pending);
+    for shape in package.shapes() {
+        collect_interface(shape.interface, &mut pending);
     }
     let mut reached: BTreeMap<String, &'a Decl> = BTreeMap::new();
     let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -1177,9 +1248,7 @@ fn collect_decl(decl: &Decl, out: &mut Vec<String>) {
 }
 
 fn collect_type_def(def: &ridl_ir::v2::TypeDef, out: &mut Vec<String>) {
-    if let Some(ridl_ir::v2::backing::Kind::Unit(unit)) = def.backing.as_ref().and_then(|b| b.kind.as_ref()) {
-        out.push(unit.clone());
-    }
+    // `backing.unit` is a UCUM unit expression, not a type reference.
     if let Some(constant) = def.constraint.as_ref().and_then(|c| c.pattern_const.clone()) {
         out.push(constant);
     }
@@ -1216,9 +1285,11 @@ fn collect_field_type(ty: &FieldType, out: &mut Vec<String>) {
 }
 
 /// SHA-256 over the canonical protobuf binary of the reduced package —
-/// the interfaces, then the reached declarations in canonical-name order,
-/// doc strings blanked — followed by each interface's name, number and
-/// provisional flag in numbering order.
+/// every interface shape under its identity name (`Package::shapes()`
+/// order, so an inline service shape is hashed like a declared interface),
+/// then the reached declarations in canonical-name order, doc strings
+/// blanked — followed by each shape's name, number and provisional flag in
+/// numbering order.
 pub fn catalog_hash(package: &Package, others: &[&Package], numbered: &[Numbered]) -> [u8; 32] {
     let mut reduced = Package {
         name: package.name.clone(),
@@ -1231,7 +1302,14 @@ pub fn catalog_hash(package: &Package, others: &[&Package], numbered: &[Numbered
                 decl
             })
             .collect(),
-        interfaces: package.interfaces.clone(),
+        interfaces: package
+            .shapes()
+            .map(|shape| {
+                let mut interface = shape.interface.clone();
+                interface.name = shape.name.to_owned();
+                interface
+            })
+            .collect(),
         services: vec![],
     };
     for interface in &mut reduced.interfaces {
@@ -1281,7 +1359,7 @@ type.
 
 - [ ] **Step 4: Run the tests**
 
-Run: `cargo test -p ridl-descriptor --locked hash` Expected: 6 tests PASS.
+Run: `cargo test -p ridl-descriptor --locked hash` Expected: 7 tests PASS.
 
 - [ ] **Step 5: Commit**
 
@@ -2275,7 +2353,7 @@ fn field_of_leaf(leaf: Leaf<'_>, ctx: &Ctx<'_>, depth: u32) -> Option<FbField> {
     }
     Some(match leaf {
         Leaf::Scalar(s) => FbField::scalar(s.fb_width()),
-        // The backend picks the enum's underlying integer; `long` is the widest it can pick.
+        // The backend always emits `: long` (`emit_enum` never narrows), so 8 bytes.
         Leaf::Enum { .. } => FbField::scalar(8),
         Leaf::EnumSet(width) => FbField::scalar(Scalar::Int(width).fb_width()),
         Leaf::Blob(bytes) => FbField::offset(blob_object(bytes)),
@@ -2389,7 +2467,7 @@ git commit -m "feat(ridl-descriptor): derive the FlatBuffers upper bound of ever
 
 - Consumes: `number_interfaces` (Task 3), `catalog_hash` (Task 4), `Ctx`,
   `PayloadShape`, `max_size` (Tasks 5-7), `verify` (Task 2), the owned tables
-  (Task 1).
+  (Task 1), `Package::shapes()` (the walk Task 3 numbers, in the same order).
 - Produces: `pub fn lower(package: &Package, others: &[&Package]) -> Vec<u8>` —
   the finished descriptor bytes, identifier included. `ridlc` writes them
   unchanged.
@@ -2402,10 +2480,10 @@ git commit -m "feat(ridl-descriptor): derive the FlatBuffers upper bound of ever
 //! Spec D-4: what the catalog descriptor contains, checked through `verify`.
 
 use ridl_ir::v2::{
-    backing, decl, field_type, return_type, stream_type, type_def, Backing, CommandDef, Decl,
-    EventDef, Field, FieldType, FixedDef, Interface, IntWidth, Package, Param, PrimitiveType,
-    QueryDef, Reserved, ReturnType, SignalDef, StreamType, StructDef, StructMember, struct_member,
-    Timing, TimingMode, TypeDef,
+    backing, decl, field_type, return_type, service_shape, stream_type, type_def, Backing,
+    CommandDef, Decl, EventDef, Field, FieldType, FixedDef, Interface, IntWidth, Package, Param,
+    PrimitiveType, QueryDef, Reserved, ReturnType, Service, ServiceShape, SignalDef, StreamType,
+    StructDef, StructMember, struct_member, Timing, TimingMode, TypeDef,
 };
 use ridl_descriptor::{lower, verify, Encoding, Kind, SCHEMA_VERSION};
 
@@ -2564,6 +2642,34 @@ fn a_stream_response_is_sized_per_element_and_flagged() {
 }
 
 #[test]
+fn an_inline_service_shape_is_an_interface_under_the_service_name() {
+    let mut package = package();
+    package.services.push(Service {
+        name: "veh.cluster.hvac".to_owned(),
+        shapes: vec![ServiceShape {
+            id: 1,
+            kind: Some(service_shape::Kind::Inline(Interface {
+                interactions: vec![interaction(
+                    "cabinTemp",
+                    1,
+                    decl::Kind::SignalDef(SignalDef { payload: "Coord".to_owned(), ..Default::default() }),
+                )],
+                ..Default::default()
+            })),
+        }],
+        ..Default::default()
+    });
+    let catalog_bytes = lower(&package, &[]);
+    let catalog = verify(&catalog_bytes).expect("the lowering writes a valid descriptor");
+    let interfaces = catalog.interfaces().unwrap();
+    assert_eq!(interfaces.len(), 2);
+    let hvac = interfaces.get(1).unwrap();
+    assert_eq!(hvac.name().unwrap(), "veh.cluster.hvac");
+    assert_eq!(hvac.number().unwrap(), 2);
+    assert_eq!(hvac.members().unwrap().len(), 1);
+}
+
+#[test]
 fn the_bytes_are_stable_across_runs() {
     assert_eq!(lower(&package(), &[]), lower(&package(), &[]));
 }
@@ -2606,15 +2712,15 @@ pub fn lower(package: &Package, others: &[&Package]) -> Vec<u8> {
     let ctx = Ctx::new(package, others);
 
     let interfaces = package
-        .interfaces
-        .iter()
+        .shapes()
         .zip(&numbered)
-        .map(|(interface, numbered)| Interface {
-            name: interface.name.clone(),
+        .map(|(shape, numbered)| Interface {
+            name: shape.name.to_owned(),
             number: numbered.number,
             provisional: numbered.provisional,
-            members: interface.interactions.iter().filter_map(|decl| member_of(decl, &ctx)).collect(),
-            reserved_ordinals: interface
+            members: shape.interface.interactions.iter().filter_map(|decl| member_of(decl, &ctx)).collect(),
+            reserved_ordinals: shape
+                .interface
                 .interactions
                 .iter()
                 .filter(|decl| matches!(decl.kind, Some(decl::Kind::ReservedSlot(_))))
@@ -2792,7 +2898,7 @@ If the generated `Member::timing` is `Option<Timing>` rather than
 - [ ] **Step 4: Run the tests**
 
 Run: `cargo test -p ridl-descriptor --locked` Expected: every test in the crate
-PASS, including the five in `lower.rs`.
+PASS, including the six in `lower.rs`.
 
 - [ ] **Step 5: Commit**
 
@@ -2865,7 +2971,8 @@ fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
     )
 }
 
-/// The checked-in corpus package with one interface and one service
+/// The checked-in corpus package with one declared interface and one
+/// inline-form service — two interface shapes
 /// (`crates/ridl/tests/baseline-corpus`).
 fn corpus() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/baseline-corpus")
@@ -2929,8 +3036,9 @@ In `crates/ridlc/src/lib.rs`, `pub enum Emit` gains, after `Flatbuffers`:
 
 ```rust
 /// The catalog descriptor an engine reads, written to
-/// `<base>.catalog.binfb` — only when the package declares an interface
-/// (docs/wip/2026-09-13-runtime-descriptors-design.md, D-1, D-9).
+/// `<base>.catalog.binfb` — only when the package carries at least one
+/// interface shape: a declared `interface`, or a `service` with an inline
+/// body (docs/wip/2026-09-13-runtime-descriptors-design.md, D-1, D-9).
 Catalog,
 ```
 
@@ -2939,7 +3047,7 @@ dump). The `write_emits` match gains:
 
 ```rust
 Emit::Catalog => {
-    if !ir.interfaces.is_empty() {
+    if ir.shapes().next().is_some() {
         std::fs::write(
             out_dir.join(format!("{base}{}", ridl_descriptor::FILE_SUFFIX)),
             ridl_descriptor::lower(ir, others),
@@ -3174,10 +3282,11 @@ git commit -m "feat(ridl-descriptor): render a descriptor as strict JSON"
 - Modify: `crates/ridl/src/main.rs:50-137` (`Command`), the dispatch in `main`
   near line 143, a new `run_describe`
 - Modify: `crates/ridl/tests/describe_cli.rs`
-- Modify: `docs/decisions/ADR-0010-cli-conventions.md:78-87` (the exit-code
-  table)
-- Modify: `docs/book/cli-reference.md` (the `--emit` values near line 960; a
-  `ridl describe` section)
+- Modify: `docs/decisions/ADR-0010-cli-conventions.md:78-92` (the exit-code
+  table and the scoping sentence after it)
+- Modify: `docs/book/cli-reference.md` (both `--emit` value lists, near lines
+  307 and 960; a `### ridl describe` section under `## ridl`; the exit-code
+  table near line 1014)
 
 **Interfaces:**
 
@@ -3244,9 +3353,10 @@ fn describe_rejects_a_truncated_and_a_flipped_descriptor() {
 ```
 
 `crates/ridl/Cargo.toml`: `[dependencies]` gains
-`ridl-descriptor = { path = "../ridl-descriptor" }` and
-`serde_json.workspace = true`; `[dev-dependencies]` gains
-`insta.workspace = true`.
+`ridl-descriptor = { path = "../ridl-descriptor" }`
+(`serde_json.workspace =
+true` is already there, line 25); `[dev-dependencies]`
+gains `insta.workspace = true`.
 
 - [ ] **Step 2: Run the tests to see them fail**
 
@@ -3305,10 +3415,11 @@ fn run_describe(path: &Path) -> ExitCode {
 
 Run: `cargo test -p ridl --locked --test describe_cli` Expected: the snapshot
 test fails once with a new snapshot under
-`crates/ridl/tests/snapshots/describe_cli__corpus_catalog.snap`. Read it: one
-interface, its members in ordinal order with `"provisional": true`, two
-`max_sizes` entries per payload, no `ReprC`. Then run `cargo insta accept` (or
-move the `.snap.new` file) and re-run: all PASS.
+`crates/ridl/tests/snapshots/describe_cli__corpus_catalog.snap`. Read it: two
+interfaces — `VehicleStatus` (number 1), then the inline shape of the service
+`corpus.baseline.hvac` (number 2) — each with `"provisional": true` and its
+members in ordinal order, two `max_sizes` entries per payload, no `ReprC`. Then
+run `cargo insta accept` (or move the `.snap.new` file) and re-run: all PASS.
 
 - [ ] **Step 5: Record the exit-code row and the book entry**
 
@@ -3321,17 +3432,27 @@ In `docs/decisions/ADR-0010-cli-conventions.md`, append to the table after the
 
 and add one sentence after the paragraph that follows the table:
 "`ridl describe` earned its row on the date of the PR that added it; the checked
-scenarios are the four `describe_cli.rs` tests."
+scenarios are the four `describe_cli.rs` tests." In that paragraph, "The claim
+is scoped to these eight" becomes "The claim is scoped to these nine — the eight
+of 2026-07-27, and `ridl describe` on the date of its PR". The sentence before
+the table ("across the eight subcommands the two binaries expose today") is
+dated and stays.
 
-In `docs/book/cli-reference.md`, in the `--emit <EMIT>` description near line
-960, append `` `catalog` `` to the value list; and add, after the last
-subcommand section, a section `## ridl describe` with one paragraph ("Prints a
-catalog descriptor written by `ridl build --emit catalog` as JSON after
-verifying it; a file that is not a descriptor, or is malformed, is rejected as a
-whole with exit code 2.") and a `json` fence holding the first twenty lines of
-the snapshot from step 4. The fence's language word is `json`, which the book
-harness does not compile (CONTRIBUTING.md, "Writing examples in the book"); the
-transcript is kept current by hand.
+In `docs/book/cli-reference.md`, in both `--emit <EMIT>` value lists (under
+`### ridl build`, near line 307, and under `### ridlc build`, near line 960),
+append a `catalog` line in the same format, with the text `--help` prints; in
+the table under `## Exit codes across the toolchain` (near line 1014), add a
+`ridl describe` row after `ridl diff` with the three cells of the ADR-0010 row
+above, and in the `ridl fmt` row change "five of the other seven" to "five of
+the other eight" (`ridl describe` names the path in its message); and add, under
+`## ridl` after `### ridl diff` (the last `ridl` subcommand section, before
+`## ridlc`), a section `### ridl describe` with one paragraph ("Prints a catalog
+descriptor written by `ridl build --emit catalog` as JSON after verifying it; a
+file that is not a descriptor, or is malformed, is rejected as a whole with exit
+code 2.") and a `json` fence holding the first twenty lines of the snapshot from
+step 4. The fence's language word is `json`, which the book harness does not
+compile (CONTRIBUTING.md, "Writing examples in the book"); the transcript is
+kept current by hand.
 
 - [ ] **Step 6: Run the docs gates**
 
@@ -3353,8 +3474,10 @@ git commit -m "feat(ridl): add ridl describe for the catalog descriptor"
 
 - Modify: `AGENTS.md` (the crate count and list in the first section)
 - Modify: `README.md` (the crate list, if it has one)
-- Modify: `CONTRIBUTING.md` (the generated-code section:
-  `cargo xtask descriptor-codegen` beside `cargo xtask codegen`)
+- Modify: `docs/technotes/walking-skeleton-architecture.md:188` (the `xtask`
+  entry, the one place that lists what `cargo xtask` does:
+  `cargo xtask descriptor-codegen` beside `cargo xtask codegen`;
+  `CONTRIBUTING.md` has no generated-code section)
 - Modify: `docs/ROADMAP.md:269-271` (Epic 14: one story row)
 - Modify: `docs/wip/2026-09-13-runtime-descriptors-design.md` (§7, the two open
   items this plan disposed of)
@@ -3374,8 +3497,10 @@ one-line purpose "the catalog descriptor an engine reads".
 
 - [ ] **Step 2: Document the generator**
 
-In `CONTRIBUTING.md`, where `cargo xtask codegen` is described, add one
-paragraph: "`cargo xtask descriptor-codegen` regenerates
+In `docs/technotes/walking-skeleton-architecture.md`, the `xtask` entry near
+line 188 ("`cargo xtask codegen`, the typed-AST generator over `family.ungram`")
+gains the second generator and its rule, as one paragraph after it:
+"`cargo xtask descriptor-codegen` regenerates
 `crates/ridl-descriptor/src/generated.rs` from
 `crates/ridl-descriptor/schema/catalog.fbs` with planus; run it after every
 schema edit. The xtask test `committed_generated_accessors_match_the_schema`
@@ -3414,42 +3539,43 @@ in the list), check.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add AGENTS.md README.md CONTRIBUTING.md docs/ROADMAP.md docs/wip
+git add AGENTS.md README.md docs/technotes docs/ROADMAP.md docs/wip
 git commit -m "docs(docs): record the catalog descriptor crate, generator and story"
 ```
 
 - [ ] **Step 6: Open the pull request**
 
 The PR description lists the seven dispositions under "Decisions this plan takes
-on the spec's open items" verbatim, names the two wordings that were not walked
-with the design's author (a stream payload's per-element row, and the `match`
-narrowing condition), and asks for the review lane as the repository runs it
-(four seats: executable lines are present).
+on the spec's open items" verbatim, names the two review-driven wordings that PR
+#323's pass-1 fix added to the design note after the author approved it (a
+stream payload's per-element row, D-4/D-6, and the `match` narrowing of the
+string byte capacity, design note §6), and asks for the review lane as the
+repository runs it (four seats: executable lines are present).
 
 ---
 
 ## Self-review
 
-**Spec coverage.** D-1 (catalog per package with an interface: Task 9's guard);
-D-2 (FlatBuffers, IR untouched: Task 1); D-3 (hand-written, `version`,
-`file_identifier`, append-only: Task 1's schema header and Task 12's
-CONTRIBUTING paragraph; the `flatc`/`flatcc` cross-compiler check is deferred by
-the spec until a C engine exists); D-4 (identity, interfaces with number and
-provisional flag, retired entries — the list exists and is empty until the lock
-file, members with ordinal, kind, payload type, timing, reserved ordinals: Tasks
-3, 4, 8); D-5 is the system descriptor, out of scope; D-6 (one row per payload,
-one column per encoding, derivation from bounds, string capacity with the
-`match` narrowing: Tasks 5-8; the conformance refutation lands with
-E11.7/E11.8/E11.12 as the spec says); D-7 (nothing added for payload layouts,
-transport, envelope); D-8 (Task 2, Task 11); D-9 (Task 9, Task 11; the JSON is a
-rendering, no JSON emit); D-10 is generated code and out of this plan (ADR-0013
-decision 3's table gains the number and hash when the lock file exists — not
-before, or the table would carry a provisional number into generated code). §3:
-an unclaimed namespace and the rsdl errors are the system descriptor's; a
-provisional number is data (Task 8 flags it, nothing refuses it). §4: schema
-round trip (Task 1), golden files (Task 11's snapshot and byte-stability tests),
-verifier rejection (Tasks 2 and 11), book example (Task 11), max-size
-conformance deferred with the codecs.
+**Spec coverage.** D-1 (catalog per package with at least one interface shape:
+Task 9's guard over `Package::shapes()`); D-2 (FlatBuffers, IR untouched: Task
+1); D-3 (hand-written, `version`, `file_identifier`, append-only: Task 1's
+schema header and Task 12's technote paragraph; the `flatc`/`flatcc`
+cross-compiler check is deferred by the spec until a C engine exists); D-4
+(identity, interfaces with number and provisional flag, retired entries — the
+list exists and is empty until the lock file, members with ordinal, kind,
+payload type, timing, reserved ordinals: Tasks 3, 4, 8); D-5 is the system
+descriptor, out of scope; D-6 (one row per payload, one column per encoding,
+derivation from bounds, string capacity with the `match` narrowing: Tasks 5-8;
+the conformance refutation lands with E11.7/E11.8/E11.12 as the spec says); D-7
+(nothing added for payload layouts, transport, envelope); D-8 (Task 2, Task 11);
+D-9 (Task 9, Task 11; the JSON is a rendering, no JSON emit); D-10 is generated
+code and out of this plan (ADR-0013 decision 3's table gains the number and hash
+when the lock file exists — not before, or the table would carry a provisional
+number into generated code). §3: an unclaimed namespace and the rsdl errors are
+the system descriptor's; a provisional number is data (Task 8 flags it, nothing
+refuses it). §4: schema round trip (Task 1), golden files (Task 11's snapshot
+and byte-stability tests), verifier rejection (Tasks 2 and 11), book example
+(Task 11), max-size conformance deferred with the codecs.
 
 **Placeholders.** Task 5 step 3 creates `proto3.rs` with a `payload_size`
 returning `None` so `max_size` compiles before Task 6 fills it; Task 6 replaces
