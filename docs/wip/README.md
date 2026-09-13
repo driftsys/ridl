@@ -88,6 +88,21 @@ archive.
   [`2026-09-08-roadmap-simplification.md`](../archive/2026-09-08-roadmap-simplification.md),
   now archived; its S-15 and S-17 are applied by the roadmap rewrite, and it
   feeds the ADR amendments. **Not ratified.**
+- **2026-09-12-rsdl-rewrite-decisions.md** — the decisions the rsdl rewrite
+  starts from, and the language surface: five container declarations, `offers` a
+  service and `requires` an interface, machines list their instances; a lone
+  service stands for an implicit component; no process and no scheduling facts;
+  named instances with a unit instance, redundancy derived; crossing kinds only,
+  transport and fabric are configuration, posture reserved; attributes as the
+  backend escape hatch; identity numbers kept out of the source at every level,
+  a per-package lock file frozen by `ridl lock` at release; cross-catalog
+  references allowed with the hash over the closure. Two identity studies
+  summarised. Amends `2026-09-08-topology-vocabulary.md` §1, §3, §7 and five of
+  its invariants; the note's §4 lists them. **Not ratified.**
+- **2026-09-12-interface-id-study.md** and
+  **2026-09-12-interface-id-study-2.md** — the two identity study reports that
+  note's D-7 summarises, kept verbatim; the first ranked the carriers, the
+  second simulated the merges and the diff. **Not ratified.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
