@@ -1005,11 +1005,17 @@ workspace — and wires the stdio transport. An agent host spawns it and speaks
 MCP over its stdin and stdout. The tool's input and output are documented in
 `crates/ridl-mcp/README.md`.
 
-**Exit codes.** 0 on a clean shutdown. 2 when the Tokio runtime fails to
-build, or the transport ends before the `initialize` handshake, or fails for
-any other reason. There is no exit 1: `ridl mcp` answers no question that can
-come back negative. Both outcomes are confirmed directly against the built
-binary by `crates/ridl/tests/servers.rs`.
+**Exit codes.** 0 on a clean shutdown: the host closes the server's stdin,
+which is how a stdio host ends an MCP session. 2 when the Tokio runtime fails
+to build, when the transport ends before the `initialize` handshake, or when a
+task the SDK runs for the session fails after it. A read failure on stdin
+after the handshake is not distinguishable from the host closing stdin — the
+SDK logs it and ends the session the same way — so it exits 0. There is no
+exit 1: `ridl mcp` answers no question that can come back negative. The clean
+shutdown and the transport ending before the handshake are confirmed directly
+against the built binary by `crates/ridl/tests/servers.rs`; a session-task
+failure cannot be provoked through the server, so its mapping is tested on its
+own in `crates/ridl-mcp`.
 
 ## `ridlc`
 

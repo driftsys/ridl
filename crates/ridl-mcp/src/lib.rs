@@ -11,6 +11,7 @@ use rmcp::handler::server::router::tool::ToolRouter;
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::{CallToolResult, ContentBlock, Implementation, ServerCapabilities, ServerInfo};
 use rmcp::schemars::JsonSchema;
+use rmcp::service::QuitReason;
 use rmcp::transport::stdio;
 use rmcp::{ErrorData, ServerHandler, ServiceExt, tool, tool_handler, tool_router};
 use serde::{Deserialize, Serialize};
@@ -184,15 +185,38 @@ pub async fn serve_stdio_with_version(
         None => RidlMcp::new(),
     };
     let service = server.serve(stdio()).await?;
-    service.waiting().await?;
-    Ok(())
+    let reason = service.waiting().await?;
+    outcome(reason)
+}
+
+/// Maps the reason the serve loop ended onto what `ridl mcp` reports
+/// (ADR-0010 decision 1, the `ridl mcp` row): `Ok` is exit 0, `Err` exit 2.
+///
+/// - `Closed`: the transport's input ended. That is the host closing this
+///   process's stdin, which is how a stdio host ends an MCP session: a clean
+///   end. `rmcp` reports a read failure on stdin the same way, after logging
+///   it, so that case is not distinguishable here.
+/// - `Cancelled`: the owner of the running service cancelled it. Nothing in
+///   this crate does, so the variant is not reached today; it is a deliberate
+///   stop, not a failure.
+/// - `JoinError`: a task the SDK spawned to send a server-initiated request to
+///   the client panicked or was cancelled. The SDK's own comment on it reads
+///   "serious, we should quit": a failure.
+/// - Any variant a later `rmcp` release adds is a failure until it is
+///   classified here: the enum is `#[non_exhaustive]`, and an unclassified
+///   reason must not pass as a clean end.
+fn outcome(reason: QuitReason) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    match reason {
+        QuitReason::Closed | QuitReason::Cancelled => Ok(()),
+        QuitReason::JoinError(err) => Err(format!("the MCP session task failed: {err}").into()),
+        other => Err(format!("the MCP session ended for an unclassified reason: {other:?}").into()),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::time::Duration;
 
-    use rmcp::service::QuitReason;
     use serde_json::json;
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, ReadHalf, WriteHalf};
 
@@ -449,6 +473,35 @@ mod tests {
         })
         .await
         .expect("the test did not finish within the timeout");
+    }
+
+    #[test]
+    fn a_closed_transport_is_a_clean_end() {
+        assert!(outcome(QuitReason::Closed).is_ok());
+    }
+
+    #[test]
+    fn a_cancelled_service_is_a_clean_end() {
+        assert!(outcome(QuitReason::Cancelled).is_ok());
+    }
+
+    // `QuitReason::JoinError` cannot be provoked through the server: `rmcp`
+    // produces it only when a task sending a server-initiated request to the
+    // client fails to join, and this server sends none. The variant is built
+    // here from a real `JoinError`, which has no constructor but is what the
+    // handle of a panicking task yields.
+    #[tokio::test]
+    async fn a_failed_session_task_is_an_error() {
+        let join_error = tokio::spawn(async {
+            panic!("a task failure driven by the test");
+        })
+        .await
+        .expect_err("a panicking task fails to join");
+        let err = outcome(QuitReason::JoinError(join_error)).expect_err("a failure");
+        assert!(
+            err.to_string().contains("the MCP session task failed"),
+            "{err}"
+        );
     }
 
     #[test]
