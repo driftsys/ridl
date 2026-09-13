@@ -3,10 +3,11 @@ name: vscode-release
 # Release train for the ridl binary and the VS Code extension, triggered by an
 # `editor-v*` tag a maintainer pushes (ADR-0007 decision 14: the push is the
 # maintainer act). Builds ridl for five targets with the tag stamped as its
-# version, packages one VSIX per target, creates the GitHub Release, and holds
-# the Marketplace and Open VSX publishes behind the `marketplace` environment's
-# required reviewers. The release job does not depend on the publish jobs, so
-# a publish failure never blocks the release.
+# version, packages one VSIX per target, creates the GitHub Release, and runs
+# the Marketplace and Open VSX publishes in the `marketplace` environment,
+# which a maintainer must configure with required reviewers. The release job
+# does not depend on the publish jobs, so a publish failure never blocks the
+# release.
 #
 # Packaging runs through `just package-vsix` (ADR-0009: the justfile defines
 # it; this file only invokes it), the same recipe `just package-vscode` calls
@@ -15,13 +16,20 @@ name: vscode-release
 #
 # Neither `vsce publish` nor `ovsx publish` is idempotent: after a partial
 # failure, publish the remaining targets by hand rather than re-running.
+#
+# Repository write is granted only where it is needed: the workflow default is
+# read, and the `release` job raises its own permissions to create the GitHub
+# Release. `ci.yml` documents the same convention (its `pages` job raises
+# permissions the same way, for the same reason) and every other job here
+# stays read-only, including the two that hold the Marketplace and Open VSX
+# tokens.
 
 on:
   push:
     tags: ["editor-v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   NODE_VERSION: 22
@@ -169,6 +177,8 @@ jobs:
     name: github release
     needs: [build, package-vsix]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -179,8 +189,8 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
-          # An editor-v* release must not take the repository's latest-release
-          # slot, which belongs to the workspace release train.
+          # A platform-specific editor release is not the repository's
+          # headline artifact, so keep it out of the latest-release slot.
           make_latest: false
           files: |
             artifacts/*.tar.gz
@@ -217,7 +227,7 @@ jobs:
           fi
           for f in "${files[@]}"; do
             echo "publishing $f"
-            editors/vscode/node_modules/.bin/vsce publish --packagePath "$f" --pat "$VSCE_PAT"
+            editors/vscode/node_modules/.bin/vsce publish --packagePath "$f"
           done
 
   publish-ovsx:
@@ -250,5 +260,5 @@ jobs:
           fi
           for f in "${files[@]}"; do
             echo "publishing $f"
-            editors/vscode/node_modules/.bin/ovsx publish "$f" --pat "$OVSX_PAT"
+            editors/vscode/node_modules/.bin/ovsx publish "$f"
           done
