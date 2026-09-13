@@ -24,6 +24,14 @@ whose tag starts with `editor-v`. They must never ask for `/releases/latest`,
 which returns the newest release across every tag namespace — once the workspace
 train is used, that would hand a user a release containing no `ridl` binary.
 
+The two Linux targets are built with `cargo zigbuild` against a glibc 2.28 floor
+(`--target <triple>.2.28`), so the binary starts on any distribution with glibc
+2.28 or newer, which includes RHEL 8, Debian 11 and Ubuntu 20.04. A binary
+linked against the runner's own glibc would require that newer version instead,
+and the extension cannot recover from that: it does not fall back to `PATH`
+while a bundled binary exists. The floor changes neither the target triple nor
+the tarball names, so `install.sh` and the VSIX layout are unaffected.
+
 ## How the binary learns its version
 
 The crates stay at `0.0.0`, so the version a user sees does not come from
