@@ -357,22 +357,33 @@ gate-parity:
 # fixture release reached through a file:// URL — curl reads file://, so no
 # server is needed. A dry run alone (RIDL_INSTALL_DRY_RUN=1) exercises neither
 # the checksum nor the extraction, the two steps that matter most in a script
-# users pipe straight into `bash`. Also runs install.ps1's own dry run behind
-# a `command -v pwsh` guard: ubuntu-latest, where this recipe runs in CI,
-# ships PowerShell 7 as `pwsh`, so this is the one place install.ps1 is
-# parsed at all. The guard skips that part, rather than failing the recipe,
-# on a machine — such as the one this was developed on — with no pwsh.
+# users pipe straight into `bash`.
+#
+# Also runs install.ps1 through the same three checks — dry run, good
+# install, corrupted download — behind a `command -v pwsh` guard:
+# ubuntu-latest, where this recipe runs in CI, ships PowerShell 7 as `pwsh`,
+# so this is the one place install.ps1 is exercised at all. The guard skips
+# that part, rather than failing the recipe, on a machine — such as the one
+# this was developed on — with no pwsh. Invoke-WebRequest does not support
+# the file:// scheme install.sh's half of this recipe relies on, so the
+# install.ps1 cases serve the same kind of fixture over a local
+# `python3 -m http.server` instead, reached through the same
+# RIDL_INSTALL_BASE_URL override install.sh's own tests use — install.ps1
+# already honours that variable, with the same name and the same default.
 install-check:
     #!/usr/bin/env bash
     set -euo pipefail
     scratch="$(mktemp -d)"
-    trap 'rm -rf "$scratch"' EXIT
+    http_pid=""
+    trap 'rm -rf "$scratch"; [ -n "$http_pid" ] && kill "$http_pid" 2>/dev/null; true' EXIT
 
     # Learn this host's tarball name from the dry run rather than duplicating
     # install.sh's own detect_target platform table here.
     version="editor-v0.0.0-install-check"
     url="$(RIDL_VERSION="$version" RIDL_INSTALL_DRY_RUN=1 bash install.sh)"
     tarball="$(basename "$url")"
+    reldir="$scratch/release/$version"
+    mkdir -p "$reldir"
 
     if command -v pwsh >/dev/null 2>&1; then
         ps1_url="$(pwsh -NoProfile -Command '$env:RIDL_VERSION="editor-v0.1.0"; $env:RIDL_INSTALL_DRY_RUN="1"; ./install.ps1')"
@@ -382,14 +393,78 @@ install-check:
             exit 1
         fi
         echo "install-check: install.ps1 dry run verified ($ps1_url)"
+
+        # install.ps1 always requests the Windows target regardless of this
+        # host's own platform, so it gets its own tarball, built the same way
+        # as install.sh's and placed in the same version directory.
+        ps_tarball="ridl-x86_64-pc-windows-msvc.tar.gz"
+        printf 'ridl 0.0.0-install-check\n' > "$reldir/ridl.exe"
+        if command -v sha256sum >/dev/null 2>&1; then
+            (cd "$reldir" && tar czf "$ps_tarball" ridl.exe && sha256sum "$ps_tarball" > "$ps_tarball.sha256")
+        else
+            (cd "$reldir" && tar czf "$ps_tarball" ridl.exe && shasum -a 256 "$ps_tarball" > "$ps_tarball.sha256")
+        fi
+        rm "$reldir/ridl.exe"
+
+        http_port=8971
+        python3 -m http.server "$http_port" --bind 127.0.0.1 --directory "$scratch/release" \
+            >"$scratch/http.log" 2>&1 &
+        http_pid=$!
+        for _ in $(seq 1 50); do
+            curl -fsS "http://127.0.0.1:$http_port/" >/dev/null 2>&1 && break
+            sleep 0.1
+        done
+
+        # A good install: same shape as install.sh's own good-install case
+        # below, but ridl.exe cannot run on this host, so the check compares
+        # the installed file's content against the fixture's instead of
+        # executing it.
+        ps_install1="$scratch/ridl install ps-good"
+        RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" \
+            RIDL_INSTALL_DIR="$ps_install1" pwsh -NoProfile -File ./install.ps1
+        if [ ! -f "$ps_install1/ridl.exe" ]; then
+            echo "install-check: install.ps1 did not land ridl.exe in $ps_install1" >&2
+            exit 1
+        fi
+        ps_got="$(cat "$ps_install1/ridl.exe")"
+        if [ "$ps_got" != "ridl 0.0.0-install-check" ]; then
+            echo "install-check: install.ps1 installed a file reading '$ps_got', expected the fixture's line" >&2
+            exit 1
+        fi
+        echo "install-check: install.ps1 good install verified ($ps_install1/ridl.exe)"
+
+        # A corrupted download: same construction as install.sh's own case
+        # below — original .sha256, tampered tarball content.
+        printf 'ridl tampered\n' > "$reldir/ridl.exe"
+        (cd "$reldir" && tar czf "$ps_tarball" ridl.exe)
+        rm "$reldir/ridl.exe"
+        ps_install2="$scratch/ridl install ps-tamper"
+        if RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" \
+            RIDL_INSTALL_DIR="$ps_install2" pwsh -NoProfile -File ./install.ps1 2>"$scratch/ps-tamper.err"; then
+            echo "install-check: install.ps1 succeeded against a corrupted tarball" >&2
+            exit 1
+        fi
+        cat "$scratch/ps-tamper.err" >&2
+        # Test-Checksum's own Write-Error text, so this pins the rejection to
+        # the checksum step rather than trusting that something rejected it.
+        if ! grep -qi "checksum mismatch" "$scratch/ps-tamper.err"; then
+            echo "install-check: install.ps1 rejected the download, but not visibly because of the checksum" >&2
+            exit 1
+        fi
+        if [ -e "$ps_install2/ridl.exe" ]; then
+            echo "install-check: a corrupted download still installed a binary via install.ps1" >&2
+            exit 1
+        fi
+        echo "install-check: install.ps1 tamper case correctly rejected by the checksum and installed nothing"
+
+        kill "$http_pid" 2>/dev/null || true
+        http_pid=""
     else
-        echo "install-check: pwsh not installed — install.ps1 dry run skipped"
+        echo "install-check: pwsh not installed — install.ps1 checks skipped"
     fi
 
     # Build the fixture release: <version>/<tarball> plus its .sha256. The
     # "binary" is a tiny script that prints a recognisable version line.
-    reldir="$scratch/release/$version"
-    mkdir -p "$reldir"
     printf '#!/bin/sh\necho "ridl 0.0.0-install-check"\n' > "$reldir/ridl"
     chmod +x "$reldir/ridl"
     if command -v sha256sum >/dev/null 2>&1; then
