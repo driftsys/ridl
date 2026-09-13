@@ -120,9 +120,10 @@ IR's shape into every engine.
   interface.
 - **Members, per interface**: name; ordinal (position in the body, ridl §11);
   kind (`signal`, `event`, `command`, `query`, `fixed`); the payload type name
-  per payload, and for a stream payload the element type and a `stream` flag
-  (D-6); the bounds and QoS terms the IR carries for the member (ADR-0015); and
-  the **max-size table** of D-6.
+  per payload, and for a stream payload (ridl §12) the element type and a
+  `stream` flag, because the stream itself has no bound; the bounds and QoS
+  terms the IR carries for the member (ADR-0015); and the **max-size table** of
+  D-6.
 - **Reserved ordinals** per interface, so the ordinal space is complete.
 
 Not contained: type layouts, field lists, constraints beyond the bounds that
@@ -152,11 +153,11 @@ schema the wire backend emits (D-7).
   declared, uninterpreted, on every node that has an attribute site in the
   source — a declaration (`system`, `deployment`, `machine`, `component`,
   `distribution`) or a member line, which is where an instance's placement
-  carries its keys. A link has no attribute site: rsdl note D-6 gives the block
-  to declarations and member lines, not to a `requires` line, and rsdl note D-5
-  keeps transport facts on `machine` or under `deployment`. A tag-based
-  transport's service number (`someip.service_id`) reaches its stack through
-  this map, which discharges the registry ADR-0016 decision 8 deferred.
+  carries its keys, or a `requires` line, which is the link's site (rsdl note
+  D-11 places the `optional` flag there); transport facts stay off the link, on
+  `machine` or under `deployment` (rsdl note D-5). A tag-based transport's
+  service number (`someip.service_id`) reaches its stack through this map, which
+  discharges the registry ADR-0016 decision 8 deferred.
 
 Not contained: transport choice per crossing, network fabric, process-local
 facts (file paths, ports, tuning), envelope and framing overhead. Design note
@@ -187,10 +188,10 @@ explicit bounds (typl §12, TYPL-201/202), `string` and `bytes` default to
 `[0..256]` (typl §4), and recursion is rejected because it makes the wire size
 unbounded (typl §7.3). A stream payload (`<T>`, ridl §12) is the one unbounded
 position: the stream itself has no bound (ridl §12.2), so its row carries the
-maximum encoded size of one element and the `stream` flag of D-4, and an engine
-sizes per element, not per stream. A `string [min..max]` bound counts Unicode
-scalar values and its byte capacity is four bytes per scalar value under UTF-8
-(design note §3.11); this note adds one narrowing, recorded in §6: when a
+maximum encoded size of one element under the `stream` flag D-4 carries, and an
+engine sizes per element, not per stream. A `string [min..max]` bound counts
+Unicode scalar values and its byte capacity is four bytes per scalar value under
+UTF-8 (design note §3.11); this note adds one narrowing, recorded in §6: when a
 `match` constraint admits only scalar values whose UTF-8 encoding is narrower,
 the narrower bound applies. Each encoding's overhead — proto3 tags and varint
 widths at their maximum, FlatBuffers vtables, offsets and alignment padding,
@@ -260,9 +261,9 @@ hash so generated code and descriptor agree on identity; `ridl-rt`'s interaction
 descriptors (roadmap E11.0) are that table's per-member form. The descriptor is
 the alternative for an engine, not a replacement for generated code. A runtime's
 node descriptor (design note §3.13) is derived from the system descriptor
-instead of from the IR; the runtime is outside this repository (design note
-§3.7), so whether it embeds the bytes at build time or loads them at start is
-the runtime's choice (§7).
+instead of from the IR; the engine that owns it is outside this repository
+(design note §3.7), so whether it embeds the bytes at build time or loads them
+at start is the runtime's choice (§7).
 
 ## 3. Error handling
 
