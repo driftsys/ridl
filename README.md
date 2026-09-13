@@ -47,6 +47,7 @@ crates/                         The compiler workspace (typl + ridl)
 ├── ridlc/                      Compiler driver (check / build / emit)
 ├── ridl/                       Porcelain facade (check / baseline / build / test / fmt / diff)
 ├── ridl-lsp/                   Language server (diagnostics, hover, goto, rename, inlay)
+├── ridl-mcp/                   MCP server (ADR-0005 Layer B): `ridl mcp`, the `ridl_check` tool
 ├── ridl-backend-rust/          Rust + extern-C code generation over the IR
 ├── ridl-backend-ts/            TypeScript code generation over the IR
 ├── ridl-backend-proto/         proto3 schema generation over the IR (a wire backend, ADR-0013 decision 2)

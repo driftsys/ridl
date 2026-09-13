@@ -7,9 +7,9 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: thirteen crates
+(ADRs), the implementation roadmap, and the compiler workspace: fourteen crates
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
-`ridl`, `ridl-lsp`, `ridl-backend-rust`, `ridl-backend-ts`,
+`ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, and `ridl-fmt` —
 plus `xtask` at the root and the `editors/vscode` extension. The typl v0.1
 toolchain (epic E1) and the ridl interface layer over it (epic E2) are built;

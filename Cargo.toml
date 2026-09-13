@@ -79,7 +79,9 @@ tar = "0.4.44"
 # inherited side effect that a future `rmcp` release could withdraw.
 # `io-std` is the stdio transport's `Stdin`/`Stdout`, `rt` the runtime that
 # drives the task `rmcp` spawns, `rt-multi-thread` the flavour the `ridl`
-# binary builds, and `macros` its `#[tokio::main]`.
+# binary builds by hand with `tokio::runtime::Builder`
+# (`crates/ridl/src/main.rs`; there is no `#[tokio::main]`), and `macros` for
+# `#[tokio::test]` in `crates/ridl/tests/servers.rs`.
 tokio = { version = "1.53.1", features = [
   "io-std",
   "macros",
