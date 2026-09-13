@@ -353,6 +353,68 @@ gate-parity:
     fi
     echo "gate-parity: ci.yml invokes all $(echo $members | wc -w | tr -d ' ') members of 'just build'."
 
+# End-to-end test of install.sh: downloads, checksum-verifies, and extracts a
+# fixture release reached through a file:// URL — curl reads file://, so no
+# server is needed. A dry run alone (RIDL_INSTALL_DRY_RUN=1) exercises neither
+# the checksum nor the extraction, the two steps that matter most in a script
+# users pipe straight into `bash`. Not exercised here: install.ps1 — there is
+# no PowerShell interpreter on this machine or in CI.
+install-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scratch="$(mktemp -d)"
+    trap 'rm -rf "$scratch"' EXIT
+
+    # Learn this host's tarball name from the dry run rather than duplicating
+    # install.sh's own detect_target platform table here.
+    version="editor-v0.0.0-install-check"
+    url="$(RIDL_VERSION="$version" RIDL_INSTALL_DRY_RUN=1 bash install.sh)"
+    tarball="$(basename "$url")"
+
+    # Build the fixture release: <version>/<tarball> plus its .sha256. The
+    # "binary" is a tiny script that prints a recognisable version line.
+    reldir="$scratch/release/$version"
+    mkdir -p "$reldir"
+    printf '#!/bin/sh\necho "ridl 0.0.0-install-check"\n' > "$reldir/ridl"
+    chmod +x "$reldir/ridl"
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd "$reldir" && tar czf "$tarball" ridl && sha256sum "$tarball" > "$tarball.sha256")
+    else
+        (cd "$reldir" && tar czf "$tarball" ridl && shasum -a 256 "$tarball" > "$tarball.sha256")
+    fi
+    rm "$reldir/ridl"
+
+    # A good install: the binary lands in a fresh directory, executable, and
+    # matches the fixture's own output.
+    install1="$scratch/install1"
+    RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
+        RIDL_INSTALL_DIR="$install1" bash install.sh
+    if [ ! -x "$install1/ridl" ]; then
+        echo "install-check: ridl did not land executable in $install1" >&2
+        exit 1
+    fi
+    got="$("$install1/ridl")"
+    if [ "$got" != "ridl 0.0.0-install-check" ]; then
+        echo "install-check: installed binary printed '$got', expected the fixture's line" >&2
+        exit 1
+    fi
+    echo "install-check: good install verified ($install1/ridl)"
+
+    # A corrupted download: the checksum must reject it, and nothing lands.
+    printf 'corrupt' >> "$reldir/$tarball"
+    install2="$scratch/install2"
+    if RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
+        RIDL_INSTALL_DIR="$install2" bash install.sh 2>"$scratch/tamper.err"; then
+        echo "install-check: installer succeeded against a corrupted tarball" >&2
+        exit 1
+    fi
+    cat "$scratch/tamper.err" >&2
+    if [ -e "$install2/ridl" ]; then
+        echo "install-check: a corrupted download still installed a binary" >&2
+        exit 1
+    fi
+    echo "install-check: tamper case correctly rejected and installed nothing"
+
 # Full local gate: confirm the toolchain and CI wiring, check Rust formatting,
 # build the docs book, compile the code, run the tests, lint the Rust, check the
 # wasm target builds, then run the connective-tissue lint checks.
@@ -367,7 +429,7 @@ gate-parity:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity fmt-check book-check link-check compile test lint wasm-check check
+build: toolchain-check gate-parity fmt-check book-check link-check compile test lint wasm-check install-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

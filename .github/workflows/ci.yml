@@ -104,6 +104,9 @@ jobs:
       - run: just toolchain-check
       # Needs no toolchain of its own, and has no other job to sit in.
       - run: just gate-parity
+      # Needs neither a toolchain nor a network: it tests install.sh against a
+      # local file:// fixture.
+      - run: just install-check
       - run: just fmt-check
       - run: just compile
       - run: just test
