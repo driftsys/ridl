@@ -75,6 +75,10 @@ pub struct RidlMcp {
     /// `ridl lsp` agree; a caller driving this library directly (including
     /// this crate's own tests) gets this crate's version through `new`.
     version: String,
+    /// What `ridl_check` runs: [`check`], except in this crate's own tests.
+    /// No input is known to make the compiler panic, so a test installs a
+    /// function that does, to reach the handler's failure path.
+    check: fn(&CheckParams) -> CheckOutput,
 }
 
 impl Default for RidlMcp {
@@ -97,6 +101,7 @@ impl RidlMcp {
         Self {
             tool_router: Self::tool_router(),
             version: version.into(),
+            check,
         }
     }
 
@@ -104,13 +109,46 @@ impl RidlMcp {
         name = "ridl_check",
         description = "Type-check one typl or ridl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. Every span reports the path `input.typl` or `input.ridl`, a fixed synthetic name for the text you supplied rather than a file on disk."
     )]
-    fn ridl_check(
+    async fn ridl_check(
         &self,
         Parameters(params): Parameters<CheckParams>,
     ) -> Result<CallToolResult, ErrorData> {
-        let output = check(&params);
+        // The check is synchronous compiler work, so it runs on the blocking
+        // pool rather than on the worker that drives the transport. That is
+        // also what turns a panic in the compiler into an error this call
+        // reports: `rmcp` spawns one task per request and sends the response
+        // from it, so a panic that unwound through this handler would end
+        // that task before any response was sent, leave the client waiting
+        // until its own timeout, and leave the request's cancellation token
+        // in the SDK's pool. Tokio catches the blocking task's panic instead
+        // and hands it back here as a `JoinError`.
+        let check = self.check;
+        let output = tokio::task::spawn_blocking(move || check(&params))
+            .await
+            .map_err(checker_failed)?;
         Ok(CallToolResult::success(vec![ContentBlock::json(&output)?]))
     }
+}
+
+/// The error a `tools/call` gets when the blocking task running the check
+/// did not return: the compiler panicked, or the runtime shut down under
+/// it. The message says the checker failed and carries the panic's own
+/// message when it has one — the backtrace, when there is one, stays on
+/// stderr where the panic hook wrote it, never in the response.
+fn checker_failed(err: tokio::task::JoinError) -> ErrorData {
+    let mut message = String::from("the checker failed on this input");
+    if err.is_panic() {
+        let payload = err.into_panic();
+        let text = payload
+            .downcast_ref::<&str>()
+            .copied()
+            .or_else(|| payload.downcast_ref::<String>().map(String::as_str));
+        if let Some(text) = text {
+            message.push_str(": ");
+            message.push_str(text);
+        }
+    }
+    ErrorData::internal_error(message, None)
 }
 
 // `router = self.tool_router` rather than the macro's default
@@ -152,8 +190,13 @@ pub async fn serve_stdio_with_version(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use std::time::Duration;
+
+    use rmcp::service::QuitReason;
     use serde_json::json;
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream, ReadHalf, WriteHalf};
+
+    use super::*;
 
     // The fixture deliberately has no trailing newline: with one, the parser
     // reports the missing backing type at the position past it, which is
@@ -249,14 +292,15 @@ mod tests {
         assert_eq!(info.server_info.version, "editor-v1.2.3");
     }
 
-    #[test]
-    fn the_tool_returns_the_check_output_as_one_json_text_block() {
+    #[tokio::test]
+    async fn the_tool_returns_the_check_output_as_one_json_text_block() {
         let server = RidlMcp::new();
         let result = server
             .ridl_check(Parameters(CheckParams {
                 source: BROKEN_TYPL.to_string(),
                 profile: Profile::Typl,
             }))
+            .await
             .expect("the tool succeeds");
         assert_eq!(result.is_error, Some(false));
         let [ContentBlock::Text(block)] = result.content.as_slice() else {
@@ -266,6 +310,145 @@ mod tests {
             serde_json::from_str(&block.text).expect("the block holds JSON");
         assert_eq!(value["diagnostics"][0]["code"], json!("FORM-101"));
         assert_eq!(value["diagnostics"][0]["span"]["path"], json!("input.typl"));
+    }
+
+    /// The check the panic test installs: it panics on one sentinel source
+    /// and is the real [`check`] on every other, so one server can show both
+    /// the failed call and the call after it.
+    fn check_or_panic(params: &CheckParams) -> CheckOutput {
+        if params.source == "panic" {
+            panic!("a checker panic driven by the test");
+        }
+        check(params)
+    }
+
+    /// Writes `message` as one newline-delimited JSON-RPC line.
+    async fn send(writer: &mut WriteHalf<DuplexStream>, message: serde_json::Value) {
+        let mut line = message.to_string();
+        line.push('\n');
+        writer
+            .write_all(line.as_bytes())
+            .await
+            .expect("write to the pipe");
+    }
+
+    /// Reads the next JSON-RPC line the server wrote.
+    async fn next(
+        reader: &mut tokio::io::Lines<BufReader<ReadHalf<DuplexStream>>>,
+    ) -> serde_json::Value {
+        let line = reader
+            .next_line()
+            .await
+            .expect("read from the pipe")
+            .expect("a line before the server closes the pipe");
+        serde_json::from_str(&line).expect("the server writes JSON-RPC lines")
+    }
+
+    /// One `tools/call` of `ridl_check` over `source` as typl.
+    fn call(id: u32, source: &str) -> serde_json::Value {
+        json!({
+            "jsonrpc": "2.0",
+            "id": id,
+            "method": "tools/call",
+            "params": {
+                "name": "ridl_check",
+                "arguments": { "source": source, "profile": "typl" }
+            }
+        })
+    }
+
+    // Without `spawn_blocking` in `ridl_check`, a panic ends the task `rmcp`
+    // spawned for the request before it sends any response, so the client
+    // waits for an answer that never comes: this test then fails on its
+    // timeout, with the second call never made.
+    #[tokio::test]
+    async fn a_checker_panic_fails_that_call_and_the_server_answers_the_next() {
+        tokio::time::timeout(Duration::from_secs(20), async {
+            let mut server = RidlMcp::new();
+            server.check = check_or_panic;
+            // The server is served over one end of an in-process pipe and the
+            // test speaks newline-delimited JSON-RPC on the other end: the
+            // framing stdio uses, without the `client` feature of `rmcp`.
+            let (server_end, client_end) = tokio::io::duplex(64 * 1024);
+            let served = tokio::spawn(async move {
+                let service = server
+                    .serve(server_end)
+                    .await
+                    .expect("the initialize handshake");
+                service.waiting().await.expect("the serve loop task joins")
+            });
+            let (client_read, mut client_write) = tokio::io::split(client_end);
+            let mut responses = BufReader::new(client_read).lines();
+
+            send(
+                &mut client_write,
+                json!({
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-06-18",
+                        "capabilities": {},
+                        "clientInfo": { "name": "lib-test", "version": "0.0.0" }
+                    }
+                }),
+            )
+            .await;
+            let initialized = next(&mut responses).await;
+            assert_eq!(
+                initialized["result"]["serverInfo"]["name"],
+                json!("ridl-mcp"),
+                "{initialized}"
+            );
+            send(
+                &mut client_write,
+                json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
+            )
+            .await;
+
+            // The panicking call gets an error response, not silence.
+            send(&mut client_write, call(2, "panic")).await;
+            let failed = next(&mut responses).await;
+            assert_eq!(failed["id"], json!(2), "{failed}");
+            assert!(failed.get("result").is_none(), "{failed}");
+            let message = failed["error"]["message"]
+                .as_str()
+                .unwrap_or_else(|| panic!("an error message: {failed}"));
+            assert!(
+                message.starts_with("the checker failed on this input"),
+                "{failed}"
+            );
+            assert!(
+                message.contains("a checker panic driven by the test"),
+                "{failed}"
+            );
+            assert!(
+                !message.contains("panicked at"),
+                "no panic location in the response: {failed}"
+            );
+
+            // The server still serves: the next call is answered in full.
+            send(&mut client_write, call(3, BROKEN_TYPL)).await;
+            let answered = next(&mut responses).await;
+            assert_eq!(answered["id"], json!(3), "{answered}");
+            let text = answered["result"]["content"][0]["text"]
+                .as_str()
+                .unwrap_or_else(|| panic!("one text block: {answered}"));
+            let output: serde_json::Value =
+                serde_json::from_str(text).expect("the block holds JSON");
+            assert_eq!(
+                output["diagnostics"][0]["code"],
+                json!("FORM-101"),
+                "{answered}"
+            );
+
+            // Closing the write side is the host closing stdin: a clean end.
+            client_write.shutdown().await.expect("close the pipe");
+            let reason = served.await.expect("the server task joins");
+            assert!(matches!(reason, QuitReason::Closed), "{reason:?}");
+        })
+        .await
+        .expect("the test did not finish within the timeout");
     }
 
     #[test]

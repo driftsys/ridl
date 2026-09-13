@@ -23,3 +23,11 @@ serde_json.workspace = true
 # here so a later `rmcp` release that stops enabling them fails as a missing
 # feature rather than as an unexplained error in this crate.
 tokio.workspace = true
+
+[dev-dependencies]
+# The panic test serves the router over an in-process pipe and reads the
+# responses back: `io-util` is `tokio::io::duplex`, `split` and the line
+# reader; `time` is the timeout that turns a lost response into a failure
+# rather than a hung run. `rmcp` enables both today; naming them here follows
+# the rule the `tokio` line above states.
+tokio = { workspace = true, features = ["io-util", "time"] }
