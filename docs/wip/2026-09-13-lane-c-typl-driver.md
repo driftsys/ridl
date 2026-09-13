@@ -3,7 +3,7 @@
 Transient working memory for `2026-09-13-step1-lanes-plan.md`. Start a fresh
 session in `.claude/worktrees/lane-c-typl` and paste the block below as the
 first message, once per stage: each stage is one session, and the session ends
-when the stage's pull request has merged. C1 and C2 may run as two sessions at
+when the stage's pull requests have merged. C1 and C2 may run as two sessions at
 the same time. Archive this file with the lanes plan.
 
 ## Model routing
@@ -67,8 +67,8 @@ for each resolved question that needs code. Docs-only pull request,
 `docs(typl): ...`. Run /review <PR> (the docs-only lane), fix, pass 2,
 `just verify`, merge.
 E14.3 (#320: both references drop "Draft", and the rxdl reference gains
-its status line) is done by whichever
-lane merges second: this stage or lane L's L5.
+its status line) is its own small pull request, opened by the lane that
+merges the last of this stage, C4 Task 10 and lane L's L5.
 
 == C2 — the Epic 10 plan refresh (branch docs/typl-value-objects-refresh) ==
 The plan is dated 2026-08-03, before #238 (the pinned name transform), #241

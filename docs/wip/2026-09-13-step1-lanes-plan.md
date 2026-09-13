@@ -68,12 +68,13 @@ Agreed with Sebastien on 2026-09-13.
   emitter, so the snapshots change once instead of twice. #302 stays where it
   is, because it is a wire discriminant question, not a naming question. The
   roadmap pull request records the move.
-- **P-6 E14.2 is the last stage of lane L, and E14.3 is the last item of the
-  typl debt.** The lock retires RIDL-146, RIDL-147 and RIDL-148 and amends
+- **P-6 E14.2 is the last stage of lane L, and E14.3 is its own small pull
+  request.** The lock retires RIDL-146, RIDL-147 and RIDL-148 and amends
   ADR-0015, and ridl §17 questions that cite ADR-0015 may change with it. E14.3
-  is one small edit once E14.1 and E14.2 have both merged. The Rust codegen,
-  finalized, still follows the typl debt in step 1, as the roadmap's sequence
-  says.
+  changes the typl and ridl references, so it waits for every earlier change to
+  them: C1 (E14.1), C4 Task 10 and L5 (E14.2). The lane that merges the last of
+  those three opens it. The Rust codegen, finalized, still follows the typl debt
+  in step 1, as the roadmap's sequence says.
 - **P-7 One driver session per stage, at most three lanes waiting for Sebastien
   at a time.** A lane runs one stage at a time, with one exception: lane C's C1
   and C2 are independent and may run as two sessions at once, each in its own
@@ -107,12 +108,14 @@ worktrees, checks out their branches, or runs a formatter in their directories.
 | Session          | Branch and worktree                                                                                         | Files it changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ---------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | S1 tooling       | `feat/ridl-mcp-v0`, `.claude/worktrees/feat+ridl-mcp-v0`, PR #327                                           | `crates/ridl` (including `src/main.rs` and `tests/`), `crates/ridl-core/src/diag.rs` and its snapshot, `ridl-lsp`, the new `ridl-mcp`, `crates/ridlc/src/lib.rs` and `tests/`, `editors/vscode`, `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `justfile`, `.github/workflows/`, `.gitignore`, `install.sh`, `install.ps1`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `docs/ROADMAP.md`, `docs/book/cli-reference.md`, `docs/technotes/`, `docs/archive/`, ADR-0005, ADR-0007, ADR-0010 |
-| S2 baseline gate | `baseline-tombstone-gate`, `.claude/worktrees/baseline-tombstone-gate`; two pull requests (its design, D-6) | `crates/ridl/src/main.rs`, `crates/ridl/tests/` (`baseline_gate.rs` new, `baseline_desk.rs`), `crates/ridl-core/src/diag.rs` (RIDL-408), `crates/ridlc/tests/corpus.rs` (the RIDL-408 catalogue row), `ridl-diff` (`MemberReordered`), ADR-0010, the ridl reference, `docs/book/cli-reference.md`                                                                                                                                                                                         |
+| S2 baseline gate | `baseline-tombstone-gate`, `.claude/worktrees/baseline-tombstone-gate`; two pull requests (its design, D-6) | `crates/ridl/src/main.rs`, `crates/ridl/tests/` (`baseline_gate.rs` new, `baseline_desk.rs`), `crates/ridl-core/src/diag.rs` (RIDL-408), `crates/ridlc/tests/corpus.rs` (the RIDL-408 catalogue row), `ridl-diff` (`MemberReordered`), ADR-0010, the ridl reference (including new §17.12 and §17.13), `docs/specification/ridl-family-overview.md` (the open-question index), `docs/book/cli-reference.md`, `docs/wip/README.md`, `docs/archive/` (its own design and plan)              |
 
-S2's design and plan are on its local branch and not on `main`. A lane reads
-them with
-`git show baseline-tombstone-gate:docs/wip/2026-09-13-baseline-gate-design.md`,
-never by checking the branch out.
+S2's design and plan are archived under `docs/archive/` on its local branch, and
+reach `main` when S2 merges. Until then a lane reads them with
+`git show baseline-tombstone-gate:docs/archive/2026-09-13-baseline-gate-design.md`
+(and `-plan.md`), never by checking the branch out. The branch is still
+changing: `git diff --stat origin/main...baseline-tombstone-gate` gives its
+current file list.
 
 ## 4. The lanes
 
@@ -171,11 +174,11 @@ Driver prompt: `2026-09-13-lane-c-typl-driver.md`. Stories: #318, #246 to #255.
 | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------- |
 | C1    | E14.1: one disposition per typl §17 question (13 items; items 12 and 13 are the two rows the re-scope added, from §3.10 and §3.11 of the release-scope note), §17.11 first, plus a row for the decision #245 asks for | Fable drafts, Sebastien decides                                                             | G1 or G2      |
 | C2    | Bring `docs/wip/typl-value-objects-plan.md` up to date with the code: Task 9 (TypeScript) moves to step 2, and a task is added for #243 and #237                                                                      | Sonnet checks each reference, Opus edits                                                    | G1 or G2      |
-| C3    | Defects #244 and #203; #245 once C1 has decided it                                                                                                                                                                    | Sonnet for #244, Opus for #203                                                              | G1, G2        |
+| C3    | Defects #244 and #203; #245 once C1 has decided it                                                                                                                                                                    | Sonnet for #244, Opus for #203 and #245                                                     | G1, G2        |
 | C4    | Epic 10 Tasks 1 to 8 and 10, plus the #243 and #237 task                                                                                                                                                              | Fable for Tasks 3 and 6 and the naming task; Opus for 1, 7, 8 and 10; Sonnet for 2, 4 and 5 | C2 merged, G2 |
 
 E14.3 (#320: both references drop "Draft", and the rxdl reference gains its
-status line) follows C1 and L5.
+status line) follows C1, C4 Task 10 and L5 (P-6).
 
 ## 5. Gates
 
@@ -201,18 +204,19 @@ below is the expected merge order, not a queue: a lane may go before its turn
 when no other open pull request changes the file, and it says so on the
 coordination issue before it pushes.
 
-| File                                                     | Order                                                                              |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `crates/ridlc/src/lib.rs` (the `Emit` enum)              | S1 → C4 Task 7 → #324 → B4                                                         |
-| `crates/ridl-core/src/diag.rs`                           | S1 and S2 → L4 → C3 → B3                                                           |
-| `crates/ridl-diff/`                                      | S2 → L4                                                                            |
-| `crates/ridl/src/main.rs`                                | S1 and S2 → L4 (`ridl lock`) → #324 (`ridl describe`)                              |
-| `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `AGENTS.md` | S1 → A3 (the new crate) → the next new crate                                       |
-| `docs/ROADMAP.md`                                        | S1 → L3 → B2                                                                       |
-| `docs/specification/ridl-language-reference.md`          | S2 → B1 (§4 census items) → L4 → L5 → E14.3                                        |
-| `docs/specification/typl-language-reference.md`          | C1 → C4 Task 10 → E14.3                                                            |
-| `docs/book/cli-reference.md`                             | S1 and S2 → L4 → #324                                                              |
-| `docs/decisions/ADR-0010-cli-conventions.md`             | S1 and S2 → B1 or B2 (§4 census items) → L4 (`ridl lock`) → #324 (`ridl describe`) |
+| File                                                     | Order                                                 |
+| -------------------------------------------------------- | ----------------------------------------------------- |
+| `crates/ridlc/src/lib.rs` (the `Emit` enum)              | S1 → C4 Task 7 → #324 → B4                            |
+| `crates/ridl-core/src/diag.rs`                           | S1 and S2 → L4 → C3 → B3                              |
+| `crates/ridl-diff/`                                      | S2 → L4                                               |
+| `crates/ridl/src/main.rs`                                | S1 and S2 → L4 (`ridl lock`) → #324 (`ridl describe`) |
+| `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `AGENTS.md` | S1 → A3 (the new crate) → the next new crate          |
+| `docs/ROADMAP.md`                                        | S1 → L3 → B2                                          |
+| `docs/specification/ridl-language-reference.md`          | S2 → B1 (§4 census items) → L4 → L5 → E14.3           |
+| `docs/specification/ridl-family-overview.md`             | S2 → B1 (§4 census items) → L5                        |
+| `docs/specification/typl-language-reference.md`          | C1 → C4 Task 10 → E14.3                               |
+| `docs/book/cli-reference.md`                             | S1 and S2 → L4 → #324                                 |
+| `docs/decisions/ADR-0010-cli-conventions.md`             | S1 and S2 → L4 (`ridl lock`) → #324 (`ridl describe`) |
 
 ## 7. Rules every lane follows
 

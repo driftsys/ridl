@@ -3,7 +3,8 @@
 Transient working memory for `2026-09-13-step1-lanes-plan.md`. Start a fresh
 session in `.claude/worktrees/lane-b-rsdl` and paste the block below as the
 first message, once per stage: each stage is one session, and the session ends
-when the stage's pull request has merged. Archive this file with the lanes plan.
+when the stage's pull requests have merged. Archive this file with the lanes
+plan.
 
 ## Model routing
 
@@ -77,9 +78,9 @@ and not as a protobuf schema. Cite the lock once, as an input to the
 lowering; lane L specifies it.
 Apply the §4 amendments in the same pull request, split this way: items
 about identity, the lock, RIDL-146 to RIDL-148 or ADR-0015 belong to lane
-L — leave them. Roadmap edits belong to B2. Edits to the ridl reference wait for G1, because the baseline gate
-session changes it. Edits to ADR-0010 wait for G1 and G2, because both
-running sessions change it. If a gate does not hold yet, list those edits
+L — leave them. Roadmap edits belong to B2. Edits to the ridl reference and to the family overview wait for G1,
+because the baseline gate session changes both. The one §4 item about
+ADR-0010 is about the lock, so it is lane L's. If a gate does not hold yet, list those edits
 on #328 for B2. Apply everything else.
 Docs-only pull request, `docs(rsdl): rewrite the rsdl reference`. Run
 /review <PR> (the docs-only lane), fix, pass 2, `just verify`, merge.

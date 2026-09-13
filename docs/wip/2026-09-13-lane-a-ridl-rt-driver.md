@@ -3,7 +3,8 @@
 Transient working memory for `2026-09-13-step1-lanes-plan.md`. Start a fresh
 session in `.claude/worktrees/lane-a-ridl-rt` and paste the block below as the
 first message, once per stage: each stage is one session, and the session ends
-when the stage's pull request has merged. Archive this file with the lanes plan.
+when the stage's pull requests have merged. Archive this file with the lanes
+plan.
 
 ## Model routing
 

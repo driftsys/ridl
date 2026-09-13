@@ -3,7 +3,8 @@
 Transient working memory for `2026-09-13-step1-lanes-plan.md`. Start a fresh
 session in `.claude/worktrees/lane-l-lock` and paste the block below as the
 first message, once per stage: each stage is one session, and the session ends
-when the stage's pull request has merged. Archive this file with the lanes plan.
+when the stage's pull requests have merged. Archive this file with the lanes
+plan.
 
 ## Model routing
 
@@ -49,8 +50,9 @@ Read for every stage:
 - docs/decisions/ADR-0010-cli-conventions.md — every subcommand follows it
 - the baseline gate session's design and plan, read without checking out
   its branch:
-    git show baseline-tombstone-gate:docs/wip/2026-09-13-baseline-gate-design.md
-    git show baseline-tombstone-gate:docs/wip/2026-09-13-baseline-gate-plan.md
+    git show baseline-tombstone-gate:docs/archive/2026-09-13-baseline-gate-design.md
+    git show baseline-tombstone-gate:docs/archive/2026-09-13-baseline-gate-plan.md
+  (on main under docs/archive/ once that session has merged)
   Its D-5 limits that gate to the interaction level; the interface level
   is this lane's
 - docs/wip/2026-09-13-catalog-descriptor-plan.md — Tasks 3 and 4 (the
@@ -106,8 +108,8 @@ tasks of the catalog descriptor plan (#324) — neither has a place in the
 roadmap today; ask Sebastien which epic they sit under, and check
 docs/archive/roadmap-landed-record.md so no row reuses a parked identifier;
 (3) P-5: #243 and #237 move to Epic 10's carried defects;
-(4) P-6: E14.2 after the lock, and E14.3 after E14.1 and E14.2; the Rust
-codegen, finalized, still follows the typl debt.
+(4) P-6: E14.2 after the lock; E14.3 after E14.1, Epic 10 Task 10 and
+E14.2; the Rust codegen, finalized, still follows the typl debt.
 Then prepare the story issues for the new rows, check the list, and give it
 to a Sonnet subagent to file. `docs(roadmap): ...`. /review, merge.
 
@@ -125,12 +127,13 @@ Gate: L4 merged. Draft a table with one row per open question in the ridl
 reference's §17: what it asks, the options, a recommendation, and what it
 blocks. Walk it with Sebastien one row at a time. Each question is resolved
 (its text moves into the section it changes) or deferred to a named
-version. The QoS and bound terms must agree with ADR-0015. Docs-only pull
+version. The baseline gate session added §17.12 and §17.13; include them.
+The QoS and bound terms must agree with ADR-0015. Docs-only pull
 request, `docs(ridl): ...`. Run sdd-gardening over lane L's design and plan
 in this pull request. /review, merge.
 E14.3 (#320: both references drop "Draft", and the rxdl reference gains
-its status line) is done by whichever
-lane merges second: lane C's C1 or this stage.
+its status line) is its own small pull request, opened by the lane that
+merges the last of lane C's C1, lane C's C4 Task 10 and this stage.
 The lane then hands over to executing #324, after Sebastien confirms the
 seven dispositions that plan takes.
 
