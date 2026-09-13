@@ -80,33 +80,41 @@ async fn call_ridl_check(
 
 #[tokio::test]
 async fn ridl_mcp_advertises_ridl_check() {
-    let client = connect().await;
-    let tools = client
-        .list_tools(Default::default())
-        .await
-        .expect("tools/list");
-    let names: Vec<&str> = tools.tools.iter().map(|tool| tool.name.as_ref()).collect();
-    assert_eq!(names, ["ridl_check"]);
-    client.cancel().await.expect("shutdown");
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect().await;
+        let tools = client
+            .list_tools(Default::default())
+            .await
+            .expect("tools/list");
+        let names: Vec<&str> = tools.tools.iter().map(|tool| tool.name.as_ref()).collect();
+        assert_eq!(names, ["ridl_check"]);
+        client.cancel().await.expect("shutdown");
+    })
+    .await
+    .expect("ridl_mcp_advertises_ridl_check did not finish within the timeout");
 }
 
 #[tokio::test]
 async fn ridl_check_returns_the_diagnostic_contract() {
-    let client = connect().await;
-    let output = call_ridl_check(&client, BROKEN_TYPL, "typl").await;
-    client.cancel().await.expect("shutdown");
+    tokio::time::timeout(TIMEOUT, async {
+        let client = connect().await;
+        let output = call_ridl_check(&client, BROKEN_TYPL, "typl").await;
+        client.cancel().await.expect("shutdown");
 
-    let diagnostics = output["diagnostics"]
-        .as_array()
-        .unwrap_or_else(|| panic!("a diagnostics array: {output}"));
-    assert_eq!(diagnostics.len(), 1, "{output}");
-    let diagnostic = &diagnostics[0];
-    assert_eq!(diagnostic["code"], "FORM-101", "{output}");
-    assert_eq!(diagnostic["severity"], "error", "{output}");
-    assert_eq!(diagnostic["span"]["path"], "input.typl", "{output}");
-    assert_eq!(diagnostic["span"]["start"]["line"], 2, "{output}");
-    assert_eq!(diagnostic["span"]["start"]["column"], 8, "{output}");
-    assert!(diagnostic["fixes"].is_array(), "{output}");
+        let diagnostics = output["diagnostics"]
+            .as_array()
+            .unwrap_or_else(|| panic!("a diagnostics array: {output}"));
+        assert_eq!(diagnostics.len(), 1, "{output}");
+        let diagnostic = &diagnostics[0];
+        assert_eq!(diagnostic["code"], "FORM-101", "{output}");
+        assert_eq!(diagnostic["severity"], "error", "{output}");
+        assert_eq!(diagnostic["span"]["path"], "input.typl", "{output}");
+        assert_eq!(diagnostic["span"]["start"]["line"], 2, "{output}");
+        assert_eq!(diagnostic["span"]["start"]["column"], 8, "{output}");
+        assert!(diagnostic["fixes"].is_array(), "{output}");
+    })
+    .await
+    .expect("ridl_check_returns_the_diagnostic_contract did not finish within the timeout");
 }
 
 /// Blanks the file path out of every span in a diagnostic array, in place.
@@ -137,35 +145,39 @@ fn blank_span_paths(diagnostics: &mut serde_json::Value) {
 /// exactly where the two may legitimately diverge.
 #[tokio::test]
 async fn ridl_check_and_check_format_json_agree() {
-    // The CLI side.
-    let dir = TempDir::new("agree");
-    let path = dir.write("agree.typl", BROKEN_TYPL);
-    let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
-        .args(["check", "--format", "json"])
-        .arg(&path)
-        .output()
-        .expect("run ridl check");
-    // Checked first: on every exit-2 path `--format json` returns before it
-    // prints anything, so stdout is empty and the parse below would report a
-    // JSON error instead of the real failure.
-    assert_eq!(cli.status.code(), Some(1), "{cli:?}");
-    let mut cli: serde_json::Value =
-        serde_json::from_slice(&cli.stdout).expect("the CLI prints JSON to stdout");
+    tokio::time::timeout(TIMEOUT, async {
+        // The CLI side.
+        let dir = TempDir::new("agree");
+        let path = dir.write("agree.typl", BROKEN_TYPL);
+        let cli = StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+            .args(["check", "--format", "json"])
+            .arg(&path)
+            .output()
+            .expect("run ridl check");
+        // Checked first: on every exit-2 path `--format json` returns before it
+        // prints anything, so stdout is empty and the parse below would report a
+        // JSON error instead of the real failure.
+        assert_eq!(cli.status.code(), Some(1), "{cli:?}");
+        let mut cli: serde_json::Value =
+            serde_json::from_slice(&cli.stdout).expect("the CLI prints JSON to stdout");
 
-    // The MCP side.
-    let client = connect().await;
-    let mut mcp = call_ridl_check(&client, BROKEN_TYPL, "typl").await;
-    client.cancel().await.expect("shutdown");
-    // The tool wraps its array in an object; the CLI prints the bare array.
-    let mut mcp = mcp["diagnostics"].take();
+        // The MCP side.
+        let client = connect().await;
+        let mut mcp = call_ridl_check(&client, BROKEN_TYPL, "typl").await;
+        client.cancel().await.expect("shutdown");
+        // The tool wraps its array in an object; the CLI prints the bare array.
+        let mut mcp = mcp["diagnostics"].take();
 
-    assert!(
-        cli.as_array().is_some_and(|array| !array.is_empty()),
-        "the fixture must produce at least one diagnostic, or this proves nothing: {cli}"
-    );
-    blank_span_paths(&mut cli);
-    blank_span_paths(&mut mcp);
-    assert_eq!(cli, mcp);
+        assert!(
+            cli.as_array().is_some_and(|array| !array.is_empty()),
+            "the fixture must produce at least one diagnostic, or this proves nothing: {cli}"
+        );
+        blank_span_paths(&mut cli);
+        blank_span_paths(&mut mcp);
+        assert_eq!(cli, mcp);
+    })
+    .await
+    .expect("ridl_check_and_check_format_json_agree did not finish within the timeout");
 }
 
 // ---------------------------------------------------------------------------

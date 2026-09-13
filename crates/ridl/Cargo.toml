@@ -40,5 +40,7 @@ pulldown-cmark.workspace = true
 rmcp = { workspace = true, features = ["client", "transport-child-process"] }
 # `process` for `tokio::process::Command`, which the child-process transport
 # takes. `transport-child-process` enables it too; naming it here makes the
-# test's own requirement explicit rather than inherited.
-tokio = { workspace = true, features = ["process"] }
+# test's own requirement explicit rather than inherited. `time` for
+# `tokio::time::timeout`, which bounds every `#[tokio::test]` below — `cargo
+# test` has no per-test timeout of its own.
+tokio = { workspace = true, features = ["process", "time"] }
