@@ -1,7 +1,9 @@
 //! Integration tests for the composite body reorder category
-//! (docs/wip/2026-09-13-baseline-gate-design.md, driftsys/ridl#314): `ridl
-//! diff` reporting a swapped struct field as `member_reordered` rather than a
-//! whole-container `constraint_changed`.
+//! (driftsys/ridl#314; typl §7.4 in
+//! `docs/specification/typl-language-reference.md` for the ordinal rule, and
+//! its §17.14 for the enum and enum-set treatment): `ridl diff` reporting a
+//! swapped struct field as `member_reordered` rather than a whole-container
+//! `constraint_changed`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -15,7 +17,7 @@ impl TempDir {
         static COUNTER: AtomicUsize = AtomicUsize::new(0);
         let mut path = std::env::temp_dir();
         path.push(format!(
-            "ridl-baseline-{label}-{}-{}",
+            "ridl-reorder-{label}-{}-{}",
             std::process::id(),
             COUNTER.fetch_add(1, Ordering::SeqCst),
         ));
@@ -256,8 +258,8 @@ fn only_the_members_that_moved_are_reported() {
 
 /// A reorder that arrives in the same edit as an in-place change reports both:
 /// the moved members as `member_reordered`, and the container as
-/// `constraint_changed` for the content that changed. Reporting the reorder
-/// alone would hide the retype.
+/// `constraint_changed` for the content that changed, after the member lines.
+/// Reporting the reorder alone would hide the retype.
 #[test]
 fn a_reorder_with_an_in_place_change_reports_both() {
     let dir = TempDir::new("reorder-and-retype");
@@ -268,19 +270,27 @@ fn a_reorder_with_an_in_place_change_reports_both() {
     let out = format!("{stdout}{stderr}");
 
     assert_eq!(code, 1, "a reorder is a wire break:\n{out}");
+    let door = out.find("member_reordered veh.cluster/Report/door");
+    let latch = out.find("member_reordered veh.cluster/Report/latch");
+    let container = out.find("constraint_changed veh.cluster/Report\n");
     assert!(
-        out.contains("member_reordered veh.cluster/Report/door")
-            && out.contains("member_reordered veh.cluster/Report/latch"),
+        door.is_some() && latch.is_some(),
         "both moved members are reported:\n{out}",
     );
     assert!(
-        out.contains("constraint_changed veh.cluster/Report\n"),
+        container.is_some(),
         "the in-place retype is reported on the container as well:\n{out}",
+    );
+    assert!(
+        container > door && container > latch,
+        "the container line follows the member lines:\n{out}",
     );
 }
 
 /// An enum value's number is explicit content, not a position. A reorder that
-/// also changes a value reports the container as `constraint_changed`.
+/// also changes a value reports the moved values as `member_reordered`, each
+/// with its 1-based position in the body, and the container as
+/// `constraint_changed`.
 #[test]
 fn an_enum_reorder_with_a_changed_value_reports_constraint_changed() {
     let dir = TempDir::new("enum-reorder-revalue");
@@ -291,6 +301,17 @@ fn an_enum_reorder_with_a_changed_value_reports_constraint_changed() {
     let out = format!("{stdout}{stderr}");
 
     assert_eq!(code, 1, "a changed enum value is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/GearPosition/PARK: position 1 -> position 2\n")
+            && out.contains(
+                "member_reordered veh.cluster/GearPosition/DRIVE: position 2 -> position 1\n"
+            ),
+        "both moved values are reported with their positions:\n{out}",
+    );
+    assert!(
+        !out.contains("member_reordered veh.cluster/GearPosition/REVERSE"),
+        "a value that kept its position is not reported:\n{out}",
+    );
     assert!(
         out.contains("constraint_changed veh.cluster/GearPosition\n"),
         "the changed value is reported on the container:\n{out}",
@@ -387,9 +408,9 @@ fn a_moved_struct_tombstone_is_not_identical() {
 
 /// The order of an enum's tombstones is removed by the order-insensitive
 /// comparison, so that comparison alone would read a reordered reserved list
-/// as equal. The bodies differ, and the walk does not read the reserved list
-/// as identities, so the report is conservative: breaking, never `identical`
-/// with exit 0.
+/// as equal. The bodies differ, no value moved, and the walk does not read the
+/// reserved list as identities, so the report is conservative: the container's
+/// `constraint_changed`, breaking, never `identical` with exit 0.
 #[test]
 fn a_reordered_enum_reserved_list_is_not_identical() {
     let dir = TempDir::new("enum-reserved-reordered");
@@ -407,6 +428,11 @@ fn a_reordered_enum_reserved_list_is_not_identical() {
         stdout.starts_with("breaking"),
         "the report verdict is breaking, not identical:\n{out}",
     );
+    assert!(
+        out.contains("constraint_changed veh.cluster/GearPosition\n"),
+        "the change is reported on the container:\n{out}",
+    );
+    assert!(!out.contains("member_reordered"), "no value moved:\n{out}",);
 }
 
 /// The tombstone moves after both fields: `door` is now ordinal 1 and `latch`
@@ -563,5 +589,300 @@ fn a_tombstone_move_with_a_swap_reports_only_the_ordinals_that_changed() {
     assert!(
         !out.contains("constraint_changed"),
         "nothing changed in place, so nothing is reported on the container:\n{out}",
+    );
+}
+
+/// `PARK` and `DRIVE` swap places in the text, and so do the two tombstones.
+/// Every value and every retired number is unchanged.
+const GEARS_AND_RESERVED_REORDERED: &str = "package veh.cluster
+enum GearPosition {
+  DRIVE = 1
+  PARK = 0
+  reserved 4
+  reserved 3
+}
+";
+
+/// With a value moved, the order-insensitive comparison decides whether
+/// anything else changed, and it removes the order of the reserved list along
+/// with the order of the values: the report is the two moved values and
+/// nothing on the container.
+#[test]
+fn an_enum_reorder_with_its_reserved_list_reordered_reports_only_the_values() {
+    let dir = TempDir::new("enum-and-reserved-reordered");
+    let old = workspace(&dir, "old", GEARS_WITH_RESERVED);
+    let new = workspace(&dir, "new", GEARS_AND_RESERVED_REORDERED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is reported breaking:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/GearPosition/PARK: position 1 -> position 2\n")
+            && out.contains(
+                "member_reordered veh.cluster/GearPosition/DRIVE: position 2 -> position 1\n"
+            ),
+        "both moved values are reported:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "the order of the reserved list is not content:\n{out}",
+    );
+}
+
+const ARMS: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+type Level: integer [0..100]
+union Reading {
+  door: DoorState
+  count: Count
+}
+";
+
+/// The two arms swap places. Names and types are untouched.
+const ARMS_SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+type Level: integer [0..100]
+union Reading {
+  count: Count
+  door: DoorState
+}
+";
+
+/// The two arms swap places and, in the same edit, `door` changes type.
+const ARMS_SWAPPED_AND_RETYPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+type Level: integer [0..100]
+union Reading {
+  count: Count
+  door: Level
+}
+";
+
+/// A tombstone ahead of both arms: `door` is ordinal 2 and `count` ordinal 3.
+const ARMS_TOMBSTONE_FIRST: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+type Level: integer [0..100]
+union Reading {
+  reserved oldArm
+  door: DoorState
+  count: Count
+}
+";
+
+/// The tombstone moves after both arms: `door` is now ordinal 1 and `count`
+/// ordinal 2.
+const ARMS_TOMBSTONE_LAST: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+type Level: integer [0..100]
+union Reading {
+  door: DoorState
+  count: Count
+  reserved oldArm
+}
+";
+
+/// Two tombstones between the arms.
+const ARMS_TWO_TOMBSTONES: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+type Level: integer [0..100]
+union Reading {
+  door: DoorState
+  reserved legacyA
+  reserved legacyB
+  count: Count
+}
+";
+
+/// The arms swap places and so do the two tombstones between them.
+const ARMS_TWO_TOMBSTONES_SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+type Level: integer [0..100]
+union Reading {
+  count: Count
+  reserved legacyB
+  reserved legacyA
+  door: DoorState
+}
+";
+
+/// A union arm takes its wire identity from its ordinal as a struct field does
+/// (typl §7.4): a swap is one `member_reordered` per arm, with the ordinals,
+/// and nothing on the container.
+#[test]
+fn a_swapped_union_arm_reports_member_reordered() {
+    let dir = TempDir::new("union-swap");
+    let old = workspace(&dir, "old", ARMS);
+    let new = workspace(&dir, "new", ARMS_SWAPPED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Reading/door: ordinal 1 -> ordinal 2\n")
+            && out.contains("member_reordered veh.cluster/Reading/count: ordinal 2 -> ordinal 1\n"),
+        "both moved arms are reported with their ordinals:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "nothing changed in place, so nothing is reported on the container:\n{out}",
+    );
+}
+
+/// A union reorder that arrives with a retyped arm reports both, as a struct
+/// does: the moved arms, then the container's `constraint_changed`.
+#[test]
+fn a_union_reorder_with_a_retyped_arm_reports_both() {
+    let dir = TempDir::new("union-swap-and-retype");
+    let old = workspace(&dir, "old", ARMS);
+    let new = workspace(&dir, "new", ARMS_SWAPPED_AND_RETYPED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Reading/door")
+            && out.contains("member_reordered veh.cluster/Reading/count"),
+        "both moved arms are reported:\n{out}",
+    );
+    assert!(
+        out.contains("constraint_changed veh.cluster/Reading\n"),
+        "the retype is reported on the container as well:\n{out}",
+    );
+}
+
+/// A union tombstone written after the arms it used to precede shifts every
+/// arm after it, and the order-insensitive comparison clears the tombstone's
+/// ordinal as it clears the arms', so nothing is reported on the container.
+#[test]
+fn a_union_tombstone_moved_to_the_end_shifts_every_arm_after_it() {
+    let dir = TempDir::new("union-tombstone-last");
+    let old = workspace(&dir, "old", ARMS_TOMBSTONE_FIRST);
+    let new = workspace(&dir, "new", ARMS_TOMBSTONE_LAST);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a shifted arm ordinal is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Reading/door: ordinal 2 -> ordinal 1\n")
+            && out.contains("member_reordered veh.cluster/Reading/count: ordinal 3 -> ordinal 2\n"),
+        "both arms slid down one ordinal:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "nothing changed in place, so nothing is reported on the container:\n{out}",
+    );
+}
+
+/// The order of a union's tombstone list is removed by the order-insensitive
+/// comparison along with the order of the arms, so two tombstones that swap
+/// in the same edit as the arms add nothing to the report.
+#[test]
+fn a_union_swap_with_its_tombstones_swapped_reports_only_the_arms() {
+    let dir = TempDir::new("union-two-tombstones");
+    let old = workspace(&dir, "old", ARMS_TWO_TOMBSTONES);
+    let new = workspace(&dir, "new", ARMS_TWO_TOMBSTONES_SWAPPED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Reading/door: ordinal 1 -> ordinal 4\n")
+            && out.contains("member_reordered veh.cluster/Reading/count: ordinal 4 -> ordinal 1\n"),
+        "both moved arms are reported with their ordinals:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "the order of the tombstone list is not content:\n{out}",
+    );
+}
+
+const FLAGS: &str = "package veh.cluster
+enumset WarningFlags {
+  LOW_FUEL = 0
+  CHECK_ENGINE = 1
+  DOOR_OPEN = 2
+}
+";
+
+/// `LOW_FUEL` and `CHECK_ENGINE` swap places in the text. Every bit is
+/// unchanged.
+const FLAGS_REORDERED: &str = "package veh.cluster
+enumset WarningFlags {
+  CHECK_ENGINE = 1
+  LOW_FUEL = 0
+  DOOR_OPEN = 2
+}
+";
+
+/// `LOW_FUEL` and `CHECK_ENGINE` swap places in the text and, in the same edit,
+/// `DOOR_OPEN` takes a new bit while keeping its position.
+const FLAGS_REORDERED_AND_REBITTED: &str = "package veh.cluster
+enumset WarningFlags {
+  CHECK_ENGINE = 1
+  LOW_FUEL = 0
+  DOOR_OPEN = 5
+}
+";
+
+/// An enum-set bit is treated as an enum value: a textual reorder with every
+/// bit unchanged is reported by position, conservatively, and nothing on the
+/// container.
+#[test]
+fn an_enum_set_reorder_with_unchanged_bits_reports_only_member_reordered() {
+    let dir = TempDir::new("enumset-reorder");
+    let old = workspace(&dir, "old", FLAGS);
+    let new = workspace(&dir, "new", FLAGS_REORDERED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is reported breaking:\n{out}");
+    assert!(
+        out.contains(
+            "member_reordered veh.cluster/WarningFlags/LOW_FUEL: position 1 -> position 2\n"
+        ) && out.contains(
+            "member_reordered veh.cluster/WarningFlags/CHECK_ENGINE: position 2 -> position 1\n"
+        ),
+        "both moved bits are reported with their positions:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "no bit changed, so nothing is reported on the container:\n{out}",
+    );
+}
+
+/// An enum-set reorder that also changes a bit reports the container as
+/// `constraint_changed` as well: a changed bit is content, and must not hide
+/// behind the reorder.
+#[test]
+fn an_enum_set_reorder_with_a_changed_bit_reports_constraint_changed() {
+    let dir = TempDir::new("enumset-reorder-rebit");
+    let old = workspace(&dir, "old", FLAGS);
+    let new = workspace(&dir, "new", FLAGS_REORDERED_AND_REBITTED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a changed bit is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/WarningFlags/LOW_FUEL")
+            && out.contains("member_reordered veh.cluster/WarningFlags/CHECK_ENGINE"),
+        "both moved bits are reported:\n{out}",
+    );
+    assert!(
+        out.contains("constraint_changed veh.cluster/WarningFlags\n"),
+        "the changed bit is reported on the container:\n{out}",
     );
 }
