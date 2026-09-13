@@ -805,7 +805,7 @@ ridl diff old.ridl
 error: `ridl diff` needs both an old and a new input, or `--explain <CATEGORY>`
 ```
 
-and 2 for an `--explain` category that is not one of the twenty the tool
+and 2 for an `--explain` category that is not one of the categories the tool
 knows, which the error lists in full:
 
 ```sh
