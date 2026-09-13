@@ -3,10 +3,12 @@
 Status: working note, 2026-09-12, revised 2026-09-13. Settles the points the
 rsdl rewrite (design note §3.1) has to fix before a new reference can be
 written, fixes the language surface, and amends
-[`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md) §7
-where the two disagree. Each decision records its alternatives. Nothing here is
-ratified; until the rewrite lands, the rsdl reference is the record and this
-note is the proposal. Read after the vocabulary note and
+[`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md) — §1,
+§3, §7, the invariants V-05, V-06, V-10, V-11 and V-17, and the open items V-X1,
+V-X2 and V-X3 — where the two disagree; §4 lists each amendment. Each decision
+records its alternatives. Nothing here is ratified; until the rewrite lands, the
+rsdl reference is the record and this note is the proposal. Read after the
+vocabulary note and
 [`2026-09-12-release-scope-and-plugin-system-design.md`](2026-09-12-release-scope-and-plugin-system-design.md)
 §3.1, §3.8 and §3.13.
 
@@ -85,16 +87,19 @@ What a team has to know:
   `require` never share a position, so the near-collision is accepted.
 - One clause: `deployment X for Y`. Deployments are top-level so a bench
   topology can live in its own file.
-- Four rsdl attribute keys: `instances`, `external`, `tier`, and the family's
-  `labels`. Any other key is a backend's, namespaced `backend.key` (D-6).
+- Three rsdl-owned attribute keys, `instances`, `external` and `tier`, plus the
+  family's `labels`. Any other key is a backend's, namespaced `backend.key`
+  (D-6).
 - A system, a distribution and a machine list their members the same way. A
   member line is a reference, not a declaration, and may carry the attribute
   block.
 - A lone service may stand in for its component (D-1). A component without
   `instances` has one copy, written by its bare name (D-4).
 - Case carries the role, as everywhere in the family (R7): `Cruise` a component,
-  `Cruise.primary` an instance, `veh.adas.cruise` a service, `AdasHpc` a
-  machine, `ASIL_B` a label, `PLATFORM` a tier value.
+  `Cruise.primary` a declared instance (a member of its component, camelCase),
+  `veh.adas.cruise` a service, `AdasHpc` a machine, `ASIL_B` a label, `PLATFORM`
+  a tier value. The unit instance's name `Unit` is never written in source
+  (D-4), so R7 does not govern it.
 - `import` makes a package's names usable and nothing else. It generates code
   for the importer (ADR-0002) but never wires, grants or places; only a
   `requires` line does. A component may name only services and interfaces from
@@ -118,11 +123,12 @@ Retired from v0.1: `provides`, `target`, `place`, `on`, `transport`, `bundle`,
 Consistency with the general form, stated plainly: the five declarations are
 Shape 3 with `for` in the relation slot, as `states` and `realizes` are. Two
 forms have precedent but no name in §2 and should be named there: the bare
-member line (typl's `enum` body lists bare values) and the keyword-plus-
-reference line `offers X` / `requires X` (ridl's `reserved Name` and the
-file-level `import` have that form). The general form's Shape 3 table still
-carries an rsdl row for the v0.1 `instance x: Type` manifest form; it should
-list the five containers instead.
+member line (ridl's `service` lists its interfaces by bare name, ridl §14.5) and
+the keyword-plus-reference line `offers X` / `requires X` (ridl's
+`reserved Name` and the file-level `import` have that form). The general form's
+Shape 3 table still carries an rsdl row for an `instance x: Type` manifest form
+that the v0.1 reference does not have either; it should list the five containers
+instead.
 
 ## 3. Decisions
 
@@ -135,16 +141,19 @@ component name appears only in those lists, in diagnostics and in the IR. An
 implicit component is implemented; an external or stub provider needs an
 explicit `component` with the `external` flag (D-9).
 
-**Rejected.** (a) An implicit _service_ named after a component: the service
-name is what the attach list, the manifests and the security labels use, so a
-name derived from the component makes the component name travel, which V-02
-forbids. (b) Interfaces or interactions declared inline in a `component`: the
-catalog is ridl's (V-15, V-16) and `ridl diff` would have to read rsdl to
-classify a contract change; generation follows imports and a consumer would
-import an rsdl file (V-06); an inline interface has no name of its own, so a
-consumer would name the component and lose immunity to recomposition. This is
-the v0.1 inline-member gradient the vocabulary note dropped: every crossing now
-has a routing key, so a private member outside a catalog no longer exists.
+**Rejected.** (a) An implicit _service_ named after a component: the service is
+the addressing unit (V-02, ridl §14.5) — its dotted name is published and
+contributes the `service.member` addresses — so a name derived from the
+component makes the component name an addressed identity, which V-02 forbids.
+The attach list, the manifests and the security labels use the catalog name
+(vocabulary note §6), not the service name. (b) Interfaces or interactions
+declared inline in a `component`: the catalog is ridl's (V-15, V-16) and
+`ridl diff` would have to read rsdl to classify a contract change; generation
+follows imports and a consumer would import an rsdl file (V-06); an inline
+interface has no name of its own, so a consumer would name the component and
+lose immunity to recomposition. This is the v0.1 inline-member gradient the
+vocabulary note dropped: every crossing now has a routing key, so a private
+member outside a catalog no longer exists.
 
 **Rule.** Derive the unaddressed noun from the addressed one, never the reverse.
 
@@ -187,12 +196,12 @@ in one machine per deployment. Two rules, both errors:
   machine per deployment — the v0.1 RSDL-701 rule at instance grain. An external
   system is an `external` component in an external machine, not an exception.
 
-**Rejected.** (a) Placing the service (vocabulary note §3, roadmap S-35): a
-consumer-only component offers nothing and still needs a machine before its
-crossing kinds exist, and a component offering two services must put both on one
-machine. (b) `place X on M` lines: two keywords for what membership says, and
-the list form makes `system`, `distribution` and `machine` one sentence with
-three verbs (R9).
+**Rejected.** (a) Placing the service (vocabulary note §3, the
+roadmap-simplification note's S-35): a consumer-only component offers nothing
+and still needs a machine before its crossing kinds exist, and a component
+offering two services must put both on one machine. (b) `place X on M` lines:
+two keywords for what membership says, and the list form makes `system`,
+`distribution` and `machine` one sentence with three verbs (R9).
 
 **Amendment.** Vocabulary note §3: "the unit of publication and addressing".
 
@@ -208,7 +217,9 @@ so no array syntax on a name). Instances are named, never numbered.
   has its unit instance and nothing else. Declaring `instances` replaces the
   unit instance rather than adding to it.
 - Instance names are unique within a component; a duplicate is an error, and
-  `Unit` may not be declared explicitly.
+  `Unit` may not be declared explicitly. `Unit` is an IR and diagnostic name,
+  not a source spelling: R7 keeps a declared instance name camelCase, so the
+  CamelCase `Unit` cannot collide with one.
 - Instances share the component's offers and requires and are indistinguishable
   on the wire (V-02).
 - **Redundancy is a derived fact.** An offering component with more than one
@@ -239,8 +250,11 @@ reads them (D-6).
 **Posture** (v0.1 §8) is kept as a word in a reserved section of the rewritten
 reference: a `service` stays posture-neutral in ridl; rsdl derives no posture in
 this release; posture derivation, RSDL-803 and RSDL-801 reopen with a bus-class
-backend. The family overview's doctrine 18 keeps its text and re-cites the
-reserved section instead of "rsdl §8".
+backend. The family overview's doctrine 18 keeps its first half (a `service` is
+posture-neutral), marks the derivation deferred inline — the overview's own form
+for a deferral, as doctrines 5 and 15 use it — and re-cites the reserved section
+instead of "rsdl §8"; every other site that cites "rsdl §8" for posture
+derivation does the same (§4).
 
 **Rejected.** (a) A `transport { ... }` table in the grammar: one transport
 family exists. (b) Dropping the word posture: the Classic-to-Adaptive migration
@@ -282,9 +296,9 @@ identity forever. Never for one level alone.
 **What needs a number.** The runtime routes by catalog slot (per connection),
 interface number within the catalog, and member ordinal within the interface.
 Member ordinals come from position in the body (ridl §11). A service has no
-number: it is identified by its dotted name at attach time, and the routing key
-does not contain it (V-X2 answered no; ADR-0016 decision 8 stands as scoped, and
-a tag-based transport's service id is that backend's attribute, D-6). The
+number: it is identified by its published dotted name, and the routing key does
+not contain it (V-X2 answered no; ADR-0016 decision 8 stands as scoped, and a
+tag-based transport's service id is that backend's attribute, D-6). The
 interface number is the only one with no source, because a package spans files
 and no position across files survives a file rename or a move.
 
@@ -321,13 +335,16 @@ checked in, written only by `ridl lock`:
   compatible once ADR-0015 decision 17 keys binding ordinal spaces on (package,
   number) instead of the name — a ruling; retired with an entry is compatible; a
   number changed by hand is breaking. Interaction-level verdicts are unchanged.
-- **Bodies stay positional.** Struct fields, enum values, union arms and
-  interactions keep position and `reserved name`. A body gives one order; a
-  per-field lock would conflict on every feature-branch merge; FlatBuffers needs
-  dense ids. Their numbers are inlay hints, as decided.
+- **Bodies stay positional.** Struct fields, union arms and interactions keep
+  position and `reserved name`; an enum value keeps its explicit integer, and
+  its tombstone is `reserved <value>`. A body gives one order; a per-field lock
+  would conflict on every feature-branch merge; FlatBuffers needs dense ids.
+  Their numbers are inlay hints, as decided.
 - **A service's interface list becomes a set.** Order carries no wire meaning,
   so ADR-0015 decision 15's slot model on that list retires with RIDL-146 to
-  RIDL-148, and an interface has exactly one number, from its catalog.
+  RIDL-148, together with decision 19's `ServiceShape*` diff categories and
+  decision 24's rules behind RIDL-147 and RIDL-148; an interface has exactly one
+  number, from its catalog.
 - **The catalog hash is derived**, over the interfaces, their numbers, and the
   types they reach (D-8).
 
@@ -344,12 +361,14 @@ addition. (g) Stamping the service: recomposition changes an interface's number,
 a service may list another package's interface, and an interface with no service
 has none. (h) A hybrid of inferred and explicit numbers: unstable under a merge.
 
-**Defect found in the current crates, to file as an issue.** `ridl baseline`
-accepts a removed interaction with no `reserved` tombstone (RIDL-407 warns
-only), a later append reuses the ordinal, and `ridl diff` reports the append as
-compatible. The baseline gate above closes it at both levels. Swapping two
+**Defect found in the current crates, filed as driftsys/ridl#315.**
+`ridl
+baseline` publishes a removed interaction with no `reserved` tombstone (it
+runs no desk check; RIDL-407 belongs to `ridl check --baseline`, and is a
+warning), a later append reuses the ordinal, and `ridl diff` reports the append
+as compatible. The baseline gate above closes it at both levels. Swapping two
 struct fields is reported breaking only through the `constraint_changed`
-fallback; a reorder category is missing.
+fallback; a reorder category is missing (driftsys/ridl#314).
 
 ### D-8 Cross-catalog type references are allowed; the hash covers the closure
 
@@ -405,6 +424,10 @@ Under D-1 a system of hand-written services is a list of service names.
 - **`Busy` in a step** (V-X6): default to drop and count, the sequence gap is
   the evidence, the step stays pure; a component that cannot lose an event keeps
   it in its own state and retries. Lands in the runtime note.
+- **Member kind in a distribution** (V-X3): no kind keyword. A member line is a
+  bare reference, and its kind is the kind of the declaration the name resolves
+  to (§2), so a later `asset` declaration lists additively with no grammar
+  change. Reopens if a member kind ever has to exist without a declaration.
 - **Timing feasibility** (RSDL-801): out of this release, reopens with posture.
 
 ## 4. Amendments implied for existing records
@@ -413,16 +436,26 @@ Under D-1 a system of hand-written services is a list of service names.
   statements about the target and the profile (D-2); §3 "unit of publication and
   addressing" (D-3); V-05, V-06 reworded (D-9); §7 becomes the five containers
   with no `lock` line (D-7); V-17 "recorded in a generated lock file per
-  package"; V-X1 and V-X2 answered (D-8, D-7).
+  package"; V-X1, V-X2 and V-X3 answered (D-8, D-7, D-11).
 - **Design note**: §3.8 gains "a backend declares the keys it consumes" and
   §3.13 gains the attribute map per node (D-6); §4 "rsdl's noun set" resolved:
   `component` stays, `process` goes (D-2, D-3).
 - **Family general form**: §2 Shape 3 table lists the five rsdl containers and
   names the member line and the keyword-plus-reference line (§2 of this note);
-  §4.3 gains the four rsdl keys; §6.3 extends to interface numbers (D-7).
-- **Family overview** doctrine 18: re-cite the reserved posture section (D-5).
-- **ridl reference**: §11 gains the baseline gate; §14.5 and ADR-0015 decisions
-  15 and 17 amended (D-7); §14.6 wording (D-9); V-X1 disposition (D-8).
+  §4.3 gains the three rsdl keys; §6.3 extends to interface numbers (D-7).
+- **Family overview** doctrines 16 and 17: "provides/requires services" becomes
+  "offers services and requires interfaces" (D-9); doctrine 18, the inventory
+  row that gives rsdl "transport/posture derivation", ledger row 28 and the
+  open-question index: posture derivation marked deferred, the reserved section
+  re-cited in place of "rsdl §8" (D-5).
+- **ridl reference**: §11 gains the baseline gate; §14.5 amended — its
+  "components _provide_" wording (D-9), the "declared redundancy" paragraph
+  under "Composing interfaces" (D-3 and D-4 reverse it: one offering component
+  per service, redundancy derived from instances), and ADR-0015 decisions 15,
+  17, 19 and 24 (D-7); §14.6 wording and the glossary entry for _service_ (D-9);
+  the posture sentences of §14.5, the transport and feasibility paragraph, and
+  the glossary entries _service_ and _posture_ re-cite the reserved section and
+  mark the derivation deferred (D-5); V-X1 disposition (D-8).
 - **ADR-0010**: the `lock` subcommand and `lock merge` follow its conventions.
 - **Roadmap**: the E6 stories left untouched by the re-scope are refiled against
   this note once the rewrite starts.
@@ -438,8 +471,10 @@ Rulings only, none blocking the rewrite:
 
 ## 6. Studies
 
-Two reports, written in a fresh context against the current crates, are in the
-session scratchpad as `interface-id-study.md` and `interface-id-study-2.md`. The
+Two reports, written in a fresh context against the current crates, sit beside
+this note as
+[`2026-09-12-interface-id-study.md`](2026-09-12-interface-id-study.md) and
+[`2026-09-12-interface-id-study-2.md`](2026-09-12-interface-id-study-2.md). The
 first ranked the carriers and found the reuse defect above; the second simulated
 the merges with git and found the union-driver resurrection and the "next free
 number" hole that `next` closes. Their measurements are the basis of D-7's
