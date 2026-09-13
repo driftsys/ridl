@@ -15,8 +15,10 @@
 //! [`check_source`] is [`compile`]'s check-only sibling over the same
 //! single-file front end — parse, resolve, check, no Rust generation —
 //! returned as a [`CliRun`] rather than a [`CompileOutput`]. It is the
-//! single-file oracle `ridl mcp`'s `ridl_check` tool and
-//! `ridl check --format json` both call.
+//! single-file oracle behind `ridl mcp`'s `ridl_check` tool. `ridl check
+//! --format json` does not call it: it goes through [`run_check`], which
+//! resolves a workspace. What the two faces share is `ridl_core::diag::to_json`,
+//! not this function.
 //!
 //! [`compile_workspace`] is the same pipeline over the loaded package model —
 //! a `.typl` file, a package directory, or a workspace root ([`load_workspace`])
@@ -126,8 +128,9 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
 }
 
 /// Checks `text` (registered under `path`) without running any backend: the
-/// single-file oracle `ridl mcp`'s `ridl_check` and `ridl check --format json`
-/// share.
+/// single-file oracle behind `ridl mcp`'s `ridl_check` tool. `ridl check
+/// --format json` calls [`run_check`] instead, which resolves a workspace;
+/// the two share `ridl_core::diag::to_json`, not this function.
 pub fn check_source(path: &str, text: &str) -> CliRun {
     let front = front_end(path, text);
     CliRun {
