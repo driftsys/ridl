@@ -5,7 +5,7 @@
 //! through an in-memory connection instead, which cannot show that the
 //! subcommand wires the stdio transport at all.
 
-use std::io::BufReader;
+use std::io::{BufRead, BufReader, Write};
 use std::path::PathBuf;
 use std::process::{Child, ChildStdout, Command as StdCommand, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -178,6 +178,115 @@ async fn ridl_check_and_check_format_json_agree() {
     })
     .await
     .expect("ridl_check_and_check_format_json_agree did not finish within the timeout");
+}
+
+/// Spawns `ridl mcp` with all three standard streams piped, bypassing the
+/// `rmcp` client: [`connect`] and `client.cancel()` drive the process through
+/// the SDK, which does not expose the child's own exit status, so the two
+/// exit-code tests below speak raw newline-delimited JSON-RPC instead, the
+/// same way the `ridl lsp` tests speak raw LSP framing.
+fn spawn_mcp() -> Child {
+    StdCommand::new(env!("CARGO_BIN_EXE_ridl"))
+        .arg("mcp")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn ridl mcp")
+}
+
+/// Reads newline-delimited JSON-RPC messages off `stdout` on a worker thread
+/// and forwards them, the same bounded-wait shape [`read_messages`] gives the
+/// LSP tests. A line that fails to parse is dropped rather than sent: the
+/// server writes nothing but JSON-RPC on stdout, so a parse failure here
+/// would be this test's own bug, not a message worth asserting on.
+fn read_json_lines(stdout: ChildStdout) -> mpsc::Receiver<serde_json::Value> {
+    let (sender, receiver) = mpsc::channel();
+    std::thread::spawn(move || {
+        let mut stdout = BufReader::new(stdout);
+        let mut line = String::new();
+        loop {
+            line.clear();
+            match stdout.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    let Ok(value) = serde_json::from_str(&line) else {
+                        continue;
+                    };
+                    if sender.send(value).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+    receiver
+}
+
+/// Waits up to [`TIMEOUT`] for the next line on `messages`.
+fn next_json_line(messages: &mpsc::Receiver<serde_json::Value>) -> serde_json::Value {
+    messages
+        .recv_timeout(TIMEOUT)
+        .unwrap_or_else(|err| panic!("no JSON-RPC line within {TIMEOUT:?}: {err}"))
+}
+
+/// One `initialize` request, as a compact JSON-RPC line: the shape
+/// `InitializeRequestParams` (`rmcp::model`) deserializes, confirmed directly
+/// against the built binary before this test was written.
+fn initialize_request() -> serde_json::Value {
+    json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+            "protocolVersion": "2025-06-18",
+            "capabilities": {},
+            "clientInfo": { "name": "servers-test", "version": "0.0.0" }
+        }
+    })
+}
+
+#[test]
+fn ridl_mcp_serves_the_handshake_and_exits_zero_on_shutdown() {
+    let mut child = spawn_mcp();
+    let mut stdin = child.stdin.take().expect("piped stdin");
+    let messages = read_json_lines(child.stdout.take().expect("piped stdout"));
+
+    writeln!(stdin, "{}", initialize_request()).expect("write initialize");
+    let response = next_json_line(&messages);
+    // Not merely "something answered": the server info is the RIDL MCP
+    // server's own, so a subcommand that only opened a transport fails here.
+    assert_eq!(
+        response["result"]["serverInfo"]["name"], "ridl-mcp",
+        "{response}"
+    );
+
+    writeln!(
+        stdin,
+        "{}",
+        json!({ "jsonrpc": "2.0", "method": "notifications/initialized" })
+    )
+    .expect("write initialized notification");
+    drop(stdin);
+
+    let status = wait_for_exit(&mut child, "ridl mcp");
+    assert_eq!(status.code(), Some(0), "a clean shutdown exits 0");
+}
+
+#[test]
+fn ridl_mcp_exits_two_when_stdin_closes_before_initialize() {
+    let mut child = spawn_mcp();
+    // Close stdin without sending a request: the server must notice the
+    // transport ending and exit, not hang.
+    drop(child.stdin.take().expect("piped stdin"));
+
+    let status = wait_for_exit(&mut child, "ridl mcp");
+    // A client that disappears before the handshake is a transport error, not
+    // a clean shutdown: exit 2, the "could not answer" code of ADR-0010
+    // decision 1 — the same code, and the same cause, as the `ridl lsp`
+    // counterpart below.
+    assert_eq!(status.code(), Some(2), "a lost transport exits 2");
 }
 
 // ---------------------------------------------------------------------------
