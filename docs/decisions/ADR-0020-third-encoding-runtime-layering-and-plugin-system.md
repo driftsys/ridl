@@ -113,6 +113,13 @@ as its public contract.
    that a TypeScript consumer reads the buffer in place through generated
    accessors and no materialized object crosses the wasm boundary on a read.
 
+   The coupling the classification rests on is a requirement of this record, not
+   an observation about how the pair happens to be built: a package's wasm codec
+   and the TypeScript that calls it are one generated unit — one `ridlc`
+   invocation over one IR — published and versioned together. A codec
+   instantiated against TypeScript generated from a different IR is outside this
+   record's contract, and no encoding is defined for that pairing.
+
    This closes the open item the roadmap carries against ADR-0018 decision 3 and
    answers the first bullet of the design note's §4.
 
@@ -332,6 +339,13 @@ as its public contract.
    ADR-0014's canonical encoding on the wire to a plugin, which makes it a
    versioned surface; whether it is also emittable by a `ridlc` subcommand for a
    plugin author to inspect is not settled.
+6. **Whether the codec loader checks the generated-unit coupling at
+   instantiation.** Decision 2 requires a package's wasm codec and its
+   TypeScript caller to be one generated unit; it does not say whether the
+   loader of decision 6's runtime package verifies that at load — for example
+   against a hash over the IR the pair was generated from — or whether
+   publication together is the only thing that carries it. The TypeScript
+   backend settles it.
 
 ## Documents amended
 
