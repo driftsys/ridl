@@ -44,7 +44,10 @@ test("isDirOnPath is exact on POSIX and case-insensitive on Windows", () => {
 
 test("pathHint prints a shell line per platform", () => {
   assert.equal(pathHint("/home/dev/.local/bin", "darwin"), 'export PATH="/home/dev/.local/bin:$PATH"');
-  assert.match(pathHint("C:\\Users\\dev\\bin", "win32"), /Path/);
+  assert.equal(
+    pathHint("C:\\Users\\dev\\bin", "win32"),
+    '[Environment]::SetEnvironmentVariable("Path", "C:\\Users\\dev\\bin;" + [Environment]::GetEnvironmentVariable("Path", "User"), "User")',
+  );
 });
 
 test("performCopy creates the directory, copies, and sets the mode", async () => {
