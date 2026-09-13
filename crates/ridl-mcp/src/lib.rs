@@ -192,7 +192,10 @@ mod tests {
             .expect("a diagnostic object");
         let mut keys: Vec<&str> = first.keys().map(String::as_str).collect();
         keys.sort_unstable();
-        assert_eq!(keys, ["code", "fixes", "message", "severity", "span"]);
+        assert_eq!(
+            keys,
+            ["code", "fixes", "labels", "message", "severity", "span"]
+        );
     }
 
     #[test]

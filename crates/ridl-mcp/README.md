@@ -27,13 +27,14 @@ and download the binary from the newest `editor-v*` GitHub Release.
 
 Returns `{ "diagnostics": [ … ] }`, where each element is:
 
-| Field      | Content                                                                      |
-| ---------- | ---------------------------------------------------------------------------- |
-| `code`     | the catalogue code, for example `RIDL-107`                                   |
-| `severity` | `error`, `warning`, or `info`                                                |
-| `message`  | the primary message, verbatim                                                |
-| `span`     | `path`, and 1-based `start`/`end` (`end` exclusive) with `line` and `column` |
-| `fixes`    | fix-its, verbatim: `label`, `replacement`, `span`                            |
+| Field      | Content                                                                        |
+| ---------- | ------------------------------------------------------------------------------ |
+| `code`     | the catalogue code, for example `RIDL-107`                                     |
+| `severity` | `error`, `warning`, or `info`                                                  |
+| `message`  | the primary message, verbatim                                                  |
+| `span`     | `path`, and 1-based `start`/`end` (`end` exclusive) with `line` and `column`   |
+| `labels`   | secondary annotations, verbatim: `message`, `span` — empty when there are none |
+| `fixes`    | fix-its, verbatim: `label`, `replacement`, `span`                              |
 
 **What this tool shares with `ridl check --format json <file>`, and where it
 differs.** Both call the same `ridl_core::diag::to_json`, so each diagnostic

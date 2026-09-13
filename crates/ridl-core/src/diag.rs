@@ -1004,18 +1004,28 @@ pub struct JsonFixIt {
     pub span: JsonSpan,
 }
 
+/// A label in the JSON diagnostic contract, verbatim from the compiler.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct JsonLabel {
+    pub message: String,
+    pub span: JsonSpan,
+}
+
 /// One diagnostic in the JSON contract `ridl check --format json` and the MCP
 /// `ridl_check` tool emit. This is the first agent-facing diagnostic contract
 /// (ADR-0005 §7): a change to its shape is a change to an external contract.
 /// `code` passes the diagnostic's [`DiagCode`] through verbatim, including the
 /// empty string a diagnostic with no assigned catalogue code carries; the
-/// field is always present, never omitted.
+/// field is always present, never omitted. `labels` passes the diagnostic's
+/// secondary annotations through verbatim, in the order the diagnostic holds
+/// them; the array is always present, empty when the diagnostic carries none.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct JsonDiagnostic {
     pub code: String,
     pub severity: String,
     pub message: String,
     pub span: JsonSpan,
+    pub labels: Vec<JsonLabel>,
     pub fixes: Vec<JsonFixIt>,
 }
 
@@ -1047,6 +1057,14 @@ pub fn to_json(diagnostics: &[Diagnostic], sources: &SourceMap) -> Vec<JsonDiagn
             severity: severity_name(diagnostic.severity).to_string(),
             message: diagnostic.message.clone(),
             span: json_span(diagnostic.primary, sources),
+            labels: diagnostic
+                .labels
+                .iter()
+                .map(|label| JsonLabel {
+                    message: label.message.clone(),
+                    span: json_span(label.span, sources),
+                })
+                .collect(),
             fixes: diagnostic
                 .fixits
                 .iter()

@@ -186,6 +186,7 @@ ridl check --format json
         "column": 40
       }
     },
+    "labels": [],
     "fixes": []
   }
 ]

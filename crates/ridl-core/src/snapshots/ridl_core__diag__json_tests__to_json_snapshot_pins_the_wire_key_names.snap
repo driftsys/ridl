@@ -18,6 +18,7 @@ expression: "to_json(&[diagnostic], &sources)"
         "column": 8
       }
     },
+    "labels": [],
     "fixes": [
       {
         "label": "give `X` a backing type",

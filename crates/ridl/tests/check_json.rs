@@ -58,6 +58,7 @@ fn json_format_prints_the_contract_and_keeps_the_exit_code() {
         .expect("an error diagnostic");
     assert!(error["code"].as_str().is_some_and(|code| !code.is_empty()));
     assert_eq!(error["span"]["start"]["line"], 2);
+    assert!(error["labels"].is_array());
     assert!(error["fixes"].is_array());
 }
 
