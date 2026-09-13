@@ -817,6 +817,7 @@ error: unknown change category `not_a_real_category`
 the categories `ridl diff` reports are:
   decl_added
   decl_removed
+  member_reordered
   interaction_appended
   interaction_inserted
   interaction_reordered

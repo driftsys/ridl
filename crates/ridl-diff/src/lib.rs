@@ -122,6 +122,10 @@ declare_categories! {
         /// A package-level declaration, interface, or service present only in the
         /// old snapshot.
         DeclRemoved,
+        /// A surviving composite member whose position in the body changed — a
+        /// struct field, enum value, enum-set bit or union arm. A body gives
+        /// one order and that order is wire identity (typl §7.4).
+        MemberReordered,
         /// A new interaction added at the end of an interface (no earlier
         /// interaction shifted).
         InteractionAppended,
@@ -375,6 +379,7 @@ pub fn category_word(category: Category) -> &'static str {
     match category {
         Category::DeclAdded => "decl_added",
         Category::DeclRemoved => "decl_removed",
+        Category::MemberReordered => "member_reordered",
         Category::InteractionAppended => "interaction_appended",
         Category::InteractionInserted => "interaction_inserted",
         Category::InteractionReordered => "interaction_reordered",

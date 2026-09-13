@@ -242,7 +242,17 @@ fn diff_composite(
             structural = true;
         }
     }
-    if !structural {
+    if structural {
+        return;
+    }
+    // The member names match on both sides, so the difference is either a
+    // reorder of the body or a member changed in place. A reorder is its own
+    // category: a body gives one order and that order is wire identity, so
+    // reporting it as a constraint edit sends the reader looking for a
+    // constraint that did not change (driftsys/ridl#314). This reads no
+    // `reserved` list and changes no removal matching, so the carried debt
+    // above — and driftsys/ridl#302's coupling — stays exactly as it is.
+    if old_names == new_names {
         emit(
             changes,
             path.to_string(),
@@ -250,6 +260,22 @@ fn diff_composite(
             None,
             None,
         );
+        return;
+    }
+    for (index, name) in new_names.iter().enumerate() {
+        let was = old_names
+            .iter()
+            .position(|old| old == name)
+            .expect("the name sets are equal, so every new name appears in the old body");
+        if was != index {
+            emit(
+                changes,
+                format!("{path}/{name}"),
+                Category::MemberReordered,
+                Some(format!("position {}", was + 1)),
+                Some(format!("position {}", index + 1)),
+            );
+        }
     }
 }
 

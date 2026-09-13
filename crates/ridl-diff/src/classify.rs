@@ -56,6 +56,7 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
         // frees a slot for reuse.
         Category::InteractionInserted
         | Category::InteractionReordered
+        | Category::MemberReordered
         | Category::InteractionRemoved
         | Category::ServiceShapeInserted
         | Category::ServiceShapeReordered
@@ -957,6 +958,12 @@ pub fn explain(category: Category) -> &'static str {
             "              errs on the safe side; carried as debt, see the note on\n",
             "              `diff_composite`. The interaction-level tombstone IS\n",
             "              recognised — see interaction_retired"
+        ),
+        Category::MemberReordered => concat!(
+            "A surviving composite member whose position in the body changed.\n",
+            "  breaking    always — a body gives one order and that order is wire\n",
+            "              identity, so a reorder moves every member after it and\n",
+            "              every later member's wire slot with it (typl 7.4)"
         ),
         Category::InteractionAppended => concat!(
             "An interaction added after every slot that existed before.\n",
