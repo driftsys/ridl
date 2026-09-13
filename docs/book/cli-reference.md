@@ -179,7 +179,9 @@ named with `--baseline` or auto-discovered at `.ridl/baseline/` — is also
 exit 2, with a message naming an artifact it found: a baseline stays
 `.ir.json` ([ADR-0014][adr-0014] decision 5), so such a directory is a
 baseline in a refused encoding, not the silently skipped "no baseline
-published yet" state — which an *empty* directory still is.
+published yet" state. An *empty* directory is still that silent state when
+auto-discovered; named explicitly with `--baseline`, it is a different
+refusal (below).
 
 So is a directory whose `.ir.json` snapshots sit one level *below* it rather
 than inside it — `--baseline .ridl` where `.ridl/baseline` was meant. The
@@ -187,6 +189,13 @@ message names the subdirectory it found and gives the path to pass instead.
 Snapshots are read from one directory and never from the directories below
 it, so a directory of this shape is a path aimed one level too high, not a
 layout to descend into.
+
+An explicit `--baseline` that yields no snapshot at all — an empty directory,
+or one whose snapshots sit two or more levels down rather than one — is the
+same exit 2: the message names the directory and suggests publishing into it.
+Auto-discovery has no flag to blame for an empty result, so a
+`.ridl/baseline/` directory found this way, empty or absent, keeps the silent
+skip the two paragraphs above do not touch.
 
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
@@ -1013,7 +1022,7 @@ compiler directly and want its stable, default-free flags.
 
 | Command | 0 | 1 | 2 |
 | --- | --- | --- | --- |
-| `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or a named `--baseline` is absent |
+| `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
 | `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error; the existing baseline is left untouched | the workspace cannot be found |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
