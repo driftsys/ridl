@@ -256,13 +256,15 @@ fn diff_composite(
     if structural {
         return;
     }
-    // The member names match on both sides, so the difference is either a
-    // reorder of the body or a member changed in place. A reorder is its own
-    // category: a body gives one order and that order is wire identity, so
-    // reporting it as a constraint edit sends the reader looking for a
-    // constraint that did not change (driftsys/ridl#314). This reads no
-    // `reserved` list and changes no removal matching, so the carried debt
-    // above — and driftsys/ridl#302's coupling — stays exactly as it is.
+    // The member names match on both sides, so the difference is a reorder of
+    // the body, a member changed in place, or both. A reorder is its own
+    // category: for struct fields and union arms the order is wire identity,
+    // and an enum or enumset body is reported the same way conservatively,
+    // because this walk compares member positions rather than the explicit
+    // values. Reporting a reorder as a constraint edit sends the reader looking
+    // for a constraint that did not change (driftsys/ridl#314). None of this
+    // changes removal matching, so the carried debt above — and
+    // driftsys/ridl#302's coupling — stays exactly as it is.
     if old_names == new_names {
         emit(
             changes,
