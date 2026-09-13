@@ -430,3 +430,45 @@ install:
 # Remove build artifacts.
 clean:
     rm -rf book target
+
+# Verify the VS Code extension packages: compile, unit tests, and a `vsce
+# package` with no bundled binary (a fresh checkout has no bin/, and the
+# manifest does not reference it). Invoked by vscode-verify.yaml on pull
+# requests that touch editors/vscode. Not a member of `build`, so gate-parity
+# does not cover it; the workflow is the only caller besides a contributor.
+vscode-verify:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd editors/vscode
+    npm ci
+    npm test
+    scratch="$(mktemp -d)"
+    trap 'rm -rf "$scratch"' EXIT
+    npx vsce package --out "$scratch/ridl-vscode.vsix"
+    listing="$(npx vsce ls)"
+    if printf '%s\n' "$listing" | grep -q '^src/'; then
+        echo "vscode-verify: src/ would ship in the VSIX — check .vscodeignore" >&2
+        exit 1
+    fi
+    if printf '%s\n' "$listing" | grep -q '\.test\.js$'; then
+        echo "vscode-verify: a compiled test file would ship in the VSIX — check .vscodeignore" >&2
+        exit 1
+    fi
+    echo "vscode-verify: packaged $scratch/ridl-vscode.vsix"
+
+# Build the extension for this machine: a release build of ridl copied into
+# editors/vscode/bin/, then `vsce package`. Local testing only — the release
+# workflow runs the same commands per target with --target. Not a member of
+# `build`.
+package-vscode:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release --locked -p ridl
+    bin=target/release/ridl
+    if [ -f target/release/ridl.exe ]; then bin=target/release/ridl.exe; fi
+    mkdir -p editors/vscode/bin
+    cp "$bin" editors/vscode/bin/
+    cd editors/vscode
+    npm ci
+    npm run compile
+    npx vsce package

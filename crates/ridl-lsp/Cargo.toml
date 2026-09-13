@@ -1,7 +1,8 @@
 # The RIDL language server (docs/ROADMAP.md epic E1.15, ADR-0004 §6):
 # a synchronous `lsp-server` loop over the same salsa database `ridlc`
-# compiles with. The crate is a library plus a thin `ridl-lsp` binary so
-# the integration tests can drive the server over an in-memory connection.
+# compiles with. The crate is a library; the `ridl` CLI hosts it as
+# `ridl lsp`. The integration tests in `tests/server.rs` drive
+# `ridl_lsp::server::run` directly on a thread, over an in-memory connection.
 
 [package]
 name = "ridl-lsp"

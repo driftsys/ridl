@@ -5,8 +5,9 @@
 //! transport crate (ADR-0004 §6). There is no async runtime: [`server::run`]
 //! is a plain loop that receives one message at a time, dispatches it, and
 //! calls straight into the memoized salsa queries (`parse_file`,
-//! `resolve_package`, `check_package`). The server is also reachable as
-//! `ridl lsp` (the `ridl` CLI).
+//! `resolve_package`, `check_package`). The server is a library; the `ridl`
+//! CLI hosts it as `ridl lsp`, which the VS Code extension and the release
+//! artifacts use.
 //!
 //! # The incremental overlay design
 //!

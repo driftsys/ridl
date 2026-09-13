@@ -4,7 +4,6 @@
   "description": "Syntax highlighting and a language server client for the RIDL family: typl, the type language, and ridl, the interface description language.",
   "version": "0.0.1",
   "publisher": "driftsys",
-  "private": true,
   "license": "MIT",
   "repository": {
     "type": "git",

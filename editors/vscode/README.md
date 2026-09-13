@@ -1,7 +1,7 @@
 # RIDL for VS Code
 
 Editor support for `.typl` and `.ridl` files: TextMate syntax highlighting and
-an LSP client that connects to `ridl-lsp` (`crates/ridl-lsp`) for diagnostics,
+an LSP client that connects to `ridl lsp` (`crates/ridl-lsp`) for diagnostics,
 quick fixes, hovers, ordinal inlay hints, navigation, completion, and rename.
 
 This extension covers the `typl` and `ridl` languages. One server serves both:
@@ -10,40 +10,35 @@ and the `.typl` vocabulary it imports are checked together. The remaining family
 languages (`uxdl`, `rmdl`, `rsdl`) are sequenced separately in
 `docs/ROADMAP.md`.
 
-## Prerequisites
-
-`ridl-lsp` is a separate binary, built from this repository's Rust workspace.
-Install it once:
-
-```sh
-cargo install --path crates/ridl-lsp
-```
-
-This places `ridl-lsp` in `~/.cargo/bin`, which most Rust installs already have
-on `PATH`. If `ridl-lsp` is not on `PATH`, or a specific build should be used
-instead (for example `target/debug/ridl-lsp` during development), set the
-`ridl.serverPath` setting described below.
-
-## Build the extension
-
-From `editors/vscode`:
-
-```sh
-npm ci
-npm run compile
-npx @vscode/vsce package
-```
-
-This produces a `.vsix` file, for example `ridl-vscode-0.0.1.vsix`.
-
 ## Install
 
+From the VS Code Marketplace or Open VSX, search "RIDL". The extension bundles
+the `ridl` binary and runs it as `ridl lsp` (the language server) and `ridl mcp`
+(the MCP server Copilot sees). Nothing else to install.
+
+To use `ridl` from a terminal, Claude Code, or Codex as well, run the command
+**RIDL: Install ridl to PATH**, or use the installer script from the repository
+root (`install.sh` / `install.ps1`).
+
+## Build from source
+
+`ridl` on `PATH` is enough for a development launch (F5 in `editors/vscode`):
+
 ```sh
-code --install-extension ridl-vscode-0.0.1.vsix
+cargo install --path crates/ridl
 ```
 
+To build a `.vsix` with the binary bundled:
+
+```sh
+just package-vscode
+code --install-extension editors/vscode/ridl-vscode-<version>.vsix
+```
+
+## Usage
+
 Open a folder containing `.typl` or `.ridl` files. The extension activates on
-the `typl` and `ridl` languages, highlights the file, and starts `ridl-lsp` to
+the `typl` and `ridl` languages, highlights the file, and starts `ridl lsp` to
 publish diagnostics and quick fixes.
 
 On a `.ridl` file the server additionally renders the ridl §11 ordinal beside
@@ -51,15 +46,12 @@ every interaction and `reserved` tombstone, expands an interaction's resolved
 timing into the per-kind reading of family general form §6.2 on hover, and
 offers the interaction keywords inside an interface body.
 
-Marketplace publishing is deferred to a maintainer act (like the crates.io
-release) and is not part of this build.
-
 ## Settings
 
-| Setting             | Default | Description                                                                                            |
-| ------------------- | ------- | ------------------------------------------------------------------------------------------------------ |
-| `ridl.serverPath`   | `""`    | Path to the `ridl-lsp` binary. Empty finds `ridl-lsp` on `PATH`.                                       |
-| `ridl.trace.server` | `"off"` | Trace level for the JSON-RPC traffic between VS Code and `ridl-lsp` — `off`, `messages`, or `verbose`. |
+| Setting             | Default | Description                                                                                                                              |
+| ------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `ridl.serverPath`   | `""`    | Path to the `ridl` binary. Empty (the default) uses the bundled binary, or `ridl` on `PATH` when none is bundled (a development launch). |
+| `ridl.trace.server` | `"off"` | Trace level for the JSON-RPC traffic between VS Code and `ridl lsp` — `off`, `messages`, or `verbose`.                                   |
 
 ## Development
 

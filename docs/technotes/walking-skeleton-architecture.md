@@ -230,10 +230,9 @@ once queries run off-thread.
 
 The workspace's first async runtime arrived later, with `crates/ridl-mcp` (built
 on `tokio`, behind `ridl mcp` — see the workspace map above). It does not reach
-`ridl-lsp`, the standalone `ridl-lsp` binary, or any crate but `ridl` itself;
-`ridl` links `tokio` only to build the one runtime `ridl mcp` blocks on, and
-`wasm-check` does not build the `ridl` crate at all, so `tokio` never reaches
-the wasm32 target either.
+`ridl-lsp` or any crate but `ridl` itself; `ridl` links `tokio` only to build
+the one runtime `ridl mcp` blocks on, and `wasm-check` does not build the `ridl`
+crate at all, so `tokio` never reaches the wasm32 target either.
 
 `ridlc::compile_workspace` is a cold, from-disk compile, so the server does not
 drive it per keystroke. Instead it loads the workspace once at `initialize`,

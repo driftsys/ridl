@@ -1,14 +1,11 @@
 # CLI reference
 
 Two command-line binaries ship from this repository: **`ridl`**, the porcelain
-facade, and **`ridlc`**, the plumbing compiler underneath it. A third binary,
-`ridl-lsp`, builds too — the same language server the [`ridl lsp`](#ridl-lsp)
-subcommand documented below also runs, over the identical stdio transport (see
-[What is built](introduction.md#what-is-built)). `ridl-lsp` itself takes no
-subcommand and no flag of its own, so the standalone binary has no further
-place on this page. Both exist today: the VS Code extension currently spawns
-the standalone `ridl-lsp` binary, not the `ridl lsp` subcommand. Build all
-three with:
+facade, and **`ridlc`**, the plumbing compiler underneath it. `ridl` hosts the
+language server as the [`ridl lsp`](#ridl-lsp) subcommand and the Model
+Context Protocol server as [`ridl mcp`](#ridl-mcp), both over stdio (see
+[What is built](introduction.md#what-is-built)). The VS Code extension spawns
+`ridl lsp`. Build both with:
 
 ```sh
 cargo build --release
@@ -975,10 +972,9 @@ Options:
   -h, --help  Print help
 ```
 
-`ridl lsp` runs the same server as the standalone `ridl-lsp` binary described
-above: behavior lives in `crates/ridl-lsp`, and this subcommand only wires the
-stdio transport. An editor spawns it and speaks the Language Server Protocol
-over its stdin and stdout.
+`ridl lsp` hosts the language server: behavior lives in `crates/ridl-lsp`, and
+this subcommand only wires the stdio transport. An editor spawns it and speaks
+the Language Server Protocol over its stdin and stdout.
 
 **Exit codes.** 0 on a clean shutdown — the client sends `shutdown` then
 `exit`. 2 when the transport ends before the `initialize` handshake, or fails
