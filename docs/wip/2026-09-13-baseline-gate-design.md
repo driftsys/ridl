@@ -121,6 +121,29 @@ the old and new names, in place of the single `ConstraintChanged`. When the
 order matches and the bodies still differ, `ConstraintChanged` is emitted
 exactly as it is today.
 
+**Amended during execution (2026-09-13).** The whole-branch review found two
+gaps in the decision above. They are settled as follows.
+
+- **A reorder that arrives with a content change.** Emitting `MemberReordered`
+  in place of the container `ConstraintChanged` hid the content change. An enum
+  `PARK = 0, DRIVE = 1, REVERSE = 2` rewritten as
+  `DRIVE = 1, PARK = 0,
+  REVERSE = 5` reported the two members whose values did
+  not change, and nothing about the one whose value did. When the name sequences
+  differ, the walk now also compares the two bodies with member order and
+  position-derived fields removed, and nothing else removed. If they still
+  differ, the container `ConstraintChanged` is emitted after the
+  `MemberReordered` lines.
+- **Which bodies have positional identity.** The rationale above holds for
+  struct fields and union arms, whose ordinals are positional (typl §7.4). Enum
+  values and enumset bits carry explicit values (typl §8, §9), so a textual
+  reorder of an enum moves no wire value. `MemberReordered` is still emitted for
+  enum and enumset bodies and still classified breaking. That is conservative:
+  the walk compares member positions, not values. A value-aware comparison would
+  turn a textual enum reorder from breaking into identical, which is a decision
+  about what enum identity is, and it is left open. A derived enumset that
+  copies its backing enum's values inherits the same conservative report.
+
 The name is `MemberReordered` rather than `DeclReordered` because `DeclAdded`
 and `DeclRemoved` are already how `diff_composite` spells a composite member,
 and a `Decl*` reorder would read as a reorder of top-level declarations.
@@ -128,9 +151,10 @@ and a `Decl*` reorder would read as a reorder of top-level declarations.
 **This closes nothing that driftsys/ridl#302 guards.** The carried-debt comment
 above `diff_composite` records that the name-keyed comparison never reads the
 body's `reserved` list, and instructs that it must not be closed alone because
-of a FlatBuffers union-discriminant coupling. The sequence comparison reads no
-`reserved` list and changes no removal matching, so that debt and its comment
-stay exactly as they are.
+of a FlatBuffers union-discriminant coupling. The sequence comparison changes no
+removal matching, so that debt and its comment stay exactly as they are. (The
+order-insensitive comparison added by the amendment does read the tombstone
+lists, as content to compare; it matches no removal.)
 
 ### D-5 The gate covers the interaction level only
 
@@ -146,6 +170,24 @@ per-package lock file. Building the service-level half of the gate now would be
 building something the lock block deletes. The interface-level refusal that D-7
 describes arrives with the lock, against the lock, which is the only place a
 provisional number or a retired entry exists to check.
+
+**Two shapes the gate does not refuse (recorded during execution, 2026-09-13).**
+Both belong with the lock-file work.
+
+- **A tombstone that already exists and moves.** A baseline with `reserved b` at
+  ordinal N and a source with `reserved b` at ordinal M produces
+  `InteractionReordered`, not `InteractionRemoved`, so publication goes ahead.
+  The question the gate asks is whether a removed interaction's ordinal was
+  tombstoned; a moved tombstone was. `ridl diff` reports the move as breaking,
+  and RIDL-407 warns about it at desk time, because `InteractionReordered` is
+  one of the ordinal categories the desk check reads. A moved tombstone usually
+  moves a surviving interaction too; two tombstones that exchange ordinals move
+  none. Publishing it still replaces the record of the original ordinal. Whether
+  a moved tombstone should be refused is open.
+- **A package removed or renamed as a whole.** `diff_sets` emits one
+  `DeclRemoved` for a package present on one side only and does not descend into
+  it, so the gate sees no interaction removal, and publication deletes that
+  package's snapshot. This is wider than the interface-level deferral above.
 
 ### D-6 Two changes, two pull requests
 
