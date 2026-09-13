@@ -259,7 +259,7 @@ fn added(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
 
     // The member name is not needed: the append test is a property of the whole
     // body, and reading the body is what catches a *surviving* member whose slot
-    // moved — which the walk's name-keyed comparison never reports.
+    // moved — which the walk does not report alongside an addition.
     let _ = member;
 
     use v2::decl::Kind;
@@ -306,10 +306,11 @@ fn added(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
 /// retired.
 ///
 /// Both halves matter. A member whose slot number moved has had its wire
-/// identity shifted even though its name survived, and the walk's name-keyed
-/// composite comparison cannot see that. A member taking a number at or below
-/// the old high-water mark is an insertion, or a reuse of a retired number,
-/// which typl §7.4 forbids so a wire value never carries a new meaning.
+/// identity shifted even though its name survived, and the walk's composite
+/// comparison does not report that alongside an addition. A member taking a
+/// number at or below the old high-water mark is an insertion, or a reuse of a
+/// retired number, which typl §7.4 forbids so a wire value never carries a new
+/// meaning.
 fn appended_slot(old: &[(String, i64)], old_retired: &[i64], new: &[(String, i64)]) -> bool {
     for (name, old_slot) in old {
         match new.iter().find(|(new_name, _)| new_name == name) {
@@ -346,8 +347,8 @@ fn appended_slot(old: &[(String, i64)], old_retired: &[i64], new: &[(String, i64
 /// consumer may already be sending.
 ///
 /// A composite body changed in place reaches here with no member path and no
-/// rendered values — the walk cannot say what moved inside it — and classifies
-/// breaking.
+/// rendered values — the walk does not say which member changed inside it — and
+/// classifies breaking.
 fn constraint(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     let mut segments = change.path.split('/').skip(1);
     let (Some(name), None) = (segments.next(), segments.next()) else {
@@ -857,7 +858,10 @@ fn shape_slots(service: &v2::Service) -> Vec<(&str, u32, Option<&str>)> {
         .collect()
 }
 
-fn struct_slots(def: &v2::StructDef) -> Vec<(String, i64)> {
+/// Every live struct field with its ordinal — the 1-based place in the body,
+/// counting tombstones, that typl §7.4 makes the wire identity. Shared with the
+/// walk, which reports a reorder by these ordinals.
+pub(crate) fn struct_slots(def: &v2::StructDef) -> Vec<(String, i64)> {
     def.members
         .iter()
         .filter_map(|member| match &member.member {
@@ -881,7 +885,8 @@ fn struct_reserved(def: &v2::StructDef) -> Vec<i64> {
         .collect()
 }
 
-fn union_slots(def: &v2::UnionDef) -> Vec<(String, i64)> {
+/// Every union arm with its ordinal, on the same rule as [`struct_slots`].
+pub(crate) fn union_slots(def: &v2::UnionDef) -> Vec<(String, i64)> {
     def.arms
         .iter()
         .map(|arm| (arm.name.clone(), i64::from(arm.ordinal)))
@@ -960,18 +965,22 @@ pub fn explain(category: Category) -> &'static str {
             "              recognised — see interaction_retired"
         ),
         Category::MemberReordered => concat!(
-            "A surviving composite member whose position in the body changed.\n",
+            "A surviving composite member whose slot in the body changed.\n",
             "  breaking    always — a struct field or union arm takes its wire\n",
-            "              identity from its position (typl 7.4), so a reorder moves\n",
-            "              the wire slot of every member after it. An enum value or\n",
-            "              enum-set bit carries an explicit number instead (typl 8, 9),\n",
-            "              but the walk compares positions, not those numbers, so a\n",
-            "              textual reorder of an enum or enum-set body is reported\n",
-            "              breaking as well, conservatively, even when no number\n",
-            "              changed\n",
-            "  note        a reorder that arrives in the same edit as an in-place\n",
-            "              change to the body is reported with constraint_changed on\n",
-            "              the container as well"
+            "              identity from its ordinal, its 1-based place in the body\n",
+            "              counting tombstones (typl 7.4), so a member whose ordinal\n",
+            "              changed has a new wire identity; the detail carries the old\n",
+            "              and new ordinal. An enum value or enum-set bit carries an\n",
+            "              explicit number instead (typl 8, 9), but the walk compares\n",
+            "              positions, not those numbers, so a textual reorder of an\n",
+            "              enum or enum-set body is reported breaking as well,\n",
+            "              conservatively, even when no number changed; the detail\n",
+            "              carries the old and new position\n",
+            "  note        reported only when both bodies hold the same member names:\n",
+            "              a reorder in the same edit as an addition or a removal is\n",
+            "              reported through decl_added or decl_removed alone. A reorder\n",
+            "              in the same edit as an in-place change to the body is\n",
+            "              reported with constraint_changed on the container as well"
         ),
         Category::InteractionAppended => concat!(
             "An interaction added after every slot that existed before.\n",
@@ -1071,7 +1080,7 @@ pub fn explain(category: Category) -> &'static str {
             "              by named constant), or a constraint appearing where there\n",
             "              was none, which bounds a previously unbounded value. A\n",
             "              composite body changed in place is breaking: the walk\n",
-            "              cannot say what moved inside it\n",
+            "              does not say which member changed inside it\n",
             "  note        each facet is judged on its own and any one narrowing\n",
             "              decides the change, so a mixed edit is breaking on the half\n",
             "              that narrows. A widening that flips the resolved wire width\n",

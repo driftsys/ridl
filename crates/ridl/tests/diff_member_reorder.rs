@@ -114,11 +114,34 @@ fn a_swapped_struct_field_reports_member_reordered() {
     );
     assert!(
         !out.contains("constraint_changed"),
-        "the fallback no longer stands in for it:\n{out}",
+        "the fallback is not reported in its place:\n{out}",
     );
     assert!(
         out.contains("door") && out.contains("latch"),
         "both moved members are named:\n{out}",
+    );
+}
+
+/// The detail carries the field's old and new ordinal, 1-based, old first: the
+/// number typl §7.4 makes the wire identity, so the reader can see which slot
+/// the field left and which it took.
+#[test]
+fn a_moved_field_reports_its_old_and_new_ordinal() {
+    let dir = TempDir::new("ordinals");
+    let old = workspace(&dir, "old", FIELDS);
+    let new = workspace(&dir, "new", SWAPPED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/door: ordinal 1 -> ordinal 2\n"),
+        "door left ordinal 1 for ordinal 2:\n{out}",
+    );
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/latch: ordinal 2 -> ordinal 1\n"),
+        "latch left ordinal 2 for ordinal 1:\n{out}",
     );
 }
 
@@ -376,9 +399,169 @@ fn a_reordered_enum_reserved_list_is_not_identical() {
     let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");
 
-    assert_eq!(code, 1, "a changed reserved list is reported breaking:\n{out}");
+    assert_eq!(
+        code, 1,
+        "a changed reserved list is reported breaking:\n{out}"
+    );
     assert!(
         stdout.starts_with("breaking"),
         "the report verdict is breaking, not identical:\n{out}",
+    );
+}
+
+/// The tombstone moves after both fields: `door` is now ordinal 1 and `latch`
+/// ordinal 2.
+const TOMBSTONE_LAST: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  door: DoorState
+  latch: DoorState
+  reserved gone
+}
+";
+
+/// The tombstone moves after both fields and the fields swap: `door` keeps
+/// ordinal 2, `latch` takes ordinal 1.
+const TOMBSTONE_LAST_AND_SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  latch: DoorState
+  door: DoorState
+  reserved gone
+}
+";
+
+/// A tombstone between the second and third field: `window` is ordinal 4.
+const TOMBSTONE_BETWEEN: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  door: DoorState
+  latch: DoorState
+  reserved gone
+  window: DoorState
+}
+";
+
+/// The first two fields swap and the tombstone moves after `window`, which
+/// keeps its place among the live names while its ordinal drops from 4 to 3.
+const SWAPPED_AROUND_TOMBSTONE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  latch: DoorState
+  door: DoorState
+  window: DoorState
+  reserved gone
+}
+";
+
+/// A moved tombstone shifts the ordinal of a field without changing the order
+/// of the live names. The report names the field and its ordinals; it does not
+/// fall back to a bare `constraint_changed` on the container.
+#[test]
+fn a_moved_struct_tombstone_reports_the_field_it_shifted() {
+    let dir = TempDir::new("tombstone-shift");
+    let old = workspace(&dir, "old", TOMBSTONE_FIRST);
+    let new = workspace(&dir, "new", TOMBSTONE_MOVED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a shifted field ordinal is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/door: ordinal 2 -> ordinal 1\n"),
+        "door slid into the slot the tombstone left:\n{out}",
+    );
+    assert!(
+        !out.contains("member_reordered veh.cluster/Report/latch"),
+        "latch kept ordinal 3:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "nothing changed in place, so nothing is reported on the container:\n{out}",
+    );
+}
+
+/// A field that keeps its place among the live names still moves when a
+/// tombstone ahead of it moves: the reported number is the ordinal, not the
+/// index among the live names, so `window` is reported alongside the swap.
+#[test]
+fn a_field_shifted_by_a_moved_tombstone_is_reported_by_ordinal() {
+    let dir = TempDir::new("swap-around-tombstone");
+    let old = workspace(&dir, "old", TOMBSTONE_BETWEEN);
+    let new = workspace(&dir, "new", SWAPPED_AROUND_TOMBSTONE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/door: ordinal 1 -> ordinal 2\n")
+            && out.contains("member_reordered veh.cluster/Report/latch: ordinal 2 -> ordinal 1\n"),
+        "the swapped fields are reported with their ordinals:\n{out}",
+    );
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/window: ordinal 4 -> ordinal 3\n"),
+        "window kept its place among the live names but not its ordinal:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "nothing changed in place, so nothing is reported on the container:\n{out}",
+    );
+}
+
+/// A tombstone written after the fields it used to precede frees its slot, and
+/// every field after it slides down one ordinal. The order-insensitive
+/// comparison clears the tombstone's ordinal as well as the fields', so no
+/// `constraint_changed` is reported for what is only a reorder.
+#[test]
+fn a_tombstone_moved_to_the_end_shifts_every_field_after_it() {
+    let dir = TempDir::new("tombstone-last");
+    let old = workspace(&dir, "old", TOMBSTONE_FIRST);
+    let new = workspace(&dir, "new", TOMBSTONE_LAST);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a shifted field ordinal is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/door: ordinal 2 -> ordinal 1\n")
+            && out.contains("member_reordered veh.cluster/Report/latch: ordinal 3 -> ordinal 2\n"),
+        "both fields slid down one ordinal:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "nothing changed in place, so nothing is reported on the container:\n{out}",
+    );
+}
+
+/// A tombstone move and a field swap in one edit: the report is one line per
+/// field whose ordinal changed. `door` swapped places among the live names but
+/// kept ordinal 2, so it is not reported; the tombstone's move is visible
+/// through `latch`, which took the slot the tombstone left.
+#[test]
+fn a_tombstone_move_with_a_swap_reports_only_the_ordinals_that_changed() {
+    let dir = TempDir::new("tombstone-last-and-swap");
+    let old = workspace(&dir, "old", TOMBSTONE_FIRST);
+    let new = workspace(&dir, "new", TOMBSTONE_LAST_AND_SWAPPED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a shifted field ordinal is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/latch: ordinal 3 -> ordinal 1\n"),
+        "latch took the slot the tombstone left:\n{out}",
+    );
+    assert!(
+        !out.contains("member_reordered veh.cluster/Report/door"),
+        "door kept ordinal 2:\n{out}",
+    );
+    assert!(
+        !out.contains("constraint_changed"),
+        "nothing changed in place, so nothing is reported on the container:\n{out}",
     );
 }

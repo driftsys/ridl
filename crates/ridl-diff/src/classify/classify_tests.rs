@@ -679,7 +679,8 @@ fn a_raised_minimum_length_is_breaking() {
 }
 
 /// The row `--explain constraint_changed` documents verbatim: "a composite body
-/// changed in place is breaking: the walk cannot say what moved inside it".
+/// changed in place is breaking: the walk does not say which member changed
+/// inside it".
 ///
 /// A struct field retyped keeps every member name, so the walk reports no
 /// addition and no removal and falls through to a bodiless `ConstraintChanged`
