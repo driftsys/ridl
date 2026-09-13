@@ -13,8 +13,9 @@ shared compiler crates — the same parser, resolver, and checker `ridl check` a
 cargo install --path crates/ridl
 ```
 
-(A release tarball and an installer script are added by the distribution plan,
-`docs/wip/2026-09-13-vscode-extension-distribution-design.md`.)
+Installer scripts, `install.sh` and `install.ps1`, exist at the repository root
+and download the binary from a GitHub Release; a maintainer has not yet
+published one.
 
 ## Tools
 
