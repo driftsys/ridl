@@ -1947,6 +1947,13 @@ mod json_tests {
             file,
             range: TextRange::new(TextSize::from(10), TextSize::from(17)),
         };
+        // A different span from the primary one — a different line and a
+        // different column — so a fix-it's span cannot pass this test by
+        // being serialized from the primary span instead of its own.
+        let fixit_span = Span {
+            file,
+            range: TextRange::new(TextSize::from(8), TextSize::from(9)),
+        };
         let diagnostic = Diagnostic {
             // A real catalogued code, not a fabricated literal: the
             // `codes_written_as_string_literals_are_all_catalogued` workspace
@@ -1958,7 +1965,7 @@ mod json_tests {
             primary: span,
             labels: Vec::new(),
             fixits: vec![FixIt {
-                span,
+                span: fixit_span,
                 replacement: "type X: integer".to_string(),
                 label: "give `X` a backing type".to_string(),
             }],
@@ -1977,7 +1984,18 @@ mod json_tests {
         assert_eq!(first.fixes.len(), 1);
         assert_eq!(first.fixes[0].label, "give `X` a backing type");
         assert_eq!(first.fixes[0].replacement, "type X: integer");
-        assert_eq!(first.fixes[0].span, first.span);
+        assert_eq!(
+            first.fixes[0].span.start,
+            LineCol { line: 1, column: 9 },
+            "the fix-it's span is its own, not the primary span",
+        );
+        assert_eq!(
+            first.fixes[0].span.end,
+            LineCol {
+                line: 1,
+                column: 10
+            }
+        );
     }
 
     /// The struct-field assertions in the test above are checked against
@@ -1994,6 +2012,13 @@ mod json_tests {
             file,
             range: TextRange::new(TextSize::from(10), TextSize::from(17)),
         };
+        // A different span from the primary one, so the snapshot cannot pass
+        // by serializing the fix-it's span from the primary span instead of
+        // its own.
+        let fixit_span = Span {
+            file,
+            range: TextRange::new(TextSize::from(8), TextSize::from(9)),
+        };
         let diagnostic = Diagnostic {
             code: DiagCode::TYPL_009,
             severity: Severity::Error,
@@ -2001,7 +2026,7 @@ mod json_tests {
             primary: span,
             labels: Vec::new(),
             fixits: vec![FixIt {
-                span,
+                span: fixit_span,
                 replacement: "type X: integer".to_string(),
                 label: "give `X` a backing type".to_string(),
             }],
@@ -2028,5 +2053,92 @@ mod json_tests {
         assert_eq!(json[0].severity, "warning");
         assert_eq!(json[0].span.path, "");
         assert_eq!(json[0].span.start, LineCol { line: 1, column: 1 });
+    }
+
+    /// A source map holding two files, with a diagnostic whose primary span
+    /// and label span both point into the second one. Every other JSON
+    /// fixture in this module registers exactly one file, under which
+    /// `json_span` resolving every span against a hard-coded `FileId(0)`
+    /// would still pass. The two files here also lay out their lines
+    /// differently, so a wrong-file lookup reads the wrong line and column,
+    /// not only the wrong path.
+    #[test]
+    fn to_json_resolves_spans_in_the_second_of_two_files() {
+        let mut sources = SourceMap::new();
+        let _first = sources.file_id("a.typl", "package p\n");
+        let second = sources.file_id("b.typl", "package p\nimport a\ntype Y:\n");
+        let primary = Span {
+            file: second,
+            range: TextRange::new(TextSize::from(19), TextSize::from(26)),
+        };
+        let label_span = Span {
+            file: second,
+            range: TextRange::new(TextSize::from(10), TextSize::from(18)),
+        };
+        let diagnostic = Diagnostic {
+            code: DiagCode::TYPL_009,
+            severity: Severity::Error,
+            message: "expected a type".to_string(),
+            primary,
+            labels: vec![Label {
+                span: label_span,
+                message: "imported here".to_string(),
+            }],
+            fixits: Vec::new(),
+        };
+
+        let json = to_json(&[diagnostic], &sources);
+
+        let first = &json[0];
+        assert_eq!(first.span.path, "b.typl");
+        assert_eq!(first.span.start, LineCol { line: 3, column: 1 });
+        assert_eq!(first.span.end, LineCol { line: 3, column: 8 });
+        assert_eq!(first.labels.len(), 1);
+        assert_eq!(first.labels[0].message, "imported here");
+        assert_eq!(first.labels[0].span.path, "b.typl");
+        assert_eq!(first.labels[0].span.start, LineCol { line: 2, column: 1 });
+        assert_eq!(first.labels[0].span.end, LineCol { line: 2, column: 9 });
+    }
+
+    /// `Severity::Info` renders as `"info"`. The other two variants
+    /// (`"error"`, `"warning"`) are already exercised above.
+    #[test]
+    fn to_json_reports_info_severity() {
+        let sources = SourceMap::new();
+        let diagnostic = Diagnostic {
+            code: DiagCode::TYPL_115,
+            severity: Severity::Info,
+            message: "type has no derivable init value".to_string(),
+            primary: Span {
+                file: FileId::DETACHED,
+                range: TextRange::new(TextSize::from(0), TextSize::from(0)),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        let json = to_json(&[diagnostic], &sources);
+        assert_eq!(json[0].severity, "info");
+    }
+
+    /// `code` stays present on the wire, as an empty string, for a diagnostic
+    /// carrying [`DiagCode::NONE`] — never omitted or turned into `null`. A
+    /// snapshot pins the whole serialized object, so a `#[serde(skip_serializing_if
+    /// = "String::is_empty")]` mutation on `code` (which a struct-field-only
+    /// assertion would not catch) drops the key and fails this comparison.
+    #[test]
+    fn to_json_keeps_the_code_field_present_when_empty() {
+        let sources = SourceMap::new();
+        let diagnostic = Diagnostic {
+            code: DiagCode::NONE,
+            severity: Severity::Error,
+            message: "unknown type name `Frob`".to_string(),
+            primary: Span {
+                file: FileId::DETACHED,
+                range: TextRange::new(TextSize::from(0), TextSize::from(0)),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        insta::assert_json_snapshot!(to_json(&[diagnostic], &sources));
     }
 }

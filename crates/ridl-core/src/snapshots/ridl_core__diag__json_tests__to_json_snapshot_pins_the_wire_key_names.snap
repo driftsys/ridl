@@ -26,12 +26,12 @@ expression: "to_json(&[diagnostic], &sources)"
         "span": {
           "path": "a.typl",
           "start": {
-            "line": 2,
-            "column": 1
+            "line": 1,
+            "column": 9
           },
           "end": {
-            "line": 2,
-            "column": 8
+            "line": 1,
+            "column": 10
           }
         }
       }
