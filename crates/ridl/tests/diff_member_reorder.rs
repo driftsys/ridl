@@ -298,3 +298,87 @@ fn an_enum_reorder_with_unchanged_values_reports_only_member_reordered() {
         "no value changed, so nothing is reported on the container:\n{out}",
     );
 }
+
+/// A tombstone ahead of both fields: `door` is ordinal 2 and `latch` ordinal 3.
+const TOMBSTONE_FIRST: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  reserved gone
+  door: DoorState
+  latch: DoorState
+}
+";
+
+/// The tombstone moves between the fields. The live names keep their order,
+/// yet `door` is now ordinal 1.
+const TOMBSTONE_MOVED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  door: DoorState
+  reserved gone
+  latch: DoorState
+}
+";
+
+const GEARS_WITH_RESERVED: &str = "package veh.cluster
+enum GearPosition {
+  PARK = 0
+  DRIVE = 1
+  reserved 3
+  reserved 4
+}
+";
+
+/// The two tombstones swap places in the text. Every value and every retired
+/// number is unchanged.
+const GEARS_RESERVED_REORDERED: &str = "package veh.cluster
+enum GearPosition {
+  PARK = 0
+  DRIVE = 1
+  reserved 4
+  reserved 3
+}
+";
+
+/// A tombstone that moves shifts the ordinal of a live field even though the
+/// live names keep their order. The order-insensitive comparison clears every
+/// ordinal, so it alone would read the two bodies as equal: the report must
+/// still come out breaking, never `identical` with exit 0.
+#[test]
+fn a_moved_struct_tombstone_is_not_identical() {
+    let dir = TempDir::new("tombstone-moved");
+    let old = workspace(&dir, "old", TOMBSTONE_FIRST);
+    let new = workspace(&dir, "new", TOMBSTONE_MOVED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a shifted field ordinal is a wire break:\n{out}");
+    assert!(
+        stdout.starts_with("breaking"),
+        "the report verdict is breaking, not identical:\n{out}",
+    );
+}
+
+/// The order of an enum's tombstones is removed by the order-insensitive
+/// comparison, so that comparison alone would read a reordered reserved list
+/// as equal. The bodies differ, and the walk does not read the reserved list
+/// as identities, so the report is conservative: breaking, never `identical`
+/// with exit 0.
+#[test]
+fn a_reordered_enum_reserved_list_is_not_identical() {
+    let dir = TempDir::new("enum-reserved-reordered");
+    let old = workspace(&dir, "old", GEARS_WITH_RESERVED);
+    let new = workspace(&dir, "new", GEARS_RESERVED_REORDERED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a changed reserved list is reported breaking:\n{out}");
+    assert!(
+        stdout.starts_with("breaking"),
+        "the report verdict is breaking, not identical:\n{out}",
+    );
+}
