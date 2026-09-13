@@ -65,6 +65,11 @@ enum Command {
         /// exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
+        /// Output format: human-readable text on stderr (the default), or a
+        /// JSON array of diagnostics on stdout with a stable schema
+        /// (`ridl_core::diag::JsonDiagnostic`).
+        #[arg(long, value_enum, default_value_t = CheckFormat::Text)]
+        format: CheckFormat,
     },
     /// Publish the current workspace as a baseline: one `<pkg-name>.ir.json`
     /// snapshot per package, written to `.ridl/baseline/` at the workspace
@@ -140,6 +145,13 @@ enum DiffFormat {
     Json,
 }
 
+/// The `ridl check` output format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum CheckFormat {
+    Text,
+    Json,
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     match cli.command {
@@ -147,7 +159,8 @@ fn main() -> ExitCode {
             path,
             frozen,
             baseline,
-        } => run_check(&path, frozen, baseline.as_deref()),
+            format,
+        } => run_check(&path, frozen, baseline.as_deref(), format),
         Command::Baseline { path, out } => run_baseline(&path, out.as_deref()),
         Command::Build {
             path,
@@ -441,7 +454,7 @@ const ORDINAL_CATEGORIES: [ridl_diff::Category; 7] = [
 /// contract, so a reordered but otherwise clean workspace still exits 0. It is
 /// also skipped entirely when the compile produced an error — a diff against
 /// IR that failed to check would report noise on top of the real problem.
-fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
+fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
     let mut run = match ridlc::run_check(path, frozen.into()) {
         Ok(run) => run,
         Err(err) => {
@@ -462,7 +475,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
         }
     }
 
-    finish(Ok(run))
+    finish_check(run, format)
 }
 
 /// Publishes the workspace at `path` as a baseline.
@@ -1503,6 +1516,26 @@ fn dotted_text(node: &ridl_syntax::SyntaxNode) -> Option<String> {
         .map(|token| token.text().to_string())
         .collect();
     (!text.is_empty()).then_some(text)
+}
+
+/// Ends `ridl check`: text renders to stderr through [`finish`]; JSON prints
+/// the contract to stdout and keeps the same exit code.
+fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
+    match format {
+        CheckFormat::Text => finish(Ok(run)),
+        CheckFormat::Json => {
+            let json = ridl_core::diag::to_json(&run.diagnostics, &run.sources);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json).expect("diagnostics serialize")
+            );
+            if run.has_error() {
+                ExitCode::FAILURE
+            } else {
+                ExitCode::SUCCESS
+            }
+        }
+    }
 }
 
 /// Renders a check/build run's diagnostics to stderr and turns the outcome into
