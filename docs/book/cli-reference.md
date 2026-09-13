@@ -265,7 +265,40 @@ ridl baseline && find .ridl/baseline -type f | sort
 .ridl/baseline/veh.common.ir.json
 ```
 
-**Exit codes.** 0 on a clean publish. 1 when a diagnostic is an error — the
+**The publication gate.** Before writing anything, `ridl baseline` compares
+the snapshot it is about to publish against the one already there, and
+refuses to replace it when the replacement drops an interaction the existing
+baseline still declares — RIDL-408, exit 1, nothing published. The refusal
+covers three shapes: the interaction is gone from the source with no
+`reserved` line at all; the source retires it with a `reserved` line, but at
+an ordinal other than the one the interaction held; or the baseline already
+retired the interaction with a `reserved` line and the source has dropped
+that line. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
+still declared:
+
+```sh
+ridl baseline
+```
+
+```text
+error[RIDL-408]: `doorClosed` is gone from the source but the baseline being replaced still declares it. Publishing would free its ordinal for a later interaction to reuse, with nothing left to record that it was ever taken. Retire it in place with `reserved doorClosed`.
+  ┌─ ./demo.ridl:3:11
+  │
+3 │ interface VehicleStatus {
+  │           ^^^^^^^^^^^^^
+
+```
+
+A first publication — the output directory absent, or present and holding no
+`.ir.json` snapshot yet — has nothing to compare against, so it is never
+refused. This is the same empty-directory shape [`ridl check --baseline`
+refuses](#ridl-check) when it is named explicitly: `ridl check --baseline`
+refuses it because the user named the directory as a baseline to compare
+against, while `ridl baseline --out` treats it as a first publication because
+it is the directory being written.
+
+**Exit codes.** 0 on a clean publish. 1 when a diagnostic is an error, or when
+the publication gate above refuses the replacement — in both cases the
 existing baseline is left exactly as it was, because a re-publish must never
 destroy a good baseline with a broken one:
 
@@ -282,7 +315,9 @@ error: unknown type name `Nope`
 
 ```
 
-2 when the workspace itself cannot be found, the same as `ridl check`:
+2 when the workspace itself cannot be found, the same as `ridl check`, when
+the output directory cannot be read or written, or when a published
+`.ir.json` snapshot fails to parse:
 
 ```sh
 ridl baseline /nonexistent/ridl/workspace
@@ -290,6 +325,18 @@ ridl baseline /nonexistent/ridl/workspace
 
 ```text
 error: `/nonexistent/ridl/workspace` does not exist
+```
+
+A published snapshot that cannot be parsed is left untouched rather than
+silently overwritten: replacing it would destroy whatever ordinal record it
+held with no one able to see it go. The message names a way out:
+
+```sh
+ridl baseline
+```
+
+```text
+error: ./.ridl/baseline/veh.cluster.ir.json: the IR snapshot is not valid IR v2 JSON: expected value at line 1 column 1; restore the file (for example from version control, or by resolving a merge conflict left in it), or delete it and run `ridl baseline` again — deleting it discards the record it held
 ```
 
 ### `ridl build`
@@ -1024,7 +1071,7 @@ compiler directly and want its stable, default-free flags.
 | --- | --- | --- | --- |
 | `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
-| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error; the existing baseline is left untouched | the workspace cannot be found |
+| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses an untombstoned removal; the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
 | `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike five of the other seven, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
