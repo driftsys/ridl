@@ -403,9 +403,8 @@ wording was never a JSON comparison to begin with: `ridl-lsp` renders
 diagnostics through `lsp_types::Diagnostic` (`crates/ridl-lsp/src/convert.rs`),
 not `ridl_core::diag::to_json`, so there was no shared serializer for
 "byte-identical to ... LSP" to hold through. The row above states the reachable
-criterion; see
-[`docs/wip/2026-09-13-ridl-mcp-v0-design.md`](wip/2026-09-13-ridl-mcp-v0-design.md),
-"What the two faces share, and where they differ."
+criterion; see `crates/ridl-mcp/README.md`, "What this tool shares with
+`ridl check --format json <file>`, and where it differs."
 
 ---
 

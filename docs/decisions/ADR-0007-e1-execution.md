@@ -169,6 +169,15 @@ at epic close) and cites these decisions by number.
     The tag push and the environment approval are the maintainer acts this
     decision requires.
 
+    Two prerequisites are maintainer acts as well, and the publish jobs cannot
+    run before both exist: the repository secrets `VSCE_PAT` and `OVSX_PAT`, and
+    the `marketplace` GitHub Environment with required reviewers. Recovery from
+    a partial publish is manual: neither `vsce publish` nor `ovsx publish` is
+    idempotent, so after a failure part-way through the target matrix, publish
+    the remaining targets individually rather than re-running the job.
+    `docs/technotes/toolchain-distribution.md` describes the train and the
+    binary-resolution order it feeds.
+
 15. **`ridl.std` ships embedded in the compiler.** The Appendix A source is
     committed verbatim as an asset of `ridl-core` and loaded via `include_str!`
     as a built-in, implicitly imported package — no filesystem or network

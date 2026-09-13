@@ -122,8 +122,9 @@ async fn ridl_check_returns_the_diagnostic_contract() {
 /// The two faces register the source under different names by construction —
 /// the tool under the synthetic `input.typl`, the CLI under the real file it
 /// read — so the path is the one field the agreement test must set aside
-/// (`docs/wip/2026-09-13-ridl-mcp-v0-design.md` §2, "What the two faces share,
-/// and where they differ"). No compiler pass emits a fix-it today, so the
+/// (`crates/ridl-mcp/README.md`, "What this tool shares with `ridl check
+/// --format json <file>`, and where it differs"). No compiler pass emits a
+/// fix-it today, so the
 /// inner loop is a no-op on current inputs; it is here because a `fixes` entry
 /// carries a span of its own and would otherwise reintroduce the difference.
 fn blank_span_paths(diagnostics: &mut serde_json::Value) {

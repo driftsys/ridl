@@ -241,6 +241,29 @@ Agent enablement is not a separate program; it rides the existing phases:
   MCP for Claude Code/Cowork/Cursor), and does the same binary back a CLI
   `ridl agent`-style entry? The interactively-authenticated-MCP caveat
   (headless/cron hosts may lack it) needs a fallback-to-CLI story.
+
+  _Resolved (2026-09-13)._ Both halves are answered. The first-class hosts are
+  Claude Code, GitHub Copilot, and Codex, all speaking MCP over stdio, reached
+  by two mechanisms: the VS Code extension registers `ridl mcp` through
+  `vscode.lm.registerMcpServerDefinitionProvider`, which serves Copilot inside
+  VS Code, while Claude Code and Codex read their own configuration and need
+  only the `ridl` binary on `PATH`. One binary backs both entry points:
+  `ridl
+  lsp` and `ridl mcp` are subcommands of the `ridl` CLI, not separate
+  executables. The fallback for a host without MCP is
+  `ridl check --format
+  json`, which serialises through the same
+  `ridl_core::diag::to_json` as the MCP tool, so the two faces agree diagnostic
+  for diagnostic. Cursor and Cowork are not first-class in this pass, and for
+  Cursor the reason is a cost this decision accepts.
+  `registerMcpServerDefinitionProvider` requires VS Code 1.101, so the
+  extension's `engines.vscode` and `@types/vscode` moved from `^1.91.0` to
+  `^1.101.0`, and a VS Code fork below 1.101 can no longer install the extension
+  at all — including the language server it could use before. The alternative,
+  holding `engines` at `^1.91.0` and hand-declaring the MCP API types behind a
+  runtime guard, would carry an unversioned copy of a VS Code API in this
+  repository for a fork that tracks upstream within months. The bump is
+  accepted; a report from a user on an older fork is what reopens it.
 - **Eval scoring beyond "compiles."** Compilation is necessary, not sufficient —
   idiomaticity (signal-vs-event choice, right error composition) needs a rubric
   or an LLM-judge with a golden set. Scope for Phase 2.

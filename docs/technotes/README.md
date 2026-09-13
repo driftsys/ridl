@@ -9,3 +9,7 @@ it — for decisions that bind downstream work, see
   overlay design the next profile's implementer needs, as they actually landed
   in the merged code. (The filename keeps its E0 origin; the E0 and E1-only
   versions are in git history.)
+- **toolchain-distribution.md** — how the `ridl` binary and the VS Code
+  extension reach a machine: the two release trains and their disjoint tag
+  namespaces, where the reported version comes from, the extension's three-tier
+  binary resolution, and what the install scripts verify.

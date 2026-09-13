@@ -42,7 +42,12 @@ object listed above is identical between the two faces. Two things are not:
 
 - **The top level.** This tool returns the object `{"diagnostics": [ … ]}`.
   `ridl check --format json` prints the bare array instead, with no
-  `diagnostics` key.
+  `diagnostics` key. The wrapper is not incidental: MCP's structured tool output
+  (`CallToolResult.structuredContent`) must be a JSON object validated against
+  an `outputSchema`, so an object envelope can later become structured content
+  and can gain sibling fields without breaking a reader, and a bare array can do
+  neither. The CLI has no such constraint, and a bare array is what a `jq`
+  pipeline expects.
 - **`span.path`.** This tool's input is a source string with no file, so every
   span reports the fixed synthetic path `input.typl` or `input.ridl`.
   `ridl check --format json <file>` reports the real path it read.
