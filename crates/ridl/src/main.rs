@@ -65,9 +65,9 @@ enum Command {
         /// exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
-        /// Output format: human-readable text on stderr (the default), or a
-        /// JSON array of diagnostics on stdout with a stable schema
-        /// (`ridl_core::diag::JsonDiagnostic`).
+        /// Output format for the report: text renders to stderr (the
+        /// default); json goes to stdout instead — see the CLI reference
+        /// (docs/book/cli-reference.md) for its schema.
         #[arg(long, value_enum, default_value_t = CheckFormat::Text)]
         format: CheckFormat,
     },
@@ -1518,6 +1518,17 @@ fn dotted_text(node: &ridl_syntax::SyntaxNode) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
+/// The 1/0 rule every `check`/`build` run turns its diagnostics into: 1 when
+/// any diagnostic is an error, 0 otherwise. Shared by [`finish`] and
+/// [`finish_check`]'s JSON arm so the rule is stated once.
+fn exit_code(run: &CliRun) -> ExitCode {
+    if run.has_error() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
 /// Ends `ridl check`: text renders to stderr through [`finish`]; JSON prints
 /// the contract to stdout and keeps the same exit code.
 fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
@@ -1529,11 +1540,7 @@ fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
                 "{}",
                 serde_json::to_string_pretty(&json).expect("diagnostics serialize")
             );
-            if run.has_error() {
-                ExitCode::FAILURE
-            } else {
-                ExitCode::SUCCESS
-            }
+            exit_code(&run)
         }
     }
 }
@@ -1545,11 +1552,7 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     match run {
         Ok(run) => {
             eprint!("{}", render(&run.diagnostics, &run.sources));
-            if run.has_error() {
-                ExitCode::FAILURE
-            } else {
-                ExitCode::SUCCESS
-            }
+            exit_code(&run)
         }
         Err(err) => {
             eprintln!("error: {err}");

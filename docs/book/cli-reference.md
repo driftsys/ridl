@@ -95,6 +95,7 @@ Arguments:
 Options:
       --frozen               Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
       --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
+      --format <FORMAT>      Output format for the report: text renders to stderr (the default); json goes to stdout instead — see the CLI reference (docs/book/cli-reference.md) for its schema [default: text] [possible values: text, json]
   -h, --help                 Print help
 ```
 
@@ -150,6 +151,35 @@ error[TYPL-104]: range minimum 250 is greater than maximum 0
 3 │ type Speed : km/h [250.0..0.0 step 0.5]
   │                   ^^^^^^^^^^^^^^^^^^^^^
 
+```
+
+The same run with `--format json`, the JSON diagnostic contract also
+`ridl_core::diag::to_json` produces:
+
+```sh
+ridl check --format json
+```
+
+```text
+[
+  {
+    "code": "TYPL-104",
+    "severity": "error",
+    "message": "range minimum 250 is greater than maximum 0",
+    "span": {
+      "path": "./demo.ridl",
+      "start": {
+        "line": 3,
+        "column": 19
+      },
+      "end": {
+        "line": 3,
+        "column": 40
+      }
+    },
+    "fixes": []
+  }
+]
 ```
 
 2 when the workspace itself cannot be found:
