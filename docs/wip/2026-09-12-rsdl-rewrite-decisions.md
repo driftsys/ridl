@@ -348,10 +348,14 @@ checked in, written only by `ridl lock`:
   `ridl-backend-flatbuffers` each emit an `<Interface>Ordinal` identity-table
   enum, claimed in the target's own name scope (ADR-0013 decision 3, under the
   scope obligation of ADR-0017 decision 4 and ADR-0019 decision 5). A
-  same-number rename leaves every wire number untouched and renames that enum
-  together with every value in it. No projection property is broken — ADR-0016
-  decision 6's stability clause is written over numbers, and ADR-0017 decision
-  4's totality over names refuses collisions rather than promising that a name
+  same-number rename leaves every wire number untouched and still renames
+  generated names, differently in each target: in proto3 the enum and every
+  value in it, because that backend prefixes each value with the
+  interface-derived name; in FlatBuffers the enum's own name alone, because
+  FlatBuffers scopes values inside their enum and prefixes none of them
+  (ADR-0019 decision 5). No projection property is broken — ADR-0016 decision
+  6's stability clause is written over numbers, and ADR-0017 decision 4's
+  totality over names refuses collisions rather than promising that a name
   persists — so neither projection record is amended. What changes is what the
   verdict means: `Compatible` would otherwise imply that nothing in a consumer's
   generated code was renamed, and here it does not. A rename therefore gets its
