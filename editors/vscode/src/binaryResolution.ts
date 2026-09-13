@@ -48,3 +48,26 @@ export function isLegacyServerName(configuredPath: string): boolean {
   const base = path.win32.basename(path.posix.basename(configuredPath));
   return base === "ridl-lsp" || base === "ridl-lsp.exe";
 }
+
+export interface McpDefinitionInput extends ResolveInput {
+  readonly extensionVersion: string;
+  readonly workspaceFolder: string | undefined;
+}
+
+/** The MCP server definition VS Code hands to Copilot: `ridl mcp`, same binary as the LSP. */
+export function resolveMcpDefinition(input: McpDefinitionInput): {
+  label: string;
+  command: string;
+  args: string[];
+  cwd: string | undefined;
+  version: string;
+} {
+  const { command } = resolveBinary(input);
+  return {
+    label: "RIDL",
+    command,
+    args: [...MCP_ARGS],
+    cwd: input.workspaceFolder,
+    version: input.extensionVersion,
+  };
+}

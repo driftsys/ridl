@@ -5,6 +5,7 @@ import {
   bundledBinaryPath,
   isLegacyServerName,
   resolveBinary,
+  resolveMcpDefinition,
 } from "./binaryResolution";
 
 const EXT = "/fake/extensions/driftsys.ridl-vscode-0.1.0";
@@ -58,4 +59,23 @@ test("the old ridl-lsp binary name is recognised so the user gets a warning", ()
   assert.equal(isLegacyServerName("/home/dev/.cargo/bin/ridl-lsp"), true);
   assert.equal(isLegacyServerName("C:\\Users\\dev\\.cargo\\bin\\ridl-lsp.exe"), true);
   assert.equal(isLegacyServerName("/home/dev/.cargo/bin/ridl"), false);
+});
+
+test("the MCP definition spawns the same binary with the mcp subcommand", () => {
+  const bundled = path.join(EXT, "bin", "ridl");
+  const definition = resolveMcpDefinition({
+    configuredPath: undefined,
+    extensionPath: EXT,
+    platform: "linux",
+    exists: (file) => file === bundled,
+    extensionVersion: "0.1.0",
+    workspaceFolder: "/work/project",
+  });
+  assert.deepEqual(definition, {
+    label: "RIDL",
+    command: bundled,
+    args: ["mcp"],
+    cwd: "/work/project",
+    version: "0.1.0",
+  });
 });

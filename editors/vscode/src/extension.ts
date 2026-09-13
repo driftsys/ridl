@@ -18,7 +18,14 @@ import {
   ServerOptions,
   TransportKind,
 } from "vscode-languageclient/node";
-import { isLegacyServerName, LSP_ARGS, resolveBinary } from "./binaryResolution";
+import {
+  isLegacyServerName,
+  LSP_ARGS,
+  resolveBinary,
+  resolveMcpDefinition,
+} from "./binaryResolution";
+
+const MCP_PROVIDER_ID = "ridl";
 
 let client: LanguageClient | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
@@ -39,6 +46,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
   );
+  registerMcpProvider(context);
   await client.start();
 }
 
@@ -88,4 +96,48 @@ async function restartClient(): Promise<void> {
   }
   client = createClient(extensionContext!);
   await client.start();
+}
+
+/**
+ * Registers `ridl mcp` with VS Code's MCP registry so Copilot (and any other
+ * MCP-aware client inside VS Code) sees the same binary the LSP uses. Claude
+ * Code and Codex do not read this registry; crates/ridl-mcp/README.md covers
+ * them.
+ */
+function registerMcpProvider(context: vscode.ExtensionContext): void {
+  const didChange = new vscode.EventEmitter<void>();
+  context.subscriptions.push(didChange);
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("ridl.serverPath")) {
+        didChange.fire();
+      }
+    }),
+  );
+  context.subscriptions.push(
+    vscode.lm.registerMcpServerDefinitionProvider(MCP_PROVIDER_ID, {
+      onDidChangeMcpServerDefinitions: didChange.event,
+      provideMcpServerDefinitions: () => {
+        const resolved = resolveMcpDefinition({
+          configuredPath: configuredServerPath(),
+          extensionPath: context.extensionPath,
+          platform: process.platform,
+          exists: (file) => fs.existsSync(file),
+          extensionVersion: String(context.extension.packageJSON.version),
+          workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath,
+        });
+        const definition = new vscode.McpStdioServerDefinition(
+          resolved.label,
+          resolved.command,
+          resolved.args,
+          {},
+          resolved.version,
+        );
+        if (resolved.cwd) {
+          definition.cwd = vscode.Uri.file(resolved.cwd);
+        }
+        return [definition];
+      },
+    }),
+  );
 }
