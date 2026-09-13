@@ -1,8 +1,11 @@
 // The RIDL VS Code extension entry point (docs/ROADMAP.md epics E1.17,
 // E2.10b).
 //
-// Activates on the `typl` and `ridl` languages and starts one LSP client over
-// stdio against the `ridl` binary, run as `ridl lsp` (crates/ridl). One
+// `activate` registers the "Install ridl to PATH" command and the MCP
+// server definition provider unconditionally — both are cheap and spawn no
+// process. It starts the LSP client (over stdio against the `ridl` binary,
+// run as `ridl lsp`, crates/ridl) only once a `typl` or `ridl` document is
+// open: one already open at activation, or the first one opened later. One
 // server serves both languages: the compiler selects the profile from the
 // file extension, so a `.ridl` file and a `.typl` file of the same package
 // are checked together. The same binary also runs as `ridl mcp` for the
@@ -26,6 +29,7 @@ import {
   isLegacyServerName,
   resolveLspCommand,
   resolveMcpDefinition,
+  shouldStartClientForLanguage,
 } from "./binaryResolution";
 import { copyIsStale, isDirOnPath, parseVersionOutput, pathHint, performCopy, planInstall } from "./installToPath";
 
@@ -35,6 +39,10 @@ const execFileAsync = promisify(execFile);
 
 let client: LanguageClient | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
+// True once the language client has been started (or has begun starting).
+// Guards against starting it twice and marks when the stale-copy check has
+// run.
+let clientStarted = false;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   extensionContext = context;
@@ -44,20 +52,27 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       "ridl.serverPath names the old ridl-lsp binary. The setting now points at the ridl binary, which the extension runs as `ridl lsp`.",
     );
   }
-  client = createClient(context);
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(async (event) => {
-      if (event.affectsConfiguration("ridl.serverPath")) {
-        await restartClient();
-      }
-    }),
-  );
   registerMcpProvider(context);
   context.subscriptions.push(
     vscode.commands.registerCommand("ridl.installToPath", () => installToPath(context)),
   );
-  void offerRefreshOfStaleCopy(context);
-  await client.start();
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(async (event) => {
+      if (event.affectsConfiguration("ridl.serverPath") && client) {
+        await restartClient();
+      }
+    }),
+  );
+  context.subscriptions.push(
+    vscode.workspace.onDidOpenTextDocument((document) => {
+      if (shouldStartClientForLanguage(document.languageId)) {
+        void startClientIfNeeded(context);
+      }
+    }),
+  );
+  if (vscode.workspace.textDocuments.some((document) => shouldStartClientForLanguage(document.languageId))) {
+    await startClientIfNeeded(context);
+  }
 }
 
 export async function deactivate(): Promise<void> {
@@ -65,6 +80,15 @@ export async function deactivate(): Promise<void> {
     await client.stop();
     client = undefined;
   }
+}
+
+/** Starts the language client the first time a `typl` or `ridl` document is open; a no-op afterward. */
+async function startClientIfNeeded(context: vscode.ExtensionContext): Promise<void> {
+  if (clientStarted) return;
+  clientStarted = true;
+  client = createClient(context);
+  await client.start();
+  void offerRefreshOfStaleCopy(context);
 }
 
 /** The `ridl.serverPath` setting, trimmed, or undefined when blank. */

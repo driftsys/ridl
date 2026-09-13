@@ -77,3 +77,12 @@ export function resolveLspCommand(input: ResolveInput): { command: string; args:
   const { command } = resolveBinary(input);
   return { command, args: [...LSP_ARGS] };
 }
+
+// The language ids the language client serves. A `.typl` and a `.ridl` file
+// of the same package are checked together by one server (see extension.ts).
+const CLIENT_LANGUAGE_IDS = ["typl", "ridl"] as const;
+
+/** Whether an open document of this language id is a reason to start the language client. */
+export function shouldStartClientForLanguage(languageId: string): boolean {
+  return (CLIENT_LANGUAGE_IDS as readonly string[]).includes(languageId);
+}

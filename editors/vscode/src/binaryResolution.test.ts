@@ -7,6 +7,7 @@ import {
   resolveBinary,
   resolveLspCommand,
   resolveMcpDefinition,
+  shouldStartClientForLanguage,
 } from "./binaryResolution";
 
 const EXT = "/fake/extensions/driftsys.ridl-vscode-0.1.0";
@@ -90,4 +91,12 @@ test("the LSP command spawns the same binary with the lsp subcommand", () => {
     exists: (file) => file === bundled,
   });
   assert.deepEqual(resolved, { command: bundled, args: ["lsp"] });
+});
+
+test("the language client starts for typl and ridl documents, not others", () => {
+  assert.equal(shouldStartClientForLanguage("typl"), true);
+  assert.equal(shouldStartClientForLanguage("ridl"), true);
+  assert.equal(shouldStartClientForLanguage("plaintext"), false);
+  assert.equal(shouldStartClientForLanguage("markdown"), false);
+  assert.equal(shouldStartClientForLanguage(""), false);
 });
