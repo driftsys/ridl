@@ -79,11 +79,12 @@ args = ["mcp"]
 
 ### GitHub Copilot in VS Code
 
-Not yet automatic. The distribution plan
-(`docs/wip/2026-09-13-vscode-extension-distribution-design.md`) has the RIDL VS
-Code extension register `ridl mcp` with VS Code (1.101 or newer) through
-`vscode.lm.registerMcpServerDefinitionProvider` when it activates, but that
-registration is not implemented yet. Until it lands, a Copilot user has to
-configure it manually: install `ridl` on `PATH` as above, then add it as a
-server the same way the Claude Code or Codex sections above do, in whichever
-place your version of VS Code keeps its MCP server list.
+Installing the RIDL VS Code extension registers `ridl mcp` with VS Code
+automatically, on VS Code 1.101 or newer, through
+`vscode.lm.registerMcpServerDefinitionProvider`. No manual configuration is
+needed.
+
+A user who is not using the extension configures it manually instead: install
+`ridl` on `PATH` as above, then add it as a server the same way the Claude Code
+or Codex sections above do, in whichever place your version of VS Code keeps its
+MCP server list.
