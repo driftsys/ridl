@@ -166,6 +166,13 @@ crates are disjoint and neither change needs the other.
   diagnostic.
 - **An output directory that cannot be read** is exit 2 with the cause named,
   which is what the publish path already does for a write it cannot perform.
+- **A published snapshot that cannot be parsed** refuses publication, exit 2,
+  rather than being silently overwritten. A baseline that cannot be read cannot
+  be shown safe to replace, and overwriting it would destroy whatever ordinal
+  record it held with no one seeing it — the exact failure this gate exists to
+  prevent. The message names a remedy: restore the file, for example from
+  version control or by resolving a merge conflict left in it, or delete it and
+  run `ridl baseline` again, which discards the record it held.
 
 ## 4. Testing
 
@@ -211,15 +218,22 @@ category `DeclReordered` (D-4); gating the interface level now (D-5).
   added and checked, so both cells are verified by direct construction against
   the built binary, as the table's existing cells were.
 - **`docs/book/cli-reference.md`** — the diff category list gains
-  `member_reordered`.
+  `member_reordered`. The `ridl baseline` section and the exit-code summary
+  table also change: the gate adds RIDL-408 to exit 1, and adds the unreadable
+  output directory and the unparseable published snapshot to exit 2.
 - **rsdl decisions note D-7** — no change. Its defect paragraph describes what
   #315 is, and this note is its disposition, not a correction of it.
 
 ## 7. Open
 
-- Whether RIDL-408's message should print the full corrected interface body, or
-  name the `reserved` line alone. Decide against the first real message, not in
-  advance.
+- **Decided.** RIDL-408's message shape: `ridl_diff` emits `InteractionRemoved`
+  for three distinct shapes — a bare removal, a tombstone at the wrong ordinal,
+  and a dropped tombstone — and each gets its own wording rather than one
+  message reused across all three. A tombstone at the wrong ordinal is told
+  apart structurally, from the change's own `after` value; a bare removal is
+  told apart from a dropped tombstone by asking the published IR whether it
+  already reserved the name, never by reading the wording of the change's
+  `before` value.
 - Whether `MemberReordered` should also be emitted when a member is inserted
   mid-body and every later member shifts. Today that case emits `DeclAdded` and
   the classifier judges the direction by reading the body. This note does not
