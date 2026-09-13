@@ -491,6 +491,23 @@ install-check:
     fi
     echo "install-check: good install verified ($install1/ridl)"
 
+    # A second install into the same, already-populated directory: install.sh
+    # replaces the existing binary rather than merely writing into an empty
+    # one, and the atomic rename it uses to do that (see the comment above
+    # the install step in install.sh) leaves no `.ridl.*` temporary file
+    # behind, unlike a same-directory copy that stops partway.
+    RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
+        RIDL_INSTALL_DIR="$install1" bash install.sh
+    if [ ! -x "$install1/ridl" ]; then
+        echo "install-check: the second install did not leave ridl executable in $install1" >&2
+        exit 1
+    fi
+    if find "$install1" -maxdepth 1 -name '.ridl.*' | grep -q .; then
+        echo "install-check: a stray .ridl.* temporary file was left behind in $install1" >&2
+        exit 1
+    fi
+    echo "install-check: second install over an existing binary verified, no stray temp file ($install1/ridl)"
+
     # A corrupted download: different content than the original .sha256
     # describes, but still a well-formed tarball. Appending garbage bytes
     # instead would also make some `tar` implementations refuse to extract
