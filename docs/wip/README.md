@@ -112,6 +112,12 @@ archive.
   with crossing kinds, routing table, grants, the attribute map). Both
   FlatBuffers, lowered from the protobuf IR, which ADR-0014 keeps for the
   toolchain. **Not ratified.**
+- **2026-09-13-catalog-descriptor-plan.md** — the twelve-task plan for the
+  catalog half of that design: the `ridl-descriptor` crate with the schema and
+  its planus-generated accessors, the verifier, provisional numbering, the
+  catalog hash, the proto3 and FlatBuffers size bounds, the lowering,
+  `ridlc build --emit catalog` and `ridl describe`. The system descriptor waits
+  for the rsdl rewrite. **Not started.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
