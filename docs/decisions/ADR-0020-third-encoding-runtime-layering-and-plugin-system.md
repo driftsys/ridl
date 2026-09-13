@@ -173,6 +173,17 @@ as its public contract.
    `ridl-rt`, and the archived `ridl-abi` note is the first draft of this
    design.
 
+   **Amendment (2026-09-13) — the module named `strata` is `error`.** The
+   `ridl-rt` 0.1 design,
+   [`docs/wip/2026-09-13-ridl-rt-v0.1-design.md`](../wip/2026-09-13-ridl-rt-v0.1-design.md)
+   R-2, renames it. The module holds the types of ridl §10's strata 2 and 3 —
+   `Contract` and `Transport` — and `CallError` over both, and a reader of
+   generated code meets `ridl_rt::error::Contract` before reading the
+   reference's vocabulary; the module documentation cites ridl §10. The six
+   modules are therefore `contract`, `sample`, `payload`, `port`, `error` and
+   `encoding`. Errors local to one module, such as a port's read error or a
+   payload's verify error, stay beside the traits that return them.
+
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
    each runtime is its own crate or package.
