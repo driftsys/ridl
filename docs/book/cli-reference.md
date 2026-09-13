@@ -2,10 +2,13 @@
 
 Two command-line binaries ship from this repository: **`ridl`**, the porcelain
 facade, and **`ridlc`**, the plumbing compiler underneath it. A third binary,
-`ridl-lsp`, builds too — the language server an editor drives over stdio (see
-[What is built](introduction.md#what-is-built)) — but it takes no subcommand
-and no flag of the kind this page documents, so it has no place here. Build
-all three with:
+`ridl-lsp`, builds too — the same language server the [`ridl lsp`](#ridl-lsp)
+subcommand documented below also runs, over the identical stdio transport (see
+[What is built](introduction.md#what-is-built)). `ridl-lsp` itself takes no
+subcommand and no flag of its own, so the standalone binary has no further
+place on this page. Both exist today: the VS Code extension currently spawns
+the standalone `ridl-lsp` binary, not the `ridl lsp` subcommand. Build all
+three with:
 
 ```sh
 cargo build --release
@@ -82,9 +85,10 @@ checks the exit code or reads the right stream.
 
 `ridl lsp` and `ridl mcp` are the two stdio servers this binary hosts — the
 language server an editor drives, and the Model Context Protocol server an
-agent drives. Neither takes an argument or a flag, so neither has a section
-below; each exits 0 when the client shuts it down and 2 when the transport
-fails or ends before the handshake.
+agent drives. Neither takes an argument or a flag; each is documented in its
+own section below, [`ridl lsp`](#ridl-lsp) and [`ridl mcp`](#ridl-mcp), and
+each exits 0 when the client shuts it down and 2 when the transport ends
+before the handshake or otherwise fails.
 
 ### `ridl check`
 
@@ -161,8 +165,8 @@ error[TYPL-104]: range minimum 250 is greater than maximum 0
 
 ```
 
-The same run with `--format json`, the JSON diagnostic contract also
-`ridl_core::diag::to_json` produces:
+The same run with `--format json` prints the JSON diagnostic contract, also
+produced by `ridl_core::diag::to_json`, as a bare array:
 
 ```sh
 ridl check --format json
@@ -955,6 +959,60 @@ the categories `ridl diff` reports are:
   doc_only
   visibility_changed
 ```
+
+### `ridl lsp`
+
+```sh
+ridl lsp --help
+```
+
+```text
+Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
+
+Usage: ridl lsp
+
+Options:
+  -h, --help  Print help
+```
+
+`ridl lsp` runs the same server as the standalone `ridl-lsp` binary described
+above: behavior lives in `crates/ridl-lsp`, and this subcommand only wires the
+stdio transport. An editor spawns it and speaks the Language Server Protocol
+over its stdin and stdout.
+
+**Exit codes.** 0 on a clean shutdown — the client sends `shutdown` then
+`exit`. 2 when the transport ends before the `initialize` handshake, or fails
+for any other reason. There is no exit 1: `ridl lsp` answers no question that
+can come back negative. Both outcomes are confirmed directly against the built
+binary by `crates/ridl/tests/servers.rs`.
+
+### `ridl mcp`
+
+```sh
+ridl mcp --help
+```
+
+```text
+Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
+
+Usage: ridl mcp
+
+Options:
+  -h, --help  Print help
+```
+
+`ridl mcp` serves the Model Context Protocol over stdio with one tool,
+`ridl_check`: behavior lives in `crates/ridl-mcp`, and this subcommand only
+builds the Tokio runtime the server needs — the only asynchronous code in this
+workspace — and wires the stdio transport. An agent host spawns it and speaks
+MCP over its stdin and stdout. The tool's input and output are documented in
+`crates/ridl-mcp/README.md`.
+
+**Exit codes.** 0 on a clean shutdown. 2 when the Tokio runtime fails to
+build, or the transport ends before the `initialize` handshake, or fails for
+any other reason. There is no exit 1: `ridl mcp` answers no question that can
+come back negative. Both outcomes are confirmed directly against the built
+binary by `crates/ridl/tests/servers.rs`.
 
 ## `ridlc`
 

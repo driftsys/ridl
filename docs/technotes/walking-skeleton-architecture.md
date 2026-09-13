@@ -182,6 +182,13 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
 
 - **`crates/ridl-lsp`** — the language server; see the LSP section below.
 
+- **`crates/ridl-mcp`** — the MCP server behind `ridl mcp` (ADR-0005 Layer B):
+  one tool, `ridl_check`, over the same single-file front end
+  (`ridlc::check_source`) that returns the JSON diagnostic contract
+  `ridl check --format json` also produces. It is the workspace's first async
+  code, built on `tokio` — see [below](#the-lsp-overlay-design) for what that
+  does and does not reach.
+
 - **`editors/vscode`** — the VS Code extension: an LSP client plus TextMate
   grammars for both `.typl` and `.ridl`, built with npm/tsc.
 
@@ -213,10 +220,17 @@ the lowered IR. Neither re-parses anything.
 
 ## The LSP overlay design
 
-`ridl-lsp` is built on `lsp-server` — a synchronous loop, no async runtime.
-Dispatch is strictly sequential; a `$/cancelRequest` is honored by a
+`ridl-lsp` is built on `lsp-server` — a synchronous loop, with no async runtime
+of its own. Dispatch is strictly sequential; a `$/cancelRequest` is honored by a
 cancelled-set check before each dispatch, and salsa's own cancellation applies
 once queries run off-thread.
+
+The workspace's first async runtime arrived later, with `crates/ridl-mcp` (built
+on `tokio`, behind `ridl mcp` — see the workspace map above). It does not reach
+`ridl-lsp`, the standalone `ridl-lsp` binary, or any other crate; `ridl` links
+`tokio` only to build the one runtime `ridl mcp` blocks on, and `wasm-check`
+does not build the `ridl` crate at all, so `tokio` never reaches the wasm32
+target either.
 
 `ridlc::compile_workspace` is a cold, from-disk compile, so the server does not
 drive it per keystroke. Instead it loads the workspace once at `initialize`,
