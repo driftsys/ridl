@@ -77,9 +77,21 @@ test("parseVersionOutput takes the token after the program name", () => {
   assert.equal(parseVersionOutput(""), undefined);
 });
 
-test("copyIsStale only when both versions are known and differ", () => {
+test("copyIsStale is true only when the installed copy is strictly older", () => {
+  // installed older than bundled: stale.
   assert.equal(copyIsStale("editor-v0.2.0", "editor-v0.1.0"), true);
+  // installed newer than bundled: never offer a downgrade.
+  assert.equal(copyIsStale("editor-v0.1.0", "editor-v0.2.0"), false);
+  // equal versions: nothing to refresh.
   assert.equal(copyIsStale("editor-v0.2.0", "editor-v0.2.0"), false);
+  // a prerelease is older than the plain release of the same triple.
+  assert.equal(copyIsStale("editor-v0.2.0", "editor-v0.2.0-install-check"), true);
+  assert.equal(copyIsStale("editor-v0.2.0-install-check", "editor-v0.2.0"), false);
+  // unparseable on either side: never stale.
+  assert.equal(copyIsStale("editor-v0.2.0", "not-a-version"), false);
+  assert.equal(copyIsStale("not-a-version", "editor-v0.1.0"), false);
   assert.equal(copyIsStale(undefined, "editor-v0.1.0"), false);
   assert.equal(copyIsStale("editor-v0.2.0", undefined), false);
+  // bare semver (no `editor-v` prefix) parses too.
+  assert.equal(copyIsStale("0.2.0", "0.1.0"), true);
 });

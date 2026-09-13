@@ -84,9 +84,59 @@ export function parseVersionOutput(stdout: string): string | undefined {
   return parts.length >= 2 ? parts[1] : undefined;
 }
 
+interface ParsedVersion {
+  readonly major: number;
+  readonly minor: number;
+  readonly patch: number;
+  readonly prerelease: string | undefined;
+}
+
+// Matches `0.2.0`, `editor-v0.2.0`, and either with a `-<prerelease>` suffix
+// such as `editor-v0.0.0-install-check`.
+const VERSION_PATTERN = /^(?:editor-v)?(\d+)\.(\d+)\.(\d+)(?:-(.+))?$/;
+
+function parseVersion(version: string | undefined): ParsedVersion | undefined {
+  if (version === undefined) return undefined;
+  const match = VERSION_PATTERN.exec(version);
+  if (!match) return undefined;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4],
+  };
+}
+
+/**
+ * Orders two parsed versions: negative when `a` is older than `b`, positive
+ * when newer, zero when equal. The major.minor.patch triple is compared
+ * numerically first. At equal triples, a prerelease sorts older than the
+ * plain release of the same triple (matching semver precedence); two
+ * prereleases of the same triple compare by the prerelease text.
+ */
+function compareVersions(a: ParsedVersion, b: ParsedVersion): number {
+  if (a.major !== b.major) return a.major - b.major;
+  if (a.minor !== b.minor) return a.minor - b.minor;
+  if (a.patch !== b.patch) return a.patch - b.patch;
+  if (a.prerelease === b.prerelease) return 0;
+  if (a.prerelease === undefined) return 1;
+  if (b.prerelease === undefined) return -1;
+  return a.prerelease < b.prerelease ? -1 : 1;
+}
+
+/**
+ * Whether the installed copy should be refreshed: both versions must parse,
+ * and the installed one must be strictly older than the bundled one. A
+ * newer installed copy (for example, one placed there by install.sh) is
+ * left alone rather than offered for a downgrade; an unparseable version on
+ * either side is treated as not stale.
+ */
 export function copyIsStale(
   bundledVersion: string | undefined,
   installedVersion: string | undefined,
 ): boolean {
-  return bundledVersion !== undefined && installedVersion !== undefined && bundledVersion !== installedVersion;
+  const bundled = parseVersion(bundledVersion);
+  const installed = parseVersion(installedVersion);
+  if (!bundled || !installed) return false;
+  return compareVersions(installed, bundled) < 0;
 }

@@ -220,14 +220,14 @@ async function installToPath(context: vscode.ExtensionContext): Promise<void> {
   }
 }
 
-/** On activation: when a copy on PATH is older than the bundled binary, offer to re-copy. */
+/** When the installed copy at `plan.target` is older than the bundled binary, offer to re-copy. */
 async function offerRefreshOfStaleCopy(context: vscode.ExtensionContext): Promise<void> {
   const plan = planInstall({ platform: process.platform, homedir: os.homedir(), extensionPath: context.extensionPath });
   if (!fs.existsSync(plan.source) || !fs.existsSync(plan.target)) return;
   const [bundled, installed] = await Promise.all([versionOf(plan.source), versionOf(plan.target)]);
   if (!copyIsStale(bundled, installed)) return;
   const pick = await vscode.window.showInformationMessage(
-    `ridl on PATH is ${installed}; this extension bundles ${bundled}.`,
+    `${plan.target} is ${installed}; this extension bundles ${bundled}.`,
     "Update the copy",
   );
   if (pick === "Update the copy") {
