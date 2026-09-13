@@ -1,0 +1,254 @@
+name: vscode-release
+
+# Release train for the ridl binary and the VS Code extension, triggered by an
+# `editor-v*` tag a maintainer pushes (ADR-0007 decision 14: the push is the
+# maintainer act). Builds ridl for five targets with the tag stamped as its
+# version, packages one VSIX per target, creates the GitHub Release, and holds
+# the Marketplace and Open VSX publishes behind the `marketplace` environment's
+# required reviewers. The release job does not depend on the publish jobs, so
+# a publish failure never blocks the release.
+#
+# Packaging runs through `just package-vsix` (ADR-0009: the justfile defines
+# it; this file only invokes it), the same recipe `just package-vscode` calls
+# for a local build. `just` is installed the same way `ci.yml` and
+# `vscode-verify.yaml` install it.
+#
+# Neither `vsce publish` nor `ovsx publish` is idempotent: after a partial
+# failure, publish the remaining targets by hand rather than re-running.
+
+on:
+  push:
+    tags: ["editor-v*"]
+
+permissions:
+  contents: write
+
+env:
+  NODE_VERSION: 22
+  JUST_VERSION: 1.38.0
+
+jobs:
+  guard:
+    name: tag matches package.json
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: compare versions
+        run: |
+          tag="${GITHUB_REF_NAME#editor-v}"
+          manifest="$(node -p "require('./editors/vscode/package.json').version")"
+          if [ "$tag" != "$manifest" ]; then
+            echo "::error::tag version $tag does not match editors/vscode/package.json version $manifest" >&2
+            exit 1
+          fi
+
+  build:
+    name: build (${{ matrix.target }})
+    needs: guard
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {
+              target: x86_64-unknown-linux-gnu,
+              os: ubuntu-latest,
+              binary: ridl,
+            }
+          - {
+              target: aarch64-unknown-linux-gnu,
+              os: ubuntu-latest,
+              binary: ridl,
+            }
+          - { target: x86_64-apple-darwin, os: macos-latest, binary: ridl }
+          - { target: aarch64-apple-darwin, os: macos-latest, binary: ridl }
+          - {
+              target: x86_64-pc-windows-msvc,
+              os: windows-latest,
+              binary: ridl.exe,
+            }
+    steps:
+      - uses: actions/checkout@v4
+      - name: add the target
+        run: rustup target add ${{ matrix.target }}
+      - name: cross toolchain (aarch64 linux)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        uses: taiki-e/setup-cross-toolchain-action@v1
+        with:
+          target: ${{ matrix.target }}
+      - name: build ridl
+        env:
+          RIDL_BUILD_VERSION: ${{ github.ref_name }}
+        run: cargo build --release --locked --target ${{ matrix.target }} -p ridl
+      - name: tarball and checksum
+        env:
+          # macOS tar stores extended attributes as separate `._` AppleDouble
+          # members, and a freshly built binary can carry one, which would put
+          # a stray `._ridl` inside the released tarball. Harmless on Linux
+          # and Windows.
+          COPYFILE_DISABLE: 1
+        run: |
+          out="target/${{ matrix.target }}/release/${{ matrix.binary }}"
+          tar czf "ridl-${{ matrix.target }}.tar.gz" -C "$(dirname "$out")" "${{ matrix.binary }}"
+          if command -v sha256sum >/dev/null; then
+            sha256sum "ridl-${{ matrix.target }}.tar.gz" > "ridl-${{ matrix.target }}.tar.gz.sha256"
+          else
+            shasum -a 256 "ridl-${{ matrix.target }}.tar.gz" > "ridl-${{ matrix.target }}.tar.gz.sha256"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ridl-${{ matrix.target }}
+          path: |
+            ridl-${{ matrix.target }}.tar.gz
+            ridl-${{ matrix.target }}.tar.gz.sha256
+
+  package-vsix:
+    name: package vsix (${{ matrix.vsce-target }})
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {
+              target: x86_64-unknown-linux-gnu,
+              vsce-target: linux-x64,
+              binary: ridl,
+            }
+          - {
+              target: aarch64-unknown-linux-gnu,
+              vsce-target: linux-arm64,
+              binary: ridl,
+            }
+          - {
+              target: x86_64-apple-darwin,
+              vsce-target: darwin-x64,
+              binary: ridl,
+            }
+          - {
+              target: aarch64-apple-darwin,
+              vsce-target: darwin-arm64,
+              binary: ridl,
+            }
+          - {
+              target: x86_64-pc-windows-msvc,
+              vsce-target: win32-x64,
+              binary: ridl.exe,
+            }
+    steps:
+      - uses: actions/checkout@v4
+      - name: install just
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin" just
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ridl-${{ matrix.target }}
+          path: artifacts
+      - name: bundle the binary
+        run: |
+          mkdir -p editors/vscode/bin
+          tar xzf "artifacts/ridl-${{ matrix.target }}.tar.gz" -C editors/vscode/bin
+          chmod +x "editors/vscode/bin/${{ matrix.binary }}"
+      - name: package
+        run: just package-vsix ${{ matrix.vsce-target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ridl-vscode-${{ matrix.vsce-target }}-vsix
+          path: editors/vscode/ridl-vscode-${{ matrix.vsce-target }}.vsix
+
+  release:
+    name: github release
+    needs: [build, package-vsix]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          # An editor-v* release must not take the repository's latest-release
+          # slot, which belongs to the workspace release train.
+          make_latest: false
+          files: |
+            artifacts/*.tar.gz
+            artifacts/*.sha256
+            artifacts/*.vsix
+
+  publish-vsce:
+    name: publish to the VS Code Marketplace
+    needs: package-vsix
+    runs-on: ubuntu-latest
+    environment: marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: vsix
+          pattern: ridl-vscode-*-vsix
+          merge-multiple: true
+      - name: install the extension's pinned tools
+        run: npm ci
+        working-directory: editors/vscode
+      - name: publish each target
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: |
+          shopt -s nullglob
+          files=(vsix/*.vsix)
+          if [ "${#files[@]}" -ne 5 ]; then
+            echo "::error::expected 5 VSIX files, found ${#files[@]}" >&2
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            echo "publishing $f"
+            editors/vscode/node_modules/.bin/vsce publish --packagePath "$f" --pat "$VSCE_PAT"
+          done
+
+  publish-ovsx:
+    name: publish to Open VSX
+    needs: package-vsix
+    runs-on: ubuntu-latest
+    environment: marketplace
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: vsix
+          pattern: ridl-vscode-*-vsix
+          merge-multiple: true
+      - name: install the extension's pinned tools
+        run: npm ci
+        working-directory: editors/vscode
+      - name: publish each target
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+        run: |
+          shopt -s nullglob
+          files=(vsix/*.vsix)
+          if [ "${#files[@]}" -ne 5 ]; then
+            echo "::error::expected 5 VSIX files, found ${#files[@]}" >&2
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            echo "publishing $f"
+            editors/vscode/node_modules/.bin/ovsx publish "$f" --pat "$OVSX_PAT"
+          done
