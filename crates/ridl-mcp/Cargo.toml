@@ -1,0 +1,23 @@
+# The RIDL MCP server (ADR-0005 Layer B, docs/ROADMAP.md epic E8.6): a thin
+# consumer of the shared compiler crates behind `ridl mcp`. It is not in the
+# `wasm-check` crate list, so the async runtime it pulls in never reaches the
+# wasm32 gate.
+
+[package]
+name = "ridl-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+ridl-core = { path = "../ridl-core" }
+ridlc = { path = "../ridlc" }
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Named here rather than taken from `rmcp`'s own feature set: `serve_stdio`
+# relies on the stdio driver (`io-std`) and on the runtime that drives the
+# task `rmcp` spawns (`rt`).
+tokio.workspace = true

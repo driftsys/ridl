@@ -55,6 +55,16 @@ protox = "0.9.1"
 pulldown-cmark = { version = "0.13.4", default-features = false }
 quote = "1.0.46"
 regress = "0.11.1"
+# The Model Context Protocol SDK behind `ridl mcp` (ADR-0005 Layer B,
+# docs/ROADMAP.md epic E8.6). Default features off: `base64` is for content
+# blocks this server never emits. `server` pulls in `schemars`, which rmcp
+# re-exports as `rmcp::schemars` — deriving `JsonSchema` through that path
+# keeps one `JsonSchema` trait rather than two incompatible copies.
+rmcp = { version = "3.3.0", default-features = false, features = [
+  "macros",
+  "server",
+  "transport-io",
+] }
 rowan = "0.16.1"
 salsa = "=0.28.0"
 serde = { version = "1.0.228", features = ["derive"] }
@@ -62,6 +72,18 @@ serde_json = "1.0.150"
 sha2 = "0.10.9"
 syn = { version = "2.0.119", features = ["full"] }
 tar = "0.4.44"
+# The async runtime the MCP SDK runs on — the first async code in this
+# workspace, reached only through `ridl mcp`. Every feature this workspace
+# relies on is named here rather than left to feature unification with
+# `rmcp`: `io-std` for the stdio transport's `Stdin`/`Stdout`, `rt` and
+# `rt-multi-thread` for the task `rmcp`'s service loop spawns, and `macros`
+# for the `#[tokio::main]` that enters the runtime in the `ridl` binary.
+tokio = { version = "1.53.1", features = [
+  "io-std",
+  "macros",
+  "rt",
+  "rt-multi-thread",
+] }
 toml = "1.1.3"
 ungrammar = "1.16.1"
 ureq = "3.1.2"
