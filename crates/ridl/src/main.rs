@@ -24,6 +24,12 @@
 //! here rather than in `ridlc` because reading a workspace-local baseline is not
 //! part of the source→IR function the tool qualification argument covers
 //! (ADR-0008 decision 9).
+//!
+//! `ridl lsp` and `ridl mcp` are the two stdio servers this one binary hosts:
+//! the language server an editor drives (`ridl-lsp`) and the Model Context
+//! Protocol server an agent drives (`ridl-mcp`). Both delegate every behavior
+//! to their library and only wire the transport here, so one installed binary
+//! serves the editor, the agent, and the command line.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -135,6 +141,12 @@ enum Command {
         #[arg(long, value_name = "CATEGORY")]
         explain: Option<String>,
     },
+    /// Run the language server over stdio: exit 0 on a clean shutdown, 2 on a
+    /// transport error. Editors spawn this; it takes no flag of its own.
+    Lsp,
+    /// Run the MCP server over stdio for an agent host: exit 0 on a clean
+    /// shutdown, 2 on a transport error. It takes no flag of its own.
+    Mcp,
 }
 
 /// The `ridl diff` output format — human-readable text or machine-readable
@@ -192,6 +204,49 @@ fn main() -> ExitCode {
                 }
             },
         },
+        Command::Lsp => run_lsp(),
+        Command::Mcp => run_mcp(),
+    }
+}
+
+/// `ridl lsp`: the language server over stdio. Every behavior lives in
+/// `ridl-lsp`; this wires the transport and maps the outcome onto the exit
+/// codes of ADR-0010 decision 1 — 0 when the client shut the server down, 2
+/// when the transport failed or ended before the handshake, which is the tool
+/// being unable to answer rather than a negative answer.
+fn run_lsp() -> ExitCode {
+    let (connection, io_threads) = lsp_server::Connection::stdio();
+    if let Err(err) = ridl_lsp::server::run(connection) {
+        eprintln!("error: {err}");
+        return ExitCode::from(2);
+    }
+    if let Err(err) = io_threads.join() {
+        eprintln!("error: {err}");
+        return ExitCode::from(2);
+    }
+    ExitCode::SUCCESS
+}
+
+/// `ridl mcp`: the Model Context Protocol server over stdio. `rmcp` is async,
+/// so this builds the only Tokio runtime the binary ever has — no other
+/// subcommand is async, and none pays for this one.
+fn run_mcp() -> ExitCode {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
+    match runtime.block_on(ridl_mcp::serve_stdio()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("error: {err}");
+            ExitCode::from(2)
+        }
     }
 }
 

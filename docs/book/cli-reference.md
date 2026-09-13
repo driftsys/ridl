@@ -66,6 +66,8 @@ Commands:
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl` and `.ridl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
+  lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
+  mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   help      Print this message or the help of the given subcommand(s)
 
 Options:
@@ -77,6 +79,12 @@ Running `ridl` with no subcommand at all prints this same text to **stderr**
 and exits 2; `ridl --help` prints it to **stdout** and exits 0 — the two
 routes carry identical text but are not interchangeable in a script that
 checks the exit code or reads the right stream.
+
+`ridl lsp` and `ridl mcp` are the two stdio servers this binary hosts — the
+language server an editor drives, and the Model Context Protocol server an
+agent drives. Neither takes an argument or a flag, so neither has a section
+below; each exits 0 when the client shuts it down and 2 when the transport
+fails or ends before the handshake.
 
 ### `ridl check`
 
