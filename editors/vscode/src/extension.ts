@@ -10,7 +10,11 @@
 // three tiers: the `ridl.serverPath` setting, the binary bundled in the
 // extension, then `ridl` resolved from PATH.
 
+import { execFile } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { promisify } from "node:util";
 import * as vscode from "vscode";
 import {
   LanguageClient,
@@ -24,8 +28,11 @@ import {
   resolveBinary,
   resolveMcpDefinition,
 } from "./binaryResolution";
+import { copyIsStale, isDirOnPath, parseVersionOutput, pathHint, performCopy, planInstall } from "./installToPath";
 
 const MCP_PROVIDER_ID = "ridl";
+
+const execFileAsync = promisify(execFile);
 
 let client: LanguageClient | undefined;
 let extensionContext: vscode.ExtensionContext | undefined;
@@ -47,6 +54,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
   registerMcpProvider(context);
+  context.subscriptions.push(
+    vscode.commands.registerCommand("ridl.installToPath", () => installToPath(context)),
+  );
+  void offerRefreshOfStaleCopy(context);
   await client.start();
 }
 
@@ -140,4 +151,63 @@ function registerMcpProvider(context: vscode.ExtensionContext): void {
       },
     }),
   );
+}
+
+/** Runs `binary --version` and parses the version out of its output; undefined when the binary cannot be run. */
+async function versionOf(binary: string): Promise<string | undefined> {
+  try {
+    const { stdout } = await execFileAsync(binary, ["--version"]);
+    return parseVersionOutput(stdout);
+  } catch {
+    return undefined;
+  }
+}
+
+/** The "RIDL: Install ridl to PATH" command: copies the bundled binary to a directory on PATH. */
+async function installToPath(context: vscode.ExtensionContext): Promise<void> {
+  const plan = planInstall({
+    platform: process.platform,
+    homedir: os.homedir(),
+    extensionPath: context.extensionPath,
+  });
+  if (!fs.existsSync(plan.source)) {
+    void vscode.window.showErrorMessage(
+      "This extension build has no bundled ridl binary (a development launch). Run cargo install --path crates/ridl instead.",
+    );
+    return;
+  }
+  try {
+    await performCopy(plan);
+  } catch (error) {
+    void vscode.window.showErrorMessage(`Could not copy ridl to ${plan.target}: ${String(error)}`);
+    return;
+  }
+  const onPath = isDirOnPath(plan.targetDir, process.env.PATH ?? process.env.Path, path.delimiter, process.platform);
+  if (onPath) {
+    void vscode.window.showInformationMessage(`ridl installed to ${plan.target}`);
+  } else {
+    const hint = pathHint(plan.targetDir, process.platform);
+    const pick = await vscode.window.showWarningMessage(
+      `ridl copied to ${plan.target}, but ${plan.targetDir} is not on your PATH.`,
+      "Copy PATH command",
+    );
+    if (pick === "Copy PATH command") {
+      await vscode.env.clipboard.writeText(hint);
+    }
+  }
+}
+
+/** On activation: when a copy on PATH is older than the bundled binary, offer to re-copy. */
+async function offerRefreshOfStaleCopy(context: vscode.ExtensionContext): Promise<void> {
+  const plan = planInstall({ platform: process.platform, homedir: os.homedir(), extensionPath: context.extensionPath });
+  if (!fs.existsSync(plan.source) || !fs.existsSync(plan.target)) return;
+  const [bundled, installed] = await Promise.all([versionOf(plan.source), versionOf(plan.target)]);
+  if (!copyIsStale(bundled, installed)) return;
+  const pick = await vscode.window.showInformationMessage(
+    `ridl on PATH is ${installed}; this extension bundles ${bundled}.`,
+    "Update the copy",
+  );
+  if (pick === "Update the copy") {
+    await installToPath(context);
+  }
 }
