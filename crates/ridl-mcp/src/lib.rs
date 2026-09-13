@@ -66,10 +66,15 @@ pub fn check(params: &CheckParams) -> CheckOutput {
     }
 }
 
-/// The MCP server: the tool router and nothing else.
+/// The MCP server: the tool router and the version it advertises.
 #[derive(Clone)]
 pub struct RidlMcp {
     tool_router: ToolRouter<Self>,
+    /// Reported as `serverInfo.version` in `get_info`. The `ridl` binary
+    /// passes its own build version here (`with_version`), so `ridl mcp` and
+    /// `ridl lsp` agree; a caller driving this library directly (including
+    /// this crate's own tests) gets this crate's version through `new`.
+    version: String,
 }
 
 impl Default for RidlMcp {
@@ -80,9 +85,18 @@ impl Default for RidlMcp {
 
 #[tool_router]
 impl RidlMcp {
+    /// A server reporting this crate's own version — the sensible default for
+    /// anything that drives this library directly rather than through the
+    /// `ridl` binary.
     pub fn new() -> Self {
+        Self::with_version(env!("CARGO_PKG_VERSION"))
+    }
+
+    /// A server reporting `version` instead of the crate's own version.
+    pub fn with_version(version: impl Into<String>) -> Self {
         Self {
             tool_router: Self::tool_router(),
+            version: version.into(),
         }
     }
 
@@ -108,8 +122,9 @@ impl ServerHandler for RidlMcp {
             // Without this, `ServerInfo::new` keeps
             // `Implementation::from_build_env()`, whose `env!` calls expand
             // inside rmcp: every host would display and log this server as
-            // `rmcp` at the SDK's version. The `env!` below expands here.
-            .with_server_info(Implementation::new("ridl-mcp", env!("CARGO_PKG_VERSION")))
+            // `rmcp` at the SDK's version, not this crate's own version or
+            // (through `with_version`) the `ridl` binary's build version.
+            .with_server_info(Implementation::new("ridl-mcp", self.version.clone()))
             .with_instructions(
                 "RIDL compiler tools. Call ridl_check with a source text and a profile \
                  (typl or ridl) to get coded diagnostics with fix-its.",
@@ -118,9 +133,22 @@ impl ServerHandler for RidlMcp {
 }
 
 /// Serves the MCP protocol over this process's stdin and stdout until the
-/// client disconnects.
+/// client disconnects, reporting this crate's own version.
 pub async fn serve_stdio() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let service = RidlMcp::new().serve(stdio()).await?;
+    serve_stdio_with_version(None).await
+}
+
+/// [`serve_stdio`], reporting `version` instead of this crate's own version
+/// when one is given — the `ridl` binary passes its build version here, so
+/// `ridl mcp` and `ridl lsp` agree.
+pub async fn serve_stdio_with_version(
+    version: Option<&str>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let server = match version {
+        Some(version) => RidlMcp::with_version(version),
+        None => RidlMcp::new(),
+    };
+    let service = server.serve(stdio()).await?;
     service.waiting().await?;
     Ok(())
 }
@@ -212,6 +240,13 @@ mod tests {
         // reports the SDK's crate name and version, not this crate's.
         assert_eq!(info.server_info.name, "ridl-mcp");
         assert_eq!(info.server_info.version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn with_version_reports_the_given_version_instead_of_the_crate_version() {
+        let info = RidlMcp::with_version("editor-v1.2.3").get_info();
+        assert_eq!(info.server_info.name, "ridl-mcp");
+        assert_eq!(info.server_info.version, "editor-v1.2.3");
     }
 
     #[test]
