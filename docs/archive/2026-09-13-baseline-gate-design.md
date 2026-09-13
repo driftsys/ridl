@@ -5,7 +5,7 @@ Nothing here is ratified. It disposes of three filed defects against shipped
 crates: driftsys/ridl#315, #235 (with #234) and #314.
 
 Read after
-[`2026-09-12-rsdl-rewrite-decisions.md`](2026-09-12-rsdl-rewrite-decisions.md)
+[`2026-09-12-rsdl-rewrite-decisions.md`](../wip/2026-09-12-rsdl-rewrite-decisions.md)
 D-7, which is where #315 and #314 were found and which fixes what the interface
 level of the same rule will become. ADR-0010 decision 1 (the exit-code taxonomy)
 and decision 6 (the fail-closed change to `ridl fmt`) bind the command surface;

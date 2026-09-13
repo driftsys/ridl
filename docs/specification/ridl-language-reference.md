@@ -1763,6 +1763,24 @@ and the same spelling is the constant.
     neither uncertainty, which is dispersion, nor the relationship, because it
     is what perturbs the relationship. Whether it becomes a fifth obligation or
     a qualifier on the relationship is open (§3.3).
+12. **Whether the publication gate should refuse a moved existing tombstone**
+    (§11). A baseline that retires an interaction with `reserved b` at ordinal
+    N, replaced by a source that retires it with `reserved b` at ordinal M,
+    reports `InteractionReordered`, not `InteractionRemoved`, and the RIDL-408
+    gate reads only `InteractionRemoved` changes. `ridl diff` still reports the
+    move as breaking and `ridl check` still warns with RIDL-407, but
+    `ridl baseline` publishes it. Whether the gate should refuse this shape as
+    well is open; it belongs with the interface-level lock-file work the rsdl
+    decisions note's D-7 describes, alongside the interface-level half of this
+    same rule (§11).
+13. **A whole package removed or renamed bypasses the publication gate** (§11).
+    `ridl-diff` reports one `DeclRemoved` for a package present only on the
+    baseline side and does not descend into it, so the RIDL-408 gate — which
+    reads `InteractionRemoved` changes — sees no interaction removal, and
+    publication deletes the package's snapshot along with every ordinal record
+    it held. This is wider than the interaction-level scope this gate covers.
+    Whether it should also be refused is open, and belongs with the same
+    lock-file work as the item above.
 
 ---
 

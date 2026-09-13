@@ -12,10 +12,11 @@ gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on 2026-08-04, the
 E9.7 design/plan pair (`2026-08-05-projection-name-transform-{design,plan}.md`)
 on 2026-08-07, the E9.8 pair (`2026-08-08-proto3-projection-{design,plan}.md`)
 on 2026-08-08, and the E9.9 pair
-(`2026-08-08-flatbuffers-projection-{design,plan}.md`) on 2026-08-09 — E9.10 and
-the Epic 11 stories that absorbed E9.11 (E11.2 and E11.4, ADR-0018 decision 16),
-both now parked by the 2026-09-12 re-scope, read the E9.8 design note, from the
-archive.
+(`2026-08-08-flatbuffers-projection-{design,plan}.md`) on 2026-08-09, and the
+baseline-gate design/plan pair (`2026-09-13-baseline-gate-{design,plan}.md`) on
+2026-09-13 — E9.10 and the Epic 11 stories that absorbed E9.11 (E11.2 and E11.4,
+ADR-0018 decision 16), both now parked by the 2026-09-12 re-scope, read the E9.8
+design note, from the archive.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the
@@ -118,18 +119,6 @@ archive.
   catalog hash, the proto3 and FlatBuffers size bounds, the lowering,
   `ridlc build --emit catalog` and `ridl describe`. The system descriptor waits
   for the rsdl rewrite. **Not started.**
-- **2026-09-13-baseline-gate-design.md** — the disposition of three filed
-  defects against shipped crates: `ridl baseline` refuses to publish an
-  interaction removed without a `reserved` tombstone (new RIDL-408, exit 1,
-  driftsys/ridl#315); an explicit `--baseline` path holding no snapshot is an
-  input error instead of a silent pass (driftsys/ridl#235, #234); and a
-  composite body reorder gets its own diff category instead of the
-  `constraint_changed` fallback (driftsys/ridl#314). The interface level of the
-  same rule waits for the lock file of the rsdl note's D-7. **Not started.**
-- **2026-09-13-baseline-gate-plan.md** — the three-task plan for that design:
-  the gate and RIDL-408 in `crates/ridl`, the explicit-baseline input error, and
-  the `member_reordered` category in `crates/ridl-diff`. Two pull requests, the
-  crates being disjoint. **Not started.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
