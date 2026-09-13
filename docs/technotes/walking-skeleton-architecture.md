@@ -26,8 +26,10 @@ crate under `crates/` with its directory named after it, and the `xtask`
 automation member at the root (issue #180). The VS Code extension
 (`editors/vscode`) is TypeScript and is not a workspace member.
 
-Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
-`ridl-backend-ts` and `ridl-diff` — are E2's.
+The crates below arrived in three waves: seven from the E1 spine, grown in place
+through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
+`ridl-mcp`, most recently. This list is not a standing count of every crate the
+workspace holds — see `AGENTS.md` for that.
 
 - **`crates/ridl-syntax`** — the surface layer, and the one grammar. A `logos`
   lexer over the full family token set; a hand-written recursive-descent parser
@@ -165,8 +167,9 @@ Eleven crates. Seven are the E1 spine and grew in place through E2; two more —
   its own artifact.
 
 - **`crates/ridl`** — the porcelain facade: `ridl check`, `ridl baseline`,
-  `ridl build`, `ridl test`, `ridl fmt`, and `ridl diff`, driving the `ridlc`
-  command drivers, the `ridl-fmt` engine, and the `ridl-diff` engine (the
+  `ridl build`, `ridl test`, `ridl fmt`, `ridl diff`, `ridl lsp`, and
+  `ridl mcp`, driving the `ridlc` command drivers, the `ridl-fmt` engine, the
+  `ridl-diff` engine, and the `ridl-lsp`/`ridl-mcp` libraries (the
   plumbing/porcelain split of concept note §8.1). Everything E2 added to the CLI
   landed here rather than in `ridlc`, because `ridlc` stays a pure source→IR
   function — the minimal ISO 26262 tool-qualification boundary (ADR-0008
@@ -227,10 +230,10 @@ once queries run off-thread.
 
 The workspace's first async runtime arrived later, with `crates/ridl-mcp` (built
 on `tokio`, behind `ridl mcp` — see the workspace map above). It does not reach
-`ridl-lsp`, the standalone `ridl-lsp` binary, or any other crate; `ridl` links
-`tokio` only to build the one runtime `ridl mcp` blocks on, and `wasm-check`
-does not build the `ridl` crate at all, so `tokio` never reaches the wasm32
-target either.
+`ridl-lsp`, the standalone `ridl-lsp` binary, or any crate but `ridl` itself;
+`ridl` links `tokio` only to build the one runtime `ridl mcp` blocks on, and
+`wasm-check` does not build the `ridl` crate at all, so `tokio` never reaches
+the wasm32 target either.
 
 `ridlc::compile_workspace` is a cold, from-disk compile, so the server does not
 drive it per keystroke. Instead it loads the workspace once at `initialize`,

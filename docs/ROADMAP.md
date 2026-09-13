@@ -398,8 +398,12 @@ CLI/LSP," is not reachable by this design, and not only because of the envelope:
 tool wraps its array in `{"diagnostics": [ … ]}` for MCP's structured-output
 requirement, and `span.path` differs by construction — the tool's input is a
 source string with no file, so it registers under the fixed synthetic name
-`input.typl`/`input.ridl` rather than a real path. The row above states the
-reachable criterion; see
+`input.typl`/`input.ridl` rather than a real path. The LSP side of the original
+wording was never a JSON comparison to begin with: `ridl-lsp` renders
+diagnostics through `lsp_types::Diagnostic` (`crates/ridl-lsp/src/convert.rs`),
+not `ridl_core::diag::to_json`, so there was no shared serializer for
+"byte-identical to ... LSP" to hold through. The row above states the reachable
+criterion; see
 [`docs/wip/2026-09-13-ridl-mcp-v0-design.md`](wip/2026-09-13-ridl-mcp-v0-design.md),
 "What the two faces share, and where they differ."
 

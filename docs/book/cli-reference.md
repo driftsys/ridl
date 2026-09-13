@@ -764,7 +764,7 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-Of the eight subcommands this page documents, [ADR-0010][adr-0010] decision 6
+Of the eight subcommands that take a path, [ADR-0010][adr-0010] decision 6
 found `ridl fmt` is the only one that reliably names the actual unreadable
 path this way in every case it was tested against. `ridl check`, `ridl build`,
 `ridl baseline`, `ridlc check`, and `ridlc build` still exit 2 on the same
@@ -1236,7 +1236,7 @@ For more information, try '--help'.
 `--help` itself, on any subcommand of either binary, always exits 0 — and so
 does `--version`/`-V`, covered [above](#ridl).
 
-Six of these eight subcommands also share a lesser-known gap:
+Six of the eight subcommands that take a path also share a lesser-known gap:
 [issue driftsys/ridl#196][issue-196] records that when the *workspace root
 itself* is unreadable, `ridl check`, `ridl build`, `ridl baseline`,
 `ridlc check`, and `ridlc build` all report
