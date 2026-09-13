@@ -736,6 +736,16 @@ diag_codes! {
         /// (ADR-0008 decisions 9 and 13).
         RIDL_407 = "RIDL-407", Warning,
             "interaction ordinal changed against the published baseline";
+
+        /// An interaction present in the baseline being replaced is gone from
+        /// the source with no `reserved` tombstone (ridl §11). Error. Emitted by
+        /// `ridl baseline` alone. Publication is the last point at which the
+        /// removal can still be refused, because the snapshot about to be
+        /// overwritten is the only record that the ordinal was ever taken.
+        /// Distinct from RIDL-407, which is the desk-time warning that an
+        /// ordinal moved and which neither classifies nor gates.
+        RIDL_408 = "RIDL-408", Error,
+            "interaction removed without a `reserved` tombstone";
     }
 
     /// The manifest catalogue (ADR-0007 decision 2): the manifest `0xx` codes the

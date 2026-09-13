@@ -458,6 +458,17 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      `crates/ridl/tests/baseline_desk.rs`",
         },
     ),
+    (
+        "RIDL-408",
+        Elsewhere {
+            fixture: "crates/ridl/tests/baseline_gate.rs",
+            reason: "the publication gate reads the baseline directory that `ridl baseline` is \
+                     about to replace, which is outside `ridlc`'s source-to-IR function, so it \
+                     is never a compile diagnostic (ADR-0008 decisions 9 and 13). Provoked by \
+                     `baseline_refuses_to_publish_an_untombstoned_removal` in \
+                     `crates/ridl/tests/baseline_gate.rs`",
+        },
+    ),
     // The shared codes E2 added or folded into the ridl profile.
     ("TYPL-005", Showcase),
     ("FORM-106", Showcase),

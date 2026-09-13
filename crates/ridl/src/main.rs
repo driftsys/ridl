@@ -486,7 +486,7 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     let staging = staging_dir(&out_dir);
     let _ = std::fs::remove_dir_all(&staging);
 
-    let run = match ridlc::run_build(path, &staging, &[Emit::IrJson], false.into()) {
+    let mut run = match ridlc::run_build(path, &staging, &[Emit::IrJson], false.into()) {
         Ok(run) => run,
         Err(err) => {
             let _ = std::fs::remove_dir_all(&staging);
@@ -503,6 +503,24 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         return finish(Ok(run));
     }
 
+    // The published baseline is the only record that a removed interaction's
+    // ordinal was ever taken. Replacing it with a snapshot that drops the
+    // interaction with no `reserved` tombstone destroys that record, and a
+    // later append then reuses the ordinal with nothing to compare against.
+    // The comparison happens here, against the directory publication is about
+    // to overwrite (driftsys/ridl#315).
+    match untombstoned_removals(path, &out_dir, &staging, &mut run) {
+        Ok(false) => {}
+        Ok(true) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return finish(Ok(run));
+        }
+        Err(code) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return code;
+        }
+    }
+
     if let Err(err) = publish_baseline(&staging, &out_dir) {
         let _ = std::fs::remove_dir_all(&staging);
         eprintln!(
@@ -513,6 +531,63 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     }
 
     finish(Ok(run))
+}
+
+/// Compares the baseline about to be replaced against the snapshots just built
+/// and records a RIDL-408 for every interaction the replacement would drop with
+/// no `reserved` tombstone. Returns whether any was recorded.
+///
+/// The published snapshots are read flat from `out_dir`, which is exactly where
+/// [`publish_baseline`] writes them. This deliberately does not go through
+/// [`load_baseline`], whose discovery rules exist to interpret a user-supplied
+/// `--baseline` path: inheriting them would let the comparison become a
+/// comparison against nothing in the cases driftsys/ridl#235 describes, and a
+/// gate that a directory layout can defeat is not a gate.
+///
+/// Only the interaction level is covered. The interface level — a removed
+/// interface with no service-level tombstone, and an unfrozen interface number
+/// — arrives with the lock file, because the rsdl decisions note's D-7 retires
+/// the service shape-list slot model a service-level gate would rest on.
+fn untombstoned_removals(
+    entry: &Path,
+    out_dir: &Path,
+    staging: &Path,
+    run: &mut CliRun,
+) -> Result<bool, ExitCode> {
+    if !out_dir.is_dir() {
+        return Ok(false);
+    }
+    let published = load_snapshots(&snapshot_files(out_dir)?)?;
+    if published.is_empty() {
+        return Ok(false);
+    }
+    let fresh = load_snapshots(&snapshot_files(staging)?)?;
+
+    let report = ridl_diff::diff_sets(&published, &fresh);
+    let index = DeclIndex::build(entry);
+    let mut refusals = Vec::new();
+    for change in &report.changes {
+        if change.category != ridl_diff::Category::InteractionRemoved {
+            continue;
+        }
+        let name = change.path.rsplit('/').next().unwrap_or(&change.path);
+        refusals.push(Diagnostic {
+            code: DiagCode::RIDL_408,
+            severity: Severity::Error,
+            message: format!(
+                "`{name}` is gone from the source but the baseline being replaced still \
+                 declares it. Publishing would free its ordinal for a later interaction \
+                 to reuse, with nothing left to record that it was ever taken. Retire it \
+                 in place with `reserved {name}`."
+            ),
+            primary: index.span_of(&change.path, &mut run.sources),
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        });
+    }
+    let refused = !refusals.is_empty();
+    run.diagnostics.extend(refusals);
+    Ok(refused)
 }
 
 /// The directory the snapshots are built into before they are published: a
