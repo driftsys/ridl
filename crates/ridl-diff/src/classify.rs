@@ -961,9 +961,17 @@ pub fn explain(category: Category) -> &'static str {
         ),
         Category::MemberReordered => concat!(
             "A surviving composite member whose position in the body changed.\n",
-            "  breaking    always — a body gives one order and that order is wire\n",
-            "              identity, so a reorder moves every member after it and\n",
-            "              every later member's wire slot with it (typl 7.4)"
+            "  breaking    always — a struct field or union arm takes its wire\n",
+            "              identity from its position (typl 7.4), so a reorder moves\n",
+            "              the wire slot of every member after it. An enum value or\n",
+            "              enum-set bit carries an explicit number instead (typl 8, 9),\n",
+            "              but the walk compares positions, not those numbers, so a\n",
+            "              textual reorder of an enum or enum-set body is reported\n",
+            "              breaking as well, conservatively, even when no number\n",
+            "              changed\n",
+            "  note        a reorder that arrives in the same edit as an in-place\n",
+            "              change to the body is reported with constraint_changed on\n",
+            "              the container as well"
         ),
         Category::InteractionAppended => concat!(
             "An interaction added after every slot that existed before.\n",

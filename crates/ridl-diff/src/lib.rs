@@ -123,8 +123,12 @@ declare_categories! {
         /// old snapshot.
         DeclRemoved,
         /// A surviving composite member whose position in the body changed — a
-        /// struct field, enum value, enum-set bit or union arm. A body gives
-        /// one order and that order is wire identity (typl §7.4).
+        /// struct field, enum value, enum-set bit or union arm. Position is
+        /// wire identity for a struct field or union arm (typl §7.4). An enum
+        /// value or enum-set bit carries an explicit number instead (typl §8,
+        /// §9), but the walk compares positions, not those numbers, so a
+        /// textual reorder of an enum or enum-set body is reported the same
+        /// way, conservatively, even when no number changed.
         MemberReordered,
         /// A new interaction added at the end of an interface (no earlier
         /// interaction shifted).

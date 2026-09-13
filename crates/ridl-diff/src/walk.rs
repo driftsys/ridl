@@ -193,9 +193,15 @@ fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec
 
 /// A coarse comparison of a composite type body (struct fields, enum values,
 /// enum-set bits, union arms) by member name. A member present on one side is
-/// an addition or removal; a member changed in place is a single
-/// `ConstraintChanged`. The classifier reads the bodies themselves to decide an
-/// addition's direction, so the append-only rule of typl §7.4 is judged there.
+/// an addition or removal. With the same member names on both sides, a member
+/// whose position changed is one `MemberReordered` each — with the container's
+/// `ConstraintChanged` as well when the body's content also changed — and a
+/// body changed in place with its order untouched is the container's
+/// `ConstraintChanged` alone. An enum or enum-set body, whose numbers are
+/// explicit rather than positional, is reported the same way because the
+/// comparison is over positions, not those numbers. The classifier reads the
+/// bodies themselves to decide an addition's direction, so the append-only
+/// rule of typl §7.4 is judged there.
 ///
 /// **Known limitation (carried debt).** This comparison is keyed on member
 /// names and never reads the body's `reserved` list, so it cannot tell a bare
