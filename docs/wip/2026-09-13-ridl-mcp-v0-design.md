@@ -84,10 +84,30 @@ structured diagnostics — coded, with spans and fix-its.
 
   The stability of this shape is an agent-contract stability question (ADR-0005
   §7); it is the first such contract and is marked as such in the crate's
-  README. `ridl check --format json` is added in the same pass, emitting the
-  identical structure from the same `ridl-core` code, so the MCP tool has a CLI
-  oracle to be compared against (the "byte-identical to CLI" property epic E8.6
-  asks for has something to compare to).
+  README. `ridl check --format json` is added in the same pass, so the MCP tool
+  has a CLI oracle to be compared against.
+
+  **What the two faces share, and where they differ.** Both call the same
+  `ridl_core::diag::to_json`, so each diagnostic object — the five fields in the
+  table above — is identical. Two things are not, and epic E8.6's
+  "byte-identical to CLI" wording is therefore not reachable in this design:
+
+  - **The top level.** The tool returns the object `{"diagnostics": [ … ]}`;
+    `ridl check --format json` prints the bare array. The tool wraps because
+    MCP's structured tool output (`CallToolResult.structuredContent`) must be a
+    JSON object validated against an `outputSchema`: an object envelope can
+    later become structured content and can gain sibling fields without breaking
+    a reader, and a bare array can do neither. The CLI has no such constraint
+    and stays an array, which is what a `jq` pipeline expects.
+  - **`span.path`.** The tool's input is a string with no file, so it registers
+    the source under the fixed synthetic name `input.typl` or `input.ridl` and
+    every span reports that. The CLI reports the real path it read. The tool's
+    description says so, because an agent that received `input.typl` might
+    otherwise try to open it.
+
+  The property worth testing is therefore agreement on the diagnostic objects:
+  the tool's `diagnostics` array and the CLI's array match element for element
+  once `span.path` is set aside.
 
 ### 3. Host coverage
 
