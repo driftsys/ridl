@@ -43,7 +43,7 @@ Two artifacts, lowered from the IR, read by engines:
       │  from the lock, sizes derived,
       │  system facts derived
       ▼
-    descriptors — FlatBuffers          ──▶  engines and integrators: ridl-rt's
+    descriptors — FlatBuffers          ──▶  engines and integrators: a runtime's
                                             node descriptor, a bus configurator,
                                             a broker, a gateway, a C engine
 
@@ -94,11 +94,11 @@ same content to keep in step, with no consumer asking for it.
 beside the IR's `.proto` (the crate is an open item, §7). Each root table
 carries a `version` field and each file a FlatBuffers `file_identifier`, so a
 reader rejects the wrong kind of file before verifying it. Evolution is by
-appending fields and tables, never by renumbering or removing: the same
-discipline the frame specification (roadmap E11.1) holds, because a descriptor
-written by one toolchain version is read by an engine built against another. The
-schemas stay within the subset both `flatc` and `flatcc` accept; when a C engine
-exists, CI compiles the schemas with both.
+appending fields and tables, never by renumbering or removing: the discipline
+ridl §11 holds for ordinals (ADR-0018 decision 8), applied to the schema,
+because a descriptor written by one toolchain version is read by an engine built
+against another. The schemas stay within the subset both `flatc` and `flatcc`
+accept; when a C engine exists, CI compiles the schemas with both.
 
 ADR-0019's projection rules bind the FlatBuffers backend's output, not these
 schemas; two of them are kept as practice anyway: every composite is a `table`,
@@ -119,9 +119,10 @@ IR's shape into every engine.
   name and number, so an engine can refuse a peer that still speaks a retired
   interface.
 - **Members, per interface**: name; ordinal (position in the body, ridl §11);
-  kind (`signal`, `event`, `command`, `query`); the payload type name per
-  payload; the bounds and QoS terms the IR carries for the member (ADR-0015);
-  and the **max-size table** of D-6.
+  kind (`signal`, `event`, `command`, `query`, `fixed`); the payload type name
+  per payload, and for a stream payload the element type and a `stream` flag
+  (D-6); the bounds and QoS terms the IR carries for the member (ADR-0015); and
+  the **max-size table** of D-6.
 - **Reserved ordinals** per interface, so the ordinal space is complete.
 
 Not contained: type layouts, field lists, constraints beyond the bounds that
@@ -138,7 +139,8 @@ schema the wire backend emits (D-7).
   is placed on in this deployment.
 - **Producers**: for every service in the closure, the offering component and
   its instances; a redundant provider set is visible as more than one instance
-  and carries the not-yet-realizable marker the lowering reports (D-4).
+  and carries the not-yet-realizable marker the lowering reports (rsdl note
+  D-4).
 - **Links**: for every `requires`, the consumer instance, the producer instance
   reached through the owning service, and the crossing kind — same machine,
   different machine, off-board (rsdl note D-2, D-5).
@@ -147,10 +149,14 @@ schema the wire backend emits (D-7).
 - **Grants**: per component, the set of catalog regions its requirements reach
   (rsdl note D-9); the surface set, the system's external boundary.
 - **The attribute map per node** (rsdl note D-6): the namespaced backend keys as
-  declared, uninterpreted, on every node that may carry them — machine,
-  component, instance, placement, link. A tag-based transport's service number
-  (`someip.service_id`) reaches its stack through this map, which discharges the
-  registry ADR-0016 decision 8 deferred.
+  declared, uninterpreted, on every node that has an attribute site in the
+  source — a declaration (`system`, `deployment`, `machine`, `component`,
+  `distribution`) or a member line, which is where an instance's placement
+  carries its keys. A link has no attribute site: rsdl note D-6 gives the block
+  to declarations and member lines, not to a `requires` line, and rsdl note D-5
+  keeps transport facts on `machine` or under `deployment`. A tag-based
+  transport's service number (`someip.service_id`) reaches its stack through
+  this map, which discharges the registry ADR-0016 decision 8 deferred.
 
 Not contained: transport choice per crossing, network fabric, process-local
 facts (file paths, ports, tuning), envelope and framing overhead. Design note
@@ -167,6 +173,7 @@ payload the kind has, and each row carries one number per core encoding:
     event     1   the occurrence
     command   1   the request; the ack is empty and lives in the envelope
     query     2   the request, the response
+    fixed     1   the provisioned value (ADR-0016 decision 9's store field)
 
     row       proto3 · FlatBuffers · repr(C)      max encoded size, bytes
 
@@ -175,21 +182,27 @@ slot in a shared-memory store is sized from the in-memory column, the same
 signal on a bus from the network column. A new core encoding appends a column.
 
 **Derivation.** One new derivation in the lowering, from typl bounds, in bytes.
-Every payload is finite: variable-size collections require explicit bounds (typl
-§12, TYPL-201/202), `string` and `bytes` default to `[0..256]` (typl §4), and
-recursion is rejected because it makes the wire size unbounded (typl §7.3). A
-`string [min..max]` bound counts characters; its byte bound is four bytes per
-character under UTF-8 unless a `match` constraint restricts the character set to
-one whose encoding is narrower, in which case the narrower bound applies. Each
-encoding's overhead — proto3 tags and varint widths at their maximum,
-FlatBuffers vtables, offsets and alignment padding, `repr(C)` layout — is part
-of the number. Nothing in the crates computes an encoded size today; design note
-§3.8's "widths derived" covers scalar widths only.
+Every payload other than a stream is finite: variable-size collections require
+explicit bounds (typl §12, TYPL-201/202), `string` and `bytes` default to
+`[0..256]` (typl §4), and recursion is rejected because it makes the wire size
+unbounded (typl §7.3). A stream payload (`<T>`, ridl §12) is the one unbounded
+position: the stream itself has no bound (ridl §12.2), so its row carries the
+maximum encoded size of one element and the `stream` flag of D-4, and an engine
+sizes per element, not per stream. A `string [min..max]` bound counts Unicode
+scalar values and its byte capacity is four bytes per scalar value under UTF-8
+(design note §3.11); this note adds one narrowing, recorded in §6: when a
+`match` constraint admits only scalar values whose UTF-8 encoding is narrower,
+the narrower bound applies. Each encoding's overhead — proto3 tags and varint
+widths at their maximum, FlatBuffers vtables, offsets and alignment padding,
+`repr(C)` layout — is part of the number. Nothing in the crates computes an
+encoded size today; design note §3.8's "widths derived" covers scalar widths
+only.
 
 **Refutation.** For every core encoding, a conformance test encodes the largest
 legal value of every payload in a fixture package and asserts the encoded length
-is at most the descriptor's number. The proto3 and FlatBuffers codec stories
-(roadmap E11.8, E11.7) carry the conformance harness the test extends.
+is at most the descriptor's number. The test lands with each codec story: E11.8
+(proto3, which already carries a byte-level conformance harness), E11.7
+(FlatBuffers) and E11.12 (`repr(C)`).
 
 **Rejected.** (a) One number per payload, the largest across encodings: simpler,
 and it oversizes every in-memory slot to the proto3 bound. (b) Per type rather
@@ -212,13 +225,13 @@ two interactions sharing a type cost one repeated row.
 ### D-8 Readers verify before access
 
 **Decision.** A descriptor is a file loaded from storage. Every reader —
-`ridl
-describe`, `ridl-rt`, an engine — runs the FlatBuffers verifier on the
+`ridl describe`, a runtime, an engine — runs the FlatBuffers verifier on the
 buffer before the first zero-copy read, and checks the `file_identifier` and
 `version` first. A buffer that fails is rejected as a whole. The toolchain's own
 reader reports the rejection under ADR-0010's exit-code taxonomy with the cause
-named, the way an unreadable input is reported today; an engine's policy on a
-provisional interface number (D-4) is its own.
+named — the property ADR-0010 decision 6 records as holding fully only for
+`ridl fmt` today (issue #196), which `ridl describe` meets from its first
+version; an engine's policy on a provisional interface number (D-4) is its own.
 
 ### D-9 Emission and inspection
 
@@ -243,18 +256,21 @@ provisional interface number (D-4) is its own.
 
 **Decision.** A component that links generated code keeps the ordinal table
 ADR-0013 decision 3 requires, extended with the interface number and the catalog
-hash so generated code and descriptor agree on identity. The descriptor is the
-alternative for an engine, not a replacement for generated code. `ridl-rt`'s
-node descriptor (roadmap E11.0, design note §3.13) reads the system descriptor;
-whether it embeds the bytes at build time or loads them at start is an
-implementation choice (§7).
+hash so generated code and descriptor agree on identity; `ridl-rt`'s interaction
+descriptors (roadmap E11.0) are that table's per-member form. The descriptor is
+the alternative for an engine, not a replacement for generated code. A runtime's
+node descriptor (design note §3.13) is derived from the system descriptor
+instead of from the IR; the runtime is outside this repository (design note
+§3.7), so whether it embeds the bytes at build time or loads them at start is
+the runtime's choice (§7).
 
 ## 3. Error handling
 
 - **Lowering errors precede emission.** A service with no offering component, an
-  instance placed twice or not at all, an unresolved `requires`, an unclaimed
-  backend namespace: the rsdl rules report these (rsdl note D-3, D-6) and no
-  descriptor is written for that deployment.
+  instance placed twice or not at all, an unresolved `requires`: the rsdl rules
+  report these (rsdl note D-3, D-11) and no descriptor is written for that
+  deployment. An unclaimed backend namespace is a warning (rsdl note D-6); the
+  descriptor is written and carries the key uninterpreted.
 - **A provisional number is data, not an error**: flagged in the descriptor;
   `ridl baseline` keeps its refusal (rsdl note D-7); an engine decides.
 - **A corrupt or foreign file** fails the identifier check or the verifier and
@@ -277,8 +293,9 @@ implementation choice (§7).
   by `ridl describe` with the exit code ADR-0010 assigns.
 - **Cross-compiler subset**: `flatc` and `flatcc` both compile the schemas;
   deferred until a C engine exists (D-3).
-- **Book examples**: a `describe` transcript in the book, under the
-  book-examples harness where a fence is compiled.
+- **Book examples**: the `ridl` fixture whose descriptor the book shows is
+  compiled by the book-examples harness; the `describe` transcript beside it is
+  a plain fence the harness does not check and is kept current by hand.
 
 ## 5. Alternatives considered
 
@@ -290,9 +307,9 @@ version 1 (D-7).
 
 ## 6. Amendments implied for existing records
 
-- **ADR-0018**: the lowering emits the two descriptors; `ridl-rt`'s node
-  descriptor reads the system descriptor; decision 3's encoding rule gains the
-  descriptor as an in-memory artifact on the FlatBuffers side.
+- **ADR-0018**: the lowering emits the two descriptors; a runtime's node
+  descriptor is derived from the system descriptor; decision 3's encoding rule
+  gains the descriptor as an in-memory artifact on the FlatBuffers side.
 - **ADR-0013 decision 3**: the generated ordinal table carries the interface
   number and the catalog hash.
 - **ADR-0016 decision 8**: the registry for tag-based service numbers is
@@ -301,11 +318,13 @@ version 1 (D-7).
   the descriptors'.
 - **ADR-0010**: `ridl describe` and the `catalog` emit value earn their rows.
 - **Design note** §3.13: the content list becomes the system descriptor's; §3.8
-  gains the second consumer class beside codegen backends.
+  gains the second consumer class beside codegen backends; §3.11 gains the
+  `match` narrowing of a string's byte capacity (D-6).
 - **Roadmap**: Epic 6's exit criteria name the system descriptor; a story for
   the catalog descriptor and the size derivation lands with the ridl
-  finalization (Epic 14), after the lock file; E11.0's "interaction descriptors"
-  are reconciled with D-10.
+  finalization (Epic 14), after the lock file; E11.0's interaction descriptors
+  carry the interface number and the catalog hash (D-10); the max-size
+  conformance test is named in E11.7, E11.8 and E11.12 (D-6).
 - **rsdl note** D-6: "every extract a backend reads carries [the attribute map]"
   names the system descriptor as that extract.
 
@@ -313,9 +332,10 @@ version 1 (D-7).
 
 - Where the schemas and the generated accessors live: a `ridl-descriptor` crate
   beside `ridl-ir`, or inside `ridl-ir`.
-- File extensions and the two `file_identifier` values, under ADR-0010's naming.
+- File extensions and the two `file_identifier` values; the extension follows
+  the convention ADR-0014 decision 4 records for artifact extensions.
 - Whether the first bus configurator needs QoS terms the IR does not yet carry;
   decide against the first consumer, not in advance.
-- Whether `ridl-rt` embeds the system descriptor at build time or loads it at
-  start (D-10).
+- Whether a runtime embeds the system descriptor at build time or loads it at
+  start (D-10); the first consumer's runtime decides.
 - When payload layouts enter (D-7).
