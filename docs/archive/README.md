@@ -16,6 +16,15 @@ provenance. Nothing here is normative — the current references live in
   provenance — its coverage analysis, its operation-shape taxonomy, and its
   prior-art survey are the source material for both. Read it as prior work,
   never as current design.
+- **rsdl-language-reference-v0.1.md** — the architecture layer as first drafted:
+  components as situated reactions, application-notation wiring,
+  capability-class targets, `place`, transport and posture derivation, bundles,
+  and declared redundancy. Superseded by the rewritten
+  [rsdl reference](../specification/rsdl-language-reference.md), which replaces
+  every one of those constructs. Kept for provenance — its prior-art survey, its
+  coverage analysis against architecture and SDV frameworks, and its posture
+  derivation are the material the rewrite reserves or reopens. Read it as prior
+  work, never as current design.
 - **2026-07-18-e0-walking-skeleton-plan.md** — the epic E0 (walking skeleton)
   implementation plan, archived verbatim from `docs/wip/` once the epic landed.
   There was no separate spec artifact for this session: the roadmap's Epic 0

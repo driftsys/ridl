@@ -224,7 +224,10 @@ The design is two changes, in this order:
    the response from its stdout. The plugin never touches the filesystem;
    `ridlc` writes the files, so output and dry-run options behave the same for
    every backend. A non-zero exit or a malformed response is a `ridlc` error
-   naming the plugin.
+   naming the plugin. A backend also declares the attribute keys it consumes,
+   under its own namespace; the compiler carries a namespaced key into the IR
+   uninterpreted and warns about a namespace no configured backend claims
+   (amended 2026-09-13 by the rsdl rewrite, decisions note D-6).
 
 A plugin is any executable, in any language: a Rust binary, a JVM launcher
 script, a Deno script, a Python file.
@@ -378,10 +381,10 @@ Written generically; the consumer is the test of each.
 
 - **The system IR carries what a runtime derives its node descriptor from:** the
   region map, the link set, the routing table, the permission list, the surface
-  set and the catalog hash. Process-local facts — file paths, ports, tuning —
-  stay in the runtime's own configuration. A runtime's descriptor is then an
-  emitter over the IR, and this is the acceptance test of the rsdl rewrite
-  (§3.1).
+  set and the catalog hash, plus an attribute map per node (amended 2026-09-13,
+  decisions note D-6). Process-local facts — file paths, ports, tuning — stay in
+  the runtime's own configuration. A runtime's descriptor is then an emitter
+  over the IR, and this is the acceptance test of the rsdl rewrite (§3.1).
 - **A language without a ridl backend reads payloads through the emitted schema
   and its own generator**, restricted to `Inline` or trusted reads (the ridl-rt
   note's RA-29), because such a reader has no verifier and no typl constraint
@@ -413,7 +416,9 @@ Written generically; the consumer is the test of each.
   and `read` a framed transport needs.
 - **rsdl's noun set.** The topology-vocabulary note's §7 keeps `component`; the
   roadmap-simplification note's S-36 dropped it. The vocabulary note is later
-  and wins; the rewrite confirms it against the first system.
+  and wins; the rewrite confirms it against the first system. _Resolved
+  2026-09-13 by the rsdl reference v0.2.0: `component` stays and `process` goes
+  (decisions note D-2, D-3)._
 - **A name for the parked engine block** on the roadmap.
 - **Where the TypeScript packages live** in this workspace.
 - **The wasm host** for the plugin contract, when the browser playground

@@ -704,17 +704,20 @@ contracts_ rather than declared.)
 model does **not** name, realize, or expose a contract. It is a pure reaction:
 `(O, S) = M(I, S)`, a signature of typed input and output flows with internal
 state. Binding that reaction to a ridl `service` is entirely an **rsdl
-component**'s job (rsdl §3–§4). This purifies the layer boundary: ridl declares
-contracts, rmdl computes, rsdl connects — and rmdl references ridl only for the
-_kinds_ (`signal`/`event`) and typl for _types_, never for contracts.
+component**'s job. rsdl v0.1 bound it with application notation
+(`docs/archive/rsdl-language-reference-v0.1.md` §3–§4); the rewritten rsdl has
+no binding notation and reserves it until rmdl is scheduled (rsdl §12). This
+purifies the layer boundary: ridl declares contracts, rmdl computes, rsdl
+connects — and rmdl references ridl only for the _kinds_ (`signal`/`event`) and
+typl for _types_, never for contracts.
 
 What used to be "realization" is now three things the component supplies from
 outside, none of them in the model:
 
 | Concern                                   | Where it lives now                                                                                                                                                   |
 | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| which contract member each flow maps to   | the component's `provides`/`requires` wiring (rsdl §4) — by application notation `(engaged, target) = M(current, brake, lever)`                                      |
-| output **timing** (`@10ms`, refresh, TTL) | the **service** the component provides (ridl §14.5); its bounds drive the model's output-deadline demand (§6.1). The model itself carries no timing                  |
+| which contract member each flow maps to   | the component's binding — application notation `(engaged, target) = M(current, brake, lever)` in rsdl v0.1 §4 (archived); reserved in the rewritten rsdl (rsdl §12)  |
+| output **timing** (`@10ms`, refresh, TTL) | the **service** the component offers (ridl §14.5); its bounds drive the model's output-deadline demand (§6.1). The model itself carries no timing                    |
 | output **init value**                     | the bound channel's init (ridl §4.4); if the model also writes `init out = …`, the component checks the two agree (a boundary check in rsdl, not here)               |
 | contract `require`/`ensure`               | the service's clauses, compiled by the component as observers over the bound flows (§9). A model may _also_ carry its own `require`/`ensure` (§9.2); the two compose |
 
@@ -886,7 +889,8 @@ Coded `RMDL-`, same lifecycle rules as typl §16.
 | RMDL-303 | input flow never read                                                              | warning  |
 
 (Contract mapping, timing transfer, and init-consistency checks moved to rsdl,
-where the component binds a reaction to a service — rsdl §4, §8.)
+where the component binds a reaction to a service — reserved in rsdl §12 until
+rmdl is scheduled.)
 
 ### 11.4 Boundaries (RMDL-4xx / 5xx)
 

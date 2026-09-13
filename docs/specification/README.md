@@ -17,8 +17,9 @@ documents in [`../archive/`](../archive/).
   its own (ADR-0012). Replaces the uxdl reference, which is archived.
 - **rmdl-language-reference.md** — the behaviour layer: functions, models,
   steps/timeline, the flow stdlib.
-- **rsdl-language-reference.md** — the architecture layer: components, services,
-  systems, deployment, transport/posture.
+- **rsdl-language-reference.md** — the architecture layer: systems, components
+  that offer services and require interfaces, distributions, deployments and
+  machines; posture reserved.
 - **expr-core-specification.md** — the cross-profile contract-term grammar: the
   guaranteed subset `require`/`ensure` uses today, the function layer rmdl
   extends it into, the typing rules, and the evaluation domains.

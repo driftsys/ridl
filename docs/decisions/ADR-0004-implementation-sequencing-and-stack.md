@@ -141,12 +141,15 @@ Epics map to milestones (full stories in `docs/ROADMAP.md`):
   WASM component codegen, and the wasmtime reference-oracle. Sits on E2's
   `interact` core and its function layer **extends E2.4's expr subset**. Does
   not begin until the IR has survived three profiles and two backends.
-- **E6 — rsdl.** Components situating contract-blind reactions —
-  `provides`/`requires` boundaries, application-notation wiring (incl.
-  event→command from rmdl emissions), services, systems — plus the deployment
-  region: targets, transport/posture derivation, bundles, and test-topology
-  emission. Composition and deployment are two regions of one grammar (rsdl §2);
-  the earlier manifest-first cut is superseded by the rsdl reference.
+- **E6 — rsdl.** A system described by five container declarations — `system`,
+  `component` (offers services, requires interfaces), `distribution`,
+  `deployment` and `machine` — and lowered to the facts a runtime reads:
+  placement, crossing kinds, grants and routing (rsdl §3, §13). _Amended
+  2026-09-13 by the rsdl rewrite._ The scope first recorded here —
+  application-notation wiring, event→command from rmdl emissions, targets,
+  transport and posture derivation, bundles, and composition and deployment as
+  two regions of one grammar — is the v0.1 reference, archived at
+  `docs/archive/rsdl-language-reference-v0.1.md`.
 - **E7 — rxdl + V2 ecosystem.** The total single-file profile, the
   reference-oracle test plane (spy/control bridge, online observers), the
   deductive-proof path, the package registry, and the full end-to-end tutorial.
