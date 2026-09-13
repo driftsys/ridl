@@ -47,6 +47,8 @@ scopes = [
   "xtask",
   "ridl-sem",
   "ridl-lsp",
+  # the MCP server (docs/ROADMAP.md, epic E8.6; ADR-0005 Layer B)
+  "ridl-mcp",
   # editor integrations (docs/ROADMAP.md, epic E1.17)
   "editors",
 ]
