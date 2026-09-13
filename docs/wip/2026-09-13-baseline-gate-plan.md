@@ -132,39 +132,36 @@ the first test below.
 
 ```rust
 /// Three events. The second is the one the later fixtures remove.
-const THREE: &str = r#"package veh.cluster
-
+/// The shape mirrors `BASE` in `baseline_desk.rs:62` — a `type` declaration
+/// rather than an enum, and a timing bound on every event — because that
+/// fixture is known to compile.
+const THREE: &str = "package veh.cluster
+type DoorState: integer [0..1]
 interface VehicleStatus {
-  event doorOpened: DoorState
-  event doorClosed: DoorState
-  event doorLocked: DoorState
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
 }
-
-enum DoorState { CLOSED = 0; OPEN = 1; LOCKED = 2 }
-"#;
+";
 
 /// `doorClosed` deleted outright. `doorLocked` slides onto ordinal 2.
-const BARE_REMOVAL: &str = r#"package veh.cluster
-
+const BARE_REMOVAL: &str = "package veh.cluster
+type DoorState: integer [0..1]
 interface VehicleStatus {
-  event doorOpened: DoorState
-  event doorLocked: DoorState
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
 }
-
-enum DoorState { CLOSED = 0; OPEN = 1; LOCKED = 2 }
-"#;
+";
 
 /// `doorClosed` retired in place. `doorLocked` keeps ordinal 3.
-const TOMBSTONED_REMOVAL: &str = r#"package veh.cluster
-
+const TOMBSTONED_REMOVAL: &str = "package veh.cluster
+type DoorState: integer [0..1]
 interface VehicleStatus {
-  event doorOpened: DoorState
+  event doorOpened: DoorState @[100ms..1s]
   reserved doorClosed
-  event doorLocked: DoorState
+  event doorLocked: DoorState @[100ms..1s]
 }
-
-enum DoorState { CLOSED = 0; OPEN = 1; LOCKED = 2 }
-"#;
+";
 
 /// The published baseline is the only record that a removed interaction's
 /// ordinal was ever taken. Replacing it with a snapshot that drops the
@@ -838,45 +835,42 @@ and the `MANIFEST` constant **verbatim** from
 `crates/ridl/tests/baseline_desk.rs:1-62`. Read those lines and copy what is
 there. Then append:
 
-```rust
+````rust
 fn workspace(dir: &TempDir, relative: &str, source: &str) -> PathBuf {
     dir.write(&format!("{relative}/ridl.toml"), MANIFEST);
-    dir.write(&format!("{relative}/report.typl"), source);
+    dir.write(&format!("{relative}/report.ridl"), source);
     dir.path().join(relative)
 }
 
-const FIELDS: &str = r#"package veh.report
-
-enum DoorState { CLOSED = 0; OPEN = 1; LOCKED = 2 }
-
+const FIELDS: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
 struct Report {
   door: DoorState
   latch: DoorState
 }
-"#;
+";
 
-/// The two fields swap places. Nothing else changes.
-const SWAPPED: &str = r#"package veh.report
-
-enum DoorState { CLOSED = 0; OPEN = 1; LOCKED = 2 }
-
+/// The two fields swap places. Names and types are untouched.
+const SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
 struct Report {
   latch: DoorState
   door: DoorState
 }
-"#;
+";
 
-/// One field's type is narrowed in place. The order is untouched.
-const NARROWED: &str = r#"package veh.report
-
-enum DoorState { CLOSED = 0; OPEN = 1; LOCKED = 2 }
-
+/// `latch` changes type in place. The names and their order are untouched, so
+/// this is the branch `ConstraintChanged` must keep.
+const CHANGED_IN_PLACE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
 struct Report {
   door: DoorState
-  latch: DoorState
-  count: u8 [0..10]
+  latch: Count
 }
-"#;
+";
 
 /// A body gives one order and that order is wire identity, so a swap is as
 /// much a wire change as an interaction reorder and deserves the same kind of
@@ -908,22 +902,27 @@ fn a_swapped_struct_field_reports_member_reordered() {
 
 /// A member changed in place, with the order untouched, is still
 /// `constraint_changed`. This pins the branch the new category must not take
-/// over.
+/// over — asserting only the absence of `member_reordered` would pass even if
+/// the whole branch stopped reporting anything.
 #[test]
 fn an_in_place_change_still_reports_constraint_changed() {
     let dir = TempDir::new("in-place");
     let old = workspace(&dir, "old", FIELDS);
-    let new = workspace(&dir, "new", NARROWED);
+    let new = workspace(&dir, "new", CHANGED_IN_PLACE);
 
-    let (_, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
     let out = format!("{stdout}{stderr}");
 
+    assert_eq!(code, 1, "narrowing a member in place is breaking:\n{out}");
+    assert!(
+        out.contains("constraint_changed"),
+        "an in-place change keeps the category it always had:\n{out}",
+    );
     assert!(
         !out.contains("member_reordered"),
-        "an addition at the end is not a reorder:\n{out}",
+        "nothing moved, so nothing reorders:\n{out}",
     );
 }
-```
 
 - [ ] **Step 2: Run the tests to verify the first fails**
 
@@ -944,7 +943,7 @@ directly after the `DeclRemoved` variant, add:
 /// struct field, enum value, enum-set bit or union arm. A body gives
 /// one order and that order is wire identity (typl §7.4).
 MemberReordered,
-```
+````
 
 The macro derives the `CATEGORIES` array length from the variant list, so
 nothing else in `lib.rs` changes for the count.
