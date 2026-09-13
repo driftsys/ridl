@@ -156,7 +156,7 @@ function registerMcpProvider(context: vscode.ExtensionContext): void {
 /** Runs `binary --version` and parses the version out of its output; undefined when the binary cannot be run. */
 async function versionOf(binary: string): Promise<string | undefined> {
   try {
-    const { stdout } = await execFileAsync(binary, ["--version"]);
+    const { stdout } = await execFileAsync(binary, ["--version"], { timeout: 5000 });
     return parseVersionOutput(stdout);
   } catch {
     return undefined;

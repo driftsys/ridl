@@ -5,6 +5,7 @@
 // filesystem work — no `vscode` import; extension.ts supplies the
 // notifications.
 
+import { randomUUID } from "node:crypto";
 import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import { bundledBinaryPath, BINARY_NAME } from "./binaryResolution";
@@ -56,10 +57,25 @@ export function pathHint(targetDir: string, platform: NodeJS.Platform): string {
     : `export PATH="${targetDir}:$PATH"`;
 }
 
+/**
+ * Copies through a temporary file in `targetDir`, then renames it over
+ * `target`. A direct `copyFile` onto `target` truncates the destination
+ * before writing it, which fails while a previous copy of the binary is
+ * still running and can leave a truncated file on PATH if the copy is
+ * interrupted. The rename is atomic on POSIX and replaces the old file
+ * only once the new one is complete.
+ */
 export async function performCopy(plan: InstallPlan): Promise<void> {
   await fs.mkdir(plan.targetDir, { recursive: true });
-  await fs.copyFile(plan.source, plan.target);
-  if (plan.chmod) await fs.chmod(plan.target, 0o755);
+  const tempPath = path.join(plan.targetDir, `.${plan.binaryName}.${randomUUID()}.tmp`);
+  try {
+    await fs.copyFile(plan.source, tempPath);
+    if (plan.chmod) await fs.chmod(tempPath, 0o755);
+    await fs.rename(tempPath, plan.target);
+  } catch (error) {
+    await fs.rm(tempPath, { force: true });
+    throw error;
+  }
 }
 
 /** `ridl --version` prints `ridl <version>`; returns `<version>`. */
