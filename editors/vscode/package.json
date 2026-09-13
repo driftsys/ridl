@@ -61,7 +61,7 @@
         "ridl.serverPath": {
           "type": "string",
           "default": "",
-          "description": "Path to the ridl-lsp binary. Empty (the default) finds ridl-lsp on PATH."
+          "description": "Path to the ridl binary, which the extension runs as ridl lsp and ridl mcp. Empty (the default) uses the binary bundled in the extension, or ridl found on PATH when none is bundled."
         },
         "ridl.trace.server": {
           "type": "string",
@@ -71,7 +71,7 @@
             "verbose"
           ],
           "default": "off",
-          "description": "Trace the JSON-RPC communication between VS Code and ridl-lsp."
+          "description": "Trace the JSON-RPC communication between VS Code and the ridl language server."
         }
       }
     }
@@ -79,7 +79,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "test": "npm run compile && node --test out/binaryResolution.test.js"
   },
   "dependencies": {
     "vscode-languageclient": "10.1.0"
