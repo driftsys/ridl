@@ -318,24 +318,45 @@ checked in, written only by `ridl lock`:
   IR marks it provisional. `ridl diff` treats a provisional number as no
   identity. `ridl baseline` refuses to publish a package with a provisional
   number or with a removed interface that has no retired entry. Branches never
-  allocate, so branches never collide.
+  allocate, so branches never collide. The gate sits at publish rather than at
+  the build because allocation is explicit here: a build-time refusal would
+  force every branch to allocate, which is the collision this carrier exists to
+  prevent. The study that recommended failing the build assumed a number stamped
+  in the source, where allocation happens as the file is edited; the carrier
+  changed, so the gate moved with it.
 - **`ridl lock` is its own command**, run by the release recipe before the
   version bump, or by hand when stability is needed earlier. `ridl fmt` never
   assigns identity. A repository whose `main` is consumed directly runs the same
   command in its merge queue; only then does the file change in parallel, and
   only then is a three-way merge driver (`ridl lock merge`) needed — a union
   driver was measured to resurrect a renamed entry silently.
-- **Rename of a frozen interface.** The LSP rename updates declaration and lock
-  together. In a plain editor the build sees one entry without a declaration and
-  one declaration without an entry: with the same shape as the baseline's,
-  member for member, it is a rename and the entry follows; otherwise the build
-  asks once, "rename the entry" or "retire and allocate". Two orphans with
-  identical shapes also ask.
+- **Rename of a frozen interface.** An LSP rename may update declaration and
+  lock together; whether it does is an implementation choice (§5), so the
+  guarantee is the build-side protocol, not the editor. In a plain editor the
+  build sees one entry without a declaration and one declaration without an
+  entry: with the same shape as the baseline's, member for member, it is a
+  rename and the entry follows; otherwise the build asks once, "rename the
+  entry" or "retire and allocate". Two orphans with identical shapes also ask.
 - **The compiler folds the number into the IR**, and `ridl diff` matches
   interfaces by number: appended is compatible; renamed with the same number is
   compatible once ADR-0015 decision 17 keys binding ordinal spaces on (package,
   number) instead of the name — a ruling; retired with an entry is compatible; a
   number changed by hand is breaking. Interaction-level verdicts are unchanged.
+- **A rename is compatible on the wire and breaking for generated code, and
+  `ridl diff` reports it under its own heading.** Both wire backends derive a
+  top-level name from the interface: `ridl-backend-proto` and
+  `ridl-backend-flatbuffers` each emit an `<Interface>Ordinal` identity-table
+  enum, claimed in the target's own name scope (ADR-0013 decision 3, under the
+  scope obligation of ADR-0017 decision 4 and ADR-0019 decision 5). A
+  same-number rename leaves every wire number untouched and renames that enum
+  together with every value in it. No projection property is broken — ADR-0016
+  decision 6's stability clause is written over numbers, and ADR-0017 decision
+  4's totality over names refuses collisions rather than promising that a name
+  persists — so neither projection record is amended. What changes is what the
+  verdict means: `Compatible` would otherwise imply that nothing in a consumer's
+  generated code was renamed, and here it does not. A rename therefore gets its
+  own heading, as D-11 gives a deployment change one: compatible on the wire,
+  source-breaking for a consumer of the generated identity table.
 - **Bodies stay positional.** Struct fields, union arms and interactions keep
   position and `reserved name`; an enum value keeps its explicit integer, and
   its tombstone is `reserved <value>`. A body gives one order; a per-field lock
@@ -463,6 +484,13 @@ Under D-1 a system of hand-written services is a list of service names.
   re-cite the reserved section and mark the derivation deferred (D-5); V-X1
   disposition (D-8).
 - **ADR-0010**: the `lock` subcommand and `lock merge` follow its conventions.
+- **ADR-0017 and ADR-0019**: checked against D-7 and **unaffected**. Neither
+  keys a rule on an interface's number — that identity is new here and belongs
+  to the runtime and dispatch layer, never to a wire schema — and neither a
+  retired entry nor a provisional number reaches either backend. Both do depend
+  on an interface's name, through the identity table, and D-7 leaves naming
+  untouched; the rename consequence is recorded in D-7 instead. Written down so
+  the question is not reopened.
 - **ADR-0011 and ADR-0018**: each cites rsdl §8 for a matter other than posture;
   both citations are re-pointed when the rewrite renumbers the section.
 - **Roadmap**: the E6 stories left untouched by the re-scope are refiled against
