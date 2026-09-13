@@ -118,6 +118,15 @@ archive.
   catalog hash, the proto3 and FlatBuffers size bounds, the lowering,
   `ridlc build --emit catalog` and `ridl describe`. The system descriptor waits
   for the rsdl rewrite. **Not started.**
+- **2026-09-13-step1-lanes-plan.md** and its four driver prompts,
+  **2026-09-13-lane-a-ridl-rt-driver.md**, **2026-09-13-lane-b-rsdl-driver.md**,
+  **2026-09-13-lane-l-lock-driver.md** and **2026-09-13-lane-c-typl-driver.md**
+  — the coordination plan for the first part of roadmap step 1: `ridl-rt` 0.1.0,
+  rsdl and its reference, the lock block of the rsdl note's D-7, and the typl
+  debt, as four lanes that run in parallel with one driver session each. It
+  decides the order, the gates, the model for each stage, and which lane may
+  change a shared file when; each lane's own spec decides the design. The
+  coordination issue is #328. **Not started.**
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
