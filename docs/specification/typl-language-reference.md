@@ -1221,27 +1221,41 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
     [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
     §3.11.
 14. **Value-aware enum and enum-set reorder comparison.** `ridl-diff`'s
-    composite-body walk compares a struct field and a union arm by position,
-    because position is their wire identity (§7.4); an `enum` value and an
+    composite-body walk compares a struct field and a union arm by ordinal,
+    because the ordinal is their wire identity (§7.4); an `enum` value and an
     `enumset` bit carry an explicit number instead (§8, §9), so a textual
     reorder that changes no number moves no wire value. The walk is not
-    value-aware — it compares positions for every composite kind alike — so a
-    textual `enum` or `enumset` reorder is reported the same as a struct-field
-    reorder: breaking (`member_reordered`). Whether the walk should instead
-    compare `enum` and `enumset` members by their explicit values, and report a
-    textual-only reorder as no change, is open; the conservative, position-based
-    treatment was kept deliberately rather than settled either way
-    (`crates/ridl-diff/src/walk.rs`, `*_ignoring_order` helpers).
-15. **A member inserted mid-body does not carry `member_reordered`.** Inserting
-    a member in the middle of a struct, `enum`, `enumset`, or union body, with
-    every later member left in its written order, is reported today as one
-    `decl_added` (or, on removal, `decl_removed`) per §7.4's append-only rule —
-    the classifier reads the body to judge the addition's direction, not the
-    reorder walk. Whether the survivors an insertion shifts should also be
-    reported with `member_reordered` is open; widening the case would reach the
-    name-keyed matching logic the carried-debt comment above
-    `crates/ridl-diff/src/walk.rs`'s `diff_composite` guards
-    (driftsys/ridl#302).
+    value-aware — it compares an `enum` value or `enumset` bit by its position
+    in the body — so, when both bodies hold the same member names, a textual
+    `enum` or `enumset` reorder is reported the same as a struct-field reorder:
+    breaking (`member_reordered`, with the old and new position in the detail).
+    When the same edit also adds or removes a member, the walk stops at the
+    addition or removal and reports no `member_reordered` (§17.15): an `enum`
+    reorder that arrives with an appended value reaches the classifier as
+    `decl_added` alone, which is compatible, because the classifier judges an
+    `enum` addition by its value. Whether the walk should instead compare `enum`
+    and `enumset` members by their explicit values, and report a textual-only
+    reorder as no change, is open; the conservative, position-based treatment
+    was kept deliberately rather than settled either way
+    (`crates/ridl-diff/src/walk.rs`, `diff_composite` and its `positions`
+    helper).
+15. **A reorder in the same edit as an addition or a removal carries no
+    `member_reordered`.** The walk reports `member_reordered` only when both
+    bodies hold the same member names; with a member added or removed, the
+    report carries the addition or removal alone and does not name the survivors
+    that moved. A member inserted in the middle of a struct or union body, with
+    every later member left in its written order, shifts the ordinal of every
+    member after it and is reported today as one `decl_added`, which the
+    classifier judges breaking under §7.4's append-only rule — the classifier
+    reads the body to judge the addition's direction, not the reorder walk. An
+    `enum` value or `enumset` bit inserted mid-body shifts no number and is
+    judged by its value. A member removed is one `decl_removed`, breaking,
+    whether or not a tombstone replaced it (the carried-debt note above
+    `crates/ridl-diff/src/walk.rs`'s `diff_composite`). Whether the survivors an
+    insertion shifts, or the survivors reordered alongside an addition or
+    removal, should also be reported with `member_reordered` is open; widening
+    the case would reach the name-keyed matching logic that carried-debt comment
+    guards (driftsys/ridl#302).
 
 ---
 
