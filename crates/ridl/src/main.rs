@@ -1135,12 +1135,30 @@ fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, ExitCode> {
 
 /// Deserializes every snapshot in `files`. One that cannot be read or parsed is
 /// exit 2 — a comparison against half a baseline would be a lie about what is
-/// published.
+/// published. This is shared by `ridl check --baseline` (through
+/// [`load_baseline`]) and `ridl baseline` (through [`untombstoned_removals`]),
+/// so a file this refuses is either the published or the freshly built side of
+/// either command.
+///
+/// A file that cannot be parsed stays fail-closed rather than being silently
+/// overwritten: a baseline that cannot be read cannot be shown safe to
+/// replace, and replacing it would destroy whatever ordinal record it held
+/// with no one seeing it — the exact failure this whole gate exists to
+/// prevent. What the message adds over a bare parse error is the way out.
 fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let mut packages = Vec::new();
     for file in files {
         match ridl_diff::load_ir_json(file) {
             Ok(package) => packages.push(package),
+            Err(err @ ridl_diff::LoadError::Parse(_)) => {
+                eprintln!(
+                    "error: {}: {err}; restore the file (for example from version control, or \
+                     by resolving a merge conflict left in it), or delete it and run \
+                     `ridl baseline` again — deleting it discards the record it held",
+                    file.display()
+                );
+                return Err(ExitCode::from(2));
+            }
             Err(err) => {
                 eprintln!("error: {}: {err}", file.display());
                 return Err(ExitCode::from(2));
