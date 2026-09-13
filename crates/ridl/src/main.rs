@@ -452,8 +452,8 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
 
     if !run.has_error() {
         match baseline_location(path, baseline) {
-            Ok(Some(location)) => {
-                if let Err(code) = desk_check(path, &location, &mut run) {
+            Ok(Some((location, explicit))) => {
+                if let Err(code) = desk_check(path, &location, explicit, &mut run) {
                     return code;
                 }
             }
@@ -629,7 +629,10 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
 /// Auto-discovery is the silent path: with no flag and no `.ridl/baseline/`
 /// directory, `ridl check` behaves exactly as it did before this command
 /// existed.
-fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf>, ExitCode> {
+fn baseline_location(
+    entry: &Path,
+    flag: Option<&Path>,
+) -> Result<Option<(PathBuf, bool)>, ExitCode> {
     match flag {
         // A prototext or binary IR artifact is refused by name — baselines
         // stay `.ir.json` (ADR-0014 decision 5) — before the snapshot loader
@@ -642,7 +645,7 @@ fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf
             );
             Err(ExitCode::from(2))
         }
-        Some(explicit) if explicit.exists() => Ok(Some(explicit.to_path_buf())),
+        Some(explicit) if explicit.exists() => Ok(Some((explicit.to_path_buf(), true))),
         Some(explicit) => {
             eprintln!(
                 "error: the baseline `{}` does not exist",
@@ -652,7 +655,7 @@ fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf
         }
         None => {
             let default = default_baseline_dir(entry);
-            Ok(default.is_dir().then_some(default))
+            Ok(default.is_dir().then_some((default, false)))
         }
     }
 }
@@ -687,8 +690,13 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
 /// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
 /// does not hand back the IR. The cost is paid only when a baseline is actually
 /// present, and never on a run that already failed.
-fn desk_check(entry: &Path, location: &Path, run: &mut CliRun) -> Result<(), ExitCode> {
-    let baseline = load_baseline(location)?;
+fn desk_check(
+    entry: &Path,
+    location: &Path,
+    explicit: bool,
+    run: &mut CliRun,
+) -> Result<(), ExitCode> {
+    let baseline = load_baseline(location, explicit)?;
     if baseline.is_empty() {
         return Ok(());
     }
@@ -862,7 +870,7 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
 /// #230). A directory with neither keeps yielding an empty baseline — that is
 /// the ordinary "no baseline published yet" state, and [`desk_check`] skips
 /// it silently.
-fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
         let snapshots = snapshot_files(location)?;
         if snapshots.is_empty() {
@@ -883,12 +891,35 @@ fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode>
                     &format!("pass `--baseline {}` instead", nested.display()),
                 ));
             }
+            // The two refusals above name a specific, fixable mistake. This one
+            // catches every remaining way a directory yields no snapshot —
+            // snapshots two or more levels down, or an empty directory — and
+            // refuses rather than comparing against nothing. Auto-discovery is
+            // exempt: with no flag, "no baseline published yet" is legitimate.
+            if explicit {
+                return Err(refuse_empty_baseline(location));
+            }
         }
         snapshots
     } else {
         vec![location.to_path_buf()]
     };
     load_snapshots(&files)
+}
+
+/// An explicit `--baseline` path that holds no snapshot at the depth the loader
+/// reads is an input error, not a silent pass. The caller asserted that a
+/// baseline is there. A comparison against nothing reports no drift and exits
+/// 0, which is indistinguishable from a clean check — the same failure shape
+/// ADR-0010 decision 6 closed for `ridl fmt` (driftsys/ridl#235).
+fn refuse_empty_baseline(location: &Path) -> ExitCode {
+    eprintln!(
+        "error: the baseline `{}` holds no `.ir.json` snapshot; publish one with \
+         `ridl baseline --out {}`",
+        location.display(),
+        location.display(),
+    );
+    ExitCode::from(2)
 }
 
 /// The files directly inside `dir` that satisfy `keep`, in file-name order.

@@ -712,13 +712,14 @@ fn check_reports_a_baseline_subdirectory_it_cannot_read() {
     );
 }
 
-/// The control for both refusals above: a directory with no IR artifacts at
-/// all — directly inside or one level down — is the ordinary "no baseline
-/// published yet" state. An empty baseline, silently skipped, exactly as
-/// before either refusal existed. Turning this into an error would break the
-/// desk check for every workspace that has not published a baseline.
+/// A directory with no IR artifacts at all — directly inside or one level
+/// down — falls past both refusals above the same way a directory whose
+/// snapshots sit two or more levels down does. Naming it with an explicit
+/// `--baseline` is an input error (driftsys/ridl#235), not the silent skip an
+/// absent flag gets — pinned separately by
+/// `auto_discovery_with_no_baseline_stays_silent`.
 #[test]
-fn check_skips_an_empty_baseline_directory() {
+fn check_refuses_an_empty_baseline_directory() {
     let dir = TempDir::new("emptydir");
     let root = package_workspace(&dir, BASE);
     let empty = dir.path().join("published");
@@ -732,10 +733,13 @@ fn check_skips_an_empty_baseline_directory() {
     ]);
 
     assert_eq!(
-        code, 0,
-        "an empty baseline directory is not an error:\n{stderr}"
+        code, 2,
+        "an explicit baseline holding no snapshot is an input error:\n{stderr}"
     );
-    assert_eq!(stderr, "", "and it stays silent");
+    assert!(
+        stderr.contains("no `.ir.json` snapshot"),
+        "the cause is named:\n{stderr}",
+    );
 }
 
 /// `--baseline` refuses a prototext or binary IR artifact by name: a
@@ -1250,5 +1254,55 @@ fn inline_shape_removal_spans_the_service_name() {
     assert!(
         named.contains("┌─") && named.contains("interface VehicleStatus {"),
         "a removal from a named interface still spans its interface name:\n{named}"
+    );
+}
+
+/// A baseline path aimed two or more levels above the snapshots falls past
+/// both existing refusals and yields no snapshot. Comparing against nothing
+/// reports no drift and exits 0, which reads exactly like a clean check, so it
+/// is an input error instead (driftsys/ridl#235).
+#[test]
+fn an_explicit_baseline_holding_no_snapshot_is_an_input_error() {
+    let dir = TempDir::new("empty-explicit");
+    let root = package_workspace(&dir, BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", REORDERED);
+    // The snapshots are at `<root>/.ridl/baseline/`, two levels below `root`.
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        root.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 2,
+        "the tool could not answer, so it says so instead of passing:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("no `.ir.json` snapshot"),
+        "the cause is named:\n{stderr}",
+    );
+}
+
+/// Auto-discovery keeps its silent skip. With no flag and no published
+/// baseline, `ridl check` behaves as it did before the baseline command
+/// existed, which is the property `baseline_location` documents.
+#[test]
+fn auto_discovery_with_no_baseline_stays_silent() {
+    let dir = TempDir::new("empty-auto");
+    let root = package_workspace(&dir, BASE);
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "a clean check with no baseline succeeds:\n{stderr}"
+    );
+    assert!(
+        stdout.is_empty() && stderr.is_empty(),
+        "no baseline means no drift report at all:\nstdout: {stdout}\nstderr: {stderr}",
     );
 }
