@@ -261,6 +261,15 @@ fn ridl_mcp_serves_the_handshake_and_exits_zero_on_shutdown() {
         response["result"]["serverInfo"]["name"], "ridl-mcp",
         "{response}"
     );
+    // The version `ridl mcp` advertises is this build's own
+    // `RIDL_BUILD_VERSION` (crates/ridl/build.rs), not `ridl-mcp`'s crate
+    // version — the same value `ridl lsp` advertises, so a bug report names
+    // one build regardless of which server the reporter happened to query.
+    assert_eq!(
+        response["result"]["serverInfo"]["version"],
+        env!("RIDL_BUILD_VERSION"),
+        "{response}"
+    );
 
     writeln!(
         stdin,

@@ -247,7 +247,9 @@ fn run_mcp() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    match runtime.block_on(ridl_mcp::serve_stdio()) {
+    match runtime.block_on(ridl_mcp::serve_stdio_with_version(Some(env!(
+        "RIDL_BUILD_VERSION"
+    )))) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => {
             eprintln!("error: {err}");
