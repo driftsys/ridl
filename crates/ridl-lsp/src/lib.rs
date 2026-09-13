@@ -6,7 +6,7 @@
 //! is a plain loop that receives one message at a time, dispatches it, and
 //! calls straight into the memoized salsa queries (`parse_file`,
 //! `resolve_package`, `check_package`). The server is also reachable as
-//! `ridl lsp` (the `ridl` CLI), which the release artifacts ship.
+//! `ridl lsp` (the `ridl` CLI).
 //!
 //! # The incremental overlay design
 //!
