@@ -49,19 +49,25 @@ pub struct CompileOutput {
     pub sources: SourceMap,
 }
 
-/// Compiles `text` (registered under `path`) end to end.
-///
-/// The pipeline is `parse_file` (through the salsa database) →
-/// `resolve_package` → `check_package` → `generate`. Diagnostics are
-/// concatenated in that order: parser errors first, then resolver, then
-/// checker, then any Rust backend error. The source becomes a single-file
-/// synthetic package named from its `package` declaration, falling back to
-/// the path's file stem — the loader's single-file rule (E1.3).
-///
-/// The package-scoped passes stamp their spans with a [`FileId`] indexing the
-/// package's files in order; [`remap_diagnostics`] rewrites them onto this
-/// function's own [`SourceMap`] before they are merged.
-pub fn compile(path: &str, text: &str) -> CompileOutput {
+/// The checked front end of one source text: parser, resolver, and checker
+/// diagnostics, the source map they are remapped onto, and the IR the checker
+/// produced.
+struct FrontEnd {
+    diagnostics: Vec<Diagnostic>,
+    sources: SourceMap,
+    /// The one file the source was interned as — the backend's error arm
+    /// points its diagnostic at it.
+    file: FileId,
+    ir: ridl_ir::v2::Package,
+}
+
+/// Parses, resolves, and checks `text` (registered under `path`) as a
+/// single-file synthetic package named from its `package` declaration, falling
+/// back to the path's file stem — the loader's single-file rule (E1.3). The
+/// profile follows `path`'s extension. Diagnostics are concatenated parser →
+/// resolver → checker, with the package-scoped spans remapped onto this
+/// function's own [`SourceMap`].
+fn front_end(path: &str, text: &str) -> FrontEnd {
     let mut db = RidlDatabase::default();
     let std = std_package(&mut db);
     let input = InputFile::new(&db, path.to_string(), text.to_string());
@@ -105,7 +111,46 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
     diagnostics.extend(remap_diagnostics(resolution.diagnostics, &render_ids));
     diagnostics.extend(remap_diagnostics(checked.diagnostics, &render_ids));
 
-    let rust_source = match ridl_backend_rust::generate(&checked.ir) {
+    FrontEnd {
+        diagnostics,
+        sources,
+        file,
+        ir: checked.ir,
+    }
+}
+
+/// Checks `text` (registered under `path`) without running any backend: the
+/// single-file oracle `ridl mcp`'s `ridl_check` and `ridl check --format json`
+/// share.
+pub fn check_source(path: &str, text: &str) -> CliRun {
+    let front = front_end(path, text);
+    CliRun {
+        diagnostics: front.diagnostics,
+        sources: front.sources,
+    }
+}
+
+/// Compiles `text` (registered under `path`) end to end.
+///
+/// The pipeline is `parse_file` (through the salsa database) →
+/// `resolve_package` → `check_package` → `generate`. Diagnostics are
+/// concatenated in that order: parser errors first, then resolver, then
+/// checker, then any Rust backend error. The source becomes a single-file
+/// synthetic package named from its `package` declaration, falling back to
+/// the path's file stem — the loader's single-file rule (E1.3).
+///
+/// The package-scoped passes stamp their spans with a [`FileId`] indexing the
+/// package's files in order; [`remap_diagnostics`] rewrites them onto this
+/// function's own [`SourceMap`] before they are merged.
+pub fn compile(path: &str, text: &str) -> CompileOutput {
+    let FrontEnd {
+        mut diagnostics,
+        sources,
+        file,
+        ir,
+    } = front_end(path, text);
+
+    let rust_source = match ridl_backend_rust::generate(&ir) {
         // The E1.12 backend returns Rust plus a C header; this pre-CLI plumbing
         // path keeps only the Rust source. Task 20 wires the C header emit.
         Ok(generated) => generated.rust_source,
@@ -124,7 +169,7 @@ pub fn compile(path: &str, text: &str) -> CompileOutput {
 
     CompileOutput {
         rust_source,
-        package: checked.ir,
+        package: ir,
         diagnostics,
         sources,
     }
