@@ -384,6 +384,18 @@ fn ridl_lsp_serves_the_handshake_and_exits_zero_on_shutdown() {
         result["capabilities"]["textDocumentSync"].is_object(),
         "{result}"
     );
+    // The version `ridl lsp` advertises is this build's own
+    // `RIDL_BUILD_VERSION` (crates/ridl/build.rs) — the same value the
+    // `ridl_mcp_serves_the_handshake_and_exits_zero_on_shutdown` test below
+    // asserts `ridl mcp` advertises, so a bug report names one build
+    // regardless of which server the reporter queried. `run_lsp` calling
+    // plain `run` instead of `run_with_version` would leave `serverInfo`
+    // with no `version` field at all, which fails this too.
+    assert_eq!(
+        result["serverInfo"]["version"],
+        env!("RIDL_BUILD_VERSION"),
+        "{result}"
+    );
 
     Message::Notification(Notification::new("initialized".to_string(), json!({})))
         .write(&mut stdin)
