@@ -9,8 +9,9 @@ Version: 0.2.0 — Draft
 > **Provenance and supersession.** This document replaces the rsdl reference
 > v0.1.0 as a whole. v0.1.0 described components as situated reactions, wired
 > them with application notation, placed them on capability-class targets,
-> derived transport and posture, and shipped them in bundles; every one of those
-> constructs is retired here, and v0.1.0 is kept for provenance at
+> derived transport and posture, and shipped them in bundles. Every one of those
+> constructs is retired here except posture derivation, which is reserved (§12),
+> and v0.1.0 is kept for provenance at
 > [`../archive/rsdl-language-reference-v0.1.md`](../archive/rsdl-language-reference-v0.1.md).
 > The language stated here was settled in the rsdl rewrite decisions of
 > 2026-09-12 and 2026-09-13 (decisions D-1 to D-11), over the topology
@@ -60,8 +61,8 @@ boundary.
 
 rsdl records nothing of its own. The contracts are ridl's: a `service`, its
 interfaces and their members are declared in `.ridl` files, and the numbers that
-identify an interface on the wire come from the per-package lock file that ridl
-maintains (§13). Behaviour is rmdl's and is not referenced in this release
+identify an interface on the wire come from a per-package lock file, an input to
+the lowering (§13). Behaviour is rmdl's and is not referenced in this release
 (§12). What rsdl adds is structure — which parts exist, how they relate, and
 where they run — and every fact it lowers is derived from that structure.
 
@@ -154,12 +155,16 @@ system  component  distribution  deployment  machine  offers  requires  for
 plus typl's `package`, `import` and `as`. Every family keyword is reserved in
 every profile (typl §1.4). The v0.1 words `provides`, `instance`, `assurance`,
 `target`, `place`, `on`, `transport`, `bundle`, `time`, `base`, `redundant`,
-`supervise` and `degraded`, and the `<-` wiring arrow, are retired; a retired
+`supervise` and `degraded`, and the `<-` wiring arrow, are retired from rsdl.
+The family registry (typl §1.4) and the implemented registry still reserve them
+and do not yet reserve `offers`, `distribution` and `machine`; both registries
+change when the rsdl checker is built (roadmap Epic 6). At that change a retired
 word leaves the registry unless another profile uses it (`let` stays, rmdl's),
-and leaving the registry makes it a legal identifier in every profile — a
-compatible widening. `requires` (a component line) and the predicate attribute
-key `require` (general form §4.3) never share a position: `require` is
-recognised only inside `[ ]`, and no rsdl declaration or line admits it.
+which makes it a legal identifier in every profile, and the three new words stop
+being legal identifiers in every profile. `requires` (a component line) and the
+predicate attribute key `require` (general form §4.3) never share a position:
+`require` is recognised only inside `[ ]`, and no rsdl declaration or line
+admits it.
 
 **Case carries the role** (general form R7):
 
@@ -644,10 +649,12 @@ The lowering runs over the closure once and then once per deployment. It
 produces **facts**, stated here as facts and not as a schema; a runtime's
 descriptor is an emitter over them and is specified with the runtime. Inputs
 from outside rsdl, cited once: the interface numbers, read from each package's
-generated lock file (the ridl reference specifies the lock file); the member
-ordinals, from position (ridl §11); and the **catalog hash** per catalog,
-computed by ridl over the interfaces, their numbers and every type they reach
-(D-8) — embedded here as an input, never computed by rsdl.
+generated lock file; the member ordinals, from position (ridl §11); and the
+**catalog hash** per catalog, computed by ridl over the interfaces, their
+numbers and every type they reach (D-8) — embedded here as an input, never
+computed by rsdl. The lock file is not yet in the ridl reference: ridl §11 and
+§14.5 still number an interface by its position in a service's list, and the
+lock file replaces that numbering when it lands.
 
 Per deployment:
 
@@ -655,6 +662,10 @@ Per deployment:
   instances, and the machine each instance is placed on; a redundant provider
   set is visible as more than one instance and carries the not-yet-realizable
   marker of RSDL-409.
+- **Machines and placement** — every machine of the deployment, with its name,
+  its `external` flag and its `labels`; and every instance of every closure
+  component, with its component, the component's `external` flag and the machine
+  the instance is placed on (§9), including an instance that has no link.
 - **The link set** — for every `requires` line, one link per (consumer instance,
   producer instance): the interface, its owning service, the two instances,
   their machines and the crossing kind (§10). A link with two external endpoints
@@ -680,10 +691,11 @@ Per deployment:
   declaration.
 - **Distribution installation and dependency** — per distribution, the machines
   hosting at least one instance of its components (installation, which differs
-  per deployment); and the distributions it depends on: `A` depends on `B` when
-  a component in `A` requires an interface whose owning service a component in
-  `B` offers (dependency, the same in every deployment). RSDL-901 is checked
-  over this fact. Absent when the workspace declares no distribution.
+  per deployment); and the distributions it depends on: `A` depends on `B`, a
+  different distribution, when a component in `A` requires an interface whose
+  owning service a component in `B` offers (dependency, the same in every
+  deployment). RSDL-901 is checked over this fact. Absent when the workspace
+  declares no distribution.
 - **The catalog hashes** of every catalog in the region map, as received.
 
 **Errors and warnings.** An error in the closure — RSDL-3xx, 4xx, 5xx, 6xx or
@@ -756,7 +768,7 @@ them. Codes not shown in any table were never allocated.
 
 | Code     | Rule                                                                                                                                                               | Severity                     | Section |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------- | ------- |
-| RSDL-305 | `instances` is not a parenthesised list of one or more camelCase names (`()`, `instances = solo`)                                                                  | error                        | §5, §7  |
+| RSDL-305 | `instances` is not a parenthesised list of one or more camelCase names (`()`, `instances = solo`)                                                                  | error                        | §5      |
 | RSDL-306 | duplicate instance name in one component                                                                                                                           | error                        | §7      |
 | RSDL-307 | `Unit` written in source — as a declared instance name, or as the instance segment of a reference                                                                  | error                        | §7      |
 | RSDL-308 | a component requires an interface listed by a service it offers                                                                                                    | error                        | §3.2    |
@@ -767,7 +779,7 @@ them. Codes not shown in any table were never allocated.
 | RSDL-313 | `external` written with a value — it is a flag                                                                                                                     | error                        | §5      |
 | RSDL-403 | a closure component requires an interface that no closure service lists (missing provider)                                                                         | error                        | §8      |
 | RSDL-408 | an interface listed by two services of the closure — raised for every interface they list                                                                          | error                        | §8      |
-| RSDL-409 | a `requires` resolves to a redundant provider set — an offering component with more than one instance                                                              | warning (not yet realizable) | §7, §8  |
+| RSDL-409 | a `requires` resolves to a redundant provider set — an offering component with more than one instance                                                              | warning (not yet realizable) | §7      |
 | RSDL-502 | two closure components offer one service                                                                                                                           | error                        | §8      |
 | RSDL-504 | a member line names a service by its name while a declared component offers it — names the offerer                                                                 | error                        | §6      |
 | RSDL-601 | more than one `system` in the workspace                                                                                                                            | error                        | §3.1    |
@@ -1065,10 +1077,12 @@ attr_block       = "[" { attribute sep? } "]" ;
 attribute        = key | key "=" attr_value ;
 key              = camelCase_id                       (* an rsdl-owned key — §5 *)
                  | camelCase_id "." camelCase_id ;    (* backend.key — §5 *)
-attr_value       = literal | SCREAMING_SNAKE_ID
+attr_value       = literal | SCREAMING_SNAKE_ID | id
                  | "(" [ list_item { "," list_item } [ "," ] ] ")" ;
-list_item        = literal | SCREAMING_SNAKE_ID | camelCase_id ;
-                 (* camelCase_id admits instance names in `instances = (…)` — §7.
+list_item        = literal | SCREAMING_SNAKE_ID | id ;
+                 (* `id` admits instance names in `instances = (…)` — §7 — and lets
+                    `instances = solo` and a declared `Unit` parse, so that RSDL-305
+                    and RSDL-307 report them rather than a parse error.
                     general form §4.2's const_value admits literals and constant
                     references only; this is the one widening rsdl needs *)
 ```

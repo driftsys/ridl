@@ -13,8 +13,9 @@ consumer's topology naming of 2026-08-10. Each is right about something and none
 covers the whole range, so the words were being re-derived from scratch every
 few weeks.
 
-Nothing here is ratified. Where it contradicts rsdl's reference, the reference
-is the record and this note is the proposal.
+Nothing here is ratified. Citations of rsdl sections below use the v0.1
+numbering unless marked. Where it contradicts rsdl's reference, the reference is
+the record and this note is the proposal.
 
 **Amended 2026-09-13.** The rsdl reference was rewritten as v0.2.0 from
 [`2026-09-12-rsdl-rewrite-decisions.md`](2026-09-12-rsdl-rewrite-decisions.md),
@@ -127,7 +128,7 @@ those two gaps: a real interface, and an execution context. That is why rsdl
 rmdl deferred: the two things the language must state need no model, and an
 implementation is an optional attribute (§7).
 
-    V-10  MUST   rsdl §1.3 assigns three properties to the component and
+    V-10  MUST   rsdl v0.1 §1.3 assigns three properties to the component and
                  only one belongs there.
 
                      one reaction, one activation  -> component
@@ -180,7 +181,7 @@ an entity where software can be deployed to", and one real ECU may run several.
 Adaptive's deployment chain is Executable -> Process -> Machine, with machine
 states deciding which processes are active.
 
-**A target is not a machine.** rsdl §7 makes a target a _logical_ execution
+**A target is not a machine.** rsdl v0.1 §7 makes a target a _logical_ execution
 context "named by capability class, never addressed", offering "node, ECU,
 partition, container slot" — two hardware grains and two isolation grains,
 undistinguished — and binds it to physical late, "potentially
@@ -300,7 +301,7 @@ is the amended one).
     V-20  MUST   `may have an implementation` keeps its "may". A component
                  with none is how an external system, a stub, or a
                  not-yet-written component is named so its interfaces
-                 resolve — which is the one job rsdl §6's system root did
+                 resolve — which is the one job rsdl v0.1 §6's system root did
                  that nothing else does.
     V-21  MUST   Offer/consume and placement stay in **separate regions**.
                  Which service provides which interface does not change
@@ -319,7 +320,10 @@ The derivation that makes it worth writing: from `place` plus the offers and
 requires edges, the emitter computes the **interfacing rules** — for each
 (interface, consumer), the crossing kind, the transport, the access grant, and
 whether `Access::CHECKED` may be relaxed. Crossing kinds are four, not three:
-intra-process, inter-process on one machine, inter-machine, off-board.
+intra-process, inter-process on one machine, inter-machine, off-board. Amended
+by D-2 and D-3: placement is membership in a machine body, not `place`, and rsdl
+lowers three crossing kinds — same machine, different machine, off-board; the
+intra-process case is a backend optimisation under V-09.
 
 ## 8. Rejected names
 
@@ -335,7 +339,7 @@ naming pass.
                   catalog itself; also APK. The in-band descriptor puts a
                   distribution message in the same IR as the source
                   package, which is a permanent tax.
-    bundle        clean, and rsdl §9 already defines it with RSDL-901 and
+    bundle        clean, and rsdl v0.1 §9 defined it with RSDL-901 and
                   RSDL-902 attached — but `distribution` reads better to
                   the reviewers this has to survive.
     pack          short, and XPK shares its morphology, but collides with

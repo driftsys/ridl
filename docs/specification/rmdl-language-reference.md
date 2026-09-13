@@ -714,12 +714,12 @@ typl for _types_, never for contracts.
 What used to be "realization" is now three things the component supplies from
 outside, none of them in the model:
 
-| Concern                                   | Where it lives now                                                                                                                                                   |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| which contract member each flow maps to   | the component's binding — application notation `(engaged, target) = M(current, brake, lever)` in rsdl v0.1 §4 (archived); reserved in the rewritten rsdl (rsdl §12)  |
-| output **timing** (`@10ms`, refresh, TTL) | the **service** the component offers (ridl §14.5); its bounds drive the model's output-deadline demand (§6.1). The model itself carries no timing                    |
-| output **init value**                     | the bound channel's init (ridl §4.4); if the model also writes `init out = …`, the component checks the two agree (a boundary check in rsdl, not here)               |
-| contract `require`/`ensure`               | the service's clauses, compiled by the component as observers over the bound flows (§9). A model may _also_ carry its own `require`/`ensure` (§9.2); the two compose |
+| Concern                                   | Where it lives now                                                                                                                                                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| which contract member each flow maps to   | the component's binding — application notation `(engaged, target) = M(current, brake, lever)` in rsdl v0.1 §4 (archived); reserved in the rewritten rsdl (rsdl §12)                                         |
+| output **timing** (`@10ms`, refresh, TTL) | the **service** the component offers (ridl §14.5); its bounds drive the model's output-deadline demand (§6.1). The model itself carries no timing                                                           |
+| output **init value**                     | the bound channel's init (ridl §4.4); if the model also writes `init out = …`, the component checks the two agree (a boundary check in rsdl once binding returns, rsdl §12; not here)                       |
+| contract `require`/`ensure`               | the service's clauses, compiled by the component, once rsdl binding returns (rsdl §12), as observers over the bound flows (§9). A model may _also_ carry its own `require`/`ensure` (§9.2); the two compose |
 
 Consequences for the model author: write inputs and outputs as plain kinded
 flows; do not annotate timing (there is nothing to annotate — a model reacts to
@@ -1208,7 +1208,7 @@ rmdl-specific:
 | **event flow**             | an occurrence-kind flow: reads as `T?` — present with payload when the occurrence arrived this step, absent otherwise; raised by `emit`, never held                                                                                                                   |
 | **`when` equation**        | the event-triggered equation block (GRust heritage): ordered branches on `init` / `e?` / rising edges; first match runs; signals it defines hold, events it emits don't                                                                                               |
 | **`case` equation**        | the mode-dispatch equation block (GRust's match equation): selects an equation set by a per-step value; exactly one branch every step, total definition, no hold — `when`'s opposite discipline                                                                       |
-| **`emit`**                 | raises an event flow with a payload inside a `when` branch — the only way behaviour produces occurrences; a side effect only once rsdl binds the event to a command (§5.7)                                                                                            |
+| **`emit`**                 | raises an event flow with a payload inside a `when` branch — the only way behaviour produces occurrences; a side effect only once the event is bound to a command (§5.7), a binding rsdl reserves (rsdl §12)                                                          |
 | **`last`**                 | the value of a flow at the previous step — the only memory in the language; total, thanks to seeds                                                                                                                                                                    |
 | **`init` (equation)**      | the seed: what `last x` yields at the first step — explicit (`init x = e`) or implicit from the channel init value (§5.3)                                                                                                                                             |
 | **step**                   | one atomic synchronous reaction — inputs snapshotted, equations evaluated, outputs published; **scheduled by the runtime on inputs and constraints, never by polling**                                                                                                |

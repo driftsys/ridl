@@ -37,6 +37,10 @@ differences, each agreed with Sebastien on 2026-09-13:
   heading, "composition changed", beside D-11's "placement changed"; a backend
   key is spelled `someip.serviceId`, because typl's identifiers admit no
   underscore.
+- **Smaller differences**: `let` stays in the family registry, because rmdl uses
+  it, although §2 lists it as retired; `deprecated` is accepted on the five
+  declarations beside the three rsdl keys and `labels`; and rsdl uses two of the
+  attribute block's three forms, flag and assignment, where D-6 says three.
 
 Why it exists: a recap of rsdl against the vocabulary note found five points the
 note answers twice or not at all — the process noun, what is placed, posture,

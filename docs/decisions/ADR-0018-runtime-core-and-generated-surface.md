@@ -549,9 +549,10 @@ be generated, and in what order", which is what this record answers.
 
 ## Open
 
-1. **rsdl has no protection-domain concept.** §7 places components on targets;
-   nothing says two components share a memory protection domain, which is the
-   boundary decision 10 derives from.
+1. **rsdl has no protection-domain concept.** §9 places component instances on
+   machines, and §12 reserves any grouping under a machine; nothing says two
+   components share a memory protection domain, which is the boundary decision
+   10 derives from.
 2. **Whether the assurance zone is one attribute or two.** Safety and cyber
    collapse for decision 10 but partition a system differently — safety by
    criticality, security by exposure — and a QM infotainment stack is the
