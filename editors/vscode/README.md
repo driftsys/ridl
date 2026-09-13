@@ -19,9 +19,9 @@ Marketplace and Open VSX publishing is deferred to a maintainer act, like the
 crates.io release, and is not part of this build. Once a maintainer publishes a
 release, search "RIDL" on the VS Code Marketplace or Open VSX; the published
 extension bundles the `ridl` binary and runs it as `ridl lsp` (the language
-server) and `ridl mcp` (the MCP server Copilot sees). That release will also add
-an installer script at the repository root (`install.sh` / `install.ps1`);
-neither exists in this branch yet.
+server) and `ridl mcp` (the MCP server Copilot sees). The repository root also
+has an installer script (`install.sh` / `install.ps1`) that downloads `ridl`
+from that release; the release itself does not exist yet.
 
 Once the extension is installed, by whichever route, run the command **RIDL:
 Install ridl to PATH** to use `ridl` from a terminal, Claude Code, or Codex too.
