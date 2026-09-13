@@ -1220,6 +1220,28 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
     decision 7). Recorded in
     [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
     §3.11.
+14. **Value-aware enum and enum-set reorder comparison.** `ridl-diff`'s
+    composite-body walk compares a struct field and a union arm by position,
+    because position is their wire identity (§7.4); an `enum` value and an
+    `enumset` bit carry an explicit number instead (§8, §9), so a textual
+    reorder that changes no number moves no wire value. The walk is not
+    value-aware — it compares positions for every composite kind alike — so a
+    textual `enum` or `enumset` reorder is reported the same as a struct-field
+    reorder: breaking (`member_reordered`). Whether the walk should instead
+    compare `enum` and `enumset` members by their explicit values, and report a
+    textual-only reorder as no change, is open; the conservative, position-based
+    treatment was kept deliberately rather than settled either way
+    (`crates/ridl-diff/src/walk.rs`, `*_ignoring_order` helpers).
+15. **A member inserted mid-body does not carry `member_reordered`.** Inserting
+    a member in the middle of a struct, `enum`, `enumset`, or union body, with
+    every later member left in its written order, is reported today as one
+    `decl_added` (or, on removal, `decl_removed`) per §7.4's append-only rule —
+    the classifier reads the body to judge the addition's direction, not the
+    reorder walk. Whether the survivors an insertion shifts should also be
+    reported with `member_reordered` is open; widening the case would reach the
+    name-keyed matching logic the carried-debt comment above
+    `crates/ridl-diff/src/walk.rs`'s `diff_composite` guards
+    (driftsys/ridl#302).
 
 ---
 
