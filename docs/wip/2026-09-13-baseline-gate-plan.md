@@ -83,8 +83,8 @@ categories are declared through the `declare_categories!` macro in
   the parameter and one more refusal; `desk_check` (line 615) passes it through;
   one new private function `refuse_empty_baseline`.
 - Modify `crates/ridl/tests/baseline_desk.rs` — two tests appended.
-- Modify `docs/decisions/ADR-0010-cli-conventions.md` — the `ridl baseline`
-  row's exit-2 cell.
+- Modify `docs/decisions/ADR-0010-cli-conventions.md` — the `ridl check` row's
+  exit-2 cell, and decision 1's closing passage on within-cell dates.
 
 **Task 3 — the composite reorder category**
 
@@ -435,7 +435,8 @@ error publishes nothing". Change it to:
 a package with a diagnostic error publishes nothing; a replacement that drops an interaction with no `reserved` tombstone is refused (RIDL-408)
 ```
 
-Leave every other cell alone. Task 2 amends this same row's exit-2 cell.
+Leave every other cell alone. Task 2 amends the `ridl check` row's exit-2 cell —
+a different row, because `--baseline` is a flag of `ridl check`.
 
 - [ ] **Step 11: Run the full local gate**
 
@@ -685,15 +686,22 @@ Expected: every test PASSES, including the two added in step 1.
 
 Run: `cargo test -p ridl --locked --test baseline_gate`
 
-Expected: 4 tests PASS. The gate reads `out_dir` directly and never calls
+Expected: 5 tests PASS. The gate reads `out_dir` directly and never calls
 `load_baseline`, so this task must not affect it. If it does, the gate is going
 through the loader and step 4 of Task 1 was not followed.
 
 - [ ] **Step 8: Amend ADR-0010**
 
 In `docs/decisions/ADR-0010-cli-conventions.md`, decision 1's table, the
-`ridl baseline` row's exit-2 cell currently reads "the given path does not
+**`ridl check`** row's exit-2 cell currently reads "the given path does not
 exist". Change it to:
+
+Take care to edit the right row. Five rows' exit-2 cells read "the given path
+does not exist" verbatim — `ridl check`, `ridl build`, `ridl baseline`,
+`ridlc check` and `ridlc build` — so a search for that text alone will land on
+the wrong one. `--baseline` is a flag of `ridl check` (`main.rs:20`, `:454`),
+not of the `ridl baseline` subcommand, and `ridlc` has no baseline flag at all.
+The new text is:
 
 ```markdown
 the given path does not exist, or an explicit `--baseline` holds no `.ir.json` snapshot
@@ -706,6 +714,32 @@ fail-closed change, add one sentence:
 The same failure shape was closed for an explicit `--baseline` that holds no
 snapshot, which reported no drift and exited 0 (driftsys/ridl#235); the search
 depth `first_nested_snapshot_dir` records as deliberate is unchanged.
+```
+
+Then amend decision 1's closing passage. It currently carries a within-cell date
+rule written for one clause — the `ridl baseline` exit-1 cell's tombstone clause
+Task 1 added. Your new exit-2 clause is a second clause that postdates the
+table's 2026-07-27 construction, so leaving the passage as it stands makes it
+certify your clause under a date that does not cover it. That is the exact
+defect Task 1's review raised as an Important finding; do not reproduce it.
+Replace the passage from "The same discipline applies within a cell:" to the end
+of the paragraph with:
+
+```markdown
+The same discipline applies within a cell. A clause added to a cell after
+2026-07-27 is not covered by that date: it carries its own date and its own
+verification, constructed the same way as the original eight — by direct
+construction against the built binary. Two clauses on this table postdate the
+original construction, both added on 2026-09-13:
+
+- the `ridl baseline` exit-1 cell's `reserved`-tombstone clause, added when
+  `ridl baseline` gained the RIDL-408 publication gate, verified via
+  `baseline_refuses_to_publish_an_untombstoned_removal` in
+  `crates/ridl/tests/baseline_gate.rs`, which asserts the refusal exits 1;
+- the `ridl check` exit-2 cell's empty-baseline clause, added when an explicit
+  `--baseline` holding no snapshot became an input error (driftsys/ridl#235),
+  verified via `an_explicit_baseline_holding_no_snapshot_is_an_input_error` in
+  `crates/ridl/tests/baseline_desk.rs`, which asserts the refusal exits 2.
 ```
 
 - [ ] **Step 9: Run the full local gate**
