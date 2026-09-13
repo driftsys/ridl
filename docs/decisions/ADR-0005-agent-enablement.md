@@ -247,22 +247,27 @@ Agent enablement is not a separate program; it rides the existing phases:
   by two mechanisms: the VS Code extension registers `ridl mcp` through
   `vscode.lm.registerMcpServerDefinitionProvider`, which serves Copilot inside
   VS Code, while Claude Code and Codex read their own configuration and need
-  only the `ridl` binary on `PATH`. One binary backs both entry points:
-  `ridl
-  lsp` and `ridl mcp` are subcommands of the `ridl` CLI, not separate
-  executables. The fallback for a host without MCP is
-  `ridl check --format
-  json`, which serialises through the same
-  `ridl_core::diag::to_json` as the MCP tool, so the two faces agree diagnostic
-  for diagnostic. Cursor and Cowork are not first-class in this pass, and for
-  Cursor the reason is a cost this decision accepts.
-  `registerMcpServerDefinitionProvider` requires VS Code 1.101, so the
-  extension's `engines.vscode` and `@types/vscode` moved from `^1.91.0` to
-  `^1.101.0`, and a VS Code fork below 1.101 can no longer install the extension
-  at all — including the language server it could use before. The alternative,
-  holding `engines` at `^1.91.0` and hand-declaring the MCP API types behind a
-  runtime guard, would carry an unversioned copy of a VS Code API in this
-  repository for a fork that tracks upstream within months. The bump is
+  only the `ridl` binary on `PATH`. One binary backs both entry points: the
+  subcommands `ridl lsp` and `ridl mcp` of the `ridl` CLI, not separate
+  executables.
+
+  The fallback for a host without MCP is the command `ridl check --format json`.
+  It serialises through the same `ridl_core::diag::to_json` as the MCP tool, so
+  each diagnostic object has the same shape. The two faces run different front
+  ends, though: the CLI resolves the workspace a file belongs to, and the tool
+  checks one standalone source against `ridl.std`. Their diagnostic lists agree
+  only for a standalone file with no manifest and no imports; for a workspace
+  member they can differ.
+
+  Cursor and Cowork are not first-class in this pass, and for Cursor the reason
+  is a cost this decision accepts. `registerMcpServerDefinitionProvider`
+  requires VS Code 1.101, so the extension's `engines.vscode` range moved from
+  `^1.91.0` to `^1.101.0` and its exact `@types/vscode` pin from `1.91.0` to
+  `1.101.0`. A VS Code fork below 1.101 can therefore no longer install the
+  extension at all, including the language server it could use before. The
+  alternative, holding `engines` at `^1.91.0` and hand-declaring the MCP API
+  types behind a runtime guard, would carry an unversioned copy of a VS Code API
+  in this repository for a fork that tracks upstream within months. The bump is
   accepted; a report from a user on an older fork is what reopens it.
 - **Eval scoring beyond "compiles."** Compilation is necessary, not sufficient —
   idiomaticity (signal-vs-event choice, right error composition) needs a rubric

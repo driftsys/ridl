@@ -48,8 +48,9 @@ wins:
 Tier 3 is reached only when nothing is bundled, which in practice means an
 unpackaged extension-development launch: every VSIX the release train produces
 carries a binary. The module also recognises a `ridl.serverPath` still naming
-`ridl-lsp`, the separate binary that no longer exists, so the extension can say
-what changed instead of failing to spawn.
+`ridl-lsp`, the separate binary that no longer exists, and the extension shows a
+warning that names the change. It still spawns the configured path, so the
+warning explains the spawn failure that follows rather than preventing it.
 
 The same resolved command backs both roles: `ridl lsp` for the language client
 and `ridl mcp` for the MCP server definition the extension registers.
@@ -79,4 +80,6 @@ only require `ridl` on `PATH`. Each downloads `ridl-<target>.tar.gz` and its
 `.sha256` from the resolved release, verifies the checksum, and places `ridl` in
 `RIDL_INSTALL_DIR` (default `$HOME/.local/bin`). `RIDL_VERSION` pins a specific
 `editor-v*` tag; `RIDL_INSTALL_DRY_RUN=1` prints the resolved URL and exits
-without downloading, which is what `just install-check` exercises.
+without downloading. `just install-check` runs `install.sh` end to end against a
+`file://` fixture release: one good install, and one tampered tarball that the
+checksum must reject with nothing installed.

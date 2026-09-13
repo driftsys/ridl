@@ -394,17 +394,18 @@ is the knowledge layer and the MCP over the compiler.
 v0 slice, 2026-09-13).** The original wording, "outputs are byte-identical to
 CLI/LSP," is not reachable by this design, and not only because of the envelope:
 `ridl_check` and `ridl check --format json` share one diagnostic serializer
-(`ridl_core::diag::to_json`), so each diagnostic object is identical, but the
-tool wraps its array in `{"diagnostics": [ … ]}` for MCP's structured-output
-requirement, and `span.path` differs by construction — the tool's input is a
-source string with no file, so it registers under the fixed synthetic name
-`input.typl`/`input.ridl` rather than a real path. The LSP side of the original
-wording was never a JSON comparison to begin with: `ridl-lsp` renders
-diagnostics through `lsp_types::Diagnostic` (`crates/ridl-lsp/src/convert.rs`),
-not `ridl_core::diag::to_json`, so there was no shared serializer for
-"byte-identical to ... LSP" to hold through. The row above states the reachable
-criterion; see `crates/ridl-mcp/README.md`, "What this tool shares with
-`ridl check --format json <file>`, and where it differs."
+(`ridl_core::diag::to_json`), so each diagnostic object has the same shape, but
+the two run different front ends (the CLI resolves a workspace, the tool checks
+one standalone source), and the tool wraps its array in `{"diagnostics": [ … ]}`
+for MCP's structured-output requirement, and `span.path` differs by construction
+— the tool's input is a source string with no file, so it registers under the
+fixed synthetic name `input.typl`/`input.ridl` rather than a real path. The LSP
+side of the original wording was never a JSON comparison to begin with:
+`ridl-lsp` renders diagnostics through `lsp_types::Diagnostic`
+(`crates/ridl-lsp/src/convert.rs`), not `ridl_core::diag::to_json`, so there was
+no shared serializer for "byte-identical to ... LSP" to hold through. The row
+above states the reachable criterion; see `crates/ridl-mcp/README.md`, "What
+this tool shares with `ridl check --format json <file>`, and where it differs."
 
 ---
 

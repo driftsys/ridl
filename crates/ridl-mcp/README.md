@@ -14,8 +14,7 @@ cargo install --path crates/ridl
 ```
 
 Installer scripts, `install.sh` and `install.ps1`, exist at the repository root
-and download the binary from a GitHub Release; a maintainer has not yet
-published one.
+and download the binary from the newest `editor-v*` GitHub Release.
 
 ## Tools
 
@@ -38,7 +37,10 @@ Returns `{ "diagnostics": [ … ] }`, where each element is:
 
 **What this tool shares with `ridl check --format json <file>`, and where it
 differs.** Both call the same `ridl_core::diag::to_json`, so each diagnostic
-object listed above is identical between the two faces. Two things are not:
+object has the shape listed above in both faces. For a standalone file with no
+manifest and no imports, the two lists agree except for the two points below.
+For a workspace member they can differ further, because the CLI resolves the
+workspace and this tool does not. The two points:
 
 - **The top level.** This tool returns the object `{"diagnostics": [ … ]}`.
   `ridl check --format json` prints the bare array instead, with no

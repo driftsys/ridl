@@ -1387,8 +1387,8 @@ fn advertises_the_inlay_hint_capability() {
 
 /// `initialize`'s result reports `serverInfo` with the given version when the
 /// server is started through `run_with_version` — the entry point `ridl lsp`
-/// uses to report its build version (docs/wip/2026-09-13-vscode-extension-
-/// distribution-design.md, "Versioning"). Every other test in this file
+/// uses to report its build version (docs/technotes/toolchain-distribution.md,
+/// "How the binary learns its version"). Every other test in this file
 /// starts the server through the version-less `run`.
 #[test]
 fn initialize_reports_the_server_version_when_given_one() {
