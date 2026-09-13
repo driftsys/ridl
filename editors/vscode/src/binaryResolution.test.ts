@@ -5,6 +5,7 @@ import {
   bundledBinaryPath,
   isLegacyServerName,
   resolveBinary,
+  resolveLspCommand,
   resolveMcpDefinition,
 } from "./binaryResolution";
 
@@ -78,4 +79,15 @@ test("the MCP definition spawns the same binary with the mcp subcommand", () => 
     cwd: "/work/project",
     version: "0.1.0",
   });
+});
+
+test("the LSP command spawns the same binary with the lsp subcommand", () => {
+  const bundled = path.join(EXT, "bin", "ridl");
+  const resolved = resolveLspCommand({
+    configuredPath: undefined,
+    extensionPath: EXT,
+    platform: "linux",
+    exists: (file) => file === bundled,
+  });
+  assert.deepEqual(resolved, { command: bundled, args: ["lsp"] });
 });

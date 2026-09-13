@@ -71,3 +71,9 @@ export function resolveMcpDefinition(input: McpDefinitionInput): {
     version: input.extensionVersion,
   };
 }
+
+/** The command the language client spawns: the resolved binary, run as `ridl lsp`. */
+export function resolveLspCommand(input: ResolveInput): { command: string; args: string[] } {
+  const { command } = resolveBinary(input);
+  return { command, args: [...LSP_ARGS] };
+}

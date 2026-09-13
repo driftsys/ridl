@@ -24,8 +24,7 @@ import {
 } from "vscode-languageclient/node";
 import {
   isLegacyServerName,
-  LSP_ARGS,
-  resolveBinary,
+  resolveLspCommand,
   resolveMcpDefinition,
 } from "./binaryResolution";
 import { copyIsStale, isDirOnPath, parseVersionOutput, pathHint, performCopy, planInstall } from "./installToPath";
@@ -76,7 +75,7 @@ function configuredServerPath(): string | undefined {
 
 /** Builds the language client: stdio transport to `ridl lsp`, scoped to `.typl` and `.ridl` files. */
 function createClient(context: vscode.ExtensionContext): LanguageClient {
-  const { command } = resolveBinary({
+  const { command, args } = resolveLspCommand({
     configuredPath: configuredServerPath(),
     extensionPath: context.extensionPath,
     platform: process.platform,
@@ -84,7 +83,7 @@ function createClient(context: vscode.ExtensionContext): LanguageClient {
   });
   const serverOptions: ServerOptions = {
     command,
-    args: [...LSP_ARGS],
+    args,
     transport: TransportKind.stdio,
   };
 
