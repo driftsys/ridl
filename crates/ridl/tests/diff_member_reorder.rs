@@ -157,6 +157,17 @@ struct Report {
 }
 ";
 
+/// The outer two fields swap places; `latch` keeps its position.
+const OUTER_SWAPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+type Count: integer [0..10]
+struct Report {
+  window: DoorState
+  latch: DoorState
+  door: DoorState
+}
+";
+
 /// `door` and `latch` swap places and, in the same edit, `window` changes type
 /// in place.
 const SWAPPED_AND_RETYPED: &str = "package veh.cluster
@@ -195,6 +206,30 @@ enum GearPosition {
   REVERSE = 5
 }
 ";
+
+/// One `member_reordered` per member that moved, and none for a member that
+/// kept its position. The swap test cannot pin this: both of its members move,
+/// so a loop reporting every member would pass it.
+#[test]
+fn only_the_members_that_moved_are_reported() {
+    let dir = TempDir::new("outer-swap");
+    let old = workspace(&dir, "old", THREE_FIELDS);
+    let new = workspace(&dir, "new", OUTER_SWAPPED);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    let out = format!("{stdout}{stderr}");
+
+    assert_eq!(code, 1, "a reorder is a wire break:\n{out}");
+    assert!(
+        out.contains("member_reordered veh.cluster/Report/door")
+            && out.contains("member_reordered veh.cluster/Report/window"),
+        "both moved members are reported:\n{out}",
+    );
+    assert!(
+        !out.contains("member_reordered veh.cluster/Report/latch"),
+        "a member that kept its position is not reported:\n{out}",
+    );
+}
 
 /// A reorder that arrives in the same edit as an in-place change reports both:
 /// the moved members as `member_reordered`, and the container as

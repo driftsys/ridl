@@ -210,31 +210,13 @@ fn explain_prints_the_rule_row_for_a_category() {
 }
 
 /// Every category a report can print is explainable, so a reader can always take
-/// a word out of the output and ask what it means.
+/// a word out of the output and ask what it means. The list is the crate's own
+/// `CATEGORIES`, so a category added to the enum is checked here without a
+/// second list to keep in step.
 #[test]
 fn every_reported_category_is_explainable() {
-    for category in [
-        "decl_added",
-        "decl_removed",
-        "interaction_appended",
-        "interaction_inserted",
-        "interaction_reordered",
-        "interaction_removed",
-        "interaction_retired",
-        "kind_changed",
-        "payload_changed",
-        "return_changed",
-        "params_changed",
-        "timing_changed",
-        "contract_changed",
-        "width_changed",
-        "constraint_changed",
-        "init_changed",
-        "reserved_name_redeclared",
-        "service_changed",
-        "doc_only",
-        "visibility_changed",
-    ] {
+    for known in ridl_diff::CATEGORIES {
+        let category = ridl_diff::category_word(known);
         let (code, stdout, stderr) =
             ridl(&["diff".as_ref(), "--explain".as_ref(), category.as_ref()]);
         assert_eq!(code, 0, "{category} must be explainable, stderr:\n{stderr}");
