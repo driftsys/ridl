@@ -633,12 +633,18 @@ vscode-verify:
     npm ci
     npm test
     scratch="$(mktemp -d)"
-    # The trap removes the scratch directory and the placeholder binary even
-    # when a check below fails.
-    trap 'rm -rf "$scratch" bin/ridl; rmdir bin 2>/dev/null || true' EXIT
-    mkdir -p bin
-    printf '#!/bin/sh\necho placeholder\n' > bin/ridl
-    chmod +x bin/ridl
+    # A placeholder bin/ridl is staged only when none is present, so a real
+    # binary that `just package-vscode` put there is neither overwritten nor
+    # deleted. The trap removes the scratch directory, and the placeholder
+    # only when this recipe staged it, even when a check below fails.
+    staged=""
+    trap 'rm -rf "$scratch"; if [ -n "$staged" ]; then rm -f bin/ridl; rmdir bin 2>/dev/null || true; fi' EXIT
+    if [ ! -e bin/ridl ]; then
+        mkdir -p bin
+        printf '#!/bin/sh\necho placeholder\n' > bin/ridl
+        chmod +x bin/ridl
+        staged=1
+    fi
     npx vsce package --out "$scratch/ridl-vscode.vsix"
     listing="$(npx vsce ls)"
     if ! grep -qx 'bin/ridl' <<<"$listing"; then
