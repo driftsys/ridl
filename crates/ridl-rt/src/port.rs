@@ -132,7 +132,9 @@ pub trait Caller: Attached {
         args: &[u8],
     ) -> Result<Correlation, SendError>;
     /// A command's delivery acknowledgment (ridl §6.1), once it is known:
-    /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected, and
+    /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected,
+    /// `Err(CallError::Transport(Transport::Corrupt))` when the provider could
+    /// not read the command's argument bytes, and
     /// `Err(CallError::Transport(Transport::Undelivered))` when no
     /// acknowledgment came within the bound. `None` while unknown, and always
     /// `None` for a query's correlation.
@@ -238,8 +240,9 @@ pub trait ScannableSignals: SignalReader {
     /// together or not at all: when they do not fit in the rest of `out`,
     /// none of them is written, that interface's mark is not updated, and
     /// `scan` returns the number of entries written so far. A return of 0
-    /// while a mark's generation is behind `generation(iface)` means `out`
-    /// is shorter than that interface's changes.
+    /// while the first mark, in the order of `marks`, whose generation is
+    /// behind `generation(iface)` means `out` is shorter than that
+    /// interface's changes.
     fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize;
 }
 
