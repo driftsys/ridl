@@ -712,13 +712,14 @@ fn check_reports_a_baseline_subdirectory_it_cannot_read() {
     );
 }
 
-/// The control for both refusals above: a directory with no IR artifacts at
-/// all — directly inside or one level down — is the ordinary "no baseline
-/// published yet" state. An empty baseline, silently skipped, exactly as
-/// before either refusal existed. Turning this into an error would break the
-/// desk check for every workspace that has not published a baseline.
+/// A directory with no IR artifacts at all — directly inside or one level
+/// down — falls past both refusals above the same way a directory whose
+/// snapshots sit two or more levels down does. Naming it with an explicit
+/// `--baseline` is an input error (driftsys/ridl#235), not the silent skip an
+/// absent flag gets — pinned separately by
+/// `auto_discovery_of_an_empty_baseline_directory_stays_silent`.
 #[test]
-fn check_skips_an_empty_baseline_directory() {
+fn check_refuses_an_empty_baseline_directory() {
     let dir = TempDir::new("emptydir");
     let root = package_workspace(&dir, BASE);
     let empty = dir.path().join("published");
@@ -732,10 +733,22 @@ fn check_skips_an_empty_baseline_directory() {
     ]);
 
     assert_eq!(
-        code, 0,
-        "an empty baseline directory is not an error:\n{stderr}"
+        code, 2,
+        "an explicit baseline holding no snapshot is an input error:\n{stderr}"
     );
-    assert_eq!(stderr, "", "and it stays silent");
+    assert!(
+        stderr.contains(&format!(
+            "the baseline `{}` holds no `.ir.json` snapshot directly inside it",
+            empty.display()
+        )),
+        "the cause names the directory — the nested and artifact-directory refusals say \
+         `no `.ir.json` snapshot` too, so the wording must be this refusal's own:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("point `--baseline` at the directory that holds the snapshots")
+            && stderr.contains(&format!("`ridl baseline --out {}`", empty.display())),
+        "the remedy names both ways out, the aimed-too-high one first:\n{stderr}",
+    );
 }
 
 /// `--baseline` refuses a prototext or binary IR artifact by name: a
@@ -1250,5 +1263,80 @@ fn inline_shape_removal_spans_the_service_name() {
     assert!(
         named.contains("┌─") && named.contains("interface VehicleStatus {"),
         "a removal from a named interface still spans its interface name:\n{named}"
+    );
+}
+
+/// A baseline path aimed two or more levels above the snapshots falls past
+/// both existing refusals and yields no snapshot. Comparing against nothing
+/// reports no drift and exits 0, which reads exactly like a clean check, so it
+/// is an input error instead (driftsys/ridl#235).
+#[test]
+fn an_explicit_baseline_holding_no_snapshot_is_an_input_error() {
+    let dir = TempDir::new("empty-explicit");
+    let root = package_workspace(&dir, BASE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", REORDERED);
+    // The snapshots are at `<root>/.ridl/baseline/`, two levels below `root`.
+    let (code, _, stderr) = ridl(&[
+        "check".as_ref(),
+        root.as_os_str(),
+        "--baseline".as_ref(),
+        root.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 2,
+        "the tool could not answer, so it says so instead of passing:\n{stderr}",
+    );
+    assert!(
+        stderr.contains(&format!(
+            "the baseline `{}` holds no `.ir.json` snapshot directly inside it",
+            root.display()
+        )),
+        "the cause names the directory the flag aimed at:\n{stderr}",
+    );
+    // This is #235's own case: the snapshots are at `<root>/.ridl/baseline/`,
+    // so `ridl baseline --out <root>` would publish into the workspace root.
+    // The remedy has to name the aimed-too-high mistake before it names
+    // publishing.
+    assert!(
+        stderr.contains("point `--baseline` at the directory that holds the snapshots"),
+        "the remedy says to aim the flag at the snapshots:\n{stderr}",
+    );
+}
+
+/// Auto-discovery keeps its silent skip even once the empty-baseline refusal
+/// exists. `.ridl/baseline/` — the exact location `default_baseline_dir`
+/// computes — is created but never published into, so `baseline_location`
+/// discovers it and hands `load_baseline` `explicit == false`. No flag
+/// asserted that a baseline is there, so "no baseline published yet" stays
+/// legitimate, exactly as it did before this task added the refusal — pinned separately,
+/// for an explicit `--baseline` naming the same kind of empty directory, by
+/// `check_refuses_an_empty_baseline_directory`.
+///
+/// This is the test that actually exercises `load_baseline`'s `explicit`
+/// guard: unlike a workspace with no `.ridl/baseline/` directory at all
+/// (`check_without_a_baseline_is_unchanged`), where `baseline_location`
+/// returns `None` and `load_baseline` is never called, an empty *existing*
+/// directory reaches the guard and depends on `explicit` being `false` to
+/// stay silent.
+#[test]
+fn auto_discovery_of_an_empty_baseline_directory_stays_silent() {
+    let dir = TempDir::new("empty-auto");
+    let root = package_workspace(&dir, BASE);
+    std::fs::create_dir_all(root.join(".ridl").join("baseline"))
+        .expect("create the empty baseline directory");
+
+    let (code, stdout, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "a clean check with no baseline succeeds:\n{stderr}"
+    );
+    assert!(
+        stdout.is_empty() && stderr.is_empty(),
+        "no baseline means no drift report at all:\nstdout: {stdout}\nstderr: {stderr}",
     );
 }

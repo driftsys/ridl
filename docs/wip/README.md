@@ -12,10 +12,11 @@ gardening pass on 2026-07-26, the E9.1 to E9.6 execution plan on 2026-08-04, the
 E9.7 design/plan pair (`2026-08-05-projection-name-transform-{design,plan}.md`)
 on 2026-08-07, the E9.8 pair (`2026-08-08-proto3-projection-{design,plan}.md`)
 on 2026-08-08, and the E9.9 pair
-(`2026-08-08-flatbuffers-projection-{design,plan}.md`) on 2026-08-09 — E9.10 and
-the Epic 11 stories that absorbed E9.11 (E11.2 and E11.4, ADR-0018 decision 16),
-both now parked by the 2026-09-12 re-scope, read the E9.8 design note, from the
-archive.
+(`2026-08-08-flatbuffers-projection-{design,plan}.md`) on 2026-08-09, and the
+baseline-gate design/plan pair (`2026-09-13-baseline-gate-{design,plan}.md`) on
+2026-09-13 — E9.10 and the Epic 11 stories that absorbed E9.11 (E11.2 and E11.4,
+ADR-0018 decision 16), both now parked by the 2026-09-12 re-scope, read the E9.8
+design note, from the archive.
 
 - **ridl-family-concept.md** — the concept note: motivation, cores, profiles,
   the platform/IR model, the naming ledger. Explicitly pre-ADR (feeds the

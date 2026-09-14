@@ -75,21 +75,36 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    on this branch (2026-07-27), one input per cell, across the eight subcommands
    the two binaries expose today:
 
-   | Subcommand      | 0                                                                                                                                           | 1                                                                    | 2                                                                                                          |
-   | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-   | `ridl check`    | a clean package checks with no diagnostic                                                                                                   | a diagnostic error (`TYPL-104`, min exceeds max)                     | the given path does not exist                                                                              |
-   | `ridl build`    | a clean package builds                                                                                                                      | the same diagnostic error                                            | the given path does not exist                                                                              |
-   | `ridl baseline` | a clean package publishes                                                                                                                   | a package with a diagnostic error publishes nothing                  | the given path does not exist                                                                              |
-   | `ridl test`     | every `require` clause evaluates or is a documented skip                                                                                    | a clause whose evaluation faults (`100 / (d - d)`, division by zero) | the workspace does not compile, or the path does not exist                                                 |
-   | `ridl fmt`      | nothing under `--check` would change                                                                                                        | a file under `--check` would change, or has a parse error            | the path does not exist, or a directory the walk reaches is unreadable (fixed by this PR — see Decision 6) |
-   | `ridl diff`     | the two sides are identical or compatible; `--explain <CATEGORY>` also exits 0, printing the classification rule without comparing anything | the change is breaking                                               | one side fails to compile, or the path does not exist                                                      |
-   | `ridlc check`   | a clean package checks with no diagnostic                                                                                                   | the same diagnostic error                                            | the given path does not exist                                                                              |
-   | `ridlc build`   | a clean package builds                                                                                                                      | the same diagnostic error                                            | the given path does not exist                                                                              |
+   | Subcommand      | 0                                                                                                                                           | 1                                                                                                                                               | 2                                                                                                          |
+   | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+   | `ridl check`    | a clean package checks with no diagnostic                                                                                                   | a diagnostic error (`TYPL-104`, min exceeds max)                                                                                                | the given path does not exist, or an explicit `--baseline` holds no `.ir.json` snapshot                    |
+   | `ridl build`    | a clean package builds                                                                                                                      | the same diagnostic error                                                                                                                       | the given path does not exist                                                                              |
+   | `ridl baseline` | a clean package publishes                                                                                                                   | a package with a diagnostic error publishes nothing; a replacement that drops an interaction with no `reserved` tombstone is refused (RIDL-408) | the given path does not exist                                                                              |
+   | `ridl test`     | every `require` clause evaluates or is a documented skip                                                                                    | a clause whose evaluation faults (`100 / (d - d)`, division by zero)                                                                            | the workspace does not compile, or the path does not exist                                                 |
+   | `ridl fmt`      | nothing under `--check` would change                                                                                                        | a file under `--check` would change, or has a parse error                                                                                       | the path does not exist, or a directory the walk reaches is unreadable (fixed by this PR — see Decision 6) |
+   | `ridl diff`     | the two sides are identical or compatible; `--explain <CATEGORY>` also exits 0, printing the classification rule without comparing anything | the change is breaking                                                                                                                          | one side fails to compile, or the path does not exist                                                      |
+   | `ridlc check`   | a clean package checks with no diagnostic                                                                                                   | the same diagnostic error                                                                                                                       | the given path does not exist                                                                              |
+   | `ridlc build`   | a clean package builds                                                                                                                      | the same diagnostic error                                                                                                                       | the given path does not exist                                                                              |
 
    The claim is scoped to these eight, constructed this way, on this date — not
    asserted as a property that holds by design of every subcommand a future PR
    might add. A ninth subcommand earns a row here when it is added and checked,
-   not by inheriting this table.
+   not by inheriting this table. The same discipline applies within a cell. A
+   clause added to a cell after 2026-07-27 is not covered by that date: it
+   carries its own date and its own verification, constructed the same way as
+   the original eight — by direct construction against the built binary. Two
+   clauses on this table postdate the original construction, both added on
+   2026-09-13:
+
+   - the `ridl baseline` exit-1 cell's `reserved`-tombstone clause, added when
+     `ridl baseline` gained the RIDL-408 publication gate, verified via
+     `baseline_refuses_to_publish_an_untombstoned_removal` in
+     `crates/ridl/tests/baseline_gate.rs`, which asserts the refusal exits 1;
+   - the `ridl check` exit-2 cell's empty-baseline clause, added when an
+     explicit `--baseline` holding no snapshot became an input error
+     (driftsys/ridl#235), verified via
+     `an_explicit_baseline_holding_no_snapshot_is_an_input_error` in
+     `crates/ridl/tests/baseline_desk.rs`, which asserts the refusal exits 2.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 
@@ -246,6 +261,14 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    `crates/ridl/tests/facade.rs`'s `fmt_on_a_missing_path_exits_two` and
    `fmt_on_an_unreadable_subdirectory_exits_two`, both confirmed to fail against
    `main`'s pre-fix behavior before this PR added them.
+
+   The same failure shape was closed for an explicit `--baseline` that holds no
+   snapshot, which reported no drift and exited 0 (driftsys/ridl#235); the
+   search depth `first_nested_snapshot_dir` records as deliberate is unchanged.
+   The closing is scoped to the explicit flag on purpose: naming a directory
+   asserts that a baseline is there, where auto-discovery asserts nothing, so an
+   empty `.ridl/baseline/` found without the flag keeps its silent skip, which
+   is the constraint driftsys/ridl#235 itself states.
 
    This brings `ridl fmt` into line with a rule this repository already states
    for its other gate-relevant tooling, not a new rule invented for it.

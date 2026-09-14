@@ -736,6 +736,23 @@ diag_codes! {
         /// (ADR-0008 decisions 9 and 13).
         RIDL_407 = "RIDL-407", Warning,
             "interaction ordinal changed against the published baseline";
+
+        /// An interaction of an interface body the baseline being replaced
+        /// declares is not carried forward as the tombstone rule requires
+        /// (ridl §11), in one of four shapes: it is gone from the source with
+        /// no `reserved` tombstone; the source retires it with a tombstone at
+        /// an ordinal other than its own; the baseline already retired it and
+        /// the source dropped the tombstone; or the source declares a live
+        /// interaction under the name a tombstone retires. Error. Emitted by
+        /// `ridl baseline` alone, for the interaction level only — a whole
+        /// interface or service removed, and a named-form service's shape
+        /// list, are outside it. Publication is the last point at which the
+        /// change can still be refused, because the snapshot about to be
+        /// overwritten is the only record that the ordinal was ever taken.
+        /// Distinct from RIDL-407, which is the desk-time warning that an
+        /// ordinal moved and which neither classifies nor gates.
+        RIDL_408 = "RIDL-408", Error,
+            "interaction removed, its tombstone dropped or moved, or its retired name redeclared";
     }
 
     /// The manifest catalogue (ADR-0007 decision 2): the manifest `0xx` codes the

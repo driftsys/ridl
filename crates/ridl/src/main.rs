@@ -264,7 +264,7 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
 /// `ridl diff` never emits a diff report over a snapshot it could not build.
 fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     if is_ir_json(entry) {
-        return load_snapshots(&[entry.to_path_buf()]);
+        return load_snapshots(&[entry.to_path_buf()], None);
     }
 
     // The other IR encodings are refused by name, before the source
@@ -282,7 +282,7 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     if entry.is_dir() {
         let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
-            return load_snapshots(&snapshots);
+            return load_snapshots(&snapshots, None);
         }
         // Two directory shapes are described rather than compiled: one
         // holding IR artifacts and no `.ir.json` — a snapshot directory in an
@@ -453,7 +453,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
     if !run.has_error() {
         match baseline_location(path, baseline) {
             Ok(Some(location)) => {
-                if let Err(code) = desk_check(path, &location, &mut run) {
+                if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
                     return code;
                 }
             }
@@ -486,7 +486,7 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     let staging = staging_dir(&out_dir);
     let _ = std::fs::remove_dir_all(&staging);
 
-    let run = match ridlc::run_build(path, &staging, &[Emit::IrJson], false.into()) {
+    let mut run = match ridlc::run_build(path, &staging, &[Emit::IrJson], false.into()) {
         Ok(run) => run,
         Err(err) => {
             let _ = std::fs::remove_dir_all(&staging);
@@ -503,6 +503,24 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         return finish(Ok(run));
     }
 
+    // The published baseline is the only record that a removed interaction's
+    // ordinal was ever taken. Replacing it with a snapshot that drops the
+    // interaction with no `reserved` tombstone destroys that record, and a
+    // later append then reuses the ordinal with nothing to compare against.
+    // The comparison happens here, against the directory publication is about
+    // to overwrite (driftsys/ridl#315).
+    match untombstoned_removals(path, &out_dir, &staging, &mut run) {
+        Ok(false) => {}
+        Ok(true) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return finish(Ok(run));
+        }
+        Err(code) => {
+            let _ = std::fs::remove_dir_all(&staging);
+            return code;
+        }
+    }
+
     if let Err(err) = publish_baseline(&staging, &out_dir) {
         let _ = std::fs::remove_dir_all(&staging);
         eprintln!(
@@ -513,6 +531,185 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     }
 
     finish(Ok(run))
+}
+
+/// Compares the baseline about to be replaced against the snapshots just built
+/// and records a RIDL-408 for every interaction the replacement would drop with
+/// no `reserved` tombstone in its own slot, and for every live interaction the
+/// replacement declares under a name the baseline retires. Returns whether any
+/// was recorded.
+///
+/// The published snapshots are read flat from `out_dir`, which is exactly where
+/// [`publish_baseline`] writes them. This deliberately does not go through
+/// [`load_baseline`], whose discovery rules exist to interpret a user-supplied
+/// `--baseline` path: inheriting them would let the comparison become a
+/// comparison against nothing in the cases driftsys/ridl#235 describes, and a
+/// gate that a directory layout can defeat is not a gate.
+///
+/// Only the interaction level is covered. The interface level — a removed
+/// interface with no service-level tombstone, and an unfrozen interface number
+/// — arrives with the lock file, because the rsdl decisions note's D-7 retires
+/// the service shape-list slot model a service-level gate would rest on. That
+/// is why `ReservedNameRedeclared`, which `ridl_diff` emits for an interaction
+/// in a body and for a shape in a named-form service's list alike (ADR-0015
+/// decision 19), is refused only when the published IR holds an
+/// interaction-level tombstone for the name.
+fn untombstoned_removals(
+    entry: &Path,
+    out_dir: &Path,
+    staging: &Path,
+    run: &mut CliRun,
+) -> Result<bool, ExitCode> {
+    if !out_dir.is_dir() {
+        return Ok(false);
+    }
+    let published = load_snapshots(&snapshot_files(out_dir)?, Some(PUBLISHED_PARSE_REMEDY))?;
+    if published.is_empty() {
+        return Ok(false);
+    }
+    let fresh = load_snapshots(&snapshot_files(staging)?, None)?;
+
+    let report = ridl_diff::diff_sets(&published, &fresh);
+    // Parsing every source file is wasted work on the common republish that
+    // carries no refused change at all, so the index is built only once the
+    // first one is actually met.
+    let mut index: Option<DeclIndex> = None;
+    let mut refusals = Vec::new();
+    for change in &report.changes {
+        let refused = match change.category {
+            ridl_diff::Category::InteractionRemoved => true,
+            ridl_diff::Category::ReservedNameRedeclared => {
+                published_reserves(&published, &change.path)
+            }
+            _ => false,
+        };
+        if !refused {
+            continue;
+        }
+        let index = index.get_or_insert_with(|| DeclIndex::build(entry));
+        refusals.push(Diagnostic {
+            code: DiagCode::RIDL_408,
+            severity: Severity::Error,
+            message: untombstoned_removal_message(change, &published),
+            primary: index.span_of(&change.path, &mut run.sources),
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        });
+    }
+    let refused = !refusals.is_empty();
+    run.diagnostics.extend(refusals);
+    Ok(refused)
+}
+
+/// The RIDL-408 message for one refused change, worded for the shape
+/// `ridl_diff::walk`'s `diff_interface` emitted it in:
+///
+/// - a **redeclared name** is the one `ReservedNameRedeclared` shape the gate
+///   refuses, told apart by its category;
+/// - a **misplaced tombstone** — the source retires the interaction, but not
+///   at its own ordinal — is told apart by `change.after`, which only this
+///   `InteractionRemoved` shape carries (the tombstone's own ordinal);
+/// - a **bare removal** and a **dropped tombstone** both carry no
+///   `change.after`, so they are told apart by asking the published IR
+///   itself whether it already reserved the name — never by reading the
+///   words in `change.before`, which is display text `ridl_diff` owns and may
+///   reword.
+///
+/// The ordinal each message names is read from the published IR too
+/// ([`published_ordinal`]), for the same reason. The shape and the name come
+/// from the diff path through [`shape_and_name`], as RIDL-407's do, so two
+/// interfaces removing the same name draw two distinct messages.
+fn untombstoned_removal_message(
+    change: &ridl_diff::Change,
+    published: &[ridl_ir::v2::Package],
+) -> String {
+    let (shape, name) = shape_and_name(&change.path);
+    let in_shape = shape.map_or(String::new(), |shape| format!(" in `{shape}`"));
+    let ordinal = published_ordinal(published, &change.path);
+    let held = ordinal.map_or(String::new(), |ordinal| format!(" (ordinal {ordinal})"));
+    let slot = ordinal.map_or("that ordinal".to_string(), |ordinal| {
+        format!("ordinal {ordinal}")
+    });
+    if change.category == ridl_diff::Category::ReservedNameRedeclared {
+        format!(
+            "`{name}` is declared again{in_shape}, but the baseline being replaced retires that \
+             name with `reserved`{held}. A tombstone is a permanent reservation (ridl §11): a \
+             consumer still holding the old contract would read the new interaction as the \
+             retired one. Give the new interaction a different name and keep `reserved {name}` \
+             at {slot}."
+        )
+    } else if change.after.is_some() {
+        format!(
+            "The source retires `{name}`{in_shape} with a tombstone, but not at the ordinal the \
+             interaction held{held}. A tombstone must hold the retired interaction's own ordinal \
+             (ridl §11); otherwise the surviving interactions slide into the freed slot. Move \
+             `reserved {name}` to {slot}."
+        )
+    } else if published_reserves(published, &change.path) {
+        format!(
+            "The baseline being replaced records `{name}`{in_shape} as retired{held}, but the \
+             source has dropped the tombstone. A tombstone is a permanent reservation (ridl \
+             §11). Put `reserved {name}` back at {slot}."
+        )
+    } else {
+        format!(
+            "`{name}` is gone from the source but the baseline being replaced still declares \
+             it{in_shape}{held}. Publishing would free its ordinal for a later interaction to \
+             reuse, with nothing left to record that it was ever taken. Retire it in place with \
+             `reserved {name}`."
+        )
+    }
+}
+
+/// The interaction a `<package>/<container>/<name>` diff path names, as the
+/// published IR declares it: the live declaration, or the `reserved <name>`
+/// tombstone that retires it.
+///
+/// This reads the same shape `ridl_diff`'s own `live_interactions` and
+/// `reserved_names` walks read (`Interface::interactions`, a `Decl` whose
+/// `kind` says whether it is a `ReservedSlot`), so nothing the gate says about
+/// the published side depends on the wording of a `Change`'s rendered
+/// `before`/`after` text. The container is found through `Package::shapes`,
+/// which yields a top-level interface and an inline-form service's own shape
+/// alike — the two containers `ridl_diff`'s interaction walk is ever called
+/// on. A named-form service is not a shape, so a service-level diff path
+/// finds nothing here.
+fn published_interaction<'a>(
+    published: &'a [ridl_ir::v2::Package],
+    path: &str,
+) -> Option<&'a ridl_ir::v2::Decl> {
+    let mut parts = path.split('/');
+    let (Some(pkg), Some(container), Some(name)) = (parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    let package = published.iter().find(|package| package.name == pkg)?;
+    let shape = package.shapes().find(|shape| shape.name == container)?;
+    shape
+        .interface
+        .interactions
+        .iter()
+        .find(|decl| match &decl.kind {
+            Some(ridl_ir::v2::decl::Kind::ReservedSlot(reserved)) => {
+                reserved.name.as_deref() == Some(name)
+            }
+            Some(_) => decl.name == name,
+            None => false,
+        })
+}
+
+/// Whether the published IR already retires the interaction a diff path names
+/// — a `reserved <name>` tombstone already present in the baseline being
+/// replaced.
+fn published_reserves(published: &[ridl_ir::v2::Package], path: &str) -> bool {
+    published_interaction(published, path)
+        .is_some_and(|decl| matches!(&decl.kind, Some(ridl_ir::v2::decl::Kind::ReservedSlot(_))))
+}
+
+/// The ordinal the interaction a diff path names holds in the published IR,
+/// live or retired — the slot every RIDL-408 remedy tells the author to keep.
+fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u32> {
+    published_interaction(published, path).map(|decl| decl.ordinal)
 }
 
 /// The directory the snapshots are built into before they are published: a
@@ -533,16 +730,33 @@ fn staging_dir(out_dir: &Path) -> PathBuf {
 /// `staging`, dropping any snapshot whose package the workspace no longer
 /// declares. Only `.ir.json` files are touched: `out_dir` may be a directory a
 /// user pointed `--out` at, and nothing else in it is this command's to delete.
+///
+/// The fresh snapshots move in first, each rename replacing the stale file of
+/// the same name, and only then are the stale snapshots no fresh one replaced
+/// removed. A failure part-way — a rename refused, a disk that fills — leaves
+/// `out_dir` holding one snapshot per package, some fresh and some stale,
+/// which the next run compares against package by package. The other order,
+/// delete then move, left `out_dir` empty after the same failure, and an
+/// empty directory is a first publication to [`untombstoned_removals`]: the
+/// next run would have skipped the gate.
 fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
     std::fs::create_dir_all(out_dir)?;
-    for stale in ir_json_files(out_dir)? {
-        std::fs::remove_file(stale)?;
-    }
+    let mut published = BTreeSet::new();
     for fresh in ir_json_files(staging)? {
         let name = fresh
             .file_name()
-            .expect("a listed snapshot path has a file name");
-        std::fs::rename(&fresh, out_dir.join(name))?;
+            .expect("a listed snapshot path has a file name")
+            .to_os_string();
+        std::fs::rename(&fresh, out_dir.join(&name))?;
+        published.insert(name);
+    }
+    for stale in ir_json_files(out_dir)? {
+        if stale
+            .file_name()
+            .is_some_and(|name| !published.contains(name))
+        {
+            std::fs::remove_file(stale)?;
+        }
     }
     std::fs::remove_dir_all(staging)
 }
@@ -611,9 +825,18 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
 /// The workspace is compiled a second time here, through
 /// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
 /// does not hand back the IR. The cost is paid only when a baseline is actually
-/// present, and never on a run that already failed.
-fn desk_check(entry: &Path, location: &Path, run: &mut CliRun) -> Result<(), ExitCode> {
-    let baseline = load_baseline(location)?;
+/// present, and never on a run that already failed. `explicit` — whether
+/// `location` came from a `--baseline` flag rather than auto-discovery — is
+/// passed straight through to [`load_baseline`], which it uses to tell an
+/// explicit `--baseline` holding no snapshot (a refusal) from an
+/// auto-discovered directory holding none (a silent skip).
+fn desk_check(
+    entry: &Path,
+    location: &Path,
+    explicit: bool,
+    run: &mut CliRun,
+) -> Result<(), ExitCode> {
+    let baseline = load_baseline(location, explicit)?;
     if baseline.is_empty() {
         return Ok(());
     }
@@ -780,14 +1003,16 @@ fn baseline_position(change: &ridl_diff::Change) -> String {
 /// Loads the baseline packages: every `.ir.json` in a directory, in file-name
 /// order, or the single file `location` names.
 ///
-/// Two directory shapes are refused rather than read as an *empty* baseline,
-/// because skipping either silently would report a clean desk check that ran
-/// against nothing: one holding IR artifacts but no `.ir.json` (issue #218
-/// item 4), and one whose `.ir.json` snapshots sit a level below it (issue
-/// #230). A directory with neither keeps yielding an empty baseline — that is
-/// the ordinary "no baseline published yet" state, and [`desk_check`] skips
-/// it silently.
-fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+/// Three directory shapes are refused rather than read as an *empty*
+/// baseline, because skipping any of them silently would report a clean desk
+/// check that ran against nothing: one holding IR artifacts but no `.ir.json`
+/// (issue #218 item 4), one whose `.ir.json` snapshots sit a level below it
+/// (issue #230), and, when `explicit` is true, any other directory that
+/// yields no snapshot at all (driftsys/ridl#235). A directory that fits none
+/// of the three and was found by auto-discovery (`explicit` false) keeps
+/// yielding an empty baseline — that is the ordinary "no baseline published
+/// yet" state, and [`desk_check`] skips it silently.
+fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let files = if location.is_dir() {
         let snapshots = snapshot_files(location)?;
         if snapshots.is_empty() {
@@ -808,12 +1033,43 @@ fn load_baseline(location: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode>
                     &format!("pass `--baseline {}` instead", nested.display()),
                 ));
             }
+            // The two refusals above name a specific, fixable mistake. This one
+            // catches every remaining way a directory yields no snapshot —
+            // snapshots two or more levels down, or an empty directory — and
+            // refuses rather than comparing against nothing. Auto-discovery is
+            // exempt: with no flag, "no baseline published yet" is legitimate.
+            if explicit {
+                return Err(refuse_empty_baseline(location));
+            }
         }
         snapshots
     } else {
         vec![location.to_path_buf()]
     };
-    load_snapshots(&files)
+    load_snapshots(&files, None)
+}
+
+/// An explicit `--baseline` path that holds no snapshot at the depth the loader
+/// reads is an input error, not a silent pass. The caller asserted that a
+/// baseline is there. A comparison against nothing reports no drift and exits
+/// 0, which is indistinguishable from a clean check — the same failure shape
+/// ADR-0010 decision 6 closed for `ridl fmt` (driftsys/ridl#235).
+///
+/// The remedy names the likely mistake first — the path is aimed above the
+/// snapshots, which is #235's own case (`--baseline ws` where
+/// `ws/.ridl/baseline/` holds them) — and publishing into the named directory
+/// second. Offered alone, the second would have `ridl baseline --out ws` write
+/// snapshots into the workspace root.
+fn refuse_empty_baseline(location: &Path) -> ExitCode {
+    eprintln!(
+        "error: the baseline `{}` holds no `.ir.json` snapshot directly inside it; point \
+         `--baseline` at the directory that holds the snapshots (`ridl baseline` publishes \
+         them to `.ridl/baseline/` at the workspace root), or publish a first one there with \
+         `ridl baseline --out {}`",
+        location.display(),
+        location.display(),
+    );
+    ExitCode::from(2)
 }
 
 /// The files directly inside `dir` that satisfy `keep`, in file-name order.
@@ -854,7 +1110,10 @@ fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
 /// an unpublished baseline. Searching deeper would mean walking an arbitrary
 /// tree — `--baseline .` at a repository root — to answer a question about
 /// the one directory the author named, so a path aimed two or more levels
-/// high stays the silent pass it is today (issue #230).
+/// high yields no snapshot from this scan (issue #230). What that empty
+/// result means is the caller's decision: [`load_baseline`] refuses it for an
+/// explicit `--baseline` (driftsys/ridl#235) and reads it as an unpublished
+/// baseline under auto-discovery.
 ///
 /// A subdirectory that cannot be listed is exit 2, not a silent `None`. This
 /// is the one scan in this file that reads a level *no caller has listed* —
@@ -894,7 +1153,8 @@ fn first_nested_snapshot_dir(dir: &Path) -> Result<Option<PathBuf>, ExitCode> {
 /// Such a directory holds no IR artifact *directly*, so
 /// [`refuse_artifact_directory`] cannot see it, and the snapshot scan reads it
 /// as an *empty* set — indistinguishable from the ordinary "no baseline
-/// published yet" state, which must stay a silent pass. The snapshots are
+/// published yet" state, which stays a silent pass under auto-discovery. The
+/// snapshots are
 /// described where they are rather than descended into: descending would
 /// accept a layout `ridl baseline` never writes, and would have to choose
 /// between subdirectories when more than one holds snapshots, silently
@@ -946,14 +1206,50 @@ fn snapshot_files(dir: &Path) -> Result<Vec<PathBuf>, ExitCode> {
     })
 }
 
+/// The remedy [`untombstoned_removals`] appends when the snapshot it cannot
+/// parse is the published baseline `ridl baseline` is about to replace.
+///
+/// The file stays fail-closed rather than being overwritten: a baseline that
+/// cannot be read cannot be shown safe to replace, and replacing it would
+/// destroy whatever ordinal record it held without any report — the exact
+/// failure the gate exists to prevent. The reader cannot tell a damaged file
+/// from one a toolchain with a different IR schema wrote (`from_json` rejects
+/// an unknown field, ADR-0014 decision 14, and a snapshot carries no schema
+/// marker), so the remedy names both causes. Neither branch tells the author
+/// to delete the record unread: the second has the toolchain that wrote the
+/// snapshot check the source against it first, and only then replaces it.
+const PUBLISHED_PARSE_REMEDY: &str = "the file is left as it is, because a record that cannot be \
+     read cannot be shown safe to replace. If the file is damaged, restore it from version \
+     control or resolve the merge conflict left in it. If a toolchain with a different IR schema \
+     wrote it, check the source against it with that toolchain (`ridl check --baseline`), then \
+     remove the file and run `ridl baseline` with this one";
+
 /// Deserializes every snapshot in `files`. One that cannot be read or parsed is
 /// exit 2 — a comparison against half a baseline would be a lie about what is
-/// published.
-fn load_snapshots(files: &[PathBuf]) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+/// published. This is shared by `ridl check --baseline` (through
+/// [`load_baseline`], where the file may be the single `.ir.json` the flag
+/// names), `ridl diff` (through [`load_diff_side`], for either side) and
+/// `ridl baseline` (through [`untombstoned_removals`], for the published and
+/// the freshly built side alike).
+///
+/// `parse_remedy`, when given, finishes the parse-error message. Only the
+/// caller knows which file it handed over, so only the caller can say what to
+/// do about it: the published baseline gets [`PUBLISHED_PARSE_REMEDY`], and
+/// every other input gets the bare parse error, because "remove the file"
+/// would be wrong advice for a diff input or a `--baseline` path.
+fn load_snapshots(
+    files: &[PathBuf],
+    parse_remedy: Option<&str>,
+) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     let mut packages = Vec::new();
     for file in files {
         match ridl_diff::load_ir_json(file) {
             Ok(package) => packages.push(package),
+            Err(err @ ridl_diff::LoadError::Parse(_)) => {
+                let remedy = parse_remedy.map_or(String::new(), |remedy| format!("; {remedy}"));
+                eprintln!("error: {}: {err}{remedy}", file.display());
+                return Err(ExitCode::from(2));
+            }
             Err(err) => {
                 eprintln!("error: {}: {err}", file.display());
                 return Err(ExitCode::from(2));
@@ -999,9 +1295,10 @@ struct DeclIndex {
 impl DeclIndex {
     /// Indexes every `.typl` and `.ridl` file under `entry`. A file that
     /// cannot be read is skipped rather than reported: the compile already ran
-    /// clean over this tree, so anything unreadable here is not the desk
-    /// check's business. An unreadable *directory* is not skipped in the same
-    /// sense — `collect_source_files` fails on the first one it meets, and
+    /// clean over this tree, so anything unreadable here is outside what any
+    /// caller of this index reports — neither the desk check nor the
+    /// publication gate. An unreadable *directory* is not skipped in the same sense —
+    /// `collect_source_files` fails on the first one it meets, and
     /// `unwrap_or_default` turns that into an empty index rather than a
     /// partial one — but the compile that already succeeded over this tree
     /// makes the case unreachable in practice, which is why it is not

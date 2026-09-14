@@ -198,7 +198,11 @@ By home; see each reference for full statements.
   closed by the ADR-0015 coherence rule: the struct idiom is confirmed (ridl
   §17.3), and interaction-set reuse is answered by composition — a service
   carries a list of interfaces, and mixins were rejected because they flatten
-  (ridl §17.2, §14.5)
+  (ridl §17.2, §14.5) · **whether the `ridl baseline` publication gate should
+  also refuse a moved existing tombstone (ridl §17.12)** · **a whole package
+  removed or renamed bypasses the same gate (ridl §17.13)** · **a whole
+  interface or service removed, or a service whose form switches, bypasses the
+  same gate (ridl §17.14)**
 - **rxdl §11**: the intent occurrence keyword · the acquisition/query cell ·
   interaction citation paths (ridl's, recorded there) · journeys and screen flow
   · accessibility metadata

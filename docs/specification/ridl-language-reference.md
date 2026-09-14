@@ -1105,6 +1105,22 @@ interface VehicleStatus {
 }
 ```
 
+- **Publication enforces the tombstone.** `ridl baseline` refuses to replace a
+  published baseline when, in an interface body both declare, the replacement
+  breaks the rule above in any of four shapes — **RIDL-408**, exit 1, the
+  published baseline left as it was: an interaction is gone with no `reserved`
+  line at all; it is retired with a `reserved` line, but at an ordinal other
+  than the one it held; the baseline already retired it and the source has
+  dropped the `reserved` line; or the source declares a live interaction under a
+  name the baseline retires. The published snapshot is the only record that the
+  ordinal was taken, so publication is the last point at which the change can be
+  refused. The gate covers the interaction level only: a whole interface or
+  service removed from the source, or a service whose form switches between
+  inline and named, is reported by `ridl diff` as breaking but is not refused at
+  publication (§17.14), and a named-form service's shape list is not read — the
+  interface level of this rule (§14.5) waits for the lock file. RIDL-407 is
+  unchanged: it remains the desk-time warning that an ordinal moved, emitted by
+  `ridl check`, and it neither classifies nor gates.
 - Transport IDs derive deterministically from ordinals (e.g. SOME/IP: method ID
   = ordinal for RPC kinds, event ID = ordinal with the event flag bit; Appendix
   B) — readable from source, no sidecar state
@@ -1586,24 +1602,25 @@ either direction.
 
 ### 16.4 Evolution and Profile (RIDL-4xx)
 
-| Code     | Rule                                                                                                                                                                                                                                                                                                                                                | Severity |
-| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| RIDL-401 | interaction re-declared under a `reserved` name                                                                                                                                                                                                                                                                                                     | error    |
-| RIDL-402 | duplicate interaction name within an interface                                                                                                                                                                                                                                                                                                      | error    |
-| RIDL-403 | behaviour/user-interaction/architecture declaration in `.ridl` context                                                                                                                                                                                                                                                                              | error    |
-| RIDL-404 | query named like a mutation — the name begins with `set`, `reset`, `clear`, `apply`, `write`, or `update` followed by an upper-case letter (`setGear`, `resetCounters`)                                                                                                                                                                             | warning  |
-| RIDL-405 | one `error` type shared across unrelated failure domains — it is the failure arm of queries in 3 or more interaction scopes (heuristic)                                                                                                                                                                                                             | info     |
-| RIDL-406 | payload field duplicating envelope metadata (§3.1) — a `signal` or `event` payload struct declaring `timestamp`, `time`, `seq`, `seqNo`, `sequence`, `sequenceNumber`, `frameCounter`, or `frameNo`; domain time or a domain counter distinct from transport metadata is legitimate                                                                 | info     |
-| RIDL-407 | interaction ordinal changed against the published baseline (§11) — the desk-time drift check, emitted by `ridl check`, never by `ridlc`                                                                                                                                                                                                             | warning  |
-| RIDL-140 | duplicate `service` name across the system — the service catalog is a flat global namespace                                                                                                                                                                                                                                                         | error    |
-| RIDL-141 | `service` names a type that is not an `interface`, and has no inline shape                                                                                                                                                                                                                                                                          | error    |
-| RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                                                                                                                                                                                                                           | error    |
-| RIDL-144 | duplicate member name across a service's interfaces — flat addressing (§14.5) cannot give `service.member` two referents                                                                                                                                                                                                                            | error    |
-| RIDL-145 | the same interface named twice in one service — its own code, so the mistake is one diagnostic rather than one RIDL-144 per member; the duplicate listing holds no slot                                                                                                                                                                             | error    |
-| RIDL-146 | interface re-declared under a service-level `reserved` name — RIDL-401 one level up (§14.5, §11)                                                                                                                                                                                                                                                    | error    |
-| RIDL-147 | two shapes of one service whose interface names collide even though their references differ — a binding separates the ordinal spaces by interface name, so the two would be indistinguishable; the rule is over every shape, live or retired, so a name spelled by two tombstones is the same code (§14.5; ADR-0015 decision 24)                    | error    |
-| RIDL-148 | service-level `reserved` tombstone without an interface name — the literal spelling lowers to a nameless tombstone no shape can ever match, so the sanctioned retirement would silently not work (§14.5; ADR-0015 decision 24)                                                                                                                      | error    |
-| RIDL-149 | two names in one scope that collide after the pinned name transform — the transform is not injective and no case-folding transform can be, so two names distinct in source can project to one identifier; scoped to the members of one interface, the parameters of one interaction, and the fields of one struct (§11; ADR-0016 decisions 3 and 4) | error    |
+| Code     | Rule                                                                                                                                                                                                                                                                                                                                                                                                                               | Severity |
+| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
+| RIDL-401 | interaction re-declared under a `reserved` name                                                                                                                                                                                                                                                                                                                                                                                    | error    |
+| RIDL-402 | duplicate interaction name within an interface                                                                                                                                                                                                                                                                                                                                                                                     | error    |
+| RIDL-403 | behaviour/user-interaction/architecture declaration in `.ridl` context                                                                                                                                                                                                                                                                                                                                                             | error    |
+| RIDL-404 | query named like a mutation — the name begins with `set`, `reset`, `clear`, `apply`, `write`, or `update` followed by an upper-case letter (`setGear`, `resetCounters`)                                                                                                                                                                                                                                                            | warning  |
+| RIDL-405 | one `error` type shared across unrelated failure domains — it is the failure arm of queries in 3 or more interaction scopes (heuristic)                                                                                                                                                                                                                                                                                            | info     |
+| RIDL-406 | payload field duplicating envelope metadata (§3.1) — a `signal` or `event` payload struct declaring `timestamp`, `time`, `seq`, `seqNo`, `sequence`, `sequenceNumber`, `frameCounter`, or `frameNo`; domain time or a domain counter distinct from transport metadata is legitimate                                                                                                                                                | info     |
+| RIDL-407 | interaction ordinal changed against the published baseline (§11) — the desk-time drift check, emitted by `ridl check`, never by `ridlc`                                                                                                                                                                                                                                                                                            | warning  |
+| RIDL-408 | interaction removed with no tombstone, retired with a tombstone at an ordinal other than its own, whose existing tombstone was dropped, or whose retired name is declared live again, refused at publication (§11) — emitted by `ridl baseline` alone, for the interaction level only (a whole interface or service removed is not refused, §17.14), which refuses to replace a baseline whose record of the ordinal would be lost | error    |
+| RIDL-140 | duplicate `service` name across the system — the service catalog is a flat global namespace                                                                                                                                                                                                                                                                                                                                        | error    |
+| RIDL-141 | `service` names a type that is not an `interface`, and has no inline shape                                                                                                                                                                                                                                                                                                                                                         | error    |
+| RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                                                                                                                                                                                                                                                                                                          | error    |
+| RIDL-144 | duplicate member name across a service's interfaces — flat addressing (§14.5) cannot give `service.member` two referents                                                                                                                                                                                                                                                                                                           | error    |
+| RIDL-145 | the same interface named twice in one service — its own code, so the mistake is one diagnostic rather than one RIDL-144 per member; the duplicate listing holds no slot                                                                                                                                                                                                                                                            | error    |
+| RIDL-146 | interface re-declared under a service-level `reserved` name — RIDL-401 one level up (§14.5, §11)                                                                                                                                                                                                                                                                                                                                   | error    |
+| RIDL-147 | two shapes of one service whose interface names collide even though their references differ — a binding separates the ordinal spaces by interface name, so the two would be indistinguishable; the rule is over every shape, live or retired, so a name spelled by two tombstones is the same code (§14.5; ADR-0015 decision 24)                                                                                                   | error    |
+| RIDL-148 | service-level `reserved` tombstone without an interface name — the literal spelling lowers to a nameless tombstone no shape can ever match, so the sanctioned retirement would silently not work (§14.5; ADR-0015 decision 24)                                                                                                                                                                                                     | error    |
+| RIDL-149 | two names in one scope that collide after the pinned name transform — the transform is not injective and no case-folding transform can be, so two names distinct in source can project to one identifier; scoped to the members of one interface, the parameters of one interaction, and the fields of one struct (§11; ADR-0016 decisions 3 and 4)                                                                                | error    |
 
 RIDL-141 and RIDL-143 apply **per shape in the service's shape list** (ADR-0015
 decision 18): neither rule changed when composition arrived, only the span each
@@ -1752,6 +1769,35 @@ and the same spelling is the constant.
     neither uncertainty, which is dispersion, nor the relationship, because it
     is what perturbs the relationship. Whether it becomes a fifth obligation or
     a qualifier on the relationship is open (§3.3).
+12. **Whether the publication gate should refuse a moved existing tombstone**
+    (§11). A baseline that retires an interaction with `reserved b` at ordinal
+    N, replaced by a source that retires it with `reserved b` at ordinal M,
+    reports `InteractionReordered`, not `InteractionRemoved`, and the RIDL-408
+    gate reads `InteractionRemoved` changes and the interaction-level
+    `ReservedNameRedeclared`, never `InteractionReordered`. `ridl diff` still
+    reports the move as breaking and `ridl check` still warns with RIDL-407, but
+    `ridl baseline` publishes it. Whether the gate should refuse this shape as
+    well is open; it belongs with the interface-level lock-file work the rsdl
+    decisions note's D-7 describes, alongside the interface-level half of this
+    same rule (§11).
+13. **A whole package removed or renamed bypasses the publication gate** (§11).
+    `ridl-diff` reports one `DeclRemoved` for a package present only on the
+    baseline side and does not descend into it, so the RIDL-408 gate — which
+    reads interaction-level changes — sees no refused change, and publication
+    deletes the package's snapshot along with every ordinal record it held. This
+    is wider than the interaction-level scope this gate covers. Whether it
+    should also be refused is open, and belongs with the same lock-file work as
+    the item above.
+14. **A whole interface or service removed, or a service whose form switches,
+    bypasses the publication gate** (§11). `ridl-diff` reports one `DeclRemoved`
+    for an interface or a service present only on the baseline side and does not
+    descend into its body, and one `ServiceChanged` for a service whose form
+    switches between inline and named (ADR-0015 decision 15), again without
+    comparing the inline body's interactions. Neither carries an
+    interaction-level change, so the RIDL-408 gate sees nothing to refuse and
+    publication drops every ordinal record the body held. Whether either should
+    be refused is open, and belongs with the same lock-file work as the two
+    items above, which is where interface identity moves.
 
 ---
 
