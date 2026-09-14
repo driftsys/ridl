@@ -56,8 +56,12 @@ impl SignalWriter for Stub {
     fn set(&mut self, _: InterfaceNo, _: Ordinal, _: &[u8]) -> Result<(), WriteError> {
         Err(WriteError::NotOwner)
     }
-    fn invalidate(&mut self, _: InterfaceNo, _: Ordinal) {}
-    fn touch(&mut self, _: InterfaceNo, _: Ordinal) {}
+    fn invalidate(&mut self, _: InterfaceNo, _: Ordinal) -> Result<(), WriteError> {
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    }
+    fn touch(&mut self, _: InterfaceNo, _: Ordinal) -> Result<(), WriteError> {
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    }
     fn commit(&mut self) {}
 }
 
@@ -72,8 +76,12 @@ impl EventSource for Stub {
 }
 
 impl EventSink for Stub {
-    fn raise(&mut self, _: InterfaceNo, _: Ordinal, _: &[u8]) -> Result<(), RaiseError> {
-        Err(RaiseError::Busy)
+    fn raise(&mut self, _: InterfaceNo, ord: Ordinal, _: &[u8]) -> Result<(), RaiseError> {
+        if ord == ORD {
+            Err(RaiseError::Busy)
+        } else {
+            Err(RaiseError::Contract(Contract::UnknownInteraction))
+        }
     }
 }
 
@@ -111,13 +119,13 @@ impl Handler for Stub {
             len: 0,
         }))
     }
-    fn settle(&mut self, _: ClaimId, _: Result<&[u8], Contract>) -> Result<(), SettleError> {
+    fn settle(&mut self, _: ClaimId, _: Result<&[u8], CallError>) -> Result<(), SettleError> {
         Err(SettleError::UnknownClaim)
     }
 }
 
 impl FixedReader for Stub {
-    fn read(&self, _: InterfaceNo, _: Ordinal, _: &mut [u8]) -> Result<usize, ReadError> {
+    fn read_fixed(&self, _: InterfaceNo, _: Ordinal, _: &mut [u8]) -> Result<usize, ReadError> {
         Err(ReadError::Detached)
     }
 }
@@ -135,10 +143,13 @@ impl CoherentSignals for Stub {
     fn read_coherent(
         &self,
         _: InterfaceNo,
-        _: &[Ordinal],
+        ords: &[Ordinal],
         _: &mut [u8],
-        _: &mut [RawSample],
+        samples: &mut [RawSample],
     ) -> Result<usize, ReadError> {
+        if samples.len() < ords.len() {
+            return Err(ReadError::TooFewSamples { needed: ords.len() });
+        }
         Ok(0)
     }
 }
@@ -162,13 +173,22 @@ fn every_core_port_is_usable_as_a_trait_object() {
     assert_eq!(reader.catalog(), &CATALOG);
 
     let fixed: &dyn FixedReader = &stub;
-    assert_eq!(fixed.read(IFACE, ORD, &mut out), Err(ReadError::Detached));
+    assert_eq!(
+        fixed.read_fixed(IFACE, ORD, &mut out),
+        Err(ReadError::Detached)
+    );
     assert_eq!(fixed.catalog(), &CATALOG);
 
     let writer: &mut dyn SignalWriter = &mut stub;
     assert_eq!(writer.set(IFACE, ORD, &[1]), Err(WriteError::NotOwner));
-    writer.invalidate(IFACE, ORD);
-    writer.touch(IFACE, ORD);
+    assert_eq!(
+        writer.invalidate(IFACE, ORD),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    assert_eq!(
+        writer.touch(IFACE, ORD),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
     writer.commit();
     assert_eq!(writer.catalog(), &CATALOG);
 
@@ -183,6 +203,10 @@ fn every_core_port_is_usable_as_a_trait_object() {
 
     let sink: &mut dyn EventSink = &mut stub;
     assert_eq!(sink.raise(IFACE, ORD, &[1]), Err(RaiseError::Busy));
+    assert_eq!(
+        sink.raise(IFACE, Ordinal(2), &[1]),
+        Err(RaiseError::Contract(Contract::UnknownInteraction))
+    );
     assert_eq!(sink.catalog(), &CATALOG);
 
     let caller: &mut dyn Caller = &mut stub;
@@ -234,6 +258,10 @@ fn both_extensions_are_usable_as_trait_objects() {
     assert_eq!(
         coherent.read_coherent(IFACE, &[ORD], &mut out, &mut [RAW]),
         Ok(0)
+    );
+    assert_eq!(
+        coherent.read_coherent(IFACE, &[ORD, ORD], &mut out, &mut [RAW]),
+        Err(ReadError::TooFewSamples { needed: 2 })
     );
     assert_eq!(coherent.read(IFACE, ORD, &mut out), Ok(RAW));
 }

@@ -21,6 +21,7 @@ pub enum Contract {
 }
 
 /// An infrastructure failure that the runtime detected, ridl §10.3.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Transport {
     /// The response bound passed without a reply.

@@ -93,6 +93,10 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
     }
 
     /// Encodes `value` into `out` with `T::encode` and returns the proof.
+    ///
+    /// It does not check the value's typl constraints: a value is trusted to
+    /// be valid when constructed, and the receiver's `verify` reports a value
+    /// that is not.
     pub fn encode(value: &T, out: &'a mut [u8]) -> Result<Self, EncodeError> {
         let Encoded { bytes, view } = value.encode(out)?;
         Ok(Ref {
@@ -185,6 +189,9 @@ pub struct Violation {
 pub enum Rule {
     /// A number is outside its declared range.
     Range,
+    /// A number is not its range's lower bound plus a whole multiple of its
+    /// declared step.
+    Step,
     /// A string, a byte sequence or a collection is outside its declared
     /// length bounds.
     Length,
@@ -192,15 +199,13 @@ pub enum Rule {
     Pattern,
     /// A discriminant names no declared variant.
     Variant,
-    /// A declared invariant evaluates to false.
-    Invariant,
 }
 
 #[cfg(test)]
 mod tests {
     use core::marker::PhantomData;
 
-    use super::{EncodeError, Encoded, Payload, Ref, VerifyError};
+    use super::{EncodeError, Encoded, Payload, Ref, Rule, VerifyError};
     use crate::encoding::ReprC;
 
     /// A payload for this test only: its view is the bytes.
@@ -236,5 +241,21 @@ mod tests {
             _e: PhantomData,
         };
         assert_eq!(proof.bytes(), bytes);
+    }
+
+    /// The match names every variant with no `_` arm, so a `Rule` variant
+    /// added or removed fails this test to compile.
+    #[test]
+    fn rule_is_exactly_these_five_variants() {
+        fn all(r: Rule) {
+            match r {
+                Rule::Range => {}
+                Rule::Step => {}
+                Rule::Length => {}
+                Rule::Pattern => {}
+                Rule::Variant => {}
+            }
+        }
+        all(Rule::Range);
     }
 }

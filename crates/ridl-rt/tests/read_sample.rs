@@ -10,8 +10,11 @@
 #[path = "../examples/read_sample.rs"]
 mod read_sample;
 
-use read_sample::{Speed, walk};
+use read_sample::{Drivetrain, Memory, Speed, SpeedSignal, read_speed, walk};
+use ridl_rt::contract::{Interaction, Interface, InterfaceNo, Ordinal};
+use ridl_rt::error::Contract;
 use ridl_rt::payload::{Rule, Violation};
+use ridl_rt::port::{SignalWriter, WriteError};
 use ridl_rt::sample::{Cause, Detection, Duration, Envelope, Freshness, Provenance, Timestamp};
 
 #[test]
@@ -112,4 +115,111 @@ fn a_hand_written_program_reads_a_signal_with_its_provenance() {
         }
     );
     assert!(!corrupt.usable());
+}
+
+#[test]
+fn set_invalidate_and_touch_on_an_unknown_ordinal_return_the_contract_error() {
+    let mut runtime = Memory::new(Timestamp(0), &[0, 0]);
+    let unknown = Ordinal(99);
+
+    assert_eq!(
+        runtime.set(Drivetrain::NUMBER, unknown, &[1, 0]),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    assert_eq!(
+        runtime.invalidate(Drivetrain::NUMBER, unknown),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    assert_eq!(
+        runtime.touch(Drivetrain::NUMBER, unknown),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+}
+
+#[test]
+fn touch_on_the_known_signal_reaffirms_without_changing_the_value() {
+    let mut runtime = Memory::new(Timestamp(0), &30u16.to_le_bytes());
+    let before = read_speed(&runtime).expect("speed is in the catalog");
+
+    assert_eq!(
+        runtime.touch(Drivetrain::NUMBER, SpeedSignal::MEMBER.ordinal),
+        Ok(())
+    );
+    runtime.commit();
+    let after = read_speed(&runtime).expect("speed is in the catalog");
+
+    assert_eq!(after.value, before.value);
+    assert_eq!(after.provenance, before.provenance);
+    assert_eq!(after.envelope.seq, before.envelope.seq + 1);
+}
+
+#[test]
+fn set_then_touch_then_commit_publishes_the_set_value() {
+    let mut runtime = Memory::new(Timestamp(0), &30u16.to_le_bytes());
+    let ord = SpeedSignal::MEMBER.ordinal;
+
+    assert_eq!(
+        runtime.set(Drivetrain::NUMBER, ord, &88u16.to_le_bytes()),
+        Ok(())
+    );
+    assert_eq!(runtime.touch(Drivetrain::NUMBER, ord), Ok(()));
+    runtime.commit();
+
+    let after = read_speed(&runtime).expect("speed is in the catalog");
+    assert_eq!(after.value, Speed(88));
+    assert_eq!(after.provenance, Provenance::Live);
+}
+
+#[test]
+fn a_rejected_call_on_an_unknown_ordinal_stages_nothing() {
+    let mut runtime = Memory::new(Timestamp(0), &30u16.to_le_bytes());
+    let unknown = Ordinal(99);
+    let before = read_speed(&runtime).expect("speed is in the catalog");
+
+    assert_eq!(
+        runtime.set(Drivetrain::NUMBER, unknown, &[1, 0]),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    runtime.commit();
+    let after_set = read_speed(&runtime).expect("speed is in the catalog");
+    assert_eq!(after_set.provenance, before.provenance);
+    assert_eq!(after_set.envelope.seq, before.envelope.seq);
+
+    assert_eq!(
+        runtime.invalidate(Drivetrain::NUMBER, unknown),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    runtime.commit();
+    let after_invalidate = read_speed(&runtime).expect("speed is in the catalog");
+    assert_eq!(after_invalidate.provenance, before.provenance);
+    assert_eq!(after_invalidate.envelope.seq, before.envelope.seq);
+
+    assert_eq!(
+        runtime.touch(Drivetrain::NUMBER, unknown),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    runtime.commit();
+    let after_touch = read_speed(&runtime).expect("speed is in the catalog");
+    assert_eq!(after_touch.provenance, before.provenance);
+    assert_eq!(after_touch.envelope.seq, before.envelope.seq);
+}
+
+#[test]
+fn set_invalidate_and_touch_on_an_unknown_interface_return_the_contract_error() {
+    let mut runtime = Memory::new(Timestamp(0), &30u16.to_le_bytes());
+    let other_iface = InterfaceNo(2);
+    let ord = SpeedSignal::MEMBER.ordinal;
+
+    assert_eq!(
+        runtime.set(other_iface, ord, &[1, 0]),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    assert_eq!(
+        runtime.invalidate(other_iface, ord),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    assert_eq!(
+        runtime.touch(other_iface, ord),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
 }

@@ -59,17 +59,20 @@ pub struct RawSample {
 
 /// Signals, provider side.
 ///
-/// `set`, `invalidate` and `touch` stage a change. `commit` publishes every
-/// staged change, with one generation increment and one timestamp per
-/// interface, taken from the runtime's [`Clock`].
+/// `set`, `invalidate` and `touch` stage a change. Each fails with
+/// [`WriteError::Contract`] when the ordinal names no member, and with
+/// [`WriteError::NotOwner`] when it names a member this provider does not
+/// own. `commit` publishes every staged change, with one generation
+/// increment and one timestamp per interface, taken from the runtime's
+/// [`Clock`].
 pub trait SignalWriter: Attached {
     /// Stages a new value.
     fn set(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError>;
     /// Stages the invalid state (ridl §4.5), with
     /// [`Cause::Declared`](crate::sample::Cause::Declared).
-    fn invalidate(&mut self, iface: InterfaceNo, ord: Ordinal);
+    fn invalidate(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError>;
     /// Stages a re-affirmation of the current value, without a new value.
-    fn touch(&mut self, iface: InterfaceNo, ord: Ordinal);
+    fn touch(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError>;
     /// Publishes everything staged. It cannot fail.
     fn commit(&mut self);
 }
@@ -129,7 +132,9 @@ pub trait Caller: Attached {
         args: &[u8],
     ) -> Result<Correlation, SendError>;
     /// A command's delivery acknowledgment (ridl §6.1), once it is known:
-    /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected, and
+    /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected,
+    /// `Err(CallError::Transport(Transport::Corrupt))` when the provider could
+    /// not read the command's argument bytes, and
     /// `Err(CallError::Transport(Transport::Undelivered))` when no
     /// acknowledgment came within the bound. `None` while unknown, and always
     /// `None` for a query's correlation.
@@ -137,6 +142,13 @@ pub trait Caller: Attached {
     /// A query's reply, once it is known: the reply bytes copied into the front
     /// of `out` and their length, or the error. `Ok(None)` while unknown.
     /// `ReadError::Short` does not consume the reply.
+    ///
+    /// The outer [`ReadError`] reports the port call itself: `Short` when
+    /// `out` is too short, and `Detached` when the local runtime is gone.
+    /// `reply` never returns `ReadError::Contract`. The inner [`CallError`] is
+    /// the outcome from the peer or the transport, such as a contract error
+    /// the provider settled, or `Transport::Down` when the connection to the
+    /// peer is lost.
     fn reply(
         &mut self,
         c: Correlation,
@@ -162,19 +174,24 @@ pub struct Correlation(pub u64);
 ///
 /// Every claim is settled. For a command, the generated dispatch settles
 /// `Ok(&[])` after the arguments and `require` pass, before application code
-/// runs. For a query, it settles with the reply bytes or the contract error.
+/// runs. For a query, it settles with the reply bytes or the outcome the
+/// caller sees.
 pub trait Handler: Attached {
     /// Starts presenting calls to the listed members.
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError>;
     /// Copies the next call's arguments into the front of `out`. `Ok(None)`
     /// when no call is waiting. `ReadError::Short` does not consume the call.
     fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError>;
-    /// Settles a claim with the reply bytes (empty for a command) or a
-    /// contract error.
+    /// Settles a claim with the reply bytes (empty for a command) or the
+    /// outcome the caller sees. A provider settles
+    /// [`CallError::Contract`] when the arguments break their typl
+    /// constraints, a `require` clause fails, or an `ensure` clause fails,
+    /// and `CallError::Transport(Transport::Corrupt)` when the argument
+    /// bytes fail the structure check.
     fn settle(
         &mut self,
         claim: ClaimId,
-        outcome: Result<&[u8], Contract>,
+        outcome: Result<&[u8], CallError>,
     ) -> Result<(), SettleError>;
 }
 
@@ -205,7 +222,12 @@ pub struct ClaimId(pub u64);
 pub trait FixedReader: Attached {
     /// Copies the provisioned value into the front of `out` and returns its
     /// length.
-    fn read(&self, iface: InterfaceNo, ord: Ordinal, out: &mut [u8]) -> Result<usize, ReadError>;
+    fn read_fixed(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<usize, ReadError>;
 }
 
 /// Extension: signals in a store a consumer can walk. A runtime may omit it.
@@ -213,8 +235,14 @@ pub trait ScannableSignals: SignalReader {
     /// The interface's generation: a counter that each commit to the interface
     /// increments.
     fn generation(&self, iface: InterfaceNo) -> u64;
-    /// Writes into `out` one entry for each signal that changed since `marks`,
-    /// updates `marks`, and returns the number of entries written.
+    /// Writes the changes into `out`, interface by interface, in the order of
+    /// `marks`, and updates `marks`. An interface's changes are written all
+    /// together or not at all: when they do not fit in the rest of `out`,
+    /// none of them is written, that interface's mark is not updated, and
+    /// `scan` returns the number of entries written so far. A return of 0
+    /// while the first mark, in the order of `marks`, whose generation is
+    /// behind `generation(iface)` means `out` is shorter than that
+    /// interface's changes.
     fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize;
 }
 
@@ -251,8 +279,10 @@ pub trait CoherentSignals: SignalReader {
     /// written to `out`.
     ///
     /// Returns `ReadError::Short` with the size the whole set needs when `out`
-    /// is too short, and `ReadError::Contract(Contract::UnknownInteraction)`
-    /// when `samples` is shorter than `ords` or an ordinal names no member.
+    /// is too short, `ReadError::TooFewSamples` with the number of entries
+    /// `samples` needs when `samples` is shorter than `ords`, and
+    /// `ReadError::Contract(Contract::UnknownInteraction)` when an ordinal
+    /// names no member.
     fn read_coherent(
         &self,
         iface: InterfaceNo,
@@ -263,11 +293,17 @@ pub trait CoherentSignals: SignalReader {
 }
 
 /// A read that failed.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReadError {
     /// The output buffer is too short. Nothing was consumed.
     Short {
         /// The bytes the read needs.
+        needed: usize,
+    },
+    /// `samples` has fewer entries than `ords`. Nothing was consumed.
+    TooFewSamples {
+        /// The entries `samples` needs.
         needed: usize,
     },
     /// A contract error, such as an unknown interaction.
@@ -276,7 +312,9 @@ pub enum ReadError {
     Detached,
 }
 
-/// A [`SignalWriter::set`] that failed.
+/// A [`SignalWriter::set`], [`SignalWriter::invalidate`] or
+/// [`SignalWriter::touch`] that failed.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WriteError {
     /// The value is larger than the signal's capacity.
@@ -286,11 +324,14 @@ pub enum WriteError {
     },
     /// This provider does not own the signal.
     NotOwner,
+    /// A contract error, such as an unknown interaction.
+    Contract(Contract),
     /// The runtime behind the port is gone.
     Detached,
 }
 
 /// An [`EventSink::raise`] that failed.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RaiseError {
     /// The runtime cannot accept an occurrence now. Retryable.
@@ -302,11 +343,14 @@ pub enum RaiseError {
     },
     /// This provider does not own the event.
     NotOwner,
+    /// A contract error, such as an unknown interaction.
+    Contract(Contract),
     /// The runtime behind the port is gone.
     Detached,
 }
 
 /// A [`Caller::command`] or [`Caller::query`] that failed before sending.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SendError {
     /// The runtime cannot accept a call now. Retryable.
@@ -323,6 +367,7 @@ pub enum SendError {
 }
 
 /// An [`EventSource::subscribe`] that failed.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SubscribeError {
     /// A contract error: an unknown interaction fails when subscribing (ridl
@@ -333,6 +378,7 @@ pub enum SubscribeError {
 }
 
 /// A [`Handler::serve`] that failed.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ServeError {
     /// A contract error, such as an unknown interaction.
@@ -344,6 +390,7 @@ pub enum ServeError {
 }
 
 /// A [`Handler::settle`] that failed.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettleError {
     /// The claim was already settled, or was never issued.
