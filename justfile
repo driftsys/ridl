@@ -146,31 +146,41 @@ wasm-check:
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
-# Build and test ridl-rt as both editions it supports, at the toolchains that
-# do not already exercise it (ADR-0021 decision 10). Edition 2021 with the
-# rust-toolchain.toml pin is `just test`; this recipe covers what that does
-# not: edition 2021 with the minimum supported Rust version, and edition 2024
-# with the pin. Edition 2024 did not exist before Rust 1.85, so the minimum
-# (older than that) can only test edition 2021.
+# Build and test the crate `cargo publish -p ridl-rt` would upload, as both
+# editions it supports, at the toolchains that do not already exercise it
+# (ADR-0021 decision 10). Edition 2021 with the rust-toolchain.toml pin is
+# `just test`; this recipe covers what that does not: the packaged manifest
+# as edition 2021 with the minimum supported Rust version, and the packaged
+# manifest edited to edition 2024 with the pin. Edition 2024 did not exist
+# before Rust 1.85, so the minimum (older than that) can only test edition
+# 2021.
 #
-# Both runs build a standalone copy of crates/ridl-rt in a temporary
-# directory, then discard it: the minimum toolchain cannot load this
-# repository's workspace (the root Cargo.toml sets `resolver = "3"`, and
-# every other crate is edition 2024), and the second run needs the edition
-# line changed without touching the tracked crate. CARGO_TARGET_DIR points at
-# target/compat-check (gitignored, inside the repository) so repeated runs
-# reuse a build cache instead of rebuilding from nothing.
+# It tests the package, not a hand-copied crate: `cargo package` normalizes
+# the manifest the way crates.io would receive it — `license.workspace = true`
+# resolved to a literal string, and (until root Cargo.toml's `resolver = "2"`)
+# this workspace's resolver written into `[package] resolver` — so this catches
+# a packaging mistake a hand copy cannot, such as a resolver value the minimum
+# toolchain cannot parse.
 #
-# The minimum lives in crates/ridl-rt/Cargo.toml's rust-version line and the
-# pin lives in rust-toolchain.toml's channel line; this recipe reads both
-# rather than naming either version of its own.
+# The package is extracted to target/compat-check/pkg, a fixed path rather
+# than a fresh mktemp each run, so CARGO_TARGET_DIR=target/compat-check/build
+# lets cargo reuse the build across repeated runs instead of adding new build
+# artifacts every time.
 #
-# Fails on: a missing or malformed rust-version line or rust-toolchain.toml
-# channel (either not a MAJOR.MINOR or MAJOR.MINOR.PATCH version); rustup
-# missing; or ridl-rt's library, tests, doctests, or examples failing to
-# build or pass as edition 2021 with the minimum toolchain, or as edition
-# 2024 with the pin.
-compat-check:
+# `toolchain-check` is a dependency, and has already proven the running
+# toolchain matches the rust-toolchain.toml pin, so this recipe reads the pin
+# straight from `rustc --version` rather than re-parsing and re-validating the
+# channel line itself. The minimum lives in crates/ridl-rt/Cargo.toml's
+# rust-version line, which this recipe still reads and validates on its own.
+#
+# Fails on: a missing or malformed rust-version line; rustup missing; a
+# packaged manifest the minimum toolchain cannot read (for instance, a
+# workspace resolver it cannot parse); a packaged LICENSE that differs from
+# the root LICENSE (crates/ridl-rt/LICENSE is a symlink to it — this catches a
+# checkout where the symlink became a text file); or ridl-rt's library,
+# tests, doctests, or examples failing to build or pass as edition 2021 with
+# the minimum toolchain, or as edition 2024 with the pin.
+compat-check: toolchain-check
     #!/usr/bin/env bash
     set -euo pipefail
     manifest="crates/ridl-rt/Cargo.toml"
@@ -184,38 +194,49 @@ compat-check:
         echo "compat-check: MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
         exit 1
     fi
-    pin="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml)"
-    if [ -z "$pin" ]; then
-        echo "compat-check: rust-toolchain.toml names no channel." >&2
-        exit 1
-    fi
-    if ! printf '%s' "$pin" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
-        echo "compat-check: rust-toolchain.toml pins the channel '$pin', which is not" >&2
-        echo "compat-check: a MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
-        exit 1
-    fi
+    pin="$(rustc --version | cut -d' ' -f2)"
+
     if ! command -v rustup >/dev/null 2>&1; then
         echo "compat-check: rustup is required to install the $minimum toolchain." >&2
         echo "compat-check: install it from https://rustup.rs." >&2
         exit 1
     fi
-    if ! rustup toolchain list | grep -qF "$minimum-"; then
+    if ! rustup run "$minimum" rustc --version >/dev/null 2>&1; then
         echo "compat-check: installing the $minimum toolchain (not found locally)." >&2
         rustup toolchain install "$minimum" --profile minimal
     fi
 
-    copy="$(mktemp -d)"
-    trap 'rm -rf "$copy"' EXIT
-    cp -R crates/ridl-rt "$copy/ridl-rt"
-    manifest_copy="$copy/ridl-rt/Cargo.toml"
-    sed -i.bak -e '/^license\.workspace = true$/d' -e '/^repository\.workspace = true$/d' "$manifest_copy"
-    rm -f "$manifest_copy.bak"
-    printf '\n[workspace]\n' >> "$manifest_copy"
+    version="$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")"
+    if [ -z "$version" ]; then
+        echo "compat-check: $manifest names no version." >&2
+        exit 1
+    fi
 
-    export CARGO_TARGET_DIR="$PWD/target/compat-check"
+    echo "compat-check: packaging ridl-rt $version"
+    cargo package -p ridl-rt --no-verify --allow-dirty
 
-    echo "compat-check: $minimum, edition 2021"
-    cargo "+$minimum" test --all-features --offline --manifest-path "$manifest_copy"
+    pkg="$PWD/target/compat-check/pkg"
+    rm -rf "$pkg"
+    mkdir -p "$pkg"
+    tar -xzf "target/package/ridl-rt-$version.crate" -C "$pkg" --strip-components=1
+
+    if ! cmp -s "$pkg/LICENSE" LICENSE; then
+        echo "compat-check: $pkg/LICENSE differs from the root LICENSE." >&2
+        echo "compat-check: crates/ridl-rt/LICENSE is meant to be a symlink to it —" >&2
+        echo "compat-check: check whether the checkout turned the symlink into a text file." >&2
+        exit 1
+    fi
+
+    # The extracted manifest has no [workspace] table of its own, but it sits
+    # under this repository's root workspace (target/ is inside it), so
+    # without this table cargo reports that it believes the package is part
+    # of that workspace and refuses to build it standalone.
+    printf '\n[workspace]\n' >> "$pkg/Cargo.toml"
+
+    export CARGO_TARGET_DIR="$PWD/target/compat-check/build"
+
+    echo "compat-check: $minimum, edition 2021 (packaged)"
+    cargo "+$minimum" test --all-features --offline --manifest-path "$pkg/Cargo.toml"
 
     # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
     # manifest otherwise); the pin already satisfies that, so this run's
@@ -223,16 +244,16 @@ compat-check:
     sed -i.bak \
         -e 's/^edition = "2021"$/edition = "2024"/' \
         -e "s/^rust-version = \"$minimum\"\$/rust-version = \"$pin\"/" \
-        "$manifest_copy"
-    rm -f "$manifest_copy.bak"
-    if ! grep -qx 'edition = "2024"' "$manifest_copy" || ! grep -qx "rust-version = \"$pin\"" "$manifest_copy"; then
-        echo "compat-check: could not set edition 2024 and rust-version $pin in the copy of $manifest;" >&2
+        "$pkg/Cargo.toml"
+    rm -f "$pkg/Cargo.toml.bak"
+    if ! grep -qx 'edition = "2024"' "$pkg/Cargo.toml" || ! grep -qx "rust-version = \"$pin\"" "$pkg/Cargo.toml"; then
+        echo "compat-check: could not set edition 2024 and rust-version $pin in $pkg/Cargo.toml;" >&2
         echo "compat-check: its edition or rust-version line no longer has the form this recipe edits." >&2
         exit 1
     fi
 
-    echo "compat-check: $pin, edition 2024"
-    cargo "+$pin" test --all-features --offline --manifest-path "$manifest_copy"
+    echo "compat-check: $pin, edition 2024 (packaged)"
+    cargo "+$pin" test --all-features --offline --manifest-path "$pkg/Cargo.toml"
 
 # Check Rust formatting without writing. Separate from `just fmt`, which owns
 # the connective tissue (prim) and does not touch Rust.

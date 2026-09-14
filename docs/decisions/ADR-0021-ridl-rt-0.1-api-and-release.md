@@ -162,60 +162,74 @@ trusted with no `unsafe` and no second verification pass.
     `Changed`, `Envelope`, `Sample` and `Occurrence`. The public tuple structs —
     `Ordinal`, `InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`,
     `Timestamp` and `Duration` — follow the same rule: each has one public field
-    code outside the crate builds directly. A field added to any of these
-    structs is such a change — recorded with no code change against
-    driftsys/ridl#350 item 4. The crate's own version is independent of the
-    workspace's (ADR-0007 decision 14); the tag and the maintainer acts that
-    create it are that decision's, not this one's. The API questions that stayed
-    open when 0.1 shipped — driftsys/ridl#350 items 5, 12, 13 and 14, and the
-    meaning of `Watermark::seq` — are tracked on that issue; the review debt of
+    code outside the crate builds directly. The unit structs `FlatBuffers`,
+    `Proto3` and `ReprC` (`crates/ridl-rt/src/encoding.rs`) follow it for a
+    different reason: each is a marker type with no field, and code outside the
+    crate uses it as a value or a pattern, so a field added to any of them
+    breaks that code just as surely. A field added to any of these structs is
+    such a change — recorded with no code change against driftsys/ridl#350
+    item 4. The crate's own version is independent of the workspace's (ADR-0007
+    decision 14); the tag and the maintainer acts that create it are that
+    decision's, not this one's. The API questions that stayed open when 0.1
+    shipped — driftsys/ridl#350 items 5, 12, 13 and 14, and the meaning of
+    `Watermark::seq` — are tracked on that issue; the review debt of
     driftsys/ridl#348 is driftsys/ridl#349.
 
     `ridl-rt` supports Rust 1.83 or newer: `rust-version = "1.83"` in
     `crates/ridl-rt/Cargo.toml`. The crate's manifest compiles as edition 2021,
-    and the crate is tested as both editions it supports: edition 2021 with the
-    1.83 toolchain and with the `rust-toolchain.toml` pin, and edition 2024 with
-    the pin — edition 2024 did not exist before Rust 1.85, so the 1.83 minimum
-    cannot build it. `just test` covers edition 2021 with the pin;
-    `just
-    compat-check` covers edition 2021 with 1.83 and edition 2024 with
-    the pin. The pin is 1.95.0 today and moves to the latest stable release
-    through driftsys/ridl#353. Raising `rust-version` is a breaking change under
-    this decision's rule, shipped in a 0.x minor release; a toolchain pin bump
-    does not by itself change `rust-version`. This replaces
-    [the archived design record](../archive/2026-09-13-ridl-rt-v0.1-design.md)'s
-    R-12, which set `rust-version` equal to the pin, decided by Sebastien on
-    2026-09-14 during the review of this pull request, because a minimum tied to
+    because its 1.83 minimum predates edition 2024 — Rust cannot build that
+    edition before 1.85 — and the crate is tested as both editions it supports:
+    edition 2021 with the 1.83 toolchain and with the `rust-toolchain.toml` pin,
+    and edition 2024 with the pin — edition 2024 did not exist before Rust 1.85,
+    so the 1.83 minimum cannot build it. `just test` covers edition 2021 with
+    the pin; `just compat-check` covers edition 2021 with 1.83 and edition 2024
+    with the pin, against the crate `cargo package -p ridl-rt` produces, not a
+    hand copy. The root `Cargo.toml` sets `resolver = "2"`, because
+    `cargo package` writes the workspace's resolver into the packaged manifest,
+    cargo 1.83 cannot read resolver 3 ("feature `edition2024` is required"), and
+    resolver 3's MSRV-aware fallback would resolve every workspace dependency
+    for `ridl-rt`'s minimum rather than only its own; decided by Sebastien on
+    2026-09-14 in driftsys/ridl#352. The pin follows the latest stable release
+    (driftsys/ridl#353). Raising `rust-version` is a breaking change under this
+    decision's rule, shipped in a 0.x minor release; a toolchain pin bump does
+    not by itself change `rust-version`. This replaces R-12's `rust-version`
+    item — not the rest of R-12 — in
+    [the archived design record](../archive/2026-09-13-ridl-rt-v0.1-design.md),
+    which set `rust-version` equal to the pin, decided by Sebastien on
+    2026-09-14 during the review of driftsys/ridl#352, because a minimum tied to
     the pin would rise with every toolchain bump.
 
     `ridl-rt` compiles as edition 2021 and is tested as editions 2021 and 2024,
     with Rust 1.83 and with the pin, in the matrix above. The Rust codegen
     (roadmap epic E11) emits code that compiles under the same matrix — edition
-    2021 with 1.83, edition 2024 with the pin — and the codegen stories test
-    that; decided by Sebastien on 2026-09-14 during the review of this pull
-    request, because code that depends on `ridl-rt` or includes generated code
-    may be built as either edition.
+    2021 with 1.83, edition 2021 with the pin, and edition 2024 with the pin —
+    and the codegen stories test that; decided by Sebastien on 2026-09-14 during
+    the review of driftsys/ridl#352, because Cargo compiles each crate under its
+    own edition — an edition-2024 dependency builds under an edition-2021
+    consumer once the toolchain is 1.85 or newer — but source ridl emits, copied
+    or generated directly into a consuming crate, compiles as that crate's own
+    edition, and a consumer may be edition 2021 or 2024.
 
 ## Alternatives considered
 
-| Question                   | Alternative                                                | Why it was not chosen                                                                                                                                               |
-| -------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity (decision 1)      | keep `ServiceId`                                           | the identity studies give a service no number; nothing would produce the type                                                                                       |
-| Identity (decision 1)      | a provisional bit inside `InterfaceNo`                     | a provisional number routes identically to a frozen one, and the bit would take width decision 2 fixes                                                              |
-| Widths (decision 2)        | keep the note's `u16`                                      | the IR already carries an ordinal as `uint32`, and the catalog descriptor plan writes `uint32` for both                                                             |
-| Port binding (decision 3)  | the full `(catalog, interface, ordinal)` key on every call | a lookup and a pointer on every call, and a catalog field on every result struct                                                                                    |
-| Port binding (decision 3)  | an address handle resolved once                            | a table per binding in the runtime; a handle is not `const`, so generated dispatch cannot `match` on it, and a handle from one port means nothing to another        |
-| Clause result (decision 4) | `require`/`ensure` return `Result<(), Violation>`          | typl v0.1 has no invariant constraint, so the `Violation` would name one that does not exist, and `Handler::settle` reads neither variant's payload                 |
-| Clause result (decision 4) | the index of the failing clause as the error               | neither `Contract` variant carries a payload, so reading the index needs one on both plus a wire form for it                                                        |
-| #308 (decision 5)          | a caller field added to `Envelope`                         | ridl §3.1 defines exactly two fields; the field would expose transport identity above the port and decide E14.2's question in advance                               |
-| #309 (decision 6)          | a ninth port that records withheld occurrences             | a port every runtime must implement, for a reading the reference has not chosen, and it decides E14.2's question in advance                                         |
-| Proof type (decision 7)    | a `#[doc(hidden)]` public `Ref` constructor                | a convention, not visibility — any crate could still forge a proof                                                                                                  |
-| Proof type (decision 7)    | `Ref` over bytes only, with a required separate `check`    | decoding a flatc-style buffer then needs an unchecked root (`unsafe`) or a second verification pass                                                                 |
-| Features (decision 8)      | let `flatbuffers` pull the dependency in 0.1               | pins a version before story E11.7 chooses one, and obliges every binary that enables the feature to provide an allocator for a codec that does not exist yet        |
-| Error enums (decision 9)   | `#[non_exhaustive]` on `Contract` and `CallError` too      | their variants are ridl §10's fixed categories and strata; a new one there is a language change, not a runtime's to add                                             |
-| Rust version (decision 10) | `rust-version` equal to the `rust-toolchain.toml` pin      | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                             |
-| Rust version (decision 10) | no `rust-version` at all                                   | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                           |
-| Rust edition (decision 10) | keep `ridl-rt` on the workspace's edition 2024 only        | source using edition-2024-only syntax would not build inside an edition-2021 workspace, and generated code compiled inside an edition-2021 crate would have no test |
+| Question                   | Alternative                                                | Why it was not chosen                                                                                                                                                                                                                      |
+| -------------------------- | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Identity (decision 1)      | keep `ServiceId`                                           | the identity studies give a service no number; nothing would produce the type                                                                                                                                                              |
+| Identity (decision 1)      | a provisional bit inside `InterfaceNo`                     | a provisional number routes identically to a frozen one, and the bit would take width decision 2 fixes                                                                                                                                     |
+| Widths (decision 2)        | keep the note's `u16`                                      | the IR already carries an ordinal as `uint32`, and the catalog descriptor plan writes `uint32` for both                                                                                                                                    |
+| Port binding (decision 3)  | the full `(catalog, interface, ordinal)` key on every call | a lookup and a pointer on every call, and a catalog field on every result struct                                                                                                                                                           |
+| Port binding (decision 3)  | an address handle resolved once                            | a table per binding in the runtime; a handle is not `const`, so generated dispatch cannot `match` on it, and a handle from one port means nothing to another                                                                               |
+| Clause result (decision 4) | `require`/`ensure` return `Result<(), Violation>`          | typl v0.1 has no invariant constraint, so the `Violation` would name one that does not exist, and `Handler::settle` reads neither variant's payload                                                                                        |
+| Clause result (decision 4) | the index of the failing clause as the error               | neither `Contract` variant carries a payload, so reading the index needs one on both plus a wire form for it                                                                                                                               |
+| #308 (decision 5)          | a caller field added to `Envelope`                         | ridl §3.1 defines exactly two fields; the field would expose transport identity above the port and decide E14.2's question in advance                                                                                                      |
+| #309 (decision 6)          | a ninth port that records withheld occurrences             | a port every runtime must implement, for a reading the reference has not chosen, and it decides E14.2's question in advance                                                                                                                |
+| Proof type (decision 7)    | a `#[doc(hidden)]` public `Ref` constructor                | a convention, not visibility — any crate could still forge a proof                                                                                                                                                                         |
+| Proof type (decision 7)    | `Ref` over bytes only, with a required separate `check`    | decoding a flatc-style buffer then needs an unchecked root (`unsafe`) or a second verification pass                                                                                                                                        |
+| Features (decision 8)      | let `flatbuffers` pull the dependency in 0.1               | pins a version before story E11.7 chooses one, and obliges every binary that enables the feature to provide an allocator for a codec that does not exist yet                                                                               |
+| Error enums (decision 9)   | `#[non_exhaustive]` on `Contract` and `CallError` too      | their variants are ridl §10's fixed categories and strata; a new one there is a language change, not a runtime's to add                                                                                                                    |
+| Rust version (decision 10) | `rust-version` equal to the `rust-toolchain.toml` pin      | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                                                                                                    |
+| Rust version (decision 10) | no `rust-version` at all                                   | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                                                                                                  |
+| Rust edition (decision 10) | keep `ridl-rt` on the workspace's edition 2024 only        | the 1.83 minimum cannot build edition 2024, so the crate would break its own `rust-version`; and source ridl emits, copied or generated into an edition-2021 consumer — which compiles as that consumer's own edition — would have no test |
 
 ## Consequences
 
@@ -251,12 +265,12 @@ trusted with no `unsafe` and no second verification pass.
 
 ## Documents amended
 
-| Document                                                                             | Change                                                                                                                                                                                                                   |
-| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| [ADR-0007](ADR-0007-e1-execution.md)                                                 | decision 14's 2026-09-14 amendment now points at this record and [the `ridl-rt` design record](../design/ridl-rt.md) rather than at the working `docs/wip/` spec, which this pull request archives                       |
-| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5 | its 2026-09-13 amendment (the `strata` → `error` rename) now points at [the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md) rather than at the working `docs/wip/` spec, which this pull request archives   |
-| [ADR-0006](ADR-0006-walking-skeleton-execution.md) decision 1                        | a 2026-09-14 amendment records that `ridl-rt` is the one workspace crate on edition 2021, tested as both editions under this record's decision 10                                                                        |
-| [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 4                         | a 2026-09-14 amendment records that `cargo fmt --all`'s style edition now follows each crate's own edition rather than one workspace-wide value, because `ridl-rt` is edition 2021 and every other crate is edition 2024 |
+| Document                                                                             | Change                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0007](ADR-0007-e1-execution.md)                                                 | decision 14's 2026-09-14 amendment now points at this record and [the `ridl-rt` design record](../design/ridl-rt.md) rather than at the working `docs/wip/` spec, which this pull request archives, and now also points at R-12 of that archived spec, noting that this record's decision 10 replaces R-12's `rust-version` item |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5 | its 2026-09-13 amendment (the `strata` → `error` rename) now points at [the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md) rather than at the working `docs/wip/` spec, which this pull request archives                                                                                                           |
+| [ADR-0006](ADR-0006-walking-skeleton-execution.md) decision 1                        | a 2026-09-14 amendment records that `ridl-rt` is the one workspace crate on edition 2021, tested as both editions under this record's decision 10                                                                                                                                                                                |
+| [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 4                         | a 2026-09-14 amendment records that `cargo fmt --all`'s style edition now follows each crate's own edition rather than one workspace-wide value, because `ridl-rt` is edition 2021 and every other crate is edition 2024                                                                                                         |
 
 ## References
 

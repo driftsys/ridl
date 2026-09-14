@@ -4,7 +4,14 @@
 # decision 1). The roadmap names the crates per epic (docs/ROADMAP.md).
 
 [workspace]
-resolver = "3"
+# resolver = "2", not "3": `cargo package -p ridl-rt` writes this line into
+# the packaged Cargo.toml (as `[package] resolver`), and cargo 1.83 cannot
+# read resolver 3 ("feature `edition2024` is required"), so a Rust 1.83 user
+# could not build the published crate. Resolver 3 is also MSRV-aware: with
+# ridl-rt's rust-version at 1.83, it would resolve every workspace dependency
+# to versions compatible with Rust 1.83, not only ridl-rt's own (ADR-0021
+# decision 10; decided by Sebastien on 2026-09-14 in driftsys/ridl#352).
+resolver = "2"
 members = ["crates/*", "xtask"]
 
 [workspace.package]

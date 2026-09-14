@@ -3,8 +3,11 @@ name = "ridl-rt"
 # Its own version, not the workspace's 0.0.0: `ridl-rt` is released on its own
 # and tagged `ridl-rt@<version>`.
 version = "0.1.0"
-# The crate compiles as edition 2021 so its source also builds inside an
-# edition-2021 workspace; `just compat-check` also tests it as edition 2024.
+# The crate compiles as edition 2021 because its rust-version minimum (1.83)
+# predates edition 2024, which Rust cannot build before 1.85; source ridl
+# emits, copied or generated into a consuming crate, compiles as that crate's
+# own edition. `just compat-check` also tests this crate as edition 2024 with
+# the toolchain pin.
 edition = "2021"
 license.workspace = true
 repository.workspace = true
