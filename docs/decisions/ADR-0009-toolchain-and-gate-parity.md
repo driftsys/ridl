@@ -82,8 +82,8 @@ prediction.
 
    _Amended (2026-09-14):_ 1.95.0 is the first value of `channel`, not the
    current one. The pin moves under decision 3, and the current version is the
-   one `rust-toolchain.toml` names (decision 2). The first bump, to 1.98.1, is
-   the pull request that closed issue #353.
+   one `rust-toolchain.toml` names (decision 2). The first bump, to 1.98.1, was
+   made by the pull request that closes issue #353.
 
 2. **The pin lives in that file and in no other.** CI does not name a version;
    it runs `rustup show`, which installs the channel, the components, and the

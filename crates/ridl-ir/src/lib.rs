@@ -25,8 +25,9 @@ pub mod v2 {
     // `useless_borrows_in_formatting`. The build script writes the file into
     // `OUT_DIR`, so an edit to it does not last and the lint cannot be repaired
     // in source. A lint attribute on the `include!` itself is ignored by rustc.
-    // `expect` rather than `allow`: once pbjson-build stops writing the borrow,
-    // clippy reports the expectation as unfulfilled, and this module goes.
+    // `expect` rather than `allow`: when the lint no longer fires here, clippy
+    // reports the expectation as unfulfilled. Then remove this module and
+    // include the file directly in `v2` again.
     #[expect(clippy::useless_borrows_in_formatting)]
     mod serde_impls {
         use super::*;
