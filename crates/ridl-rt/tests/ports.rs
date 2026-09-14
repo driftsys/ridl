@@ -1,5 +1,6 @@
-//! Every port is usable as a trait object. A later signature that breaks `dyn`
-//! use fails this build.
+//! Every port is usable as a trait object, and each port's supertrait is
+//! reachable through that trait object. A later signature that breaks `dyn`
+//! use, or a removed supertrait, fails this build.
 
 #![forbid(unsafe_code)]
 
@@ -162,12 +163,14 @@ fn every_core_port_is_usable_as_a_trait_object() {
 
     let fixed: &dyn FixedReader = &stub;
     assert_eq!(fixed.read(IFACE, ORD, &mut out), Err(ReadError::Detached));
+    assert_eq!(fixed.catalog(), &CATALOG);
 
     let writer: &mut dyn SignalWriter = &mut stub;
     assert_eq!(writer.set(IFACE, ORD, &[1]), Err(WriteError::NotOwner));
     writer.invalidate(IFACE, ORD);
     writer.touch(IFACE, ORD);
     writer.commit();
+    assert_eq!(writer.catalog(), &CATALOG);
 
     let source: &mut dyn EventSource = &mut stub;
     assert_eq!(
@@ -176,9 +179,11 @@ fn every_core_port_is_usable_as_a_trait_object() {
     );
     source.unsubscribe(IFACE, &[ORD]);
     assert_eq!(source.next(&mut out), Ok(None));
+    assert_eq!(source.catalog(), &CATALOG);
 
     let sink: &mut dyn EventSink = &mut stub;
     assert_eq!(sink.raise(IFACE, ORD, &[1]), Err(RaiseError::Busy));
+    assert_eq!(sink.catalog(), &CATALOG);
 
     let caller: &mut dyn Caller = &mut stub;
     assert_eq!(caller.command(IFACE, ORD, &[]), Ok(Correlation(1)));
@@ -189,8 +194,10 @@ fn every_core_port_is_usable_as_a_trait_object() {
         Err(ReadError::Short { needed: 8 })
     );
     caller.forget(Correlation(1));
+    assert_eq!(caller.catalog(), &CATALOG);
 
     let handler: &mut dyn Handler = &mut stub;
+    assert_eq!(handler.catalog(), &CATALOG);
     assert_eq!(handler.serve(IFACE, &[ORD]), Err(ServeError::NotOwner));
     assert_eq!(
         handler.next_claim(&mut out).map(|c| c.map(|c| c.id)),
@@ -228,7 +235,11 @@ fn both_extensions_are_usable_as_trait_objects() {
         coherent.read_coherent(IFACE, &[ORD], &mut out, &mut [RAW]),
         Ok(0)
     );
+    assert_eq!(coherent.read(IFACE, ORD, &mut out), Ok(RAW));
+}
 
+#[test]
+fn a_raw_occurrence_is_built_from_its_four_fields() {
     let occurrence = RawOccurrence {
         iface: IFACE,
         ord: ORD,

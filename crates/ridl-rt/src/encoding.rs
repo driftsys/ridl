@@ -34,6 +34,14 @@ mod sealed {
 ///     const NAME: &'static str = "json";
 /// }
 /// ```
+///
+/// and cannot implement the sealing trait, because its module is private:
+///
+/// ```compile_fail,E0603
+/// struct Json;
+///
+/// impl ridl_rt::encoding::sealed::Sealed for Json {}
+/// ```
 pub trait Encoding: sealed::Sealed + 'static {
     /// The encoding's name, spelled as its cargo feature is spelled.
     const NAME: &'static str;
@@ -69,7 +77,23 @@ impl Encoding for ReprC {
 
 #[cfg(test)]
 mod tests {
-    use super::{Encoding, FlatBuffers, Proto3, ReprC};
+    use super::{Encoding, FlatBuffers, Proto3, ReprC, sealed};
+
+    /// A fourth encoding, for this test only. It implements every required
+    /// item of `Encoding`, so a required item added to the trait fails to
+    /// compile this module.
+    struct Fourth;
+
+    impl sealed::Sealed for Fourth {}
+
+    impl Encoding for Fourth {
+        const NAME: &'static str = "fourth";
+    }
+
+    #[test]
+    fn name_is_the_only_required_item() {
+        assert_eq!(Fourth::NAME, "fourth");
+    }
 
     #[test]
     fn each_name_is_the_cargo_feature_name() {

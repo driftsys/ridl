@@ -165,7 +165,7 @@ fn member_of<I: Interaction>() -> Member {
 }
 
 #[test]
-fn each_interaction_constant_is_its_row_in_the_members_table() {
+fn each_kind_of_descriptor_reaches_its_member_through_the_interaction_bound() {
     assert_eq!(member_of::<SpeedSignal>(), Drivetrain::MEMBERS[0]);
     assert_eq!(member_of::<ShiftDoneEvent>(), Drivetrain::MEMBERS[1]);
     assert_eq!(member_of::<SetGearCommand>(), Drivetrain::MEMBERS[2]);

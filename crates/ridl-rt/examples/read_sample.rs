@@ -121,7 +121,7 @@ impl Interaction for SpeedSignal {
 impl Signal for SpeedSignal {
     type Payload = Speed;
     fn init() -> Speed {
-        Speed(0)
+        Speed(30)
     }
 }
 
@@ -309,11 +309,11 @@ fn publish(runtime: &mut Memory, speed: Speed) {
     runtime.commit();
 }
 
-/// Moves `speed` through five states and returns the sample read after each:
+/// Moves `speed` through six states and returns the sample read after each:
 /// the init value; a live value; the same value once its staleness bound has
-/// passed; the invalid state the provider declares; and a value the accessor's
-/// check rejects.
-pub fn walk() -> [Sample<Speed>; 5] {
+/// passed; the invalid state the provider declares; a value the accessor's
+/// check rejects; and bytes the accessor cannot decode.
+pub fn walk() -> [Sample<Speed>; 6] {
     let mut init = [0u8; <Speed as Payload<ReprC>>::MAX_SIZE];
     let proof = Ref::<Speed, ReprC>::encode(&SpeedSignal::init(), &mut init)
         .expect("the buffer is MAX_SIZE");
@@ -343,7 +343,14 @@ pub fn walk() -> [Sample<Speed>; 5] {
     runtime.commit();
     let detected = read(&runtime);
 
-    [at_init, live, stale, declared, detected]
+    // One byte where the encoding needs two.
+    runtime
+        .set(Drivetrain::NUMBER, SpeedSignal::MEMBER.ordinal, &[1])
+        .expect("the runtime owns speed");
+    runtime.commit();
+    let corrupt = read(&runtime);
+
+    [at_init, live, stale, declared, detected, corrupt]
 }
 
 fn main() {
@@ -353,6 +360,7 @@ fn main() {
         "stale",
         "declared invalid",
         "detected invalid",
+        "corrupt",
     ];
     for (step, sample) in steps.iter().zip(walk()) {
         println!("{step}: {sample:?} usable={}", sample.usable());

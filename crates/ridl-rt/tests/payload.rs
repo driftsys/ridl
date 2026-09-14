@@ -3,10 +3,19 @@
 
 #![forbid(unsafe_code)]
 
+use std::cell::Cell;
+
 use ridl_rt::encoding::{Proto3, ReprC};
 use ridl_rt::payload::{
     EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError, Violation,
 };
+
+thread_local! {
+    /// How many times `<Speed as Payload<ReprC>>::verify` ran on this thread.
+    /// Thread-local, because the test harness runs each test on its own
+    /// thread.
+    static VERIFY_CALLS: Cell<usize> = const { Cell::new(0) };
+}
 
 /// A typl-style scalar: speed in km/h, declared in the range 0 to 300.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -55,6 +64,7 @@ impl Payload<ReprC> for Speed {
     }
 
     fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+        VERIFY_CALLS.with(|calls| calls.set(calls.get() + 1));
         check(read_le(buf)?)?;
         Ok(buf)
     }
@@ -109,9 +119,15 @@ fn verified_bytes_decode_to_the_value() {
 #[test]
 fn encoded_bytes_decode_without_a_second_check() {
     let mut out = [0u8; 4];
+    let before = VERIFY_CALLS.with(Cell::get);
     let proof = Ref::<Speed, ReprC>::encode(&Speed(88), &mut out).expect("4 bytes is enough");
     assert_eq!(proof.bytes(), &[88, 0]);
     assert_eq!(proof.decode(), Speed(88));
+    assert_eq!(
+        VERIFY_CALLS.with(Cell::get),
+        before,
+        "verify ran during encode or decode"
+    );
 }
 
 #[test]

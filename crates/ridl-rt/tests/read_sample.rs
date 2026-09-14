@@ -16,11 +16,11 @@ use ridl_rt::sample::{Cause, Detection, Duration, Envelope, Freshness, Provenanc
 
 #[test]
 fn a_hand_written_program_reads_a_signal_with_its_provenance() {
-    let [at_init, live, stale, declared, detected] = walk();
+    let [at_init, live, stale, declared, detected, corrupt] = walk();
 
     // Before the first publication: the init value, `seq` 0, stamped when the
     // channel was created.
-    assert_eq!(at_init.value, Speed(0));
+    assert_eq!(at_init.value, Speed(30));
     assert_eq!(at_init.provenance, Provenance::Init);
     assert_eq!(at_init.freshness, Freshness::Fresh);
     assert_eq!(
@@ -78,7 +78,7 @@ fn a_hand_written_program_reads_a_signal_with_its_provenance() {
 
     // A published value outside the declared range: the accessor detects it
     // and substitutes the init value.
-    assert_eq!(detected.value, Speed(0));
+    assert_eq!(detected.value, Speed(30));
     assert_eq!(
         detected.provenance,
         Provenance::Invalid(Cause::Detected(Detection::InvalidValue(Violation {
@@ -95,4 +95,21 @@ fn a_hand_written_program_reads_a_signal_with_its_provenance() {
         }
     );
     assert!(!detected.usable());
+
+    // One published byte where the encoding needs two: the accessor cannot
+    // decode it, reports the detection and substitutes the init value.
+    assert_eq!(corrupt.value, Speed(30));
+    assert_eq!(
+        corrupt.provenance,
+        Provenance::Invalid(Cause::Detected(Detection::Corrupt))
+    );
+    assert_eq!(corrupt.freshness, Freshness::Fresh);
+    assert_eq!(
+        corrupt.envelope,
+        Envelope {
+            stamp: Timestamp(1_610_000),
+            seq: 4
+        }
+    );
+    assert!(!corrupt.usable());
 }

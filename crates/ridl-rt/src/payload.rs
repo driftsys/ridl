@@ -195,3 +195,46 @@ pub enum Rule {
     /// A declared invariant evaluates to false.
     Invariant,
 }
+
+#[cfg(test)]
+mod tests {
+    use core::marker::PhantomData;
+
+    use super::{EncodeError, Encoded, Payload, Ref, VerifyError};
+    use crate::encoding::ReprC;
+
+    /// A payload for this test only: its view is the bytes.
+    struct Raw;
+
+    impl Payload<ReprC> for Raw {
+        const MAX_SIZE: usize = 0;
+        type View<'a> = &'a [u8];
+
+        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+            let bytes: &'o [u8] = &out[..0];
+            Ok(Encoded { bytes, view: bytes })
+        }
+
+        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+            Ok(buf)
+        }
+
+        fn decode(_: Ref<'_, Self, ReprC>) -> Self {
+            Raw
+        }
+    }
+
+    /// The struct literal names every field, so a field added to `Ref` fails
+    /// to compile this test. The `compile_fail` doctest on `Ref` cannot pin
+    /// the field set, because it fails for any compile error.
+    #[test]
+    fn a_ref_is_built_from_exactly_its_three_fields() {
+        let bytes: &[u8] = &[1, 2];
+        let proof: Ref<'_, Raw, ReprC> = Ref {
+            bytes,
+            view: bytes,
+            _e: PhantomData,
+        };
+        assert_eq!(proof.bytes(), bytes);
+    }
+}
