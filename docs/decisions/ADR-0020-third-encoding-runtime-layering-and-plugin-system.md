@@ -175,7 +175,7 @@ as its public contract.
 
    **Amendment (2026-09-13) — the module named `strata` is `error`.** The
    `ridl-rt` 0.1 design,
-   [`docs/wip/2026-09-13-ridl-rt-v0.1-design.md`](../wip/2026-09-13-ridl-rt-v0.1-design.md)
+   [`docs/archive/2026-09-13-ridl-rt-v0.1-design.md`](../archive/2026-09-13-ridl-rt-v0.1-design.md)
    R-2, renames it. The module holds the types of ridl §10's strata 2 and 3 —
    `Contract` and `Transport` — and `CallError` over both, and a reader of
    generated code meets `ridl_rt::error::Contract` before reading the

@@ -131,6 +131,16 @@
   the set that changes shipped code, because the Rust backend emits `#[repr(C)]`
   on fixed-layout structs today.
 
+- **ADR-0021 — The `ridl-rt` 0.1 API: identity, the proof type, the port
+  dispositions, and the release policy.** Fixes what the earlier records left
+  open once the crate had to compile: `InterfaceNo` scoped by catalog and its
+  width, `CatalogHash` as `[u8; 32]` SHA-256, a port checked against one catalog
+  at construction, a failed `require`/`ensure` clause carrying no value, the
+  driftsys/ridl#308 and #309 dispositions, the sealed `Encoding` and
+  private-field `Ref` proof type, and what counts as a breaking `ridl-rt`
+  change. Binds every consumer of `ridl-rt`: the Rust codegen, the two runtimes,
+  and the ridl reference finalization pass (story E14.2).
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.

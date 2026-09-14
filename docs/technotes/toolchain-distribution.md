@@ -13,8 +13,9 @@ The repository has two independent release trains:
 - **`v<version>`**, cut by `just release` (git-std bump). This is the workspace
   train. Every workspace crate except `ridl-rt` still sits at `0.0.0`, so it has
   not been used to publish anything. `ridl-rt` has a version of its own, and a
-  maintainer pushes its tag, `ridl-rt@<version>`, by hand: `just release` does
-  not cut it (ADR-0007 decision 14).
+  maintainer creates its tag, `ridl-rt@<version>`, by hand and runs
+  `cargo publish -p ridl-rt` by hand: `just release` and git-std are not used
+  for either (ADR-0007 decision 14's 2026-09-14 amendment).
 - **`editor-v<version>`**, cut by a maintainer pushing the tag. This builds the
   `ridl` binary for five targets and packages one VSIX per target, creates the
   GitHub Release, and holds the Marketplace and Open VSX publishes behind the

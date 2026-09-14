@@ -127,7 +127,10 @@ design note, from the archive.
   debt, as four lanes that run in parallel with one driver session each. It
   decides the order, the gates, the model for each stage, and which lane may
   change a shared file when; each lane's own spec decides the design. The
-  coordination issue is #328. **Not started.**
+  coordination issue is #328. Lane A (`ridl-rt` 0.1.0) landed; its own
+  design/plan pair is archived — see
+  [`../archive/README.md`](../archive/README.md). The state of the other three
+  lanes is on #328.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
