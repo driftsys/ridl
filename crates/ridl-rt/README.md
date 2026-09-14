@@ -30,6 +30,9 @@ same rule.
 The open API questions are tracked at
 <https://github.com/driftsys/ridl/issues/350>.
 
+`ridl-rt` supports Rust 1.85 or newer (`rust-version = "1.85"`). Raising that
+minimum is a breaking change, shipped in a 0.x minor release like any other.
+
 ## What 0.1 leaves out
 
 - streams

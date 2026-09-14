@@ -10,9 +10,9 @@ description = "The vocabulary that code generated from ridl and a runtime agree 
 readme = "README.md"
 keywords = ["ridl", "idl", "runtime", "embedded", "reactive"]
 categories = ["no-std", "encoding"]
-# Equal to the `channel` in rust-toolchain.toml — `just toolchain-check`
-# compares the two and fails if they diverge (ADR-0009).
-rust-version = "1.95.0"
+# The oldest Rust this crate supports. `just msrv-check` builds and tests the
+# crate with that toolchain; the newest tested is the rust-toolchain.toml pin.
+rust-version = "1.85"
 
 # One feature per payload encoding (ADR-0020 decision 5). In this version each
 # feature enables nothing, and the crate has no dependency in any combination.

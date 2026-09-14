@@ -171,6 +171,17 @@ trusted with no `unsafe` and no second verification pass.
     meaning of `Watermark::seq` — are tracked on that issue; the review debt of
     driftsys/ridl#348 is driftsys/ridl#349.
 
+    `ridl-rt` supports Rust 1.85 or newer: `rust-version = "1.85"` in
+    `crates/ridl-rt/Cargo.toml`. The lower end is built and tested with the 1.85
+    toolchain by `just msrv-check`; the newest tested version is the
+    `rust-toolchain.toml` pin (1.95.0 today), built and tested by every other
+    gate member. Raising `rust-version` is a breaking change under this
+    decision's rule, shipped in a 0.x minor release; a toolchain pin bump does
+    not by itself change `rust-version`. This replaces the design record's R-12,
+    which set `rust-version` equal to the pin, decided by Sebastien on
+    2026-09-14 during the review of this pull request, because a minimum tied to
+    the pin would rise with every toolchain bump.
+
 ## Alternatives considered
 
 | Question                   | Alternative                                                | Why it was not chosen                                                                                                                                        |
@@ -188,6 +199,8 @@ trusted with no `unsafe` and no second verification pass.
 | Proof type (decision 7)    | `Ref` over bytes only, with a required separate `check`    | decoding a flatc-style buffer then needs an unchecked root (`unsafe`) or a second verification pass                                                          |
 | Features (decision 8)      | let `flatbuffers` pull the dependency in 0.1               | pins a version before story E11.7 chooses one, and obliges every binary that enables the feature to provide an allocator for a codec that does not exist yet |
 | Error enums (decision 9)   | `#[non_exhaustive]` on `Contract` and `CallError` too      | their variants are ridl §10's fixed categories and strata; a new one there is a language change, not a runtime's to add                                      |
+| Rust version (decision 10) | `rust-version` equal to the `rust-toolchain.toml` pin      | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                      |
+| Rust version (decision 10) | no `rust-version` at all                                   | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                    |
 
 ## Consequences
 

@@ -33,8 +33,7 @@ check:
     prim fmt --check .
     prim lint .
 
-# Check that the rustc about to run is the version rust-toolchain.toml pins,
-# and that any `rust-version` a workspace manifest sets names that same pin.
+# Check that the rustc about to run is the version rust-toolchain.toml pins.
 #
 # It compares versions, and only versions. It does not detect an override as
 # such: `RUSTUP_TOOLCHAIN=stable` passes today because `stable` is 1.95.0, which
@@ -42,12 +41,9 @@ check:
 # not which alias selected it. What it does catch is every way the version can
 # end up wrong: no rustup at all, in which case this file is read by nobody and
 # ignored without a word; a `RUSTUP_TOOLCHAIN` or a `rustup override set`
-# naming a different release; a pin nobody installed; or a `rust-version` in a
-# workspace manifest (the root, `crates/*`, `xtask`) left at another version
-# after the pin moved. Any of those leaves `cargo fmt --all --check` measuring a
-# rustfmt other than the one CI applies, and reporting green against it, or
-# leaves a published crate's `rust-version` naming a toolchain that the gate did
-# not build and test it with.
+# naming a different release; or a pin nobody installed. Any of those leaves
+# `cargo fmt --all --check` measuring a rustfmt other than the one CI applies,
+# and reporting green against it.
 toolchain-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -66,15 +62,6 @@ toolchain-check:
         echo "toolchain-check: an alias is the gap the pin exists to close (ADR-0009)." >&2
         exit 1
     fi
-    for manifest in Cargo.toml crates/*/Cargo.toml xtask/Cargo.toml; do
-        [ -f "$manifest" ] || continue
-        rv="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")"
-        if [ -n "$rv" ] && [ "$rv" != "$pinned" ]; then
-            echo "toolchain-check: $manifest sets rust-version = \"$rv\"; rust-toolchain.toml pins $pinned." >&2
-            echo "toolchain-check: change both to the same version in the same commit (ADR-0009)." >&2
-            exit 1
-        fi
-    done
     if ! command -v rustc >/dev/null 2>&1; then
         echo "toolchain-check: rustc is required and is not on PATH." >&2
         echo "toolchain-check: install rustup (https://rustup.rs); it applies the pin." >&2
@@ -158,6 +145,41 @@ wasm-check:
     else
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
+
+# Build and test ridl-rt with its minimum supported Rust version (ADR-0021
+# decision 10). The minimum lives in crates/ridl-rt/Cargo.toml's rust-version
+# line, and nowhere else: this recipe reads it rather than naming a version
+# of its own, so the recipe and the manifest cannot disagree. The newest
+# tested version is the rust-toolchain.toml pin, covered by every other gate
+# member.
+#
+# Fails on: a missing or malformed rust-version line (not a MAJOR.MINOR or
+# MAJOR.MINOR.PATCH version); rustup missing; or ridl-rt's library, tests,
+# doctests, or examples failing to build or pass under that toolchain.
+msrv-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    manifest="crates/ridl-rt/Cargo.toml"
+    minimum="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")"
+    if [ -z "$minimum" ]; then
+        echo "msrv-check: $manifest names no rust-version." >&2
+        exit 1
+    fi
+    if ! printf '%s' "$minimum" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+        echo "msrv-check: $manifest sets rust-version = \"$minimum\", which is not a" >&2
+        echo "msrv-check: MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
+        exit 1
+    fi
+    if ! command -v rustup >/dev/null 2>&1; then
+        echo "msrv-check: rustup is required to install the $minimum toolchain." >&2
+        echo "msrv-check: install it from https://rustup.rs." >&2
+        exit 1
+    fi
+    if ! rustup toolchain list | grep -qF "$minimum-"; then
+        echo "msrv-check: installing the $minimum toolchain (not found locally)." >&2
+        rustup toolchain install "$minimum" --profile minimal
+    fi
+    cargo "+$minimum" test -p ridl-rt --all-features --locked
 
 # Check Rust formatting without writing. Separate from `just fmt`, which owns
 # the connective tissue (prim) and does not touch Rust.
@@ -571,7 +593,7 @@ install-check:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check compile test lint wasm-check check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check compile test lint wasm-check msrv-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

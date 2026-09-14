@@ -104,8 +104,7 @@ member; rsdl is the apex.
 
     just fmt             reformat connective tissue with prim
     just check           lint gate — prim fmt --check + prim lint (no writes)
-    just toolchain-check the running toolchain is the one rust-toolchain.toml pins,
-                         and any rust-version a crate sets names the same version
+    just toolchain-check the running toolchain is the one rust-toolchain.toml pins
     just gate-parity     CI invokes every member of just build
     just install-check   end-to-end test of install.sh (and install.ps1's dry
                          run) against a fixture release
@@ -121,11 +120,15 @@ member; rsdl is the apex.
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
     just wasm-check      cargo check for wasm32 with --no-default-features
+    just msrv-check      build and test ridl-rt with its minimum supported
+                         Rust version, read from crates/ridl-rt/Cargo.toml's
+                         rust-version (ADR-0021 decision 10)
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + compile + test +
-                         lint + wasm-check + check — the full local gate: every
-                         member ADR-0008 decision 11 names, plus the four CI
-                         checks ADR-0009 brought back to this side
+                         lint + wasm-check + msrv-check + check — the full
+                         local gate: every member ADR-0008 decision 11 names,
+                         plus the four CI checks ADR-0009 brought back to this
+                         side
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just verify          lint-commits, then build — run before a PR
