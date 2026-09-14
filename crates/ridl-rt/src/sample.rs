@@ -24,7 +24,8 @@ pub struct Duration(pub i64);
 pub struct Envelope {
     /// When the sender produced the value.
     pub stamp: Timestamp,
-    /// The sender's sequence number. A gap is a loss.
+    /// The sender's sequence number. On an event channel, a gap is a loss
+    /// (ridl §3.1).
     pub seq: u64,
 }
 
