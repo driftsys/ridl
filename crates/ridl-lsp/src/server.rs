@@ -52,9 +52,33 @@ type Error = Box<dyn std::error::Error + Send + Sync>;
 /// initialize handshake (including the `initialized` notification), one
 /// workspace load, the initial diagnostics publish, then the message loop.
 pub fn run(connection: Connection) -> Result<(), Error> {
+    run_with_version(connection, None)
+}
+
+/// [`run`], reporting `version` in the initialize result's `serverInfo` when
+/// one is given — the `ridl` binary passes its own build version here.
+///
+/// This drives the handshake through `initialize_start`/`initialize_finish`
+/// rather than the single-call `Connection::initialize`, because that method
+/// hardcodes the result to `{"capabilities": ...}` with no room for
+/// `serverInfo`. `server_capabilities()` is still serialized through an
+/// explicit, fallible `serde_json::to_value` call rather than embedded
+/// directly in the `json!` macro below, so a serialization failure is
+/// propagated as an error, matching what the single-call form did, rather
+/// than reaching the macro's internal `.unwrap()` for interpolated values.
+pub fn run_with_version(connection: Connection, version: Option<&str>) -> Result<(), Error> {
+    let (id, params) = connection.initialize_start()?;
+    let params: lt::InitializeParams = serde_json::from_value(params)?;
     let capabilities = serde_json::to_value(server_capabilities())?;
-    let params: lt::InitializeParams =
-        serde_json::from_value(connection.initialize(capabilities)?)?;
+    let mut server_info = serde_json::json!({ "name": "ridl-lsp" });
+    if let Some(version) = version {
+        server_info["version"] = serde_json::Value::String(version.to_string());
+    }
+    let result = serde_json::json!({
+        "capabilities": capabilities,
+        "serverInfo": server_info,
+    });
+    connection.initialize_finish(id, result)?;
     let mut state = ServerState::new(workspace_root(&params));
     state.publish_all(&connection)?;
     main_loop(connection, state)

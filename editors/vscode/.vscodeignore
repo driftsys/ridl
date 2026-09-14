@@ -1,6 +1,28 @@
 .vscode/**
+
+# TypeScript sources and maps — VS Code runs the compiled out/*.js.
 src/**
-tsconfig.json
 **/*.ts
 **/*.map
+tsconfig.json
+
+# Compiled tests are inert at runtime.
+**/*.test.js
+
+# bin/ is NOT ignored: just package-vscode and the release workflow put the
+# ridl binary there, and it must ship in the VSIX.
+
+# Development-only dependency content.
+node_modules/typescript/**
+node_modules/@types/**
+node_modules/@vscode/**
+node_modules/**/*.md
+node_modules/**/*.ts
+node_modules/**/*.map
+node_modules/**/test/**
+node_modules/**/tests/**
+node_modules/**/.bin/**
+
 .gitignore
+.vscodeignore
+package-lock.json

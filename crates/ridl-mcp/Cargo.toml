@@ -1,0 +1,33 @@
+# The RIDL MCP server (ADR-0005 Layer B, docs/ROADMAP.md epic E8.6): a thin
+# consumer of the shared compiler crates behind `ridl mcp`. It is not in the
+# `wasm-check` crate list, so the async runtime it pulls in never reaches the
+# wasm32 gate.
+
+[package]
+name = "ridl-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+ridl-core = { path = "../ridl-core" }
+ridlc = { path = "../ridlc" }
+rmcp.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# `serve_stdio` needs the stdio driver (`io-std`) and the runtime that drives
+# the task `rmcp` spawns (`rt`). `rmcp`'s own feature set supplies both today,
+# so this line is not what makes the crate build; it states the requirement
+# here so a later `rmcp` release that stops enabling them fails as a missing
+# feature rather than as an unexplained error in this crate.
+tokio.workspace = true
+
+[dev-dependencies]
+# The panic test serves the router over an in-process pipe and reads the
+# responses back: `io-util` is `tokio::io::duplex`, `split` and the line
+# reader; `time` is the timeout that turns a lost response into a failure
+# rather than a hung run. `rmcp` enables both today; naming them here follows
+# the rule the `tokio` line above states.
+tokio = { workspace = true, features = ["io-util", "time"] }

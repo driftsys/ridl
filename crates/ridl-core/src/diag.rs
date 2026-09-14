@@ -37,7 +37,7 @@
 //! spans. The [`SourceMap`] is the only bridge between a diagnostic and the
 //! source text the renderer needs.
 
-use rowan::TextRange;
+use rowan::{TextRange, TextSize};
 use serde::{Serialize, Serializer};
 
 pub mod render;
@@ -949,6 +949,133 @@ impl SourceMap {
             .get(id.0 as usize)
             .map(|entry| entry.path.as_str())
     }
+
+    /// The text an interned [`FileId`] stands for, or `None` for an id this map
+    /// never issued (including [`FileId::DETACHED`]).
+    pub fn text(&self, id: FileId) -> Option<&str> {
+        self.files
+            .get(id.0 as usize)
+            .map(|entry| entry.text.as_str())
+    }
+}
+
+/// A 1-based line and column. The column counts Unicode scalar values — Rust
+/// `char`s — not UTF-8 bytes and not the UTF-16 code units LSP positions use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub struct LineCol {
+    pub line: u32,
+    pub column: u32,
+}
+
+/// The line and column of a byte `offset` into `text`. An offset past the end
+/// of the text, or inside a multi-byte character, is moved back to the nearest
+/// character boundary at or before it.
+pub fn line_col(text: &str, offset: TextSize) -> LineCol {
+    let mut offset = usize::from(offset).min(text.len());
+    while !text.is_char_boundary(offset) {
+        offset -= 1;
+    }
+    let before = &text[..offset];
+    let line = before.matches('\n').count() as u32 + 1;
+    let column = match before.rfind('\n') {
+        Some(newline) => before[newline + 1..].chars().count(),
+        None => before.chars().count(),
+    } as u32
+        + 1;
+    LineCol { line, column }
+}
+
+/// A span in the JSON diagnostic contract: the file's path as registered in the
+/// [`SourceMap`] and 1-based start and end positions. `end` is exclusive: the
+/// position one past the last character in the span, not the position of the
+/// last character itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct JsonSpan {
+    pub path: String,
+    pub start: LineCol,
+    pub end: LineCol,
+}
+
+/// A fix-it in the JSON diagnostic contract, verbatim from the compiler.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct JsonFixIt {
+    pub label: String,
+    pub replacement: String,
+    pub span: JsonSpan,
+}
+
+/// A label in the JSON diagnostic contract, verbatim from the compiler.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct JsonLabel {
+    pub message: String,
+    pub span: JsonSpan,
+}
+
+/// One diagnostic in the JSON contract `ridl check --format json` and the MCP
+/// `ridl_check` tool emit. This is the first agent-facing diagnostic contract
+/// (ADR-0005 §7): a change to its shape is a change to an external contract.
+/// `code` passes the diagnostic's [`DiagCode`] through verbatim, including the
+/// empty string a diagnostic with no assigned catalogue code carries; the
+/// field is always present, never omitted. `labels` passes the diagnostic's
+/// secondary annotations through verbatim, in the order the diagnostic holds
+/// them; the array is always present, empty when the diagnostic carries none.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct JsonDiagnostic {
+    pub code: String,
+    pub severity: String,
+    pub message: String,
+    pub span: JsonSpan,
+    pub labels: Vec<JsonLabel>,
+    pub fixes: Vec<JsonFixIt>,
+}
+
+fn json_span(span: Span, sources: &SourceMap) -> JsonSpan {
+    let path = sources.path(span.file).unwrap_or("").to_string();
+    let text = sources.text(span.file).unwrap_or("");
+    JsonSpan {
+        path,
+        start: line_col(text, span.range.start()),
+        end: line_col(text, span.range.end()),
+    }
+}
+
+fn severity_name(severity: Severity) -> &'static str {
+    match severity {
+        Severity::Error => "error",
+        Severity::Warning => "warning",
+        Severity::Info => "info",
+    }
+}
+
+/// Projects `diagnostics` onto the JSON contract, resolving every span through
+/// `sources`.
+pub fn to_json(diagnostics: &[Diagnostic], sources: &SourceMap) -> Vec<JsonDiagnostic> {
+    diagnostics
+        .iter()
+        .map(|diagnostic| JsonDiagnostic {
+            code: diagnostic.code.0.to_string(),
+            severity: severity_name(diagnostic.severity).to_string(),
+            message: diagnostic.message.clone(),
+            span: json_span(diagnostic.primary, sources),
+            labels: diagnostic
+                .labels
+                .iter()
+                .map(|label| JsonLabel {
+                    message: label.message.clone(),
+                    span: json_span(label.span, sources),
+                })
+                .collect(),
+            fixes: diagnostic
+                .fixits
+                .iter()
+                .map(|fixit| JsonFixIt {
+                    label: fixit.label.clone(),
+                    replacement: fixit.replacement.clone(),
+                    span: json_span(fixit.span, sources),
+                })
+                .collect(),
+        })
+        .collect()
 }
 
 /// Remaps per-package diagnostics onto a renderer's [`SourceMap`] ids.
@@ -1778,5 +1905,240 @@ mod tests {
             found.push(&text[start..dash + 4]);
         }
         found
+    }
+}
+
+#[cfg(test)]
+mod json_tests {
+    use super::*;
+
+    #[test]
+    fn line_col_is_one_based_and_counts_chars() {
+        let text = "ab\ncé\n";
+        assert_eq!(
+            line_col(text, TextSize::from(0)),
+            LineCol { line: 1, column: 1 }
+        );
+        assert_eq!(
+            line_col(text, TextSize::from(2)),
+            LineCol { line: 1, column: 3 }
+        );
+        assert_eq!(
+            line_col(text, TextSize::from(3)),
+            LineCol { line: 2, column: 1 }
+        );
+        // `é` is two bytes; the column after it is the third character.
+        assert_eq!(
+            line_col(text, TextSize::from(6)),
+            LineCol { line: 2, column: 3 }
+        );
+        // An offset past the end clamps to the end of the text.
+        assert_eq!(
+            line_col(text, TextSize::from(99)),
+            LineCol { line: 3, column: 1 }
+        );
+    }
+
+    #[test]
+    fn to_json_projects_spans_and_fixits_onto_lines_and_columns() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("a.typl", "package p\ntype X:\n");
+        let span = Span {
+            file,
+            range: TextRange::new(TextSize::from(10), TextSize::from(17)),
+        };
+        // A different span from the primary one — a different line and a
+        // different column — so a fix-it's span cannot pass this test by
+        // being serialized from the primary span instead of its own.
+        let fixit_span = Span {
+            file,
+            range: TextRange::new(TextSize::from(8), TextSize::from(9)),
+        };
+        let diagnostic = Diagnostic {
+            // A real catalogued code, not a fabricated literal: the
+            // `codes_written_as_string_literals_are_all_catalogued` workspace
+            // scan rejects any `PREFIX-NNN` string literal that is not in a
+            // catalogue, including one written in a test fixture.
+            code: DiagCode::TYPL_009,
+            severity: Severity::Error,
+            message: "expected a type".to_string(),
+            primary: span,
+            labels: Vec::new(),
+            fixits: vec![FixIt {
+                span: fixit_span,
+                replacement: "type X: integer".to_string(),
+                label: "give `X` a backing type".to_string(),
+            }],
+        };
+
+        let json = to_json(&[diagnostic], &sources);
+
+        assert_eq!(json.len(), 1);
+        let first = &json[0];
+        assert_eq!(first.code, "TYPL-009");
+        assert_eq!(first.severity, "error");
+        assert_eq!(first.message, "expected a type");
+        assert_eq!(first.span.path, "a.typl");
+        assert_eq!(first.span.start, LineCol { line: 2, column: 1 });
+        assert_eq!(first.span.end, LineCol { line: 2, column: 8 });
+        assert_eq!(first.fixes.len(), 1);
+        assert_eq!(first.fixes[0].label, "give `X` a backing type");
+        assert_eq!(first.fixes[0].replacement, "type X: integer");
+        assert_eq!(
+            first.fixes[0].span.start,
+            LineCol { line: 1, column: 9 },
+            "the fix-it's span is its own, not the primary span",
+        );
+        assert_eq!(
+            first.fixes[0].span.end,
+            LineCol {
+                line: 1,
+                column: 10
+            }
+        );
+    }
+
+    /// The struct-field assertions in the test above are checked against
+    /// `JsonDiagnostic` itself and stay green through a consistent field
+    /// rename or an added `#[serde(rename = ...)]` on the struct. This
+    /// snapshot instead pins the serialized JSON key names — the actual wire
+    /// contract the MCP `ridl_check` tool and `ridl check --format json` are
+    /// both required to emit identically.
+    #[test]
+    fn to_json_snapshot_pins_the_wire_key_names() {
+        let mut sources = SourceMap::new();
+        let file = sources.file_id("a.typl", "package p\ntype X:\n");
+        let span = Span {
+            file,
+            range: TextRange::new(TextSize::from(10), TextSize::from(17)),
+        };
+        // A different span from the primary one, so the snapshot cannot pass
+        // by serializing the fix-it's span from the primary span instead of
+        // its own.
+        let fixit_span = Span {
+            file,
+            range: TextRange::new(TextSize::from(8), TextSize::from(9)),
+        };
+        let diagnostic = Diagnostic {
+            code: DiagCode::TYPL_009,
+            severity: Severity::Error,
+            message: "expected a type".to_string(),
+            primary: span,
+            labels: Vec::new(),
+            fixits: vec![FixIt {
+                span: fixit_span,
+                replacement: "type X: integer".to_string(),
+                label: "give `X` a backing type".to_string(),
+            }],
+        };
+
+        insta::assert_json_snapshot!(to_json(&[diagnostic], &sources));
+    }
+
+    #[test]
+    fn to_json_tolerates_a_span_on_an_unknown_file() {
+        let sources = SourceMap::new();
+        let diagnostic = Diagnostic {
+            code: DiagCode::MANI_101,
+            severity: Severity::Warning,
+            message: "detached".to_string(),
+            primary: Span {
+                file: FileId::DETACHED,
+                range: TextRange::new(TextSize::from(0), TextSize::from(0)),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        let json = to_json(&[diagnostic], &sources);
+        assert_eq!(json[0].severity, "warning");
+        assert_eq!(json[0].span.path, "");
+        assert_eq!(json[0].span.start, LineCol { line: 1, column: 1 });
+    }
+
+    /// A source map holding two files, with a diagnostic whose primary span
+    /// and label span both point into the second one. Every other JSON
+    /// fixture in this module registers exactly one file, under which
+    /// `json_span` resolving every span against a hard-coded `FileId(0)`
+    /// would still pass. The two files here also lay out their lines
+    /// differently, so a wrong-file lookup reads the wrong line and column,
+    /// not only the wrong path.
+    #[test]
+    fn to_json_resolves_spans_in_the_second_of_two_files() {
+        let mut sources = SourceMap::new();
+        let _first = sources.file_id("a.typl", "package p\n");
+        let second = sources.file_id("b.typl", "package p\nimport a\ntype Y:\n");
+        let primary = Span {
+            file: second,
+            range: TextRange::new(TextSize::from(19), TextSize::from(26)),
+        };
+        let label_span = Span {
+            file: second,
+            range: TextRange::new(TextSize::from(10), TextSize::from(18)),
+        };
+        let diagnostic = Diagnostic {
+            code: DiagCode::TYPL_009,
+            severity: Severity::Error,
+            message: "expected a type".to_string(),
+            primary,
+            labels: vec![Label {
+                span: label_span,
+                message: "imported here".to_string(),
+            }],
+            fixits: Vec::new(),
+        };
+
+        let json = to_json(&[diagnostic], &sources);
+
+        let first = &json[0];
+        assert_eq!(first.span.path, "b.typl");
+        assert_eq!(first.span.start, LineCol { line: 3, column: 1 });
+        assert_eq!(first.span.end, LineCol { line: 3, column: 8 });
+        assert_eq!(first.labels.len(), 1);
+        assert_eq!(first.labels[0].message, "imported here");
+        assert_eq!(first.labels[0].span.path, "b.typl");
+        assert_eq!(first.labels[0].span.start, LineCol { line: 2, column: 1 });
+        assert_eq!(first.labels[0].span.end, LineCol { line: 2, column: 9 });
+    }
+
+    /// `Severity::Info` renders as `"info"`. The other two variants
+    /// (`"error"`, `"warning"`) are already exercised above.
+    #[test]
+    fn to_json_reports_info_severity() {
+        let sources = SourceMap::new();
+        let diagnostic = Diagnostic {
+            code: DiagCode::TYPL_115,
+            severity: Severity::Info,
+            message: "type has no derivable init value".to_string(),
+            primary: Span {
+                file: FileId::DETACHED,
+                range: TextRange::new(TextSize::from(0), TextSize::from(0)),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        let json = to_json(&[diagnostic], &sources);
+        assert_eq!(json[0].severity, "info");
+    }
+
+    /// `code` stays present on the wire, as an empty string, for a diagnostic
+    /// carrying [`DiagCode::NONE`] — never omitted or turned into `null`. A
+    /// snapshot pins the whole serialized object, so a `#[serde(skip_serializing_if
+    /// = "String::is_empty")]` mutation on `code` (which a struct-field-only
+    /// assertion would not catch) drops the key and fails this comparison.
+    #[test]
+    fn to_json_keeps_the_code_field_present_when_empty() {
+        let sources = SourceMap::new();
+        let diagnostic = Diagnostic {
+            code: DiagCode::NONE,
+            severity: Severity::Error,
+            message: "unknown type name `Frob`".to_string(),
+            primary: Span {
+                file: FileId::DETACHED,
+                range: TextRange::new(TextSize::from(0), TextSize::from(0)),
+            },
+            labels: Vec::new(),
+            fixits: Vec::new(),
+        };
+        insta::assert_json_snapshot!(to_json(&[diagnostic], &sources));
     }
 }

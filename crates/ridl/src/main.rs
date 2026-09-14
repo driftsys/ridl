@@ -24,6 +24,12 @@
 //! here rather than in `ridlc` because reading a workspace-local baseline is not
 //! part of the source→IR function the tool qualification argument covers
 //! (ADR-0008 decision 9).
+//!
+//! `ridl lsp` and `ridl mcp` are the two stdio servers this one binary hosts:
+//! the language server an editor drives (`ridl-lsp`) and the Model Context
+//! Protocol server an agent drives (`ridl-mcp`). Both delegate every behavior
+//! to their library and only wire the transport here, so one installed binary
+//! serves the editor, the agent, and the command line.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -41,7 +47,11 @@ use ridlc::{CliRun, Emit};
 use rowan::{TextRange, TextSize};
 
 #[derive(Parser)]
-#[command(name = "ridl", about = "The RIDL toolchain", version)]
+#[command(
+    name = "ridl",
+    about = "The RIDL toolchain",
+    version = env!("RIDL_BUILD_VERSION")
+)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -65,6 +75,11 @@ enum Command {
         /// exists.
         #[arg(long, value_name = "DIR|FILE")]
         baseline: Option<PathBuf>,
+        /// Output format for the report: text renders to stderr (the
+        /// default); json goes to stdout instead — see the CLI reference
+        /// (docs/book/cli-reference.md) for its schema.
+        #[arg(long, value_enum, default_value_t = CheckFormat::Text)]
+        format: CheckFormat,
     },
     /// Publish the current workspace as a baseline: one `<pkg-name>.ir.json`
     /// snapshot per package, written to `.ridl/baseline/` at the workspace
@@ -130,12 +145,25 @@ enum Command {
         #[arg(long, value_name = "CATEGORY")]
         explain: Option<String>,
     },
+    /// Run the language server over stdio: exit 0 on a clean shutdown, 2 on a
+    /// transport error. Editors spawn this; it takes no flag of its own.
+    Lsp,
+    /// Run the MCP server over stdio for an agent host: exit 0 on a clean
+    /// shutdown, 2 on a transport error. It takes no flag of its own.
+    Mcp,
 }
 
 /// The `ridl diff` output format — human-readable text or machine-readable
 /// JSON with a stable schema.
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
 enum DiffFormat {
+    Text,
+    Json,
+}
+
+/// The `ridl check` output format.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum CheckFormat {
     Text,
     Json,
 }
@@ -147,7 +175,8 @@ fn main() -> ExitCode {
             path,
             frozen,
             baseline,
-        } => run_check(&path, frozen, baseline.as_deref()),
+            format,
+        } => run_check(&path, frozen, baseline.as_deref(), format),
         Command::Baseline { path, out } => run_baseline(&path, out.as_deref()),
         Command::Build {
             path,
@@ -179,6 +208,53 @@ fn main() -> ExitCode {
                 }
             },
         },
+        Command::Lsp => run_lsp(),
+        Command::Mcp => run_mcp(),
+    }
+}
+
+/// `ridl lsp`: the language server over stdio. Every behavior lives in
+/// `ridl-lsp`; this wires the transport and maps the outcome onto the exit
+/// codes of ADR-0010 decision 1 — 0 when the client shut the server down, 2
+/// when the transport failed or ended before the handshake, which is the tool
+/// being unable to answer rather than a negative answer.
+fn run_lsp() -> ExitCode {
+    let (connection, io_threads) = lsp_server::Connection::stdio();
+    if let Err(err) =
+        ridl_lsp::server::run_with_version(connection, Some(env!("RIDL_BUILD_VERSION")))
+    {
+        eprintln!("error: {err}");
+        return ExitCode::from(2);
+    }
+    if let Err(err) = io_threads.join() {
+        eprintln!("error: {err}");
+        return ExitCode::from(2);
+    }
+    ExitCode::SUCCESS
+}
+
+/// `ridl mcp`: the Model Context Protocol server over stdio. `rmcp` is async,
+/// so this builds the only Tokio runtime the binary ever has — no other
+/// subcommand is async, and none pays for this one.
+fn run_mcp() -> ExitCode {
+    let runtime = match tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime,
+        Err(err) => {
+            eprintln!("error: {err}");
+            return ExitCode::from(2);
+        }
+    };
+    match runtime.block_on(ridl_mcp::serve_stdio_with_version(Some(env!(
+        "RIDL_BUILD_VERSION"
+    )))) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("error: {err}");
+            ExitCode::from(2)
+        }
     }
 }
 
@@ -441,7 +517,7 @@ const ORDINAL_CATEGORIES: [ridl_diff::Category; 7] = [
 /// contract, so a reordered but otherwise clean workspace still exits 0. It is
 /// also skipped entirely when the compile produced an error — a diff against
 /// IR that failed to check would report noise on top of the real problem.
-fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
+fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
     let mut run = match ridlc::run_check(path, frozen.into()) {
         Ok(run) => run,
         Err(err) => {
@@ -462,7 +538,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
         }
     }
 
-    finish(Ok(run))
+    finish_check(run, format)
 }
 
 /// Publishes the workspace at `path` as a baseline.
@@ -1505,6 +1581,33 @@ fn dotted_text(node: &ridl_syntax::SyntaxNode) -> Option<String> {
     (!text.is_empty()).then_some(text)
 }
 
+/// The 1/0 rule every `check`/`build` run turns its diagnostics into: 1 when
+/// any diagnostic is an error, 0 otherwise. Shared by [`finish`] and
+/// [`finish_check`]'s JSON arm so the rule is stated once.
+fn exit_code(run: &CliRun) -> ExitCode {
+    if run.has_error() {
+        ExitCode::FAILURE
+    } else {
+        ExitCode::SUCCESS
+    }
+}
+
+/// Ends `ridl check`: text renders to stderr through [`finish`]; JSON prints
+/// the contract to stdout and keeps the same exit code.
+fn finish_check(run: CliRun, format: CheckFormat) -> ExitCode {
+    match format {
+        CheckFormat::Text => finish(Ok(run)),
+        CheckFormat::Json => {
+            let json = ridl_core::diag::to_json(&run.diagnostics, &run.sources);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json).expect("diagnostics serialize")
+            );
+            exit_code(&run)
+        }
+    }
+}
+
 /// Renders a check/build run's diagnostics to stderr and turns the outcome into
 /// an exit code: 2 on an I/O error, 1 when any diagnostic is an error, 0
 /// otherwise.
@@ -1512,11 +1615,7 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     match run {
         Ok(run) => {
             eprint!("{}", render(&run.diagnostics, &run.sources));
-            if run.has_error() {
-                ExitCode::FAILURE
-            } else {
-                ExitCode::SUCCESS
-            }
+            exit_code(&run)
         }
         Err(err) => {
             eprintln!("error: {err}");

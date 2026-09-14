@@ -44,7 +44,7 @@ repairs the new release wants in the same commit.
    configured scopes are the language scopes (`typl`/`ridl`/`rxdl`/`rmdl`/
    `rsdl`), `family`, `roadmap`, `adr`, the compiler workspace scopes
    (`ridl-syntax`/`ridl-core`/`ridl-sem`/`ridl-ir`/`ridlc`/`ridl-lsp`/
-   `ridl-backend-rust`/`ridl-backend-ts`/`ridl-backend-proto`/
+   `ridl-mcp`/`ridl-backend-rust`/`ridl-backend-ts`/`ridl-backend-proto`/
    `ridl-backend-flatbuffers`/`ridl-diff`/`ridl-fmt`/`xtask`/`editors`), and the
    repo-wide scopes (`repo`/`docs`/`ci`/`hooks`/`deps`).
 4. Run `just verify` before opening a PR — commit-message lint over your branch
@@ -164,23 +164,23 @@ there is no runtime here. Write it so a reader cannot mistake the two.
 
 Run `just --list` for the full set. The common ones:
 
-| recipe                 | what it does                                                                                                                                |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `just fmt`             | reformat the connective tissue with prim                                                                                                    |
-| `just check`           | lint gate — `prim fmt --check` + `prim lint`, no writes                                                                                     |
-| `just toolchain-check` | the running toolchain is the one `rust-toolchain.toml` pins                                                                                 |
-| `just gate-parity`     | CI invokes every member of `just build`                                                                                                     |
-| `just fmt-check`       | `cargo fmt --all --check` (no writes)                                                                                                       |
-| `just book-check`      | `mdbook build` on a copy — catches a SUMMARY.md mdBook cannot parse                                                                         |
-| `just compile`         | compile the Rust workspace (`--locked`)                                                                                                     |
-| `just test`            | run the Rust workspace test suite (`--locked`)                                                                                              |
-| `just lint`            | `cargo clippy --workspace --all-targets -- -D warnings`                                                                                     |
-| `just wasm-check`      | `cargo check` for wasm32, `--no-default-features`                                                                                           |
-| `just build`           | `toolchain-check` + `gate-parity` + `fmt-check` + `book-check` + `compile` + `test` + `lint` + `wasm-check` + `check` — the full local gate |
-| `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                     |
-| `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                  |
-| `just book`            | serve the mdBook docs locally                                                                                                               |
-| `just release`         | `git std bump` — version, changelog, tag                                                                                                    |
+| recipe                 | what it does                                                                                                                                                                 |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `just fmt`             | reformat the connective tissue with prim                                                                                                                                     |
+| `just check`           | lint gate — `prim fmt --check` + `prim lint`, no writes                                                                                                                      |
+| `just toolchain-check` | the running toolchain is the one `rust-toolchain.toml` pins                                                                                                                  |
+| `just gate-parity`     | CI invokes every member of `just build`                                                                                                                                      |
+| `just fmt-check`       | `cargo fmt --all --check` (no writes)                                                                                                                                        |
+| `just book-check`      | `mdbook build` on a copy — catches a SUMMARY.md mdBook cannot parse                                                                                                          |
+| `just compile`         | compile the Rust workspace (`--locked`)                                                                                                                                      |
+| `just test`            | run the Rust workspace test suite (`--locked`)                                                                                                                               |
+| `just lint`            | `cargo clippy --workspace --all-targets -- -D warnings`                                                                                                                      |
+| `just wasm-check`      | `cargo check` for wasm32, `--no-default-features`                                                                                                                            |
+| `just build`           | `toolchain-check` + `gate-parity` + `install-check` + `fmt-check` + `book-check` + `link-check` + `compile` + `test` + `lint` + `wasm-check` + `check` — the full local gate |
+| `just lint-commits`    | `git std lint` over the commits on top of a base branch                                                                                                                      |
+| `just verify`          | `lint-commits` + `build` — run before a PR                                                                                                                                   |
+| `just book`            | serve the mdBook docs locally                                                                                                                                                |
+| `just release`         | `git std bump` — version, changelog, tag                                                                                                                                     |
 
 ## Reporting issues
 

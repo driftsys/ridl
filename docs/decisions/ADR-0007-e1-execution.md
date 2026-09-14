@@ -160,6 +160,28 @@ at epic close) and cites these decisions by number.
     criteria are met by capability, and the preview cut is handed to the
     maintainer at close-out.
 
+    _Amended (2026-09-13)._ A second release train exists beside this decision:
+    an `editor-v<version>` tag, pushed by a maintainer, builds the `ridl` binary
+    for five targets and the VS Code extension, publishes a GitHub Release, and
+    holds the Marketplace and Open VSX publishes behind a reviewed `marketplace`
+    environment (`.github/workflows/vscode-release.yaml`). The workspace crates
+    stay at `0.0.0`; the binary reports the tag through `RIDL_BUILD_VERSION`.
+    The tag push and the environment approval are the maintainer acts this
+    decision requires.
+
+    Two prerequisites are maintainer acts as well, and their order matters.
+    Nothing in the workflow stops a publish job when they are missing: GitHub
+    creates an environment with no protection rules the first time a job
+    references a name that does not exist. So the `marketplace` GitHub
+    Environment, with required reviewers, is created first, and `VSCE_PAT` and
+    `OVSX_PAT` are then stored as secrets of that environment rather than of the
+    repository, so that a job cannot read them before the environment approves
+    it. Recovery from a partial publish is manual: neither `vsce publish` nor
+    `ovsx publish` is idempotent, so after a failure part-way through the target
+    matrix, publish the remaining targets individually rather than re-running
+    the job. `docs/technotes/toolchain-distribution.md` describes the train and
+    the binary-resolution order it feeds.
+
 15. **`ridl.std` ships embedded in the compiler.** The Appendix A source is
     committed verbatim as an asset of `ridl-core` and loaded via `include_str!`
     as a built-in, implicitly imported package — no filesystem or network

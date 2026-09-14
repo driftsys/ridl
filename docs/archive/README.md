@@ -199,3 +199,20 @@ provenance. Nothing here is normative — the current references live in
   provisional interface number — waits for the lock file the rsdl decisions
   note's D-7 describes; building it now would be building something the lock
   block deletes.
+- **2026-09-13-ridl-mcp-v0-design.md** and **2026-09-13-ridl-mcp-v0-plan.md** —
+  the design and plan for the JSON diagnostic contract,
+  `ridl check --format
+  json`, the `ridl-mcp` crate, and the `ridl lsp` /
+  `ridl mcp` subcommands. The durable claims are in ADR-0005 (host coverage),
+  ADR-0010 (exit codes), the CLI reference, and `crates/ridl-mcp/README.md`.
+- **2026-09-13-vscode-extension-distribution-design.md** and
+  **2026-09-13-vscode-extension-distribution-plan.md** — the design and plan for
+  the extension's binary resolution, MCP registration, the `editor-v*` release
+  train, and the install scripts. The durable claims are in ADR-0007's
+  2026-09-13 amendment and `docs/technotes/toolchain-distribution.md`. The
+  design's install-script interface (arguments, a registry `PATH` update) was
+  replaced by environment variables in the plan; the technote records the
+  interface as built.
+- **2026-09-13-execution-driver-prompt.md** — the prompt that ran the two plans
+  above as one branch. Its instruction to review before opening the pull request
+  was wrong: `/review` needs an open pull request.

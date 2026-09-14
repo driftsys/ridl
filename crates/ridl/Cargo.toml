@@ -8,6 +8,9 @@ publish = false
 
 [dependencies]
 clap.workspace = true
+# `ridl lsp` owns the stdio transport the language server runs over; the
+# server itself is `ridl-lsp`'s library face.
+lsp-server.workspace = true
 num-bigint.workspace = true
 num-rational.workspace = true
 # `ridl test` (E2.11a) draws its samples from the E1.18 range strategies, so the
@@ -18,11 +21,26 @@ ridl-core = { path = "../ridl-core" }
 ridl-diff = { path = "../ridl-diff" }
 ridl-fmt = { path = "../ridl-fmt" }
 ridl-ir = { path = "../ridl-ir" }
+ridl-lsp = { path = "../ridl-lsp" }
+ridl-mcp = { path = "../ridl-mcp" }
 ridl-sem = { path = "../ridl-sem" }
 ridl-syntax = { path = "../ridl-syntax" }
 ridlc = { path = "../ridlc" }
 rowan.workspace = true
 serde_json.workspace = true
+# `ridl-mcp`'s `serve_stdio` is async, so `ridl mcp` builds the process's one
+# Tokio runtime and blocks on it. No other subcommand is async.
+tokio.workspace = true
 
 [dev-dependencies]
 pulldown-cmark.workspace = true
+# The end-to-end server tests speak MCP to a spawned `ridl mcp`: `client` is
+# the caller half of the SDK, `transport-child-process` the child-process
+# transport that spawns the binary and frames JSON-RPC over its stdio.
+rmcp = { workspace = true, features = ["client", "transport-child-process"] }
+# `process` for `tokio::process::Command`, which the child-process transport
+# takes. `transport-child-process` enables it too; naming it here makes the
+# test's own requirement explicit rather than inherited. `time` for
+# `tokio::time::timeout`, which bounds every `#[tokio::test]` below — `cargo
+# test` has no per-test timeout of its own.
+tokio = { workspace = true, features = ["process", "time"] }

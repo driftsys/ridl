@@ -29,3 +29,4 @@ node_modules/
 editors/vscode/node_modules
 editors/vscode/*.vsix
 editors/vscode/out
+editors/vscode/bin/

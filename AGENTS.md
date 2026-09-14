@@ -7,9 +7,9 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: thirteen crates
+(ADRs), the implementation roadmap, and the compiler workspace: fourteen crates
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
-`ridl`, `ridl-lsp`, `ridl-backend-rust`, `ridl-backend-ts`,
+`ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, and `ridl-fmt` —
 plus `xtask` at the root and the `editors/vscode` extension. The typl v0.1
 toolchain (epic E1) and the ridl interface layer over it (epic E2) are built;
@@ -103,6 +103,8 @@ member; rsdl is the apex.
     just check           lint gate — prim fmt --check + prim lint (no writes)
     just toolchain-check the running toolchain is the one rust-toolchain.toml pins
     just gate-parity     CI invokes every member of just build
+    just install-check   end-to-end test of install.sh (and install.ps1's dry
+                         run) against a fixture release
     just fmt-check       cargo fmt --all --check (no writes; repair with cargo fmt --all)
     just book-check      mdbook build on a copy — catches a SUMMARY.md mdBook
                          cannot parse and a {{#include}} that does not resolve
@@ -115,15 +117,22 @@ member; rsdl is the apex.
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
     just wasm-check      cargo check for wasm32 with --no-default-features
-    just build           toolchain-check + gate-parity + fmt-check + book-check +
-                         link-check + compile + test + lint + wasm-check + check — the full
-                         local gate: every member ADR-0008 decision 11 names, plus
-                         the four CI checks ADR-0009 brought back to this side
+    just build           toolchain-check + gate-parity + install-check +
+                         fmt-check + book-check + link-check + compile + test +
+                         lint + wasm-check + check — the full local gate: every
+                         member ADR-0008 decision 11 names, plus the four CI
+                         checks ADR-0009 brought back to this side
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just verify          lint-commits, then build — run before a PR
     just book            serve the mdBook docs locally
     just book-build      render the book to ./book — what CI publishes to Pages
+    just vscode-verify   compile, test, and vsce package the VS Code extension
+                         with no bundled binary
+    just package-vsix    compile the extension, then vsce package (optional
+                         vsce-target)
+    just package-vscode  build ridl for this machine and package the extension
+                         (local testing)
     just release         git std bump — version, changelog, tag
     just install         ./bootstrap — toolchain, git hooks, gate requirements
 

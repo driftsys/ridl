@@ -353,6 +353,194 @@ gate-parity:
     fi
     echo "gate-parity: ci.yml invokes all $(echo $members | wc -w | tr -d ' ') members of 'just build'."
 
+# End-to-end test of install.sh: downloads, checksum-verifies, and extracts a
+# fixture release reached through a file:// URL — curl reads file://, so no
+# server is needed. A dry run alone (RIDL_INSTALL_DRY_RUN=1) exercises neither
+# the checksum nor the extraction, the two steps that matter most in a script
+# users pipe straight into `bash`.
+#
+# Also runs install.ps1 through the same three checks — dry run, good
+# install, corrupted download — behind a `command -v pwsh` guard:
+# ubuntu-latest, where this recipe runs in CI, ships PowerShell 7 as `pwsh`,
+# so this is the one place install.ps1 is exercised at all. The guard skips
+# that part, rather than failing the recipe, on a machine — such as the one
+# this was developed on — with no pwsh. Invoke-WebRequest does not support
+# the file:// scheme install.sh's half of this recipe relies on, so the
+# install.ps1 cases serve the same kind of fixture over a local
+# `python3 -m http.server` instead, reached through the same
+# RIDL_INSTALL_BASE_URL override install.sh's own tests use — install.ps1
+# already honours that variable, with the same name and the same default.
+install-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    scratch="$(mktemp -d)"
+    http_pid=""
+    trap 'rm -rf "$scratch"; [ -n "$http_pid" ] && kill "$http_pid" 2>/dev/null; true' EXIT
+
+    # Learn this host's tarball name from the dry run rather than duplicating
+    # install.sh's own detect_target platform table here.
+    version="editor-v0.0.0-install-check"
+    url="$(RIDL_VERSION="$version" RIDL_INSTALL_DRY_RUN=1 bash install.sh)"
+    tarball="$(basename "$url")"
+    reldir="$scratch/release/$version"
+    mkdir -p "$reldir"
+
+    if command -v pwsh >/dev/null 2>&1; then
+        ps1_url="$(pwsh -NoProfile -Command '$env:RIDL_VERSION="editor-v0.1.0"; $env:RIDL_INSTALL_DRY_RUN="1"; ./install.ps1')"
+        expected="https://github.com/driftsys/ridl/releases/download/editor-v0.1.0/ridl-x86_64-pc-windows-msvc.tar.gz"
+        if [ "$ps1_url" != "$expected" ]; then
+            echo "install-check: install.ps1 dry run printed '$ps1_url', expected '$expected'" >&2
+            exit 1
+        fi
+        echo "install-check: install.ps1 dry run verified ($ps1_url)"
+
+        # install.ps1 always requests the Windows target regardless of this
+        # host's own platform, so it gets its own tarball, built the same way
+        # as install.sh's and placed in the same version directory.
+        ps_tarball="ridl-x86_64-pc-windows-msvc.tar.gz"
+        printf 'ridl 0.0.0-install-check\n' > "$reldir/ridl.exe"
+        if command -v sha256sum >/dev/null 2>&1; then
+            (cd "$reldir" && tar czf "$ps_tarball" ridl.exe && sha256sum "$ps_tarball" > "$ps_tarball.sha256")
+        else
+            (cd "$reldir" && tar czf "$ps_tarball" ridl.exe && shasum -a 256 "$ps_tarball" > "$ps_tarball.sha256")
+        fi
+        rm "$reldir/ridl.exe"
+
+        http_port=8971
+        python3 -m http.server "$http_port" --bind 127.0.0.1 --directory "$scratch/release" \
+            >"$scratch/http.log" 2>&1 &
+        http_pid=$!
+        for _ in $(seq 1 50); do
+            curl -fsS "http://127.0.0.1:$http_port/" >/dev/null 2>&1 && break
+            sleep 0.1
+        done
+
+        # A good install: same shape as install.sh's own good-install case
+        # below, but ridl.exe cannot run on this host, so the check compares
+        # the installed file's content against the fixture's instead of
+        # executing it.
+        ps_install1="$scratch/ridl install ps-good"
+        RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" \
+            RIDL_INSTALL_DIR="$ps_install1" pwsh -NoProfile -File ./install.ps1
+        if [ ! -f "$ps_install1/ridl.exe" ]; then
+            echo "install-check: install.ps1 did not land ridl.exe in $ps_install1" >&2
+            exit 1
+        fi
+        ps_got="$(cat "$ps_install1/ridl.exe")"
+        if [ "$ps_got" != "ridl 0.0.0-install-check" ]; then
+            echo "install-check: install.ps1 installed a file reading '$ps_got', expected the fixture's line" >&2
+            exit 1
+        fi
+        echo "install-check: install.ps1 good install verified ($ps_install1/ridl.exe)"
+
+        # A corrupted download: same construction as install.sh's own case
+        # below — original .sha256, tampered tarball content.
+        printf 'ridl tampered\n' > "$reldir/ridl.exe"
+        (cd "$reldir" && tar czf "$ps_tarball" ridl.exe)
+        rm "$reldir/ridl.exe"
+        ps_install2="$scratch/ridl install ps-tamper"
+        if RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="http://127.0.0.1:$http_port" \
+            RIDL_INSTALL_DIR="$ps_install2" pwsh -NoProfile -File ./install.ps1 2>"$scratch/ps-tamper.err"; then
+            echo "install-check: install.ps1 succeeded against a corrupted tarball" >&2
+            exit 1
+        fi
+        cat "$scratch/ps-tamper.err" >&2
+        # Test-Checksum's own Write-Error text, so this pins the rejection to
+        # the checksum step rather than trusting that something rejected it.
+        if ! grep -qi "checksum mismatch" "$scratch/ps-tamper.err"; then
+            echo "install-check: install.ps1 rejected the download, but not visibly because of the checksum" >&2
+            exit 1
+        fi
+        if [ -e "$ps_install2/ridl.exe" ]; then
+            echo "install-check: a corrupted download still installed a binary via install.ps1" >&2
+            exit 1
+        fi
+        echo "install-check: install.ps1 tamper case correctly rejected by the checksum and installed nothing"
+
+        kill "$http_pid" 2>/dev/null || true
+        http_pid=""
+    else
+        echo "install-check: pwsh not installed — install.ps1 checks skipped"
+    fi
+
+    # Build the fixture release: <version>/<tarball> plus its .sha256. The
+    # "binary" is a tiny script that prints a recognisable version line.
+    printf '#!/bin/sh\necho "ridl 0.0.0-install-check"\n' > "$reldir/ridl"
+    chmod +x "$reldir/ridl"
+    if command -v sha256sum >/dev/null 2>&1; then
+        (cd "$reldir" && tar czf "$tarball" ridl && sha256sum "$tarball" > "$tarball.sha256")
+    else
+        (cd "$reldir" && tar czf "$tarball" ridl && shasum -a 256 "$tarball" > "$tarball.sha256")
+    fi
+    rm "$reldir/ridl"
+
+    # A good install: the binary lands in a fresh directory — its name
+    # holding a space, the quoting risk both scripts are most exposed to —
+    # executable, and matching the fixture's own output.
+    install1="$scratch/ridl install 1"
+    RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
+        RIDL_INSTALL_DIR="$install1" bash install.sh
+    if [ ! -x "$install1/ridl" ]; then
+        echo "install-check: ridl did not land executable in $install1" >&2
+        exit 1
+    fi
+    got="$("$install1/ridl")"
+    if [ "$got" != "ridl 0.0.0-install-check" ]; then
+        echo "install-check: installed binary printed '$got', expected the fixture's line" >&2
+        exit 1
+    fi
+    echo "install-check: good install verified ($install1/ridl)"
+
+    # A second install into the same, already-populated directory: install.sh
+    # replaces the existing binary rather than merely writing into an empty
+    # one, and the atomic rename it uses to do that (see the comment above
+    # the install step in install.sh) leaves no `.ridl.*` temporary file
+    # behind, unlike a same-directory copy that stops partway.
+    RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
+        RIDL_INSTALL_DIR="$install1" bash install.sh
+    if [ ! -x "$install1/ridl" ]; then
+        echo "install-check: the second install did not leave ridl executable in $install1" >&2
+        exit 1
+    fi
+    if find "$install1" -maxdepth 1 -name '.ridl.*' | grep -q .; then
+        echo "install-check: a stray .ridl.* temporary file was left behind in $install1" >&2
+        exit 1
+    fi
+    echo "install-check: second install over an existing binary verified, no stray temp file ($install1/ridl)"
+
+    # A corrupted download: different content than the original .sha256
+    # describes, but still a well-formed tarball. Appending garbage bytes
+    # instead would also make some `tar` implementations refuse to extract
+    # the archive at all, which would let this test pass for the wrong
+    # reason — rejected by extraction, not by the checksum, which is exactly
+    # the failure mode a checksum test exists to rule out. Keeping the
+    # original .sha256 and replacing only the tarball's content isolates the
+    # checksum step as the one thing that can reject this.
+    printf '#!/bin/sh\necho "ridl tampered"\n' > "$reldir/ridl"
+    chmod +x "$reldir/ridl"
+    (cd "$reldir" && tar czf "$tarball" ridl)
+    rm "$reldir/ridl"
+    install2="$scratch/ridl install 2"
+    if RIDL_VERSION="$version" RIDL_INSTALL_BASE_URL="file://$scratch/release" \
+        RIDL_INSTALL_DIR="$install2" bash install.sh 2>"$scratch/tamper.err"; then
+        echo "install-check: installer succeeded against a corrupted tarball" >&2
+        exit 1
+    fi
+    cat "$scratch/tamper.err" >&2
+    # Names the step that rejected the download, rather than trusting that
+    # something did: sha256sum and shasum both write this line to stderr on
+    # a checksum mismatch, and nothing else in install.sh's output can match
+    # it, so its presence pins the failure to the checksum step specifically.
+    if ! grep -qi "did not match" "$scratch/tamper.err"; then
+        echo "install-check: installer rejected the download, but not visibly because of the checksum" >&2
+        exit 1
+    fi
+    if [ -e "$install2/ridl" ]; then
+        echo "install-check: a corrupted download still installed a binary" >&2
+        exit 1
+    fi
+    echo "install-check: tamper case correctly rejected by the checksum and installed nothing"
+
 # Full local gate: confirm the toolchain and CI wiring, check Rust formatting,
 # build the docs book, compile the code, run the tests, lint the Rust, check the
 # wasm target builds, then run the connective-tissue lint checks.
@@ -367,7 +555,7 @@ gate-parity:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity fmt-check book-check link-check compile test lint wasm-check check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check compile test lint wasm-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:
@@ -430,3 +618,79 @@ install:
 # Remove build artifacts.
 clean:
     rm -rf book target
+
+# Verify the VS Code extension packages: compile, unit tests, and a `vsce
+# package` against a placeholder bin/ridl staged just for this check, so a
+# .vscodeignore mistake that drops the binary is caught here instead of in a
+# release, where it would ship five VSIXs with no binary at all. Invoked by
+# vscode-verify.yaml on pull requests that touch editors/vscode. Not a member
+# of `build`, so gate-parity does not cover it; the workflow is the only
+# caller besides a contributor.
+vscode-verify:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd editors/vscode
+    npm ci
+    npm test
+    scratch="$(mktemp -d)"
+    # A placeholder bin/ridl is staged only when none is present, so a real
+    # binary that `just package-vscode` put there is neither overwritten nor
+    # deleted. The trap removes the scratch directory, and the placeholder
+    # only when this recipe staged it, even when a check below fails.
+    staged=""
+    trap 'rm -rf "$scratch"; if [ -n "$staged" ]; then rm -f bin/ridl; rmdir bin 2>/dev/null || true; fi' EXIT
+    if [ ! -e bin/ridl ]; then
+        mkdir -p bin
+        printf '#!/bin/sh\necho placeholder\n' > bin/ridl
+        chmod +x bin/ridl
+        staged=1
+    fi
+    npx vsce package --out "$scratch/ridl-vscode.vsix"
+    listing="$(npx vsce ls)"
+    if ! grep -qx 'bin/ridl' <<<"$listing"; then
+        echo "vscode-verify: bin/ridl is missing from the VSIX — check .vscodeignore" >&2
+        exit 1
+    fi
+    if grep -q '^src/' <<<"$listing"; then
+        echo "vscode-verify: src/ would ship in the VSIX — check .vscodeignore" >&2
+        exit 1
+    fi
+    if grep -q '\.test\.js$' <<<"$listing"; then
+        echo "vscode-verify: a compiled test file would ship in the VSIX — check .vscodeignore" >&2
+        exit 1
+    fi
+    echo "vscode-verify: packaged ok"
+
+# Package the extension: compile, then `vsce package`. Assumes the caller has
+# already populated editors/vscode/bin/ — this recipe does not build ridl
+# itself. With no argument, a plain `vsce package`. With a vsce-target (a
+# vsce platform identifier, e.g. darwin-arm64), `vsce package --target
+# <vsce-target> --out ridl-vscode-<vsce-target>.vsix`, which is what the
+# release workflow's package-vsix job runs per target after staging that
+# target's binary. Not a member of `build`.
+package-vsix vsce-target="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd editors/vscode
+    npm ci
+    npm run compile
+    if [ -z "{{ vsce-target }}" ]; then
+        npx vsce package
+    else
+        npx vsce package --target "{{ vsce-target }}" --out "ridl-vscode-{{ vsce-target }}.vsix"
+    fi
+
+# Build the extension for this machine: a release build of ridl copied into
+# editors/vscode/bin/, then `just package-vsix` for the packaging half. Local
+# testing only — the release workflow builds ridl per target in its own job
+# and then runs `just package-vsix` with that target's vsce-target. Not a
+# member of `build`.
+package-vscode:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cargo build --release --locked -p ridl
+    bin=target/release/ridl
+    if [ -f target/release/ridl.exe ]; then bin=target/release/ridl.exe; fi
+    mkdir -p editors/vscode/bin
+    cp "$bin" editors/vscode/bin/
+    just package-vsix

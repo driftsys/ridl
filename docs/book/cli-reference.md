@@ -1,11 +1,11 @@
 # CLI reference
 
 Two command-line binaries ship from this repository: **`ridl`**, the porcelain
-facade, and **`ridlc`**, the plumbing compiler underneath it. A third binary,
-`ridl-lsp`, builds too — the language server an editor drives over stdio (see
-[What is built](introduction.md#what-is-built)) — but it takes no subcommand
-and no flag of the kind this page documents, so it has no place here. Build
-all three with:
+facade, and **`ridlc`**, the plumbing compiler underneath it. `ridl` hosts the
+language server as the [`ridl lsp`](#ridl-lsp) subcommand and the Model
+Context Protocol server as [`ridl mcp`](#ridl-mcp), both over stdio (see
+[What is built](introduction.md#what-is-built)). The VS Code extension spawns
+`ridl lsp`. Build both with:
 
 ```sh
 cargo build --release
@@ -66,6 +66,8 @@ Commands:
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl` and `.ridl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
+  lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
+  mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   help      Print this message or the help of the given subcommand(s)
 
 Options:
@@ -77,6 +79,13 @@ Running `ridl` with no subcommand at all prints this same text to **stderr**
 and exits 2; `ridl --help` prints it to **stdout** and exits 0 — the two
 routes carry identical text but are not interchangeable in a script that
 checks the exit code or reads the right stream.
+
+`ridl lsp` and `ridl mcp` are the two stdio servers this binary hosts — the
+language server an editor drives, and the Model Context Protocol server an
+agent drives. Neither takes an argument or a flag; each is documented in its
+own section below, [`ridl lsp`](#ridl-lsp) and [`ridl mcp`](#ridl-mcp), and
+each exits 0 when the client shuts it down and 2 when the transport ends
+before the handshake or otherwise fails.
 
 ### `ridl check`
 
@@ -95,6 +104,7 @@ Arguments:
 Options:
       --frozen               Verify remote imports against `ridl.lock` without fetching or regenerating it (CI mode, ADR-0002 §7)
       --baseline <DIR|FILE>  Compare the checked workspace against a published baseline — a directory of `.ir.json` snapshots or one snapshot file — and warn (RIDL-407) on every interaction whose ordinal moved. Without the flag, `.ridl/baseline/` at the workspace root is used when it exists
+      --format <FORMAT>      Output format for the report: text renders to stderr (the default); json goes to stdout instead — see the CLI reference (docs/book/cli-reference.md) for its schema [default: text] [possible values: text, json]
   -h, --help                 Print help
 ```
 
@@ -150,6 +160,36 @@ error[TYPL-104]: range minimum 250 is greater than maximum 0
 3 │ type Speed : km/h [250.0..0.0 step 0.5]
   │                   ^^^^^^^^^^^^^^^^^^^^^
 
+```
+
+The same run with `--format json` prints the JSON diagnostic contract, also
+produced by `ridl_core::diag::to_json`, as a bare array:
+
+```sh
+ridl check --format json
+```
+
+```text
+[
+  {
+    "code": "TYPL-104",
+    "severity": "error",
+    "message": "range minimum 250 is greater than maximum 0",
+    "span": {
+      "path": "./demo.ridl",
+      "start": {
+        "line": 3,
+        "column": 19
+      },
+      "end": {
+        "line": 3,
+        "column": 40
+      }
+    },
+    "labels": [],
+    "fixes": []
+  }
+]
 ```
 
 2 when the workspace itself cannot be found:
@@ -722,7 +762,7 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-Of the eight subcommands this page documents, [ADR-0010][adr-0010] decision 6
+Of the eight subcommands that take a path, [ADR-0010][adr-0010] decision 6
 found `ridl fmt` is the only one that reliably names the actual unreadable
 path this way in every case it was tested against. `ridl check`, `ridl build`,
 `ridl baseline`, `ridlc check`, and `ridlc build` still exit 2 on the same
@@ -917,6 +957,65 @@ the categories `ridl diff` reports are:
   doc_only
   visibility_changed
 ```
+
+### `ridl lsp`
+
+```sh
+ridl lsp --help
+```
+
+```text
+Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
+
+Usage: ridl lsp
+
+Options:
+  -h, --help  Print help
+```
+
+`ridl lsp` hosts the language server: behavior lives in `crates/ridl-lsp`, and
+this subcommand only wires the stdio transport. An editor spawns it and speaks
+the Language Server Protocol over its stdin and stdout.
+
+**Exit codes.** 0 on a clean shutdown — the client sends `shutdown` then
+`exit`. 2 when the transport ends before the `initialize` handshake, or fails
+for any other reason. There is no exit 1: `ridl lsp` answers no question that
+can come back negative. Both outcomes are confirmed directly against the built
+binary by `crates/ridl/tests/servers.rs`.
+
+### `ridl mcp`
+
+```sh
+ridl mcp --help
+```
+
+```text
+Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
+
+Usage: ridl mcp
+
+Options:
+  -h, --help  Print help
+```
+
+`ridl mcp` serves the Model Context Protocol over stdio with one tool,
+`ridl_check`: behavior lives in `crates/ridl-mcp`, and this subcommand only
+builds the Tokio runtime the server needs — the only asynchronous code in this
+workspace — and wires the stdio transport. An agent host spawns it and speaks
+MCP over its stdin and stdout. The tool's input and output are documented in
+`crates/ridl-mcp/README.md`.
+
+**Exit codes.** 0 on a clean shutdown: the host closes the server's stdin,
+which is how a stdio host ends an MCP session. 2 when the Tokio runtime fails
+to build, when the transport ends before the `initialize` handshake, or when a
+task the SDK runs for the session fails after it. A read failure on stdin
+after the handshake is not distinguishable from the host closing stdin — the
+SDK logs it and ends the session the same way — so it exits 0. There is no
+exit 1: `ridl mcp` answers no question that can come back negative. The clean
+shutdown and the transport ending before the handshake are confirmed directly
+against the built binary by `crates/ridl/tests/servers.rs`; a session-task
+failure cannot be provoked through the server, so its mapping is tested on its
+own in `crates/ridl-mcp`.
 
 ## `ridlc`
 
@@ -1140,7 +1239,7 @@ For more information, try '--help'.
 `--help` itself, on any subcommand of either binary, always exits 0 — and so
 does `--version`/`-V`, covered [above](#ridl).
 
-Six of these eight subcommands also share a lesser-known gap:
+Six of the eight subcommands that take a path also share a lesser-known gap:
 [issue driftsys/ridl#196][issue-196] records that when the *workspace root
 itself* is unreadable, `ridl check`, `ridl build`, `ridl baseline`,
 `ridlc check`, and `ridlc build` all report
