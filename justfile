@@ -115,6 +115,8 @@ test:
 # crates are included so this recipe actually exercises them: previously it
 # checked a fixed non-backend list, so it never built ridl-backend-proto or
 # ridl-backend-flatbuffers and could not have caught a change to either.
+# `ridl-rt` is included because a package's generated Rust links it and is
+# compiled to wasm32 (ADR-0020 decisions 6 and 7).
 # Note: `cargo check` alone is not proof that a dev-only dependency (`protox`,
 # `planus-translation`) promoted to a normal one would be caught here — both
 # type-check cleanly for this target even as a normal dependency, because
@@ -138,6 +140,7 @@ wasm-check:
             -p ridl-syntax -p ridl-core -p ridl-sem -p ridl-ir \
             -p ridl-backend-proto -p ridl-backend-flatbuffers \
             -p ridl-backend-rust -p ridl-backend-ts \
+            -p ridl-rt \
             --no-default-features
     else
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."

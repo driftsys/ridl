@@ -182,6 +182,14 @@ at epic close) and cites these decisions by number.
     the job. `docs/technotes/toolchain-distribution.md` describes the train and
     the binary-resolution order it feeds.
 
+    _Amended (2026-09-14)._ `ridl-rt` is the one workspace crate with a version
+    of its own, starting at `0.1.0`: a release of it is tagged
+    `ridl-rt@<version>`, and every other workspace crate stays at `0.0.0`.
+    Creating that tag and running `cargo publish` are maintainer acts, as this
+    decision requires. The version and the tag are R-12 of the `ridl-rt` 0.1
+    design
+    ([`docs/wip/2026-09-13-ridl-rt-v0.1-design.md`](../wip/2026-09-13-ridl-rt-v0.1-design.md)).
+
 15. **`ridl.std` ships embedded in the compiler.** The Appendix A source is
     committed verbatim as an asset of `ridl-core` and loaded via `include_str!`
     as a built-in, implicitly imported package — no filesystem or network

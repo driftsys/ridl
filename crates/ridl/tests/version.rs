@@ -200,7 +200,7 @@ fn mcp_server_info_version() -> String {
 /// compares against `env!("RIDL_BUILD_VERSION")`, which is *this build's*
 /// compile-time value — a meaningful check when the whole test run was
 /// invoked with the variable already set, but not under plain `just test`,
-/// where it never is: every workspace crate shares the same `0.0.0` version
+/// where it never is: `ridl` and `ridl-mcp` share the workspace version `0.0.0`
 /// (`version.workspace = true`), so under an unset variable,
 /// `ridl-mcp`'s own `CARGO_PKG_VERSION` and `ridl`'s `RIDL_BUILD_VERSION`
 /// fallback are numerically the same value regardless of whether `run_mcp`

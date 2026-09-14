@@ -1,0 +1,15 @@
+[package]
+name = "ridl-rt"
+# Its own version, not the workspace's 0.0.0: `ridl-rt` is released on its own
+# and tagged `ridl-rt@<version>`.
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# One feature per payload encoding (ADR-0020 decision 5). In this version each
+# feature enables nothing, and the crate has no dependency in any combination.
+[features]
+flatbuffers = []
+proto3 = []
+repr-c = []

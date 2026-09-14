@@ -7,14 +7,14 @@ A shared vocabulary layer (`typl`) plus three description languages over it
 `uxdl` as a family member and gave `ridl` a boundary model instead.
 
 This repository holds the specifications, the architecture decision records
-(ADRs), the implementation roadmap, and the compiler workspace: fourteen crates
+(ADRs), the implementation roadmap, and the compiler workspace: fifteen crates
 under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
-`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, and `ridl-fmt` —
-plus `xtask` at the root and the `editors/vscode` extension. The typl v0.1
-toolchain (epic E1) and the ridl interface layer over it (epic E2) are built;
-the boundary model (epic E3) and `rsdl` are sequenced in the roadmap, and `rmdl`
-stays a Proposed draft with no implementation. See
+`ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`, and
+`ridl-rt` — plus `xtask` at the root and the `editors/vscode` extension. The
+typl v0.1 toolchain (epic E1) and the ridl interface layer over it (epic E2) are
+built; the boundary model (epic E3) and `rsdl` are sequenced in the roadmap, and
+`rmdl` stays a Proposed draft with no implementation. See
 `docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Read these before doing anything else in this repo:**

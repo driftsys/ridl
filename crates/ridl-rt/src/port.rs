@@ -1,0 +1,358 @@
+//! The ports: the traits a runtime implements and generated code calls.
+//!
+//! Every port method returns without waiting. Waiting — blocking, `async`, or
+//! a loop that drives the runtime — belongs to a face over a port, and this
+//! crate defines no face. A port carries interface numbers, ordinals and
+//! bytes, never a payload type: the generated binding decodes. No port method
+//! takes the current time; a runtime reads its own [`Clock`].
+//!
+//! A port is attached to one catalog ([`Attached`]), and the interface numbers
+//! and ordinals its methods take are scoped by that catalog.
+//!
+//! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
+//! mechanisms some runtimes have, not interaction semantics every runtime must
+//! present, so a runtime may omit them.
+
+use crate::contract::{CatalogRef, InterfaceNo, Ordinal};
+use crate::error::{CallError, Contract};
+use crate::sample::{Duration, Envelope, Freshness, Provenance, Timestamp};
+
+/// A port attached to one catalog.
+pub trait Attached {
+    /// The catalog this port serves.
+    fn catalog(&self) -> &CatalogRef;
+}
+
+/// The clock envelopes are stamped from. A runtime has one.
+pub trait Clock {
+    /// The current time in the platform time base.
+    fn now(&self) -> Timestamp;
+}
+
+/// Signals, consumer side.
+pub trait SignalReader: Attached {
+    /// Copies the signal's current value into the front of `out` and returns
+    /// its provenance, its freshness and its envelope. The runtime resolves
+    /// both the provenance and the freshness.
+    ///
+    /// Returns `ReadError::Short` when `out` is shorter than the value.
+    fn read(
+        &self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        out: &mut [u8],
+    ) -> Result<RawSample, ReadError>;
+}
+
+/// What [`SignalReader::read`] returns beside the copied bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RawSample {
+    /// Where the value comes from.
+    pub provenance: Provenance,
+    /// How old the value is.
+    pub freshness: Freshness,
+    /// The sender's timestamp and sequence number.
+    pub envelope: Envelope,
+    /// The number of bytes copied into `out`.
+    pub len: usize,
+}
+
+/// Signals, provider side.
+///
+/// `set`, `invalidate` and `touch` stage a change. `commit` publishes every
+/// staged change, with one generation increment and one timestamp per
+/// interface, taken from the runtime's [`Clock`].
+pub trait SignalWriter: Attached {
+    /// Stages a new value.
+    fn set(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError>;
+    /// Stages the invalid state (ridl §4.5), with
+    /// [`Cause::Declared`](crate::sample::Cause::Declared).
+    fn invalidate(&mut self, iface: InterfaceNo, ord: Ordinal);
+    /// Stages a re-affirmation of the current value, without a new value.
+    fn touch(&mut self, iface: InterfaceNo, ord: Ordinal);
+    /// Publishes everything staged. It cannot fail.
+    fn commit(&mut self);
+}
+
+/// Events, consumer side.
+pub trait EventSource: Attached {
+    /// Starts delivery of the listed events.
+    fn subscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), SubscribeError>;
+    /// Stops delivery of the listed events.
+    fn unsubscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]);
+    /// Copies the next occurrence into the front of `out`. `Ok(None)` when no
+    /// occurrence is waiting.
+    ///
+    /// Occurrences come in order, and a gap in `seq` is a loss (ridl §3.1). An
+    /// occurrence older than its time to live is discarded here (ridl §5.2).
+    /// `ReadError::Short` does not consume the occurrence: the next call
+    /// returns the same one.
+    fn next(&mut self, out: &mut [u8]) -> Result<Option<RawOccurrence>, ReadError>;
+}
+
+/// What [`EventSource::next`] returns beside the copied bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RawOccurrence {
+    /// The interface of the event.
+    pub iface: InterfaceNo,
+    /// The ordinal of the event.
+    pub ord: Ordinal,
+    /// The sender's timestamp and sequence number.
+    pub envelope: Envelope,
+    /// The number of bytes copied into `out`.
+    pub len: usize,
+}
+
+/// Events, provider side.
+pub trait EventSink: Attached {
+    /// Raises one occurrence.
+    fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError>;
+}
+
+/// Calls, consumer side.
+///
+/// A command and a query are separate methods, because their outcomes differ
+/// (ridl §6, §7).
+pub trait Caller: Attached {
+    /// Sends a command and returns the correlation of its outcome.
+    fn command(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        args: &[u8],
+    ) -> Result<Correlation, SendError>;
+    /// Sends a query and returns the correlation of its reply.
+    fn query(
+        &mut self,
+        iface: InterfaceNo,
+        ord: Ordinal,
+        args: &[u8],
+    ) -> Result<Correlation, SendError>;
+    /// A command's delivery acknowledgment (ridl §6.1), once it is known:
+    /// `Ok(())` when accepted, `Err(CallError::Contract(_))` when rejected, and
+    /// `Err(CallError::Transport(Transport::Undelivered))` when no
+    /// acknowledgment came within the bound. `None` while unknown, and always
+    /// `None` for a query's correlation.
+    fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>>;
+    /// A query's reply, once it is known: the reply bytes copied into the front
+    /// of `out` and their length, or the error. `Ok(None)` while unknown.
+    /// `ReadError::Short` does not consume the reply.
+    fn reply(
+        &mut self,
+        c: Correlation,
+        out: &mut [u8],
+    ) -> Result<Option<Result<usize, CallError>>, ReadError>;
+    /// Releases a correlation whose outcome the caller no longer needs.
+    fn forget(&mut self, c: Correlation);
+}
+
+/// Identifies one sent call to its caller.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct Correlation(pub u64);
+
+/// Calls, provider side.
+///
+/// `next_claim` presents each delivered call once. A retransmission of a call
+/// already presented is not presented again and receives the cached
+/// acknowledgment. Calls from two callers are never merged, even when they
+/// carry the same `seq`. A call lost in transport is never presented. The
+/// caller of a lost command sees `Transport::Undelivered` from `Caller::ack`;
+/// the caller of a lost query sees `Transport::Timeout` from `Caller::reply`
+/// once the response bound passes.
+///
+/// Every claim is settled. For a command, the generated dispatch settles
+/// `Ok(&[])` after the arguments and `require` pass, before application code
+/// runs. For a query, it settles with the reply bytes or the contract error.
+pub trait Handler: Attached {
+    /// Starts presenting calls to the listed members.
+    fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError>;
+    /// Copies the next call's arguments into the front of `out`. `Ok(None)`
+    /// when no call is waiting. `ReadError::Short` does not consume the call.
+    fn next_claim(&mut self, out: &mut [u8]) -> Result<Option<Claim>, ReadError>;
+    /// Settles a claim with the reply bytes (empty for a command) or a
+    /// contract error.
+    fn settle(
+        &mut self,
+        claim: ClaimId,
+        outcome: Result<&[u8], Contract>,
+    ) -> Result<(), SettleError>;
+}
+
+/// One call presented to a provider.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Claim {
+    /// Unique in its channel.
+    pub id: ClaimId,
+    /// The interface of the call.
+    pub iface: InterfaceNo,
+    /// The ordinal of the call. The descriptor at this ordinal gives the kind.
+    pub ord: Ordinal,
+    /// The caller's timestamp and sequence number. `seq` is unique for each
+    /// caller, not for each channel.
+    pub envelope: Envelope,
+    /// The time left before the response bound passes. `None` when the call
+    /// has no response bound (ridl §9.3).
+    pub remaining: Option<Duration>,
+    /// The number of argument bytes copied into `out`.
+    pub len: usize,
+}
+
+/// Identifies one claim to its provider.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ClaimId(pub u64);
+
+/// `fixed`, consumer side (ridl §8).
+pub trait FixedReader: Attached {
+    /// Copies the provisioned value into the front of `out` and returns its
+    /// length.
+    fn read(&self, iface: InterfaceNo, ord: Ordinal, out: &mut [u8]) -> Result<usize, ReadError>;
+}
+
+/// Extension: signals in a store a consumer can walk. A runtime may omit it.
+pub trait ScannableSignals: SignalReader {
+    /// The interface's generation: a counter that each commit to the interface
+    /// increments.
+    fn generation(&self, iface: InterfaceNo) -> u64;
+    /// Writes into `out` one entry for each signal that changed since `marks`,
+    /// updates `marks`, and returns the number of entries written.
+    fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize;
+}
+
+/// How far a consumer has scanned one interface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Watermark {
+    /// The interface.
+    pub iface: InterfaceNo,
+    /// The generation last scanned. Named `generation`, not `gen`, because
+    /// `gen` is a reserved keyword in the 2024 edition.
+    pub generation: u64,
+    /// The sequence number last scanned.
+    pub seq: u64,
+}
+
+/// A signal that changed since a [`Watermark`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Changed {
+    /// The interface of the signal.
+    pub iface: InterfaceNo,
+    /// The ordinal of the signal.
+    pub ord: Ordinal,
+    /// The signal's sequence number.
+    pub seq: u64,
+}
+
+/// Extension: reads of several signals of one interface from one publication.
+/// A runtime whose binding delivers each field separately cannot present this
+/// and omits it.
+pub trait CoherentSignals: SignalReader {
+    /// Answers every ordinal in `ords` from one publication. Copies the values
+    /// into `out` one after another, writes one `RawSample` for each ordinal
+    /// into `samples` in the order of `ords`, and returns the number of bytes
+    /// written to `out`.
+    ///
+    /// Returns `ReadError::Short` with the size the whole set needs when `out`
+    /// is too short, and `ReadError::Contract(Contract::UnknownInteraction)`
+    /// when `samples` is shorter than `ords` or an ordinal names no member.
+    fn read_coherent(
+        &self,
+        iface: InterfaceNo,
+        ords: &[Ordinal],
+        out: &mut [u8],
+        samples: &mut [RawSample],
+    ) -> Result<usize, ReadError>;
+}
+
+/// A read that failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReadError {
+    /// The output buffer is too short. Nothing was consumed.
+    Short {
+        /// The bytes the read needs.
+        needed: usize,
+    },
+    /// A contract error, such as an unknown interaction.
+    Contract(Contract),
+    /// The runtime behind the port is gone.
+    Detached,
+}
+
+/// A [`SignalWriter::set`] that failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WriteError {
+    /// The value is larger than the signal's capacity.
+    TooLarge {
+        /// The capacity in bytes.
+        cap: usize,
+    },
+    /// This provider does not own the signal.
+    NotOwner,
+    /// The runtime behind the port is gone.
+    Detached,
+}
+
+/// An [`EventSink::raise`] that failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RaiseError {
+    /// The runtime cannot accept an occurrence now. Retryable.
+    Busy,
+    /// The occurrence is larger than the event's capacity.
+    TooLarge {
+        /// The capacity in bytes.
+        cap: usize,
+    },
+    /// This provider does not own the event.
+    NotOwner,
+    /// The runtime behind the port is gone.
+    Detached,
+}
+
+/// A [`Caller::command`] or [`Caller::query`] that failed before sending.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SendError {
+    /// The runtime cannot accept a call now. Retryable.
+    Busy,
+    /// The arguments are larger than the call's capacity.
+    TooLarge {
+        /// The capacity in bytes.
+        cap: usize,
+    },
+    /// A contract error, such as an unknown interaction.
+    Contract(Contract),
+    /// The runtime behind the port is gone.
+    Detached,
+}
+
+/// An [`EventSource::subscribe`] that failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SubscribeError {
+    /// A contract error: an unknown interaction fails when subscribing (ridl
+    /// §10.2).
+    Contract(Contract),
+    /// The runtime behind the port is gone.
+    Detached,
+}
+
+/// A [`Handler::serve`] that failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ServeError {
+    /// A contract error, such as an unknown interaction.
+    Contract(Contract),
+    /// This provider does not own the call.
+    NotOwner,
+    /// The runtime behind the port is gone.
+    Detached,
+}
+
+/// A [`Handler::settle`] that failed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettleError {
+    /// The claim was already settled, or was never issued.
+    UnknownClaim,
+    /// The reply is larger than the call's capacity.
+    TooLarge {
+        /// The capacity in bytes.
+        cap: usize,
+    },
+    /// The runtime behind the port is gone.
+    Detached,
+}
