@@ -250,7 +250,7 @@ impl SignalReader for Memory {
 impl SignalWriter for Memory {
     fn set(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError> {
         if Memory::member(iface, ord).is_none() {
-            return Err(WriteError::NotOwner);
+            return Err(WriteError::Contract(Contract::UnknownInteraction));
         }
         let mut value = [0u8; 2];
         let Some(front) = value.get_mut(..bytes.len()) else {
@@ -261,16 +261,22 @@ impl SignalWriter for Memory {
         Ok(())
     }
 
-    fn invalidate(&mut self, iface: InterfaceNo, ord: Ordinal) {
-        if Memory::member(iface, ord).is_some() {
-            self.staged = Some(Staged::Invalid);
+    fn invalidate(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError> {
+        if Memory::member(iface, ord).is_none() {
+            return Err(WriteError::Contract(Contract::UnknownInteraction));
         }
+        self.staged = Some(Staged::Invalid);
+        Ok(())
     }
 
-    fn touch(&mut self, iface: InterfaceNo, ord: Ordinal) {
-        if Memory::member(iface, ord).is_some() && self.staged.is_none() {
+    fn touch(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError> {
+        if Memory::member(iface, ord).is_none() {
+            return Err(WriteError::Contract(Contract::UnknownInteraction));
+        }
+        if self.staged.is_none() {
             self.staged = Some(Staged::Touch);
         }
+        Ok(())
     }
 
     fn commit(&mut self) {
@@ -329,7 +335,9 @@ pub fn walk() -> [Sample<Speed>; 6] {
     runtime.advance(Duration(600_000));
     let stale = read(&runtime);
 
-    runtime.invalidate(Drivetrain::NUMBER, SpeedSignal::MEMBER.ordinal);
+    runtime
+        .invalidate(Drivetrain::NUMBER, SpeedSignal::MEMBER.ordinal)
+        .expect("the runtime owns speed");
     runtime.commit();
     let declared = read(&runtime);
 
