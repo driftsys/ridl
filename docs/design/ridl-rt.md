@@ -1,14 +1,15 @@
 # `ridl-rt` — the runtime library
 
-`ridl-rt` 0.1.0 is the `no_std` library that a package generated from ridl links
-and a runtime implements: identity, time and the envelope, samples, the payload
-traits, the interaction descriptors, the ports, and the contract and transport
-errors (ADR-0020 decision 5). It contains no runtime — nothing in the crate
-performs I/O — and no engine: the store, the sans-IO session, the scheduler and
-the platform traits are `ridl-engine`'s, parked outside this repository and
-reopened by rmdl (ADR-0018's 2026-09-12 amendment). A runtime is a separate
-crate that implements the traits of the `port` module; generated code calls
-those traits without naming the runtime.
+`ridl-rt` 0.1.0 is the `no_std` library that defines what a package generated
+from ridl will link and a runtime will implement: identity, time and the
+envelope, samples, the payload traits, the interaction descriptors, the ports,
+and the contract and transport errors (ADR-0020 decision 5). No backend emits
+code against it yet and no runtime exists. It contains no runtime — nothing in
+the crate performs I/O — and no engine: the store, the sans-IO session, the
+scheduler and the platform traits are `ridl-engine`'s, parked outside this
+repository and reopened by rmdl (ADR-0018's 2026-09-12 amendment). A runtime is
+a separate crate that implements the traits of the `port` module; generated code
+calls those traits without naming the runtime.
 
 The crate carries `#![no_std]` and `#![forbid(unsafe_code)]`, has no dependency
 in any feature combination, and allocates nothing. This is the architecture as
@@ -175,9 +176,10 @@ sample with no cause, or a live one with a cause, cannot be built.
 constraint violation (ridl §10.2); `Detection::Corrupt` is a serialization
 failure (§10.3). There is no `Implausible` variant: ridl §3.3 states that
 failure to correspond is not invalidity, so `SignalWriter::invalidate` takes no
-cause — downstream of the provider, every invalid transition is
-`Cause::Declared`. `Freshness::Unbounded` is the freshness of a member whose
-timing carries no `max` (`@[1s..]` is legal and receives no default upper
+cause: an invalidation the provider declares arrives as `Cause::Declared`, and
+`Cause::Detected` is what the consumer's own binding reports, when its check
+finds the payload invalid. `Freshness::Unbounded` is the freshness of a member
+whose timing carries no `max` (`@[1s..]` is legal and receives no default upper
 bound); a signal with no `@` annotation at all is not unbounded, because it
 receives the default range.
 
@@ -342,6 +344,8 @@ Semantics each implementation presents:
   loss. An occurrence older than its time to live is discarded inside `next`.
 - **`Caller::ack`** reports a command's delivery acknowledgment: `Ok(())`
   accepted, `Err(CallError::Contract(_))` a negative acknowledgment,
+  `Err(CallError::Transport(Transport::Corrupt))` when the provider could not
+  read the command's argument bytes, and
   `Err(CallError::Transport(Transport::Undelivered))` no acknowledgment within
   the bound. It returns `None` for a query's correlation; a query's outcome
   comes from `reply`.
@@ -353,7 +357,9 @@ Semantics each implementation presents:
   receives the cached acknowledgment, and two callers are never merged even
   under the same `seq`. Every claim is settled — a command settles `Ok(&[])`
   after its arguments and `require` pass and before application code runs; a
-  query settles with the reply bytes or the `CallError` outcome.
+  query settles with the reply bytes or the `CallError` outcome. A provider
+  settles `CallError::Transport(Transport::Corrupt)` when the argument bytes
+  fail the structure check.
 - **`ScannableSignals::scan`** writes each interface's changes into `out` all
   together or not at all: when an interface's changes do not fit in the rest of
   `out`, none of them is written, that interface's mark is not updated, and

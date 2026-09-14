@@ -15,7 +15,9 @@ The repository has two independent release trains:
   not been used to publish anything. `ridl-rt` has a version of its own, and a
   maintainer creates its tag, `ridl-rt@<version>`, by hand and runs
   `cargo publish -p ridl-rt` by hand: `just release` and git-std are not used
-  for either (ADR-0007 decision 14's 2026-09-14 amendment).
+  for either
+  ([R-12 of the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md)),
+  and both are maintainer acts (ADR-0007 decision 14's 2026-09-14 amendment).
 - **`editor-v<version>`**, cut by a maintainer pushing the tag. This builds the
   `ridl` binary for five targets and packages one VSIX per target, creates the
   GitHub Release, and holds the Marketplace and Open VSX publishes behind the

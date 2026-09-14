@@ -28,13 +28,14 @@ Two layers of the family have a working toolchain in this repository:
 - **ridl** — the interface layer over it (epic E2): the five interaction kinds,
   timing annotations, contracts, interfaces and services, a TypeScript code
   generator beside the Rust one, and `ridl diff`.
-- **`ridl-rt`** (epic E11 story E11.0) — the `no_std` runtime library a
-  generated ridl package will link and a runtime will implement: identity,
-  time and the envelope, samples, the payload traits, the interaction
-  descriptors, the ports, and the contract and transport errors. It has no
-  dependency in any feature combination. No runtime implements it yet, no
-  transport reaches a second process, and no payload codec (FlatBuffers,
-  proto3, `repr(C)`) is built.
+
+**`ridl-rt`** (epic E11 story E11.0) is the `no_std` runtime library a
+generated ridl package will link and a runtime will implement: identity, time
+and the envelope, samples, the payload traits, the interaction descriptors,
+the ports, and the contract and transport errors. It has no dependency in any
+feature combination. No runtime implements it yet, no transport reaches a
+second process, and no payload codec (FlatBuffers, proto3, `repr(C)`) is
+built.
 
 `ridl build --emit` writes Rust source, TypeScript source, a proto3 schema, a
 FlatBuffers schema, or the IR as JSON.

@@ -77,6 +77,8 @@ docs/
 │   ├── ridl-family-concept.md      Concept note — the family direction (pre-ADR)
 │   ├── family-general-form.md      Cross-profile syntax, typing, and attribute rules
 │   └── …                           Design notes feeding the roadmap; see wip/README.md
+├── design/                      Architecture records — a crate/component, as built
+│   └── ridl-rt.md               The ridl-rt 0.1 runtime library: modules, types, traits
 ├── technotes/                  Informative architecture notes (bind nothing)
 │   └── walking-skeleton-architecture.md   The RIDL toolchain, as built
 ├── archive/                    Superseded documents + landed epic plans
@@ -104,7 +106,8 @@ docs/
     ├── ADR-0017-proto3-projection-rules.md
     ├── ADR-0018-runtime-core-and-generated-surface.md
     ├── ADR-0019-flatbuffers-projection-rules.md
-    └── ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
+    ├── ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
+    └── ADR-0021-ridl-rt-0.1-api-and-release.md
 ```
 
 ## Where to start

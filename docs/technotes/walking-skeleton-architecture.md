@@ -185,14 +185,15 @@ every crate the workspace holds — see `AGENTS.md` for that.
   returned untouched), and idempotent, implementing the tight `name: Type` style
   of general form §5. E2 extended it to `.ridl` files.
 
-- **`crates/ridl-rt`** — the `no_std` runtime library a generated ridl package
-  links and a runtime implements: identity, time and the envelope, samples, the
-  payload traits, the interaction descriptors, the ports, and the contract and
-  transport errors (epic E11 story E11.0, ADR-0020 decision 5). It has no
-  dependency in any feature combination and links no runtime: the store and the
-  sans-IO session are `ridl-engine`'s, parked outside this repository, and the
-  three payload codecs (FlatBuffers, proto3, `repr(C)`) are later Epic 11
-  stories. See [the design record](../design/ridl-rt.md) and
+- **`crates/ridl-rt`** — the `no_std` runtime library that defines what a
+  generated ridl package will link and a runtime will implement: identity, time
+  and the envelope, samples, the payload traits, the interaction descriptors,
+  the ports, and the contract and transport errors (epic E11 story E11.0,
+  ADR-0020 decision 5). No backend emits code against it yet and no runtime
+  exists. It has no dependency in any feature combination and links no runtime:
+  the store and the sans-IO session are `ridl-engine`'s, parked outside this
+  repository, and the three payload codecs (FlatBuffers, proto3, `repr(C)`) are
+  later Epic 11 stories. See [the design record](../design/ridl-rt.md) and
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md).
 
 - **`crates/ridl-lsp`** — the language server; see the LSP section below.

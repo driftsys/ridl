@@ -23,8 +23,11 @@ full type and trait surface, as built — is
 
 Sebastien approved the spec these decisions come from before it merged
 (driftsys/ridl#332), and decided decision 4 himself during the review of
-driftsys/ridl#348. Where the lane's driver first took a choice under his
-delegation, the decision's own text says so.
+driftsys/ridl#348. The API revision driftsys/ridl#351 settled decision 9
+(`#[non_exhaustive]` on `Transport` and the seven port error enums) and the
+`CallError` argument of `Handler::settle`, both decided by Sebastien. Where the
+lane's driver first took a choice under his delegation, the decision's own text
+says so.
 
 It does not restate
 [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
@@ -150,18 +153,22 @@ trusted with no `unsafe` and no second verification pass.
    stay open, because ridl §10.3's detected infrastructure failures are
    open-ended and a runtime may need to report one this crate does not yet name.
 
-10. **A breaking `ridl-rt` change is a 0.x minor release, and a struct with
-    public fields that code outside the crate builds as a struct literal cannot
-    gain a field without one.** Eight structs in 0.1 have public fields, carry
-    no `#[non_exhaustive]`, and are built as struct literals outside the crate:
-    `Encoded`, `Envelope`, `RawSample`, `Claim`, `Timing`, `EncodedSizes`,
-    `Member` and `PayloadInfo`. A field added to any of them is such a change —
-    recorded with no code change against driftsys/ridl#350 item 4. The crate's
-    own version is independent of the workspace's (ADR-0007 decision 14); the
-    tag and the maintainer acts that create it are that decision's, not this
-    one's. The API questions that stayed open when 0.1 shipped —
-    driftsys/ridl#350 items 5, 12, 13 and 14, and the meaning of
-    `Watermark::seq` — are tracked on that issue; the review debt of
+10. **A breaking `ridl-rt` change is a 0.x minor release, and a public struct
+    whose fields are all public and that carries no `#[non_exhaustive]` cannot
+    gain a field without a breaking change, because code outside the crate can
+    build it as a struct literal.** Fifteen named-field structs in 0.1 meet that
+    condition: `CatalogRef`, `Member`, `Timing`, `PayloadInfo`, `EncodedSizes`,
+    `Encoded`, `Violation`, `RawSample`, `RawOccurrence`, `Claim`, `Watermark`,
+    `Changed`, `Envelope`, `Sample` and `Occurrence`. The public tuple structs —
+    `Ordinal`, `InterfaceNo`, `CatalogHash`, `Correlation`, `ClaimId`,
+    `Timestamp` and `Duration` — follow the same rule: each has one public field
+    code outside the crate builds directly. A field added to any of these
+    structs is such a change — recorded with no code change against
+    driftsys/ridl#350 item 4. The crate's own version is independent of the
+    workspace's (ADR-0007 decision 14); the tag and the maintainer acts that
+    create it are that decision's, not this one's. The API questions that stayed
+    open when 0.1 shipped — driftsys/ridl#350 items 5, 12, 13 and 14, and the
+    meaning of `Watermark::seq` — are tracked on that issue; the review debt of
     driftsys/ridl#348 is driftsys/ridl#349.
 
 ## Alternatives considered
@@ -190,11 +197,12 @@ trusted with no `unsafe` and no second verification pass.
   against the note have crate-level answers a runtime can build against today,
   with a stated fallback if the reference finalization pass (E14.2) chooses
   differently.
-- **Negative — deferred to E14.2.** Three sentences of the ridl reference are
-  now known to need correction (the sequence-number scope on a call, the
-  invalid-event-payload delivery, and the `Init` envelope convention) but stay
-  uncorrected until that pass runs; a reader of the reference alone, without
-  this record, sees the older wording.
+- **Negative — deferred to E14.2.** Two sentences of the ridl reference are now
+  known to need correction (the sequence-number scope on a call, and the
+  invalid-event-payload delivery) but stay uncorrected until that pass runs; the
+  `Init` envelope convention needs a sentence that confirms it, not a
+  correction. A reader of the reference alone, without this record, sees the
+  older wording until E14.2 adds these sentences.
 - **Neutral — the `u16` fallback and the review debt stay open.** Decision 2's
   fallback and the driftsys/ridl#350 items decision 10 leaves open are not
   blocking anything scheduled now, and are recorded here so a future change to
@@ -215,9 +223,10 @@ trusted with no `unsafe` and no second verification pass.
 
 ## Documents amended
 
-| Document                             | Change                                                                                                                                                                                             |
-| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [ADR-0007](ADR-0007-e1-execution.md) | decision 14's 2026-09-14 amendment now points at this record and [the `ridl-rt` design record](../design/ridl-rt.md) rather than at the working `docs/wip/` spec, which this pull request archives |
+| Document                                                                             | Change                                                                                                                                                                                                                 |
+| ------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0007](ADR-0007-e1-execution.md)                                                 | decision 14's 2026-09-14 amendment now points at this record and [the `ridl-rt` design record](../design/ridl-rt.md) rather than at the working `docs/wip/` spec, which this pull request archives                     |
+| [ADR-0020](ADR-0020-third-encoding-runtime-layering-and-plugin-system.md) decision 5 | its 2026-09-13 amendment (the `strata` → `error` rename) now points at [the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md) rather than at the working `docs/wip/` spec, which this pull request archives |
 
 ## References
 

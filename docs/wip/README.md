@@ -63,7 +63,12 @@ design note, from the archive.
   runtime, from the first consumer. **Not ratified** — but the ADR-0018
   amendment it implies (RA-X10) is written: that record's 2026-09-12 amendments
   retire the `ridl-rt` name collision and amend its decisions 3, 6, 15, 16
-  and 17. Amended 2026-09-12 in four places (see its own header).
+  and 17. Amended 2026-09-12 in four places (see its own header). For `ridl-rt`
+  0.1, this note is superseded by
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) and
+  [the `ridl-rt` design record](../design/ridl-rt.md); its numbered rules
+  (`RA-nn`) that concern the codecs, the engine and the runtimes remain working
+  memory here for the Epic 11 stories that take them.
 - **2026-09-08-topology-vocabulary.md** — the nouns for the layer between a
   contract and the hardware: distribution, machine, process, component, service,
   interface, member, catalog, with one question each (V-01) and only addressed

@@ -223,7 +223,14 @@ provenance. Nothing here is normative — the current references live in
   decisions R-1 to R-12 fixed once the crate had to compile) and
   [the `ridl-rt` design record](../design/ridl-rt.md) (the crate's six modules
   and full type and trait surface, as built). Read the plan as a plan, not as a
-  description: it predates the API revision pull request (#351), so its code
-  blocks show `Command`/`Query::require` and `Query::ensure` returning
-  `Result<(), Violation>` and a `Rule` enum with `Invariant` in place of `Step`,
-  both superseded by the shipped crate.
+  description: its code blocks predate both decision A-1 (driftsys/ridl#348) and
+  the API revision (driftsys/ridl#351), so several signatures differ from the
+  shipped crate — `Command`/`Query::require` and `Query::ensure` return
+  `Result<(), Violation>` rather than `Result<(), ()>` (predates A-1);
+  `payload::Rule` has `Invariant` in place of `Step` (predates #351);
+  `SignalWriter::invalidate` and `touch` return `()` rather than
+  `Result<(), WriteError>` (predates #351); `Handler::settle` takes
+  `Result<&[u8], Contract>` rather than `Result<&[u8], CallError>` (predates
+  #351); and `WriteError` and `RaiseError` carry no `Contract` variant (predates
+  #351). [The `ridl-rt` design record](../design/ridl-rt.md) and the crate's
+  rustdoc describe the API as built.

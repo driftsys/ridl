@@ -18,9 +18,14 @@ dependency. It declares one cargo feature per payload encoding — `flatbuffers`
 ## Versioning
 
 `ridl-rt` is a 0.x crate. A breaking change bumps the minor version (0.1 → 0.2),
-not the major version. Adding a field to a struct that code outside the crate
-can build as a struct literal — `Encoded`, `Envelope`, `RawSample`, `Claim`,
-`Timing`, `EncodedSizes`, `Member`, `PayloadInfo` — is a breaking change.
+not the major version. A public struct whose fields are all public and that
+carries no `#[non_exhaustive]` cannot gain a field without a breaking change,
+because code outside the crate can build it as a struct literal: `CatalogRef`,
+`Member`, `Timing`, `PayloadInfo`, `EncodedSizes`, `Encoded`, `Violation`,
+`RawSample`, `RawOccurrence`, `Claim`, `Watermark`, `Changed`, `Envelope`,
+`Sample`, `Occurrence`. The public tuple structs — `Ordinal`, `InterfaceNo`,
+`CatalogHash`, `Correlation`, `ClaimId`, `Timestamp`, `Duration` — follow the
+same rule.
 
 The open API questions are tracked at
 <https://github.com/driftsys/ridl/issues/350>.
