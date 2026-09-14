@@ -207,9 +207,20 @@ fn both_extensions_are_usable_as_trait_objects() {
     let stub = Stub;
     let mut out = [0u8; 8];
 
+    let watermark = Watermark {
+        iface: IFACE,
+        generation: 7,
+        seq: 0,
+    };
+    let changed = Changed {
+        iface: IFACE,
+        ord: ORD,
+        seq: 1,
+    };
+
     let scannable: &dyn ScannableSignals = &stub;
     assert_eq!(scannable.generation(IFACE), 7);
-    assert_eq!(scannable.scan(&mut [], &mut []), 0);
+    assert_eq!(scannable.scan(&mut [watermark], &mut [changed]), 0);
     assert_eq!(scannable.read(IFACE, ORD, &mut out), Ok(RAW));
 
     let coherent: &dyn CoherentSignals = &stub;
@@ -217,6 +228,14 @@ fn both_extensions_are_usable_as_trait_objects() {
         coherent.read_coherent(IFACE, &[ORD], &mut out, &mut [RAW]),
         Ok(0)
     );
+
+    let occurrence = RawOccurrence {
+        iface: IFACE,
+        ord: ORD,
+        envelope: ENVELOPE,
+        len: 3,
+    };
+    assert_eq!(occurrence.len, 3);
 }
 
 #[test]

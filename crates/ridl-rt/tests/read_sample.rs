@@ -54,13 +54,26 @@ fn a_hand_written_program_reads_a_signal_with_its_provenance() {
             by: Duration(100_000)
         }
     );
+    assert_eq!(
+        stale.envelope,
+        Envelope {
+            stamp: Timestamp(1_010_000),
+            seq: 1
+        }
+    );
     assert!(!stale.usable());
 
     // The provider declares the invalid state: the last good value stays.
     assert_eq!(declared.value, Speed(88));
     assert_eq!(declared.provenance, Provenance::Invalid(Cause::Declared));
     assert_eq!(declared.freshness, Freshness::Fresh);
-    assert_eq!(declared.envelope.seq, 2);
+    assert_eq!(
+        declared.envelope,
+        Envelope {
+            stamp: Timestamp(1_610_000),
+            seq: 2
+        }
+    );
     assert!(!declared.usable());
 
     // A published value outside the declared range: the accessor detects it
@@ -73,6 +86,13 @@ fn a_hand_written_program_reads_a_signal_with_its_provenance() {
             rule: Rule::Range,
         })))
     );
-    assert_eq!(detected.envelope.seq, 3);
+    assert_eq!(detected.freshness, Freshness::Fresh);
+    assert_eq!(
+        detected.envelope,
+        Envelope {
+            stamp: Timestamp(1_610_000),
+            seq: 3
+        }
+    );
     assert!(!detected.usable());
 }

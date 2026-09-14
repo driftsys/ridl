@@ -70,7 +70,9 @@ pub enum Freshness {
         /// How far past the bound the value is.
         by: Duration,
     },
-    /// The interaction declares no staleness bound.
+    /// The value has no staleness bound: its member's timing has no `max`, as
+    /// under `@[1s..]`. A signal with no `@` annotation is not unbounded,
+    /// because it receives the default range (ridl §9.1).
     Unbounded,
 }
 

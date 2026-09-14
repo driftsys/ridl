@@ -72,9 +72,10 @@ struct Parsed {
     value: u16,
 }
 
-/// A second codec, for this test only: it writes the same little-endian bytes as above,
-/// keeps a parsed view instead of a byte view, and declares a different
-/// `MAX_SIZE`, so the `MAX_SIZE` test below can tell the two constants apart.
+/// A second codec, for this test only: it writes the same little-endian bytes
+/// as above, keeps a parsed view instead of a byte view, and declares a
+/// different `MAX_SIZE`, so the `MAX_SIZE` test below can tell the two
+/// constants apart.
 impl Payload<Proto3> for Speed {
     const MAX_SIZE: usize = 3;
     type View<'a> = Parsed;

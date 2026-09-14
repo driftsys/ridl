@@ -5,7 +5,8 @@
 //! a `repr(C)` codec for its payload type; an in-memory runtime that
 //! implements `Clock`, `SignalReader` and `SignalWriter`; and the accessor a
 //! generated client would contain. `main` moves the signal through its
-//! provenance states and prints the sample read after each step.
+//! provenance and freshness states and prints the sample read after each
+//! step.
 //!
 //! Run it with `cargo run -p ridl-rt --example read_sample`.
 //! `tests/read_sample.rs` runs the same steps and checks each sample.

@@ -2,8 +2,7 @@
 //!
 //! A descriptor is a zero-sized marker type with constants. The descriptors
 //! are the per-member form of the ordinal table of ADR-0013 decision 3,
-//! extended with the interface number and the catalog hash. Their fields have
-//! the names and meanings of the catalog descriptor's fields.
+//! extended with the interface number and the catalog hash.
 
 use crate::payload::Violation;
 use crate::sample::Duration;
@@ -61,7 +60,8 @@ pub trait Interface {
     const PROVISIONAL: bool;
     /// The interface name.
     const NAME: &'static str;
-    /// The members, in ordinal order.
+    /// The members, in ordinal order. A reserved ordinal has no row, so the
+    /// index of a row is not its ordinal minus one.
     const MEMBERS: &'static [Member];
 }
 
@@ -144,6 +144,8 @@ pub enum TimingMode {
 ///
 /// `max` is the staleness bound of a signal, the time to live of an event, and
 /// the response bound of a call.
+///
+/// Under `StrictPeriodic`, `min` and `max` both hold the period.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Timing {
     /// The form of the annotation.
