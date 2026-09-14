@@ -67,6 +67,16 @@ empty snapshot list, which would make the gate pass silently in exactly the
 cases D-3 describes. A gate that can be defeated by where a directory sits is
 not a gate.
 
+**Amended after review (2026-09-13) — the order of the publish.**
+`publish_baseline` moves the fresh snapshots in before it removes the stale
+ones, not after, as the decision above described. With delete-then-move, a
+rename refused part-way left the output directory holding no snapshot, and
+section 3 defines that as a first publication: the next run would have compared
+against nothing. With the order reversed, each fresh snapshot replaces the stale
+file of the same name, only the stale snapshots no fresh one replaced are
+removed afterwards, and a failure part-way leaves one snapshot per package —
+some fresh, some stale — which the next run compares against package by package.
+
 ### D-2 The refusal is a new code, RIDL-408; RIDL-407 does not change
 
 **Decision.** The refusal is a new diagnostic, **RIDL-408**, severity Error,
@@ -110,6 +120,18 @@ deliberate decision scoped to driftsys/ridl#230, and an unbounded walk makes any
 directory above a workspace a plausible baseline. Reopening a recorded bound is
 a larger change than the defect needs.
 
+**Amended after review (2026-09-13) — the constraint #235 states.**
+driftsys/ridl#235 ends with the constraint that "the empty directory must stay a
+silent pass". The issue states it while weighing a deeper search, for which an
+empty result is the common, correct state, and this decision keeps it for
+auto-discovery. For an explicit `--baseline` the constraint is overridden, for
+the reason given above: naming a directory asserts that a baseline is there, and
+an empty result under that assertion is the false pass ADR-0010 decision 6
+closed for `ridl fmt`. Auto-discovery asserts nothing, so its empty result keeps
+the silent skip the issue requires. The override and its reason were not
+recorded anywhere before this amendment; ADR-0010 decision 6's closing paragraph
+now records them as well.
+
 ### D-4 The composite reorder category is `MemberReordered`
 
 **Decision.** A new `Category::MemberReordered`, classified breaking, for a
@@ -143,6 +165,21 @@ gaps in the decision above. They are settled as follows.
   turn a textual enum reorder from breaking into identical, which is a decision
   about what enum identity is, and it is left open. A derived enumset that
   copies its backing enum's values inherits the same conservative report.
+
+**Amended after review (2026-09-14) — what the detail carries.** The decision
+above says a `MemberReordered` change carries the old and new names. It does
+not. For a struct field or a union arm the detail is the slot ordinal — the wire
+identity typl §7.4 gives the member, computed by the `struct_slots` and
+`union_slots` of `classify.rs` that the classifier already uses — rendered as
+`member_reordered <pkg>/<Type>/<member>: ordinal N -> ordinal M`, for example
+`[breaking] member_reordered veh.cluster/Report/door: ordinal 2 -> ordinal 1`. A
+tombstone moved out from ahead of a member is reported the same way. For an enum
+value or an enum-set bit the detail is the 1-based textual position,
+`position N -> position M`, because comparing by explicit value would settle the
+open question the typl reference records as §17.14. When a content change
+accompanies the reorder, the container line comes after the member lines. A
+reorder combined with an add, a remove or a mid-body insert still emits no
+`member_reordered` (typl §17.15).
 
 The name is `MemberReordered` rather than `DeclReordered` because `DeclAdded`
 and `DeclRemoved` are already how `diff_composite` spells a composite member,
@@ -189,6 +226,54 @@ Both belong with the lock-file work.
   it, so the gate sees no interaction removal, and publication deletes that
   package's snapshot. This is wider than the interface-level deferral above.
 
+**Amended after review (2026-09-13) — a fourth refused shape.** A live
+interaction declared under a name the published baseline retires —
+`ReservedNameRedeclared` at the interaction level — is refused as well, with its
+own wording: `a; reserved b; c` republished as `a; c; event b` published at exit
+0 and replaced the tombstone's record with a live declaration. `ridl_diff` emits
+the same category for a shape in a named-form service's list (ADR-0015 decision
+19); that emission is the interface level this decision defers, so the gate
+refuses the category only when the published IR holds an interaction-level
+tombstone for the name.
+
+**Amended after review (2026-09-13) — two more shapes the gate does not refuse,
+and a correction.** The prose section 6 asked for said that any dropped
+interaction is refused. That is wider than the gate. A whole interface or
+service removed from the source is one `DeclRemoved` in `ridl_diff`, with no
+descent into the body, and a service whose form switches between inline and
+named is one `ServiceChanged` (ADR-0015 decision 15), again with no descent, so
+neither carries an interaction-level change and both publish. Both are recorded
+as open in the ridl reference's §17.14 and wait for the lock file with the rest
+of the interface level; the reference and the CLI reference now state the
+interaction-level scope.
+
+**Amended after review (2026-09-13) — the unparseable published snapshot.**
+Section 3's remedy told the author to "delete it and run `ridl baseline` again".
+`from_json` rejects an unknown field (ADR-0014 decision 14) and a snapshot
+carries no schema marker, so a snapshot that a toolchain with a different IR
+schema wrote is refused the same way as a damaged file, and the remedy as
+written discarded the record the gate exists to protect. Three remedies were
+weighed:
+
+- **A lenient parse of the published side.** Rejected. It needs a second
+  deserializer configuration in `ridl-ir`, against decision 14, and a record
+  read leniently can be misread — a gate comparing against a misread record can
+  pass a removal it should refuse.
+- **A version-aware refusal.** Rejected for now. There is no marker to read:
+  adding one to the IR is an ADR-0014 change outside this note's scope.
+- **Strict parse, corrected remedy.** Taken. The message says the file is left
+  as it is, names both causes, and gives for each the step that keeps the
+  record: restore the file if it is damaged; if another toolchain wrote it,
+  check the source against it with that toolchain (`ridl check --baseline`)
+  before removing the file and republishing with this one. Deleting the record
+  unread is no longer offered, and the remedy is appended only for the published
+  side of the gate — a `ridl diff` input or a `--baseline` path gets the bare
+  parse error.
+
+The refusal binds only when the published snapshot carries a field this
+toolchain's schema does not declare; an upgrade that adds fields never produces
+it.
+
 ### D-6 Two changes, two pull requests
 
 **Decision.** D-1 to D-3 land together in `crates/ridl`, because they are one
@@ -214,7 +299,9 @@ crates are disjoint and neither change needs the other.
   record it held with no one seeing it — the exact failure this gate exists to
   prevent. The message names a remedy: restore the file, for example from
   version control or by resolving a merge conflict left in it, or delete it and
-  run `ridl baseline` again, which discards the record it held.
+  run `ridl baseline` again, which discards the record it held. (The remedy was
+  corrected after review; see the D-5 amendment on the unparseable published
+  snapshot.)
 
 ## 4. Testing
 
@@ -255,8 +342,10 @@ category `DeclReordered` (D-4); gating the interface level now (D-5).
   removed without a `reserved` tombstone. The RIDL-407 row and the sentence
   stating that it neither classifies nor gates are unchanged.
 - **ADR-0010 decision 1** — the `ridl baseline` row's exit-1 column gains the
-  refusal, and its exit-2 column gains an explicit `--baseline` path that holds
-  no snapshot. The table's own scoping sentence says a row is earned by being
+  refusal, and the `ridl check` row's exit-2 column gains an explicit
+  `--baseline` path that holds no snapshot (corrected 2026-09-13: this note
+  first placed the second clause in the `ridl baseline` row; the flag belongs to
+  `ridl check`). The table's own scoping sentence says a row is earned by being
   added and checked, so both cells are verified by direct construction against
   the built binary, as the table's existing cells were.
 - **`docs/book/cli-reference.md`** — the diff category list gains

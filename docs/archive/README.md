@@ -163,25 +163,29 @@ provenance. Nothing here is normative — the current references live in
   `ridl baseline` refuses to publish an interaction removed with no `reserved`
   tombstone (new RIDL-408, exit 1, driftsys/ridl#315); an explicit `--baseline`
   path holding no snapshot is an input error instead of a silent pass
-  (driftsys/ridl#235, #234); and a composite body reorder gets its own diff
-  category, `Category::MemberReordered`, instead of the `constraint_changed`
-  fallback (driftsys/ridl#314). Landed as two pull requests over disjoint
-  crates, as the design's own D-6 called for: the gate and the explicit-baseline
-  read in `crates/ridl`, closing #315 and #235; the reorder category in
-  `crates/ridl-diff`, closing #314. Both pull requests wrote their own durable
-  records as they executed, so gardening reconciled rather than authored most of
-  them: the ridl reference's §11 (the RIDL-408 row, the
-  publication-enforces-the-tombstone paragraph),
+  (driftsys/ridl#235; #234 stays open, because no test yet builds a baseline
+  directory whose subdirectories hold no snapshot); and a composite body reorder
+  gets its own diff category, `Category::MemberReordered`, instead of the
+  `constraint_changed` fallback (driftsys/ridl#314). Executed as two pull
+  requests over disjoint crates, as the design's own D-6 called for: the gate
+  and the explicit-baseline read in `crates/ridl` (driftsys/ridl#330, which
+  closes #235 and covers #315 at the interaction level, its interface level
+  staying open); the reorder category in `crates/ridl-diff` (driftsys/ridl#331,
+  for #314, still open when this entry was written). Both pull requests wrote
+  their own durable records as they executed, so gardening reconciled rather
+  than authored most of them: the ridl reference's §11 (the
+  publication-enforces-the-tombstone paragraph) and §16.4 (the RIDL-408 row),
   [ADR-0010](../decisions/ADR-0010-cli-conventions.md) decision 1 (the
   `ridl baseline` and `ridl check` exit-code cells), and the CLI reference's
   `ridl baseline` section and exit-code table (the publication gate, the
   empty-baseline refusal, and the `member_reordered` category). Gardening added
   what execution left open rather than decided: the ridl reference's §17 open
-  questions 12-13 (whether the gate should also refuse a moved existing
-  tombstone, and a whole package removed or renamed bypassing it) and, on the
-  `member-reordered-category` branch, the typl reference's §17 open questions
-  14-15 (value-aware enum/enumset comparison, and whether a mid-body insert
-  should also carry `member_reordered`). The interface level of the same
+  questions 12-14 (whether the gate should also refuse a moved existing
+  tombstone; a whole package removed or renamed bypassing it; and a whole
+  interface or service removed, or a service whose form switches, bypassing it)
+  and, on the `member-reordered-category` branch, the typl reference's §17 open
+  questions 14-15 (value-aware enum/enumset comparison, and whether a mid-body
+  insert should also carry `member_reordered`). The interface level of the same
   tombstone rule — a removed interface with no service-level `reserved`, and a
   provisional interface number — waits for the lock file the rsdl decisions
   note's D-7 describes; building it now would be building something the lock
