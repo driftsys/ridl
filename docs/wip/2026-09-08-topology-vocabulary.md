@@ -13,14 +13,22 @@ consumer's topology naming of 2026-08-10. Each is right about something and none
 covers the whole range, so the words were being re-derived from scratch every
 few weeks.
 
-Nothing here is ratified. Where it contradicts rsdl's reference, the reference
-is the record and this note is the proposal.
+Nothing here is ratified. Citations of rsdl sections below use the v0.1
+numbering unless marked. Where it contradicts rsdl's reference, the reference is
+the record and this note is the proposal.
+
+**Amended 2026-09-13.** The rsdl reference was rewritten as v0.2.0 from
+[`2026-09-12-rsdl-rewrite-decisions.md`](2026-09-12-rsdl-rewrite-decisions.md),
+which amends this note. The amendments are marked in place with the decision
+that makes each one. The identity items (V-17, V-X2 and the `lock` line of §7)
+are left to the lock design.
 
 ## 1. The nouns
 
     distribution  what is versioned, signed and shipped
     machine       what it is installed on
-    process       what is isolated, started, placed, and assured
+    process       what is isolated, started, placed, and assured —
+                  not an rsdl noun (amended by D-2)
     component     what steps — one reaction, one rate, one pump
     service       what is addressed on the wire
     interface     what is contracted
@@ -69,11 +77,11 @@ AUTOSAR Adaptive too: SoftwareCluster ships, Process runs.
                  **requires** interfaces. The two sides carry different
                  types and it is not a stylistic choice.
 
-A service is the unit of publication, addressing and placement; half a service
-cannot be offered. An interface is the unit of contract, and a consumer needs a
-contract rather than a publication. Requiring a whole service would make every
-unrelated interface in it the consumer's business, which `ridl diff` would then
-report as affecting them.
+A service is the unit of publication and addressing (amended by D-3); half a
+service cannot be offered. An interface is the unit of contract, and a consumer
+needs a contract rather than a publication. Requiring a whole service would make
+every unrelated interface in it the consumer's business, which `ridl diff` would
+then report as affecting them.
 
 Three things follow. **Least privilege**: the interfacing rules grant a consumer
 only the regions of the interfaces it names. **Immunity to recomposition**: a
@@ -86,8 +94,9 @@ is what makes consuming an interface well defined at all.
                  **requires**. What code exists in a package follows that
                  package's interface imports (ADR-0002), which is what
                  keeps a package compilable alone. What is wired and what
-                 access is granted follows a component's `requires`, at
-                 service granularity. These are two questions and they were
+                 access is granted follows a component's `requires`,
+                 resolved through the owning service (amended by D-9).
+                 These are two questions and they were
                  conflated twice before being separated.
 
 OSGi separates the same two with `Import-Package` at resolve time and the
@@ -119,7 +128,7 @@ those two gaps: a real interface, and an execution context. That is why rsdl
 rmdl deferred: the two things the language must state need no model, and an
 implementation is an optional attribute (§7).
 
-    V-10  MUST   rsdl §1.3 assigns three properties to the component and
+    V-10  MUST   rsdl v0.1 §1.3 assigns three properties to the component and
                  only one belongs there.
 
                      one reaction, one activation  -> component
@@ -133,10 +142,20 @@ implementation is an optional attribute (§7).
                  thread granularity. An assurance argument citing §1.3 for
                  freedom from interference between two components in one
                  process is citing a property that level does not have.
+
+                 Amended by D-2: rsdl declares no process, so failure
+                 containment is a statement about the target — how a
+                 backend or host program groups components — and not a
+                 property rsdl records.
     V-11  MUST   Assurance level is a **process** attribute. Two components
                  at different levels cannot share an address space, and
                  placement must reject the mix. This is ADR-0018 open item
                  1 arriving as a checkable rule.
+
+                 Amended by D-2: a machine is certified for a level
+                 through `labels`, and a component that demands a higher
+                 level placed on it is a lint of the automotive profile,
+                 out of this release.
 
 **Composites are dropped.** A composite — async between its children — is not
 one reaction, so it is not a component under V-07; it is a grouping, and the
@@ -162,7 +181,7 @@ an entity where software can be deployed to", and one real ECU may run several.
 Adaptive's deployment chain is Executable -> Process -> Machine, with machine
 states deciding which processes are active.
 
-**A target is not a machine.** rsdl §7 makes a target a _logical_ execution
+**A target is not a machine.** rsdl v0.1 §7 makes a target a _logical_ execution
 context "named by capability class, never addressed", offering "node, ECU,
 partition, container slot" — two hardware grains and two isolation grains,
 undistinguished — and binds it to physical late, "potentially
@@ -259,19 +278,22 @@ catalogs compose.
 
 ## 7. What rsdl is left with
 
-Four declarations, plus one recorded artifact.
+Five declarations, all containers (amended by D-3, D-9 and D-10; the list below
+is the amended one).
 
-    system        the closure — which components are in scope, the
-                  assurance profile, the external boundary. Without it the
-                  completeness checks have no set to quantify over and the
-                  v1/v2 story has nothing to vary against.
+    system        the closure — which components are in scope. The
+                  external boundary is derived from its external
+                  components and machines; the assurance profile slot is
+                  reserved. Without it the completeness checks have no set
+                  to quantify over and the v1/v2 story has nothing to vary
+                  against.
     component     one execution context (§4): offers services, requires
-                  interfaces, may have an implementation.
-    distribution  what is versioned and shipped: contains components
-                  (assets later), depends on other distributions, carries
-                  a tier.
-    deployment    named, several per system: declares machines, places
-                  components on them.
+                  interfaces, may be external; has instances.
+    distribution  what is versioned and shipped: lists components (assets
+                  later), carries an optional tier; its installation and
+                  its dependencies are derived.
+    deployment    named, several per system: contains machines.
+    machine       lists the component instances it hosts.
 
     lock          the service-number registry — allocated and recorded,
                   never derived (ADR-0016 decision 8).
@@ -279,7 +301,7 @@ Four declarations, plus one recorded artifact.
     V-20  MUST   `may have an implementation` keeps its "may". A component
                  with none is how an external system, a stub, or a
                  not-yet-written component is named so its interfaces
-                 resolve — which is the one job rsdl §6's system root did
+                 resolve — which is the one job rsdl v0.1 §6's system root did
                  that nothing else does.
     V-21  MUST   Offer/consume and placement stay in **separate regions**.
                  Which service provides which interface does not change
@@ -298,7 +320,10 @@ The derivation that makes it worth writing: from `place` plus the offers and
 requires edges, the emitter computes the **interfacing rules** — for each
 (interface, consumer), the crossing kind, the transport, the access grant, and
 whether `Access::CHECKED` may be relaxed. Crossing kinds are four, not three:
-intra-process, inter-process on one machine, inter-machine, off-board.
+intra-process, inter-process on one machine, inter-machine, off-board. Amended
+by D-2 and D-3: placement is membership in a machine body, not `place`, and rsdl
+lowers three crossing kinds — same machine, different machine, off-board; the
+intra-process case is a backend optimisation under V-09.
 
 ## 8. Rejected names
 
@@ -314,7 +339,7 @@ naming pass.
                   catalog itself; also APK. The in-band descriptor puts a
                   distribution message in the same IR as the source
                   package, which is a permanent tax.
-    bundle        clean, and rsdl §9 already defines it with RSDL-901 and
+    bundle        clean, and rsdl v0.1 §9 defined it with RSDL-901 and
                   RSDL-902 attached — but `distribution` reads better to
                   the reviewers this has to survive.
     pack          short, and XPK shares its morphology, but collides with
@@ -336,7 +361,9 @@ naming pass.
 payload in one catalog name a type in another? "Easy at compiler-design time,
 awful to retrofit. A question for ridl, not answerable here." A framework
 catalog whose types two programme catalogs use hits this on day one, so V-16's
-one-package-one-catalog rule makes it urgent rather than hypothetical.
+one-package-one-catalog rule makes it urgent rather than hypothetical. Answered
+by D-8: allowed, and a catalog's hash covers every type its interfaces reach,
+wherever declared.
 
 **V-X2 — whether a service number is needed at all on this transport.** The
 routing key is (slot, interface, member), with no service in it. ADR-0016
@@ -350,7 +377,10 @@ join components later. Keep the member kind explicit in the grammar even while
 `component` is the only one, so adding `asset` is additive; and do not write "a
 member belongs to exactly one distribution" as an invariant, because the asset
 technote's override surfaces will need resolution order. Android's Runtime
-Resource Overlay is the prior art, on this platform.
+Resource Overlay is the prior art, on this platform. Answered by D-11, confirmed
+2026-09-13: no kind keyword; a member line is a bare reference whose kind is its
+declaration's, so `asset` lists additively. Reopens if a member kind ever has to
+exist without a declaration.
 
 **V-X4 — cardinality and policy on `requires`.** OSGi's Declarative Services
 puts both on a reference: cardinality (0..1, 1..1, 0..n) and policy (static,

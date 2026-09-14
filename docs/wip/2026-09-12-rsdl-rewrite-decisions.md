@@ -12,6 +12,36 @@ vocabulary note and
 [`2026-09-12-release-scope-and-plugin-system-design.md`](2026-09-12-release-scope-and-plugin-system-design.md)
 §3.1, §3.8 and §3.13.
 
+**Superseded as the record, 2026-09-13.** The rsdl reference v0.2.0
+(`docs/specification/rsdl-language-reference.md`) states this note's language
+and is now the record. Where the two differ, the reference governs. The
+differences, each agreed with Sebastien on 2026-09-13:
+
+- **Imports** follow typl §3.2 unchanged: `import veh.adas.LaneAssist` or a
+  fully qualified name, and a service is named by its global dotted name. §2's
+  `import veh.adas` and its rule that a component may name only what its file
+  imports are withdrawn.
+- **One reference per `offers` or `requires` line.** §2's
+  `requires CruiseControl, LaneAssist` breaks R8, which makes a comma inside
+  `{ }` a separator between body items.
+- **One system per workspace** is stated without a citation: ADR-0002, which D-9
+  cites, does not state it.
+- **Rules this note leaves open are settled in the reference**: a bare component
+  name in a machine body places every instance; an inline-shape service's name
+  is the name of its one interface for `requires`; no two services in the
+  closure list one interface; distribution membership; external machines and the
+  surface set; a producer's write side is read from the producers fact, so D-9's
+  grant wording stands, and the region an interface reaches is its own package's
+  catalog, not the owning service's; an `.rsdl` file holds only the rsdl
+  declarations; `ridl diff` lists closure and line changes under a second
+  heading, "composition changed", beside D-11's "placement changed"; a backend
+  key is spelled `someip.serviceId`, because typl's identifiers admit no
+  underscore.
+- **Smaller differences**: `let` stays in the family registry, because rmdl uses
+  it, although §2 lists it as retired; `deprecated` is accepted on the five
+  declarations beside the three rsdl keys and `labels`; and rsdl uses two of the
+  attribute block's three forms, flag and assignment, where D-6 says three.
+
 Why it exists: a recap of rsdl against the vocabulary note found five points the
 note answers twice or not at all — the process noun, what is placed, posture,
 the identity registry, and cross-catalog references — plus smaller ones. They

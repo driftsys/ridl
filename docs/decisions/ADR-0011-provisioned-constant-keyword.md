@@ -94,17 +94,17 @@ the row that does not need profile-specific words.
 
 ## Alternatives considered
 
-| Candidate     | Verdict  | Reason                                                                                                            |
-| ------------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
-| `fixed`       | chosen   | already in the registry as uxdl's word; costs zero new entries and removes one; no compile-time-constant prior    |
-| `final`       | rejected | the Java and Kotlin prior points at a compile-time constant, which is the wrong notion                            |
-| `value`       | rejected | the general form calls shape 1 the value declaration; the word names the declaration shape, not the kind          |
-| `option`      | rejected | typl owns `?` optionality, and configuration vocabulary reads "option" as a settable preference                   |
-| `preset`      | rejected | consumer-electronics presets are user-changeable and re-selectable, which inverts the semantics                   |
-| `static`      | rejected | the family already uses "static" for wire posture — a static bus against a discovered service (ridl §17, rsdl §8) |
-| `frozen`      | rejected | `ridlc --frozen` is the lockfile-pinning flag (MANI-103, MANI-104)                                                |
-| `constant`    | rejected | one letter away from typl's `const`, for a different concept                                                      |
-| `provisioned` | rejected | names the origin but not the immutability, and is long                                                            |
+| Candidate     | Verdict  | Reason                                                                                                             |
+| ------------- | -------- | ------------------------------------------------------------------------------------------------------------------ |
+| `fixed`       | chosen   | already in the registry as uxdl's word; costs zero new entries and removes one; no compile-time-constant prior     |
+| `final`       | rejected | the Java and Kotlin prior points at a compile-time constant, which is the wrong notion                             |
+| `value`       | rejected | the general form calls shape 1 the value declaration; the word names the declaration shape, not the kind           |
+| `option`      | rejected | typl owns `?` optionality, and configuration vocabulary reads "option" as a settable preference                    |
+| `preset`      | rejected | consumer-electronics presets are user-changeable and re-selectable, which inverts the semantics                    |
+| `static`      | rejected | the family already uses "static" for wire posture — a static bus against a discovered service (ridl §17, rsdl §12) |
+| `frozen`      | rejected | `ridlc --frozen` is the lockfile-pinning flag (MANI-103, MANI-104)                                                 |
+| `constant`    | rejected | one letter away from typl's `const`, for a different concept                                                       |
+| `provisioned` | rejected | names the origin but not the immutability, and is long                                                             |
 
 ## Consequences
 

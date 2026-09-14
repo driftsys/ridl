@@ -293,17 +293,20 @@ be generated, and in what order", which is what this record answers.
 
 12. **Ring depth derives; subscriber count comes from the wiring graph.**
     `depth ≈ ceil((service_period + jitter) / rate_floor)`, where the rate floor
-    is ridl §9's `min`, the service period comes from rsdl — which needs it for
-    RSDL-801 regardless — and jitter is a target property with one conservative
-    default for real-time platforms and one for the rest, calibrated against
-    measurement later. An rsdl override covers consumers whose pattern the rates
-    do not capture; an underivable or infeasible depth is a deploy-time error.
+    is ridl §9's `min`, the service period comes from rsdl — where RSDL-801, the
+    check that needs it, is reserved until timing feasibility reopens (rsdl §12)
+    — and jitter is a target property with one conservative default for
+    real-time platforms and one for the rest, calibrated against measurement
+    later. An rsdl override covers consumers whose pattern the rates do not
+    capture; an underivable or infeasible depth is a deploy-time error.
 
     Subscriber count is the connection count in static posture and a declared
-    bound in discovered posture (rsdl §8.1). Signals need no depth — they are
-    the store. **The percentile derives from the interaction's safety integrity
-    level**: above a threshold, size for worst case and treat overflow as a
-    fault with a defined reaction rather than as telemetry.
+    bound in discovered posture. rsdl derives no posture in this release (rsdl
+    §12), so this part of the rule waits for posture derivation to reopen.
+    Signals need no depth — they are the store. **The percentile derives from
+    the interaction's safety integrity level**: above a threshold, size for
+    worst case and treat overflow as a fault with a defined reaction rather than
+    as telemetry.
 
 13. **A bridge keeps a domain-mediated reference path with generated streaming
     transcoders beside it.** Decode to the validated domain type and re-encode
@@ -546,9 +549,10 @@ be generated, and in what order", which is what this record answers.
 
 ## Open
 
-1. **rsdl has no protection-domain concept.** §7 places components on targets;
-   nothing says two components share a memory protection domain, which is the
-   boundary decision 10 derives from.
+1. **rsdl has no protection-domain concept.** §9 places component instances on
+   machines, and §12 reserves any grouping under a machine; nothing says two
+   components share a memory protection domain, which is the boundary decision
+   10 derives from.
 2. **Whether the assurance zone is one attribute or two.** Safety and cyber
    collapse for decision 10 but partition a system differently — safety by
    criticality, security by exposure — and a QM infotainment stack is the
@@ -613,8 +617,9 @@ be generated, and in what order", which is what this record answers.
   the envelope, §3.4 availability and RIDL-505, §4.2 direction, §4.3 coalescing,
   §4.4 and §4.5 last-value and provenance, §6.1 and §6.2 the command
   acknowledgment, §9 timing, §11 identity, §14.5 coherence
-- [rsdl language reference](../specification/rsdl-language-reference.md) — §4
-  wiring, §7 targets and placement, §8 transport and posture, RSDL-801
+- [rsdl language reference](../specification/rsdl-language-reference.md) — §9
+  placement, §10 crossing kinds, §12 reserved posture and RSDL-801, §13 what the
+  lowering produces
 - [`docs/ROADMAP.md`](../ROADMAP.md) — E3.1, E4.5, E5.10, E5.12, E9.8, E9.9,
   E9.11
 - `crates/ridl-backend-rust/src/interact.rs` — `vocabulary()` at line 81

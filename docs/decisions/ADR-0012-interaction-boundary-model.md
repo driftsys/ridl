@@ -332,10 +332,12 @@ review and retracted for exactly this reason (decision 10).
     the review and retracted. Every candidate decomposes: no-acknowledgment-of-
     effect is already ridl `command`; stuck, drift, and disconnection are ridl
     §4.5 invalid-state provenance; plausibility is typl ranges plus `require`;
-    tolerance is a typl type property; redundancy and voting are rsdl wiring;
-    calibration parameters are `fixed`; transfer functions are rmdl; sampling
-    and aliasing are ridl §9 timing. What survives is the obligation set of
-    decision 3, which is shared with the person boundary and therefore core.
+    tolerance is a typl type property; redundancy is derived by rsdl from a
+    component's instances, and voting is arbitration rsdl reserves for the
+    runtime (rsdl §7, §12); calibration parameters are `fixed`; transfer
+    functions are rmdl; sampling and aliasing are ridl §9 timing. What survives
+    is the obligation set of decision 3, which is shared with the person
+    boundary and therefore core.
 
 11. **`fetch` is removed and does not reappear.** Three independent grounds, in
     Context and in decision 4's gap analysis. On-demand data at a user boundary

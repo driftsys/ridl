@@ -704,19 +704,22 @@ contracts_ rather than declared.)
 model does **not** name, realize, or expose a contract. It is a pure reaction:
 `(O, S) = M(I, S)`, a signature of typed input and output flows with internal
 state. Binding that reaction to a ridl `service` is entirely an **rsdl
-component**'s job (rsdl §3–§4). This purifies the layer boundary: ridl declares
-contracts, rmdl computes, rsdl connects — and rmdl references ridl only for the
-_kinds_ (`signal`/`event`) and typl for _types_, never for contracts.
+component**'s job. rsdl v0.1 bound it with application notation
+(`docs/archive/rsdl-language-reference-v0.1.md` §3–§4); the rewritten rsdl has
+no binding notation and reserves it until rmdl is scheduled (rsdl §12). This
+purifies the layer boundary: ridl declares contracts, rmdl computes, rsdl
+connects — and rmdl references ridl only for the _kinds_ (`signal`/`event`) and
+typl for _types_, never for contracts.
 
 What used to be "realization" is now three things the component supplies from
 outside, none of them in the model:
 
-| Concern                                   | Where it lives now                                                                                                                                                   |
-| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| which contract member each flow maps to   | the component's `provides`/`requires` wiring (rsdl §4) — by application notation `(engaged, target) = M(current, brake, lever)`                                      |
-| output **timing** (`@10ms`, refresh, TTL) | the **service** the component provides (ridl §14.5); its bounds drive the model's output-deadline demand (§6.1). The model itself carries no timing                  |
-| output **init value**                     | the bound channel's init (ridl §4.4); if the model also writes `init out = …`, the component checks the two agree (a boundary check in rsdl, not here)               |
-| contract `require`/`ensure`               | the service's clauses, compiled by the component as observers over the bound flows (§9). A model may _also_ carry its own `require`/`ensure` (§9.2); the two compose |
+| Concern                                   | Where it lives now                                                                                                                                                                                          |
+| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| which contract member each flow maps to   | the component's binding — application notation `(engaged, target) = M(current, brake, lever)` in rsdl v0.1 §4 (archived); reserved in the rewritten rsdl (rsdl §12)                                         |
+| output **timing** (`@10ms`, refresh, TTL) | the **service** the component offers (ridl §14.5); its bounds drive the model's output-deadline demand (§6.1). The model itself carries no timing                                                           |
+| output **init value**                     | the bound channel's init (ridl §4.4); if the model also writes `init out = …`, the component checks the two agree (a boundary check in rsdl once binding returns, rsdl §12; not here)                       |
+| contract `require`/`ensure`               | the service's clauses, compiled by the component, once rsdl binding returns (rsdl §12), as observers over the bound flows (§9). A model may _also_ carry its own `require`/`ensure` (§9.2); the two compose |
 
 Consequences for the model author: write inputs and outputs as plain kinded
 flows; do not annotate timing (there is nothing to annotate — a model reacts to
@@ -886,7 +889,8 @@ Coded `RMDL-`, same lifecycle rules as typl §16.
 | RMDL-303 | input flow never read                                                              | warning  |
 
 (Contract mapping, timing transfer, and init-consistency checks moved to rsdl,
-where the component binds a reaction to a service — rsdl §4, §8.)
+where the component binds a reaction to a service — reserved in rsdl §12 until
+rmdl is scheduled.)
 
 ### 11.4 Boundaries (RMDL-4xx / 5xx)
 
@@ -1204,7 +1208,7 @@ rmdl-specific:
 | **event flow**             | an occurrence-kind flow: reads as `T?` — present with payload when the occurrence arrived this step, absent otherwise; raised by `emit`, never held                                                                                                                   |
 | **`when` equation**        | the event-triggered equation block (GRust heritage): ordered branches on `init` / `e?` / rising edges; first match runs; signals it defines hold, events it emits don't                                                                                               |
 | **`case` equation**        | the mode-dispatch equation block (GRust's match equation): selects an equation set by a per-step value; exactly one branch every step, total definition, no hold — `when`'s opposite discipline                                                                       |
-| **`emit`**                 | raises an event flow with a payload inside a `when` branch — the only way behaviour produces occurrences; a side effect only once rsdl binds the event to a command (§5.7)                                                                                            |
+| **`emit`**                 | raises an event flow with a payload inside a `when` branch — the only way behaviour produces occurrences; a side effect only once the event is bound to a command (§5.7), a binding rsdl reserves (rsdl §12)                                                          |
 | **`last`**                 | the value of a flow at the previous step — the only memory in the language; total, thanks to seeds                                                                                                                                                                    |
 | **`init` (equation)**      | the seed: what `last x` yields at the first step — explicit (`init x = e`) or implicit from the channel init value (§5.3)                                                                                                                                             |
 | **step**                   | one atomic synchronous reaction — inputs snapshotted, equations evaluated, outputs published; **scheduled by the runtime on inputs and constraints, never by polling**                                                                                                |

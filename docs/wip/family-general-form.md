@@ -97,13 +97,13 @@ A named group of members, with an optional relation clause.
 kw Name relation? [ attrs ]? "{" member* "}"
 ```
 
-| Profile        | Instances                                                     | Relation                                                       |
-| -------------- | ------------------------------------------------------------- | -------------------------------------------------------------- |
-| typl           | `struct`, `enum`, `enumset`, `union`                          | `: Backing` (enumset derivation — a true backing, hence colon) |
-| ridl           | `interface`                                                   | —                                                              |
-| uxdl           | `view`                                                        | `states EnumRef`                                               |
-| rmdl (planned) | `model`                                                       | `realizes InterfaceRef`                                        |
-| rsdl (future)  | `instance x: Type` in manifest — colon again means "typed as" |                                                                |
+| Profile        | Instances                                                      | Relation                                                       |
+| -------------- | -------------------------------------------------------------- | -------------------------------------------------------------- |
+| typl           | `struct`, `enum`, `enumset`, `union`                           | `: Backing` (enumset derivation — a true backing, hence colon) |
+| ridl           | `interface`                                                    | —                                                              |
+| uxdl           | `view`                                                         | `states EnumRef`                                               |
+| rmdl (planned) | `model`                                                        | `realizes InterfaceRef`                                        |
+| rsdl           | `system`, `component`, `distribution`, `deployment`, `machine` | `for SystemRef` (`deployment`)                                 |
 
 ```ridl
 enumset WarningFlags: Warning
@@ -112,8 +112,20 @@ model CruiseController realizes CruiseControl { … }
 ```
 
 **Relation rule:** `:` is used when the relation is _backed-by / typed-as_
-(enumset derivation, instance typing); every other relationship gets a named
-keyword clause (`states`, `realizes`). Never a second meaning for the colon.
+(enumset derivation); every other relationship gets a named keyword clause
+(`states`, `realizes`, rsdl's `for`). Never a second meaning for the colon.
+
+**Two member forms** appear inside container bodies and have precedent in more
+than one profile (amended 2026-09-13 by the rsdl rewrite):
+
+- the **bare member line** — a reference, not a declaration. ridl's `service`
+  lists its interfaces by bare name (ridl §14.5); rsdl's `system`,
+  `distribution` and `machine` bodies list their members this way;
+- the **keyword-plus-reference line** — a keyword followed by one reference.
+  rsdl's `offers X` and `requires X`, ridl's `reserved Name`, and the file-level
+  `import` have this form.
+
+In rsdl, both forms may carry the attribute block after the reference (§4.4).
 
 ---
 
@@ -127,8 +139,8 @@ signal.
 
 **R2 — The colon invariant.** `:` means exactly one thing everywhere it appears:
 _is typed as / backed by_. Declarations, parameters, tuple fields, union arms,
-map entries (`[Label: Name; 0..32]`), enumset derivation, callable returns, rsdl
-instance typing. No other use exists or may be added.
+map entries (`[Label: Name; 0..32]`), enumset derivation, callable returns. No
+other use exists or may be added.
 
 **R3 — Position-typed brackets.** `[ … ]` in **type position** is _data shape_ —
 a value constraint (`[0..250 step 1]`) or a collection bound (`[T; 0..32]`,
@@ -210,7 +222,12 @@ attribute  = key                              (* flag       — persist         
 
 Every attribute starts with its key — the reader rule is uniform. `const_value`
 is a literal, constant reference, or parenthesised list of same; `expr` is the
-expr-core surface (guaranteed subset until the core lands, ridl §13).
+expr-core surface (guaranteed subset until the core lands, ridl §13). rsdl
+widens `const_value` in two positions, the value and the list item, to admit a
+bare name: `instances = (primary, backup)` lists camelCase instance names, which
+are neither literals nor constant references, and a misspelt `instances = solo`
+or a declared `Unit` still parses so that its rsdl diagnostic reports it
+(amended 2026-09-13, rsdl reference Appendix B).
 
 ### 4.3 One production, allow-lists by diagnostics
 
@@ -229,6 +246,9 @@ _semantic_ allow-list enforced by diagnostics, not four grammar rules:
 | `invariant`  | predicate  | `struct` (future, expr-core)           | cross-field validation                     |
 | `labels`     | assignment | any declaration                        | assurance profiles, injection gating       |
 | `deprecated` | assignment | any declaration                        | lint, generated deprecation metadata       |
+| `instances`  | assignment | rsdl `component`                       | instance naming, placement, redundancy     |
+| `external`   | flag       | rsdl `component`, `machine`            | placement rules, surface set, grants       |
+| `tier`       | assignment | rsdl `distribution`                    | RSDL-901 tier inversion                    |
 
 Proposed diagnostics (shared form namespace): unknown attribute key (error); key
 not allowed on this declaration kind (error); duplicate key in one block

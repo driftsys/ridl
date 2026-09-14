@@ -69,17 +69,17 @@ archive.
   things carrying wire identity (V-02). Three trees rather than one hierarchy;
   offer a service, consume an interface; generation follows imports while wiring
   follows `requires`. A component is a sans-IO synchronous step machine with a
-  sync or async pump — which corrects rsdl §1.3, whose three properties belong
-  to three different levels, and drops composites. Machine is verified against
-  AUTOSAR Adaptive ("quasi a virtualized ECU-HW"); a `target` is not one, and
-  `RTE` names the layer `ridl-rt` occupies. Restates the consumer's catalog
-  record §2/§5 and adds: a catalog is declared in ridl because it owns an id
-  space and a hash, one package one catalog, ids allocated-and-recorded per
-  package, and a generation filter produces a view and never a catalog. Leaves
-  rsdl with four declarations plus a lock. Full mapping table to Adaptive,
-  Classic and OSGi, and the rejected names with their reasons. **Not ratified**;
-  six opens, including the cross-catalog references question and what a breaking
-  _deployment_ change is.
+  sync or async pump — which corrects rsdl v0.1 §1.3, whose three properties
+  belong to three different levels, and drops composites. Machine is verified
+  against AUTOSAR Adaptive ("quasi a virtualized ECU-HW"); a `target` is not
+  one, and `RTE` names the layer `ridl-rt` occupies. Restates the consumer's
+  catalog record §2/§5 and adds: a catalog is declared in ridl because it owns
+  an id space and a hash, one package one catalog, ids allocated-and-recorded
+  per package, and a generation filter produces a view and never a catalog.
+  Leaves rsdl with four declarations plus a lock. Full mapping table to
+  Adaptive, Classic and OSGi, and the rejected names with their reasons. **Not
+  ratified**; six opens, including the cross-catalog references question and
+  what a breaking _deployment_ change is.
 - **2026-09-12-release-scope-and-plugin-system-design.md** — the design note of
   the 2026-09-12 re-scoping session: the release scope (typl, ridl, rsdl
   finalized; rmdl deferred; Rust with three payload encodings and TypeScript
