@@ -33,7 +33,8 @@ check:
     prim fmt --check .
     prim lint .
 
-# Check that the rustc about to run is the version rust-toolchain.toml pins.
+# Check that the rustc about to run is the version rust-toolchain.toml pins,
+# and that any `rust-version` a workspace manifest sets names that same pin.
 #
 # It compares versions, and only versions. It does not detect an override as
 # such: `RUSTUP_TOOLCHAIN=stable` passes today because `stable` is 1.95.0, which
@@ -41,9 +42,12 @@ check:
 # not which alias selected it. What it does catch is every way the version can
 # end up wrong: no rustup at all, in which case this file is read by nobody and
 # ignored without a word; a `RUSTUP_TOOLCHAIN` or a `rustup override set`
-# naming a different release; or a pin nobody installed. Any of those leaves
-# `cargo fmt --all --check` measuring a rustfmt other than the one CI applies,
-# and reporting green against it.
+# naming a different release; a pin nobody installed; or a `rust-version` in a
+# workspace manifest (the root, `crates/*`, `xtask`) left at another version
+# after the pin moved. Any of those leaves `cargo fmt --all --check` measuring a
+# rustfmt other than the one CI applies, and reporting green against it, or
+# leaves a published crate's `rust-version` naming a toolchain that the gate did
+# not build and test it with.
 toolchain-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -62,6 +66,15 @@ toolchain-check:
         echo "toolchain-check: an alias is the gap the pin exists to close (ADR-0009)." >&2
         exit 1
     fi
+    for manifest in Cargo.toml crates/*/Cargo.toml xtask/Cargo.toml; do
+        [ -f "$manifest" ] || continue
+        rv="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")"
+        if [ -n "$rv" ] && [ "$rv" != "$pinned" ]; then
+            echo "toolchain-check: $manifest sets rust-version = \"$rv\"; rust-toolchain.toml pins $pinned." >&2
+            echo "toolchain-check: change both to the same version in the same commit (ADR-0009)." >&2
+            exit 1
+        fi
+    done
     if ! command -v rustc >/dev/null 2>&1; then
         echo "toolchain-check: rustc is required and is not on PATH." >&2
         echo "toolchain-check: install rustup (https://rustup.rs); it applies the pin." >&2

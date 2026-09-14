@@ -101,7 +101,8 @@ member; rsdl is the apex.
 
     just fmt             reformat connective tissue with prim
     just check           lint gate — prim fmt --check + prim lint (no writes)
-    just toolchain-check the running toolchain is the one rust-toolchain.toml pins
+    just toolchain-check the running toolchain is the one rust-toolchain.toml pins,
+                         and any rust-version a crate sets names the same version
     just gate-parity     CI invokes every member of just build
     just install-check   end-to-end test of install.sh (and install.ps1's dry
                          run) against a fixture release

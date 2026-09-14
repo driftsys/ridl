@@ -12,11 +12,13 @@
 #
 # Bumping it is a deliberate PR: change `channel`, run `just build`, repair
 # whatever the new rustfmt and clippy report, and land the repairs in the same
-# commit as the bump. The version lives here and in no other file.
+# commit as the bump. The version lives here; a published crate's
+# `rust-version` in its own Cargo.toml repeats it, and `just toolchain-check`
+# compares the two, so bumping the pin changes both in one commit.
 #
-# `just toolchain-check` fails when the running toolchain is not this one —
-# without rustup this file is silently ignored, and a silently ignored pin is
-# no pin at all.
+# `just toolchain-check` fails when the running toolchain is not this one, or
+# when a crate's `rust-version` names a different version — without rustup
+# this file is silently ignored, and a silently ignored pin is no pin at all.
 
 [toolchain]
 channel = "1.95.0"
