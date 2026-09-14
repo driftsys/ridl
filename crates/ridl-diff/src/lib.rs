@@ -122,6 +122,17 @@ declare_categories! {
         /// A package-level declaration, interface, or service present only in the
         /// old snapshot.
         DeclRemoved,
+        /// A surviving composite member whose slot in the body changed — a
+        /// struct field, enum value, enum-set bit or union arm — reported only
+        /// when both bodies hold the same member names. For a struct field or
+        /// union arm the slot is the ordinal, which is wire identity (typl
+        /// §7.4), and the detail carries the old and new ordinal. An enum value
+        /// or enum-set bit carries an explicit number instead (typl §8, §9),
+        /// but the walk compares positions, not those numbers, so a textual
+        /// reorder of an enum or enum-set body is reported the same way,
+        /// conservatively, even when no number changed; its detail carries the
+        /// old and new position.
+        MemberReordered,
         /// A new interaction added at the end of an interface (no earlier
         /// interaction shifted).
         InteractionAppended,
@@ -375,6 +386,7 @@ pub fn category_word(category: Category) -> &'static str {
     match category {
         Category::DeclAdded => "decl_added",
         Category::DeclRemoved => "decl_removed",
+        Category::MemberReordered => "member_reordered",
         Category::InteractionAppended => "interaction_appended",
         Category::InteractionInserted => "interaction_inserted",
         Category::InteractionReordered => "interaction_reordered",

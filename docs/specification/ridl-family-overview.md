@@ -187,7 +187,10 @@ By home; see each reference for full statements.
   canonical encoding · **explicit wire-width floor (deferred `wire` clause,
   §17.11)** · **integer-backed unit types (§17.12)** · **what a `string` is made
   of and how it is encoded (§17.13 — to be resolved as normative text in §4 by
-  the finalization pass, not deferred)**
+  the finalization pass, not deferred)** · **whether `ridl-diff` should compare
+  `enum`/`enumset` reorder by explicit value instead of position (§17.14)** ·
+  **whether a mid-body insert should also report `member_reordered` for the
+  members it shifts (§17.15)**
 - **ridl §17**: selective broadcasts · actions/long-operations idiom ·
   mid-stream invalid policy · reflection service · failure-management spec (with
   safety/HA properties direction) — the QoS boundary question is answered by the

@@ -43,6 +43,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use ridl_ir::v2;
 
+use crate::classify::{struct_slots, union_slots};
 use crate::{Category, Change, emit};
 
 /// Walks two matched packages, appending every difference to `changes`.
@@ -110,36 +111,44 @@ fn diff_decl(pkg: &str, name: &str, old: &v2::Decl, new: &v2::Decl, changes: &mu
         (Some(Kind::StructDef(a)), Some(Kind::StructDef(b))) => {
             diff_composite(
                 &path,
-                struct_member_names(a),
-                struct_member_names(b),
+                struct_slots(a),
+                struct_slots(b),
+                "ordinal",
                 a == b,
+                || struct_ignoring_order(a) == struct_ignoring_order(b),
                 changes,
             );
         }
         (Some(Kind::EnumDef(a)), Some(Kind::EnumDef(b))) => {
             diff_composite(
                 &path,
-                enum_value_names(a),
-                enum_value_names(b),
+                positions(&a.values),
+                positions(&b.values),
+                "position",
                 a == b,
+                || enum_ignoring_order(a) == enum_ignoring_order(b),
                 changes,
             );
         }
         (Some(Kind::EnumSetDef(a)), Some(Kind::EnumSetDef(b))) => {
             diff_composite(
                 &path,
-                enum_set_bit_names(a),
-                enum_set_bit_names(b),
+                positions(&a.bits),
+                positions(&b.bits),
+                "position",
                 a == b,
+                || enum_set_ignoring_order(a) == enum_set_ignoring_order(b),
                 changes,
             );
         }
         (Some(Kind::UnionDef(a)), Some(Kind::UnionDef(b))) => {
             diff_composite(
                 &path,
-                union_arm_names(a),
-                union_arm_names(b),
+                union_slots(a),
+                union_slots(b),
+                "ordinal",
                 a == b,
+                || union_ignoring_order(a) == union_ignoring_order(b),
                 changes,
             );
         }
@@ -188,10 +197,24 @@ fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec
 }
 
 /// A coarse comparison of a composite type body (struct fields, enum values,
-/// enum-set bits, union arms) by member name. A member present on one side is
-/// an addition or removal; a member changed in place is a single
-/// `ConstraintChanged`. The classifier reads the bodies themselves to decide an
-/// addition's direction, so the append-only rule of typl §7.4 is judged there.
+/// enum-set bits, union arms) by member name, each member paired with its
+/// slot. A member present on one side is an addition or removal, and the
+/// comparison stops there: a reorder in the same edit as an addition or a
+/// removal reports no `MemberReordered`. The classifier reads the bodies
+/// themselves to decide an addition's direction, so the append-only rule of
+/// typl §7.4 is judged there.
+///
+/// With the same member names on both sides, a member whose slot changed is
+/// one `MemberReordered` each, carrying the old and new slot — with the
+/// container's `ConstraintChanged` as well when the body's content also
+/// changed — and a body changed in place with every slot untouched is the
+/// container's `ConstraintChanged` alone. The slot is the ordinal for a struct
+/// field or union arm, which is the wire identity (typl §7.4), so a field a
+/// moved tombstone shifted is reported even though the live names kept their
+/// order. An enum value or enum-set bit carries an explicit number instead, and
+/// its slot here is its 1-based position in the body: the comparison is over
+/// positions, not those numbers, so a textual reorder is reported the same way
+/// (typl §17.14). `slot` names the unit in the rendered detail.
 ///
 /// **Known limitation (carried debt).** This comparison is keyed on member
 /// names and never reads the body's `reserved` list, so it cannot tell a bare
@@ -207,18 +230,20 @@ fn diff_type_def(path: &str, a: &v2::TypeDef, b: &v2::TypeDef, changes: &mut Vec
 /// FlatBuffers union-discriminant coupling that must move with it.
 fn diff_composite(
     path: &str,
-    old_names: Vec<String>,
-    new_names: Vec<String>,
+    old: Vec<(String, i64)>,
+    new: Vec<(String, i64)>,
+    slot: &str,
     equal: bool,
+    equal_ignoring_order: impl FnOnce() -> bool,
     changes: &mut Vec<Change>,
 ) {
     if equal {
         return;
     }
-    let old_set: BTreeSet<&String> = old_names.iter().collect();
-    let new_set: BTreeSet<&String> = new_names.iter().collect();
+    let old_set: BTreeSet<&String> = old.iter().map(|(name, _)| name).collect();
+    let new_set: BTreeSet<&String> = new.iter().map(|(name, _)| name).collect();
     let mut structural = false;
-    for name in &new_names {
+    for (name, _) in &new {
         if !old_set.contains(name) {
             emit(
                 changes,
@@ -230,7 +255,7 @@ fn diff_composite(
             structural = true;
         }
     }
-    for name in &old_names {
+    for (name, _) in &old {
         if !new_set.contains(name) {
             emit(
                 changes,
@@ -242,7 +267,44 @@ fn diff_composite(
             structural = true;
         }
     }
-    if !structural {
+    if structural {
+        return;
+    }
+    // The member names match on both sides, so the difference is a reorder of
+    // the body, a member changed in place, or both. A reorder is its own
+    // category: for struct fields and union arms the ordinal is wire identity,
+    // and an enum or enumset body is reported the same way conservatively,
+    // because this walk compares member positions rather than the explicit
+    // values. Reporting a reorder as a constraint edit sends the reader looking
+    // for a constraint that did not change (driftsys/ridl#314). None of this
+    // changes removal matching, so the carried debt above — and
+    // driftsys/ridl#302's coupling — stays exactly as it is.
+    let mut moved = false;
+    for (name, new_slot) in &new {
+        let (_, old_slot) = old
+            .iter()
+            .find(|(old_name, _)| old_name == name)
+            .expect("the name sets are equal, so every new name appears in the old body");
+        if old_slot != new_slot {
+            moved = true;
+            emit(
+                changes,
+                format!("{path}/{name}"),
+                Category::MemberReordered,
+                Some(format!("{slot} {old_slot}")),
+                Some(format!("{slot} {new_slot}")),
+            );
+        }
+    }
+    // With no slot moved, the bodies differ in content only: a member changed
+    // in place, or a tombstone list changed without shifting a live member. A
+    // reorder can also arrive in the same edit as a change to a member's
+    // content or to the container itself. Comparing the bodies with member
+    // order removed tells the two apart: when they still differ, the
+    // container's `ConstraintChanged` is reported as well, after the
+    // per-member lines, so the content change is not hidden behind the
+    // reorder.
+    if !moved || !equal_ignoring_order() {
         emit(
             changes,
             path.to_string(),
@@ -1078,26 +1140,89 @@ fn reserved_shapes(service: &v2::Service) -> BTreeMap<&str, u32> {
         .collect()
 }
 
-fn struct_member_names(def: &v2::StructDef) -> Vec<String> {
-    def.members
+/// Enum values or enum-set bits, each with its 1-based position in the body.
+/// The explicit number is not read here: the reorder comparison is over
+/// positions, conservatively (typl §17.14).
+fn positions(values: &[v2::EnumValue]) -> Vec<(String, i64)> {
+    values
         .iter()
-        .filter_map(|member| match &member.member {
-            Some(v2::struct_member::Member::Field(field)) => Some(field.name.clone()),
-            _ => None,
-        })
+        .zip(1..)
+        .map(|(value, position)| (value.name.clone(), position))
         .collect()
 }
 
-fn enum_value_names(def: &v2::EnumDef) -> Vec<String> {
-    def.values.iter().map(|value| value.name.clone()).collect()
+// The four `*_ignoring_order` helpers return a body with its member order
+// removed, so that `==` over two of them asks whether the bodies are equal
+// once order is ignored — the question `diff_composite` needs to tell a pure
+// reorder from a reorder combined with a content change. Each removes exactly
+// two things from what `a == b` compares: the order of the members, and every
+// field whose value is derived from position (the 1-based `ordinal` of a
+// struct field, a union arm, and a struct or union tombstone — typl §7.4).
+// Everything else stays in the comparison: member names, types, inits, docs,
+// labels, deprecations, the explicit value of an enum value or enum-set bit,
+// the retired identity of a tombstone, and the container's own fields.
+
+/// A struct body with its member order removed (see above). Fields and
+/// tombstones share the `members` list and one ordinal counter, so both have
+/// the ordinal cleared and both are sorted, fields before tombstones.
+fn struct_ignoring_order(def: &v2::StructDef) -> v2::StructDef {
+    use v2::struct_member::Member;
+    let mut def = def.clone();
+    for member in &mut def.members {
+        match &mut member.member {
+            Some(Member::Field(field)) => field.ordinal = 0,
+            Some(Member::Reserved(reserved)) => reserved.ordinal = 0,
+            None => {}
+        }
+    }
+    def.members.sort_by_key(|member| match &member.member {
+        Some(Member::Field(field)) => (0, Some(field.name.clone()), None),
+        Some(Member::Reserved(reserved)) => (1, reserved.name.clone(), reserved.value),
+        None => (2, None, None),
+    });
+    def
 }
 
-fn enum_set_bit_names(def: &v2::EnumSetDef) -> Vec<String> {
-    def.bits.iter().map(|bit| bit.name.clone()).collect()
+/// An enum body with its member order removed (see above). An enum value
+/// carries no ordinal — its number is explicit content and stays compared —
+/// and an enum tombstone's ordinal is always 0, so only the two lists are
+/// sorted.
+fn enum_ignoring_order(def: &v2::EnumDef) -> v2::EnumDef {
+    let mut def = def.clone();
+    def.values.sort_by_key(|value| value.name.clone());
+    def.reserved.sort_by_key(tombstone_key);
+    def
 }
 
-fn union_arm_names(def: &v2::UnionDef) -> Vec<String> {
-    def.arms.iter().map(|arm| arm.name.clone()).collect()
+/// An enum-set body with its member order removed (see above). A bit carries
+/// no ordinal — its position number is explicit content and stays compared —
+/// so only the list is sorted.
+fn enum_set_ignoring_order(def: &v2::EnumSetDef) -> v2::EnumSetDef {
+    let mut def = def.clone();
+    def.bits.sort_by_key(|bit| bit.name.clone());
+    def
+}
+
+/// A union body with its member order removed (see above). Arms and
+/// tombstones are two lists over one ordinal counter, so both have the
+/// ordinal cleared and both are sorted.
+fn union_ignoring_order(def: &v2::UnionDef) -> v2::UnionDef {
+    let mut def = def.clone();
+    for arm in &mut def.arms {
+        arm.ordinal = 0;
+    }
+    def.arms.sort_by_key(|arm| arm.name.clone());
+    for reserved in &mut def.reserved {
+        reserved.ordinal = 0;
+    }
+    def.reserved.sort_by_key(tombstone_key);
+    def
+}
+
+/// The retired identity of a tombstone — its name in a struct or union body,
+/// its value in an enum body — as a sort key.
+fn tombstone_key(reserved: &v2::Reserved) -> (Option<String>, Option<i64>) {
+    (reserved.name.clone(), reserved.value)
 }
 
 // ==========================================================================
