@@ -1,8 +1,9 @@
 //! Integration tests for the baseline publication gate
-//! (docs/wip/2026-09-13-baseline-gate-design.md, general form §6.3): `ridl
+//! (docs/archive/2026-09-13-baseline-gate-design.md, general form §6.3): `ridl
 //! baseline` refusing to replace a published snapshot when the replacement
 //! drops an interaction the snapshot still declares and the source does not
-//! retire it with a `reserved` tombstone at its own ordinal.
+//! retire it with a `reserved` tombstone at its own ordinal, or declares a
+//! live interaction under a name the snapshot retires.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -120,11 +121,11 @@ interface VehicleStatus {
 ";
 
 /// `doorClosed` retired, but `reserved doorClosed` sits last rather than at
-/// ordinal 2, the slot `doorClosed` held in `THREE`. `diff_interface`
-/// (ridl-diff/src/walk.rs:339-363) emits this as `InteractionRemoved` with a
+/// ordinal 2, the slot `doorClosed` held in `THREE`. `diff_interface` in
+/// `ridl-diff`'s `walk.rs` emits this as `InteractionRemoved` with a
 /// `change.after` carrying the tombstone's own ordinal (3), which is the one
 /// `InteractionRemoved` emission that carries an `after` at all — the
-/// structural signal message (b) is selected on.
+/// structural signal the misplaced-tombstone wording is selected on.
 const MISPLACED_TOMBSTONE: &str = "package veh.cluster
 type DoorState: integer [0..1]
 interface VehicleStatus {
@@ -132,6 +133,120 @@ interface VehicleStatus {
   event doorLocked: DoorState @[100ms..1s]
   reserved doorClosed
 }
+";
+
+/// `THREE` behind a tombstone for a name no event carries. Removing
+/// `doorClosed` outright from this baseline must draw the bare-removal
+/// wording: the published IR reserves `legacyTemp`, not `doorClosed`. The
+/// tombstone comes first so that a lookup which stops at any tombstone,
+/// whatever its name, meets it before the live `doorClosed`.
+const THREE_WITH_ANOTHER_TOMBSTONE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  reserved legacyTemp
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// `THREE_WITH_ANOTHER_TOMBSTONE` with `doorClosed` deleted outright.
+const BARE_REMOVAL_WITH_ANOTHER_TOMBSTONE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  reserved legacyTemp
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// A sibling interface, declared first, retires `doorClosed`; `VehicleStatus`
+/// declares the same name live. The tombstone that decides the wording must
+/// be looked up in the interface the diff path names, never in the first one.
+const SIBLING_RESERVES_THE_NAME: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface Legacy {
+  event ping: DoorState @[100ms..1s]
+  reserved doorClosed
+}
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// `SIBLING_RESERVES_THE_NAME` with `doorClosed` deleted from `VehicleStatus`
+/// outright; `Legacy` is unchanged.
+const SIBLING_RESERVES_THE_NAME_REMOVED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface Legacy {
+  event ping: DoorState @[100ms..1s]
+  reserved doorClosed
+}
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// An inline-form service whose body retires `doorClosed` at ordinal 2. Its
+/// shape is reached through `Package::shapes`, not `Package::interfaces`.
+const INLINE_SERVICE_TOMBSTONED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+service veh.cluster.doors {
+  event doorOpened: DoorState @[100ms..1s]
+  reserved doorClosed
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// `INLINE_SERVICE_TOMBSTONED` with the tombstone dropped.
+const INLINE_SERVICE_TOMBSTONE_DROPPED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+service veh.cluster.doors {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+";
+
+/// `doorClosed` declared live again, at the end, in a source whose baseline
+/// (`TOMBSTONED_REMOVAL`) retires that name at ordinal 2. `diff_interface`
+/// emits this as `ReservedNameRedeclared`, not `InteractionRemoved`: the
+/// name is live on the new side, so the tombstone loop skips it.
+const TOMBSTONE_REDECLARED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+}
+";
+
+/// A named-form service whose shape list retires `HealthBlock`. The
+/// service-level reading of a tombstone (ridl §14.5, ADR-0015 decision 19).
+const SERVICE_TOMBSTONED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface DoorBlock {
+  event locked: DoorState @[100ms..1s]
+}
+interface HealthBlock {
+  event uptime: DoorState @[100ms..1s]
+}
+service veh.cluster.doors : DoorBlock, reserved HealthBlock
+";
+
+/// The same service listing `HealthBlock` live again: `ReservedNameRedeclared`
+/// at the service level, which the gate leaves to the lock-file work.
+const SERVICE_TOMBSTONE_REDECLARED: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface DoorBlock {
+  event locked: DoorState @[100ms..1s]
+}
+interface HealthBlock {
+  event uptime: DoorState @[100ms..1s]
+}
+service veh.cluster.doors : DoorBlock, HealthBlock
 ";
 
 /// `THREE` under the package name `veh.other`, with the manifest to match:
@@ -178,8 +293,19 @@ fn baseline_refuses_to_publish_an_untombstoned_removal() {
     );
     assert!(
         stderr.contains("is gone from the source"),
-        "a bare removal draws message (a), not the misplaced- or dropped-tombstone wording:\n\
-         {stderr}",
+        "a bare removal draws the bare-removal wording, not the misplaced- or \
+         dropped-tombstone one:\n{stderr}",
+    );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one removed interaction — `doorLocked` sliding into the freed \
+         slot is the removal's consequence, not a second refusal:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("┌─") && stderr.contains("interface VehicleStatus {"),
+        "the interaction is gone from the source, so the span falls back to the interface's \
+         name:\n{stderr}",
     );
 }
 
@@ -312,11 +438,14 @@ fn the_first_publication_is_never_refused() {
 
 /// Design section 3 defines a first publication as "the output directory is
 /// absent, or holds no snapshot" — the second half of that sentence is
-/// distinct from the first: an *existing, empty* `.ridl/baseline/` reaches
-/// `untombstoned_removals`'s `out_dir.is_dir()` check as `true` and only then
-/// meets `published.is_empty()`, which the test above never exercises because
-/// it never creates the directory at all. This pins that the empty-but-present
-/// shape is still a first publication, not something to compare against.
+/// distinct from the first: an *existing, empty* `.ridl/baseline/` passes
+/// `untombstoned_removals`'s `out_dir.is_dir()` check, which the test above
+/// never reaches because it never creates the directory at all. This pins
+/// that the empty-but-present shape publishes into the directory that is
+/// there, at exit 0 and with no diagnostic. It does not pin the
+/// `published.is_empty()` early return on that path: a diff of an empty
+/// snapshot set against the fresh one carries no refused change either, so
+/// deleting the early return would change nothing this test can see.
 #[test]
 fn an_existing_empty_baseline_directory_is_still_a_first_publication() {
     let dir = TempDir::new("gate-empty-dir-first");
@@ -365,14 +494,20 @@ fn a_refusal_names_every_untombstoned_removal_in_one_run() {
         stderr.contains("doorLocked"),
         "the refusal names the second removed interaction, not just the first:\n{stderr}",
     );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        2,
+        "two refusals for two removed interactions, and no third for `doorAjar` sliding:\n\
+         {stderr}",
+    );
 }
 
 /// A tombstone that retires the right name at the wrong ordinal is still a
 /// refusal: `reserved doorClosed` in `MISPLACED_TOMBSTONE` holds ordinal 3,
 /// not the ordinal 2 `doorClosed` held in the published baseline, so the
-/// surviving interactions would slide into the freed slot (ridl §11). This is
-/// message (b), never message (a) — the source does retire the name, just
-/// not in the slot it must hold.
+/// surviving interactions would slide into the freed slot (ridl §11). This
+/// draws the misplaced-tombstone wording, never the bare-removal one — the
+/// source does retire the name, just not in the slot it must hold.
 #[test]
 fn baseline_refuses_a_tombstone_at_the_wrong_ordinal() {
     let dir = TempDir::new("gate-misplaced-tombstone");
@@ -387,26 +522,34 @@ fn baseline_refuses_a_tombstone_at_the_wrong_ordinal() {
         code, 1,
         "a tombstone at the wrong ordinal is still a refusal:\n{stderr}",
     );
-    assert!(
-        stderr.contains("RIDL-408"),
-        "the refusal carries its code:\n{stderr}",
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one misplaced tombstone; `doorLocked` moving up is its \
+         consequence, not a second refusal:\n{stderr}",
     );
     assert!(
-        stderr.contains("not at the ordinal the interaction held"),
-        "message (b) is drawn — the source retires the name, just not in place:\n{stderr}",
+        stderr.contains("not at the ordinal the interaction held (ordinal 2)")
+            && stderr.contains("Move `reserved doorClosed` to ordinal 2"),
+        "the misplaced-tombstone wording is drawn and names the ordinal to move the \
+         tombstone to:\n{stderr}",
     );
     assert!(
         !stderr.contains("is gone from the source"),
-        "message (a)'s wording must not fire when the source does retire the name:\n{stderr}",
+        "the bare-removal wording must not fire when the source does retire the name:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("┌─") && stderr.contains("reserved doorClosed"),
+        "the tombstone is in the source, so the span points at it:\n{stderr}",
     );
 }
 
 /// A tombstone already recorded in the baseline being replaced, dropped from
 /// the source, is a refusal too: a tombstone is a permanent reservation
 /// (ridl §11), so deleting the `reserved` line does not un-retire the slot.
-/// This is message (c), never message (a) — the source never held the
-/// interaction live at all here, only its retirement, and the retirement is
-/// what was dropped.
+/// This draws the dropped-tombstone wording, never the bare-removal one — the
+/// source never held the interaction live at all here, only its retirement,
+/// and the retirement is what was dropped.
 #[test]
 fn baseline_refuses_a_dropped_tombstone() {
     let dir = TempDir::new("gate-dropped-tombstone");
@@ -421,13 +564,268 @@ fn baseline_refuses_a_dropped_tombstone() {
         code, 1,
         "dropping an already-published tombstone is still a refusal:\n{stderr}",
     );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one dropped tombstone:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("records `doorClosed` in `VehicleStatus` as retired (ordinal 2)")
+            && stderr.contains("dropped the tombstone")
+            && stderr.contains("Put `reserved doorClosed` back at ordinal 2"),
+        "the dropped-tombstone wording is drawn, naming the interface and the ordinal the \
+         tombstone held:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("is gone from the source"),
+        "the bare-removal wording must not fire when the baseline already retired the \
+         name:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("┌─") && stderr.contains("interface VehicleStatus {"),
+        "the tombstone is gone from the source, so the span falls back to the interface's \
+         name:\n{stderr}",
+    );
+}
+
+/// The wording is decided by asking the published IR whether it retires *this*
+/// name in *this* interface, so a tombstone for another name in the same body
+/// must not turn a bare removal into a dropped tombstone.
+#[test]
+fn a_tombstone_for_another_name_does_not_change_the_wording() {
+    let dir = TempDir::new("gate-other-tombstone");
+    let root = package_workspace(&dir, THREE_WITH_ANOTHER_TOMBSTONE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", BARE_REMOVAL_WITH_ANOTHER_TOMBSTONE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the bare removal is refused:\n{stderr}");
+    assert!(
+        stderr.contains("`doorClosed` is gone from the source") && stderr.contains("(ordinal 3)"),
+        "the published IR reserves `legacyTemp`, not `doorClosed`, so this is a bare removal \
+         of the interaction at ordinal 3:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("dropped the tombstone"),
+        "another name's tombstone is not this name's:\n{stderr}",
+    );
+}
+
+/// The same lookup must read the interface the diff path names: a sibling
+/// interface that happens to retire the same name, declared first, is not the
+/// one the removal happened in.
+#[test]
+fn a_sibling_interface_reserving_the_name_does_not_change_the_wording() {
+    let dir = TempDir::new("gate-sibling-tombstone");
+    let root = package_workspace(&dir, SIBLING_RESERVES_THE_NAME);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", SIBLING_RESERVES_THE_NAME_REMOVED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the bare removal is refused:\n{stderr}");
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "`Legacy` is unchanged, so only `VehicleStatus` draws a refusal:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doorClosed` is gone from the source")
+            && stderr.contains("in `VehicleStatus`"),
+        "`VehicleStatus` never retired `doorClosed`; `Legacy` did, and it is not the \
+         interface the removal happened in:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("dropped the tombstone"),
+        "a sibling's tombstone is not this interface's:\n{stderr}",
+    );
+}
+
+/// An inline-form service's body is an interface shape reached through
+/// `Package::shapes`, not `Package::interfaces`. A tombstone dropped from it
+/// draws the dropped-tombstone wording exactly as one dropped from a declared
+/// interface does.
+#[test]
+fn baseline_refuses_a_dropped_tombstone_in_an_inline_service() {
+    let dir = TempDir::new("gate-inline-dropped-tombstone");
+    let root = package_workspace(&dir, INLINE_SERVICE_TOMBSTONED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", INLINE_SERVICE_TOMBSTONE_DROPPED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "dropping a tombstone from an inline body is still a refusal:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("records `doorClosed` in `veh.cluster.doors` as retired (ordinal 2)")
+            && stderr.contains("dropped the tombstone"),
+        "the inline body's tombstone is found under the service's dotted name:\n{stderr}",
+    );
+}
+
+/// An interaction appended at the end of the body is the sanctioned way to
+/// grow an interface (ridl §11): no ordinal moves and nothing is dropped, so
+/// the gate must admit it (baseline gate design §4).
+#[test]
+fn baseline_publishes_an_append() {
+    let dir = TempDir::new("gate-admits-append");
+    let root = package_workspace(&dir, THREE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    let snapshot = root
+        .join(".ridl")
+        .join("baseline")
+        .join("veh.cluster.ir.json");
+    let before = std::fs::read(&snapshot).expect("the first published snapshot is readable");
+
+    dir.write("cluster.ridl", FOUR);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "an append publishes:\n{stderr}");
+    assert!(
+        !stderr.contains("RIDL-408"),
+        "an append drops nothing, so it draws no refusal:\n{stderr}",
+    );
+    let after = std::fs::read(&snapshot).expect("the republished snapshot is readable");
+    assert_ne!(
+        before, after,
+        "the append is published: the snapshot must now carry `doorAjar`",
+    );
+}
+
+/// A tombstone that already exists and moves is `InteractionReordered`, not
+/// `InteractionRemoved`, and the gate publishes it: `ridl diff` reports the
+/// move as breaking and RIDL-407 warns about it at desk time, but whether
+/// publication should refuse it is open (ridl §17.12). This pins the current
+/// behaviour, so that widening the refusal to `InteractionReordered` is a
+/// deliberate change to a recorded open question rather than an accident.
+#[test]
+fn baseline_publishes_a_moved_existing_tombstone() {
+    let dir = TempDir::new("gate-moved-tombstone");
+    let root = package_workspace(&dir, TOMBSTONED_REMOVAL);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", MISPLACED_TOMBSTONE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "a moved existing tombstone publishes today (ridl §17.12 records the question):\n\
+         {stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-408"),
+        "the gate reads no `InteractionReordered` change:\n{stderr}",
+    );
+}
+
+/// The gate compares against the directory publication is about to replace,
+/// which is `--out` when given — never the default `.ridl/baseline/`. A gate
+/// reading the default directory would compare against nothing for every
+/// `--out` user and publish the removal as a first publication.
+#[test]
+fn the_gate_reads_the_out_directory() {
+    let dir = TempDir::new("gate-out");
+    let root = package_workspace(&dir, THREE);
+    let out = dir.path().join("published");
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        out.as_os_str(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "the first baseline is written to `--out`: {stderr}"
+    );
+
+    dir.write("cluster.ridl", BARE_REMOVAL);
+    let (code, _, stderr) = ridl(&[
+        "baseline".as_ref(),
+        root.as_os_str(),
+        "--out".as_ref(),
+        out.as_os_str(),
+    ]);
+
+    assert_eq!(
+        code, 1,
+        "the removal is refused against the snapshot in `--out`:\n{stderr}",
+    );
     assert!(
         stderr.contains("RIDL-408"),
         "the refusal carries its code:\n{stderr}",
     );
     assert!(
-        stderr.contains("dropped the tombstone"),
-        "message (c) is drawn — the baseline being replaced already retired the name:\n{stderr}",
+        !root.join(".ridl").exists(),
+        "the default directory is neither read nor created when `--out` is given",
+    );
+}
+
+/// A live interaction declared under a name the published baseline retires
+/// is a refusal: the tombstone is a permanent reservation (ridl §11), and a
+/// consumer holding the old contract would read the new interaction as the
+/// retired one. `ridl_diff` reports this as `ReservedNameRedeclared`, not
+/// `InteractionRemoved`, so a gate reading removals alone published it.
+#[test]
+fn baseline_refuses_an_interaction_redeclared_over_its_tombstone() {
+    let dir = TempDir::new("gate-redeclared-tombstone");
+    let root = package_workspace(&dir, TOMBSTONED_REMOVAL);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", TOMBSTONE_REDECLARED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "redeclaring a retired name is still a refusal:\n{stderr}",
+    );
+    assert_eq!(
+        stderr.matches("RIDL-408").count(),
+        1,
+        "one refusal for the one redeclared name:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`doorClosed` is declared again in `VehicleStatus`")
+            && stderr.contains("keep `reserved doorClosed` at ordinal 2"),
+        "the redeclared-name wording names the interaction, the interface and the tombstone's \
+         ordinal:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("┌─") && stderr.contains("event doorClosed: DoorState @[100ms..1s]"),
+        "the span points at the redeclaration, which is in the source:\n{stderr}",
+    );
+}
+
+/// The service-level reading of the same category — an interface name a
+/// named-form service's shape list retires, listed live again — is not
+/// refused: the gate covers the interaction level only, and the interface
+/// level waits for the lock file (baseline gate design D-5).
+#[test]
+fn baseline_publishes_a_service_shape_redeclared_over_its_tombstone() {
+    let dir = TempDir::new("gate-service-redeclared");
+    let root = package_workspace(&dir, SERVICE_TOMBSTONED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    dir.write("cluster.ridl", SERVICE_TOMBSTONE_REDECLARED);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "the interface level is outside the gate's scope:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-408"),
+        "no refusal at the interface level:\n{stderr}",
     );
 }
 
