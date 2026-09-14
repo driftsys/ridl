@@ -140,6 +140,13 @@ pub trait Caller: Attached {
     /// A query's reply, once it is known: the reply bytes copied into the front
     /// of `out` and their length, or the error. `Ok(None)` while unknown.
     /// `ReadError::Short` does not consume the reply.
+    ///
+    /// The outer [`ReadError`] reports the port call itself: `Short` when
+    /// `out` is too short, and `Detached` when the local runtime is gone.
+    /// `reply` never returns `ReadError::Contract`. The inner [`CallError`] is
+    /// the outcome from the peer or the transport, such as a contract error
+    /// the provider settled, or `Transport::Down` when the connection to the
+    /// peer is lost.
     fn reply(
         &mut self,
         c: Correlation,
