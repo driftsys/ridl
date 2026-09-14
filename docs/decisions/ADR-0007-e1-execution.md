@@ -183,7 +183,7 @@ at epic close) and cites these decisions by number.
     the binary-resolution order it feeds.
 
     _Amended (2026-09-14)._ `ridl-rt` is the one workspace crate with a version
-    of its own: its version is `0.1.0`, and a release of it is tagged
+    of its own, starting at `0.1.0`: a release of it is tagged
     `ridl-rt@<version>`, and every other workspace crate stays at `0.0.0`.
     Creating that tag and running `cargo publish` are maintainer acts, as this
     decision requires. The version and the tag are R-12 of the `ridl-rt` 0.1
