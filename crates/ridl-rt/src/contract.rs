@@ -5,6 +5,9 @@
 //! extended with the interface number and the catalog hash. Their fields have
 //! the names and meanings of the catalog descriptor's fields.
 
+use crate::payload::Violation;
+use crate::sample::Duration;
+
 /// A member's ordinal: its position in the interface body, counted from 1
 /// (ridl §11). An ordinal is never 0.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -46,6 +49,130 @@ pub enum Kind {
     Query = 4,
     /// A `fixed`.
     Fixed = 5,
+}
+
+/// An interface's descriptor.
+pub trait Interface {
+    /// The catalog the interface belongs to.
+    const CATALOG: &'static CatalogRef;
+    /// The interface number in that catalog.
+    const NUMBER: InterfaceNo;
+    /// `true` when the number is provisional, not yet frozen in the lock file.
+    const PROVISIONAL: bool;
+    /// The interface name.
+    const NAME: &'static str;
+    /// The members, in ordinal order.
+    const MEMBERS: &'static [Member];
+}
+
+/// An interaction's descriptor: the part every kind has.
+pub trait Interaction {
+    /// The interface that declares the interaction.
+    type Iface: Interface;
+    /// The interaction's row in `Iface::MEMBERS`.
+    const MEMBER: &'static Member;
+}
+
+/// A `signal` (ridl §4).
+pub trait Signal: Interaction {
+    /// The value type.
+    type Payload;
+    /// The channel's init value (ridl §4.4).
+    fn init() -> Self::Payload;
+}
+
+/// An `event` (ridl §5).
+pub trait Event: Interaction {
+    /// The occurrence type.
+    type Payload;
+}
+
+/// A `fixed` (ridl §8).
+pub trait Fixed: Interaction {
+    /// The provisioned value type.
+    type Payload;
+}
+
+/// A `command` (ridl §6).
+pub trait Command: Interaction {
+    /// The argument type.
+    type Args;
+    /// Evaluates the command's `require` clauses. `Ok` when it declares none.
+    fn require(args: &Self::Args) -> Result<(), Violation>;
+}
+
+/// A `query` (ridl §7).
+pub trait Query: Interaction {
+    /// The argument type.
+    type Args;
+    /// The reply type.
+    type Reply;
+    /// Evaluates the query's `require` clauses. `Ok` when it declares none.
+    fn require(args: &Self::Args) -> Result<(), Violation>;
+    /// Evaluates the query's `ensure` clauses. `Ok` when it declares none.
+    fn ensure(args: &Self::Args, reply: &Self::Reply) -> Result<(), Violation>;
+}
+
+/// One member of an interface.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Member {
+    /// The member's ordinal.
+    pub ordinal: Ordinal,
+    /// The member's kind.
+    pub kind: Kind,
+    /// The member's name.
+    pub name: &'static str,
+    /// The member's timing, as the IR resolved it. `None` when the IR carries
+    /// no timing: a `command` or a `query` with no timing annotation, or a
+    /// `fixed`.
+    pub timing: Option<Timing>,
+    /// One entry per payload: two for a `query` (the request, then the
+    /// reply), one for every other kind.
+    pub payloads: &'static [PayloadInfo],
+}
+
+/// The form of a timing annotation (ridl §9).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TimingMode {
+    /// `@Xms`: a strict period, on a signal only (ridl §9.2).
+    StrictPeriodic,
+    /// `@[min..max]`, where either side may be absent.
+    Range,
+}
+
+/// A member's timing (ridl §9).
+///
+/// `max` is the staleness bound of a signal, the time to live of an event, and
+/// the response bound of a call.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Timing {
+    /// The form of the annotation.
+    pub mode: TimingMode,
+    /// The lower bound. `None` when the IR leaves it unset.
+    pub min: Option<Duration>,
+    /// The upper bound. `None` when the IR leaves it unset.
+    pub max: Option<Duration>,
+}
+
+/// One payload of a member.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PayloadInfo {
+    /// The payload type's name.
+    pub type_name: &'static str,
+    /// The payload's largest encoded size in each core encoding.
+    pub max_size: EncodedSizes,
+}
+
+/// A payload's largest encoded size in bytes, one field per core encoding. A
+/// field is `None` when that encoding cannot carry the payload.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EncodedSizes {
+    /// The proto3 size.
+    pub proto3: Option<u32>,
+    /// The FlatBuffers size.
+    pub flatbuffers: Option<u32>,
+    /// The `repr(C)` size.
+    pub repr_c: Option<u32>,
 }
 
 #[cfg(test)]
