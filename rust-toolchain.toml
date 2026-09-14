@@ -19,7 +19,7 @@
 # no pin at all.
 
 [toolchain]
-channel = "1.95.0"
+channel = "1.98.1"
 components = ["rustfmt", "clippy"]
 targets = ["wasm32-unknown-unknown"]
 profile = "minimal"

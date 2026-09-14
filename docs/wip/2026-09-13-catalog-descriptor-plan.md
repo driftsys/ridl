@@ -19,7 +19,7 @@ catalog hash, the size derivation and the verifier. `ridlc` gains the `catalog`
 emit; `ridl` gains the `describe` subcommand. The system descriptor is out of
 scope (it waits for the rsdl rewrite).
 
-**Tech Stack:** Rust 1.95.0 (edition 2024), `planus` 1.3.0 runtime,
+**Tech Stack:** Rust 1.98.1 (edition 2024), `planus` 1.3.0 runtime,
 `planus-translation` 1.3.0 + `planus-codegen` 1.3.0 in `xtask` only, `prost` IR
 types from `ridl-ir`, `sha2` for the hash, `serde_json` for `describe`, `insta`
 for snapshots.
@@ -33,7 +33,7 @@ for snapshots.
 
 ## Global Constraints
 
-- Toolchain pin `channel = "1.95.0"` (`rust-toolchain.toml`); every cargo
+- Toolchain pin `channel = "1.98.1"` (`rust-toolchain.toml`); every cargo
   command runs `--locked`; `just build` is the gate (ADR-0009).
 - A crate lives at `crates/<crate-name>/` and adds its own scope to
   `.git-std.toml` (AGENTS.md); commits are Conventional Commits with a scope

@@ -36,8 +36,8 @@ check:
 # Check that the rustc about to run is the version rust-toolchain.toml pins.
 #
 # It compares versions, and only versions. It does not detect an override as
-# such: `RUSTUP_TOOLCHAIN=stable` passes today because `stable` is 1.95.0, which
-# is the right answer — what the gate measures against is the compiler version,
+# such: `RUSTUP_TOOLCHAIN=stable` passes whenever `stable` is the pinned release,
+# which is the right answer — what the gate measures against is the compiler version,
 # not which alias selected it. What it does catch is every way the version can
 # end up wrong: no rustup at all, in which case this file is read by nobody and
 # ignored without a word; a `RUSTUP_TOOLCHAIN` or a `rustup override set`

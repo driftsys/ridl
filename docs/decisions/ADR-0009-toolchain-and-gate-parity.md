@@ -13,6 +13,8 @@ fixing what those commands run against. It changes none of them.
 
 Decisions 5, 9, 10, and 12, and two accepted consequences, carry 2026-09-12
 amendments, dated in their own text, for the markdownlint-cli retirement.
+Decisions 1 and 4 carry 2026-09-14 amendments, for the first toolchain bump and
+for `ridl-rt`'s edition 2021.
 
 ## Context
 
@@ -77,6 +79,12 @@ prediction.
    close. The workspace was verified clean under 1.95.0 — build, test,
    `cargo fmt --all --check`, clippy with `-D warnings`, and the wasm32 check —
    before the pin was written.
+
+   _Amended (2026-09-14):_ 1.95.0 is the first value of `channel`, not the
+   current one. The pin moves under decision 3, and the current version is the
+   one `rust-toolchain.toml` names (decision 2). Issue #353 made the first bump,
+   to 1.98.1. Decision 11's statement that `stable` is 1.95.0 is likewise true
+   as of this record's date only.
 
 2. **The pin lives in that file and in no other.** CI does not name a version;
    it runs `rustup show`, which installs the channel, the components, and the
