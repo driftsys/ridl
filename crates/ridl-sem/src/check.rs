@@ -4207,7 +4207,8 @@ impl Checker<'_> {
                 );
             }
             v2::return_type::Kind::Fallible(v2::FallibleType { ok, err })
-        } else if let Some(path) = return_type.type_ref() {
+        } else {
+            let path = return_type.type_ref()?;
             // RIDL-303: a bare error type in return position has no success
             // path (ridl §10.1) — a bare error `enum`/`struct`/`union` or a
             // named `error union` alike. A named *result* union is not an
@@ -4230,8 +4231,6 @@ impl Checker<'_> {
                 optional: false,
                 kind: Some(v2::field_type::Kind::Named(named)),
             })
-        } else {
-            return None;
         };
         Some(v2::ReturnType { kind: Some(kind) })
     }

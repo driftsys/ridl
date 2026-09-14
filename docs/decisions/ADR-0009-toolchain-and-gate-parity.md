@@ -13,6 +13,8 @@ fixing what those commands run against. It changes none of them.
 
 Decisions 5, 9, 10, and 12, and two accepted consequences, carry 2026-09-12
 amendments, dated in their own text, for the markdownlint-cli retirement.
+Decisions 1 and 11 carry 2026-09-14 amendments for the first toolchain bump, and
+decision 4 carries one for `ridl-rt`'s edition 2021.
 
 ## Context
 
@@ -77,6 +79,11 @@ prediction.
    close. The workspace was verified clean under 1.95.0 — build, test,
    `cargo fmt --all --check`, clippy with `-D warnings`, and the wasm32 check —
    before the pin was written.
+
+   _Amended (2026-09-14):_ 1.95.0 is the first value of `channel`, not the
+   current one. The pin moves under decision 3, and the current version is the
+   one `rust-toolchain.toml` names (decision 2). The first bump, to 1.98.1, was
+   made by the pull request that closes issue #353.
 
 2. **The pin lives in that file and in no other.** CI does not name a version;
    it runs `rustup show`, which installs the channel, the components, and the
@@ -219,6 +226,11 @@ prediction.
     also rejects a `channel` that is not an exact version, with that as the
     stated reason — a moving alias is the gap the pin exists to close, and the
     recipe previously blamed `RUSTUP_TOOLCHAIN` for it.
+
+    _Amended (2026-09-14):_ "`stable` is 1.95.0" names the pin of this record's
+    date, not a lasting fact. `RUSTUP_TOOLCHAIN=stable` passes whenever the
+    release that `stable` selects is the pinned release, and fails otherwise.
+    The `toolchain-check` comment in the justfile states it that way.
 
 12. **`./bootstrap` installs the pinned toolchain and names every other tool the
     gate requires.** It keeps installing git-std and prim, and now runs

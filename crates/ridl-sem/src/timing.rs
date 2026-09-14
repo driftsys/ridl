@@ -468,10 +468,9 @@ fn duration_us(text: &str) -> Option<Duration> {
         (digits, 60_000_000)
     } else if let Some(digits) = text.strip_suffix('s') {
         (digits, 1_000_000)
-    } else if let Some(digits) = text.strip_suffix('h') {
-        (digits, 3_600_000_000)
     } else {
-        return None;
+        let digits = text.strip_suffix('h')?;
+        (digits, 3_600_000_000)
     };
     // `ExactValue::parse` accepts an integer or a decimal literal and rejects
     // anything else (a sign, scientific notation, a bare `.`).
