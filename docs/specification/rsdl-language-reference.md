@@ -10,8 +10,9 @@ Version: 0.2.0 — Draft
 > v0.1.0 as a whole. v0.1.0 described components as situated reactions, wired
 > them with application notation, placed them on capability-class targets,
 > derived transport and posture, and shipped them in bundles. Every one of those
-> constructs is retired here except posture derivation, which is reserved (§12),
-> and v0.1.0 is kept for provenance at
+> constructs is retired here except two, which are reserved (§12): posture
+> derivation, and the binding of a reaction to an interface's members that
+> application notation also wrote. v0.1.0 is kept for provenance at
 > [`../archive/rsdl-language-reference-v0.1.md`](../archive/rsdl-language-reference-v0.1.md).
 > The language stated here was settled in the rsdl rewrite decisions of
 > 2026-09-12 and 2026-09-13 (decisions D-1 to D-11), over the topology
@@ -155,16 +156,16 @@ system  component  distribution  deployment  machine  offers  requires  for
 plus typl's `package`, `import` and `as`. Every family keyword is reserved in
 every profile (typl §1.4). The v0.1 words `provides`, `instance`, `assurance`,
 `target`, `place`, `on`, `transport`, `bundle`, `time`, `base`, `redundant`,
-`supervise` and `degraded`, and the `<-` wiring arrow, are retired from rsdl.
-The family registry (typl §1.4) and the implemented registry still reserve them
-and do not yet reserve `offers`, `distribution` and `machine`; both registries
-change when the rsdl checker is built (roadmap Epic 6). At that change a retired
-word leaves the registry unless another profile uses it (`let` stays, rmdl's),
-which makes it a legal identifier in every profile, and the three new words stop
-being legal identifiers in every profile. `requires` (a component line) and the
-predicate attribute key `require` (general form §4.3) never share a position:
-`require` is recognised only inside `[ ]`, and no rsdl declaration or line
-admits it.
+`supervise` and `degraded` are retired from rsdl, and so is the `<-` wiring
+arrow. The family registry (typl §1.4) and the implemented registry still
+reserve those words and do not yet reserve `offers`, `distribution` and
+`machine`; both registries change when the rsdl checker is built (roadmap Epic
+6). At that change a retired word leaves the registry unless another profile
+uses it (`let` stays, rmdl's), which makes it a legal identifier in every
+profile, and the three new words stop being legal identifiers in every profile.
+`requires` (a component line) and the predicate attribute key `require` (general
+form §4.3) never share a position: `require` is recognised only inside `[ ]`,
+and no rsdl declaration or line admits it.
 
 **Case carries the role** (general form R7):
 
@@ -1028,11 +1029,11 @@ Two edits that would each draw one error: listing `veh.adas.cruise` in `Vehicle`
 ## Appendix B — Formal Grammar (EBNF)
 
 The rsdl **profile grammar** — the restriction of the family grammar accepted in
-`.rsdl` files. `package`, `import`, `doc_comment`, `sep`, `qualified_id`,
+`.rsdl` files. `package`, `import`, `doc_comment`, `sep`, `qualified_id`, `id`,
 `CamelCase_id`, `camelCase_id`, `SCREAMING_SNAKE_ID` and `literal` are typl
 Appendix E's; `attr_block` is the family's single production (general form
-§4.2), restated here with the value form `instances` needs. A declaration of any
-other profile is RSDL-604.
+§4.2), restated here with the two value positions `instances` needs. A
+declaration of any other profile is RSDL-604.
 
 ```ebnf
 file             = package { import } { declaration } ;
@@ -1084,7 +1085,8 @@ list_item        = literal | SCREAMING_SNAKE_ID | id ;
                     `instances = solo` and a declared `Unit` parse, so that RSDL-305
                     and RSDL-307 report them rather than a parse error.
                     general form §4.2's const_value admits literals and constant
-                    references only; this is the one widening rsdl needs *)
+                    references only; rsdl widens it in these two positions, the
+                    value and the list item *)
 ```
 
 ---

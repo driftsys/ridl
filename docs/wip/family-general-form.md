@@ -223,8 +223,10 @@ attribute  = key                              (* flag       — persist         
 Every attribute starts with its key — the reader rule is uniform. `const_value`
 is a literal, constant reference, or parenthesised list of same; `expr` is the
 expr-core surface (guaranteed subset until the core lands, ridl §13). rsdl
-widens the list item by one form: `instances = (primary, backup)` lists
-camelCase instance names, which are neither literals nor constant references
+widens `const_value` in two positions, the value and the list item, to admit a
+bare name: `instances = (primary, backup)` lists camelCase instance names, which
+are neither literals nor constant references, and a misspelt `instances = solo`
+or a declared `Unit` still parses so that its rsdl diagnostic reports it
 (amended 2026-09-13, rsdl reference Appendix B).
 
 ### 4.3 One production, allow-lists by diagnostics
