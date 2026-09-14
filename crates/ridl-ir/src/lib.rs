@@ -22,10 +22,12 @@ pub mod v2 {
     // The file holds only trait impls, so it sits in a private module to scope
     // one lint allowance to generated code: pbjson-build 0.9.0 writes
     // `write!(formatter, "…", &FIELDS)`, which clippy 1.98 reports as
-    // `useless_borrows_in_formatting`. The file is regenerated on every build,
-    // so the lint cannot be repaired in source. A lint attribute on the
-    // `include!` itself is ignored by rustc.
-    #[allow(clippy::useless_borrows_in_formatting)]
+    // `useless_borrows_in_formatting`. The build script writes the file into
+    // `OUT_DIR`, so an edit to it does not last and the lint cannot be repaired
+    // in source. A lint attribute on the `include!` itself is ignored by rustc.
+    // `expect` rather than `allow`: once pbjson-build stops writing the borrow,
+    // clippy reports the expectation as unfulfilled, and this module goes.
+    #[expect(clippy::useless_borrows_in_formatting)]
     mod serde_impls {
         use super::*;
 
