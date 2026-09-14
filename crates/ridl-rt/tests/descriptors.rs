@@ -7,7 +7,7 @@ use ridl_rt::contract::{
     CatalogHash, CatalogRef, Command, EncodedSizes, Event, Fixed, Interaction, Interface,
     InterfaceNo, Kind, Member, Ordinal, PayloadInfo, Query, Signal, Timing, TimingMode,
 };
-use ridl_rt::payload::{Rule, Violation};
+use ridl_rt::error::Contract;
 use ridl_rt::sample::Duration;
 
 const VEHICLE: CatalogRef = CatalogRef {
@@ -130,15 +130,8 @@ impl Interaction for SetGearCommand {
 }
 impl Command for SetGearCommand {
     type Args = u8;
-    fn require(args: &u8) -> Result<(), Violation> {
-        if *args <= 6 {
-            Ok(())
-        } else {
-            Err(Violation {
-                type_name: "SetGearArgs",
-                rule: Rule::Invariant,
-            })
-        }
+    fn require(args: &u8) -> Result<(), ()> {
+        if *args <= 6 { Ok(()) } else { Err(()) }
     }
 }
 
@@ -150,25 +143,11 @@ impl Interaction for AverageSpeedQuery {
 impl Query for AverageSpeedQuery {
     type Args = u32;
     type Reply = u16;
-    fn require(window: &u32) -> Result<(), Violation> {
-        if *window > 0 {
-            Ok(())
-        } else {
-            Err(Violation {
-                type_name: "AverageSpeedArgs",
-                rule: Rule::Range,
-            })
-        }
+    fn require(window: &u32) -> Result<(), ()> {
+        if *window > 0 { Ok(()) } else { Err(()) }
     }
-    fn ensure(_window: &u32, reply: &u16) -> Result<(), Violation> {
-        if *reply <= 300 {
-            Ok(())
-        } else {
-            Err(Violation {
-                type_name: "Speed",
-                rule: Rule::Range,
-            })
-        }
+    fn ensure(_window: &u32, reply: &u16) -> Result<(), ()> {
+        if *reply <= 300 { Ok(()) } else { Err(()) }
     }
 }
 
@@ -225,22 +204,30 @@ fn a_member_ordinal_is_usable_as_a_match_pattern() {
 
 #[test]
 fn contract_clauses_run_through_a_generic_bound() {
-    fn admit<C: Command>(args: &C::Args) -> Result<(), Violation> {
+    fn admit<C: Command>(args: &C::Args) -> Result<(), ()> {
         C::require(args)
     }
-    fn answer<Q: Query>(args: &Q::Args, reply: &Q::Reply) -> Result<(), Violation> {
-        Q::require(args)?;
-        Q::ensure(args, reply)
+    /// The mapping generated dispatch writes: a failed `require` is
+    /// `PreconditionFailed`, a failed `ensure` is `ContractBroken`, and
+    /// `require` is evaluated first.
+    fn answer<Q: Query>(args: &Q::Args, reply: &Q::Reply) -> Result<(), Contract> {
+        Q::require(args).map_err(|()| Contract::PreconditionFailed)?;
+        Q::ensure(args, reply).map_err(|()| Contract::ContractBroken)
     }
     assert_eq!(admit::<SetGearCommand>(&3), Ok(()));
-    assert_eq!(
-        admit::<SetGearCommand>(&9).map_err(|v| v.rule),
-        Err(Rule::Invariant)
-    );
+    assert_eq!(admit::<SetGearCommand>(&9), Err(()));
     assert_eq!(answer::<AverageSpeedQuery>(&10, &120), Ok(()));
     assert_eq!(
-        answer::<AverageSpeedQuery>(&10, &400).map_err(|v| v.rule),
-        Err(Rule::Range)
+        answer::<AverageSpeedQuery>(&0, &120),
+        Err(Contract::PreconditionFailed)
+    );
+    assert_eq!(
+        answer::<AverageSpeedQuery>(&10, &400),
+        Err(Contract::ContractBroken)
+    );
+    assert_eq!(
+        answer::<AverageSpeedQuery>(&0, &400),
+        Err(Contract::PreconditionFailed)
     );
     assert_eq!(SpeedSignal::init(), 0);
 }

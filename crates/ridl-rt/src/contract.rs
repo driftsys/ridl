@@ -4,7 +4,6 @@
 //! are the per-member form of the ordinal table of ADR-0013 decision 3,
 //! extended with the interface number and the catalog hash.
 
-use crate::payload::Violation;
 use crate::sample::Duration;
 
 /// A member's ordinal: its position in the interface body, counted from 1
@@ -97,8 +96,15 @@ pub trait Fixed: Interaction {
 pub trait Command: Interaction {
     /// The argument type.
     type Args;
-    /// Evaluates the command's `require` clauses. `Ok` when it declares none.
-    fn require(args: &Self::Args) -> Result<(), Violation>;
+    /// Evaluates the command's `require` clauses. `Ok` when every clause is
+    /// true or the command declares none. `Err` when a clause is false, which
+    /// the provider reports as
+    /// [`Contract::PreconditionFailed`](crate::error::Contract::PreconditionFailed).
+    #[allow(
+        clippy::result_unit_err,
+        reason = "the failing method decides the contract error, so the error carries no value"
+    )]
+    fn require(args: &Self::Args) -> Result<(), ()>;
 }
 
 /// A `query` (ridl §7).
@@ -107,10 +113,24 @@ pub trait Query: Interaction {
     type Args;
     /// The reply type.
     type Reply;
-    /// Evaluates the query's `require` clauses. `Ok` when it declares none.
-    fn require(args: &Self::Args) -> Result<(), Violation>;
-    /// Evaluates the query's `ensure` clauses. `Ok` when it declares none.
-    fn ensure(args: &Self::Args, reply: &Self::Reply) -> Result<(), Violation>;
+    /// Evaluates the query's `require` clauses. `Ok` when every clause is
+    /// true or the query declares none. `Err` when a clause is false, which
+    /// the provider reports as
+    /// [`Contract::PreconditionFailed`](crate::error::Contract::PreconditionFailed).
+    #[allow(
+        clippy::result_unit_err,
+        reason = "the failing method decides the contract error, so the error carries no value"
+    )]
+    fn require(args: &Self::Args) -> Result<(), ()>;
+    /// Evaluates the query's `ensure` clauses. `Ok` when every clause is true
+    /// or the query declares none. `Err` when a clause is false, which the
+    /// provider reports as
+    /// [`Contract::ContractBroken`](crate::error::Contract::ContractBroken).
+    #[allow(
+        clippy::result_unit_err,
+        reason = "the failing method decides the contract error, so the error carries no value"
+    )]
+    fn ensure(args: &Self::Args, reply: &Self::Reply) -> Result<(), ()>;
 }
 
 /// One member of an interface.
