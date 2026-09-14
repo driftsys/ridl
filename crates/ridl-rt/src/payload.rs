@@ -205,7 +205,7 @@ pub enum Rule {
 mod tests {
     use core::marker::PhantomData;
 
-    use super::{EncodeError, Encoded, Payload, Ref, VerifyError};
+    use super::{EncodeError, Encoded, Payload, Ref, Rule, VerifyError};
     use crate::encoding::ReprC;
 
     /// A payload for this test only: its view is the bytes.
@@ -241,5 +241,21 @@ mod tests {
             _e: PhantomData,
         };
         assert_eq!(proof.bytes(), bytes);
+    }
+
+    /// The match names every variant with no `_` arm, so a `Rule` variant
+    /// added or removed fails this test to compile.
+    #[test]
+    fn rule_is_exactly_these_five_variants() {
+        fn all(r: Rule) {
+            match r {
+                Rule::Range => {}
+                Rule::Step => {}
+                Rule::Length => {}
+                Rule::Pattern => {}
+                Rule::Variant => {}
+            }
+        }
+        all(Rule::Range);
     }
 }

@@ -76,8 +76,12 @@ impl EventSource for Stub {
 }
 
 impl EventSink for Stub {
-    fn raise(&mut self, _: InterfaceNo, _: Ordinal, _: &[u8]) -> Result<(), RaiseError> {
-        Err(RaiseError::Busy)
+    fn raise(&mut self, _: InterfaceNo, ord: Ordinal, _: &[u8]) -> Result<(), RaiseError> {
+        if ord == ORD {
+            Err(RaiseError::Busy)
+        } else {
+            Err(RaiseError::Contract(Contract::UnknownInteraction))
+        }
     }
 }
 
@@ -139,10 +143,13 @@ impl CoherentSignals for Stub {
     fn read_coherent(
         &self,
         _: InterfaceNo,
-        _: &[Ordinal],
+        ords: &[Ordinal],
         _: &mut [u8],
-        _: &mut [RawSample],
+        samples: &mut [RawSample],
     ) -> Result<usize, ReadError> {
+        if samples.len() < ords.len() {
+            return Err(ReadError::TooFewSamples { needed: ords.len() });
+        }
         Ok(0)
     }
 }
@@ -196,6 +203,10 @@ fn every_core_port_is_usable_as_a_trait_object() {
 
     let sink: &mut dyn EventSink = &mut stub;
     assert_eq!(sink.raise(IFACE, ORD, &[1]), Err(RaiseError::Busy));
+    assert_eq!(
+        sink.raise(IFACE, Ordinal(2), &[1]),
+        Err(RaiseError::Contract(Contract::UnknownInteraction))
+    );
     assert_eq!(sink.catalog(), &CATALOG);
 
     let caller: &mut dyn Caller = &mut stub;
@@ -247,6 +258,10 @@ fn both_extensions_are_usable_as_trait_objects() {
     assert_eq!(
         coherent.read_coherent(IFACE, &[ORD], &mut out, &mut [RAW]),
         Ok(0)
+    );
+    assert_eq!(
+        coherent.read_coherent(IFACE, &[ORD, ORD], &mut out, &mut [RAW]),
+        Err(ReadError::TooFewSamples { needed: 2 })
     );
     assert_eq!(coherent.read(IFACE, ORD, &mut out), Ok(RAW));
 }
