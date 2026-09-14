@@ -146,40 +146,93 @@ wasm-check:
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
 
-# Build and test ridl-rt with its minimum supported Rust version (ADR-0021
-# decision 10). The minimum lives in crates/ridl-rt/Cargo.toml's rust-version
-# line, and nowhere else: this recipe reads it rather than naming a version
-# of its own, so the recipe and the manifest cannot disagree. The newest
-# tested version is the rust-toolchain.toml pin, covered by every other gate
-# member.
+# Build and test ridl-rt as both editions it supports, at the toolchains that
+# do not already exercise it (ADR-0021 decision 10). Edition 2021 with the
+# rust-toolchain.toml pin is `just test`; this recipe covers what that does
+# not: edition 2021 with the minimum supported Rust version, and edition 2024
+# with the pin. Edition 2024 did not exist before Rust 1.85, so the minimum
+# (older than that) can only test edition 2021.
 #
-# Fails on: a missing or malformed rust-version line (not a MAJOR.MINOR or
-# MAJOR.MINOR.PATCH version); rustup missing; or ridl-rt's library, tests,
-# doctests, or examples failing to build or pass under that toolchain.
-msrv-check:
+# Both runs build a standalone copy of crates/ridl-rt in a temporary
+# directory, then discard it: the minimum toolchain cannot load this
+# repository's workspace (the root Cargo.toml sets `resolver = "3"`, and
+# every other crate is edition 2024), and the second run needs the edition
+# line changed without touching the tracked crate. CARGO_TARGET_DIR points at
+# target/compat-check (gitignored, inside the repository) so repeated runs
+# reuse a build cache instead of rebuilding from nothing.
+#
+# The minimum lives in crates/ridl-rt/Cargo.toml's rust-version line and the
+# pin lives in rust-toolchain.toml's channel line; this recipe reads both
+# rather than naming either version of its own.
+#
+# Fails on: a missing or malformed rust-version line or rust-toolchain.toml
+# channel (either not a MAJOR.MINOR or MAJOR.MINOR.PATCH version); rustup
+# missing; or ridl-rt's library, tests, doctests, or examples failing to
+# build or pass as edition 2021 with the minimum toolchain, or as edition
+# 2024 with the pin.
+compat-check:
     #!/usr/bin/env bash
     set -euo pipefail
     manifest="crates/ridl-rt/Cargo.toml"
     minimum="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$manifest")"
     if [ -z "$minimum" ]; then
-        echo "msrv-check: $manifest names no rust-version." >&2
+        echo "compat-check: $manifest names no rust-version." >&2
         exit 1
     fi
     if ! printf '%s' "$minimum" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
-        echo "msrv-check: $manifest sets rust-version = \"$minimum\", which is not a" >&2
-        echo "msrv-check: MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
+        echo "compat-check: $manifest sets rust-version = \"$minimum\", which is not a" >&2
+        echo "compat-check: MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
+        exit 1
+    fi
+    pin="$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' rust-toolchain.toml)"
+    if [ -z "$pin" ]; then
+        echo "compat-check: rust-toolchain.toml names no channel." >&2
+        exit 1
+    fi
+    if ! printf '%s' "$pin" | grep -qE '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
+        echo "compat-check: rust-toolchain.toml pins the channel '$pin', which is not" >&2
+        echo "compat-check: a MAJOR.MINOR or MAJOR.MINOR.PATCH version." >&2
         exit 1
     fi
     if ! command -v rustup >/dev/null 2>&1; then
-        echo "msrv-check: rustup is required to install the $minimum toolchain." >&2
-        echo "msrv-check: install it from https://rustup.rs." >&2
+        echo "compat-check: rustup is required to install the $minimum toolchain." >&2
+        echo "compat-check: install it from https://rustup.rs." >&2
         exit 1
     fi
     if ! rustup toolchain list | grep -qF "$minimum-"; then
-        echo "msrv-check: installing the $minimum toolchain (not found locally)." >&2
+        echo "compat-check: installing the $minimum toolchain (not found locally)." >&2
         rustup toolchain install "$minimum" --profile minimal
     fi
-    cargo "+$minimum" test -p ridl-rt --all-features --locked
+
+    copy="$(mktemp -d)"
+    trap 'rm -rf "$copy"' EXIT
+    cp -R crates/ridl-rt "$copy/ridl-rt"
+    manifest_copy="$copy/ridl-rt/Cargo.toml"
+    sed -i.bak -e '/^license\.workspace = true$/d' -e '/^repository\.workspace = true$/d' "$manifest_copy"
+    rm -f "$manifest_copy.bak"
+    printf '\n[workspace]\n' >> "$manifest_copy"
+
+    export CARGO_TARGET_DIR="$PWD/target/compat-check"
+
+    echo "compat-check: $minimum, edition 2021"
+    cargo "+$minimum" test --all-features --offline --manifest-path "$manifest_copy"
+
+    # Edition 2024 requires rust-version >= 1.85 (cargo refuses to parse the
+    # manifest otherwise); the pin already satisfies that, so this run's
+    # rust-version becomes the pin rather than the minimum.
+    sed -i.bak \
+        -e 's/^edition = "2021"$/edition = "2024"/' \
+        -e "s/^rust-version = \"$minimum\"\$/rust-version = \"$pin\"/" \
+        "$manifest_copy"
+    rm -f "$manifest_copy.bak"
+    if ! grep -qx 'edition = "2024"' "$manifest_copy" || ! grep -qx "rust-version = \"$pin\"" "$manifest_copy"; then
+        echo "compat-check: could not set edition 2024 and rust-version $pin in the copy of $manifest;" >&2
+        echo "compat-check: its edition or rust-version line no longer has the form this recipe edits." >&2
+        exit 1
+    fi
+
+    echo "compat-check: $pin, edition 2024"
+    cargo "+$pin" test --all-features --offline --manifest-path "$manifest_copy"
 
 # Check Rust formatting without writing. Separate from `just fmt`, which owns
 # the connective tissue (prim) and does not touch Rust.
@@ -593,7 +646,7 @@ install-check:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check compile test lint wasm-check msrv-check check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check compile test lint wasm-check compat-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

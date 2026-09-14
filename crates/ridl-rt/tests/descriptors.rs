@@ -131,7 +131,11 @@ impl Interaction for SetGearCommand {
 impl Command for SetGearCommand {
     type Args = u8;
     fn require(args: &u8) -> Result<(), ()> {
-        if *args <= 6 { Ok(()) } else { Err(()) }
+        if *args <= 6 {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 }
 
@@ -144,10 +148,18 @@ impl Query for AverageSpeedQuery {
     type Args = u32;
     type Reply = u16;
     fn require(window: &u32) -> Result<(), ()> {
-        if *window > 0 { Ok(()) } else { Err(()) }
+        if *window > 0 {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
     fn ensure(_window: &u32, reply: &u16) -> Result<(), ()> {
-        if *reply <= 300 { Ok(()) } else { Err(()) }
+        if *reply <= 300 {
+            Ok(())
+        } else {
+            Err(())
+        }
     }
 }
 

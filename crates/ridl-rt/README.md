@@ -30,8 +30,13 @@ same rule.
 The open API questions are tracked at
 <https://github.com/driftsys/ridl/issues/350>.
 
-`ridl-rt` supports Rust 1.85 or newer (`rust-version = "1.85"`). Raising that
+`ridl-rt` supports Rust 1.83 or newer (`rust-version = "1.83"`). Raising that
 minimum is a breaking change, shipped in a 0.x minor release like any other.
+
+The crate builds as edition 2021 and edition 2024: edition 2021 is tested with
+Rust 1.83 and with the pinned toolchain, and edition 2024 is tested with the
+pinned toolchain (edition 2024 did not exist before Rust 1.85, so the minimum
+cannot build it).
 
 ## What 0.1 leaves out
 
