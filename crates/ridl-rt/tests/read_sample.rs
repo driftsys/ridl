@@ -10,7 +10,7 @@
 #[path = "../examples/read_sample.rs"]
 mod read_sample;
 
-use read_sample::{Drivetrain, Memory, Speed, SpeedSignal, read_speed, walk};
+use read_sample::{read_speed, walk, Drivetrain, Memory, Speed, SpeedSignal};
 use ridl_rt::contract::{Interaction, Interface, InterfaceNo, Ordinal};
 use ridl_rt::error::Contract;
 use ridl_rt::payload::{Rule, Violation};

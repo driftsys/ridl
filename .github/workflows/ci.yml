@@ -127,6 +127,7 @@ jobs:
             | tar -xz -C "$HOME/.local/bin" just
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - run: just wasm-check
+      - run: just compat-check
 
   commit-lint:
     name: commit-lint

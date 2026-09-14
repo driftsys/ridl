@@ -186,9 +186,14 @@ at epic close) and cites these decisions by number.
     of its own, starting at `0.1.0`: a release of it is tagged
     `ridl-rt@<version>`, and every other workspace crate stays at `0.0.0`.
     Creating that tag and running `cargo publish` are maintainer acts, as this
-    decision requires. The version and the tag are R-12 of the `ridl-rt` 0.1
-    design
-    ([`docs/wip/2026-09-13-ridl-rt-v0.1-design.md`](../wip/2026-09-13-ridl-rt-v0.1-design.md)).
+    decision requires. The version, the tag and the git-std choice behind them
+    are decided in
+    [R-12 of the archived spec](../archive/2026-09-13-ridl-rt-v0.1-design.md),
+    whose `rust-version` item is replaced by
+    [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10. What counts
+    as a breaking `ridl-rt` change against that version is that same decision;
+    the crate's full architecture is
+    [the `ridl-rt` design record](../design/ridl-rt.md).
 
 15. **`ridl.std` ships embedded in the compiler.** The Appendix A source is
     committed verbatim as an asset of `ridl-core` and loaded via `include_str!`

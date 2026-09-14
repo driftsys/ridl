@@ -105,6 +105,14 @@ prediction.
    setting would be a file to maintain that changes nothing. Adding one is how
    this repository would express a formatting choice it has not made.
 
+   _Amended (2026-09-14)._ `ridl-rt` is edition 2021
+   ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 10), so
+   `cargo fmt --all` now formats that crate under rustfmt's edition-2021 style
+   and every other crate under edition 2024 — each crate's style edition follows
+   its own manifest, not a single workspace-wide value. No `rustfmt.toml` is
+   still added: both style editions are rustfmt's defaults, not a configured
+   choice.
+
 5. **Local and CI run the same commands, not equivalent ones.** The justfile is
    the single definition of every gate command. CI installs the tools a runner
    needs and then invokes the recipes — `just check`, `just compile`,

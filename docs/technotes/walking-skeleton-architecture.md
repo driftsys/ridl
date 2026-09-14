@@ -28,8 +28,10 @@ automation member at the root (issue #180). The VS Code extension
 
 The crates below arrived in three waves: seven from the E1 spine, grown in place
 through E2; two more from E2 — `ridl-backend-ts` and `ridl-diff`; and
-`ridl-mcp`, most recently. This list is not a standing count of every crate the
-workspace holds — see `AGENTS.md` for that.
+`ridl-mcp`, most recently. `ridl-rt` landed after those three waves, from epic
+E11's first story rather than from E1 or E2, and is listed with the others
+because a newcomer will look for it here. This list is not a standing count of
+every crate the workspace holds — see `AGENTS.md` for that.
 
 - **`crates/ridl-syntax`** — the surface layer, and the one grammar. A `logos`
   lexer over the full family token set; a hand-written recursive-descent parser
@@ -182,6 +184,17 @@ workspace holds — see `AGENTS.md` for that.
   (comments are preserved and re-anchored), total (input with parse errors is
   returned untouched), and idempotent, implementing the tight `name: Type` style
   of general form §5. E2 extended it to `.ridl` files.
+
+- **`crates/ridl-rt`** — the `no_std` runtime library that defines what a
+  generated ridl package will link and a runtime will implement: identity, time
+  and the envelope, samples, the payload traits, the interaction descriptors,
+  the ports, and the contract and transport errors (epic E11 story E11.0,
+  ADR-0020 decision 5). No backend emits code against it yet and no runtime
+  exists. It has no dependency in any feature combination and links no runtime:
+  the store and the sans-IO session are `ridl-engine`'s, parked outside this
+  repository, and the three payload codecs (FlatBuffers, proto3, `repr(C)`) are
+  later Epic 11 stories. See [the design record](../design/ridl-rt.md) and
+  [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md).
 
 - **`crates/ridl-lsp`** — the language server; see the LSP section below.
 

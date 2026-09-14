@@ -77,7 +77,7 @@ impl Encoding for ReprC {
 
 #[cfg(test)]
 mod tests {
-    use super::{Encoding, FlatBuffers, Proto3, ReprC, sealed};
+    use super::{sealed, Encoding, FlatBuffers, Proto3, ReprC};
 
     /// A fourth encoding, for this test only. It implements every required
     /// item of `Encoding`, so a required item added to the trait fails to

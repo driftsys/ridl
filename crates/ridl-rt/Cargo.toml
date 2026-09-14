@@ -3,9 +3,22 @@ name = "ridl-rt"
 # Its own version, not the workspace's 0.0.0: `ridl-rt` is released on its own
 # and tagged `ridl-rt@<version>`.
 version = "0.1.0"
-edition.workspace = true
+# The crate compiles as edition 2021 because its rust-version minimum (1.83)
+# predates edition 2024, which Rust cannot build before 1.85; source ridl
+# emits, copied or generated into a consuming crate, compiles as that crate's
+# own edition. `just compat-check` also tests this crate as edition 2024 with
+# the toolchain pin.
+edition = "2021"
 license.workspace = true
 repository.workspace = true
+description = "The vocabulary that code generated from ridl and a runtime agree on: identity, time, the envelope, samples, payload traits, interaction descriptors, ports, and contract and transport errors."
+readme = "README.md"
+keywords = ["ridl", "idl", "runtime", "embedded", "reactive"]
+categories = ["no-std", "encoding"]
+# The oldest Rust this crate supports. `just compat-check` builds and tests
+# the crate with that toolchain; the newest tested is the rust-toolchain.toml
+# pin.
+rust-version = "1.83"
 
 # One feature per payload encoding (ADR-0020 decision 5). In this version each
 # feature enables nothing, and the crate has no dependency in any combination.

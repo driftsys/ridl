@@ -75,7 +75,10 @@ built; the boundary model (epic E3) and `rsdl` are sequenced in the roadmap, and
   **Documents amended** table: ADR-0018's decisions 3, 6 and 15 rest on this
   record, its decisions 16 and 17 on the re-scope's other decisions, and
   ADR-0013's target list and ADR-0007 decision 13 change with them — the last is
-  the only one of these that changes shipped code).
+  the only one of these that changes shipped code), ADR-0021 (the `ridl-rt` 0.1
+  API decisions and the 0.x breaking-change rule; binds every consumer of
+  `ridl-rt` — the Rust codegen, the runtimes, and story E14.2; the crate's
+  as-built design record is `docs/design/ridl-rt.md`).
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the
@@ -117,11 +120,16 @@ member; rsdl is the apex.
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
     just wasm-check      cargo check for wasm32 with --no-default-features
+    just compat-check    build and test the packaged ridl-rt crate as edition
+                         2021 with the rust-version in crates/ridl-rt/Cargo.toml
+                         and as edition 2024 with the rust-toolchain.toml pin,
+                         and check its LICENSE (ADR-0021 decision 10)
     just build           toolchain-check + gate-parity + install-check +
                          fmt-check + book-check + link-check + compile + test +
-                         lint + wasm-check + check — the full local gate: every
-                         member ADR-0008 decision 11 names, plus the four CI
-                         checks ADR-0009 brought back to this side
+                         lint + wasm-check + compat-check + check — the full
+                         local gate: every member ADR-0008 decision 11 names,
+                         plus the four CI checks ADR-0009 brought back to this
+                         side
     just lint-commits    git std lint over the commits on top of a base branch
                          (BASE defaults to main; CI passes the PR base branch)
     just verify          lint-commits, then build — run before a PR
