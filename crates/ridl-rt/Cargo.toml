@@ -6,6 +6,13 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+description = "The vocabulary that code generated from ridl and a runtime agree on: identity, time, the envelope, samples, payload traits, interaction descriptors, ports, and contract and transport errors."
+readme = "README.md"
+keywords = ["ridl", "idl", "runtime", "embedded", "reactive"]
+categories = ["no-std", "encoding"]
+# Equal to the `channel` in rust-toolchain.toml — `just toolchain-check`
+# compares the two and fails if they diverge (ADR-0009).
+rust-version = "1.95.0"
 
 # One feature per payload encoding (ADR-0020 decision 5). In this version each
 # feature enables nothing, and the crate has no dependency in any combination.
