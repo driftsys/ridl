@@ -118,7 +118,7 @@ fn a_hand_written_program_reads_a_signal_with_its_provenance() {
 }
 
 #[test]
-fn set_and_invalidate_on_an_unknown_ordinal_return_the_contract_error() {
+fn set_invalidate_and_touch_on_an_unknown_ordinal_return_the_contract_error() {
     let mut runtime = Memory::new(Timestamp(0), &[0, 0]);
     let unknown = Ordinal(99);
 
@@ -128,6 +128,10 @@ fn set_and_invalidate_on_an_unknown_ordinal_return_the_contract_error() {
     );
     assert_eq!(
         runtime.invalidate(Drivetrain::NUMBER, unknown),
+        Err(WriteError::Contract(Contract::UnknownInteraction))
+    );
+    assert_eq!(
+        runtime.touch(Drivetrain::NUMBER, unknown),
         Err(WriteError::Contract(Contract::UnknownInteraction))
     );
 }
