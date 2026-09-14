@@ -11,8 +11,9 @@ train and the maintainer acts) and ADR-0005's resolved host-coverage question
 The repository has two independent release trains:
 
 - **`v<version>`**, cut by `just release` (git-std bump). This is the workspace
-  train. The crates still sit at `0.0.0`, so it has not been used to publish
-  anything.
+  train. Every workspace crate except `ridl-rt` still sits at `0.0.0`, so it has
+  not been used to publish anything. `ridl-rt` has a version of its own and its
+  own tag, `ridl-rt@<version>` (ADR-0007 decision 14).
 - **`editor-v<version>`**, cut by a maintainer pushing the tag. This builds the
   `ridl` binary for five targets and packages one VSIX per target, creates the
   GitHub Release, and holds the Marketplace and Open VSX publishes behind the
@@ -34,13 +35,14 @@ the tarball names, so `install.sh` and the VSIX layout are unaffected.
 
 ## How the binary learns its version
 
-The crates stay at `0.0.0`, so the version a user sees does not come from
-`Cargo.toml`. `crates/ridl/build.rs` reads `RIDL_BUILD_VERSION` at build time
-and falls back to the crate version when that variable is absent or empty, which
-is what a local build gets. The release workflow sets it to the `editor-v*` tag.
-One stamped string is then reported by `ridl --version`, by `ridl lsp`'s LSP
-`serverInfo`, and by `ridl mcp`'s MCP server info, so a user reporting a bug
-from any of the three names the same build.
+The `ridl` crate stays at the workspace version `0.0.0`, so the version a user
+sees does not come from `Cargo.toml`. `crates/ridl/build.rs` reads
+`RIDL_BUILD_VERSION` at build time and falls back to the crate version when that
+variable is absent or empty, which is what a local build gets. The release
+workflow sets it to the `editor-v*` tag. One stamped string is then reported by
+`ridl --version`, by `ridl lsp`'s LSP `serverInfo`, and by `ridl mcp`'s MCP
+server info, so a user reporting a bug from any of the three names the same
+build.
 
 ## The extension resolves one binary, spawns it in two roles
 
