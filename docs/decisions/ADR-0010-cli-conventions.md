@@ -265,6 +265,10 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    The same failure shape was closed for an explicit `--baseline` that holds no
    snapshot, which reported no drift and exited 0 (driftsys/ridl#235); the
    search depth `first_nested_snapshot_dir` records as deliberate is unchanged.
+   The closing is scoped to the explicit flag on purpose: naming a directory
+   asserts that a baseline is there, where auto-discovery asserts nothing, so an
+   empty `.ridl/baseline/` found without the flag keeps its silent skip, which
+   is the constraint driftsys/ridl#235 itself states.
 
    This brings `ridl fmt` into line with a rule this repository already states
    for its other gate-relevant tooling, not a new rule invented for it.
