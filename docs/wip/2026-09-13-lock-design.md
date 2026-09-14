@@ -54,8 +54,8 @@ no such backend exists yet; the check is that backend's when it is written.
 and no `ServiceId`. Lane A's `ridl-rt` spec (stage A1) states the types, and it
 supersedes those lines. The widths change nothing in the IR, in either wire
 backend, or in Tasks 1, 3 and 4 of the catalog descriptor plan, which already
-use 32 bits. The lock itself changes the IR and Task 3 for other reasons (§9,
-§11).
+use 32 bits. The lock itself changes the IR, Task 3 and Task 4 for other reasons
+(§3, §9, §11).
 
 **Not decided here.**
 
@@ -253,12 +253,13 @@ frozen and the candidate is provisional, so a comparison of whole `Interface`
 values would never match. Every interaction's name, kind, ordinal, payload,
 timing, parameters, return, contracts and visibility, and every `reserved`
 tombstone, must match. The IR types derive `PartialEq`, and the descriptor plan
-already clones IR values and overwrites fields to compare them (`:1305-1311`).
-**The desk check runs with RIDL-409 present.** `run_check` runs the desk check
-only when the compile produced no error (`crates/ridl/src/main.rs:444-453`); L4
-changes that condition so the desk check also runs when every error is RIDL-409.
-RIDL-409 stops nothing in lowering, since an entry with no declaration has
-nothing to lower, so the candidate's `Interface` exists.
+already clones IR values and blanks their doc strings before hashing them
+(`:1305-1320`). **The desk check runs with RIDL-409 present.** `run_check` runs
+the desk check only when the compile produced no error
+(`crates/ridl/src/main.rs:444-453`); L4 changes that condition so the desk check
+also runs when every error is RIDL-409. RIDL-409 stops nothing in lowering,
+since an entry with no declaration has nothing to lower, so the candidate's
+`Interface` exists.
 
 | Situation                                                                                                  | `ridl check` / `ridl build`                                                                                    | `ridl lock`                                                                                                     | `ridl baseline`                                                                                        |
 | ---------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
@@ -275,11 +276,13 @@ nothing to lower, so the candidate's `Interface` exists.
    declaration and one declaration without an entry: with the same shape as the
    baseline's, member for member, it is a rename and the entry follows;
    otherwise the build asks once". Here a same-shape rename is not automatic:
-   the shape test chooses which command the diagnostic names, and the author
-   runs it. "Asks once" is a diagnostic plus two explicit flags, because the
-   build runs where nobody can answer a prompt — CI and a merge queue — and
-   ADR-0010 decision 1 already gives a refusal its form: a diagnostic error,
-   exit 1 (`docs/decisions/ADR-0010-cli-conventions.md:59-73`).
+   RIDL-409 names the commands from the lock and the source alone,
+   `ridl check`'s shape test only adds a note naming the single `--rename`
+   command, and the author runs it. "Asks once" is a diagnostic plus two
+   explicit flags, because the build runs where nobody can answer a prompt — CI
+   and a merge queue — and ADR-0010 decision 1 already gives a refusal its form:
+   a diagnostic error, exit 1
+   (`docs/decisions/ADR-0010-cli-conventions.md:59-73`).
 2. D-7 `:329-332`: "A repository whose `main` is consumed directly runs the same
    command in its merge queue; only then does the file change in parallel". Here
    it reads "only then is a number allocated in parallel": a branch edits lines
@@ -494,12 +497,12 @@ between the clean compile and the publication (gate design D-1 and D-5 on branch
 `docs/archive/2026-09-13-baseline-gate-design.md:50-68` and `:159-190` there):
 exit 1, the staging directory removed, every published file byte-identical.
 
-| Code     | Severity | Emitted by                        | Trigger                                                                                                                    | Fix text                                                                                                                                                                                                                                                                                 |
-| -------- | -------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| RIDL-409 | error    | the compiler (`ridlc` and `ridl`) | a live lock entry has no declaration                                                                                       | `ridl lock <pkg> --retire Old` when the package has no declaration without an entry; otherwise both `--rename Old=New` and `--retire Old`. `ridl check`, with a baseline and exactly one declaration without an entry of `Old`'s shape, adds a note naming the single `--rename` command |
-| RIDL-410 | error    | the compiler                      | `interfaces.lock` is malformed: conflict markers, `next` ≤ an entry, a duplicate number, a duplicate live name, a bad line | resolve the conflict or restore the file from version control, then run `ridl lock`                                                                                                                                                                                                      |
-| RIDL-411 | error    | `ridl baseline`                   | an interface in the fresh IR has a provisional number                                                                      | run `ridl lock`, then publish                                                                                                                                                                                                                                                            |
-| RIDL-412 | error    | `ridl baseline`                   | an interface number in the published baseline is absent from the fresh side and not in its retired list                    | restore the entry's line in `interfaces.lock` from version control, with `retired` if the interface is gone                                                                                                                                                                              |
+| Code     | Severity | Emitted by                        | Trigger                                                                                                                                   | Fix text                                                                                                                                                                                                                                                                                 |
+| -------- | -------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RIDL-409 | error    | the compiler (`ridlc` and `ridl`) | a live lock entry has no declaration                                                                                                      | `ridl lock <pkg> --retire Old` when the package has no declaration without an entry; otherwise both `--rename Old=New` and `--retire Old`. `ridl check`, with a baseline and exactly one declaration without an entry of `Old`'s shape, adds a note naming the single `--rename` command |
+| RIDL-410 | error    | the compiler                      | `interfaces.lock` is malformed: no `next` line, conflict markers, `next` ≤ an entry, a duplicate number, a duplicate live key, a bad line | resolve the conflict or restore the file from version control, then run `ridl lock`                                                                                                                                                                                                      |
+| RIDL-411 | error    | `ridl baseline`                   | an interface in the fresh IR has a provisional number                                                                                     | run `ridl lock`, then publish                                                                                                                                                                                                                                                            |
+| RIDL-412 | error    | `ridl baseline`                   | an interface number in the published baseline is absent from the fresh side and not in its retired list                                   | restore the entry's line in `interfaces.lock` from version control, with `retired` if the interface is gone                                                                                                                                                                              |
 
 - **RIDL-411** reads the fresh IR alone. **RIDL-412** reads the same `diff_sets`
   report the RIDL-408 gate walks (`untombstoned_removals`,
@@ -540,8 +543,8 @@ exit 1, the staging directory removed, every published file byte-identical.
   (`crates/ridl-syntax/family.ungram:299-301`) becomes `PathType` alone: a set
   holds no slots, so `reserved` in a service's list is a parse error. Nothing is
   published at 0.0.0; no migration. The change reaches the AST variant
-  `ServiceShape::Reserved` (`crates/ridl-syntax/src/ast.rs:271`) and its match
-  arm in `crates/ridl/src/main.rs:1068-1074`, and the parser fixture
+  `ServiceShape::Reserved` (`crates/ridl-syntax/src/ast.rs:272`) and its match
+  arm in `crates/ridl/src/main.rs:1074-1079`, and the parser fixture
   `crates/ridl-syntax/test_data/parser/ok/services.ridl:32` with its snapshot.
 - **IR.** `ServiceShape.id = 1` and `ServiceShape.reserved = 12`
   (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:446-462`) become reserved field
@@ -627,7 +630,7 @@ files binds L4 (`2026-09-13-step1-lanes-plan.md:209-219`).
 | `docs/decisions/README.md:79`                                                  | ADR-0015's summary line ("five diagnostics (RIDL-144 to RIDL-148), and five diff categories") gains the amendment                                                                                                                                                                                                                                           | L4                                                                               |
 | Runtime descriptors design D-4 (`:117-120`), D-8 (`:235`), D-9 (`:240-242`)    | unaffected: they already state the frozen number from the lock, the provisional flag, and the retired entries as name and number                                                                                                                                                                                                                            | none                                                                             |
 | `crates/ridl-core/src/diag.rs`, `crates/ridl-diff/`, `crates/ridl/src/main.rs` | the four codes and the three removals; the categories and the number-keyed walk; `ridl lock`, `ridl lock merge`, the desk check's shape note and `run_check`'s condition for running it (§4), the two `ridl baseline` refusals                                                                                                                              | L4 (orders `:210-212`: S1 and S2 → L4 → C3 → B3; S2 → L4; S1 and S2 → L4 → #324) |
-| rsdl decisions note D-7                                                        | not edited: §4's reading of `:314` and the two departures are recorded here; the family general form §6.3 item is D-7's §4 (`:470-472`) and outside this lane                                                                                                                                                                                               | none                                                                             |
+| rsdl decisions note D-7                                                        | not edited: §4's reading of `:314` and the four departures are recorded here; the family general form §6.3 item is D-7's §4 (`:470-472`) and outside this lane                                                                                                                                                                                              | none                                                                             |
 
 ## 12. Testing
 
@@ -674,8 +677,8 @@ interface level (RIDL-411, RIDL-412).
 - The two identity studies: `2026-09-12-interface-id-study.md` and
   `2026-09-12-interface-id-study-2.md` (the merge measurements, §2; the diff
   table, §1).
-- ADR-0015 decisions 15, 17, 18, 19, 20 and 24 (§10); ADR-0010 decisions 1 and 2
-  (§5).
+- ADR-0015 decisions 12, 15, 17, 18, 19, 20 and 24 (§10); ADR-0010 decisions 1
+  and 2 (§5).
 - The baseline gate: PR #330's design D-5 and RIDL-408 (§8); §17.12 and §17.13
   to stage L5.
 - The catalog descriptor plan (#324) Tasks 3 and 4, and #326 (§11).
