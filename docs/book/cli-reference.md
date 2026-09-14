@@ -192,10 +192,13 @@ layout to descend into.
 
 An explicit `--baseline` that yields no snapshot at all — an empty directory,
 or one whose snapshots sit two or more levels down rather than one — is the
-same exit 2: the message names the directory and suggests publishing into it.
-Auto-discovery has no flag to blame for an empty result, so a
-`.ridl/baseline/` directory found this way, empty or absent, keeps the silent
-skip the two paragraphs above do not touch.
+same exit 2: the message names the directory, says to point `--baseline` at
+the directory that holds the snapshots (`ridl baseline` publishes them to
+`.ridl/baseline/` at the workspace root), and only then offers
+`ridl baseline --out` for publishing a first baseline there. Auto-discovery
+asserts nothing about a baseline being present, so a `.ridl/baseline/`
+directory found this way, empty or absent, keeps the silent skip the two
+paragraphs above do not touch.
 
 **The baseline desk check.** With `.ridl/baseline/` present at the workspace
 root — written by [`ridl baseline`](#ridl-baseline) — `ridl check` compares
@@ -265,15 +268,21 @@ ridl baseline && find .ridl/baseline -type f | sort
 .ridl/baseline/veh.common.ir.json
 ```
 
-**The publication gate.** Before writing anything, `ridl baseline` compares
-the snapshot it is about to publish against the one already there, and
-refuses to replace it when the replacement drops an interaction the existing
-baseline still declares — RIDL-408, exit 1, nothing published. The refusal
-covers three shapes: the interaction is gone from the source with no
-`reserved` line at all; the source retires it with a `reserved` line, but at
-an ordinal other than the one the interaction held; or the baseline already
-retired the interaction with a `reserved` line and the source has dropped
-that line. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
+**The publication gate.** Before replacing the published snapshots,
+`ridl baseline` compares the snapshot it is about to publish against the one
+already there, and refuses to replace it when, in an interface body both
+declare, the replacement breaks the tombstone rule of ridl §11 — RIDL-408,
+exit 1, the published snapshots left as they were (the compile has already
+run, so `ridl.lock` is written as on any other run). The refusal covers four
+shapes: an interaction is gone from the source with no `reserved` line at
+all; the source retires it with a `reserved` line, but at an ordinal other
+than the one the interaction held; the baseline already retired the
+interaction with a `reserved` line and the source has dropped that line; or
+the source declares a live interaction under a name the baseline retires.
+The gate covers the interaction level only: a whole interface or service
+removed from the source is reported by `ridl diff` as breaking but is not
+refused here (ridl §17.14), and a named-form service's shape list is not
+read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
 still declared:
 
 ```sh
@@ -281,7 +290,7 @@ ridl baseline
 ```
 
 ```text
-error[RIDL-408]: `doorClosed` is gone from the source but the baseline being replaced still declares it. Publishing would free its ordinal for a later interaction to reuse, with nothing left to record that it was ever taken. Retire it in place with `reserved doorClosed`.
+error[RIDL-408]: `doorClosed` is gone from the source but the baseline being replaced still declares it in `VehicleStatus` (ordinal 2). Publishing would free its ordinal for a later interaction to reuse, with nothing left to record that it was ever taken. Retire it in place with `reserved doorClosed`.
   ┌─ ./demo.ridl:3:11
   │
 3 │ interface VehicleStatus {
@@ -329,15 +338,24 @@ error: `/nonexistent/ridl/workspace` does not exist
 
 A published snapshot that cannot be parsed is left untouched rather than
 silently overwritten: replacing it would destroy whatever ordinal record it
-held with no one able to see it go. The message names a way out:
+held without any report. `ridl` cannot tell a damaged file from a snapshot
+that a toolchain with a different IR schema wrote — the reader rejects an
+unknown field ([ADR-0014][adr-0014] decision 14) and a snapshot carries no
+schema marker — so the message names a remedy for each cause, and neither
+remedy discards the record unread:
 
 ```sh
 ridl baseline
 ```
 
 ```text
-error: ./.ridl/baseline/veh.cluster.ir.json: the IR snapshot is not valid IR v2 JSON: expected value at line 1 column 1; restore the file (for example from version control, or by resolving a merge conflict left in it), or delete it and run `ridl baseline` again — deleting it discards the record it held
+error: ./.ridl/baseline/veh.cluster.ir.json: the IR snapshot is not valid IR v2 JSON: expected value at line 1 column 1; the file is left as it is, because a record that cannot be read cannot be shown safe to replace. If the file is damaged, restore it from version control or resolve the merge conflict left in it. If a toolchain with a different IR schema wrote it, check the source against it with that toolchain (`ridl check --baseline`), then remove the file and run `ridl baseline` with this one
 ```
+
+The same parse error on a `ridl diff` input, or on a file or directory named
+with `ridl check --baseline`, is reported without that remedy: only the
+published baseline that `ridl baseline` is about to replace is the record the
+remedy protects.
 
 ### `ridl build`
 
@@ -1071,7 +1089,7 @@ compiler directly and want its stable, default-free flags.
 | --- | --- | --- | --- |
 | `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
-| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses an untombstoned removal; the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
+| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses the replacement under the tombstone rule (RIDL-408); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
 | `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike five of the other seven, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
