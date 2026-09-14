@@ -737,8 +737,17 @@ fn check_refuses_an_empty_baseline_directory() {
         "an explicit baseline holding no snapshot is an input error:\n{stderr}"
     );
     assert!(
-        stderr.contains("no `.ir.json` snapshot"),
-        "the cause is named:\n{stderr}",
+        stderr.contains(&format!(
+            "the baseline `{}` holds no `.ir.json` snapshot directly inside it",
+            empty.display()
+        )),
+        "the cause names the directory — the nested and artifact-directory refusals say \
+         `no `.ir.json` snapshot` too, so the wording must be this refusal's own:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("point `--baseline` at the directory that holds the snapshots")
+            && stderr.contains(&format!("`ridl baseline --out {}`", empty.display())),
+        "the remedy names both ways out, the aimed-too-high one first:\n{stderr}",
     );
 }
 
@@ -1282,17 +1291,28 @@ fn an_explicit_baseline_holding_no_snapshot_is_an_input_error() {
         "the tool could not answer, so it says so instead of passing:\n{stderr}",
     );
     assert!(
-        stderr.contains("no `.ir.json` snapshot"),
-        "the cause is named:\n{stderr}",
+        stderr.contains(&format!(
+            "the baseline `{}` holds no `.ir.json` snapshot directly inside it",
+            root.display()
+        )),
+        "the cause names the directory the flag aimed at:\n{stderr}",
+    );
+    // This is #235's own case: the snapshots are at `<root>/.ridl/baseline/`,
+    // so `ridl baseline --out <root>` would publish into the workspace root.
+    // The remedy has to name the aimed-too-high mistake before it names
+    // publishing.
+    assert!(
+        stderr.contains("point `--baseline` at the directory that holds the snapshots"),
+        "the remedy says to aim the flag at the snapshots:\n{stderr}",
     );
 }
 
 /// Auto-discovery keeps its silent skip even once the empty-baseline refusal
 /// exists. `.ridl/baseline/` — the exact location `default_baseline_dir`
 /// computes — is created but never published into, so `baseline_location`
-/// discovers it and hands `load_baseline` `explicit == false`. With no flag to
-/// blame for the empty result, "no baseline published yet" stays legitimate,
-/// exactly as it did before this task added the refusal — pinned separately,
+/// discovers it and hands `load_baseline` `explicit == false`. No flag
+/// asserted that a baseline is there, so "no baseline published yet" stays
+/// legitimate, exactly as it did before this task added the refusal — pinned separately,
 /// for an explicit `--baseline` naming the same kind of empty directory, by
 /// `check_refuses_an_empty_baseline_directory`.
 ///

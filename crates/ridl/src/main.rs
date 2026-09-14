@@ -452,8 +452,8 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>) -> ExitCode {
 
     if !run.has_error() {
         match baseline_location(path, baseline) {
-            Ok(Some((location, explicit))) => {
-                if let Err(code) = desk_check(path, &location, explicit, &mut run) {
+            Ok(Some(location)) => {
+                if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
                     return code;
                 }
             }
@@ -767,14 +767,8 @@ fn publish_baseline(staging: &Path, out_dir: &Path) -> std::io::Result<()> {
 /// asking for a baseline that is not there is a mistake worth hearing about.
 /// Auto-discovery is the silent path: with no flag and no `.ridl/baseline/`
 /// directory, `ridl check` behaves exactly as it did before this command
-/// existed. The returned `bool` says which path found the location — `true`
-/// for an explicit `--baseline`, `false` for auto-discovery — which
-/// [`load_baseline`] needs to tell an explicit path that names an empty
-/// baseline from a workspace that has not published one yet.
-fn baseline_location(
-    entry: &Path,
-    flag: Option<&Path>,
-) -> Result<Option<(PathBuf, bool)>, ExitCode> {
+/// existed.
+fn baseline_location(entry: &Path, flag: Option<&Path>) -> Result<Option<PathBuf>, ExitCode> {
     match flag {
         // A prototext or binary IR artifact is refused by name — baselines
         // stay `.ir.json` (ADR-0014 decision 5) — before the snapshot loader
@@ -787,7 +781,7 @@ fn baseline_location(
             );
             Err(ExitCode::from(2))
         }
-        Some(explicit) if explicit.exists() => Ok(Some((explicit.to_path_buf(), true))),
+        Some(explicit) if explicit.exists() => Ok(Some(explicit.to_path_buf())),
         Some(explicit) => {
             eprintln!(
                 "error: the baseline `{}` does not exist",
@@ -797,7 +791,7 @@ fn baseline_location(
         }
         None => {
             let default = default_baseline_dir(entry);
-            Ok(default.is_dir().then_some((default, false)))
+            Ok(default.is_dir().then_some(default))
         }
     }
 }
@@ -831,10 +825,11 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
 /// The workspace is compiled a second time here, through
 /// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
 /// does not hand back the IR. The cost is paid only when a baseline is actually
-/// present, and never on a run that already failed. `explicit` is passed
-/// straight through to [`load_baseline`], which it uses to tell an explicit
-/// `--baseline` holding no snapshot (a refusal) from an auto-discovered
-/// directory holding none (a silent skip).
+/// present, and never on a run that already failed. `explicit` — whether
+/// `location` came from a `--baseline` flag rather than auto-discovery — is
+/// passed straight through to [`load_baseline`], which it uses to tell an
+/// explicit `--baseline` holding no snapshot (a refusal) from an
+/// auto-discovered directory holding none (a silent skip).
 fn desk_check(
     entry: &Path,
     location: &Path,
@@ -1059,9 +1054,17 @@ fn load_baseline(location: &Path, explicit: bool) -> Result<Vec<ridl_ir::v2::Pac
 /// baseline is there. A comparison against nothing reports no drift and exits
 /// 0, which is indistinguishable from a clean check — the same failure shape
 /// ADR-0010 decision 6 closed for `ridl fmt` (driftsys/ridl#235).
+///
+/// The remedy names the likely mistake first — the path is aimed above the
+/// snapshots, which is #235's own case (`--baseline ws` where
+/// `ws/.ridl/baseline/` holds them) — and publishing into the named directory
+/// second. Offered alone, the second would have `ridl baseline --out ws` write
+/// snapshots into the workspace root.
 fn refuse_empty_baseline(location: &Path) -> ExitCode {
     eprintln!(
-        "error: the baseline `{}` holds no `.ir.json` snapshot; publish one with \
+        "error: the baseline `{}` holds no `.ir.json` snapshot directly inside it; point \
+         `--baseline` at the directory that holds the snapshots (`ridl baseline` publishes \
+         them to `.ridl/baseline/` at the workspace root), or publish a first one there with \
          `ridl baseline --out {}`",
         location.display(),
         location.display(),
@@ -1107,7 +1110,10 @@ fn first_non_json_ir_in(dir: &Path) -> Option<PathBuf> {
 /// an unpublished baseline. Searching deeper would mean walking an arbitrary
 /// tree — `--baseline .` at a repository root — to answer a question about
 /// the one directory the author named, so a path aimed two or more levels
-/// high stays the silent pass it is today (issue #230).
+/// high yields no snapshot from this scan (issue #230). What that empty
+/// result means is the caller's decision: [`load_baseline`] refuses it for an
+/// explicit `--baseline` (driftsys/ridl#235) and reads it as an unpublished
+/// baseline under auto-discovery.
 ///
 /// A subdirectory that cannot be listed is exit 2, not a silent `None`. This
 /// is the one scan in this file that reads a level *no caller has listed* —
@@ -1147,7 +1153,8 @@ fn first_nested_snapshot_dir(dir: &Path) -> Result<Option<PathBuf>, ExitCode> {
 /// Such a directory holds no IR artifact *directly*, so
 /// [`refuse_artifact_directory`] cannot see it, and the snapshot scan reads it
 /// as an *empty* set — indistinguishable from the ordinary "no baseline
-/// published yet" state, which must stay a silent pass. The snapshots are
+/// published yet" state, which stays a silent pass under auto-discovery. The
+/// snapshots are
 /// described where they are rather than descended into: descending would
 /// accept a layout `ridl baseline` never writes, and would have to choose
 /// between subdirectories when more than one holds snapshots, silently
@@ -1288,9 +1295,9 @@ struct DeclIndex {
 impl DeclIndex {
     /// Indexes every `.typl` and `.ridl` file under `entry`. A file that
     /// cannot be read is skipped rather than reported: the compile already ran
-    /// clean over this tree, so anything unreadable here is not the business of
-    /// any caller of this index — neither the desk check nor the publication
-    /// gate. An unreadable *directory* is not skipped in the same sense —
+    /// clean over this tree, so anything unreadable here is outside what any
+    /// caller of this index reports — neither the desk check nor the
+    /// publication gate. An unreadable *directory* is not skipped in the same sense —
     /// `collect_source_files` fails on the first one it meets, and
     /// `unwrap_or_default` turns that into an empty index rather than a
     /// partial one — but the compile that already succeeded over this tree
