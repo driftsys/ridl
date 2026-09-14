@@ -218,7 +218,7 @@ compat-check: toolchain-check
     pkg="$PWD/target/compat-check/pkg"
     rm -rf "$pkg"
     mkdir -p "$pkg"
-    tar -xzf "target/package/ridl-rt-$version.crate" -C "$pkg" --strip-components=1
+    tar -xzf "${CARGO_TARGET_DIR:-target}/package/ridl-rt-$version.crate" -C "$pkg" --strip-components=1
 
     if ! cmp -s "$pkg/LICENSE" LICENSE; then
         echo "compat-check: $pkg/LICENSE differs from the root LICENSE." >&2

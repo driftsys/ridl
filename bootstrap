@@ -55,7 +55,7 @@ if command -v rustup >/dev/null 2>&1; then
 
   # ridl-rt's minimum supported Rust version — `just compat-check` builds with it.
   minimum="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' crates/ridl-rt/Cargo.toml)"
-  if [ -n "$minimum" ]; then
+  if [ -n "$minimum" ] && ! rustup run "$minimum" rustc --version >/dev/null 2>&1; then
     log "installing the $minimum toolchain"
     rustup toolchain install "$minimum" --profile minimal
   fi
