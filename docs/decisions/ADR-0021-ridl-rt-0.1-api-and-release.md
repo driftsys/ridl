@@ -189,11 +189,13 @@ trusted with no `unsafe` and no second verification pass.
     cargo 1.83 cannot read resolver 3 ("feature `edition2024` is required"), and
     resolver 3's MSRV-aware fallback would resolve every workspace dependency
     for `ridl-rt`'s minimum rather than only its own; decided by Sebastien on
-    2026-09-14 in driftsys/ridl#352. The pin follows the latest stable release
-    (driftsys/ridl#353). Raising `rust-version` is a breaking change under this
-    decision's rule, shipped in a 0.x minor release; a toolchain pin bump does
-    not by itself change `rust-version`. This replaces R-12's `rust-version`
-    item — not the rest of R-12 — in
+    2026-09-14 in driftsys/ridl#352. The pin follows the latest stable release:
+    a maintainer bumps it by hand under
+    [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 3 when a new
+    stable release appears (driftsys/ridl#353). Raising `rust-version` is a
+    breaking change under this decision's rule, shipped in a 0.x minor release;
+    a toolchain pin bump does not by itself change `rust-version`. This replaces
+    R-12's `rust-version` item — not the rest of R-12 — in
     [the archived design record](../archive/2026-09-13-ridl-rt-v0.1-design.md),
     which set `rust-version` equal to the pin, decided by Sebastien on
     2026-09-14 during the review of driftsys/ridl#352, because a minimum tied to
