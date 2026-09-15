@@ -377,16 +377,51 @@ book-check:
 # that writes it, over every tracked `.md` — the book, the specifications, the
 # ADRs, and the repository's own front matter alike.
 #
-# Fenced blocks and inline code spans are stripped first. A fence closes only at
-# a fence of the same character that is at least as long and has no info string,
-# as in CommonMark, so a four-backtick fence can quote a Markdown file that holds
-# three-backtick fences. A code span such as
-# `element[](min..max)` is documentation of another language's syntax, not a
-# link. External schemes and bare anchors are skipped; an anchor on a real path
-# is trimmed, so the file is checked and the fragment is not.
+# Fenced blocks and inline code spans are stripped first. A fence opens at three
+# or more backticks or tildes, indented by at most three spaces, and closes only
+# at a fence of the same character that is at least as long and has no info
+# string, as in CommonMark. So a four-backtick fence can quote a Markdown file
+# that holds three-backtick fences. A trailing carriage return is ignored. Two
+# CommonMark cases are not followed: a fence inside a block quote, and a fence
+# in a list item indented four spaces or more, are read as text. A code span
+# such as `element[](min..max)` is documentation of another language's syntax,
+# not a link. External schemes and bare anchors are skipped; an anchor on a real
+# path is trimmed, so the file is checked and the fragment is not.
+#
+# Before the scan, the recipe runs the extraction over a built-in sample and
+# fails if the fence rules above do not give exactly the expected links.
 link-check:
     #!/usr/bin/env bash
     set -uo pipefail
+    extract_links() {
+        awk '{
+                line = $0; sub(/\r$/, "", line); sub(/^(   |  | )/, "", line)
+                if (line !~ /^(```|~~~)/) { if (!f) print; next }
+                c = substr(line, 1, 1); n = 0
+                while (substr(line, n + 1, 1) == c) n++
+                if (!f) { f = 1; fc = c; fn = n; next }
+                if (c == fc && n >= fn && substr(line, n + 1) ~ /^[ \t]*$/) f = 0
+            }' "$1" \
+            | sed -E 's/`[^`]*`//g' \
+            | grep -oE '\]\([^)]+\)' \
+            | sed -E 's/^\]\(//; s/\)$//' \
+            | grep -vE '^(https?:|mailto:|#)' \
+            | sed -E 's/#.*$//' \
+            | grep -v '^$' || true
+    }
+    sample="$(mktemp)"
+    trap 'rm -f "$sample"' EXIT
+    printf '%s\n' '[a](before.md)' '````markdown' '```rsdl' '[b](nested.md)' '```' '````' \
+        '   ```text' '[c](indented.md)' '   ```' \
+        '~~~' '[d](tilde.md)' '```' '[e](tilde-still.md)' '~~~' \
+        $'```crlf\r' $'[f](crlf.md)\r' $'```\r' \
+        '```' '[g](info.md)' '```text' '[h](info-still.md)' '```' \
+        '[z](after.md)' > "$sample"
+    if [ "$(extract_links "$sample" | tr '\n' ' ')" != "before.md after.md " ]; then
+        echo "link-check: the fence rules no longer give the expected links on the built-in sample:" >&2
+        extract_links "$sample" >&2
+        exit 1
+    fi
     broken=0
     while IFS= read -r file; do
         dir="$(dirname "$file")"
@@ -395,20 +430,7 @@ link-check:
             [ -e "$dir/$target" ] && continue
             echo "link-check: $file -> $target" >&2
             broken=$((broken+1))
-        done < <(awk '{
-                line = $0; sub(/^ ? ? ?/, "", line)
-                if (line !~ /^(```|~~~)/) { if (!f) print; next }
-                c = substr(line, 1, 1); n = 0
-                while (substr(line, n + 1, 1) == c) n++
-                if (!f) { f = 1; fc = c; fn = n; next }
-                if (c == fc && n >= fn && substr(line, n + 1) ~ /^[ \t]*$/) f = 0
-            }' "$file" \
-            | sed -E 's/`[^`]*`//g' \
-            | grep -oE '\]\([^)]+\)' \
-            | sed -E 's/^\]\(//; s/\)$//' \
-            | grep -vE '^(https?:|mailto:|#)' \
-            | sed -E 's/#.*$//' \
-            | grep -v '^$' || true)
+        done < <(extract_links "$file")
     done < <(git ls-files '*.md')
     if [ "$broken" -ne 0 ]; then
         echo "link-check: $broken link(s) above do not resolve." >&2
