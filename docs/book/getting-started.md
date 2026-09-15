@@ -878,11 +878,10 @@ exists.
 
 Composing interfaces is how a recurring interaction set — a diagnostics block,
 a heartbeat — is reused without duplication: each composed interface keeps its
-own ordinal space, and its slot in the list carries an interface id that
-follows the same append-only rule as ordinals, with a service-level `reserved`
-tombstone holding a retired slot. Because members stay addressed
-`service.member`, two composed interfaces must not share a member name
-(`RIDL-144`).
+own ordinal space, and its number comes from its package's `interfaces.lock`,
+not from its place in the list, so the list is a set and its order carries
+nothing. Because members stay addressed `service.member`, two composed
+interfaces must not share a member name (`RIDL-144`).
 
 Interfaces are flat: there is no interface inheritance. Sharing a _shape_ is
 typl's job; a shared interaction _set_ is composed at the service, never

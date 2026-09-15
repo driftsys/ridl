@@ -1197,8 +1197,8 @@ impl<'a> Parser<'a> {
         self.builder.finish_node();
     }
 
-    /// The comma-separated shape list of a service's named form: a `PathType`
-    /// or a `ReservedEntry` per slot (ADR-0015 decision 12).
+    /// The comma-separated shape list of a service's named form: one
+    /// `PathType` per shape (ADR-0015 decision 12).
     ///
     /// Commas are **required** between shapes, diverging from the family's
     /// optional-comma convention, and the reason is structural (ADR-0015
@@ -1214,28 +1214,20 @@ impl<'a> Parser<'a> {
     /// missing comma instead leaves that identifier to the top-level loop,
     /// whose FORM-102 points at it directly. A trailing comma stays optional.
     fn service_shape_list(&mut self) {
-        self.service_shape();
+        // One shape: an interface reference. A primitive keyword still parses
+        // as a path segment and the checker rejects it (RIDL-141), the E1
+        // lenient-parser discipline. `reserved` is not a shape: a service's
+        // list is a set with no slot to retire (lock design §9), so the list
+        // ends before it and the top-level loop reports the stray keyword.
+        self.path_type();
         // `current()` peeks past trivia without consuming it, so a list that
         // ends here leaves the trailing trivia outside the ServiceDef node.
         while self.at(SyntaxKind::Comma) {
             self.bump(); // ','
             // A trailing comma: nothing after it starts a shape.
-            if !self.at(SyntaxKind::ReservedKw) && !self.at_path_segment() {
+            if !self.at_path_segment() {
                 break;
             }
-            self.service_shape();
-        }
-    }
-
-    /// One shape slot: an interface reference, or a service-level `reserved`
-    /// tombstone — the same `ReservedEntry` typl's struct and union tombstones
-    /// and interface bodies already share (ADR-0015 decision 12). A primitive
-    /// keyword still parses as a path segment and the checker rejects it
-    /// (RIDL-141), the E1 lenient-parser discipline.
-    fn service_shape(&mut self) {
-        if self.at(SyntaxKind::ReservedKw) {
-            self.reserved_entry();
-        } else {
             self.path_type();
         }
     }
@@ -3145,24 +3137,44 @@ interface I {{
         );
     }
 
-    /// The trailing comma stays optional (ADR-0015 decision 13), and a
-    /// service-level `reserved` tombstone is a direct `ReservedEntry` child of
-    /// the ServiceDef — the same node typl's tombstones use.
+    /// The trailing comma stays optional (ADR-0015 decision 13), and every
+    /// shape is a direct `PathType` child of the ServiceDef. `reserved` is not
+    /// a shape (lock design §9): the list ends at the comma before it, the
+    /// stray keyword is reported, and nothing after it joins the list.
     #[test]
-    fn a_shape_list_admits_a_trailing_comma_and_a_tombstone() {
-        let input = "package p\nservice p.svc : DoorControl, reserved LegacyDiag, MotorControl,\n";
+    fn a_shape_list_admits_a_trailing_comma_and_ends_before_reserved() {
+        let input = "package p\nservice p.svc : DoorControl, MotorControl,\n";
         let parsed = parse(input, Profile::Ridl);
         assert!(
             parsed.errors().is_empty(),
             "the list parses clean, got: {:?}",
             parsed.errors(),
         );
-        let service = parsed
+        assert_eq!(
+            shape_kinds(&parsed),
+            [SyntaxKind::PathType, SyntaxKind::PathType]
+        );
+
+        let input = "package p\nservice p.svc : DoorControl, reserved LegacyDiag, MotorControl,\n";
+        let parsed = parse(input, Profile::Ridl);
+        assert!(
+            !parsed.errors().is_empty(),
+            "`reserved` in a service's list is a parse error",
+        );
+        assert_eq!(
+            shape_kinds(&parsed),
+            [SyntaxKind::PathType],
+            "the list ends before the stray keyword",
+        );
+    }
+
+    /// The kinds of the shape children of the first ServiceDef in `parsed`.
+    fn shape_kinds(parsed: &Parse) -> Vec<SyntaxKind> {
+        parsed
             .syntax()
             .descendants()
             .find(|node| node.kind() == SyntaxKind::ServiceDef)
-            .expect("the service parses");
-        let kinds: Vec<SyntaxKind> = service
+            .expect("the service parses")
             .children()
             .filter(|child| {
                 matches!(
@@ -3171,15 +3183,7 @@ interface I {{
                 )
             })
             .map(|child| child.kind())
-            .collect();
-        assert_eq!(
-            kinds,
-            [
-                SyntaxKind::PathType,
-                SyntaxKind::ReservedEntry,
-                SyntaxKind::PathType,
-            ],
-        );
+            .collect()
     }
 
     /// Nothing at all after `reserved` is a missing token, not a wrong one:

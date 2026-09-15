@@ -283,13 +283,10 @@ message Field {
 
 // A reserved tombstone — a retired slot that is never reused (typl §7.4).
 message Reserved {
-  // The retired ordinal slot in a struct, union, or interface body, or the
-  // retired shape slot in a service's list (ADR-0015 decision 15); 0 in
+  // The retired ordinal slot in a struct, union, or interface body; 0 in
   // enum bodies, where the retired identity is the value.
   uint32 ordinal = 1;
-  // The retired field name, e.g. `reserved legacyChecksum` (typl §7.4) —
-  // the retired interface name in a service's shape list, where it is
-  // required (RIDL-148, ADR-0015 decision 24).
+  // The retired field name, e.g. `reserved legacyChecksum` (typl §7.4).
   optional string name = 2;
   // The retired integer value in enum bodies, e.g. `reserved 3`
   // (typl §7.4).
@@ -464,31 +461,31 @@ message Service {
   // treatment ADR-0008 decision 8 applied when IR v2 took over v1's
   // numbering.
   reserved 10, 11;
-  // The shape list, in slot order (ridl §11 one level up, ADR-0015
-  // decision 15): the named form carries one entry per shape or tombstone;
-  // the inline form carries exactly one INLINE entry in slot 1
+  // The list of interfaces (ADR-0015 decision 12, as amended by the lock
+  // design): the named form carries one entry per reference, in source
+  // order — a set, since an interface's number is Interface.number and not
+  // its place here; the inline form carries exactly one INLINE entry
   // (ADR-0015 decision 14).
   repeated ServiceShape shapes = 12;
 }
 
-// One slot of a service's shape list (ridl §14.5, ADR-0015 decisions 12
-// and 15): a composed interface, the service's inline shape, or a
-// service-level reserved tombstone holding a retired slot.
+// One entry of a service's list (ridl §14.5, ADR-0015 decision 12 as
+// amended by the lock design): a composed interface, or the service's inline
+// shape. The list is a set: an interface's number comes from its package's
+// interfaces.lock (Interface.number), not from its place here.
 message ServiceShape {
-  // 1-based interface id by declaration order — ridl §11's model one level
-  // up (ADR-0015 decision 15). Stored on the slot and, for a tombstone,
-  // inside Reserved too; the lowering sets both from one counter, as the
-  // interaction tombstones do.
-  uint32 id = 1;
+  // 1 carried `uint32 id`, the 1-based slot id of the retired slot model, and
+  // 12 carried `Reserved reserved`, the service-level tombstone, until the
+  // lock design §9 retired both on 2026-09-15. Reserved rather than reused,
+  // the treatment ADR-0015 decision 20 gave the Service oneof: a field
+  // number's meaning stays permanent by construction.
+  reserved 1, 12;
   oneof kind {
     // Canonical interface reference (ridl §14.5).
     string interface_ref = 10;
     // Inline shape; Interface.name == "" (ridl §14.5). Present only as the
-    // single slot of an inline-form service (ADR-0015 decision 14).
+    // single entry of an inline-form service (ADR-0015 decision 14).
     Interface inline = 11;
-    // A service-level tombstone: the retired slot's interface name in
-    // Reserved.name (ADR-0015 decision 12 — the ReservedEntry reuse).
-    Reserved reserved = 12;
   }
 }
 

@@ -12,7 +12,6 @@ use super::Expr;
 use super::FieldType;
 use super::InterfaceMember;
 use super::ParamType;
-use super::ServiceShape;
 use super::StructMember;
 use super::support;
 use crate::syntax_kind::{SyntaxKind, SyntaxNode, SyntaxToken};
@@ -162,7 +161,7 @@ impl ServiceDef {
     pub fn name(&self) -> Option<DottedName> {
         support::child(&self.syntax)
     }
-    pub fn shapes(&self) -> AstChildren<ServiceShape> {
+    pub fn shapes(&self) -> AstChildren<PathType> {
         support::children(&self.syntax)
     }
     pub fn inline_members(&self) -> AstChildren<InterfaceMember> {

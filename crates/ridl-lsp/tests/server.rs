@@ -2188,7 +2188,7 @@ fn goto_definition_and_references_work_on_a_service_interface_reference() {
 }
 
 /// A contract composing two interfaces into one service (ADR-0015 decision
-/// 12), with a service-level `reserved` tombstone holding slot 2.
+/// 12).
 const RIDL_COMPOSED: &str = "package veh.body\n\
 \n\
 type Flag : boolean\n\
@@ -2201,7 +2201,7 @@ interface HealthBlock {\n\
 \x20 signal alive : Flag @[1s..10s]\n\
 }\n\
 \n\
-service veh.body.doors : DoorControl, reserved LegacyDoorDiag, HealthBlock\n";
+service veh.body.doors : DoorControl, HealthBlock\n";
 
 /// Writes the composed-service fixture as a one-member workspace.
 fn write_composed_workspace(dir: &TempDir) -> lt::Uri {
@@ -2212,10 +2212,10 @@ fn write_composed_workspace(dir: &TempDir) -> lt::Uri {
     uri_of(&dir.write("doors.ridl", RIDL_COMPOSED))
 }
 
-/// Hover on a composed service renders the whole shape list — both interface
-/// references and the tombstone, in slot order — and goto-definition on each
-/// shape reference jumps to its own interface declaration: the LSP follows
-/// the list, not one reference.
+/// Hover on a composed service renders the whole list — both interface
+/// references, in source order — and goto-definition on each reference jumps
+/// to its own interface declaration: the LSP follows the list, not one
+/// reference.
 #[test]
 fn hover_and_goto_follow_a_composed_services_shape_list() {
     let dir = TempDir::new("ridl-composed-service");
@@ -2229,12 +2229,17 @@ fn hover_and_goto_follow_a_composed_services_shape_list() {
         contract.clone(),
         find_pos(RIDL_COMPOSED, "veh.body.doors", 0),
     );
-    assert!(value.contains("DoorControl"), "slot 1: {value}");
-    assert!(value.contains("reserved LegacyDoorDiag"), "slot 2: {value}");
-    assert!(value.contains("HealthBlock"), "slot 3: {value}");
+    assert!(
+        value.contains("DoorControl"),
+        "the first reference: {value}"
+    );
+    assert!(
+        value.contains("HealthBlock"),
+        "the second reference: {value}"
+    );
     assert!(
         value.contains("deriving the posture per deployment is reserved (rsdl §12)"),
-        "the posture note: {value}"
+        "the §14.5 note: {value}"
     );
 
     // Goto-definition on the SECOND interface reference: a walk that stopped

@@ -769,10 +769,10 @@ fn strata_note(fallible: &v2::FallibleType) -> String {
     )
 }
 
-/// Renders a service declaration: its shape list, and the ridl §14.5 posture
-/// note. A named-form service renders every slot — references and `reserved`
-/// tombstones alike, in slot order (ADR-0015 decision 12) — so the hover
-/// shows the same list the source declares.
+/// Renders a service declaration: its list of interfaces, and the ridl §14.5
+/// posture note. A named-form service renders every reference in source
+/// order (ADR-0015 decision 12), so the hover shows the same list the source
+/// declares.
 pub(crate) fn render_service(service: &v2::Service) -> String {
     let inline = service.shapes.iter().find_map(|slot| match &slot.kind {
         Some(v2::service_shape::Kind::Inline(shape)) => Some(shape),
@@ -783,10 +783,6 @@ pub(crate) fn render_service(service: &v2::Service) -> String {
         .iter()
         .filter_map(|slot| match &slot.kind {
             Some(v2::service_shape::Kind::InterfaceRef(interface)) => Some(interface.clone()),
-            Some(v2::service_shape::Kind::Reserved(reserved)) => Some(format!(
-                "reserved {}",
-                reserved.name.as_deref().unwrap_or("_")
-            )),
             Some(v2::service_shape::Kind::Inline(_)) | None => None,
         })
         .collect();

@@ -3092,9 +3092,9 @@ impl Checker<'_> {
                     self.duplicate_interaction(&name, range, first);
                     continue;
                 }
-                // The offender still lowers and holds its ordinal, as with
-                // RIDL-146 and RIDL-147: the error blocks emission, and
-                // dropping the member would shift every later ordinal.
+                // The offender still lowers and holds its ordinal: the error
+                // blocks emission, and dropping the member would shift every
+                // later ordinal.
                 let projection = snake_case(&name);
                 if let Some((first_name, first)) = projected.get(&projection).cloned() {
                     self.colliding_projected_name(&name, &first_name, &projection, range, first);
@@ -3202,18 +3202,14 @@ impl Checker<'_> {
             self.check_service_name(dotted);
         }
         let doc_info = docs::scan(&service.doc_comments());
-        // The `:` token discriminates the two forms, not the shape list: in
-        // the inline form `ServiceDef::shapes()` would also yield the body's
-        // tombstones (see `ridl_syntax::ast::ServiceShape`). A service the
-        // parser recovered with neither form reads as an empty inline shape,
-        // the reading `SourceFile::shapes` takes too.
+        // The `:` token discriminates the two forms. A service the parser
+        // recovered with neither form reads as an empty inline shape, the
+        // reading `SourceFile::shapes` takes too.
         let shapes = if service.colon_token().is_some() {
             self.lower_service_shapes(service)
         } else {
-            // The inline shape is slot 1 (ADR-0015 decision 15), which makes
-            // the inline form a degenerate case of the general one.
+            // The inline shape is the one entry of the list.
             vec![v2::ServiceShape {
-                id: 1,
                 kind: Some(v2::service_shape::Kind::Inline(
                     self.lower_service_inline(service),
                 )),
@@ -3229,183 +3225,65 @@ impl Checker<'_> {
         }
     }
 
-    /// Lowers a service's named shape list (ADR-0015 decisions 12 to 18, and
-    /// decision 24). Interface ids are 1-based by declaration order and a
-    /// tombstone holds its slot (decision 15) — ridl §11's model one level
-    /// up. Five rules guard the list:
+    /// Lowers a service's list of interfaces (ADR-0015 decisions 12 to 18, as
+    /// amended by the lock design): a set of canonical references, in source
+    /// order. An interface's number comes from its package's `interfaces.lock`
+    /// (`Interface.number`), not from its place here, so the list carries no
+    /// slot id and no tombstone. Two rules guard the list:
     ///
     /// - **RIDL-145** — the same interface named twice. The second listing is
-    ///   dropped and holds no slot, mirroring RIDL-402's first-wins rule; its
-    ///   own code rather than RIDL-144 per member, which would bury the
-    ///   mistake under one diagnostic per member.
-    /// - **RIDL-146** — a shape re-declaring a name a service-level
-    ///   `reserved` tombstone retired: RIDL-401 one level up. As there, the
-    ///   offender still lowers into its slot; the error blocks emission.
-    /// - **RIDL-147** — two shapes whose interface names collide even though
-    ///   their references differ (decision 24). A binding keys the ordinal
-    ///   spaces on the interface name (decision 17), so the two shapes would
-    ///   be indistinguishable at every binding. The rule is over every shape,
-    ///   live or retired (decision 24): a name spelled by two tombstones
-    ///   draws the same code, from the pre-pass. The offender lowers into
-    ///   its slot, as with RIDL-146.
-    /// - **RIDL-148** — a tombstone that spells no interface name (decision
-    ///   24): the literal spellings the shared `reserved` grammar admits
-    ///   lower to a nameless tombstone nothing can ever match, so the
-    ///   sanctioned retirement would silently not work. The slot still
-    ///   lowers, holding its id.
+    ///   dropped, mirroring RIDL-402's first-wins rule; its own code rather
+    ///   than RIDL-144 per member, which would bury the mistake under one
+    ///   diagnostic per member.
     /// - **RIDL-144** — a member name duplicated across the composed
     ///   interfaces. Flat addressing (decision 16) gives every member the
     ///   address `service.member`, so two referents for one name cannot be
     ///   expressed.
     fn lower_service_shapes(&mut self, service: &ast::ServiceDef) -> Vec<v2::ServiceShape> {
-        // The tombstone pre-pass, as in an interface body: `reserved` retires
-        // its name wherever it sits in the list. First-wins, read-then-write:
-        // the first tombstone keeps the name and RIDL-146's label, and a
-        // later tombstone spelling the same name is RIDL-147 — the
-        // uniqueness rule is over every shape, live or retired (ADR-0015
-        // decision 24), and two tombstones on one name would leave the
-        // shape list without a per-name key.
-        let mut reserved: HashMap<String, TextRange> = HashMap::new();
-        for shape in service.shapes() {
-            if let ast::ServiceShape::Reserved(entry) = &shape
-                && let Some(name) = member_name(entry.name())
-            {
-                let range = member_name_range(entry.name(), entry.syntax());
-                if let Some(first) = reserved.get(&name).copied() {
-                    self.colliding_reserved_shape(&name, range, first);
-                } else {
-                    reserved.insert(name, range);
-                }
-            }
-        }
-
         // RIDL-145 keys on the canonical reference, so a bare local name and
         // its qualified spelling collide as one interface. The winner's span
         // is kept so the diagnostic can point at it.
         let mut seen: HashMap<String, TextRange> = HashMap::new();
-        // RIDL-147 keys on the interface name — the final segment of the
-        // canonical reference: the first shape to compose a name owns it,
-        // and its reference and span feed the diagnostic (ADR-0015
-        // decision 24).
-        let mut name_owners: HashMap<String, (String, TextRange)> = HashMap::new();
         // RIDL-144: member name → the interface that first contributed it and
-        // the shape slot that listed the interface.
+        // the list entry that named the interface.
         let mut member_owners: HashMap<String, (String, TextRange)> = HashMap::new();
         let mut shapes = Vec::new();
-        let mut id = 0u32;
-        for shape in service.shapes() {
-            match shape {
-                ast::ServiceShape::Reserved(entry) => {
-                    // A service-level tombstone retires an interface *name*
-                    // (ADR-0015 decisions 17 and 24). The literal spellings
-                    // the shared `reserved` grammar admits lower to a
-                    // nameless tombstone that neither RIDL-146's pre-pass
-                    // nor the diff walk can ever match, so RIDL-148 rejects
-                    // them. The slot still lowers, holding its id, so the
-                    // later slots keep their numbering.
-                    if member_name(entry.name()).is_none() {
-                        self.reserved_shape_without_a_name(&entry);
-                    }
-                    id += 1;
-                    // The tombstone stores its slot twice — on the shape AND
-                    // in `Reserved` — set from the one counter, as the
-                    // interaction tombstones are.
-                    shapes.push(v2::ServiceShape {
-                        id,
-                        kind: Some(v2::service_shape::Kind::Reserved(lower_reserved(
-                            &entry, id,
-                        ))),
-                    });
-                }
-                ast::ServiceShape::Interface(path) => {
-                    let range = path.syntax().text_range();
-                    let (canonical, symbol) = self.lower_service_ref(&path);
-                    // RIDL-146 compares the interface's own name — the final
-                    // segment of the reference. A service-level tombstone
-                    // spells an interface name (RIDL-148 rejects the
-                    // nameless literal spellings), and the interface name is
-                    // what a binding keys the ordinal spaces on (ADR-0015
-                    // decision 17), so it is the identity the tombstone
-                    // retires.
-                    let shape_name = canonical.rsplit('.').next().unwrap_or(&canonical);
-                    if let Some(tombstone) = reserved.get(shape_name).copied() {
-                        self.redeclared_reserved_shape(shape_name, range, tombstone);
-                    }
-                    // First-wins, read-then-write — the RIDL-402 discipline.
-                    if let Some(first) = seen.get(&canonical).copied() {
-                        self.duplicate_service_shape(&canonical, range, first);
-                        continue;
-                    }
-                    seen.insert(canonical.clone(), range);
-                    // RIDL-147 — two shapes whose interface names collide
-                    // even though their references differ (ADR-0015 decision
-                    // 24). The same-reference case cannot reach here:
-                    // RIDL-145 above owns it and drops the listing. The
-                    // offender still lowers into its slot, as with RIDL-146;
-                    // the error blocks emission.
-                    match name_owners.get(shape_name) {
+        for path in service.shapes() {
+            let range = path.syntax().text_range();
+            let (canonical, symbol) = self.lower_service_ref(&path);
+            // First-wins, read-then-write — the RIDL-402 discipline.
+            if let Some(first) = seen.get(&canonical).copied() {
+                self.duplicate_service_shape(&canonical, range, first);
+                continue;
+            }
+            seen.insert(canonical.clone(), range);
+            let shape_name = canonical.rsplit('.').next().unwrap_or(&canonical);
+            if let Some(symbol) = &symbol
+                && symbol.kind == SymbolKind::Interface
+            {
+                for member in self.interface_member_names(symbol) {
+                    match member_owners.get(&member) {
                         Some((owner, owner_range)) => {
                             let (owner, owner_range) = (owner.clone(), *owner_range);
-                            self.colliding_service_shape(
+                            self.duplicate_service_member(
+                                &member,
                                 shape_name,
-                                &canonical,
                                 range,
                                 &owner,
                                 owner_range,
                             );
                         }
                         None => {
-                            name_owners.insert(shape_name.to_string(), (canonical.clone(), range));
+                            member_owners.insert(member, (shape_name.to_string(), range));
                         }
                     }
-                    if let Some(symbol) = &symbol
-                        && symbol.kind == SymbolKind::Interface
-                    {
-                        for member in self.interface_member_names(symbol) {
-                            match member_owners.get(&member) {
-                                Some((owner, owner_range)) => {
-                                    let (owner, owner_range) = (owner.clone(), *owner_range);
-                                    self.duplicate_service_member(
-                                        &member,
-                                        shape_name,
-                                        range,
-                                        &owner,
-                                        owner_range,
-                                    );
-                                }
-                                None => {
-                                    member_owners.insert(member, (shape_name.to_string(), range));
-                                }
-                            }
-                        }
-                    }
-                    id += 1;
-                    shapes.push(v2::ServiceShape {
-                        id,
-                        kind: Some(v2::service_shape::Kind::InterfaceRef(canonical)),
-                    });
                 }
             }
+            shapes.push(v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::InterfaceRef(canonical)),
+            });
         }
         shapes
-    }
-
-    /// RIDL-146: a shape re-declaring a name a service-level `reserved`
-    /// tombstone retired — the RIDL-401 rule one level up (ADR-0015
-    /// decision 18).
-    fn redeclared_reserved_shape(&mut self, name: &str, range: TextRange, tombstone: TextRange) {
-        self.error_with_label(
-            DiagCode::RIDL_146,
-            range,
-            format!(
-                "`{name}` is retired: this service reserves the name, and a retired interface \
-                 keeps its slot for ever, so a consumer still holding the old contract would \
-                 read this shape as the retired one. Publish it under a different interface \
-                 name (ridl §14.5, §11)"
-            ),
-            tombstone,
-            format!("`{name}` is retired here"),
-        );
     }
 
     /// RIDL-145: the same interface named twice in one service (ADR-0015
@@ -3422,62 +3300,6 @@ impl Checker<'_> {
             ),
             first,
             format!("`{canonical}` is listed here, and this is the listing that is kept"),
-        );
-    }
-
-    /// RIDL-147: two shapes of one service whose interface names collide even
-    /// though their references differ (ADR-0015 decision 24). A binding
-    /// separates the ordinal spaces by interface name (decision 17), so the
-    /// two shapes would be indistinguishable at every binding. Its own code
-    /// rather than RIDL-145 because the remedy differs: an import alias
-    /// cannot fix a name collision — the name is the interface's own — only
-    /// a rename or a different composition can. The retired pairing of the
-    /// same rule — one name on two tombstones — is
-    /// [`Self::colliding_reserved_shape`].
-    fn colliding_service_shape(
-        &mut self,
-        name: &str,
-        canonical: &str,
-        range: TextRange,
-        owner: &str,
-        owner_range: TextRange,
-    ) {
-        self.error_with_label(
-            DiagCode::RIDL_147,
-            range,
-            format!(
-                "`{canonical}` composes as `{name}`, and this service already composes `{owner}` \
-                 under the same name — a binding separates the ordinal spaces by interface name \
-                 (ADR-0015 decision 17), so two shapes of one service cannot share one. An import \
-                 alias cannot help: rename one of the two interfaces, or compose this one into a \
-                 different service (ridl §14.5)"
-            ),
-            owner_range,
-            format!("`{owner}` composes as `{name}` here"),
-        );
-    }
-
-    /// RIDL-147, the retired pairing: one name spelled by two `reserved`
-    /// tombstones of one service (ADR-0015 decision 24). The uniqueness rule
-    /// is over every shape, live or retired — two tombstones on one name
-    /// leave the shape list without a per-name key, so every later diff of
-    /// the service would be compared as a whole. The same code as the live
-    /// pairing, because it is the same rule; its own message, because the
-    /// remedy differs — nothing is composed and nothing can be renamed
-    /// here, the second tombstone is deleted or corrected.
-    fn colliding_reserved_shape(&mut self, name: &str, range: TextRange, first: TextRange) {
-        self.error_with_label(
-            DiagCode::RIDL_147,
-            range,
-            format!(
-                "`{name}` is already retired by this service — a name is retired once, \
-                 because two shapes of one service cannot share an interface name, live or \
-                 retired (ADR-0015 decision 24). Delete this tombstone if it repeats the \
-                 retirement, or write the interface name it was meant to retire (ridl §14.5, \
-                 §11)"
-            ),
-            first,
-            format!("`{name}` is retired here"),
         );
     }
 
@@ -3503,24 +3325,6 @@ impl Checker<'_> {
             ),
             first_range,
             format!("`{first}` becomes `{projected}` here"),
-        );
-    }
-
-    /// RIDL-148: a service-level `reserved` tombstone that spells no
-    /// interface name (ADR-0015 decision 24). The shared `reserved` grammar
-    /// admits a literal, but a service tombstone retires an interface name —
-    /// the identity a binding keys the ordinal spaces on (decision 17) — so
-    /// a nameless tombstone holds a slot that retires nothing, and the
-    /// sanctioned retirement of ridl §14.5 would silently not work.
-    fn reserved_shape_without_a_name(&mut self, entry: &ast::ReservedEntry) {
-        self.error(
-            DiagCode::RIDL_148,
-            entry.syntax().text_range(),
-            "a service-level `reserved` retires an interface name, and this tombstone spells \
-             none — the interface name is the identity a binding keys the ordinal spaces on \
-             (ADR-0015 decision 17), so a tombstone without one can never match a retired \
-             shape. Write `reserved` followed by the retired interface's name (ridl §14.5, §11)"
-                .to_string(),
         );
     }
 
@@ -9767,7 +9571,6 @@ interface VehicleStatus {
         assert_eq!(
             service.shapes,
             [v2::ServiceShape {
-                id: 1,
                 kind: Some(v2::service_shape::Kind::InterfaceRef(
                     "CruiseControl".to_string()
                 )),
@@ -9788,7 +9591,6 @@ interface VehicleStatus {
         assert_eq!(
             checked.ir.services[0].shapes,
             [v2::ServiceShape {
-                id: 1,
                 kind: Some(v2::service_shape::Kind::InterfaceRef("Speed".to_string())),
             }],
         );
@@ -9817,16 +9619,16 @@ interface VehicleStatus {
         );
     }
 
-    /// A service composing two interfaces lowers with 1-based ids and a
-    /// tombstone holding its slot (ADR-0015 decisions 12 and 15).
+    /// A service composing two interfaces lowers its references in source
+    /// order, each canonicalized on its own (ADR-0015 decision 12).
     #[test]
-    fn a_composed_service_lowers_with_slot_ids() {
+    fn a_composed_service_lowers_its_references_in_order() {
         let checked = check_ridl(
             "app",
             &format!(
                 "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
                  interface HealthBlock {{\n  signal uptime : Speed @10ms\n}}\n\
-                 service veh.body.doors : DoorControl, reserved LegacyDoorDiag, HealthBlock\n"
+                 service veh.body.doors : DoorControl, HealthBlock\n"
             ),
         );
         assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
@@ -9834,21 +9636,11 @@ interface VehicleStatus {
             checked.ir.services[0].shapes,
             [
                 v2::ServiceShape {
-                    id: 1,
                     kind: Some(v2::service_shape::Kind::InterfaceRef(
                         "DoorControl".to_string()
                     )),
                 },
                 v2::ServiceShape {
-                    id: 2,
-                    kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
-                        ordinal: 2,
-                        name: Some("LegacyDoorDiag".to_string()),
-                        value: None,
-                    })),
-                },
-                v2::ServiceShape {
-                    id: 3,
                     kind: Some(v2::service_shape::Kind::InterfaceRef(
                         "HealthBlock".to_string()
                     )),
@@ -9906,138 +9698,43 @@ interface VehicleStatus {
         assert_eq!(
             checked.ir.services[0].shapes,
             [v2::ServiceShape {
-                id: 1,
                 kind: Some(v2::service_shape::Kind::InterfaceRef(
                     "DoorControl".to_string()
                 )),
             }],
-            "the duplicate holds no slot of its own",
+            "the duplicate listing is dropped",
         );
     }
 
-    /// RIDL-146: a shape re-declaring a service-level `reserved` name — the
-    /// tombstone retires the name wherever it sits in the list, so the
-    /// pre-pass finds a tombstone written after the offending shape too.
+    /// A `reserved` entry in a service's list is a parse error, not a checker
+    /// rule (lock design §9): the list is a set of interface references and
+    /// holds no slot to retire. The parser ends the list at the comma before
+    /// the stray keyword, so the service lowers with the references before
+    /// it, and no `RIDL-14x` code is drawn.
     #[test]
-    fn ridl_146_reserved_name_redeclared_wherever_the_tombstone_sits() {
+    fn a_service_list_holds_no_reserved_entry() {
         let checked = check_ridl(
             "app",
             &format!(
                 "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
-                 service veh.body.doors : DoorControl, reserved DoorControl\n"
+                 service veh.body.doors : DoorControl, reserved LegacyDoorDiag\n"
             ),
         );
-        assert_eq!(codes(&checked), vec!["RIDL-146"]);
-    }
-
-    /// RIDL-147: two shapes whose interface names collide even though their
-    /// references differ (ADR-0015 decision 24). RIDL-145 keys on the
-    /// canonical reference and stays silent here, and RIDL-144 stays silent
-    /// because the members are disjoint — yet a binding keyed on the
-    /// interface name (decision 17) could not tell the two shapes apart.
-    /// Both shapes still lower into their slots; the error blocks emission.
-    #[test]
-    fn ridl_147_colliding_interface_names_across_packages() {
-        let mut db = RidlDatabase::default();
-        let std = std_package(&mut db);
-        let c1 = ridl_package(
-            &db,
-            "fleet.c1",
-            "package fleet.c1\ntype Flag: boolean\n\
-             interface DiagBlock {\n  signal status : Flag @[1s..10s]\n}\n",
-        );
-        let c2 = ridl_package(
-            &db,
-            "fleet.c2",
-            "package fleet.c2\ntype Flag: boolean\n\
-             interface DiagBlock {\n  signal fault : Flag @[1s..10s]\n  signal uptime : Flag @[1s..10s]\n}\n",
-        );
-        let app = ridl_package(
-            &db,
-            "fleet.app",
-            "package fleet.app\nservice fleet.app.diag : fleet.c1.DiagBlock, fleet.c2.DiagBlock\n",
-        );
-        let ws = Workspace::new(&db, vec![c1, c2, app], BTreeMap::new());
-
-        let checked = check_package(&db, ws, app, std);
-        assert_eq!(codes(&checked), vec!["RIDL-147"]);
         assert!(
-            checked.diagnostics[0].message.contains("`DiagBlock`"),
-            "the message names the colliding interface name, got: {}",
-            checked.diagnostics[0].message
+            codes(&checked)
+                .iter()
+                .all(|code| !code.starts_with("RIDL-14")),
+            "no service rule fires on a stray `reserved`, got: {:?}",
+            checked.diagnostics
         );
         assert_eq!(
-            checked.ir.services[0].shapes.len(),
-            2,
-            "both shapes still hold their slots",
-        );
-    }
-
-    /// RIDL-147, the retired pairing: one name spelled by two `reserved`
-    /// tombstones of one service (ADR-0015 decision 24). Without the rule
-    /// the source compiles clean, and the shape list can never again be
-    /// keyed by interface name — every later edit, including the sanctioned
-    /// compatible append, would diff as a whole and classify breaking. The
-    /// message is the tombstone wording, not the live-shape one; both
-    /// tombstones still lower and hold their slots — the error blocks
-    /// emission.
-    #[test]
-    fn ridl_147_name_repeated_across_tombstones() {
-        let checked = check_ridl(
-            "app",
-            &format!(
-                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
-                 service veh.body.doors : DoorControl, reserved LegacyX, reserved LegacyX\n"
-            ),
-        );
-        assert_eq!(codes(&checked), vec!["RIDL-147"]);
-        assert!(
-            checked.diagnostics[0].message.contains("already retired"),
-            "the retired pairing carries its own wording, got: {}",
-            checked.diagnostics[0].message
-        );
-        assert_eq!(
-            checked.ir.services[0].shapes.len(),
-            3,
-            "both tombstones still hold their slots",
-        );
-    }
-
-    /// Two tombstones spelling distinct names are clean: the uniqueness rule
-    /// (ADR-0015 decision 24) rejects a repeated name, not a second
-    /// retirement.
-    #[test]
-    fn ridl_147_distinct_tombstone_names_are_clean() {
-        let checked = check_ridl(
-            "app",
-            &format!(
-                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
-                 service veh.body.doors : DoorControl, reserved LegacyX, reserved LegacyY\n"
-            ),
-        );
-        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
-    }
-
-    /// RIDL-148: a service-level tombstone must spell an interface name. The
-    /// literal spelling lowers to a nameless tombstone that neither
-    /// RIDL-146's pre-pass nor the diff walk can ever match, so the
-    /// sanctioned retirement of ridl §14.5 would silently not work (ADR-0015
-    /// decision 24). The slot still lowers and holds its id.
-    #[test]
-    fn ridl_148_numeric_service_tombstone_is_rejected() {
-        let checked = check_ridl(
-            "app",
-            &format!(
-                "{PRELUDE}interface DoorControl {{\n  signal locked : Speed @10ms\n}}\n\
-                 interface HealthBlock {{\n  signal uptime : Speed @10ms\n}}\n\
-                 service veh.body.doors : DoorControl, reserved 2, HealthBlock\n"
-            ),
-        );
-        assert_eq!(codes(&checked), vec!["RIDL-148"]);
-        assert_eq!(
-            checked.ir.services[0].shapes.len(),
-            3,
-            "the rejected tombstone still holds slot 2",
+            checked.ir.services[0].shapes,
+            [v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::InterfaceRef(
+                    "DoorControl".to_string()
+                )),
+            }],
+            "the list ends at the stray keyword",
         );
     }
 

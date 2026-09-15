@@ -223,32 +223,6 @@ interface VehicleStatus {
 }
 ";
 
-/// A named-form service whose shape list retires `HealthBlock`. The
-/// service-level reading of a tombstone (ridl §14.5, ADR-0015 decision 19).
-const SERVICE_TOMBSTONED: &str = "package veh.cluster
-type DoorState: integer [0..1]
-interface DoorBlock {
-  event locked: DoorState @[100ms..1s]
-}
-interface HealthBlock {
-  event uptime: DoorState @[100ms..1s]
-}
-service veh.cluster.doors : DoorBlock, reserved HealthBlock
-";
-
-/// The same service listing `HealthBlock` live again: `ReservedNameRedeclared`
-/// at the service level, which the gate leaves to the lock-file work.
-const SERVICE_TOMBSTONE_REDECLARED: &str = "package veh.cluster
-type DoorState: integer [0..1]
-interface DoorBlock {
-  event locked: DoorState @[100ms..1s]
-}
-interface HealthBlock {
-  event uptime: DoorState @[100ms..1s]
-}
-service veh.cluster.doors : DoorBlock, HealthBlock
-";
-
 /// `THREE` under the package name `veh.other`, with the manifest to match:
 /// a republish of this workspace over a `veh.cluster` baseline writes a
 /// fresh snapshot under a new file name and drops the stale one.
@@ -802,30 +776,6 @@ fn baseline_refuses_an_interaction_redeclared_over_its_tombstone() {
     assert!(
         stderr.contains("┌─") && stderr.contains("event doorClosed: DoorState @[100ms..1s]"),
         "the span points at the redeclaration, which is in the source:\n{stderr}",
-    );
-}
-
-/// The service-level reading of the same category — an interface name a
-/// named-form service's shape list retires, listed live again — is not
-/// refused: the gate covers the interaction level only, and the interface
-/// level waits for the lock file (baseline gate design D-5).
-#[test]
-fn baseline_publishes_a_service_shape_redeclared_over_its_tombstone() {
-    let dir = TempDir::new("gate-service-redeclared");
-    let root = package_workspace(&dir, SERVICE_TOMBSTONED);
-    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
-    assert_eq!(code, 0, "the first baseline is written: {stderr}");
-
-    dir.write("cluster.ridl", SERVICE_TOMBSTONE_REDECLARED);
-    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
-
-    assert_eq!(
-        code, 0,
-        "the interface level is outside the gate's scope:\n{stderr}",
-    );
-    assert!(
-        !stderr.contains("RIDL-408"),
-        "no refusal at the interface level:\n{stderr}",
     );
 }
 

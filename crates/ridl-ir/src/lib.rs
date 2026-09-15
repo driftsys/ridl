@@ -480,9 +480,7 @@ pub mod v2 {
                             interface,
                             service: Some(service),
                         }),
-                        service_shape::Kind::InterfaceRef(_) | service_shape::Kind::Reserved(_) => {
-                            None
-                        }
+                        service_shape::Kind::InterfaceRef(_) => None,
                     })
             });
             named.chain(inline)
@@ -522,8 +520,7 @@ pub mod v2 {
                             walk_decl(interaction, &mut found);
                         }
                     }
-                    // A tombstone holds a retired slot and names no type.
-                    Some(service_shape::Kind::Reserved(_)) | None => {}
+                    None => {}
                 }
             }
         }
@@ -826,37 +823,22 @@ mod v2_round_trip {
             timing: None,
         };
 
-        // service veh.adas.status : VehicleStatus, reserved LegacyDiag — a
-        // named reference in slot 1 and a service-level tombstone holding
-        // slot 2 (ADR-0015 decisions 12 and 15).
+        // service veh.adas.status : VehicleStatus — one named reference in
+        // the service's set (ADR-0015 decision 12).
         let status_service = v2::Service {
             name: "veh.adas.status".to_string(),
             visibility: v2::Visibility::Public as i32,
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
-            shapes: vec![
-                v2::ServiceShape {
-                    id: 1,
-                    kind: Some(v2::service_shape::Kind::InterfaceRef(
-                        "VehicleStatus".to_string(),
-                    )),
-                },
-                // The tombstone stores its slot twice — on the shape AND in
-                // Reserved — set from one counter, as interaction tombstones
-                // are.
-                v2::ServiceShape {
-                    id: 2,
-                    kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
-                        ordinal: 2,
-                        name: Some("LegacyDiag".to_string()),
-                        value: None,
-                    })),
-                },
-            ],
+            shapes: vec![v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::InterfaceRef(
+                    "VehicleStatus".to_string(),
+                )),
+            }],
         };
-        // service veh.adas.logs { … } — inline shape in slot 1 (ADR-0015
-        // decision 15), Interface.name == "" (ridl §14.5).
+        // service veh.adas.logs { … } — the inline shape as the one entry,
+        // Interface.name == "" (ridl §14.5).
         let logs_service = v2::Service {
             name: "veh.adas.logs".to_string(),
             visibility: v2::Visibility::Public as i32,
@@ -864,7 +846,6 @@ mod v2_round_trip {
             labels: Vec::new(),
             deprecated: None,
             shapes: vec![v2::ServiceShape {
-                id: 1,
                 kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
                     name: String::new(),
                     visibility: v2::Visibility::Unspecified as i32,
@@ -1191,19 +1172,21 @@ mod v2_round_trip {
             .first()
             .and_then(|slot| slot.kind.as_ref())
         else {
-            panic!("veh.adas.logs must decode as an inline shape in slot 1");
+            panic!("veh.adas.logs must decode as an inline shape");
         };
         assert_eq!(inline.name, "", "an inline shape carries no name");
-        let slot_ids: Vec<u32> = decoded.services[0]
+        let references: Vec<&str> = decoded.services[0]
             .shapes
             .iter()
-            .map(|slot| slot.id)
+            .filter_map(|slot| match &slot.kind {
+                Some(v2::service_shape::Kind::InterfaceRef(reference)) => Some(reference.as_str()),
+                _ => None,
+            })
             .collect();
         assert_eq!(
-            slot_ids,
-            [1, 2],
-            "interface ids are 1-based by declaration order, tombstone counted \
-             (ADR-0015 decision 15)"
+            references,
+            ["VehicleStatus"],
+            "a service's set carries its references and nothing else"
         );
     }
 

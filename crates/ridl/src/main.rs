@@ -49,9 +49,7 @@ use clap::{Parser, Subcommand};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
 use ridl_core::interface_lock::LockKey;
 use ridl_fmt::{FormatOutcome, format};
-use ridl_syntax::ast::{
-    AstNode as _, HasName as _, InterfaceMember, Name, ServiceShape, SourceFile,
-};
+use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
 use ridlc::{CliRun, Emit};
 use rowan::{TextRange, TextSize};
 
@@ -687,14 +685,12 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 /// comparison against nothing in the cases driftsys/ridl#235 describes, and a
 /// gate that a directory layout can defeat is not a gate.
 ///
-/// Only the interaction level is covered. The interface level — a removed
-/// interface with no service-level tombstone, and an unfrozen interface number
-/// — arrives with the lock file, because the rsdl decisions note's D-7 retires
-/// the service shape-list slot model a service-level gate would rest on. That
-/// is why `ReservedNameRedeclared`, which `ridl_diff` emits for an interaction
-/// in a body and for a shape in a named-form service's list alike (ADR-0015
-/// decision 19), is refused only when the published IR holds an
-/// interaction-level tombstone for the name.
+/// Only the interaction level is covered. The interface level is the lock's:
+/// an interface's identity is its number in `interfaces.lock`, not a slot in
+/// a service's list, so a removed or renumbered interface is refused by the
+/// lock's own publication rules, not here. `ReservedNameRedeclared` is an
+/// interaction-level category, refused when the published IR holds a
+/// tombstone for the name.
 fn untombstoned_removals(
     entry: &Path,
     out_dir: &Path,
@@ -1572,11 +1568,10 @@ impl DeclIndex {
 
             // Named-form services (ridl §14.5). `SourceFile::shapes` yields
             // only inline-form services, so without this pass a service-level
-            // diff path found nothing and its RIDL-407 rendered detached.
-            // Each list element is indexed under the interface name the diff
-            // paths carry — a reference's final segment, or the name a
-            // service-level tombstone spells — and the service's dotted name
-            // is the fallback for an element that is gone from the source.
+            // diff path found nothing and rendered detached. Each listed
+            // reference is indexed under its final segment, and the service's
+            // dotted name is the fallback for one that is gone from the
+            // source.
             for service in source
                 .services()
                 .filter(|service| service.colon_token().is_some())
@@ -1592,24 +1587,13 @@ impl DeclIndex {
                     (package.clone(), name.clone()),
                     (path.clone(), dotted.syntax().text_range()),
                 );
-                for element in service.shapes() {
-                    let (element_name, range) = match &element {
-                        ServiceShape::Interface(reference) => {
-                            let Some(final_segment) = final_ident(reference.syntax()) else {
-                                continue;
-                            };
-                            (final_segment, reference.syntax().text_range())
-                        }
-                        ServiceShape::Reserved(entry) => {
-                            let Some(retired) = entry.name().as_ref().and_then(name_text) else {
-                                continue;
-                            };
-                            (retired, entry.syntax().text_range())
-                        }
+                for reference in service.shapes() {
+                    let Some(final_segment) = final_ident(reference.syntax()) else {
+                        continue;
                     };
                     index.members.insert(
-                        (package.clone(), name.clone(), element_name),
-                        (path.clone(), range),
+                        (package.clone(), name.clone(), final_segment),
+                        (path.clone(), reference.syntax().text_range()),
                     );
                 }
             }
@@ -1719,8 +1703,7 @@ fn package_name(source: &SourceFile) -> Option<String> {
 }
 
 /// The final identifier segment of a path node — `DiagBlock` of
-/// `fleet.c2.DiagBlock` — which is the interface name a service-level diff
-/// path carries (ADR-0015 decision 17).
+/// `fleet.c2.DiagBlock` — under which a listed reference is indexed.
 fn final_ident(node: &ridl_syntax::SyntaxNode) -> Option<String> {
     node.descendants_with_tokens()
         .filter_map(|element| element.into_token())

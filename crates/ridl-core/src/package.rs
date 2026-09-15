@@ -15,7 +15,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 
-use ridl_syntax::ast::{AstNode as _, PathType, ServiceDef, ServiceShape, SourceFile};
+use ridl_syntax::ast::{AstNode as _, PathType, ServiceDef, SourceFile};
 use ridl_syntax::{SyntaxKind, SyntaxNode};
 use rowan::TextRange;
 
@@ -273,11 +273,9 @@ fn service_source(db: &dyn salsa::Database, file: InputFile) -> SourceFile {
     SourceFile::cast(parse.syntax()).expect("the parser roots every tree in a SourceFile")
 }
 
-/// The canonical interface references a service's shape list names, in slot
+/// The canonical interface references a service's list names, in source
 /// order, or the empty list for an inline shape (ADR-0015 decision 12). The
-/// `:` token discriminates the two forms, not the shape list: in the inline
-/// form `ServiceDef::shapes` would also yield the body's tombstones (see
-/// `ridl_syntax::ast::ServiceShape`).
+/// `:` token discriminates the two forms.
 ///
 /// A multi-segment reference is already package-qualified and is kept as
 /// written. A single-segment reference resolves against the **package-wide**
@@ -292,11 +290,7 @@ fn canonical_interface_refs(names: &PackageNames, service: &ServiceDef) -> Vec<S
     }
     service
         .shapes()
-        .filter_map(|shape| match shape {
-            ServiceShape::Interface(path) => Some(canonical_ref(names, &path)),
-            // A tombstone holds a slot but names no interface.
-            ServiceShape::Reserved(_) => None,
-        })
+        .map(|path| canonical_ref(names, &path))
         .collect()
 }
 
@@ -507,8 +501,7 @@ mod tests {
     }
 
     /// A shape list (ADR-0015 decision 12) records every named reference in
-    /// slot order, each canonicalized on its own; a service-level `reserved`
-    /// tombstone holds a slot but contributes no reference.
+    /// source order, each canonicalized on its own.
     #[test]
     fn service_catalog_records_every_shape_of_a_composed_service() {
         use crate::std_lib::std_package;
@@ -524,7 +517,7 @@ mod tests {
             "veh.body",
             "package veh.body\nimport veh.common.DiagBlock\n\
              interface DoorControl {\n  signal locked : boolean\n}\n\
-             service veh.body.doors : DoorControl, reserved LegacyDoorDiag, DiagBlock\n",
+             service veh.body.doors : DoorControl, DiagBlock\n",
         );
         let ws = Workspace::new(&db, vec![common, body], BTreeMap::new());
 
@@ -535,7 +528,7 @@ mod tests {
         assert_eq!(
             entry.interface_refs,
             ["DoorControl", "veh.common.DiagBlock"],
-            "slot order, local bare, import canonicalized, tombstone skipped",
+            "source order, local bare, import canonicalized",
         );
         assert!(!entry.inline);
     }

@@ -10,8 +10,10 @@
 //!
 //! # Namespaces (ADR-0007 decision 2)
 //!
-//! Codes are grouped by hundreds and never renumbered or reused. Five
-//! namespaces are in play across the family, one catalogue each:
+//! Codes are grouped by hundreds and never renumbered or reused; a code
+//! retired from a catalogue is listed in [`RETIRED_RIDL_CODES`], and a guard
+//! keeps it out. Five namespaces are in play across the family, one catalogue
+//! each:
 //!
 //! - `FORM-…` — the shared family grammar: lexical `0xx`, parse `1xx`, and the
 //!   general form §4.3 attribute rules. Named after the general form's own
@@ -146,6 +148,18 @@ macro_rules! diag_codes {
         ];
     };
 }
+
+/// The `RIDL-` codes retired by the interface lock (lock design §9). A code is
+/// never renumbered or reused (ADR-0008 decision 13): RIDL-146 to RIDL-148
+/// guarded the slot model of a service's list — a shape re-declared under a
+/// service-level `reserved` name, one interface name on two shapes, and a
+/// nameless service-level tombstone — and left the catalogue with that model
+/// on 2026-09-15. Held as integers rather than `"RIDL-146"` literals, because
+/// a string literal of a code that is in no catalogue fails
+/// `codes_written_as_string_literals_are_all_catalogued`; the guard
+/// `retired_ridl_codes_are_never_redeclared` keeps the numbers out of
+/// [`RIDL_CATALOG`].
+pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148];
 
 diag_codes! {
     /// The FORM catalogue (ADR-0007 decision 2): lexical `0xx`, parse `1xx`, and
@@ -415,7 +429,7 @@ diag_codes! {
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
     /// this module, with the severity the ridl reference §16 tables classify it
-    /// at. RIDL-140, RIDL-141, and RIDL-143 to RIDL-148 sit in the 1xx band
+    /// at. RIDL-140, RIDL-141, and RIDL-143 to RIDL-145 sit in the 1xx band
     /// while the reference lists them under the §16.4 evolution table — a
     /// documented anomaly kept as written (ADR-0008 decision 6). RIDL-111 and
     /// RIDL-142 are reserved by ADR-0008 decision 21 and are not declared yet,
@@ -577,41 +591,6 @@ diag_codes! {
         /// diagnostic's secondary label points at it.
         RIDL_145 = "RIDL-145", Error,
             "the same interface named twice in one service";
-
-        /// An interface re-declared under a service-level `reserved` name
-        /// (ridl §14.5, §16.4; ADR-0015 decision 18) — the analogue of
-        /// RIDL-401 one level up: a tombstone retires a name permanently, at
-        /// the service level as inside an interface body. Emitted per-package
-        /// by the checker (E9.6).
-        RIDL_146 = "RIDL-146", Error,
-            "interface re-declared under a service-level `reserved` name";
-
-        /// Two shapes of one service whose interface names collide even though
-        /// their references differ (ridl §14.5, §16.4; ADR-0015 decision 24).
-        /// A binding separates the ordinal spaces by interface name (decision
-        /// 17), so a service carrying `fleet.c1.DiagBlock` and
-        /// `fleet.c2.DiagBlock` leaves the binding no way to tell the two
-        /// apart. The rule is over every shape, live or retired: a name
-        /// spelled by two `reserved` tombstones draws the same code, because
-        /// two slots under one name leave the shape list without the
-        /// per-name key the diff walk matches slots by. Its own code rather
-        /// than RIDL-145 — that rule is the same reference listed twice —
-        /// because the remedy differs: an import alias cannot fix a name
-        /// collision, only renaming one interface or composing it into a
-        /// different service can. Emitted per-package by the checker (E9.6).
-        RIDL_147 = "RIDL-147", Error,
-            "one interface name on two shapes of one service";
-
-        /// A service-level `reserved` tombstone that spells no interface name
-        /// (ridl §14.5, §16.4; ADR-0015 decision 24) — the literal spellings
-        /// the shared `reserved` grammar admits for enum bodies. A service
-        /// tombstone retires an interface name: the name is the identity a
-        /// binding keys the ordinal spaces on (decision 17) and the only
-        /// thing RIDL-146 or the diff walk can match a retirement against, so
-        /// a nameless tombstone holds a slot that retires nothing. Emitted
-        /// per-package by the checker (E9.6).
-        RIDL_148 = "RIDL-148", Error,
-            "service-level `reserved` tombstone without an interface name";
 
         /// Two names in one scope that collide after the pinned name
         /// transform (ridl §11, §16.4; ADR-0016 decision 3). The transform is
@@ -1601,6 +1580,23 @@ mod tests {
     /// the expansion does not fix. There is deliberately no expected list of
     /// codes: comparing a catalogue against a second hand-written list is the
     /// guard this change removed.
+    /// A retired code is never declared again (ADR-0008 decision 13): every
+    /// number in [`RETIRED_RIDL_CODES`] stays out of the `RIDL-` catalogue.
+    #[test]
+    fn retired_ridl_codes_are_never_redeclared() {
+        for entry in RIDL_CATALOG {
+            let code = entry.code.as_str();
+            let number: u16 = code
+                .strip_prefix("RIDL-")
+                .and_then(|digits| digits.parse().ok())
+                .unwrap_or_else(|| panic!("`{code}` is not spelled `RIDL-NNN`"));
+            assert!(
+                !RETIRED_RIDL_CODES.contains(&number),
+                "`{code}` is retired and must not be declared again",
+            );
+        }
+    }
+
     #[test]
     fn catalog_entries_are_well_formed_ordered_and_unique() {
         let mut seen: Vec<&str> = Vec::new();

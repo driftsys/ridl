@@ -1334,8 +1334,9 @@ service veh.powertrain.motor : MotorControl
 ```
 
 - A service has a **dotted global name** (reverse-domain, like packages) and a
-  **comma-separated list of interface shapes** after `:` (ADR-0015 decision 12).
-  Its members are addressed `service.member` — `veh.adas.cruise.engaged`,
+  **comma-separated set of interfaces** after `:` (ADR-0015 decision 12, as
+  amended by the lock design): the list's order carries nothing. Its members are
+  addressed `service.member` — `veh.adas.cruise.engaged`,
   `veh.adas.cruise.setLever`.
 - **Commas are required between shapes** — the one list in the family whose
   separators are not optional (ADR-0015 decision 13). The reason is structural:
@@ -1366,37 +1367,28 @@ service veh.hvac.cabin {
 }
 ```
 
-#### Composing interfaces — ids, flat addressing, and the rules
+#### Composing interfaces — numbers, flat addressing, and the rules
 
-A service composing several interfaces gives each a slot in its list, and the
-list follows §11's identity model **one level up** (ADR-0015 decision 15):
+A service composing several interfaces names each in its list, and the list is a
+**set** (rsdl decision D-7; the lock design §7 and §9):
 
-- **Interface ids are implicit, 1-based, by declaration order.** An inline shape
-  is slot 1, which makes the inline form a degenerate case of the general one.
-- **Append-only.** Adding a shape at the end appends; inserting or reordering
-  shifts ids and is breaking; removing one requires a **service-level `reserved`
-  tombstone** to hold its slot. The tombstone spells the retired interface's
-  name — the `reserved <Name>` form the family uses everywhere; the literal
-  spellings typl's `reserved` grammar admits name no interface and are RIDL-148
-  here (ADR-0015 decision 24):
-
-```ridl
-service veh.body.doors :
-  DoorControl,
-  reserved LegacyDoorDiag,
-  HealthBlock
-```
-
-- **Ordinals stay per-interface, and a binding separates the ordinal spaces by
-  interface name** (ADR-0015 decision 17), not by list position. Renumbering
+- **An interface's number comes from its package's `interfaces.lock`** (§11),
+  not from its place in a service's list. An inline shape is an interface too
+  and has its own entry there, keyed `service:` followed by the service's dotted
+  name. The list holds no slot and no tombstone: adding an interface to the set,
+  removing one, or reordering the list moves no wire identity, and `ridl diff`
+  reports an addition as `service_interface_added` and a removal as
+  `service_interface_removed`, both compatible. A removed interface is retired
+  in the lock — `ridl lock <pkg> --retire Name` — never in the list, and
+  `reserved` in a service's list is a parse error.
+- **Ordinals stay per-interface, and a binding keys the ordinal spaces on
+  (package, interface number)** (ADR-0015 decision 17, as amended by the lock
+  design), not on the interface name and not on list position. Renumbering
   interactions across a service was rejected: an interface's wire identity would
   then depend on what else the service happens to carry — the coupling §14.1
   rejected inheritance to avoid. Appendix B already maps a SOME/IP eventgroup to
   an interface, so a multi-interface service maps to several transport-level
-  groupings under one logical name. Keying on the name also makes reordering the
-  list invisible to transport identity — though `ridl-diff` still classifies a
-  reorder as breaking, because the _id_ moves even when the transport key does
-  not.
+  groupings under one logical name, each keyed on the number.
 - **Addressing stays flat** (ADR-0015 decision 16): members remain
   `service.member`, so every address written before composition existed stays
   valid. A member name duplicated across a service's interfaces is a compile
@@ -1406,24 +1398,12 @@ service veh.body.doors :
   service without renaming one of them.**
 - **The same interface named twice in one service is RIDL-145** — its own code
   rather than one RIDL-144 per member, which would bury the actual mistake; the
-  duplicate listing is dropped and holds no slot.
-- **A shape re-declared under a service-level `reserved` name is RIDL-146** —
-  the analogue of RIDL-401 one level up: a tombstone retires an interface name
-  permanently, at the service level as inside an interface body.
-- **Two shapes whose interface names collide even though their references differ
-  is RIDL-147** (ADR-0015 decision 24) — a binding separates the ordinal spaces
-  by interface name, so a service carrying `fleet.c1.DiagBlock` and
-  `fleet.c2.DiagBlock` leaves the binding no way to tell the two apart. An
-  import alias cannot fix it — the name is the interface's own — only renaming
-  one interface or composing it into a different service can, which is why the
-  case has its own code rather than folding into RIDL-145. The rule is over
-  every shape, live or retired: a name spelled by two `reserved` tombstones
-  draws the same code, because two slots under one name would leave the shape
-  list without the per-name key `ridl-diff` matches slots by — a name is retired
-  once.
+  duplicate listing is dropped.
+
 - **Extracting an inline shape into a named interface is breaking, by design.**
-  Slot numbering survives the refactor (the inline shape is slot 1), but a
-  fallible return's transport identity derives from the enclosing interface name
+  The interface's number survives the refactor — the lock entry is renamed,
+  `ridl lock <pkg> --rename service:veh.hvac.cabin=Cabin` — but a fallible
+  return's transport identity derives from the enclosing interface name
   (ADR-0008 decision 4), and an inline shape uses the service's dotted name
   instead — so extraction rewrites the identity of every fallible query in the
   shape, and `ridl-diff` classifies the form switch as breaking. Making that
@@ -1649,9 +1629,9 @@ either direction.
 | RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | error    |
 | RIDL-144 | duplicate member name across a service's interfaces — flat addressing (§14.5) cannot give `service.member` two referents                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | error    |
 | RIDL-145 | the same interface named twice in one service — its own code, so the mistake is one diagnostic rather than one RIDL-144 per member; the duplicate listing holds no slot                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | error    |
-| RIDL-146 | interface re-declared under a service-level `reserved` name — RIDL-401 one level up (§14.5, §11)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | error    |
-| RIDL-147 | two shapes of one service whose interface names collide even though their references differ — a binding separates the ordinal spaces by interface name, so the two would be indistinguishable; the rule is over every shape, live or retired, so a name spelled by two tombstones is the same code (§14.5; ADR-0015 decision 24)                                                                                                                                                                                                                                                                                                                                                  | error    |
-| RIDL-148 | service-level `reserved` tombstone without an interface name — the literal spelling lowers to a nameless tombstone no shape can ever match, so the sanctioned retirement would silently not work (§14.5; ADR-0015 decision 24)                                                                                                                                                                                                                                                                                                                                                                                                                                                    | error    |
+| RIDL-146 | retired by the lock (2026-09-15; ADR-0015 decision 18 as amended) — was: interface re-declared under a service-level `reserved` name; a service's list holds no tombstone                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | retired  |
+| RIDL-147 | retired by the lock (2026-09-15; ADR-0015 decision 24 as amended) — was: two shapes of one service whose interface names collide even though their references differ; a binding keys the ordinal spaces on (package, interface number), so two names may collide                                                                                                                                                                                                                                                                                                                                                                                                                  | retired  |
+| RIDL-148 | retired by the lock (2026-09-15; ADR-0015 decision 24 as amended) — was: service-level `reserved` tombstone without an interface name; `reserved` in a service's list is a parse error                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | retired  |
 | RIDL-149 | two names in one scope that collide after the pinned name transform — the transform is not injective and no case-folding transform can be, so two names distinct in source can project to one identifier; scoped to the members of one interface, the parameters of one interaction, and the fields of one struct (§11; ADR-0016 decisions 3 and 4)                                                                                                                                                                                                                                                                                                                               | error    |
 
 RIDL-141 and RIDL-143 apply **per shape in the service's shape list** (ADR-0015
@@ -1976,12 +1956,10 @@ service_def   = doc_comment? "service" dotted_name
                                                         the next declaration begins *)
                 | "{" { interaction sep? } "}" ) ;   (* one inline shape — §14.5; never both
                                                         forms (ADR-0015 decision 14) *)
-service_shape = type_ref | service_reserved ;       (* a composed interface, or a
-                                                       service-level tombstone — §14.5, §11 *)
-service_reserved = "reserved" CamelCase_id ;        (* the tombstone spells the retired
-                                                       interface's name; typl's literal
-                                                       `reserved` spellings derive no name
-                                                       and are RIDL-148 here — §14.5 *)
+service_shape = type_ref ;                          (* a composed interface — §14.5; the
+                                                       list is a set with no tombstone: a
+                                                       removed interface is retired in
+                                                       `interfaces.lock` (§11) *)
 dotted_name   = camelCase_id { "." camelCase_id } ; (* reverse-domain global name,
                                                        every segment lowercase — §14.5 *)
 

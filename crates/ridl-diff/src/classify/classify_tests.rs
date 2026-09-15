@@ -1368,15 +1368,7 @@ fn service_pkg(services: Vec<v2::Service>) -> v2::Package {
 }
 
 fn service_ref(name: &str, interface_ref: &str) -> v2::Service {
-    service_shapes(
-        name,
-        vec![v2::ServiceShape {
-            id: 1,
-            kind: Some(v2::service_shape::Kind::InterfaceRef(
-                interface_ref.to_string(),
-            )),
-        }],
-    )
+    service_shapes(name, vec![ref_slot(interface_ref)])
 }
 
 /// A named-form service carrying an explicit shape list (ADR-0015
@@ -1392,25 +1384,12 @@ fn service_shapes(name: &str, shapes: Vec<v2::ServiceShape>) -> v2::Service {
     }
 }
 
-/// One interface-reference slot of a shape list.
-fn ref_slot(id: u32, interface_ref: &str) -> v2::ServiceShape {
+/// One interface reference of a service's list.
+fn ref_slot(interface_ref: &str) -> v2::ServiceShape {
     v2::ServiceShape {
-        id,
         kind: Some(v2::service_shape::Kind::InterfaceRef(
             interface_ref.to_string(),
         )),
-    }
-}
-
-/// One service-level tombstone slot (ADR-0015 decision 12).
-fn reserved_slot(id: u32, name: &str) -> v2::ServiceShape {
-    v2::ServiceShape {
-        id,
-        kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
-            ordinal: id,
-            name: Some(name.to_string()),
-            value: None,
-        })),
     }
 }
 
@@ -1430,7 +1409,6 @@ fn service_inline(
         labels: Vec::new(),
         deprecated: None,
         shapes: vec![v2::ServiceShape {
-            id: 1,
             kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
                 name: String::new(),
                 visibility: v2::Visibility::Unspecified as i32,
@@ -1550,10 +1528,10 @@ fn a_service_interface_ref_change_is_a_removal_plus_an_addition() {
 /// moved, and the routing key does not contain the service.
 #[test]
 fn adding_an_interface_to_a_service_is_compatible() {
-    let old = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
+    let old = service_pkg(vec![service_shapes("Cluster", vec![ref_slot("I")])]);
     let new = service_pkg(vec![service_shapes(
         "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+        vec![ref_slot("I"), ref_slot("J")],
     )]);
     let report = diff_packages(&old, &new);
     assert_eq!(
@@ -1582,9 +1560,9 @@ fn adding_an_interface_to_a_service_is_compatible() {
 fn removing_an_interface_from_a_service_is_compatible_under_the_heading() {
     let old = service_pkg(vec![service_shapes(
         "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+        vec![ref_slot("I"), ref_slot("J")],
     )]);
-    let new = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
+    let new = service_pkg(vec![service_shapes("Cluster", vec![ref_slot("I")])]);
     let report = diff_packages(&old, &new);
     assert_eq!(
         report.verdict,
@@ -1615,33 +1593,11 @@ fn removing_an_interface_from_a_service_is_compatible_under_the_heading() {
 fn reordering_a_services_list_is_identical() {
     let old = service_pkg(vec![service_shapes(
         "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+        vec![ref_slot("I"), ref_slot("J")],
     )]);
     let new = service_pkg(vec![service_shapes(
         "Cluster",
-        vec![ref_slot(1, "J"), ref_slot(2, "I")],
-    )]);
-    let report = diff_packages(&old, &new);
-    assert_eq!(
-        report.verdict,
-        Verdict::Identical,
-        "got {:?}",
-        report.changes
-    );
-}
-
-/// Until the IR loses its `Reserved` slot, the set walk ignores one: a set
-/// holds no tombstone, so a snapshot that still carries one diffs as if the
-/// slot were not there.
-#[test]
-fn a_reserved_slot_in_a_services_list_is_ignored_by_the_set_walk() {
-    let old = service_pkg(vec![service_shapes(
-        "Cluster",
-        vec![ref_slot(1, "I"), reserved_slot(2, "X"), ref_slot(3, "J")],
-    )]);
-    let new = service_pkg(vec![service_shapes(
-        "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+        vec![ref_slot("J"), ref_slot("I")],
     )]);
     let report = diff_packages(&old, &new);
     assert_eq!(
@@ -1660,11 +1616,11 @@ fn a_reserved_slot_in_a_services_list_is_ignored_by_the_set_walk() {
 fn a_retargeted_reference_with_the_same_final_name_is_a_removal_plus_an_addition() {
     let old = service_pkg(vec![service_shapes(
         "fleet.app.diag",
-        vec![ref_slot(1, "fleet.c1.DiagBlock")],
+        vec![ref_slot("fleet.c1.DiagBlock")],
     )]);
     let new = service_pkg(vec![service_shapes(
         "fleet.app.diag",
-        vec![ref_slot(1, "fleet.c2.DiagBlock")],
+        vec![ref_slot("fleet.c2.DiagBlock")],
     )]);
     let report = diff_packages(&old, &new);
     assert_eq!(
@@ -1707,7 +1663,7 @@ fn a_service_form_switch_stays_service_changed_and_breaking() {
     )]);
     let new = service_pkg(vec![service_shapes(
         "veh.hvac.cabin",
-        vec![ref_slot(1, "Cabin")],
+        vec![ref_slot("Cabin")],
     )]);
     assert_row(&old, &new, Category::ServiceChanged, Verdict::Breaking);
 }

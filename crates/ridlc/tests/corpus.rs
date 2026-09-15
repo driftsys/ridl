@@ -319,9 +319,9 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
 }
 
 /// A service composing two interfaces (ADR-0015 decision 12) compiles clean,
-/// lowers with 1-based slot ids and its tombstone holding its slot (decision
-/// 15), and survives both interchange encodings unchanged — the shape list is
-/// package data the encodings must carry, not a lowering-only view. The
+/// lowers each reference canonicalized on its own, and survives both
+/// interchange encodings unchanged — the list is package data the encodings
+/// must carry, not a lowering-only view. The
 /// generation halves of the same claim are the `services-workspace` Rust and
 /// TypeScript snapshots, which carry `fleet.vehicle.cockpit`'s rows.
 #[test]
@@ -354,33 +354,18 @@ fn a_composed_service_compiles_and_round_trips_through_the_ir() {
         .iter()
         .find(|service| service.name == "fleet.vehicle.cockpit")
         .expect("the composed service lowers");
-    let slots: Vec<(u32, String)> = cockpit
+    let references: Vec<String> = cockpit
         .shapes
         .iter()
-        .map(|slot| {
-            let kind = match &slot.kind {
-                Some(ridl_ir::v2::service_shape::Kind::InterfaceRef(reference)) => {
-                    reference.clone()
-                }
-                Some(ridl_ir::v2::service_shape::Kind::Reserved(reserved)) => format!(
-                    "reserved {} (ordinal {})",
-                    reserved.name.as_deref().unwrap_or("_"),
-                    reserved.ordinal
-                ),
-                other => panic!("unexpected slot kind: {other:?}"),
-            };
-            (slot.id, kind)
+        .map(|slot| match &slot.kind {
+            Some(ridl_ir::v2::service_shape::Kind::InterfaceRef(reference)) => reference.clone(),
+            other => panic!("unexpected entry kind: {other:?}"),
         })
         .collect();
     assert_eq!(
-        slots,
-        [
-            (1, "fleet.contracts.DoorControl".to_string()),
-            (2, "reserved LegacyCabin (ordinal 2)".to_string()),
-            (3, "fleet.contracts.Telemetry".to_string()),
-        ],
-        "slot ids are 1-based by declaration order, each reference \
-         canonicalized on its own, the tombstone holding its slot",
+        references,
+        ["fleet.contracts.DoorControl", "fleet.contracts.Telemetry"],
+        "each reference is canonicalized on its own, in source order",
     );
 
     // Both interchange encodings carry the shape list unchanged (the JSON
@@ -461,9 +446,6 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-143", Showcase),
     ("RIDL-144", Showcase),
     ("RIDL-145", Showcase),
-    ("RIDL-146", Showcase),
-    ("RIDL-147", Showcase),
-    ("RIDL-148", Showcase),
     ("RIDL-149", Showcase),
     ("RIDL-201", Showcase),
     ("RIDL-202", Showcase),
@@ -976,9 +958,6 @@ fn showcase_pins_every_severity() {
         ("RIDL-143", Severity::Error),
         ("RIDL-144", Severity::Error),
         ("RIDL-145", Severity::Error),
-        ("RIDL-146", Severity::Error),
-        ("RIDL-147", Severity::Error),
-        ("RIDL-148", Severity::Error),
         ("RIDL-149", Severity::Error),
         ("RIDL-201", Severity::Error),
         ("RIDL-202", Severity::Error),
