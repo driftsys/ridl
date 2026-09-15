@@ -66,6 +66,7 @@ Commands:
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
+  lock      Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   help      Print this message or the help of the given subcommand(s)
@@ -765,11 +766,11 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-Of the eight subcommands that take a path, [ADR-0010][adr-0010] decision 6
+Of the nine subcommands that take a path, [ADR-0010][adr-0010] decision 6
 found `ridl fmt` is the only one that reliably names the actual unreadable
 path this way in every case it was tested against. `ridl check`, `ridl build`,
-`ridl baseline`, `ridlc check`, and `ridlc build` still exit 2 on the same
-inputs, but with the wrong cause or none: an unreadable *workspace root*
+`ridl baseline`, `ridl lock`, `ridlc check`, and `ridlc build` still exit 2 on
+the same inputs, but with the wrong cause or none: an unreadable *workspace root*
 reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed
 directly against this build — and an unreadable subdirectory nested inside an
 otherwise-readable workspace reports a bare `error: Permission denied (os
@@ -960,6 +961,114 @@ the categories `ridl diff` reports are:
   doc_only
   visibility_changed
 ```
+
+### `ridl lock`
+
+```sh
+ridl lock --help
+```
+
+```text
+Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure
+
+Usage: ridl lock [OPTIONS] [PATH]
+
+Arguments:
+  [PATH]  [default: .]
+
+Options:
+      --rename <OLD=NEW>  Rewrite the live entry OLD to hold the key NEW, keeping its number (repeatable). NEW must be a declaration without an entry
+      --retire <NAME>     Mark the live entry NAME retired, keeping its line and its number (repeatable). NAME must no longer be declared
+  -h, --help              Print help
+```
+
+**It writes** `interfaces.lock` in the package directory, beside the `.ridl`
+sources — the line table that gives every interface of the package its
+number (ridl §11): a `#` header, `next N`, then one entry per interface,
+`Name N`, with the word `retired` after the number when the interface is
+gone. A service's inline shape is an interface too and is keyed `service:`
+followed by the service's dotted name. Only `ridl lock` writes the file: the
+compiler reads it beside the sources, and `ridl fmt` never touches it.
+
+Plain `ridl lock` is the only form that allocates. Every declared interface
+whose name has no live entry gets the next free number, in byte order of the
+name, and the file is written; a declaration that already has its entry is
+left as it is. Over a package holding `interface Zone` and `interface Cabin`
+and no lock file yet:
+
+```sh
+ridl lock . ; echo "exit: $?"
+```
+
+```text
+allocated Cabin 1
+allocated Zone 2
+exit: 0
+```
+
+```text
+# interfaces.lock — written by ridl lock; do not edit by hand.
+next 3
+Cabin 1
+Zone 2
+```
+
+Run again with nothing to allocate, it prints nothing, writes nothing and
+exits 0. Over a workspace it writes each package's own file, and each output
+line is prefixed with the package directory relative to `PATH` and a colon:
+`hvac: allocated Cabin 1`. Until `ridl lock` has run, a declaration with no
+entry compiles with a provisional number, which carries no identity.
+
+The reverse case — a live entry whose interface is gone from the source — is
+RIDL-409 from the compiler, and plain `ridl lock` refuses to allocate over it:
+nothing is written, exit 1. The two flags are that diagnostic's fix, and they
+run with RIDL-409 present:
+
+- `--rename OLD=NEW` rewrites the entry `OLD` to hold the key `NEW` in place,
+  keeping its number, when `NEW` is a declaration without an entry — the same
+  interface under a new name. Printed as `renamed Old New N`.
+- `--retire NAME` marks the entry retired, keeping its line and its number,
+  when nothing declares `NAME` any more. Printed as `retired Name N`.
+
+Both are repeatable, neither allocates, and `PATH` must resolve to exactly one
+package. A rename keeps the number because the number, not the name, is the
+interface's wire identity; the old name is then free for a later, unrelated
+interface. Starting from the file above with `interface Zone` renamed to
+`interface Lane` in the source:
+
+```sh
+ridl check . ; echo "exit: $?"
+```
+
+```text
+error[RIDL-409]: `Zone` is a live entry of `interfaces.lock` with no declaration in the package: run `ridl lock . --rename Zone=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock . --retire Zone` when the interface is gone
+  ┌─ ./interfaces.lock:4:1
+  │
+4 │ Zone 2
+  │ ^^^^^^
+
+exit: 1
+```
+
+```sh
+ridl lock . --rename Zone=Lane ; echo "exit: $?"
+```
+
+```text
+renamed Zone Lane 2
+exit: 0
+```
+
+**Exit codes.** 0 when the file is written or there is nothing to change. 1
+on a diagnostic error over the source, with nothing written: a live entry with
+no declaration when plain `ridl lock` is asked to allocate (RIDL-409), a
+malformed lock file — a git conflict left in it included — (RIDL-410), or any
+other compile error, in any package of the workspace. 2 when the path is
+missing or unreadable, on a bad flag — `--rename` naming no live entry or a
+`NEW` that is not a declaration without an entry, `--retire` naming an
+interface that is still declared, either flag over more than one package — or
+on an I/O failure writing the file. Every cell is confirmed against the built
+binary by `crates/ridl/tests/lock_cli.rs`.
 
 ### `ridl lsp`
 
@@ -1181,8 +1290,8 @@ to `out`) and, on `check` only, the baseline desk check described
 [above](#ridl-check), which has no `ridlc` equivalent. On identical input the
 two render byte-identical diagnostics, confirmed earlier on this page.
 
-`ridl baseline`, `ridl test`, `ridl fmt`, and `ridl diff` have no `ridlc`
-counterpart at all — `ridlc`'s surface is `check` and `build`, full stop, as
+`ridl baseline`, `ridl test`, `ridl fmt`, `ridl diff`, and `ridl lock` have no
+`ridlc` counterpart at all — `ridlc`'s surface is `check` and `build`, full stop, as
 its own `--help` shows. Reach for `ridl` unless you are scripting the
 compiler directly and want its stable, default-free flags.
 
@@ -1194,8 +1303,9 @@ compiler directly and want its stable, default-free flags.
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
 | `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses the replacement under the tombstone rule (RIDL-408); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
-| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike five of the other seven, which name no path at all |
+| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other eight, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
+| `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
 
 This table is this repository's own taxonomy, recorded in
 [ADR-0010][adr-0010]: **0** succeeded, or the verdict is affirmative; **1** a
@@ -1242,14 +1352,14 @@ For more information, try '--help'.
 `--help` itself, on any subcommand of either binary, always exits 0 — and so
 does `--version`/`-V`, covered [above](#ridl).
 
-Six of the eight subcommands that take a path also share a lesser-known gap:
+Seven of the nine subcommands that take a path also share a lesser-known gap:
 [issue driftsys/ridl#196][issue-196] records that when the *workspace root
 itself* is unreadable, `ridl check`, `ridl build`, `ridl baseline`,
-`ridlc check`, and `ridlc build` all report
+`ridl lock`, `ridlc check`, and `ridlc build` all report
 `` error: no `ridl.toml` found at or above `<path>` `` — exit 2 is right, the
 cause is wrong, confirmed directly against this build — and when a
 *subdirectory nested inside* an otherwise-readable workspace is unreadable,
-the same five report a bare `error: Permission denied (os error 13)`, naming
+the same six report a bare `error: Permission denied (os error 13)`, naming
 no path at all, also confirmed directly. `ridl test` reaches the same code
 path and wraps it with the top-level path it was given
 (`error: <path>: no ridl.toml found…` in the first case,

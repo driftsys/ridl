@@ -30,11 +30,19 @@
 //! Protocol server an agent drives (`ridl-mcp`). Both delegate every behavior
 //! to their library and only wire the transport here, so one installed binary
 //! serves the editor, the agent, and the command line.
+//!
+//! `ridl lock` writes a package's `interfaces.lock` (lock design §5): plain, it
+//! allocates a number to every interface that has none; with `--rename` or
+//! `--retire`, it rewrites one package's entries in place. It lives here
+//! beside `ridl baseline` because it reads and writes a file in the workspace
+//! that is not a source (`ridlc` gains no `lock` subcommand); the compile it
+//! runs first is `ridlc`'s own.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod lock;
 mod property;
 
 use clap::{Parser, Subcommand};
@@ -145,6 +153,23 @@ enum Command {
         #[arg(long, value_name = "CATEGORY")]
         explain: Option<String>,
     },
+    /// Allocate a number to every interface that has none and write each
+    /// package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
+    /// package's entries in place instead. Exit 0 when the file is written or
+    /// nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or
+    /// I/O failure.
+    Lock {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Rewrite the live entry OLD to hold the key NEW, keeping its number
+        /// (repeatable). NEW must be a declaration without an entry.
+        #[arg(long, value_name = "OLD=NEW")]
+        rename: Vec<String>,
+        /// Mark the live entry NAME retired, keeping its line and its number
+        /// (repeatable). NAME must no longer be declared.
+        #[arg(long, value_name = "NAME")]
+        retire: Vec<String>,
+    },
     /// Run the language server over stdio: exit 0 on a clean shutdown, 2 on a
     /// transport error. Editors spawn this; it takes no flag of its own.
     Lsp,
@@ -208,6 +233,11 @@ fn main() -> ExitCode {
                 }
             },
         },
+        Command::Lock {
+            path,
+            rename,
+            retire,
+        } => lock::run_lock(&path, &rename, &retire),
         Command::Lsp => run_lsp(),
         Command::Mcp => run_mcp(),
     }
