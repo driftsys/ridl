@@ -73,7 +73,11 @@ pub trait SignalWriter: Attached {
     fn invalidate(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError>;
     /// Stages a re-affirmation of the current value, without a new value.
     fn touch(&mut self, iface: InterfaceNo, ord: Ordinal) -> Result<(), WriteError>;
-    /// Publishes everything staged. It cannot fail.
+    /// Publishes everything staged. It cannot fail, so it reports nothing —
+    /// including that the runtime behind the port is gone. A caller learns
+    /// that from [`WriteError::Detached`] on a later `set`, `invalidate` or
+    /// `touch`, never from `commit`, and the changes staged before it are not
+    /// published.
     fn commit(&mut self);
 }
 
@@ -138,6 +142,13 @@ pub trait Caller: Attached {
     /// `Err(CallError::Transport(Transport::Undelivered))` when no
     /// acknowledgment came within the bound. `None` while unknown, and always
     /// `None` for a query's correlation.
+    ///
+    /// `None` has two causes this method does not separate: the acknowledgment
+    /// is not known yet, and `c` is not a command's correlation — a query's,
+    /// or one already passed to [`forget`](Caller::forget). A caller that
+    /// polls `ack` on a correlation that is not a command's therefore never
+    /// finishes. The return carries no error, so keep the correlations
+    /// [`command`](Caller::command) returned and ask only about those.
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>>;
     /// A query's reply, once it is known: the reply bytes copied into the front
     /// of `out` and their length, or the error. `Ok(None)` while unknown.
@@ -234,15 +245,35 @@ pub trait FixedReader: Attached {
 pub trait ScannableSignals: SignalReader {
     /// The interface's generation: a counter that each commit to the interface
     /// increments.
+    ///
+    /// The return carries no error, so an interface the port's catalog does
+    /// not hold has no reserved answer and cannot be told from a real
+    /// generation. Ask only about an interface of
+    /// [`catalog`](Attached::catalog): [`scan`](ScannableSignals::scan)'s loop
+    /// compares marks against this counter, so a wrong `iface` misreads the
+    /// loop rather than reporting anything.
     fn generation(&self, iface: InterfaceNo) -> u64;
     /// Writes the changes into `out`, interface by interface, in the order of
     /// `marks`, and updates `marks`. An interface's changes are written all
     /// together or not at all: when they do not fit in the rest of `out`,
     /// none of them is written, that interface's mark is not updated, and
-    /// `scan` returns the number of entries written so far. A return of 0
-    /// while the first mark, in the order of `marks`, whose generation is
-    /// behind `generation(iface)` means `out` is shorter than that
-    /// interface's changes.
+    /// `scan` returns the number of entries written so far.
+    ///
+    /// The count alone does not say whether changes are still waiting, because
+    /// a return of 0 has two causes. To tell them apart, compare each mark
+    /// with its interface's [`generation`](ScannableSignals::generation) after
+    /// the call:
+    ///
+    /// - every mark's `generation` equals `generation(iface)` — nothing had
+    ///   changed, and the scan is complete;
+    /// - some mark's `generation` is behind `generation(iface)` — that
+    ///   interface's changes did not fit in `out`. When `scan` also returned
+    ///   0, `out` is shorter than the changes of the first such interface in
+    ///   the order of `marks`, and no call can make progress until `out` is
+    ///   longer.
+    ///
+    /// A caller that scans in a loop therefore grows `out` when `scan` returns
+    /// 0 and a mark is still behind its interface's generation.
     fn scan(&self, marks: &mut [Watermark], out: &mut [Changed]) -> usize;
 }
 
@@ -293,6 +324,12 @@ pub trait CoherentSignals: SignalReader {
 }
 
 /// A read that failed.
+///
+/// One enum serves every read on every port, so a variant can be unreachable
+/// for the method that returns it: [`TooFewSamples`](ReadError::TooFewSamples)
+/// belongs to [`CoherentSignals::read_coherent`] alone, and
+/// [`Caller::reply`] never returns [`Contract`](ReadError::Contract). Each
+/// method documents what it can return.
 #[non_exhaustive]
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReadError {
