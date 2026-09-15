@@ -377,7 +377,10 @@ book-check:
 # that writes it, over every tracked `.md` — the book, the specifications, the
 # ADRs, and the repository's own front matter alike.
 #
-# Fenced blocks and inline code spans are stripped first: a code span such as
+# Fenced blocks and inline code spans are stripped first. A fence closes only at
+# a fence of the same character that is at least as long and has no info string,
+# as in CommonMark, so a four-backtick fence can quote a Markdown file that holds
+# three-backtick fences. A code span such as
 # `element[](min..max)` is documentation of another language's syntax, not a
 # link. External schemes and bare anchors are skipped; an anchor on a real path
 # is trimmed, so the file is checked and the fragment is not.
@@ -392,7 +395,14 @@ link-check:
             [ -e "$dir/$target" ] && continue
             echo "link-check: $file -> $target" >&2
             broken=$((broken+1))
-        done < <(awk '/^```/{f=!f; next} !f' "$file" \
+        done < <(awk '{
+                line = $0; sub(/^ ? ? ?/, "", line)
+                if (line !~ /^(```|~~~)/) { if (!f) print; next }
+                c = substr(line, 1, 1); n = 0
+                while (substr(line, n + 1, 1) == c) n++
+                if (!f) { f = 1; fc = c; fn = n; next }
+                if (c == fc && n >= fn && substr(line, n + 1) ~ /^[ \t]*$/) f = 0
+            }' "$file" \
             | sed -E 's/`[^`]*`//g' \
             | grep -oE '\]\([^)]+\)' \
             | sed -E 's/^\]\(//; s/\)$//' \
