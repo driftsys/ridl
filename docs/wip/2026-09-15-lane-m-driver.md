@@ -3,8 +3,9 @@
 Transient working memory for a lane proposed 2026-09-15, alongside
 `2026-09-13-step1-lanes-plan.md` but not part of it: that plan's four lanes (A,
 B, C, L) do not cover generating a RIDL interface's Rust API over `ridl-rt`.
-Lane A built the full `ridl-rt` library (E11.0) — identity, the envelope,
-payload encoding, and the ports — but no backend generates code against it yet.
+Lane A built the full `ridl-rt` library (E11.0) — identity, the envelope, the
+payload and encoding scaffolding (traits, not a working codec — see
+Dependencies), and the ports — but no backend generates code against it yet.
 ADR-0018 decision 15 and ADR-0020 decisions 5-7 sequence that generated
 interaction face after the frame specification (E11.1) and the transport
 (E11.9); neither is in scope for the current lanes, and `docs/ROADMAP.md`
@@ -37,12 +38,11 @@ no runtime exists yet; a runtime is a separate crate that implements the port
 traits (ADR-0020 decision 6), and the first one, the in-process loopback, is
 E11.9, out of this lane's scope. Lane M therefore needs its own throwaway,
 test-only implementation of the port traits — just enough to drive one example
-package's round trip — alongside the numbering placeholder below; M1 must assign
-this explicitly (see Dependencies). The target shape for the generated face is
-already drafted, unbuilt, in `docs/wip/2026-09-08-ridl-rt-design.md` §8
-(:770-839): a `Client<'a, P: ...>` generic over exactly the ports an interface
-needs, a `Provider` trait the application implements, and a generated `dispatch`
-over `Handler`.
+package's round trip; M1 must assign this explicitly (see Dependencies). The
+target shape for the generated face is already drafted, unbuilt, in
+`docs/wip/2026-09-08-ridl-rt-design.md` §8 (:770-839): a `Client<'a, P: ...>`
+generic over exactly the ports an interface needs, a `Provider` trait the
+application implements, and a generated `dispatch` over `Handler`.
 
 ## Dependencies — read before scoping M1
 
@@ -52,26 +52,29 @@ over `Handler`.
   depends only on the in-tree crate).
 - **No dependency:** Lane B (rsdl describes systems and deployment, a layer
   above the single ridl interface this lane targets).
-- **A placeholder decision, not a blocker:** every `ridl-rt` port is
-  byte-oriented and scoped to a catalog-wide interface number
+- **Resolved since this file's first draft — no placeholder needed:** every
+  `ridl-rt` port is byte-oriented and scoped to a catalog-wide interface number
   (`crates/ridl-rt/src/port.rs:6,9` — "never a payload type: the generated
-  binding decodes" / "the interface numbers ... scoped by that catalog"). The
-  per-member ordinal within one interface already exists from E2
-  (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:87`), but a catalog-scoped
-  interface number does not exist anywhere in the IR today. Lane L's lock design
-  assigns it at compile time, in Lane L's own implementation stage (L4, not yet
-  merged); the catalog descriptor plan (#324, already merged as a docs-only
-  plan) only reads that number once its own execution lands — it does not assign
-  it. M1 must design a throwaway placeholder (for example, one hardcoded
-  interface number for a single-interface example package) and say so in the
-  spec: this numbering is disposable and gets replaced, not reused, once Lane
-  L's L4 lands.
-- **A second placeholder, alongside numbering:** `ridl-rt` ships no runtime — a
-  runtime is a separate crate that implements the port traits, and the first
-  real one (the in-process loopback) is E11.9, out of this lane's scope. M1 must
-  assign a throwaway, test-only port implementation of its own, disposable the
-  same way as the numbering placeholder, so M3's round-trip test has something
-  to run against.
+  binding decodes" / "the interface numbers ... scoped by that catalog"). This
+  file originally found no such number anywhere in the IR and told M1 to invent
+  a throwaway one. Lane L's L4 landed while that fix was in flight (`fdcf2ca`,
+  PR #391, 2026-09-15): the IR now carries a real `Interface.number` and
+  `Interface.provisional` (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto`, added by
+  #391), assigned by the compiler from the package's `interfaces.lock` when one
+  exists, or provisionally at compile time when it does not (lock design §3). An
+  example package with no `interfaces.lock` gets a provisional number for free —
+  M1 uses that directly and does not invent a separate scheme. The only thing to
+  confirm in the spec: a provisional number is fine for an in-process MVP, since
+  RIDL-411 only blocks _publishing_ one, not using one locally. **Before scoping
+  M1, re-check `origin/main` for further drift** — this section was already
+  overtaken once by a concurrent merge; `git log` and the current IR are the
+  source of truth, not this file.
+- **A placeholder that is still needed:** `ridl-rt` ships no runtime — a runtime
+  is a separate crate that implements the port traits, and the first real one
+  (the in-process loopback) is E11.9, out of this lane's scope. M1 must assign a
+  throwaway, test-only port implementation of its own, disposable the same way
+  the numbering placeholder above would have been, so M3's round-trip test has
+  something to run against.
 - **A coupling to expect, not block on:** Epic 10 (Lane C's typl debt) is
   actively reshaping the Rust types this lane's `Client`/`Provider` methods use
   as arguments and return values, in `crates/ridl-backend-rust/src/lib.rs` — the
@@ -134,6 +137,9 @@ Read for every stage:
   error.rs
 - crates/ridl-backend-rust/src/lib.rs (today's Rust emitter, the codegen
   this lane extends)
+- docs/wip/2026-09-13-lock-design.md §3 (provisional numbering) — Lane L's L4
+  landed after this file's first draft; the IR's `Interface.number` and
+  `Interface.provisional` fields are real now (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto`)
 - This file's "Dependencies" section above
 
 == M1 — the spec (branch docs/interaction-face-design) ==
@@ -148,9 +154,11 @@ docs/wip/<today>-interaction-face-v0-design.md. It must settle:
     is built yet (E11.7/E11.8/E11.12 are all out of scope for the current
     lanes) — decide the cheapest path to something real, or a narrowly
     scoped stand-in explicitly marked as throwaway, and say which.
- 3. The placeholder interface-numbering scheme (see "Dependencies" above)
-    and how it is marked disposable once Lane L's L4 lands (not #324, which
-    only reads the number L4 assigns).
+ 3. Confirm the interface numbering (see "Dependencies" above): the example
+    package uses the provisional `Interface.number` the compiler now assigns
+    when no `interfaces.lock` exists (Lane L's L4, `fdcf2ca`/#391), not an
+    invented scheme. Re-check `origin/main` first — this is the one part of
+    the file already overtaken once by a concurrent merge.
  4. The placeholder in-process port implementation (see "Dependencies"
     above): test-only, disposable, just enough to drive one example
     package's round trip — not E11.9's real loopback runtime.
@@ -165,10 +173,14 @@ docs/wip/<today>-interaction-face-v0-design.md. It must settle:
  7. The coupling to Lane C's Epic 10 (P-5): name it as accepted rework, not
     a blocker.
  8. A tracking issue and a roadmap identifier. This lane is not yet in
-    docs/ROADMAP.md; read docs/ROADMAP.md's Epic 11 table directly for the
-    actual next free identifier rather than assuming one (do not trust any
-    enumeration written from memory, including this file's), or ask
-    Sebastien — and open a GitHub issue for it before merging this stage.
+    docs/ROADMAP.md. No single table gives the next free Epic 11 identifier —
+    Epic 11 stories are split across docs/ROADMAP.md's own Epic 11 table, its
+    "Rust codegen, finalized" table, and parked or landed rows in
+    docs/archive/roadmap-landed-record.md. Grep both files for every `E11.`
+    identifier before picking one, or just ask Sebastien — do not trust an
+    enumeration written from memory, including this file's own past mistake
+    here. Open a GitHub issue for the chosen identifier before merging this
+    stage.
  9. An "Alternatives considered" section, and trace links to that issue.
 Open a docs-only pull request, `docs(docs): design the interaction face
 MVP`. Run /review <PR> (docs-only lane). Merge after pass 2 and Sebastien's
@@ -208,7 +220,7 @@ anything another lane must know) and one on this lane's tracking issue
 once M1 has opened it. Then end the session.
 
 Stop and ask Sebastien when a record contradicts the spec, when a decision
-would change ADR-0018 or ADR-0020, when the payload-encoding or numbering
-placeholder choice is unclear, or when a gate check does not hold. Plain,
-literal prose everywhere. Never name a private or consumer project.
+would change ADR-0018 or ADR-0020, when the payload-encoding choice or the
+in-process port placeholder is unclear, or when a gate check does not hold.
+Plain, literal prose everywhere. Never name a private or consumer project.
 ```
