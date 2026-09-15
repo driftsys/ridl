@@ -43,22 +43,29 @@ stage, create that stage's branch from origin/main inside the lane's
 worktree. Never enter another session's worktree. Run
 `git branch --show-current` before every commit and every push.
 
-Read for every stage:
+Read for every stage. Every line number below is where the text sat at
+d2e9d41; if a number does not match, find the item by its number or its
+bold lead-in rather than trusting the line.
 - docs/specification/typl-language-reference.md — §17 open questions
-  (:1070-1225; item 11, the wire-width floor, at :1145; item 13, strings,
-  at :1187)
+  (:1068-1258; item 11, the wire-width floor, at :1143; item 13, strings,
+  at :1185; item 14, value-aware reorder comparison, at :1221; item 15,
+  a reorder alongside an addition or removal, at :1240)
 - docs/wip/2026-09-12-release-scope-and-plugin-system-design.md — §3.10
-  (:289, integer-backed unit types) and §3.11 (:315, strings)
+  (:292, integer-backed unit types) and §3.11 (:318, strings)
 - docs/wip/typl-value-objects-design.md and docs/wip/typl-value-objects-plan.md
 - docs/ROADMAP.md — Epic 14, Epic 10, and the carried typl defects
 - docs/decisions/ADR-0013-codegen-backend-scope.md
 - issues #318, #246-#255, #243, #237, #244, #203, #245
 
 == C1 — E14.1, the typl §17 pass (branch docs/typl-open-questions) ==
-Draft a table with one row per §17 item (13 items; items 12 and 13
-are the rows the re-scope added from §3.10 and §3.11): what it asks, the options, a recommendation, and what it
-blocks. Put §17.11 first. Lane A's RA-X7 (docs/wip/2026-09-08-ridl-rt-design.md
-§11) and E11.12 depend on it. Add a row for #245: is a name-based
+Draft a table with one row per §17 item (15 items; items 12 and 13 are the
+rows the re-scope added from §3.10 and §3.11, and items 14 and 15 are the
+two #331 added after this prompt was written — both are about
+`ridl-diff`'s reorder comparison, and item 15 already carries #302, so do
+not file a second issue for it): what it asks, the options, a
+recommendation, and what it blocks. Put §17.11 first. Lane A's RA-X7
+(docs/wip/2026-09-08-ridl-rt-design.md §11) and E11.12 depend on it. Add a
+row for #245: is a name-based
 `reserved` legal in an enum body, and if so what does it guarantee. Walk the
 table with Sebastien one row at a time. Each question is resolved (its text
 moves into the section of the reference it changes) or deferred to a named
@@ -79,7 +86,10 @@ every Files line, line reference and code snippet in every task against
 origin/main, and reporting only what no longer matches. Then:
 - update each task that no longer matches;
 - move Task 9 (TypeScript) out, to step 2, and leave a note where it was;
-  Task 1's two-backend done-when completes in step 2;
+  Task 1's two-backend done-when completes in step 2. The tracker half of
+  this is already done: E10.9 (#254) was closed as not planned on
+  2026-09-12, refiled under §3.5 and §3.8 of the release-scope note. Do not
+  reopen it; the move is to the plan document only;
 - add a task for #243 (struct field names emitted verbatim, which draws
   non_snake_case) and #237 (union arm names that collide under camel_case).
   Check ADR-0016's pinned name transform first; #237 needs a decision
