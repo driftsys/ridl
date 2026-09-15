@@ -51,6 +51,9 @@
 //!   package emitting one instance of every implemented rsdl-profile
 //!   diagnostic. [`RSDL_PROFILE_CODES`] below is the machine-checked index;
 //!   `rsdl-diag-showcase/NOTES` is the prose one.
+//! - `rsdl-appendix-a/` — the rsdl reference Appendix A, verbatim, as a
+//!   workspace of four packages. It checks with only the warnings the example
+//!   lists.
 //!
 //! The malformed programs live in `tests/malformed/` and are driven by
 //! `tests/totality.rs`: they are single files with no manifest, so the corpus
@@ -829,6 +832,109 @@ fn every_rsdl_profile_code_has_a_living_example() {
             );
         }
     }
+}
+
+/// The rsdl codes in force, read from the rsdl reference §16.1 table, each with
+/// the severity its row gives.
+fn rsdl_reference_codes() -> std::collections::BTreeMap<String, Severity> {
+    let path = repository_root().join("docs/specification/rsdl-language-reference.md");
+    let reference = std::fs::read_to_string(&path).expect("the rsdl reference is readable");
+    let table = reference
+        .split("### 16.1 Codes in force")
+        .nth(1)
+        .and_then(|rest| rest.split("### 16.2").next())
+        .expect("the rsdl reference has a §16.1 table");
+    table
+        .lines()
+        .filter_map(|line| {
+            let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+            let [_, code, _, severity, ..] = cells.as_slice() else {
+                return None;
+            };
+            if !code.starts_with("RSDL-") {
+                return None;
+            }
+            let severity = match *severity {
+                "error" => Severity::Error,
+                warning if warning.starts_with("warning") => Severity::Warning,
+                other => panic!("{code}: the §16.1 table gives the unknown severity `{other}`"),
+            };
+            Some((code.to_string(), severity))
+        })
+        .collect()
+}
+
+/// `RSDL_PROFILE_CODES` lists exactly the codes of the rsdl reference §16.1
+/// table, in both directions, and the catalogue gives each code the severity
+/// its row gives. With [`rsdl_profile_codes_match_the_catalogue`], the table,
+/// this list and `RSDL_CATALOG` hold one set of codes.
+#[test]
+fn rsdl_profile_codes_match_the_reference_table() {
+    let reference = rsdl_reference_codes();
+    let in_table: BTreeSet<&str> = reference.keys().map(String::as_str).collect();
+    let listed: BTreeSet<&str> = RSDL_PROFILE_CODES
+        .iter()
+        .map(|(code, _)| *code)
+        .filter(|code| code.starts_with("RSDL-"))
+        .collect();
+
+    let unlisted: Vec<&str> = in_table.difference(&listed).copied().collect();
+    let untabled: Vec<&str> = listed.difference(&in_table).copied().collect();
+    assert!(
+        unlisted.is_empty() && untabled.is_empty(),
+        "`RSDL_PROFILE_CODES` and the rsdl reference §16.1 table disagree.\n  \
+         in the table, absent from this list: {unlisted:?}\n  \
+         in this list, absent from the table: {untabled:?}",
+    );
+    for entry in ridl_core::diag::RSDL_CATALOG {
+        let code = entry.code.as_str();
+        assert_eq!(
+            reference.get(code),
+            Some(&entry.severity),
+            "{code}: the catalogue severity differs from the rsdl reference §16.1 table",
+        );
+    }
+}
+
+/// The rsdl showcase emits every `RSDL-` code at the severity the reference
+/// §16.1 table gives it, and every shared code (`FORM-`, TYPL-009) as an error.
+/// The catalogue severity is checked above; this checks the passes, which set a
+/// diagnostic's severity themselves.
+#[test]
+fn rsdl_showcase_emits_each_code_at_its_reference_severity() {
+    let reference = rsdl_reference_codes();
+    let compiled = compile_entry(Path::new("tests/corpus/rsdl-diag-showcase"));
+    for (code, severity) in &compiled.coded {
+        let expected = if code.starts_with("RSDL-") {
+            reference[code]
+        } else {
+            Severity::Error
+        };
+        assert_eq!(
+            *severity, expected,
+            "{code} is emitted at the wrong severity"
+        );
+    }
+}
+
+/// rsdl reference Appendix A, verbatim, as a workspace. It checks with no
+/// error, and its only diagnostics are the warnings the example lists: RSDL-409
+/// twice, for `Panel`'s and `Backend`'s `requires CruiseControl`, and RSDL-804
+/// for `linux.cpuset`, which the command drivers raise because they claim no
+/// backend namespace (plan decision P-B4). The coded list is in the order the
+/// diagnostics snapshot lists them.
+#[test]
+fn rsdl_appendix_a_checks_with_only_its_listed_warnings() {
+    let compiled = compile_entry(Path::new("tests/corpus/rsdl-appendix-a"));
+    let warning = |code: &str| (code.to_string(), Severity::Warning);
+    assert_eq!(
+        compiled.coded,
+        [
+            warning("RSDL-409"),
+            warning("RSDL-409"),
+            warning("RSDL-804")
+        ]
+    );
 }
 
 /// Severity is part of what a diagnostic promises: the reference §16 tables

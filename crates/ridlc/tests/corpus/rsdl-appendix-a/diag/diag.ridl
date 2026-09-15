@@ -1,0 +1,7 @@
+package veh.diag
+
+import veh.common.FaultReport
+
+service veh.diag.access {
+  query readFaults(): FaultReport @[..100ms]
+}

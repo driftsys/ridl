@@ -1,0 +1,6 @@
+package veh.common
+
+type Speed: km/h [0.0..250.0 step 0.5]
+type Engaged: boolean
+enum LeverCmd { SET = 1, CANCEL = 2, RESUME = 3 }
+struct FaultReport { count: integer [0..255] }
