@@ -168,14 +168,26 @@ which is the right way round for a placeholder.
 
 **One consequence for M2.** `dispatch(h, p, buf)`'s `buf` belongs to the caller,
 and `Handler::next_claim` returns `ReadError::Short` without consuming the claim
-(`port.rs:196-197`), so a `buf` that is too small makes `dispatch` return 0
+(`port.rs:195-196`), so a `buf` that is too small makes `dispatch` return 0
 forever rather than fail. With the descriptor's sizes absent, nothing tells the
 caller how large `buf` must be. **The emitter therefore writes a generated
-constant for it** — the maximum of the interface's own argument `MAX_SIZE`
-values — and the round trip uses that constant rather than a number chosen by
-hand. The same reasoning applies to `EventSource::next`, whose payload type is
-not known until `RawOccurrence.ord` is read: the emitter takes the maximum over
-the interface's event types, which it can compute from the per-type consts.
+constant for it** — the maximum over the interface's argument **and reply**
+`MAX_SIZE` values, not arguments alone. `dispatch` has one buffer, and a query's
+reply has to be encoded into it before `Handler::settle(claim, Ok(&bytes))`, so
+sizing from arguments alone under-sizes it whenever a reply is larger than every
+argument. The same reasoning applies to `EventSource::next`, whose payload type
+is not known until `RawOccurrence.ord` is read: the emitter takes the maximum
+over the interface's event types, which it can compute from the per-type consts.
+
+**Two things M2 settles, not M1.** With `buf` sized from `MAX_SIZE` — "the
+largest encoded size of any legal value" — `Ref::encode` cannot exceed its
+capacity for a legal value, so an `EncodeError::Capacity` at that point would
+mean the provider returned a value outside its own type's range. That is a
+different kind of failure from anything in the table above and M2 decides what
+`dispatch` does with it. `Handler::settle` also returns
+`Result<(), SettleError>` and `dispatch -> usize` has no channel for one; the
+expectation is that `dispatch` counts only the claims it settled successfully,
+and M2 states it.
 
 ## 5. The placeholder ports: test-only, one file, disposable
 
@@ -242,21 +254,30 @@ also not a type `ridl-rt` has; `error.rs` carries `Contract`, `Transport` and
 
 **What `dispatch` settles, and the stratum it settles it in.** Every outcome the
 caller can see as an error is settled by `dispatch` before or around the
-provider call, never returned from it. There are **three** outcomes, not two,
-because `Payload::verify` checks structure and typl constraints in one pass and
-reports them as two distinct variants (`payload.rs:146-153`):
+provider call, never returned from it. `Handler`'s contract is that **every
+claim is settled** (`port.rs:187`), so the table has to be total over the claims
+that can arrive, including one the generated code does not recognise:
 
-| Cause                       | Settled as                     |
-| --------------------------- | ------------------------------ |
-| `VerifyError::Structure(m)` | `Transport::Corrupt`           |
-| `VerifyError::Contract(v)`  | `Contract::InvalidValue(v)`    |
-| `require` returns `Err(())` | `Contract::PreconditionFailed` |
+| Cause                                       | Settled as                     |
+| ------------------------------------------- | ------------------------------ |
+| `claim.ord` or `claim.iface` matches no arm | `Contract::UnknownInteraction` |
+| `VerifyError::Structure(m)`                 | `Transport::Corrupt`           |
+| `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`    |
+| `require` returns `Err(())`                 | `Contract::PreconditionFailed` |
 
-Collapsing the first two into `Transport::Corrupt` would settle a range or
-enum-variant violation as a transport corruption, which reaches the caller in
-the wrong stratum. `Handler::settle`'s own documentation separates them —
-`CallError::Contract` when "the arguments break their typl constraints", and
-`Transport::Corrupt` when "the argument bytes fail the structure check"
+The first row is the fallback arm of the generated `match`. Without it an
+unroutable claim is never settled, which breaks `port.rs:187`;
+`Contract::UnknownInteraction` is the category the language defines for exactly
+this, "the peers disagree on an interface number or an ordinal"
+(`error.rs:18-20`).
+
+The middle two exist separately because `Payload::verify` checks structure and
+typl constraints in one pass and reports them as two distinct variants
+(`payload.rs:146-153`). Collapsing them into `Transport::Corrupt` would settle a
+range or enum-variant violation as a transport corruption, which reaches the
+caller in the wrong stratum. `Handler::settle`'s own documentation separates
+them — `CallError::Contract` when "the arguments break their typl constraints",
+and `Transport::Corrupt` when "the argument bytes fail the structure check"
 (`port.rs:199-203`) — and ridl §6.1 says the same from the language side, a
 negative acknowledgment carrying the stratum 2 category.
 `Contract::InvalidValue` is that stratum (`error.rs:12-13`).
@@ -273,14 +294,20 @@ bound requires satisfies it anyway, so instantiating the signal-only interface's
 `Client` with §5's full loopback proves nothing — it compiles whether or not the
 emitter added a `Caller` bound the interface does not need. The property is
 shown with a **minimal** port type that implements `SignalReader` and its
-`Attached` supertrait and nothing else:
+`Attached` supertrait and nothing else: it **must** construct the signal-only
+interface's `Client`, and that fails to compile if the emitter emitted a bound
+the interface does not need. That is exactly RA-19's claim, and it is a single
+ordinary compiling test.
 
-- it **must** construct the signal-only interface's `Client`. That fails to
-  compile if the emitter emitted a bound the interface does not need, which is
-  exactly RA-19's claim.
-- it **must not** construct the first interface's `Client`, which is a
-  `compile_fail` case, because that interface needs `Caller` and `EventSource`
-  as well.
+The mirror case — that the same minimal port must _not_ construct the first
+interface's `Client` — is deliberately **not** specified as a test.
+`compile_fail` is a rustdoc attribute, cargo collects doctests from library
+targets only, so it cannot reach a type defined under
+`crates/ridl-backend-rust/tests/`, and the crate has no `trybuild`
+dev-dependency. Adding one to prove the converse is not worth it: under-bounding
+cannot survive anyway, because a `Client` missing a bound its own method bodies
+need does not compile at all. Over-bounding is the only failure mode RA-19 has
+to catch, and the positive test catches it.
 
 **RA-20 holds.** Generated code contains no thread, future, socket or timer. A
 query returns a `Correlation` and a separate `*_reply` method polls it; nothing
@@ -329,9 +356,9 @@ and **two interfaces**.
   nothing. This is the interface the round trip runs against.
 - The second declares one signal and nothing else. It exists only so §6's RA-19
   claim is testable, in the direction §6 gives: a minimal port type implementing
-  `SignalReader` and `Attached` alone must construct this interface's `Client`,
-  and must fail to construct the first interface's. One interface cannot show
-  both halves of that property.
+  `SignalReader` and `Attached` alone must construct this interface's `Client`.
+  The first interface cannot show that, because its `Client` needs `Caller` and
+  `EventSource` too.
 
 **Every command and query in the fixture takes exactly one parameter, whose type
 is a declared type of the package, and every query replies with one.** So
@@ -378,10 +405,13 @@ available: an inner attribute inside an `include!`d file is a hard error. So:
   `generate` builds `quote! { #(#items)* }` and parses it as a `syn::File` with
   no `attrs` — and M3 must keep it true;
 - **the allows are outer attributes on the module that wraps the `include!`**,
-  written by hand in the test, not by the emitter. They cannot be part of the
-  generated file, because the byte-equality guard compares the emitter's output
-  against that file and an allow the emitter did not write would fail the
-  comparison.
+  written by hand in the test, not by the emitter. An allow the emitter itself
+  wrote would be in its own output and would satisfy the guard; what cannot work
+  is adding one to the checked-in file by hand, because the byte-equality guard
+  compares the emitter's output against that file. Putting them on the wrapping
+  module keeps the decision about which lints to silence in the test, where it
+  is visible, rather than in the emitter, where it would apply to every
+  consumer's generated code.
 
 If M3 finds the generated face needs so many allows that the wrapping module
 becomes the real specification of what the emitter may produce, that is a signal
