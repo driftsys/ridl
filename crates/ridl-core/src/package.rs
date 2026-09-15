@@ -21,6 +21,7 @@ use rowan::TextRange;
 
 use crate::db::InputFile;
 use crate::diag::{DiagCode, Diagnostic, Label, Severity, SourceMap, Span};
+use crate::interface_lock::InterfaceLock;
 
 /// Where a package's sources come from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -34,8 +35,22 @@ pub enum PackageOrigin {
     Std,
 }
 
+/// The package's `interfaces.lock` as the loader read it (lock design §2): the
+/// file's path and text, kept so a checker diagnostic can point into the file
+/// (RIDL-409 is reported on an entry's line), and the parsed table.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PackageLock {
+    /// The file's path, in the loader's path form; its parent directory is
+    /// the package directory `ridl lock` names.
+    pub path: String,
+    /// The file's text, byte for byte.
+    pub text: String,
+    /// The parsed table.
+    pub lock: InterfaceLock,
+}
+
 /// One loaded package: its dotted name (e.g. `veh.common`), its files, where
-/// it came from, and its own manifest's `[imports]` map.
+/// it came from, its own manifest's `[imports]` map, and its interface lock.
 ///
 /// `imports` is ADR-0002 §5 step 2: the `[imports]` of the manifest governing
 /// this package's directory tree. It shadows the workspace `[imports]` for
@@ -58,6 +73,14 @@ pub struct Package {
     /// unparsed: `ridl-core` cannot depend on `ridl-sem` (E2 task 9).
     #[returns(ref)]
     pub default_timing: Option<String>,
+    /// The package's `interfaces.lock`, read by the loader from the package
+    /// directory (lock design §2), or `None` when the directory has no such
+    /// file, when the file is malformed (the loader reports RIDL-410 and
+    /// drops it), or when the package was not loaded from a directory (a
+    /// source string, `ridl.std`). The checker reads it to give every
+    /// interface its number; without it every number is provisional.
+    #[returns(ref)]
+    pub lock: Option<PackageLock>,
 }
 
 /// Every loaded package plus the workspace root's own `[imports]` map.
@@ -374,6 +397,7 @@ mod tests {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            None,
         );
         let cluster = Package::new(
             &db,
@@ -381,6 +405,7 @@ mod tests {
             vec![file(&db, "veh-cluster/b.typl", "package veh.cluster")],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
             None,
         );
         let ws = Workspace::new(&db, vec![common, cluster], BTreeMap::new());
@@ -417,6 +442,7 @@ mod tests {
             vec![file(db, &format!("{}.ridl", name.replace('.', "/")), text)],
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
             None,
         )
     }

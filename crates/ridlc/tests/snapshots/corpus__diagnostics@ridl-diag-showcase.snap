@@ -3,6 +3,12 @@ source: crates/ridlc/tests/corpus.rs
 expression: compiled.diagnostics
 input_file: crates/ridlc/tests/corpus/ridl-diag-showcase/ridl.toml
 ---
+error[RIDL-410]: `interfaces.lock` is malformed: `next` is 1, which is not greater than the number 1 of `Badlock` — resolve the conflict or restore the file from version control, then run `ridl lock`
+  ┌─ tests/corpus/ridl-diag-showcase/badlock/interfaces.lock:3:1
+  │
+3 │ Badlock 1
+  │ ^^^^^^^^^
+
 error[RIDL-104]: return type on command — a command always returns `()`; use `query` for a result
   ┌─ tests/corpus/ridl-diag-showcase/main/kinds.ridl:9:37
   │

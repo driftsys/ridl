@@ -755,6 +755,18 @@ diag_codes! {
         /// ordinal moved and which neither classifies nor gates.
         RIDL_408 = "RIDL-408", Error,
             "interaction removed, its tombstone dropped or moved, or its retired name redeclared";
+
+        /// The package's `interfaces.lock` is malformed (lock design §2, §8):
+        /// no `next` line, `next` not greater than every entry's number, one
+        /// number on two entries, one live key on two entries, or a line that
+        /// does not parse — git conflict markers included. Error. Emitted by
+        /// the loader, on the offending line of the lock file itself (or at
+        /// the start of an empty file), so `ridlc` and `ridl` alike stop on
+        /// it; the package then compiles without its lock. The fix is to
+        /// resolve the conflict or restore the file from version control and
+        /// run `ridl lock`.
+        RIDL_410 = "RIDL-410", Error,
+            "`interfaces.lock` is malformed";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the

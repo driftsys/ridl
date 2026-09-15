@@ -111,6 +111,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
         PackageOrigin::WorkspaceMember,
         BTreeMap::new(),
         None,
+        None,
     );
     let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
 

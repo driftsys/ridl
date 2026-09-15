@@ -33,6 +33,7 @@ pub fn std_package(db: &mut RidlDatabase) -> Package {
         PackageOrigin::Std,
         std::collections::BTreeMap::new(),
         None,
+        None,
     );
     let _ = db.std_package_cache.set(package);
     package

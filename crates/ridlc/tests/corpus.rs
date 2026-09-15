@@ -499,6 +499,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      `crates/ridl/tests/baseline_gate.rs`",
         },
     ),
+    ("RIDL-410", Showcase),
     // The shared codes E2 added or folded into the ridl profile.
     ("TYPL-005", Showcase),
     ("FORM-106", Showcase),
@@ -988,6 +989,7 @@ fn showcase_pins_every_severity() {
         ("RIDL-404", Severity::Warning),
         ("RIDL-405", Severity::Info),
         ("RIDL-406", Severity::Info),
+        ("RIDL-410", Severity::Error),
         ("TYPL-005", Severity::Error),
         ("TYPL-115", Severity::Info),
         ("TYPL-301", Severity::Error),

@@ -923,6 +923,76 @@ fn missing_entry_is_io_error() {
     assert_eq!(code, 2, "a missing entry is an I/O error, exit 2");
 }
 
+/// A malformed `interfaces.lock` beside the sources is RIDL-410, exit 1,
+/// reported on the lock file's own line — git conflict markers included
+/// (lock design §2, §8; plan decision PD-3).
+#[test]
+fn check_malformed_interfaces_lock_exits_one_with_ridl_410() {
+    let dir = TempDir::new("check-badlock");
+    dir.write("ridl.toml", PACKAGE_MANIFEST);
+    dir.write("speed.typl", SPEED_SOURCE);
+    let lock = dir.write(
+        "interfaces.lock",
+        "# interfaces.lock — written by ridl lock; do not edit by hand.\n\
+         next 3\n\
+         <<<<<<< HEAD\n\
+         A 1\n\
+         =======\n\
+         B 1\n\
+         >>>>>>> feature\n",
+    );
+    let (code, stderr) = ridlc(&["check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(
+        code, 1,
+        "a malformed lock is a diagnostic error, exit 1; stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("error[RIDL-410]: `interfaces.lock` is malformed: line does not parse:"),
+        "stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains(
+            "resolve the conflict or restore the file from version control, then run `ridl lock`"
+        ),
+        "stderr:\n{stderr}"
+    );
+    let location = format!("{}:3:1", lock.display());
+    assert!(
+        stderr.contains(&location),
+        "the span is the first conflict marker line, {location}; stderr:\n{stderr}"
+    );
+}
+
+/// PD-8: a bare `.ridl` file with no manifest reads `interfaces.lock` from
+/// the file's own directory, so a malformed one is RIDL-410 there too.
+#[test]
+fn check_single_file_reads_the_lock_beside_the_file() {
+    let dir = TempDir::new("check-file-badlock");
+    let file = dir.write("speed.ridl", SPEED_SOURCE);
+    dir.write("interfaces.lock", "next 2\nA 1\nA 1\n");
+    let (code, stderr) = ridlc(&["check".as_ref(), file.as_os_str()]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(
+        stderr.contains("error[RIDL-410]: `interfaces.lock` is malformed: number 1 is on two entries: `A` and `A`"),
+        "stderr:\n{stderr}"
+    );
+}
+
+/// A well-formed `interfaces.lock` draws nothing: `check` exits 0.
+#[test]
+fn check_with_a_well_formed_interfaces_lock_exits_zero() {
+    let dir = TempDir::new("check-goodlock");
+    dir.write("ridl.toml", PACKAGE_MANIFEST);
+    dir.write("speed.typl", SPEED_SOURCE);
+    dir.write(
+        "interfaces.lock",
+        "# interfaces.lock — written by ridl lock; do not edit by hand.\nnext 1\n",
+    );
+    let (code, stderr) = ridlc(&["check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(!stderr.contains("RIDL-410"), "stderr:\n{stderr}");
+}
+
 /// `ridlc --version` reports the binary's own name and version and exits 0
 /// (driftsys/ridl#194); before the fix it was an unrecognised argument and
 /// exited 2.

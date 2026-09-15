@@ -426,6 +426,7 @@ mod tests {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            None,
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         check_package(&db, ws, pkg, std)

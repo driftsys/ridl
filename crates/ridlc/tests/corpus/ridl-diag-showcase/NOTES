@@ -5,7 +5,7 @@ the ridl profile implements. The `@ridl-diag-showcase` diagnostics snapshot
 (`crates/ridlc/tests/snapshots/`) is the de-facto ridl diagnostic index until
 the error-index website (E4.2), the way `diag-showcase` is for the typl codes.
 
-Two members, because one package cannot provoke everything:
+Three members, because one package cannot provoke everything:
 
 - `main/` — package `diag.ridl`. One file per diagnostic family, so a parse
   error in one family never suppresses the checker in another. Its manifest
@@ -16,6 +16,10 @@ Two members, because one package cannot provoke everything:
   namespace and RIDL-140 cannot be provoked from a single package, and it
   declares its own `Published` so `main/services.ridl` can compose two
   interfaces with one name (RIDL-147) — one package cannot declare two.
+- `badlock/` — package `diag.badlock`. Its `interfaces.lock` is malformed
+  (`next` is not above the entry's number), which is RIDL-410 on the lock
+  file's own line. The lock is per package, so the code needs a package of its
+  own; the interface beside it checks clean.
 
 `main/narrowing.ridl` and `main/narrowing_returns.ridl` cover what typl shapes
 may cross an interaction boundary — optional in any interaction position, a map
@@ -67,7 +71,7 @@ review caught and no single-clause fixture could have. Keep both clauses.
   listed twice in one shape list), 146 (a shape re-declared under a
   service-level `reserved` name — RIDL-401 one level up),
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
-  406.
+  406, 410 (a malformed `interfaces.lock`, from the `badlock/` member).
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).
 - MANI: 009.
 - TYPL: 005 (the visibility rule, reaching the interaction layer), 301, 303, 304

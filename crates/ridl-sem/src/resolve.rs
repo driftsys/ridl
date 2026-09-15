@@ -835,6 +835,7 @@ mod package_tests {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            None,
         )
     }
 
@@ -854,6 +855,7 @@ mod package_tests {
                 .iter()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
                 .collect(),
+            None,
             None,
         )
     }
@@ -1128,6 +1130,7 @@ mod package_tests {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            None,
         )
     }
 
@@ -1217,6 +1220,7 @@ mod package_tests {
                 .collect(),
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
             None,
         )
     }

@@ -5161,6 +5161,7 @@ mod tests {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            None,
         )
     }
 
@@ -7027,6 +7028,7 @@ mod tests {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            None,
         )
     }
 
@@ -7050,6 +7052,7 @@ mod tests {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             Some(default_timing.to_string()),
+            None,
         )
     }
 
@@ -9305,6 +9308,7 @@ interface VehicleStatus {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            None,
         );
         let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
         let checked = check_package(&db, ws, pkg, std);
@@ -10028,6 +10032,7 @@ interface VehicleStatus {
             inputs,
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
+            None,
             None,
         )
     }
