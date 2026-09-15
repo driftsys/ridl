@@ -401,15 +401,32 @@ fn a_package_directory_named_merge_is_a_path_when_spelled_with_a_dot() {
 }
 
 /// Runs `git` with `args` in `dir`; panics with the output when it fails.
+///
+/// A git hook runs with `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE` in its
+/// environment, and each of those outranks the child process's working
+/// directory. This repository's pre-push hook runs the test suite, so the
+/// inherited git environment is removed here: without that, this helper would
+/// drive the repository being pushed from instead of the temporary one.
 fn git(dir: &Path, args: &[&str]) -> String {
-    let output = Command::new("git")
+    let mut command = Command::new("git");
+    command
         .current_dir(dir)
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_CONFIG_SYSTEM", "/dev/null")
-        .env("GIT_EDITOR", "true")
-        .args(args)
-        .output()
-        .expect("git runs");
+        .env("GIT_EDITOR", "true");
+    for inherited in [
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_OBJECT_DIRECTORY",
+        "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+        "GIT_COMMON_DIR",
+        "GIT_NAMESPACE",
+        "GIT_PREFIX",
+    ] {
+        command.env_remove(inherited);
+    }
+    let output = command.args(args).output().expect("git runs");
     assert!(
         output.status.success(),
         "git {} failed:\nstdout:\n{}\nstderr:\n{}",
@@ -434,6 +451,16 @@ fn the_registered_driver_merges_two_branches_through_git() {
     let dir = TempDir::new("git");
     let repo = dir.path();
     git(repo, &["init", "--quiet", "--initial-branch=main"]);
+    // Every later command must reach this repository and no other. The check
+    // runs before the first commit, so a git environment that outranked the
+    // working directory would stop the test here rather than write into the
+    // repository the test suite runs in.
+    let reached = git(repo, &["rev-parse", "--absolute-git-dir"]);
+    assert_eq!(
+        std::fs::canonicalize(reached.trim()).expect("the git directory git reached exists"),
+        std::fs::canonicalize(repo.join(".git")).expect("the temporary git directory exists"),
+        "git must reach the temporary repository"
+    );
     git(repo, &["config", "user.name", "ridl tests"]);
     git(
         repo,
