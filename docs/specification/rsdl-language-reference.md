@@ -657,9 +657,9 @@ from outside rsdl, cited once: the interface numbers, read from each package's
 generated lock file; the member ordinals, from position (ridl §11); and the
 **catalog hash** per catalog, computed by ridl over the interfaces, their
 numbers and every type they reach (D-8) — embedded here as an input, never
-computed by rsdl. The lock file is not yet in the ridl reference: ridl §11 and
-§14.5 still number an interface by its position in a service's list, and the
-lock file replaces that numbering when it lands.
+computed by rsdl. The lock file is `interfaces.lock`, one per package, written
+by `ridl lock` alone (ridl §11); an inline shape is numbered from it too, under
+the key `service:` and the service's dotted name (ridl §14.5).
 
 Per deployment:
 

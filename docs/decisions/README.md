@@ -81,7 +81,13 @@
   Two amendments came out of implementation review rather than design: ADR-0014
   decision 12 retracts that record's infallible serialization return, and
   decision 24 here requires an interface name to be unique across a service's
-  shapes, live or retired, and makes a retargeted slot breaking.
+  shapes, live or retired, and makes a retargeted slot breaking. Amended in
+  place on 2026-09-15 by the lock design (rsdl decision D-7): an interface's
+  number comes from its package's `interfaces.lock`, the list is a set with no
+  tombstone, the ordinal spaces are keyed on (package, interface number),
+  RIDL-146 to RIDL-148 are retired, and the five slot categories are replaced by
+  `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` (decisions 12, 15, 17,
+  18, 19, 20 and 24, each dated).
 
 - **ADR-0016 — Schema projection and the pinned name transform.** The four
   properties every projection from IR identity to a target's namespace must

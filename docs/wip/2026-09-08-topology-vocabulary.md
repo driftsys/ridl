@@ -21,7 +21,9 @@ the record and this note is the proposal.
 [`2026-09-12-rsdl-rewrite-decisions.md`](2026-09-12-rsdl-rewrite-decisions.md),
 which amends this note. The amendments are marked in place with the decision
 that makes each one. The identity items (V-17, V-X2 and the `lock` line of §7)
-are left to the lock design.
+were left to the lock design
+([`2026-09-13-lock-design.md`](2026-09-13-lock-design.md)), which settled them;
+each is marked in place, dated 2026-09-15.
 
 ## 1. The nouns
 
@@ -257,6 +259,10 @@ catalog record already fixes.
                  derivation that survives a rename. This is ADR-0016
                  decision 8's mechanism one scope down, and it stays per
                  package, so there is still no global registry.
+                 Landed 2026-09-15 as `interfaces.lock`, one per package,
+                 written by `ridl lock` alone (D-7; the lock design §2):
+                 a `u32` number per interface, an inline shape's included,
+                 provisional until allocated and retired in place.
     V-18  MUST   A generation filter produces a **view**; it never produces
                  a catalog. A view is which contracts one consumer links,
                  derived from its requires-closure, and may differ per
@@ -295,8 +301,12 @@ is the amended one).
     deployment    named, several per system: contains machines.
     machine       lists the component instances it hosts.
 
-    lock          the service-number registry — allocated and recorded,
-                  never derived (ADR-0016 decision 8).
+    lock          `interfaces.lock`, the per-package interface-number
+                  registry — allocated and recorded by `ridl lock`, never
+                  derived (D-7; the lock design). There is no service
+                  number (V-X2): the service is not in the routing key.
+                  Written 2026-09-08 as "the service-number registry
+                  (ADR-0016 decision 8)"; corrected 2026-09-15.
 
     V-20  MUST   `may have an implementation` keeps its "may". A component
                  with none is how an external system, a stub, or a
@@ -370,7 +380,10 @@ routing key is (slot, interface, member), with no service in it. ADR-0016
 decision 8 scoped its allocation question to tag-based transports; if the
 routing key holds, the question does not arise here and a piece of machinery
 leaves the plan. Confirm against the spike repo's copy of the ABI, which is
-ahead of the one read for this note.
+ahead of the one read for this note. Answered by D-7 and the lock design §1,
+recorded 2026-09-15: the routing key is (catalog slot, interface number, member
+ordinal) and holds no service number; a tag-based transport that needs a service
+id gets it as that backend's own attribute (rsdl §17 item 9).
 
 **V-X3 — where a distribution's members and their kinds are declared.** Assets
 join components later. Keep the member kind explicit in the grammar even while
