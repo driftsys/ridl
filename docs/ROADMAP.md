@@ -225,12 +225,12 @@ their issues are closed as not planned, and the new stories take new
 identifiers, from E6.12. The noun set is settled: `component` stays and
 `process` goes (rsdl §1.3, §1.4).
 
-**The keyword registry changes with the checker.** The family registry (typl
-§1.4) and the implemented registry still reserve the retired v0.1 rsdl words and
-do not yet reserve `offers`, `distribution` and `machine`. Both change in E6.12,
-as rsdl §2 states: a retired word leaves the registry unless another profile
-uses it (`let` stays, rmdl's), and the three new words stop being legal
-identifiers in every profile.
+**The keyword registry changed with the checker.** E6.12 made the change rsdl §2
+states, in the family registry (typl §1.4) and in the implemented registry
+together: each retired v0.1 rsdl word left the registry, because no other
+profile uses it (`let` stays, rmdl's), and is a legal identifier in every
+profile again; `offers`, `distribution` and `machine` are reserved in both
+registries and are no longer legal identifiers in any profile.
 
 **The catalog hash is received, not computed.** The lowering embeds each
 catalog's hash (rsdl §13); the catalog descriptor work (#324) computes it, after
