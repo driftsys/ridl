@@ -45,14 +45,18 @@ Agreed with Sebastien on 2026-09-13.
   are open and the records disagree: the `ridl-rt` note proposes `u16` for
   `Ordinal`, `InterfaceId` and `ServiceId`
   (`docs/wip/2026-09-08-ridl-rt-design.md:205-208`), the IR carries every
-  ordinal as `uint32` (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:87`), the
-  catalog descriptor plan's schema already writes `uint32` for the ordinal and
-  the interface number (`docs/wip/2026-09-13-catalog-descriptor-plan.md:296`,
-  `:306`, `:319`), and D-7 and the runtime descriptors design state no width. If
-  lane L chooses a different width, that plan's Task 1 schema changes with it.
-  D-7 owns numbering, so the first section of lane L's design fixes the widths.
-  Lane A writes the rest of its spec in the meantime and does not fix its
-  identity types until Sebastien has approved that section.
+  ordinal as `uint32` (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:105`, and again
+  at `:269`, `:288` and `:345`), the catalog descriptor plan's schema already
+  writes `uint32` for the ordinal and the interface number
+  (`docs/wip/2026-09-13-catalog-descriptor-plan.md:296`, `:306`, `:319`), and
+  D-7 and the runtime descriptors design state no width. If lane L chooses a
+  different width, that plan's Task 1 schema changes with it. _Settled since
+  this was written:_ Sebastien approved the widths on 2026-09-13, recorded in §1
+  of `docs/wip/2026-09-13-lock-design.md` and in the lane L comment on #328 that
+  holds gate GW. The decision above stands as taken; the widths it left open are
+  no longer open. D-7 owns numbering, so the first section of lane L's design
+  fixes the widths. Lane A writes the rest of its spec in the meantime and does
+  not fix its identity types until Sebastien has approved that section.
 - **P-3 `ridl-rt` runs beside rsdl and the lock, not after rsdl.** The roadmap's
   step 1 sequence puts E6 before E11.0. E11.0 needs only the identity widths
   from D-7, and nothing from the rsdl language. The roadmap pull request (lane
@@ -108,7 +112,7 @@ worktrees, checks out their branches, or runs a formatter in their directories.
 (`baseline-tombstone-gate`) and #331 (`member-reordered-category`) — so the
 table below is a record of what each one changed, which is what the §6 orders
 are built on, not a live warning. Gates G1 and G2 both hold. #331 also appended
-items 14 and 15 to typl §17, which is why stage C1's table below has fifteen
+items 14 and 15 to typl §17, which is why stage C1's table below has fifteen §17
 rows and not thirteen.
 
 | Session          | Branch and worktree                                                                                         | Files it changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
