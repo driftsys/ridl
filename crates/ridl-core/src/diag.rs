@@ -761,6 +761,33 @@ diag_codes! {
         /// run `ridl lock`.
         RIDL_410 = "RIDL-410", Error,
             "`interfaces.lock` is malformed";
+
+        /// An interface in the snapshot `ridl baseline` is about to publish
+        /// carries a provisional number — a declaration with no entry in the
+        /// package's `interfaces.lock` (lock design §3, §8). A provisional
+        /// number is no identity: `ridl diff` never matches on it, so a
+        /// snapshot holding one records nothing a later comparison can hold
+        /// the interface to. Error. Emitted by `ridl baseline` alone, at the
+        /// declaration's name, for a first publication as for a replacement.
+        /// The fix is plain `ridl lock`, which allocates and records the
+        /// number, then publish.
+        RIDL_411 = "RIDL-411", Error,
+            "provisional interface number refused at publication";
+
+        /// An interface number the published baseline holds is absent from
+        /// the fresh snapshot and not among its `interfaces.lock` retired
+        /// entries (lock design §4, §8) — a lock line deleted by hand, since a
+        /// live entry with no declaration already fails the build with
+        /// RIDL-409. Publishing would lose the only record that the number was
+        /// allocated, and `next` could hand it to a later interface. Error.
+        /// Emitted by `ridl baseline` alone, for a published number other
+        /// than 0: a snapshot published before the lock existed carries 0,
+        /// which is never allocated, and is matched by name. The fix is to
+        /// restore the entry's line in `interfaces.lock` from version
+        /// control, with `retired` after the number when the interface is
+        /// gone.
+        RIDL_412 = "RIDL-412", Error,
+            "published interface number dropped without a retired entry";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the

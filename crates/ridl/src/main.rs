@@ -647,17 +647,23 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     // interaction with no `reserved` tombstone destroys that record, and a
     // later append then reuses the ordinal with nothing to compare against.
     // The comparison happens here, against the directory publication is about
-    // to overwrite (driftsys/ridl#315).
-    match untombstoned_removals(path, &out_dir, &staging, &mut run) {
-        Ok(false) => {}
-        Ok(true) => {
-            let _ = std::fs::remove_dir_all(&staging);
-            return finish(Ok(run));
+    // to overwrite (driftsys/ridl#315). The interface level is the lock's:
+    // `interface_refusals` refuses a provisional interface number and a
+    // published number the fresh snapshot neither carries nor retires (lock
+    // design §8). Both gates run, so one run reports every refusal.
+    let mut refused = false;
+    for gate in [untombstoned_removals, interface_refusals] {
+        match gate(path, &out_dir, &staging, &mut run) {
+            Ok(hit) => refused |= hit,
+            Err(code) => {
+                let _ = std::fs::remove_dir_all(&staging);
+                return code;
+            }
         }
-        Err(code) => {
-            let _ = std::fs::remove_dir_all(&staging);
-            return code;
-        }
+    }
+    if refused {
+        let _ = std::fs::remove_dir_all(&staging);
+        return finish(Ok(run));
     }
 
     if let Err(err) = publish_baseline(&staging, &out_dir) {
@@ -847,6 +853,142 @@ fn published_reserves(published: &[ridl_ir::v2::Package], path: &str) -> bool {
 /// live or retired — the slot every RIDL-408 remedy tells the author to keep.
 fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u32> {
     published_interaction(published, path).map(|decl| decl.ordinal)
+}
+
+/// The interface level of the publication gate — the lock's own rules (lock
+/// design §8; the design's §4 table, `ridl baseline` column): a RIDL-411 for
+/// every interface in the fresh snapshots whose number is provisional, and a
+/// RIDL-412 for every interface the baseline being replaced holds under a
+/// non-zero number that the fresh snapshots neither carry nor retire. Returns
+/// whether any was recorded.
+///
+/// RIDL-411 reads the fresh snapshots alone, so a first publication is
+/// refused too: a provisional number is no identity, and a snapshot holding
+/// one records nothing a later comparison can hold the interface to. RIDL-412
+/// reads the same `diff_sets` report the RIDL-408 gate walks, keeping the
+/// interface-level `DeclRemoved` changes: `ridl_diff` matches interfaces by
+/// number, so such a change is a number the fresh side carries under no name
+/// and does not list as retired. A published `number` 0 predates the lock and
+/// was matched by name, so its removal is not refused (plan decision PD-9). In
+/// practice RIDL-412 is a lock line deleted by hand: a live entry with no
+/// declaration fails the build with RIDL-409 before publication.
+///
+/// The published snapshots are read flat from `out_dir`, as
+/// [`untombstoned_removals`] reads them and for the same reason.
+fn interface_refusals(
+    entry: &Path,
+    out_dir: &Path,
+    staging: &Path,
+    run: &mut CliRun,
+) -> Result<bool, ExitCode> {
+    let fresh = load_snapshots(&snapshot_files(staging)?, None)?;
+    let mut index: Option<DeclIndex> = None;
+    let mut refusals = Vec::new();
+    for package in &fresh {
+        for shape in package.shapes() {
+            if !shape.interface.provisional {
+                continue;
+            }
+            let index = index.get_or_insert_with(|| DeclIndex::build(entry));
+            refusals.push(Diagnostic {
+                code: DiagCode::RIDL_411,
+                severity: Severity::Error,
+                message: provisional_number_message(&package.name, &shape, entry),
+                primary: index.shape_span(&package.name, shape.name, &mut run.sources),
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            });
+        }
+    }
+
+    if out_dir.is_dir() {
+        let published = load_snapshots(&snapshot_files(out_dir)?, Some(PUBLISHED_PARSE_REMEDY))?;
+        if !published.is_empty() {
+            let report = ridl_diff::diff_sets(&published, &fresh);
+            for change in &report.changes {
+                let Some((package, shape)) = dropped_number(change, &published, &fresh) else {
+                    continue;
+                };
+                refusals.push(Diagnostic {
+                    code: DiagCode::RIDL_412,
+                    severity: Severity::Error,
+                    message: dropped_number_message(&package.name, &shape),
+                    primary: detached_span(),
+                    labels: Vec::new(),
+                    fixits: Vec::new(),
+                });
+            }
+        }
+    }
+
+    let refused = !refusals.is_empty();
+    run.diagnostics.extend(refusals);
+    Ok(refused)
+}
+
+/// The RIDL-411 message: the lock key the entry would carry, the provisional
+/// number the checker showed, and the command that records it.
+fn provisional_number_message(
+    package: &str,
+    shape: &ridl_ir::v2::InterfaceShape<'_>,
+    entry: &Path,
+) -> String {
+    let key = lock::shape_key(shape);
+    format!(
+        "`{key}` has a provisional interface number ({}) in package `{package}`: no entry in \
+         `interfaces.lock` records it, and a provisional number is no identity. Run `ridl lock \
+         {}` to allocate and record the number, then publish.",
+        shape.interface.number,
+        entry.display()
+    )
+}
+
+/// The published shape an interface-level `DeclRemoved` names, when the
+/// number it held is one the lock allocated (not 0) and the fresh package
+/// does not retire — the RIDL-412 shape. An interface-level change has a
+/// two-segment path and the walk's `interface` marker as its `before`; a
+/// service's own `DeclRemoved` carries `service` there, and a package's has
+/// one segment.
+fn dropped_number<'a>(
+    change: &ridl_diff::Change,
+    published: &'a [ridl_ir::v2::Package],
+    fresh: &[ridl_ir::v2::Package],
+) -> Option<(&'a ridl_ir::v2::Package, ridl_ir::v2::InterfaceShape<'a>)> {
+    if change.category != ridl_diff::Category::DeclRemoved
+        || change.before.as_deref() != Some("interface")
+    {
+        return None;
+    }
+    let mut parts = change.path.split('/');
+    let (Some(pkg), Some(name), None) = (parts.next(), parts.next(), parts.next()) else {
+        return None;
+    };
+    let package = published.iter().find(|package| package.name == pkg)?;
+    let shape = package.shapes().find(|shape| shape.name == name)?;
+    let number = shape.interface.number;
+    if number == 0 {
+        return None;
+    }
+    let retired = fresh
+        .iter()
+        .find(|package| package.name == pkg)
+        .is_some_and(|package| package.retired.iter().any(|entry| entry.number == number));
+    (!retired).then_some((package, shape))
+}
+
+/// The RIDL-412 message: the name and number the baseline holds, and the
+/// line that restores the record.
+fn dropped_number_message(package: &str, shape: &ridl_ir::v2::InterfaceShape<'_>) -> String {
+    let key = lock::shape_key(shape);
+    let number = shape.interface.number;
+    format!(
+        "`{key}` holds interface number {number} in the baseline being replaced, in package \
+         `{package}`, but the fresh snapshot neither declares that number nor retires it. \
+         Publishing would lose the only record that the number was allocated, and `next` could \
+         hand it to a later interface. Restore the line `{key} {number}` in the package's \
+         `interfaces.lock` from version control — `{key} {number} retired` when the interface is \
+         gone."
+    )
 }
 
 /// The directory the snapshots are built into before they are published: a

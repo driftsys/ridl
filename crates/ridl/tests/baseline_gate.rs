@@ -3,7 +3,10 @@
 //! baseline` refusing to replace a published snapshot when the replacement
 //! drops an interaction the snapshot still declares and the source does not
 //! retire it with a `reserved` tombstone at its own ordinal, or declares a
-//! live interaction under a name the snapshot retires.
+//! live interaction under a name the snapshot retires (RIDL-408); and the
+//! interface level of the same gate, the lock's (lock design §8): a
+//! provisional interface number is refused (RIDL-411), and so is a published
+//! number the fresh snapshot neither carries nor retires (RIDL-412).
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -60,11 +63,17 @@ fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
 
 const MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n";
 
-/// Lays out a one-package workspace holding `source` and returns its root.
+/// Lays out a one-package workspace holding `source`, records its interface
+/// numbers with plain `ridl lock` — `ridl baseline` refuses a provisional
+/// number (RIDL-411), so a fixture that publishes needs its lock first — and
+/// returns its root.
 fn package_workspace(dir: &TempDir, source: &str) -> PathBuf {
     dir.write("ridl.toml", MANIFEST);
     dir.write("cluster.ridl", source);
-    dir.path().to_path_buf()
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+    root
 }
 
 /// Three events. The second is the one the later fixtures remove.
@@ -235,6 +244,42 @@ interface VehicleStatus {
   event doorLocked: DoorState @[100ms..1s]
 }
 ";
+
+/// `THREE` plus a second interface, `Lights`, whose lock entry the
+/// interface-level tests allocate, delete by hand, or retire. Plain
+/// `ridl lock` numbers a fresh workspace in byte order of the name:
+/// `Lights 1`, `VehicleStatus 2`, `next 3`.
+const THREE_AND_LIGHTS: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+  event doorClosed: DoorState @[100ms..1s]
+  event doorLocked: DoorState @[100ms..1s]
+}
+interface Lights {
+  event lampOn: DoorState @[100ms..1s]
+}
+";
+
+const LOCK_HEADER: &str = "# interfaces.lock — written by ridl lock; do not edit by hand.\n";
+
+/// `THREE_AND_LIGHTS`'s lock with the `Lights 1` line deleted by hand: `next`
+/// is not lowered, so the number is not reused.
+const LOCK_WITHOUT_LIGHTS: &str = "next 3\nVehicleStatus 2\n";
+
+/// The published snapshot of `veh.cluster` under `<root>/.ridl/baseline`.
+fn snapshot(root: &Path) -> PathBuf {
+    root.join(".ridl")
+        .join("baseline")
+        .join("veh.cluster.ir.json")
+}
+
+/// Publishes the workspace at `root` and asserts the publication went
+/// through.
+fn publish(root: &Path) {
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the baseline is written: {stderr}");
+}
 
 /// The published baseline is the only record that a removed interaction's
 /// ordinal was ever taken. Replacing it with a snapshot that drops the
@@ -829,4 +874,286 @@ fn baseline_refuses_to_republish_over_a_corrupt_snapshot() {
          exit-1 refusal does: {}",
         staging.display(),
     );
+}
+
+// --- The interface level: the lock's publication rules (lock design §8) -----
+
+/// Lock design §4, row 1, the `ridl baseline` column: a declaration with no
+/// lock entry compiles with a provisional number, and publication refuses it
+/// — RIDL-411, exit 1, nothing written, the span at the declaration — until
+/// plain `ridl lock` records the number, after which the same source
+/// publishes.
+#[test]
+fn baseline_refuses_a_provisional_number() {
+    let dir = TempDir::new("gate-provisional");
+    let root = package_workspace(&dir, THREE);
+    dir.write("cluster.ridl", THREE_AND_LIGHTS);
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "a provisional number is refused:\n{stderr}");
+    assert!(
+        stderr.contains("error[RIDL-411]"),
+        "the refusal carries its code:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`Lights` has a provisional interface number (2)"),
+        "the message names the interface and the number the checker showed:\n{stderr}",
+    );
+    assert!(
+        stderr.contains(&format!("Run `ridl lock {}`", root.display())),
+        "the message names the command that records the number:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("┌─") && stderr.contains("interface Lights"),
+        "the span points at the declaration:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-408"),
+        "the interaction level has nothing to refuse:\n{stderr}",
+    );
+    assert!(
+        !root.join(".ridl").join("baseline").exists(),
+        "nothing is published",
+    );
+    assert!(
+        !root.join(".ridl").join(".baseline.staging").exists(),
+        "the staging directory is removed",
+    );
+
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the number is recorded: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "with the number recorded, the same source publishes:\n{stderr}",
+    );
+    assert!(snapshot(&root).is_file(), "the snapshot is written");
+}
+
+/// Lock design §4, row 5: with no baseline published yet, an entry with no
+/// declaration beside a declaration with no entry is RIDL-409 at the compile,
+/// so `ridl baseline` never reaches its gate; once `ridl lock --rename`
+/// records the fix, the first publication has nothing to compare against and
+/// goes through with no diagnostic.
+#[test]
+fn the_first_publication_after_a_lock_fix_compares_nothing() {
+    let dir = TempDir::new("gate-first-after-fix");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write("cluster.ridl", THREE_AND_LIGHTS);
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}next 3\nVehicleStatus 1\nLamps 2\n"),
+    );
+    let root = dir.path().to_path_buf();
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 1, "the compile fails on the orphan entry:\n{stderr}");
+    assert!(
+        stderr.contains("error[RIDL-409]"),
+        "the compile's diagnostic:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-41"),
+        "the gate does not run after a failed compile:\n{stderr}",
+    );
+    assert!(!root.join(".ridl").exists(), "nothing is published");
+
+    let (code, _, stderr) = ridl(&[
+        "lock".as_ref(),
+        root.as_os_str(),
+        "--rename".as_ref(),
+        "Lamps=Lights".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the rename is recorded: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first publication after the fix:\n{stderr}");
+    assert!(
+        !stderr.contains("RIDL-"),
+        "nothing to compare against, nothing provisional:\n{stderr}",
+    );
+    assert!(snapshot(&root).is_file(), "the snapshot is written");
+}
+
+/// Lock design §4, row 6, first phase: a lock line deleted by hand leaves
+/// its declaration provisional. The build cannot see that, and publication
+/// refuses it with RIDL-411 — the provisional number is taken from `next`,
+/// so the deleted number is not reused — leaving the published snapshot
+/// byte-identical.
+#[test]
+fn a_hand_deleted_lock_line_is_ridl_411_while_its_declaration_is_provisional() {
+    let dir = TempDir::new("gate-deleted-line-provisional");
+    let root = package_workspace(&dir, THREE_AND_LIGHTS);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}{LOCK_WITHOUT_LIGHTS}"),
+    );
+    let (code, _, stderr) = ridl(&["check".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the build cannot see a deleted line:\n{stderr}");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the provisional number is refused:\n{stderr}");
+    assert!(
+        stderr.contains("error[RIDL-411]")
+            && stderr.contains("`Lights` has a provisional interface number (3)"),
+        "the number comes from `next`, not from the deleted line:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+    assert!(
+        !root.join(".ridl").join(".baseline.staging").exists(),
+        "the staging directory is removed",
+    );
+}
+
+/// Lock design §4, row 6, second phase, and §7 row 6 at publication: after
+/// plain `ridl lock` gives the kept declaration a fresh number, the number
+/// the baseline holds is absent from the fresh side and not retired —
+/// RIDL-412, exit 1, the published snapshot byte-identical, the staging
+/// directory removed. Nothing here is RIDL-408: the interaction level is
+/// untouched.
+#[test]
+fn baseline_refuses_a_number_dropped_without_a_retired_entry() {
+    let dir = TempDir::new("gate-dropped-number");
+    let root = package_workspace(&dir, THREE_AND_LIGHTS);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}{LOCK_WITHOUT_LIGHTS}"),
+    );
+    let (code, stdout, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "the kept declaration gets a fresh number: {stderr}"
+    );
+    assert_eq!(stdout, "allocated Lights 3\n", "`next` was never lowered");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the dropped number is refused:\n{stderr}");
+    assert_eq!(
+        stderr.matches("RIDL-412").count(),
+        1,
+        "one refusal for the one dropped number:\n{stderr}",
+    );
+    assert!(
+        stderr.contains("`Lights` holds interface number 1 in the baseline being replaced")
+            && stderr.contains("Restore the line `Lights 1`")
+            && stderr.contains("`Lights 1 retired` when the interface is gone"),
+        "the message names the number and the line that restores its record:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-408") && !stderr.contains("RIDL-411"),
+        "the interaction level is untouched and nothing is provisional:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a refused publication rewrites nothing");
+    assert!(
+        !root.join(".ridl").join(".baseline.staging").exists(),
+        "the staging directory is removed",
+    );
+}
+
+/// Lock design §7, row 5, at publication: an interface removed with its entry
+/// retired — `ridl lock --retire` — is the sanctioned removal. It publishes,
+/// and the new snapshot records the retired number.
+#[test]
+fn baseline_publishes_a_retired_number() {
+    let dir = TempDir::new("gate-retired-number");
+    let root = package_workspace(&dir, THREE_AND_LIGHTS);
+    publish(&root);
+
+    dir.write("cluster.ridl", THREE);
+    let (code, stdout, stderr) = ridl(&[
+        "lock".as_ref(),
+        root.as_os_str(),
+        "--retire".as_ref(),
+        "Lights".as_ref(),
+    ]);
+    assert_eq!(code, 0, "the retirement is recorded: {stderr}");
+    assert_eq!(stdout, "retired Lights 1\n");
+
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 0, "a retired number publishes:\n{stderr}");
+    assert!(
+        !stderr.contains("RIDL-"),
+        "the sanctioned removal draws no refusal:\n{stderr}",
+    );
+    let text = std::fs::read_to_string(snapshot(&root)).expect("the republished snapshot");
+    assert!(
+        text.contains("\"retired\"") && text.contains("\"name\": \"Lights\""),
+        "the snapshot records the retired entry:\n{text}",
+    );
+}
+
+/// Plan decision PD-9: an interface published before the lock existed
+/// carries `number` 0, which is never allocated, so it never had an entry.
+/// `ridl diff` matches it by name and reports its removal as breaking, and
+/// RIDL-412 does not refuse it. The pre-lock snapshot is made by publishing
+/// and rewriting the number to 0 — the shape a snapshot from before the lock
+/// has.
+#[test]
+fn a_pre_lock_baseline_is_not_refused_for_an_interface_removal() {
+    let dir = TempDir::new("gate-pre-lock");
+    let root = package_workspace(&dir, THREE_AND_LIGHTS);
+    publish(&root);
+    let path = snapshot(&root);
+    let text = std::fs::read_to_string(&path).expect("the published snapshot is readable");
+    assert!(
+        text.contains("\"number\": 1"),
+        "`Lights` was published under number 1:\n{text}",
+    );
+    std::fs::write(&path, text.replace("\"number\": 1", "\"number\": 0"))
+        .expect("rewrite the snapshot as a pre-lock one");
+
+    dir.write("cluster.ridl", THREE);
+    dir.write(
+        "interfaces.lock",
+        &format!("{LOCK_HEADER}{LOCK_WITHOUT_LIGHTS}"),
+    );
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 0,
+        "a number the lock never allocated has no record to lose:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-412") && !stderr.contains("RIDL-408"),
+        "neither gate refuses:\n{stderr}",
+    );
+}
+
+/// The interface level is outside the RIDL-408 gate — the claim the retired
+/// service-tombstone test used to state. A whole interface removed is
+/// refused by the lock's own rules instead: with its entry still live the
+/// build fails first (RIDL-409, the compile), so publication never reaches
+/// its gate, and only a hand-deleted line reaches RIDL-412.
+#[test]
+fn a_whole_interface_removed_is_refused_by_the_lock_not_the_tombstone_gate() {
+    let dir = TempDir::new("gate-whole-interface");
+    let root = package_workspace(&dir, THREE_AND_LIGHTS);
+    publish(&root);
+    let before = std::fs::read(snapshot(&root)).expect("the published snapshot is readable");
+
+    dir.write("cluster.ridl", THREE);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(code, 1, "the live entry fails the compile:\n{stderr}");
+    assert!(
+        stderr.contains("error[RIDL-409]"),
+        "the build's diagnostic, naming the retire:\n{stderr}",
+    );
+    assert!(
+        !stderr.contains("RIDL-408") && !stderr.contains("RIDL-412"),
+        "no gate runs after a failed compile:\n{stderr}",
+    );
+    let after = std::fs::read(snapshot(&root)).expect("the published snapshot survives");
+    assert_eq!(before, after, "a failed compile rewrites nothing");
 }

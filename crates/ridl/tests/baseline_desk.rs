@@ -187,11 +187,23 @@ interface VehicleStatus {
 }
 ";
 
-/// Lays out a one-package workspace holding `source` and returns its root.
+/// Lays out a one-package workspace holding `source`, records its interface
+/// numbers with plain `ridl lock` — `ridl baseline` refuses a provisional
+/// number (RIDL-411), so a fixture that publishes needs its lock first — and
+/// returns its root.
 fn package_workspace(dir: &TempDir, source: &str) -> PathBuf {
     dir.write("ridl.toml", MANIFEST);
     dir.write("cluster.ridl", source);
-    dir.path().to_path_buf()
+    let root = dir.path().to_path_buf();
+    lock(&root);
+    root
+}
+
+/// Records the interface numbers of the workspace at `root` with plain
+/// `ridl lock`.
+fn lock(root: &Path) {
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
 }
 
 /// `ridl baseline` writes one `<pkg-name>.ir.json` per package into
@@ -239,6 +251,7 @@ interface VehicleStatus {
 ",
     );
     let root = dir.path();
+    lock(root);
 
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
 
@@ -869,9 +882,7 @@ fn diff_of_a_directory_without_snapshots_compiles_it_as_source() {
 #[test]
 fn baseline_drops_a_snapshot_whose_package_is_gone() {
     let dir = TempDir::new("rename");
-    dir.write("ridl.toml", MANIFEST);
-    dir.write("cluster.ridl", BASE);
-    let root = dir.path().to_path_buf();
+    let root = package_workspace(&dir, BASE);
     ridl(&["baseline".as_ref(), root.as_os_str()]);
     assert!(
         root.join(".ridl/baseline/veh.cluster.ir.json").is_file(),

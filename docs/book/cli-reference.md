@@ -303,8 +303,11 @@ root when the manifest declares `[imports]` (`ridl baseline` builds through
 `ridlc build`, non-frozen, so the same materialization step runs). Publishing
 the snapshots is wholesale: the target directory ends up holding exactly the
 snapshots the workspace declares now, and nothing else in that directory is
-touched. A two-member workspace with no `[imports]` writes two files and no
-lockfile:
+touched. The workspace's interface numbers must be recorded first: a
+provisional number is refused (RIDL-411, under the publication gate below), so
+a package with interfaces runs plain [`ridl lock`](#ridl-lock) before its
+first publication. A two-member workspace with no `[imports]`, its locks
+written, publishes two files and no `ridl.lock`:
 
 ```sh
 ridl baseline && find .ridl/baseline -type f | sort
@@ -326,10 +329,16 @@ all; the source retires it with a `reserved` line, but at an ordinal other
 than the one the interaction held; the baseline already retired the
 interaction with a `reserved` line and the source has dropped that line; or
 the source declares a live interaction under a name the baseline retires.
-The gate covers the interaction level only: a whole interface or service
+The interface level of the gate is the lock's: an interface whose number is
+provisional — a declaration with no entry in the package's `interfaces.lock`
+— is refused (RIDL-411, exit 1, nothing published), on a first publication as
+on a replacement, until plain `ridl lock` records the number; and a number the
+published baseline holds that the fresh snapshot neither carries nor retires
+is refused too (RIDL-412) — a lock line deleted by hand, since a live entry
+with no declaration already fails the build with RIDL-409. A whole service
 removed from the source is reported by `ridl diff` as breaking but is not
-refused here (ridl §17.14), and a named-form service's shape list is not
-read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
+refused here (ridl §17.14), and a named-form service's list is a set the gate
+does not read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
 still declared:
 
 ```sh
@@ -346,12 +355,14 @@ error[RIDL-408]: `doorClosed` is gone from the source but the baseline being rep
 ```
 
 A first publication — the output directory absent, or present and holding no
-`.ir.json` snapshot yet — has nothing to compare against, so it is never
-refused. This is the same empty-directory shape [`ridl check --baseline`
-refuses](#ridl-check) when it is named explicitly: `ridl check --baseline`
-refuses it because the user named the directory as a baseline to compare
-against, while `ridl baseline --out` treats it as a first publication because
-it is the directory being written.
+`.ir.json` snapshot yet — has no published snapshot to compare against, so
+RIDL-408 and RIDL-412 never refuse it. This is the same empty-directory shape
+[`ridl check --baseline` refuses](#ridl-check) when it is named explicitly:
+`ridl check --baseline` refuses it because the user named the directory as a
+baseline to compare against, while `ridl baseline --out` treats it as a first
+publication because it is the directory being written. RIDL-411 still refuses
+a first publication that holds a provisional interface number, because
+RIDL-411 reads the fresh snapshot alone.
 
 **Exit codes.** 0 on a clean publish. 1 when a diagnostic is an error, or when
 the publication gate above refuses the replacement — in both cases the
@@ -1431,7 +1442,7 @@ compiler directly and want its stable, default-free flags.
 | --- | --- | --- | --- |
 | `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
-| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses the replacement under the tombstone rule (RIDL-408); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
+| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
 | `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other eight, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |

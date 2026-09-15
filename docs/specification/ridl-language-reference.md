@@ -1115,13 +1115,16 @@ interface VehicleStatus {
   dropped the `reserved` line; or the source declares a live interaction under a
   name the baseline retires. The published snapshot is the only record that the
   ordinal was taken, so publication is the last point at which the change can be
-  refused. The gate covers the interaction level only: a whole interface or
-  service removed from the source, or a service whose form switches between
-  inline and named, is reported by `ridl diff` as breaking but is not refused at
-  publication (§17.14), and a named-form service's shape list is not read — the
-  interface level of this rule (§14.5) waits for the lock file. RIDL-407 is
-  unchanged: it remains the desk-time warning that an ordinal moved, emitted by
-  `ridl check`, and it neither classifies nor gates.
+  refused. The gate covers the interaction level; the interface level is the
+  lock's, one level up below: a whole interface removed with its lock entry live
+  fails the build (RIDL-409), a provisional number is refused at publication
+  (RIDL-411), and so is a published number the fresh snapshot neither carries
+  nor retires (RIDL-412). A whole service removed, or a service whose form
+  switches between inline and named, is reported by `ridl diff` as breaking but
+  is not refused at publication (§17.14), and a named-form service's list is a
+  set (§14.5) the gate does not read. RIDL-407 is unchanged: it remains the
+  desk-time warning that an ordinal moved, emitted by `ridl check`, and it
+  neither classifies nor gates.
 - Transport IDs derive deterministically from ordinals (e.g. SOME/IP: method ID
   = ordinal for RPC kinds, event ID = ordinal with the event flag bit; Appendix
   B) — readable from source, no sidecar state
@@ -1621,9 +1624,11 @@ either direction.
 | RIDL-405 | one `error` type shared across unrelated failure domains — it is the failure arm of queries in 3 or more interaction scopes (heuristic)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | info     |
 | RIDL-406 | payload field duplicating envelope metadata (§3.1) — a `signal` or `event` payload struct declaring `timestamp`, `time`, `seq`, `seqNo`, `sequence`, `sequenceNumber`, `frameCounter`, or `frameNo`; domain time or a domain counter distinct from transport metadata is legitimate                                                                                                                                                                                                                                                                                                                                                                                               | info     |
 | RIDL-407 | interaction ordinal changed against the published baseline (§11) — the desk-time drift check, emitted by `ridl check`, never by `ridlc`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           | warning  |
-| RIDL-408 | interaction removed with no tombstone, retired with a tombstone at an ordinal other than its own, whose existing tombstone was dropped, or whose retired name is declared live again, refused at publication (§11) — emitted by `ridl baseline` alone, for the interaction level only (a whole interface or service removed is not refused, §17.14), which refuses to replace a baseline whose record of the ordinal would be lost                                                                                                                                                                                                                                                | error    |
+| RIDL-408 | interaction removed with no tombstone, retired with a tombstone at an ordinal other than its own, whose existing tombstone was dropped, or whose retired name is declared live again, refused at publication (§11) — emitted by `ridl baseline` alone, for the interaction level only (the interface level is the lock's — RIDL-409 at the build, RIDL-411 and RIDL-412 at publication — and a whole service removed is not refused, §17.14), which refuses to replace a baseline whose record of the ordinal would be lost                                                                                                                                                       | error    |
 | RIDL-409 | a live `interfaces.lock` entry has no declaration (§11) — the interface it numbers was renamed or removed and the lock does not record which; emitted by the compiler on the entry's own line of the lock file, `ridlc` and `ridl` alike; the fix is `ridl lock <pkg> --retire Old` when the interface is gone, or `ridl lock <pkg> --rename Old=New` when a declaration without an entry is the same interface under a new name — the message names `--retire` alone when the package has no declaration without an entry, and `ridl check` adds a label naming the one `--rename` when the published baseline shows exactly one declaration without an entry with `Old`'s shape | error    |
 | RIDL-410 | `interfaces.lock` is malformed — no `next` line, `next` not above every entry's number, one number on two entries, one live key on two entries, or a line that does not parse, git conflict markers included (§11) — emitted by the compiler on the offending line of the lock file, `ridlc` and `ridl` alike; resolve the conflict or restore the file from version control, then run `ridl lock`                                                                                                                                                                                                                                                                                | error    |
+| RIDL-411 | provisional interface number refused at publication (§11) — an interface in the snapshot `ridl baseline` is about to publish has no entry in `interfaces.lock`; a provisional number is no identity, so the snapshot would record nothing a later comparison can hold the interface to; emitted by `ridl baseline` alone, at the declaration's name, for a first publication as for a replacement; run plain `ridl lock` to record the number, then publish                                                                                                                                                                                                                       | error    |
+| RIDL-412 | published interface number dropped without a retired entry (§11) — a number the published baseline holds is absent from the fresh snapshot and not among its `interfaces.lock` retired entries, which is a lock line deleted by hand (a live entry with no declaration is RIDL-409 at the build); publishing would lose the only record that the number was allocated; emitted by `ridl baseline` alone, for a published number other than 0 (a snapshot published before the lock existed carries 0 and is matched by name); restore the entry's line from version control, with `retired` after the number when the interface is gone                                           | error    |
 | RIDL-140 | duplicate `service` name across the system — the service catalog is a flat global namespace                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | error    |
 | RIDL-141 | `service` names a type that is not an `interface`, and has no inline shape                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | error    |
 | RIDL-143 | `service` publishes an `internal` interface — a global published address must name a public shape (§14.5)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | error    |
@@ -1801,16 +1806,20 @@ and the same spelling is the constant.
     is wider than the interaction-level scope this gate covers. Whether it
     should also be refused is open, and belongs with the same lock-file work as
     the item above.
-14. **A whole interface or service removed, or a service whose form switches,
-    bypasses the publication gate** (§11). `ridl-diff` reports one `DeclRemoved`
-    for an interface or a service present only on the baseline side and does not
-    descend into its body, and one `ServiceChanged` for a service whose form
-    switches between inline and named (ADR-0015 decision 15), again without
-    comparing the inline body's interactions. Neither carries an
-    interaction-level change, so the RIDL-408 gate sees nothing to refuse and
-    publication drops every ordinal record the body held. Whether either should
-    be refused is open, and belongs with the same lock-file work as the two
-    items above, which is where interface identity moves.
+14. **A whole service removed, or a service whose form switches, bypasses the
+    publication gate** (§11). `ridl-diff` reports one `DeclRemoved` for a
+    service present only on the baseline side and one `ServiceChanged` for a
+    service whose form switches between inline and named (ADR-0015 decision 15),
+    neither of which the RIDL-408 gate reads. The interface half of this item
+    closed with the lock (2026-09-15): an interface is identified by its
+    `interfaces.lock` number, so a whole interface removed with its entry live
+    fails the build (RIDL-409), and a published number the fresh snapshot
+    neither carries nor retires is refused at publication (RIDL-412) — an inline
+    shape's number included, so an inline-form service removed whole is refused
+    for its shape's number unless the entry is retired, while the service itself
+    is not refused. Whether a removed named-form service, which carries no
+    number of its own, or a form switch should also be refused is open, and
+    belongs with the two items above.
 
 ---
 

@@ -58,6 +58,14 @@ fn ridl(args: &[&std::ffi::OsStr]) -> (i32, String, String) {
 
 const MANIFEST: &str = "[package]\nname = \"veh.cluster\"\nversion = \"1.0.0\"\n";
 
+/// Records the interface numbers of the workspace at `root` with plain
+/// `ridl lock`: `ridl baseline` refuses a provisional number (RIDL-411), so a
+/// workspace publishes only once its lock is written.
+fn lock(root: &Path) {
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+}
+
 const BASE: &str = "package veh.cluster
 type Speed: km/h [0.0..250.0 step 0.5]
 type DoorState: integer [0..1]
@@ -246,6 +254,7 @@ fn a_directory_whose_snapshots_are_nested_is_described_not_compiled() {
     let root = dir.path().join("ws");
     dir.write("ws/ridl.toml", MANIFEST);
     dir.write("ws/iface.ridl", BASE);
+    lock(&root);
     let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
     assert_eq!(code, 0, "the baseline publishes:\n{stderr}");
     dir.write("ws/iface.ridl", BREAKING);
@@ -293,6 +302,7 @@ fn a_source_tree_holding_its_own_snapshots_still_compiles() {
     let root = dir.path().join("ws");
     dir.write("ws/ridl.toml", MANIFEST);
     dir.write("ws/iface.ridl", BASE);
+    lock(&root);
     let published = root.join("published");
     let (code, _, stderr) = ridl(&[
         "baseline".as_ref(),
@@ -326,6 +336,7 @@ fn snapshot_dir_vs_source_tree_identical_exits_zero() {
     let root = dir.path().join("ws");
     dir.write("ws/ridl.toml", MANIFEST);
     dir.write("ws/iface.ridl", BASE);
+    lock(&root);
     let published = dir.path().join("published");
     let (baseline_code, _, baseline_err) = ridl(&[
         "baseline".as_ref(),

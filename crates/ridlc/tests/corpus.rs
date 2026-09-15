@@ -489,6 +489,28 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ),
     ("RIDL-409", Showcase),
     ("RIDL-410", Showcase),
+    (
+        "RIDL-411",
+        Elsewhere {
+            fixture: "crates/ridl/tests/baseline_gate.rs",
+            reason: "the publication gate reads the snapshot `ridl baseline` is about to \
+                     publish, outside `ridlc`'s source-to-IR function, so it is never a \
+                     compile diagnostic (ADR-0008 decisions 9 and 13; lock design section 8). \
+                     Provoked by `baseline_refuses_a_provisional_number` in \
+                     `crates/ridl/tests/baseline_gate.rs`",
+        },
+    ),
+    (
+        "RIDL-412",
+        Elsewhere {
+            fixture: "crates/ridl/tests/baseline_gate.rs",
+            reason: "the publication gate reads the baseline directory that `ridl baseline` is \
+                     about to replace, outside `ridlc`'s source-to-IR function, so it is never \
+                     a compile diagnostic (ADR-0008 decisions 9 and 13; lock design section 8). \
+                     Provoked by `baseline_refuses_a_number_dropped_without_a_retired_entry` in \
+                     `crates/ridl/tests/baseline_gate.rs`",
+        },
+    ),
     // The shared codes E2 added or folded into the ridl profile.
     ("TYPL-005", Showcase),
     ("FORM-106", Showcase),
