@@ -1,0 +1,91 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/reserved_in_service_list.ridl
+---
+SourceFile@0..465
+  LineComment@0..77 "// A `reserved` entry ..."
+  Whitespace@77..78 "\n"
+  LineComment@78..154 "// of interface refer ..."
+  Whitespace@154..155 "\n"
+  LineComment@155..231 "// interface's number ..."
+  Whitespace@231..232 "\n"
+  LineComment@232..266 "// retired there, not ..."
+  Whitespace@266..267 "\n"
+  PackageDecl@267..283
+    PackageKw@267..274 "package"
+    Whitespace@274..275 " "
+    QualifiedName@275..283
+      Ident@275..278 "veh"
+      Dot@278..279 "."
+      Ident@279..283 "body"
+  Whitespace@283..285 "\n\n"
+  InterfaceDef@285..336
+    InterfaceKw@285..294 "interface"
+    Whitespace@294..295 " "
+    Name@295..306
+      Ident@295..306 "DoorControl"
+    Whitespace@306..307 " "
+    LBrace@307..308 "{"
+    Whitespace@308..311 "\n  "
+    SignalDef@311..334
+      SignalKw@311..317 "signal"
+      Whitespace@317..318 " "
+      Name@318..324
+        Ident@318..324 "locked"
+      Whitespace@324..325 " "
+      Colon@325..326 ":"
+      Whitespace@326..327 " "
+      PrimitiveType@327..334
+        BooleanKw@327..334 "boolean"
+    Whitespace@334..335 "\n"
+    RBrace@335..336 "}"
+  Whitespace@336..338 "\n\n"
+  ServiceDef@338..375
+    ServiceKw@338..345 "service"
+    Whitespace@345..346 " "
+    DottedName@346..360
+      Ident@346..349 "veh"
+      Dot@349..350 "."
+      Ident@350..354 "body"
+      Dot@354..355 "."
+      Ident@355..360 "doors"
+    Whitespace@360..361 " "
+    Colon@361..362 ":"
+    Whitespace@362..363 " "
+    PathType@363..374
+      QualifiedName@363..374
+        Ident@363..374 "DoorControl"
+    Comma@374..375 ","
+  Whitespace@375..376 " "
+  ErrorNode@376..412
+    ReservedKw@376..384 "reserved"
+    Whitespace@384..385 " "
+    Ident@385..399 "LegacyDoorDiag"
+    Comma@399..400 ","
+    Whitespace@400..401 " "
+    Ident@401..412 "HealthBlock"
+  Whitespace@412..414 "\n\n"
+  InterfaceDef@414..464
+    InterfaceKw@414..423 "interface"
+    Whitespace@423..424 " "
+    Name@424..435
+      Ident@424..435 "HealthBlock"
+    Whitespace@435..436 " "
+    LBrace@436..437 "{"
+    Whitespace@437..440 "\n  "
+    SignalDef@440..462
+      SignalKw@440..446 "signal"
+      Whitespace@446..447 " "
+      Name@447..452
+        Ident@447..452 "alive"
+      Whitespace@452..453 " "
+      Colon@453..454 ":"
+      Whitespace@454..455 " "
+      PrimitiveType@455..462
+        BooleanKw@455..462 "boolean"
+    Whitespace@462..463 "\n"
+    RBrace@463..464 "}"
+  Whitespace@464..465 "\n"
+errors:
+  FORM-102 376..384 unexpected token at top level

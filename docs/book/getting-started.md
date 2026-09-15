@@ -804,6 +804,7 @@ dataflow, not calls.
 | `ridl fmt`      | rewrite `.typl`, `.ridl` and `.rsdl` files into one canonical form; `--check` reports without writing |
 | `ridl baseline` | publish the current workspace as `.ridl/baseline/<package>.ir.json` snapshots            |
 | `ridl diff`     | compare two IR snapshots or source trees and classify the change                         |
+| `ridl lock`     | allocate interface numbers in each package's `interfaces.lock`; `--rename` and `--retire` record a renamed or removed interface |
 | `ridl test`     | run the property suite: range self-corpora, and sampling of `require` clauses. `ensure` clauses are listed as observer stubs, never evaluated |
 
 `ridlc` is the plumbing underneath, with `check` and `build` only. Use `ridl`
@@ -877,11 +878,10 @@ exists.
 
 Composing interfaces is how a recurring interaction set — a diagnostics block,
 a heartbeat — is reused without duplication: each composed interface keeps its
-own ordinal space, and its slot in the list carries an interface id that
-follows the same append-only rule as ordinals, with a service-level `reserved`
-tombstone holding a retired slot. Because members stay addressed
-`service.member`, two composed interfaces must not share a member name
-(`RIDL-144`).
+own ordinal space, and its number comes from its package's `interfaces.lock`,
+not from its place in the list, so the list is a set and its order carries
+nothing. Because members stay addressed `service.member`, two composed
+interfaces must not share a member name (`RIDL-144`).
 
 Interfaces are flat: there is no interface inheritance. Sharing a _shape_ is
 typl's job; a shared interaction _set_ is composed at the service, never

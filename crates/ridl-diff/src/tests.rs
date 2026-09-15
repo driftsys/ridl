@@ -3,7 +3,7 @@
 
 use ridl_ir::v2;
 
-use crate::{Category, Verdict, diff_packages, diff_sets, render_json};
+use crate::{Category, Change, Verdict, diff_packages, diff_sets, render_json};
 
 // --------------------------------------------------------------------------
 // Builders.
@@ -71,6 +71,8 @@ fn interface(name: &str, interactions: Vec<v2::Decl>) -> v2::Interface {
         labels: Vec::new(),
         deprecated: None,
         interactions,
+        number: 0,
+        provisional: false,
     }
 }
 
@@ -80,6 +82,7 @@ fn pkg(name: &str, iface: v2::Interface) -> v2::Package {
         decls: Vec::new(),
         interfaces: vec![iface],
         services: Vec::new(),
+        retired: Vec::new(),
     }
 }
 
@@ -781,4 +784,543 @@ fn a_compatible_delta_moves_no_projected_name() {
         ridl_ir::name::snake_case("vehicleSpeed"),
         "the rename must move the projection, or this arm proves nothing"
     );
+}
+
+// --------------------------------------------------------------------------
+// Interface identity — the number from `interfaces.lock` (lock design §7,
+// plan decisions PD-1 and PD-14). One test per row of the design's §7 table,
+// rows 1 to 8, then the cases PD-1 adds.
+// --------------------------------------------------------------------------
+
+/// An interface with a frozen number from the lock.
+fn frozen(name: &str, number: u32, interactions: Vec<v2::Decl>) -> v2::Interface {
+    v2::Interface {
+        number,
+        provisional: false,
+        ..interface(name, interactions)
+    }
+}
+
+/// An interface with a provisional number — a declaration with no lock entry.
+fn provisional(name: &str, number: u32, interactions: Vec<v2::Decl>) -> v2::Interface {
+    v2::Interface {
+        number,
+        provisional: true,
+        ..interface(name, interactions)
+    }
+}
+
+/// A package holding `interfaces`, the inline-form `services`, and the
+/// lock's retired entries.
+fn package(
+    interfaces: Vec<v2::Interface>,
+    services: Vec<v2::Service>,
+    retired: Vec<v2::RetiredInterface>,
+) -> v2::Package {
+    v2::Package {
+        name: "veh.cluster".to_string(),
+        decls: Vec::new(),
+        interfaces,
+        services,
+        retired,
+    }
+}
+
+/// An inline-form service whose shape carries a frozen number — the lock
+/// entry keyed `service:<name>`. The shape's own name is `""` and its own
+/// visibility unspecified, both by construction (ridl §14.5).
+fn inline_service(name: &str, number: u32, interactions: Vec<v2::Decl>) -> v2::Service {
+    v2::Service {
+        name: name.to_string(),
+        visibility: v2::Visibility::Public as i32,
+        doc: String::new(),
+        labels: Vec::new(),
+        deprecated: None,
+        shapes: vec![v2::ServiceShape {
+            kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
+                visibility: v2::Visibility::Unspecified as i32,
+                ..frozen("", number, interactions)
+            })),
+        }],
+    }
+}
+
+fn retired(name: &str, number: u32) -> v2::RetiredInterface {
+    v2::RetiredInterface {
+        name: name.to_string(),
+        number,
+    }
+}
+
+fn change(
+    path: &str,
+    category: Category,
+    verdict: Verdict,
+    before: Option<&str>,
+    after: Option<&str>,
+) -> Change {
+    Change {
+        path: path.to_string(),
+        category,
+        verdict,
+        before: before.map(str::to_string),
+        after: after.map(str::to_string),
+    }
+}
+
+fn door_opened(payload: &str) -> Vec<v2::Decl> {
+    vec![event("doorOpened", 1, payload)]
+}
+
+/// Row 1: the same frozen number on both sides is one interface, and its
+/// interactions are diffed exactly as before the lock.
+#[test]
+fn a_matched_number_diffs_the_interactions_as_today() {
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorEvent"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Doors/doorOpened",
+            Category::PayloadChanged,
+            Verdict::Breaking,
+            Some("DoorEvent"),
+            Some("DoorState"),
+        )]
+    );
+}
+
+/// Row 2: the same number under a new name is `InterfaceRenamed`, compatible
+/// — the number is the routing identity — and listed under the heading; the
+/// path carries the new name (PD-14).
+#[test]
+fn a_rename_on_the_same_number_is_compatible_under_the_heading() {
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("DoorStatus", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/DoorStatus",
+            Category::InterfaceRenamed,
+            Verdict::Compatible,
+            Some("Doors"),
+            Some("DoorStatus"),
+        )]
+    );
+    assert_eq!(
+        crate::heading(Category::InterfaceRenamed),
+        Some("compatible on the wire, visible in source")
+    );
+    assert_eq!(crate::heading(Category::InterfaceRetired), None);
+}
+
+/// Row 3: a frozen number the old side never held is a new interface.
+#[test]
+fn a_fresh_frozen_number_is_decl_added() {
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![
+            frozen("Doors", 1, door_opened("DoorState")),
+            frozen("Lights", 2, vec![event("on", 1, "DoorState")]),
+        ],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Lights",
+            Category::DeclAdded,
+            Verdict::Compatible,
+            None,
+            Some("interface"),
+        )]
+    );
+}
+
+/// Row 4, and the second PD-1 case: a provisional number is no identity, so a
+/// frozen old number is never matched to a new provisional interface — not
+/// even one spelled the same and numbered the same. The old one is
+/// `DeclRemoved`, the new one `DeclAdded`, breaking, until `ridl lock` records
+/// the number.
+#[test]
+fn a_provisional_interface_is_decl_added_and_never_matched() {
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![provisional("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report.changes,
+        vec![
+            change(
+                "veh.cluster/Doors",
+                Category::DeclRemoved,
+                Verdict::Breaking,
+                Some("interface"),
+                None,
+            ),
+            change(
+                "veh.cluster/Doors",
+                Category::DeclAdded,
+                Verdict::Compatible,
+                None,
+                Some("interface"),
+            ),
+        ]
+    );
+}
+
+/// Row 5: a number gone from the new side and listed in its retired entries
+/// is the sanctioned removal, `InterfaceRetired`, compatible.
+#[test]
+fn a_number_in_the_retired_list_is_interface_retired() {
+    let lights = || frozen("Lights", 2, vec![event("on", 1, "DoorState")]);
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorState")), lights()],
+        vec![],
+        vec![],
+    );
+    let new = package(vec![lights()], vec![], vec![retired("Doors", 1)]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Doors",
+            Category::InterfaceRetired,
+            Verdict::Compatible,
+            Some("interface"),
+            Some("retired"),
+        )]
+    );
+}
+
+/// Row 6: a number gone from the new side and not retired there is
+/// `DeclRemoved`, breaking — the number could be allocated again.
+#[test]
+fn a_number_absent_and_not_retired_is_decl_removed() {
+    let lights = || frozen("Lights", 2, vec![event("on", 1, "DoorState")]);
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorState")), lights()],
+        vec![],
+        vec![],
+    );
+    let new = package(vec![lights()], vec![], vec![]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Doors",
+            Category::DeclRemoved,
+            Verdict::Breaking,
+            Some("interface"),
+            None,
+        )]
+    );
+}
+
+/// Row 7: the same name on another frozen number is a removal plus an
+/// addition — two existing categories, breaking, and no third one.
+#[test]
+fn a_hand_changed_number_is_removed_plus_added() {
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("Doors", 2, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Breaking);
+    assert_eq!(
+        report.changes,
+        vec![
+            change(
+                "veh.cluster/Doors",
+                Category::DeclRemoved,
+                Verdict::Breaking,
+                Some("interface"),
+                None,
+            ),
+            change(
+                "veh.cluster/Doors",
+                Category::DeclAdded,
+                Verdict::Compatible,
+                None,
+                Some("interface"),
+            ),
+        ]
+    );
+}
+
+/// Row 8: a snapshot published before the lock existed carries `number` 0,
+/// which is never allocated, so its interfaces are matched by name — the one
+/// transition case — whatever number the new side froze.
+#[test]
+fn a_published_number_zero_is_matched_by_name() {
+    let old = package(
+        vec![interface("Doors", door_opened("DoorEvent"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("Doors", 3, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.changes,
+        vec![change(
+            "veh.cluster/Doors/doorOpened",
+            Category::PayloadChanged,
+            Verdict::Breaking,
+            Some("DoorEvent"),
+            Some("DoorState"),
+        )]
+    );
+}
+
+/// The first PD-1 case: two source trees compiled with no lock file lower
+/// every interface provisional on both sides. An old interface with no
+/// identity is matched by name — the provisional numbers themselves may
+/// differ, since a sibling added before it in byte order moves them — and its
+/// body is diffed as any matched pair's.
+#[test]
+fn a_provisional_old_side_is_matched_by_name() {
+    let old = package(
+        vec![provisional("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![
+            provisional("Aux", 1, vec![event("on", 1, "DoorState")]),
+            provisional(
+                "Doors",
+                2,
+                vec![
+                    event("doorOpened", 1, "DoorState"),
+                    event("doorClosed", 2, "DoorState"),
+                ],
+            ),
+        ],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible);
+    assert_eq!(
+        report.changes,
+        vec![
+            change(
+                "veh.cluster/Doors/doorClosed",
+                Category::InteractionAppended,
+                Verdict::Compatible,
+                None,
+                Some("event doorClosed"),
+            ),
+            change(
+                "veh.cluster/Aux",
+                Category::DeclAdded,
+                Verdict::Compatible,
+                None,
+                Some("interface"),
+            ),
+        ]
+    );
+}
+
+/// An inline shape is an interface with its own number (lock design §3), so
+/// it follows that number across a rename of its service: the shape is
+/// `InterfaceRenamed` and its body is diffed, while the service itself — which
+/// is identified by its dotted name, D-7 — is a removal plus an addition.
+#[test]
+fn an_inline_shape_follows_its_number_across_a_service_rename() {
+    let old = package(
+        vec![],
+        vec![inline_service(
+            "veh.cluster.hvac",
+            5,
+            vec![event("cabinTemp", 1, "DoorState")],
+        )],
+        vec![],
+    );
+    let new = package(
+        vec![],
+        vec![inline_service(
+            "veh.cluster.climate",
+            5,
+            vec![
+                event("cabinTemp", 1, "DoorState"),
+                event("filterClogged", 2, "DoorState"),
+            ],
+        )],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.changes,
+        vec![
+            change(
+                "veh.cluster/veh.cluster.climate",
+                Category::InterfaceRenamed,
+                Verdict::Compatible,
+                Some("veh.cluster.hvac"),
+                Some("veh.cluster.climate"),
+            ),
+            change(
+                "veh.cluster/veh.cluster.climate/filterClogged",
+                Category::InteractionAppended,
+                Verdict::Compatible,
+                None,
+                Some("event filterClogged"),
+            ),
+            change(
+                "veh.cluster/veh.cluster.hvac",
+                Category::DeclRemoved,
+                Verdict::Breaking,
+                Some("service"),
+                None,
+            ),
+            change(
+                "veh.cluster/veh.cluster.climate",
+                Category::DeclAdded,
+                Verdict::Compatible,
+                None,
+                Some("service"),
+            ),
+        ]
+    );
+    assert_eq!(
+        report.verdict,
+        Verdict::Breaking,
+        "a service is identified by its dotted name, so the rename of the service is breaking \
+         even though its shape kept its number"
+    );
+}
+
+/// A renamed interface's member changes are classified as any other
+/// interface's: the classifier re-finds the old side by number. The append
+/// rule answers breaking when it cannot find the old body, so a compatible
+/// verdict here proves the lookup.
+#[test]
+fn a_renamed_interfaces_member_change_classifies_as_before() {
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen(
+            "DoorStatus",
+            1,
+            vec![
+                event("doorOpened", 1, "DoorState"),
+                event("doorClosed", 2, "DoorState"),
+            ],
+        )],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    assert_eq!(report.verdict, Verdict::Compatible, "{:?}", report.changes);
+    assert_eq!(
+        report.changes,
+        vec![
+            change(
+                "veh.cluster/DoorStatus",
+                Category::InterfaceRenamed,
+                Verdict::Compatible,
+                Some("Doors"),
+                Some("DoorStatus"),
+            ),
+            change(
+                "veh.cluster/DoorStatus/doorClosed",
+                Category::InteractionAppended,
+                Verdict::Compatible,
+                None,
+                Some("event doorClosed"),
+            ),
+        ]
+    );
+}
+
+/// The JSON report is unchanged by the heading: a headed change carries the
+/// same five fields as any other, and the report the same two.
+#[test]
+fn a_headed_change_renders_json_with_no_heading_field() {
+    let old = package(
+        vec![frozen("Doors", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let new = package(
+        vec![frozen("DoorStatus", 1, door_opened("DoorState"))],
+        vec![],
+        vec![],
+    );
+    let report = diff_packages(&old, &new);
+    let value: serde_json::Value =
+        serde_json::from_str(&render_json(&report)).expect("render_json emits valid JSON");
+
+    let mut report_keys: Vec<&str> = value
+        .as_object()
+        .expect("the report is an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    report_keys.sort_unstable();
+    assert_eq!(report_keys, ["changes", "verdict"]);
+
+    let change = &value["changes"][0];
+    let mut change_keys: Vec<&str> = change
+        .as_object()
+        .expect("a change is an object")
+        .keys()
+        .map(String::as_str)
+        .collect();
+    change_keys.sort_unstable();
+    assert_eq!(
+        change_keys,
+        ["after", "before", "category", "path", "verdict"]
+    );
+    assert_eq!(change["category"], "interface_renamed");
 }

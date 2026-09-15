@@ -10,8 +10,10 @@
 //!
 //! # Namespaces (ADR-0007 decision 2)
 //!
-//! Codes are grouped by hundreds and never renumbered or reused. Five
-//! namespaces are in play across the family, one catalogue each:
+//! Codes are grouped by hundreds and never renumbered or reused; a code
+//! retired from a catalogue is listed in [`RETIRED_RIDL_CODES`], and a guard
+//! keeps it out. Five namespaces are in play across the family, one catalogue
+//! each:
 //!
 //! - `FORM-…` — the shared family grammar: lexical `0xx`, parse `1xx`, and the
 //!   general form §4.3 attribute rules. Named after the general form's own
@@ -146,6 +148,18 @@ macro_rules! diag_codes {
         ];
     };
 }
+
+/// The `RIDL-` codes retired by the interface lock (lock design §9). A code is
+/// never renumbered or reused (ADR-0008 decision 13): RIDL-146 to RIDL-148
+/// guarded the slot model of a service's list — a shape re-declared under a
+/// service-level `reserved` name, one interface name on two shapes, and a
+/// nameless service-level tombstone — and left the catalogue with that model
+/// on 2026-09-15. Held as integers rather than `"RIDL-146"` literals, because
+/// a string literal of a code that is in no catalogue fails
+/// `codes_written_as_string_literals_are_all_catalogued`; the guard
+/// `retired_ridl_codes_are_never_redeclared` keeps the numbers out of
+/// [`RIDL_CATALOG`].
+pub const RETIRED_RIDL_CODES: &[u16] = &[146, 147, 148];
 
 diag_codes! {
     /// The FORM catalogue (ADR-0007 decision 2): lexical `0xx`, parse `1xx`, and
@@ -415,7 +429,7 @@ diag_codes! {
 
     /// The ridl catalogue (ADR-0008 decision 21): every `RIDL-` code declared in
     /// this module, with the severity the ridl reference §16 tables classify it
-    /// at. RIDL-140, RIDL-141, and RIDL-143 to RIDL-148 sit in the 1xx band
+    /// at. RIDL-140, RIDL-141, and RIDL-143 to RIDL-145 sit in the 1xx band
     /// while the reference lists them under the §16.4 evolution table — a
     /// documented anomaly kept as written (ADR-0008 decision 6). RIDL-111 and
     /// RIDL-142 are reserved by ADR-0008 decision 21 and are not declared yet,
@@ -578,41 +592,6 @@ diag_codes! {
         RIDL_145 = "RIDL-145", Error,
             "the same interface named twice in one service";
 
-        /// An interface re-declared under a service-level `reserved` name
-        /// (ridl §14.5, §16.4; ADR-0015 decision 18) — the analogue of
-        /// RIDL-401 one level up: a tombstone retires a name permanently, at
-        /// the service level as inside an interface body. Emitted per-package
-        /// by the checker (E9.6).
-        RIDL_146 = "RIDL-146", Error,
-            "interface re-declared under a service-level `reserved` name";
-
-        /// Two shapes of one service whose interface names collide even though
-        /// their references differ (ridl §14.5, §16.4; ADR-0015 decision 24).
-        /// A binding separates the ordinal spaces by interface name (decision
-        /// 17), so a service carrying `fleet.c1.DiagBlock` and
-        /// `fleet.c2.DiagBlock` leaves the binding no way to tell the two
-        /// apart. The rule is over every shape, live or retired: a name
-        /// spelled by two `reserved` tombstones draws the same code, because
-        /// two slots under one name leave the shape list without the
-        /// per-name key the diff walk matches slots by. Its own code rather
-        /// than RIDL-145 — that rule is the same reference listed twice —
-        /// because the remedy differs: an import alias cannot fix a name
-        /// collision, only renaming one interface or composing it into a
-        /// different service can. Emitted per-package by the checker (E9.6).
-        RIDL_147 = "RIDL-147", Error,
-            "one interface name on two shapes of one service";
-
-        /// A service-level `reserved` tombstone that spells no interface name
-        /// (ridl §14.5, §16.4; ADR-0015 decision 24) — the literal spellings
-        /// the shared `reserved` grammar admits for enum bodies. A service
-        /// tombstone retires an interface name: the name is the identity a
-        /// binding keys the ordinal spaces on (decision 17) and the only
-        /// thing RIDL-146 or the diff walk can match a retirement against, so
-        /// a nameless tombstone holds a slot that retires nothing. Emitted
-        /// per-package by the checker (E9.6).
-        RIDL_148 = "RIDL-148", Error,
-            "service-level `reserved` tombstone without an interface name";
-
         /// Two names in one scope that collide after the pinned name
         /// transform (ridl §11, §16.4; ADR-0016 decision 3). The transform is
         /// not injective and no case-folding transform can be, so
@@ -755,6 +734,60 @@ diag_codes! {
         /// ordinal moved and which neither classifies nor gates.
         RIDL_408 = "RIDL-408", Error,
             "interaction removed, its tombstone dropped or moved, or its retired name redeclared";
+
+        /// A live entry of the package's `interfaces.lock` names an interface
+        /// the package no longer declares (lock design §4, §8) — the interface
+        /// was renamed or removed, and the lock does not record which. Error.
+        /// Emitted by the checker on the entry's own line of the lock file,
+        /// `ridlc` and `ridl` alike. The fix is `ridl lock <pkg> --retire Old`
+        /// when the interface is gone, or `ridl lock <pkg> --rename Old=New`
+        /// when a declaration without an entry is the same interface under a
+        /// new name; the message names only `--retire` when the package has
+        /// no declaration without an entry. `ridl check` adds a label naming
+        /// the one `--rename` command when the published baseline shows
+        /// exactly one declaration without an entry with the old interface's
+        /// shape.
+        RIDL_409 = "RIDL-409", Error,
+            "live `interfaces.lock` entry with no declaration";
+
+        /// The package's `interfaces.lock` is malformed (lock design §2, §8):
+        /// no `next` line, `next` not greater than every entry's number, one
+        /// number on two entries, one live key on two entries, or a line that
+        /// does not parse — git conflict markers included. Error. Emitted by
+        /// the loader, on the offending line of the lock file itself (or at
+        /// the start of an empty file), so `ridlc` and `ridl` alike stop on
+        /// it; the package then compiles without its lock. The fix is to
+        /// resolve the conflict or restore the file from version control and
+        /// run `ridl lock`.
+        RIDL_410 = "RIDL-410", Error,
+            "`interfaces.lock` is malformed";
+
+        /// An interface in the snapshot `ridl baseline` is about to publish
+        /// carries a provisional number — a declaration with no entry in the
+        /// package's `interfaces.lock` (lock design §3, §8). A provisional
+        /// number is no identity: `ridl diff` never matches on it, so a
+        /// snapshot holding one records nothing a later comparison can hold
+        /// the interface to. Error. Emitted by `ridl baseline` alone, at the
+        /// declaration's name, for a first publication as for a replacement.
+        /// The fix is plain `ridl lock`, which allocates and records the
+        /// number, then publish.
+        RIDL_411 = "RIDL-411", Error,
+            "provisional interface number refused at publication";
+
+        /// An interface number the published baseline holds is absent from
+        /// the fresh snapshot and not among its `interfaces.lock` retired
+        /// entries (lock design §4, §8) — a lock line deleted by hand, since a
+        /// live entry with no declaration already fails the build with
+        /// RIDL-409. Publishing would lose the only record that the number was
+        /// allocated, and `next` could hand it to a later interface. Error.
+        /// Emitted by `ridl baseline` alone, for a published number other
+        /// than 0: a snapshot published before the lock existed carries 0,
+        /// which is never allocated, and is matched by name. The fix is to
+        /// restore the entry's line in `interfaces.lock` from version
+        /// control, with `retired` after the number when the interface is
+        /// gone.
+        RIDL_412 = "RIDL-412", Error,
+            "published interface number dropped without a retired entry";
     }
 
     /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
@@ -1574,6 +1607,23 @@ mod tests {
     /// the expansion does not fix. There is deliberately no expected list of
     /// codes: comparing a catalogue against a second hand-written list is the
     /// guard this change removed.
+    /// A retired code is never declared again (ADR-0008 decision 13): every
+    /// number in [`RETIRED_RIDL_CODES`] stays out of the `RIDL-` catalogue.
+    #[test]
+    fn retired_ridl_codes_are_never_redeclared() {
+        for entry in RIDL_CATALOG {
+            let code = entry.code.as_str();
+            let number: u16 = code
+                .strip_prefix("RIDL-")
+                .and_then(|digits| digits.parse().ok())
+                .unwrap_or_else(|| panic!("`{code}` is not spelled `RIDL-NNN`"));
+            assert!(
+                !RETIRED_RIDL_CODES.contains(&number),
+                "`{code}` is retired and must not be declared again",
+            );
+        }
+    }
+
     #[test]
     fn catalog_entries_are_well_formed_ordered_and_unique() {
         let mut seen: Vec<&str> = Vec::new();

@@ -14,7 +14,10 @@
 //! declaration in a file is TYPL-001. A bare `.typl` or `.ridl` file with no
 //! manifest anywhere up the tree loads in **single-file mode**: one synthetic
 //! package named from the file's declared package, exempt from TYPL-002 (the
-//! task 20 CLI contract).
+//! task 20 CLI contract). Every package directory — the bare file's directory
+//! included — is also read for an `interfaces.lock`, which rides on the
+//! [`Package`] as its [`PackageLock`]; a malformed one is RIDL-410 on the
+//! file's own line (lock design §2, §8).
 //!
 //! Problems in loaded content — manifest diagnostics, the law violations, a
 //! nested workspace (MANI-004), a broken member (MANI-008), a file that is
@@ -31,8 +34,9 @@ use rowan::{TextRange, TextSize};
 
 use crate::db::{InputFile, RidlDatabase, parse_file};
 use crate::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
+use crate::interface_lock;
 use crate::manifest::{Manifest, ManifestKind, parse_manifest};
-use crate::package::{Package, PackageOrigin, Workspace, package_declarations};
+use crate::package::{Package, PackageLock, PackageOrigin, Workspace, package_declarations};
 
 /// The result of [`load_workspace`]: the salsa [`Workspace`] input, the
 /// diagnostics the load accumulated, and the interned path+text table the
@@ -270,6 +274,7 @@ impl Loader {
                     files.push(input);
                 }
             }
+            let lock = self.read_lock(dir)?;
             self.packages.push(Package::new(
                 &*db,
                 name.to_string(),
@@ -277,6 +282,7 @@ impl Loader {
                 PackageOrigin::WorkspaceMember,
                 imports.clone(),
                 default_timing.clone(),
+                lock,
             ));
         }
 
@@ -319,6 +325,12 @@ impl Loader {
                     .map(|stem| stem.to_string_lossy().into_owned())
                     .unwrap_or_else(|| "package".to_string())
             });
+        // The file's directory is the package directory, so the lock is read
+        // there too (plan decision PD-8).
+        let lock = match path.parent() {
+            Some(dir) => self.read_lock(dir)?,
+            None => None,
+        };
         self.packages.push(Package::new(
             &*db,
             name,
@@ -326,8 +338,47 @@ impl Loader {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            lock,
         ));
         Ok(())
+    }
+
+    /// Reads `dir/interfaces.lock` for the package rooted at `dir` (lock
+    /// design §2). An absent file is `None`. A malformed file — one that is
+    /// not valid UTF-8 included — is RIDL-410 on the offending line of the
+    /// lock file itself, through this loader's source map, at the empty range
+    /// 0..0 when there is no line to point at (plan decision PD-3); the
+    /// package then carries no lock. Any other I/O failure is the error.
+    fn read_lock(&mut self, dir: &Path) -> io::Result<Option<PackageLock>> {
+        let path = path_string(&dir.join(interface_lock::FILE_NAME));
+        let text = match interface_lock::read(dir) {
+            Ok(Some(text)) => text,
+            Ok(None) => return Ok(None),
+            Err(err) if err.kind() == io::ErrorKind::InvalidData => {
+                let file_id = self.sources.file_id(&path, "");
+                self.diagnostics.push(error(
+                    DiagCode::RIDL_410,
+                    file_id,
+                    byte_range(0, 0),
+                    malformed_lock_message("the file is not valid UTF-8"),
+                ));
+                return Ok(None);
+            }
+            Err(err) => return Err(err),
+        };
+        match interface_lock::parse(&text) {
+            Ok(lock) => Ok(Some(PackageLock { path, text, lock })),
+            Err(malformed) => {
+                let file_id = self.sources.file_id(&path, &text);
+                self.diagnostics.push(error(
+                    DiagCode::RIDL_410,
+                    file_id,
+                    malformed.range,
+                    malformed_lock_message(&malformed.message),
+                ));
+                Ok(None)
+            }
+        }
     }
 
     /// Reads one source file into an [`InputFile`], parses it through the
@@ -397,6 +448,16 @@ impl Loader {
 /// The interned string form of a filesystem path.
 fn path_string(path: &Path) -> String {
     path.to_string_lossy().into_owned()
+}
+
+/// The RIDL-410 message: what is wrong with the lock file, then the fix the
+/// lock design §8 names.
+fn malformed_lock_message(reason: &str) -> String {
+    format!(
+        "`{}` is malformed: {reason} — resolve the conflict or restore the file from version \
+         control, then run `ridl lock`",
+        interface_lock::FILE_NAME
+    )
 }
 
 /// The byte range of the quoted `member` entry inside a workspace manifest's
@@ -1059,6 +1120,196 @@ mod tests {
             parse_file(&db, files[0]).errors(),
             &[],
             "the fixture parses clean"
+        );
+    }
+
+    // --- the interface lock (lock design §2, §8) --------------------------
+
+    const LOCK_TEXT: &str = "\
+# interfaces.lock — written by ridl lock; do not edit by hand.
+next 3
+Cabin 1
+service:veh.common.climate 2
+";
+
+    /// A well-formed `interfaces.lock` beside the sources rides on the
+    /// package: its path, its text and the parsed table (the text and path
+    /// travel so a later checker diagnostic can point into the file).
+    #[test]
+    fn a_lock_beside_the_sources_rides_on_the_package() {
+        let dir = TempDir::new("lock");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.ridl", "package veh.common\ntype A: m\n");
+        let lock_path = dir.write("interfaces.lock", LOCK_TEXT);
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(
+            loaded.diagnostics,
+            Vec::new(),
+            "a well-formed lock draws nothing"
+        );
+
+        let packages = loaded.workspace.packages(&db).clone();
+        let lock = packages[0]
+            .lock(&db)
+            .as_ref()
+            .expect("the lock rides on the package");
+        assert_eq!(lock.path, path_string(&lock_path));
+        assert_eq!(lock.text, LOCK_TEXT);
+        assert_eq!(lock.lock.next, 3);
+        assert_eq!(lock.lock.entries.len(), 2);
+        assert_eq!(
+            lock.lock.entries[1].key,
+            crate::interface_lock::LockKey::Service("veh.common.climate".to_string())
+        );
+    }
+
+    #[test]
+    fn a_package_with_no_lock_has_none() {
+        let dir = TempDir::new("no-lock");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.ridl", "package veh.common\ntype A: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(*packages[0].lock(&db), None);
+    }
+
+    /// RIDL-410 is reported on the offending line of the lock file itself,
+    /// through the loader's source map (PD-3), and the package then carries
+    /// no lock.
+    #[test]
+    fn a_malformed_lock_is_ridl_410_on_its_own_line() {
+        let dir = TempDir::new("bad-lock");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.ridl", "package veh.common\ntype A: m\n");
+        let text = "# interfaces.lock — written by ridl lock; do not edit by hand.\n\
+                    next 2\n\
+                    Cabin 1\n\
+                    Door 1\n";
+        let lock_path = dir.write("interfaces.lock", text);
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), ["RIDL-410"]);
+        let diagnostic = &loaded.diagnostics[0];
+        assert_eq!(diagnostic.severity, Severity::Error);
+        assert_eq!(
+            loaded.sources.path(diagnostic.primary.file),
+            Some(path_string(&lock_path).as_str()),
+            "the span is in the lock file"
+        );
+        assert_eq!(loaded.sources.text(diagnostic.primary.file), Some(text));
+        let line_start = text
+            .find("Door 1")
+            .expect("the offending line is in the text");
+        assert_eq!(
+            diagnostic.primary.range,
+            byte_range(line_start, line_start + "Door 1".len()),
+            "the span is the offending line"
+        );
+        assert_eq!(
+            diagnostic.message,
+            "`interfaces.lock` is malformed: number 1 is on two entries: `Cabin` and `Door` — \
+             resolve the conflict or restore the file from version control, then run `ridl lock`"
+        );
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(
+            *packages[0].lock(&db),
+            None,
+            "a malformed lock does not ride on the package"
+        );
+    }
+
+    /// PD-3: an empty lock file, which has no `next` line, is reported at
+    /// 0..0 of the file.
+    #[test]
+    fn an_empty_lock_is_ridl_410_at_the_start_of_the_file() {
+        let dir = TempDir::new("empty-lock");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.ridl", "package veh.common\ntype A: m\n");
+        dir.write("interfaces.lock", "");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), ["RIDL-410"]);
+        assert_eq!(loaded.diagnostics[0].primary.range, byte_range(0, 0));
+        assert!(
+            loaded.diagnostics[0].message.contains("no `next` line"),
+            "got: {}",
+            loaded.diagnostics[0].message
+        );
+    }
+
+    /// A lock file that is not valid UTF-8 is RIDL-410 at 0..0 too — the
+    /// treatment the loader gives a source file that is not valid UTF-8.
+    #[test]
+    fn a_lock_that_is_not_utf8_is_ridl_410() {
+        let dir = TempDir::new("binary-lock");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.ridl", "package veh.common\ntype A: m\n");
+        fs::write(dir.path().join("interfaces.lock"), [0xff, 0xfe, b'\n'])
+            .expect("write the bytes");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(codes(&loaded.diagnostics), ["RIDL-410"]);
+        assert!(
+            loaded.diagnostics[0].message.contains("not valid UTF-8"),
+            "got: {}",
+            loaded.diagnostics[0].message
+        );
+        assert_eq!(loaded.diagnostics[0].primary.range, byte_range(0, 0));
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(*packages[0].lock(&db), None);
+    }
+
+    /// PD-8: a bare `.ridl` file with no manifest reads `interfaces.lock`
+    /// from the file's directory.
+    #[test]
+    fn single_file_mode_reads_the_lock_beside_the_file() {
+        let dir = TempDir::new("single-lock");
+        let path = dir.write("iface.ridl", "package veh.iface\ntype A: m\n");
+        dir.write("interfaces.lock", LOCK_TEXT);
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &path).expect("single-file mode loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+        let packages = loaded.workspace.packages(&db).clone();
+        let lock = packages[0]
+            .lock(&db)
+            .as_ref()
+            .expect("the lock rides on the synthetic package");
+        assert_eq!(lock.lock.next, 3);
+    }
+
+    /// The file is per package (lock design §2): a subdirectory package reads
+    /// its own directory's lock, not its parent's.
+    #[test]
+    fn a_subdirectory_package_reads_its_own_lock() {
+        let dir = TempDir::new("subdir-lock");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.ridl", "package veh.common\ntype A: m\n");
+        dir.write("interfaces.lock", LOCK_TEXT);
+        dir.write("sub/b.ridl", "package veh.common.sub\ntype B: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the tree loads");
+        assert_eq!(loaded.diagnostics, Vec::new());
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 2);
+        assert!(
+            packages[0].lock(&db).is_some(),
+            "the root package has a lock"
+        );
+        assert_eq!(
+            *packages[1].lock(&db),
+            None,
+            "the subdirectory package has none"
         );
     }
 }

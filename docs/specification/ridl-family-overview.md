@@ -206,9 +206,9 @@ By home; see each reference for full statements.
   carries a list of interfaces, and mixins were rejected because they flatten
   (ridl §17.2, §14.5) · **whether the `ridl baseline` publication gate should
   also refuse a moved existing tombstone (ridl §17.12)** · **a whole package
-  removed or renamed bypasses the same gate (ridl §17.13)** · **a whole
-  interface or service removed, or a service whose form switches, bypasses the
-  same gate (ridl §17.14)**
+  removed or renamed bypasses the same gate (ridl §17.13)** · **a whole service
+  removed, or a service whose form switches, bypasses the same gate; the
+  interface half closed with the lock (ridl §17.14)**
 - **rxdl §11**: the intent occurrence keyword · the acquisition/query cell ·
   interaction citation paths (ridl's, recorded there) · journeys and screen flow
   · accessibility metadata

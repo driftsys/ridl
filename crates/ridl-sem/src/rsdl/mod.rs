@@ -452,6 +452,7 @@ mod tests {
             PackageOrigin::WorkspaceMember,
             BTreeMap::new(),
             None,
+            None,
         )
     }
 

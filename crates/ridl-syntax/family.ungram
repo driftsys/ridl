@@ -292,17 +292,8 @@ TimingRange =
 // to the mistake. A trailing comma stays optional.
 ServiceDef =
   'service' name:DottedName
-  ( ':' shapes:ServiceShape (',' shapes:ServiceShape)* ','?
+  ( ':' shapes:PathType (',' shapes:PathType)* ','?
   | '{' (inline_members:InterfaceMember ','?)* '}' )
-
-// One slot of a service's shape list (ADR-0015 decisions 12 and 15): a
-// composed interface reference, or a service-level `reserved` tombstone.
-// Reusing `ReservedEntry` — already shared by typl's struct and union
-// tombstones and by interface bodies — means service-level `reserved`
-// needs no new syntax at all.
-ServiceShape =
-  PathType
-| ReservedEntry
 
 // A dotted global name — `veh.adas.cruise` (ADR-0002 §1). Consumers read the
 // segment tokens through `DottedName::segments()` in src/ast.rs.

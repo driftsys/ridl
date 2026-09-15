@@ -480,9 +480,7 @@ pub mod v2 {
                             interface,
                             service: Some(service),
                         }),
-                        service_shape::Kind::InterfaceRef(_) | service_shape::Kind::Reserved(_) => {
-                            None
-                        }
+                        service_shape::Kind::InterfaceRef(_) => None,
                     })
             });
             named.chain(inline)
@@ -522,8 +520,7 @@ pub mod v2 {
                             walk_decl(interaction, &mut found);
                         }
                     }
-                    // A tombstone holds a retired slot and names no type.
-                    Some(service_shape::Kind::Reserved(_)) | None => {}
+                    None => {}
                 }
             }
         }
@@ -804,6 +801,8 @@ mod v2_round_trip {
                 interaction("fetchFaults", 5, v2::decl::Kind::QueryDef(fetch_faults)),
                 interaction("vin", 6, v2::decl::Kind::FixedDef(vin)),
             ],
+            number: 0,
+            provisional: false,
         };
 
         // query tailLogs(pattern : <string>) : <LogLine> — a stream param
@@ -824,37 +823,22 @@ mod v2_round_trip {
             timing: None,
         };
 
-        // service veh.adas.status : VehicleStatus, reserved LegacyDiag — a
-        // named reference in slot 1 and a service-level tombstone holding
-        // slot 2 (ADR-0015 decisions 12 and 15).
+        // service veh.adas.status : VehicleStatus — one named reference in
+        // the service's set (ADR-0015 decision 12).
         let status_service = v2::Service {
             name: "veh.adas.status".to_string(),
             visibility: v2::Visibility::Public as i32,
             doc: String::new(),
             labels: Vec::new(),
             deprecated: None,
-            shapes: vec![
-                v2::ServiceShape {
-                    id: 1,
-                    kind: Some(v2::service_shape::Kind::InterfaceRef(
-                        "VehicleStatus".to_string(),
-                    )),
-                },
-                // The tombstone stores its slot twice — on the shape AND in
-                // Reserved — set from one counter, as interaction tombstones
-                // are.
-                v2::ServiceShape {
-                    id: 2,
-                    kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
-                        ordinal: 2,
-                        name: Some("LegacyDiag".to_string()),
-                        value: None,
-                    })),
-                },
-            ],
+            shapes: vec![v2::ServiceShape {
+                kind: Some(v2::service_shape::Kind::InterfaceRef(
+                    "VehicleStatus".to_string(),
+                )),
+            }],
         };
-        // service veh.adas.logs { … } — inline shape in slot 1 (ADR-0015
-        // decision 15), Interface.name == "" (ridl §14.5).
+        // service veh.adas.logs { … } — the inline shape as the one entry,
+        // Interface.name == "" (ridl §14.5).
         let logs_service = v2::Service {
             name: "veh.adas.logs".to_string(),
             visibility: v2::Visibility::Public as i32,
@@ -862,7 +846,6 @@ mod v2_round_trip {
             labels: Vec::new(),
             deprecated: None,
             shapes: vec![v2::ServiceShape {
-                id: 1,
                 kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
                     name: String::new(),
                     visibility: v2::Visibility::Unspecified as i32,
@@ -874,6 +857,8 @@ mod v2_round_trip {
                         1,
                         v2::decl::Kind::QueryDef(tail_logs),
                     )],
+                    number: 0,
+                    provisional: false,
                 })),
             }],
         };
@@ -903,6 +888,7 @@ mod v2_round_trip {
             }],
             interfaces: vec![vehicle_status],
             services: vec![status_service, logs_service],
+            retired: Vec::new(),
         }
     }
 
@@ -1151,6 +1137,7 @@ mod v2_round_trip {
             ],
             interfaces: Vec::new(),
             services: Vec::new(),
+            retired: Vec::new(),
         }
     }
 
@@ -1185,19 +1172,21 @@ mod v2_round_trip {
             .first()
             .and_then(|slot| slot.kind.as_ref())
         else {
-            panic!("veh.adas.logs must decode as an inline shape in slot 1");
+            panic!("veh.adas.logs must decode as an inline shape");
         };
         assert_eq!(inline.name, "", "an inline shape carries no name");
-        let slot_ids: Vec<u32> = decoded.services[0]
+        let references: Vec<&str> = decoded.services[0]
             .shapes
             .iter()
-            .map(|slot| slot.id)
+            .filter_map(|slot| match &slot.kind {
+                Some(v2::service_shape::Kind::InterfaceRef(reference)) => Some(reference.as_str()),
+                _ => None,
+            })
             .collect();
         assert_eq!(
-            slot_ids,
-            [1, 2],
-            "interface ids are 1-based by declaration order, tombstone counted \
-             (ADR-0015 decision 15)"
+            references,
+            ["VehicleStatus"],
+            "a service's set carries its references and nothing else"
         );
     }
 
@@ -1209,6 +1198,99 @@ mod v2_round_trip {
 
             assert_eq!(package, decoded);
         }
+    }
+
+    /// The interface identity fields the lock design §9 adds — `number` and
+    /// `provisional` on every `Interface`, an inline shape included, and the
+    /// package's `retired` list — ride all three encodings unchanged, and the
+    /// JSON writes them under their canonical names even when they hold their
+    /// defaults (ADR-0014 decision 2), so a reader can tell `number` 0 from an
+    /// absent field only by the schema, never by the text.
+    #[test]
+    fn number_provisional_and_retired_round_trip_through_json_text_and_binary() {
+        let mut package = fixture();
+        package.interfaces[0].number = 4;
+        package.interfaces[0].provisional = true;
+        let Some(v2::service_shape::Kind::Inline(inline)) =
+            package.services[1].shapes[0].kind.as_mut()
+        else {
+            panic!("veh.adas.logs holds an inline shape in slot 1");
+        };
+        inline.number = 5;
+        package.retired = vec![
+            v2::RetiredInterface {
+                name: "LaneAssist".to_string(),
+                number: 2,
+            },
+            v2::RetiredInterface {
+                name: "service:veh.hvac.cabin".to_string(),
+                number: 3,
+            },
+        ];
+
+        let json = v2::to_json_pretty(&package).expect("the package serializes as IR JSON");
+        assert_eq!(v2::from_json(&json).expect("the JSON parses back"), package);
+        let text = v2::to_text_format(&package).expect("the package serializes as prototext");
+        assert_eq!(
+            v2::from_text_format(&text).expect("the prototext parses back"),
+            package
+        );
+        assert_eq!(
+            v2::from_binary(v2::to_binary(&package).as_slice()).expect("the binary decodes"),
+            package
+        );
+
+        for needle in [
+            r#""number": 4"#,
+            r#""provisional": true"#,
+            r#""number": 5"#,
+            r#""name": "LaneAssist""#,
+            r#""name": "service:veh.hvac.cabin""#,
+        ] {
+            assert!(
+                json.contains(needle),
+                "the JSON must carry {needle}, got: {json}"
+            );
+        }
+
+        // A default holds its place in the text (decision 2): an interface
+        // that was never numbered writes `0` and `false`, and a package with
+        // nothing retired writes an empty list.
+        let unnumbered = v2::to_json_pretty(&fixture()).expect("the fixture serializes as IR JSON");
+        for needle in [
+            r#""number": 0"#,
+            r#""provisional": false"#,
+            r#""retired": []"#,
+        ] {
+            assert!(
+                unnumbered.contains(needle),
+                "a default field must still be written, expected {needle} in: {unnumbered}"
+            );
+        }
+    }
+
+    /// A baseline published before the lock existed carries no `number`, no
+    /// `provisional` and no `retired` field. It still loads — a missing field
+    /// reads as its default, which is the `number` 0 the lock design §7 names
+    /// as the one transition case — while an unknown field is still rejected
+    /// (`json_parse_rejects_an_unknown_field`).
+    #[test]
+    fn a_snapshot_lacking_the_number_fields_still_loads() {
+        let package = v2::from_json(
+            r#"{"name": "veh.x", "interfaces": [{"name": "LaneKeeping"}], "services": [{"name": "veh.x.s", "shapes": [{"inline": {"name": ""}}]}]}"#,
+        )
+        .expect("a pre-lock snapshot loads");
+
+        assert_eq!(package.interfaces[0].number, 0);
+        assert!(!package.interfaces[0].provisional);
+        let Some(v2::service_shape::Kind::Inline(inline)) =
+            package.services[0].shapes[0].kind.as_ref()
+        else {
+            panic!("the service holds an inline shape");
+        };
+        assert_eq!(inline.number, 0);
+        assert!(!inline.provisional);
+        assert_eq!(package.retired, Vec::new());
     }
 
     /// The prototext read path (ADR-0014 decision 7): both fixtures survive

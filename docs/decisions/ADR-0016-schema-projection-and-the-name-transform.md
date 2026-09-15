@@ -131,7 +131,11 @@ rewrites the transport identity of every fallible query in the shape). What
 survives of the proposal is the numbering alone, which its decision 15 records:
 in the IR an inline shape carries interface id 1, only ever as the single slot
 of an inline-form service. A projection must therefore not treat "extract the
-inline shape into a named interface" as identity-preserving.
+inline shape into a named interface" as identity-preserving. (Amended
+2026-09-15: the slot numbering is retired with the lock — an inline shape
+carries the number of its `service:<name>` entry in the package's
+`interfaces.lock`, ADR-0015 decision 15 as amended — and the conclusion stands:
+extraction is not identity-preserving.)
 
 ## Decision
 
@@ -162,8 +166,10 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
    discharged by a check, rather than the transform function. RIDL-149 is the
    direct sibling of RIDL-147, which
    [ADR-0015](ADR-0015-qos-absorption-and-rpc-bounds.md) decision 24 minted for
-   interface names colliding within a service; this is the same fail-closed rule
-   one level down.
+   interface names colliding within a service and which the lock retired on
+   2026-09-15 (decision 24 as amended: a binding keys on the interface number,
+   so two names may collide); this is the same fail-closed rule one level down,
+   and it stands — a member's projected name has no number to fall back on.
 
 4. **The check covers two of the three namespaces the transform is applied to
    today — the members of one interface, and the parameters of one
@@ -216,6 +222,14 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
    mechanism — allocation-and-record, a registry pinned in a lockfile-shaped
    artifact — is deferred to E6 with the rest of deployment, and the question
    binds tag-based transports only, because proto and gRPC identity is nominal.
+
+   **Amendment (2026-09-15) — answered.** The open question was rsdl v0.1.0
+   §13's; rsdl v0.2.0 §17 item 9 answers it: the routing key holds a catalog, an
+   interface and a member, and no service, so a tag-based transport that needs a
+   service number reads it from its own backend key (rsdl §5). The
+   allocation-and-record mechanism landed one scope down, for the interface
+   number: a per-package `interfaces.lock`, written by `ridl lock` alone (the
+   lock design, applying rsdl decision D-7).
 
 9. **Ratified — note §7.3, a `fixed` interaction gets a real field in the store
    table, not a placeholder.** A `fixed` is a value a consumer reads, and a
@@ -272,10 +286,10 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
 
 ## Documents amended
 
-| Document          | Change                                                                                                                |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------- |
-| rsdl §13          | gains the service-number open question (decision 8)                                                                   |
-| `docs/ROADMAP.md` | the E9.7 row restated per decisions 1 to 3; the Epic 9 status paragraph records this ratification and the corrections |
+| Document          | Change                                                                                                                                                           |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| rsdl §13          | gains the service-number open question (decision 8) — answered in rsdl v0.2.0 §17 item 9 (2026-09-13): a tag-based transport's service number is its backend key |
+| `docs/ROADMAP.md` | the E9.7 row restated per decisions 1 to 3; the Epic 9 status paragraph records this ratification and the corrections                                            |
 
 ## Open
 
@@ -301,7 +315,7 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   reads
 - [ADR-0015](ADR-0015-qos-absorption-and-rpc-bounds.md) — decisions 14, 15, 17,
   19 (service shapes and their diff), decision 24 (RIDL-147, the sibling rule
-  one level up)
+  one level up, retired by the lock on 2026-09-15)
 - [`docs/specification/ridl-language-reference.md`](../specification/ridl-language-reference.md)
   — §11, §14.5, §16.4, Appendix B (nominal proto identity), Appendix E (the
   hashed-identity rejection)

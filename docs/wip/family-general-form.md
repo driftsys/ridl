@@ -467,6 +467,15 @@ mitigations, no syntax:
   CI. The typl §7.4 trade-off ("unprotected without the CI gate") shrinks to
   "unprotected only with no baseline at all."
 
+**Interface numbers follow the same rule** (rsdl decision D-7; the lock design,
+2026-09-15). One level up, an interface's number is wire identity too, and it is
+never written in the source: it lives in the package's `interfaces.lock`, which
+only `ridl lock` writes, so a rename keeps the number and a reorder of a
+service's list moves nothing. A declaration with no entry compiles with a
+provisional number that `ridl baseline` refuses to publish (ridl §11, RIDL-411).
+Materialising numbers into the source is a possible later feature at every level
+at once, not a per-level choice.
+
 ### 6.4 Error-surface terminology (normative wording)
 
 Stratum 3 is never described as _undefined behavior_: UB means the system may do

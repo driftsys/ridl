@@ -75,18 +75,20 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    on this branch (2026-07-27), one input per cell, across the eight subcommands
    the two binaries expose today:
 
-   | Subcommand      | 0                                                                                                                                           | 1                                                                                                                                               | 2                                                                                                                                                |
-   | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-   | `ridl check`    | a clean package checks with no diagnostic                                                                                                   | a diagnostic error (`TYPL-104`, min exceeds max)                                                                                                | the given path does not exist, or an explicit `--baseline` holds no `.ir.json` snapshot                                                          |
-   | `ridl build`    | a clean package builds                                                                                                                      | the same diagnostic error                                                                                                                       | the given path does not exist                                                                                                                    |
-   | `ridl baseline` | a clean package publishes                                                                                                                   | a package with a diagnostic error publishes nothing; a replacement that drops an interaction with no `reserved` tombstone is refused (RIDL-408) | the given path does not exist                                                                                                                    |
-   | `ridl test`     | every `require` clause evaluates or is a documented skip                                                                                    | a clause whose evaluation faults (`100 / (d - d)`, division by zero)                                                                            | the workspace does not compile, or the path does not exist                                                                                       |
-   | `ridl fmt`      | nothing under `--check` would change                                                                                                        | a file under `--check` would change, or has a parse error                                                                                       | the path does not exist, or a directory the walk reaches is unreadable (fixed by this PR — see Decision 6)                                       |
-   | `ridl diff`     | the two sides are identical or compatible; `--explain <CATEGORY>` also exits 0, printing the classification rule without comparing anything | the change is breaking                                                                                                                          | one side fails to compile, or the path does not exist                                                                                            |
-   | `ridlc check`   | a clean package checks with no diagnostic                                                                                                   | the same diagnostic error                                                                                                                       | the given path does not exist                                                                                                                    |
-   | `ridlc build`   | a clean package builds                                                                                                                      | the same diagnostic error                                                                                                                       | the given path does not exist                                                                                                                    |
-   | `ridl lsp`      | a clean shutdown — the client sends `shutdown` then `exit`                                                                                  |                                                                                                                                                 | the transport ends before the `initialize` handshake, or fails for any other reason                                                              |
-   | `ridl mcp`      | a clean shutdown — the host closes stdin after the `initialize` handshake                                                                   |                                                                                                                                                 | the Tokio runtime fails to build, or the transport ends before the `initialize` handshake, or a task the SDK runs for the session fails after it |
+   | Subcommand        | 0                                                                                                                                           | 1                                                                                                                                                                                                                                                                                                                     | 2                                                                                                                                                                                                                                                    |
+   | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `ridl check`      | a clean package checks with no diagnostic                                                                                                   | a diagnostic error (`TYPL-104`, min exceeds max)                                                                                                                                                                                                                                                                      | the given path does not exist, or an explicit `--baseline` holds no `.ir.json` snapshot                                                                                                                                                              |
+   | `ridl build`      | a clean package builds                                                                                                                      | the same diagnostic error                                                                                                                                                                                                                                                                                             | the given path does not exist                                                                                                                                                                                                                        |
+   | `ridl baseline`   | a clean package publishes                                                                                                                   | a package with a diagnostic error publishes nothing; a replacement that drops an interaction with no `reserved` tombstone is refused (RIDL-408); a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412), is refused the given path does not exist |                                                                                                                                                                                                                                                      |
+   | `ridl test`       | every `require` clause evaluates or is a documented skip                                                                                    | a clause whose evaluation faults (`100 / (d - d)`, division by zero)                                                                                                                                                                                                                                                  | the workspace does not compile, or the path does not exist                                                                                                                                                                                           |
+   | `ridl fmt`        | nothing under `--check` would change                                                                                                        | a file under `--check` would change, or has a parse error                                                                                                                                                                                                                                                             | the path does not exist, or a directory the walk reaches is unreadable (fixed by this PR — see Decision 6)                                                                                                                                           |
+   | `ridl diff`       | the two sides are identical or compatible; `--explain <CATEGORY>` also exits 0, printing the classification rule without comparing anything | the change is breaking                                                                                                                                                                                                                                                                                                | one side fails to compile, or the path does not exist                                                                                                                                                                                                |
+   | `ridlc check`     | a clean package checks with no diagnostic                                                                                                   | the same diagnostic error                                                                                                                                                                                                                                                                                             | the given path does not exist                                                                                                                                                                                                                        |
+   | `ridlc build`     | a clean package builds                                                                                                                      | the same diagnostic error                                                                                                                                                                                                                                                                                             | the given path does not exist                                                                                                                                                                                                                        |
+   | `ridl lsp`        | a clean shutdown — the client sends `shutdown` then `exit`                                                                                  |                                                                                                                                                                                                                                                                                                                       | the transport ends before the `initialize` handshake, or fails for any other reason                                                                                                                                                                  |
+   | `ridl mcp`        | a clean shutdown — the host closes stdin after the `initialize` handshake                                                                   |                                                                                                                                                                                                                                                                                                                       | the Tokio runtime fails to build, or the transport ends before the `initialize` handshake, or a task the SDK runs for the session fails after it                                                                                                     |
+   | `ridl lock`       | the file is written, or there is nothing to change                                                                                          | a diagnostic error over the source, nothing written: a live entry with no declaration when plain `ridl lock` is asked to allocate (RIDL-409); a malformed lock file, conflict markers included (RIDL-410)                                                                                                             | the path is missing or unreadable; a bad flag — `--rename` naming no live entry, or a `NEW` that is not a declaration without an entry; `--retire` naming a still-declared interface; either flag over more than one package; an I/O failure writing |
+   | `ridl lock merge` | the three sides merge clean, and the result is written to OURS                                                                              | entries disagree: OURS is written with git conflict markers of MARKER_SIZE around only the disagreeing entries, and is malformed (RIDL-410) until an author resolves it                                                                                                                                               | an input cannot be read, or does not parse (OURS is left as it was); MARKER_SIZE is not a number from 1 up; an I/O failure writing OURS                                                                                                              |
 
    The claim is scoped to these eight, constructed this way, on this date — not
    asserted as a property that holds by design of every subcommand a future PR
@@ -94,9 +96,9 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    not by inheriting this table. The same discipline applies within a cell. A
    clause added to a cell after 2026-07-27 is not covered by that date: it
    carries its own date and its own verification, constructed the same way as
-   the original eight — by direct construction against the built binary. Two
-   clauses on this table postdate the original construction, both added on
-   2026-09-13:
+   the original eight — by direct construction against the built binary. Three
+   clauses on this table postdate the original construction, two added on
+   2026-09-13 and one on 2026-09-15:
 
    - the `ridl baseline` exit-1 cell's `reserved`-tombstone clause, added when
      `ridl baseline` gained the RIDL-408 publication gate, verified via
@@ -106,7 +108,13 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
      explicit `--baseline` holding no snapshot became an input error
      (driftsys/ridl#235), verified via
      `an_explicit_baseline_holding_no_snapshot_is_an_input_error` in
-     `crates/ridl/tests/baseline_desk.rs`, which asserts the refusal exits 2.
+     `crates/ridl/tests/baseline_desk.rs`, which asserts the refusal exits 2;
+   - the `ridl baseline` exit-1 cell's lock clause, added on 2026-09-15 when
+     `ridl baseline` gained the interface level of its gate (lock design §8),
+     verified via `baseline_refuses_a_provisional_number` (RIDL-411) and
+     `baseline_refuses_a_number_dropped_without_a_retired_entry` (RIDL-412) in
+     `crates/ridl/tests/baseline_gate.rs`, each of which asserts the refusal
+     exits 1 and the published snapshot stays byte-identical.
 
    **`ridl lsp` and `ridl mcp` earned their rows on 2026-09-13, when they were
    added and checked** by `crates/ridl/tests/servers.rs`, which drives both
@@ -116,6 +124,46 @@ defects it found are recorded as issue driftsys/ridl#196 rather than fixed here.
    empty: neither subcommand answers a question that can come back negative —
    each only serves a protocol over stdio until its client disconnects — so the
    taxonomy has two outcomes for them, not three.
+
+   **`ridl lock` earned its row on 2026-09-15, when it was added and checked**
+   by `crates/ridl/tests/lock_cli.rs`, one test per clause of its three cells
+   against the built `ridl` binary: the two exit-0 outcomes
+   (`plain_lock_allocates_every_provisional_interface_and_exits_zero`,
+   `plain_lock_with_nothing_to_change_exits_zero_and_writes_nothing`), the two
+   exit-1 diagnostics
+   (`plain_lock_refuses_an_orphan_entry_with_ridl_409_and_writes_nothing`,
+   `a_malformed_lock_is_ridl_410_and_nothing_is_written`), and the six exit-2
+   clauses (`a_missing_path_exits_two`, `a_flag_that_does_not_parse_exits_two`,
+   `rename_naming_no_live_entry_exits_two`,
+   `rename_to_a_name_that_is_not_an_unentered_declaration_exits_two`,
+   `retire_of_a_still_declared_interface_exits_two`,
+   `rename_over_more_than_one_package_exits_two`,
+   `an_unwritable_lock_file_exits_two`). Each test that must write nothing
+   asserts the lock file byte-identical afterwards. `--rename` and `--retire`
+   run with RIDL-409 present, since they are that diagnostic's fix; any other
+   compile error, in any package of the workspace, still exits 1 and writes
+   nothing (`rename_with_another_compile_error_exits_one`,
+   `a_compile_error_in_one_package_writes_no_package_file`).
+
+   **`ridl lock merge` earned its row on 2026-09-15, when it was added and
+   checked** by `crates/ridl/tests/lock_merge.rs` against the built `ridl`
+   binary. Exit 0: the five clean rows of the lock design's merge table, each
+   run with the two branches swapped (`both_add_one_number_renumbers_theirs`,
+   `rename_plus_add_merges_clean`, `the_same_change_on_both_sides_is_kept_once`,
+   `both_retire_and_both_re_add_merges_clean`,
+   `retire_versus_add_merges_clean`), plus `an_empty_base_reads_as_next_one` and
+   `next_is_the_maximum_of_the_three_sides_plus_renumbering`. Exit 1: the three
+   conflict rows (`retire_versus_rename_conflicts_on_the_entry`,
+   `two_different_renames_conflict`, `a_live_name_on_two_numbers_conflicts`) and
+   `a_conflict_marks_only_the_disagreeing_entries_and_is_ridl_410_until_resolved`,
+   which also runs `ridl check` over the written file and sees RIDL-410. Exit 2:
+   `an_unreadable_input_exits_two` and
+   `an_input_that_does_not_parse_exits_two_and_leaves_ours_unchanged`, both
+   asserting OURS byte-identical afterwards; a MARKER_SIZE of 0 or a non-number
+   is refused by the argument parser before any file is read.
+   `the_registered_driver_merges_two_branches_through_git` registers the driver
+   in a temporary repository the way the CLI reference documents it and merges
+   two branches through git itself.
 
 2. **The clig.dev guidance that applies, quoted rather than paraphrased:**
 

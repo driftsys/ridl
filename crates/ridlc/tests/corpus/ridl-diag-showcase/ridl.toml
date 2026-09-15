@@ -1,2 +1,2 @@
 [workspace]
-members = ["main", "twin"]
+members = ["main", "twin", "badlock"]

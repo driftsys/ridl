@@ -1,0 +1,15 @@
+// A `reserved` entry in a service's list is a parse error: the list is a set
+// of interface references and holds no slot to retire (lock design §9). An
+// interface's number lives in `interfaces.lock`, and a removed interface is
+// retired there, not in the list.
+package veh.body
+
+interface DoorControl {
+  signal locked : boolean
+}
+
+service veh.body.doors : DoorControl, reserved LegacyDoorDiag, HealthBlock
+
+interface HealthBlock {
+  signal alive : boolean
+}

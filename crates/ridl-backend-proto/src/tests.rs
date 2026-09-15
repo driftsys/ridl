@@ -70,7 +70,6 @@ fn an_inline_service_shape_is_named_from_the_service_address() {
         services: vec![v2::Service {
             name: "corpus.baseline.hvac".to_string(),
             shapes: vec![v2::ServiceShape {
-                id: 1,
                 kind: Some(v2::service_shape::Kind::Inline(v2::Interface {
                     name: String::new(),
                     interactions: vec![signal_decl("cabinTemp", 1)],

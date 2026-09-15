@@ -111,6 +111,7 @@ fn front_end(path: &str, text: &str) -> FrontEnd {
         PackageOrigin::WorkspaceMember,
         BTreeMap::new(),
         None,
+        None,
     );
     let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
 
@@ -631,10 +632,16 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
         // Intern this package's files into the render source map; their ids are
         // the render targets the package-relative pass diagnostics remap onto.
         let files = pkg.files(db).clone();
-        let render_ids: Vec<FileId> = files
+        let mut render_ids: Vec<FileId> = files
             .iter()
             .map(|file| sources.file_id(file.path(db), file.text(db)))
             .collect();
+        // The checker stamps a lock diagnostic (RIDL-409) with the index after
+        // the package's files, so the lock's own id goes last (plan decision
+        // PD-12).
+        if let Some(lock) = pkg.lock(db) {
+            render_ids.push(sources.file_id(&lock.path, &lock.text));
+        }
 
         // The loader keeps only manifest and law findings; the parser errors on
         // each file are collected here, like the single-file `compile` does.

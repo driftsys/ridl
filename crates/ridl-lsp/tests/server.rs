@@ -2188,7 +2188,7 @@ fn goto_definition_and_references_work_on_a_service_interface_reference() {
 }
 
 /// A contract composing two interfaces into one service (ADR-0015 decision
-/// 12), with a service-level `reserved` tombstone holding slot 2.
+/// 12).
 const RIDL_COMPOSED: &str = "package veh.body\n\
 \n\
 type Flag : boolean\n\
@@ -2201,7 +2201,7 @@ interface HealthBlock {\n\
 \x20 signal alive : Flag @[1s..10s]\n\
 }\n\
 \n\
-service veh.body.doors : DoorControl, reserved LegacyDoorDiag, HealthBlock\n";
+service veh.body.doors : DoorControl, HealthBlock\n";
 
 /// Writes the composed-service fixture as a one-member workspace.
 fn write_composed_workspace(dir: &TempDir) -> lt::Uri {
@@ -2212,10 +2212,10 @@ fn write_composed_workspace(dir: &TempDir) -> lt::Uri {
     uri_of(&dir.write("doors.ridl", RIDL_COMPOSED))
 }
 
-/// Hover on a composed service renders the whole shape list — both interface
-/// references and the tombstone, in slot order — and goto-definition on each
-/// shape reference jumps to its own interface declaration: the LSP follows
-/// the list, not one reference.
+/// Hover on a composed service renders the whole list — both interface
+/// references, in source order — and goto-definition on each reference jumps
+/// to its own interface declaration: the LSP follows the list, not one
+/// reference.
 #[test]
 fn hover_and_goto_follow_a_composed_services_shape_list() {
     let dir = TempDir::new("ridl-composed-service");
@@ -2229,12 +2229,17 @@ fn hover_and_goto_follow_a_composed_services_shape_list() {
         contract.clone(),
         find_pos(RIDL_COMPOSED, "veh.body.doors", 0),
     );
-    assert!(value.contains("DoorControl"), "slot 1: {value}");
-    assert!(value.contains("reserved LegacyDoorDiag"), "slot 2: {value}");
-    assert!(value.contains("HealthBlock"), "slot 3: {value}");
+    assert!(
+        value.contains("DoorControl"),
+        "the first reference: {value}"
+    );
+    assert!(
+        value.contains("HealthBlock"),
+        "the second reference: {value}"
+    );
     assert!(
         value.contains("deriving the posture per deployment is reserved (rsdl §12)"),
-        "the posture note: {value}"
+        "the §14.5 note: {value}"
     );
 
     // Goto-definition on the SECOND interface reference: a walk that stopped
@@ -2683,5 +2688,45 @@ fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
     assert_eq!(instance.range, Some(range_of(RSDL_SYSTEM, "primary", 1)));
 
     shut_down(&client, 17);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// RIDL-409 — a live `interfaces.lock` entry with no declaration — is
+/// published under the lock file's own URI, on the entry's line (plan
+/// decision PD-12): the checker stamps it with the index after the package's
+/// files, and the server interns the lock last and carries its text.
+#[test]
+fn a_lock_diagnostic_is_published_under_the_lock_files_uri() {
+    let dir = TempDir::new("lock");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hvac\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "hvac.ridl",
+        "package veh.hvac\ntype State: integer [0..1]\ninterface Cabin { signal c : State @[100ms..1s] }\n",
+    );
+    let lock = dir.write(
+        "interfaces.lock",
+        "# interfaces.lock — written by ridl lock; do not edit by hand.\nnext 3\nCabin 1\nLegacy 2\n",
+    );
+    let lock_uri = uri_of(&lock);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = next_publish(&client, &lock_uri);
+    assert_eq!(codes(&published.diagnostics), ["RIDL-409"]);
+    let diagnostic = &published.diagnostics[0];
+    assert_eq!(
+        diagnostic.range,
+        range((3, 0), (3, 8)),
+        "the entry `Legacy 2` on the fourth line"
+    );
+    assert!(
+        diagnostic.message.contains("--retire Legacy"),
+        "the message names the fix: {}",
+        diagnostic.message
+    );
+
+    shut_down(&client, 10);
     server.join().expect("thread joins").expect("clean exit");
 }

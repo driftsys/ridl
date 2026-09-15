@@ -5,17 +5,22 @@ the ridl profile implements. The `@ridl-diag-showcase` diagnostics snapshot
 (`crates/ridlc/tests/snapshots/`) is the de-facto ridl diagnostic index until
 the error-index website (E4.2), the way `diag-showcase` is for the typl codes.
 
-Two members, because one package cannot provoke everything:
+Three members, because one package cannot provoke everything:
 
 - `main/` — package `diag.ridl`. One file per diagnostic family, so a parse
   error in one family never suppresses the checker in another. Its manifest
   carries an invalid `[defaults].timing`, which is MANI-009; the built-in
   `[100ms..1000ms]` is the fallback, so RIDL-100 still reports concrete bounds.
+  Its `interfaces.lock` holds a live entry, `Legacy`, that no file declares,
+  which is RIDL-409 on the entry's own line; the package has declarations
+  without an entry too, so the message names both `--rename` and `--retire`.
 - `twin/` — package `diag.twin`. It republishes the service name
   `diag.showcase.duplicate`, because the service catalog is a workspace-wide
-  namespace and RIDL-140 cannot be provoked from a single package, and it
-  declares its own `Published` so `main/services.ridl` can compose two
-  interfaces with one name (RIDL-147) — one package cannot declare two.
+  namespace and RIDL-140 cannot be provoked from a single package.
+- `badlock/` — package `diag.badlock`. Its `interfaces.lock` is malformed
+  (`next` is not above the entry's number), which is RIDL-410 on the lock
+  file's own line. The lock is per package, so the code needs a package of its
+  own; the interface beside it checks clean.
 
 `main/narrowing.ridl` and `main/narrowing_returns.ridl` cover what typl shapes
 may cross an interaction boundary — optional in any interaction position, a map
@@ -64,10 +69,11 @@ review caught and no single-clause fixture could have. Keep both clauses.
   108, 109, 110, 112 (both spellings: a bare query, and `@[20ms..]` declaring
   a throttle with no response bound), 140, 141, 143, 144 (a member name
   duplicated across a service's composed interfaces), 145 (the same interface
-  listed twice in one shape list), 146 (a shape re-declared under a
-  service-level `reserved` name — RIDL-401 one level up),
+  listed twice in one shape list),
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
-  406.
+  406, 409 (a live `interfaces.lock` entry with no declaration, from
+  `main/interfaces.lock`), 410 (a malformed `interfaces.lock`, from the
+  `badlock/` member).
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).
 - MANI: 009.
 - TYPL: 005 (the visibility rule, reaching the interaction layer), 301, 303, 304

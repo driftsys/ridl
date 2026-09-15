@@ -122,11 +122,17 @@ fn compile_entry(entry: &Path) -> Compiled {
         let files: Vec<InputFile> = pkg.files(&db).clone();
 
         // The render ids for this package's files, in the same order the
-        // package-scoped passes stamp their FileIds (pkg.files order).
-        let render_ids: Vec<_> = files
+        // package-scoped passes stamp their FileIds (pkg.files order), then
+        // the package's `interfaces.lock` when it has one: the checker stamps
+        // a lock diagnostic (RIDL-409) with the index after the files, so the
+        // lock's own id goes last, as `ridlc::load_and_check` pushes it.
+        let mut render_ids: Vec<_> = files
             .iter()
             .map(|file| sources.file_id(file.path(&db), file.text(&db)))
             .collect();
+        if let Some(lock) = pkg.lock(&db) {
+            render_ids.push(sources.file_id(&lock.path, &lock.text));
+        }
 
         // Parser diagnostics: each file's SyntaxErrors carry their own FORM- or
         // TYPL-302 code and a real range; polish the message into the house
@@ -313,9 +319,9 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
 }
 
 /// A service composing two interfaces (ADR-0015 decision 12) compiles clean,
-/// lowers with 1-based slot ids and its tombstone holding its slot (decision
-/// 15), and survives both interchange encodings unchanged — the shape list is
-/// package data the encodings must carry, not a lowering-only view. The
+/// lowers each reference canonicalized on its own, and survives both
+/// interchange encodings unchanged — the list is package data the encodings
+/// must carry, not a lowering-only view. The
 /// generation halves of the same claim are the `services-workspace` Rust and
 /// TypeScript snapshots, which carry `fleet.vehicle.cockpit`'s rows.
 #[test]
@@ -348,33 +354,18 @@ fn a_composed_service_compiles_and_round_trips_through_the_ir() {
         .iter()
         .find(|service| service.name == "fleet.vehicle.cockpit")
         .expect("the composed service lowers");
-    let slots: Vec<(u32, String)> = cockpit
+    let references: Vec<String> = cockpit
         .shapes
         .iter()
-        .map(|slot| {
-            let kind = match &slot.kind {
-                Some(ridl_ir::v2::service_shape::Kind::InterfaceRef(reference)) => {
-                    reference.clone()
-                }
-                Some(ridl_ir::v2::service_shape::Kind::Reserved(reserved)) => format!(
-                    "reserved {} (ordinal {})",
-                    reserved.name.as_deref().unwrap_or("_"),
-                    reserved.ordinal
-                ),
-                other => panic!("unexpected slot kind: {other:?}"),
-            };
-            (slot.id, kind)
+        .map(|slot| match &slot.kind {
+            Some(ridl_ir::v2::service_shape::Kind::InterfaceRef(reference)) => reference.clone(),
+            other => panic!("unexpected entry kind: {other:?}"),
         })
         .collect();
     assert_eq!(
-        slots,
-        [
-            (1, "fleet.contracts.DoorControl".to_string()),
-            (2, "reserved LegacyCabin (ordinal 2)".to_string()),
-            (3, "fleet.contracts.Telemetry".to_string()),
-        ],
-        "slot ids are 1-based by declaration order, each reference \
-         canonicalized on its own, the tombstone holding its slot",
+        references,
+        ["fleet.contracts.DoorControl", "fleet.contracts.Telemetry"],
+        "each reference is canonicalized on its own, in source order",
     );
 
     // Both interchange encodings carry the shape list unchanged (the JSON
@@ -455,9 +446,6 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RIDL-143", Showcase),
     ("RIDL-144", Showcase),
     ("RIDL-145", Showcase),
-    ("RIDL-146", Showcase),
-    ("RIDL-147", Showcase),
-    ("RIDL-148", Showcase),
     ("RIDL-149", Showcase),
     ("RIDL-201", Showcase),
     ("RIDL-202", Showcase),
@@ -496,6 +484,30 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      about to replace, which is outside `ridlc`'s source-to-IR function, so it \
                      is never a compile diagnostic (ADR-0008 decisions 9 and 13). Provoked by \
                      `baseline_refuses_to_publish_an_untombstoned_removal` in \
+                     `crates/ridl/tests/baseline_gate.rs`",
+        },
+    ),
+    ("RIDL-409", Showcase),
+    ("RIDL-410", Showcase),
+    (
+        "RIDL-411",
+        Elsewhere {
+            fixture: "crates/ridl/tests/baseline_gate.rs",
+            reason: "the publication gate reads the snapshot `ridl baseline` is about to \
+                     publish, outside `ridlc`'s source-to-IR function, so it is never a \
+                     compile diagnostic (ADR-0008 decisions 9 and 13; lock design section 8). \
+                     Provoked by `baseline_refuses_a_provisional_number` in \
+                     `crates/ridl/tests/baseline_gate.rs`",
+        },
+    ),
+    (
+        "RIDL-412",
+        Elsewhere {
+            fixture: "crates/ridl/tests/baseline_gate.rs",
+            reason: "the publication gate reads the baseline directory that `ridl baseline` is \
+                     about to replace, outside `ridlc`'s source-to-IR function, so it is never \
+                     a compile diagnostic (ADR-0008 decisions 9 and 13; lock design section 8). \
+                     Provoked by `baseline_refuses_a_number_dropped_without_a_retired_entry` in \
                      `crates/ridl/tests/baseline_gate.rs`",
         },
     ),
@@ -968,9 +980,6 @@ fn showcase_pins_every_severity() {
         ("RIDL-143", Severity::Error),
         ("RIDL-144", Severity::Error),
         ("RIDL-145", Severity::Error),
-        ("RIDL-146", Severity::Error),
-        ("RIDL-147", Severity::Error),
-        ("RIDL-148", Severity::Error),
         ("RIDL-149", Severity::Error),
         ("RIDL-201", Severity::Error),
         ("RIDL-202", Severity::Error),
@@ -988,6 +997,8 @@ fn showcase_pins_every_severity() {
         ("RIDL-404", Severity::Warning),
         ("RIDL-405", Severity::Info),
         ("RIDL-406", Severity::Info),
+        ("RIDL-409", Severity::Error),
+        ("RIDL-410", Severity::Error),
         ("TYPL-005", Severity::Error),
         ("TYPL-115", Severity::Info),
         ("TYPL-301", Severity::Error),

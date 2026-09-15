@@ -1,0 +1,12 @@
+// The third workspace member. Its one job is RIDL-410: a malformed
+// `interfaces.lock` beside the sources. The lock is per package, so the code
+// needs a package of its own, whose file is broken by hand — `next` is not
+// above the entry's number. The interface itself checks clean.
+
+package diag.badlock
+
+type Heartbeat : integer [0..255]
+
+interface Badlock {
+  signal alive : Heartbeat @[1s..10s]
+}

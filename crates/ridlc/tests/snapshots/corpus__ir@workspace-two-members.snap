@@ -55,7 +55,8 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
     }
   ],
   "interfaces": [],
-  "services": []
+  "services": [],
+  "retired": []
 }
 
 // ===== package veh.cluster =====
@@ -93,5 +94,6 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
     }
   ],
   "interfaces": [],
-  "services": []
+  "services": [],
+  "retired": []
 }

@@ -81,7 +81,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 1,
+      "provisional": true
     },
     {
       "name": "LaneAssist",
@@ -110,7 +112,9 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 2,
+      "provisional": true
     }
   ],
   "services": [
@@ -121,7 +125,6 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "interfaceRef": "CruiseControl"
         }
       ]
@@ -133,12 +136,12 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "interfaceRef": "LaneAssist"
         }
       ]
     }
-  ]
+  ],
+  "retired": []
 }
 
 // ===== package veh.common =====
@@ -253,7 +256,8 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
     }
   ],
   "interfaces": [],
-  "services": []
+  "services": [],
+  "retired": []
 }
 
 // ===== package veh.diag =====
@@ -269,7 +273,6 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "inline": {
             "name": "",
             "visibility": "VISIBILITY_UNSPECIFIED",
@@ -299,12 +302,15 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
                   }
                 }
               }
-            ]
+            ],
+            "number": 1,
+            "provisional": true
           }
         }
       ]
     }
-  ]
+  ],
+  "retired": []
 }
 
 // ===== package veh.topology =====
@@ -312,5 +318,6 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
   "name": "veh.topology",
   "decls": [],
   "interfaces": [],
-  "services": []
+  "services": [],
+  "retired": []
 }

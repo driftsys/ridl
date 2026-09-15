@@ -1,10 +1,12 @@
 //! The comparison walk over two resolved IR v2 packages.
 //!
-//! The walk matches package declarations, interfaces, services, and
-//! interactions by name within their container, then compares the aspects
-//! that carry contract identity — ordinals, payloads, timings, returns,
-//! parameters, contracts, widths, constraints, and inits — emitting one
-//! [`Change`](crate::Change) per difference with an honest path.
+//! The walk matches package declarations, services, and interactions by name
+//! within their container, and interfaces — declared ones and the inline
+//! shapes of services alike — by the number each carries from its package's
+//! `interfaces.lock` (lock design §7; see `diff_interfaces`). It then compares
+//! the aspects that carry contract identity — ordinals, payloads, timings,
+//! returns, parameters, contracts, widths, constraints, and inits — emitting
+//! one [`Change`](crate::Change) per difference with an honest path.
 //!
 //! Ordinal analysis (ridl §11) is done on the surviving interactions of an
 //! interface. A new slot is [`InteractionAppended`](crate::Category::InteractionAppended)
@@ -44,13 +46,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use ridl_ir::v2;
 
 use crate::classify::{struct_slots, union_slots};
-use crate::{Category, Change, emit};
+use crate::{Category, Change, emit, frozen};
 
 /// Walks two matched packages, appending every difference to `changes`.
 pub(crate) fn walk_packages(old: &v2::Package, new: &v2::Package, changes: &mut Vec<Change>) {
     let pkg = new.name.as_str();
     diff_decls(pkg, &old.decls, &new.decls, changes);
-    diff_interfaces(pkg, &old.interfaces, &new.interfaces, changes);
+    diff_interfaces(pkg, old, new, changes);
     diff_services(pkg, &old.services, &new.services, changes);
 }
 
@@ -319,49 +321,146 @@ fn diff_composite(
 // Interfaces and interactions.
 // ==========================================================================
 
-fn diff_interfaces(
-    pkg: &str,
-    old: &[v2::Interface],
-    new: &[v2::Interface],
-    changes: &mut Vec<Change>,
-) {
-    let old_by: BTreeMap<&str, &v2::Interface> = old.iter().map(|i| (i.name.as_str(), i)).collect();
-    let new_by: BTreeMap<&str, &v2::Interface> = new.iter().map(|i| (i.name.as_str(), i)).collect();
+/// A shape's place in the walk's maps: its form — `false` for a declared
+/// interface, `true` for a service's inline shape — then its identity name.
+/// The form comes first so that a declared interface and an inline shape
+/// spelled the same (`interface cabin` beside `service cabin`) are two keys,
+/// and so that the declared interfaces sort before the inline shapes.
+type ShapeKey<'a> = (bool, &'a str);
 
-    for (name, old_iface) in &old_by {
-        match new_by.get(name) {
-            Some(new_iface) => {
-                if interface_envelope_differs(old_iface, new_iface) {
-                    emit(
-                        changes,
-                        format!("{pkg}/{name}"),
-                        Category::DocOnly,
-                        None,
-                        None,
-                    );
-                }
-                emit_visibility(
-                    changes,
-                    format!("{pkg}/{name}"),
-                    old_iface.visibility,
-                    new_iface.visibility,
-                );
-                diff_interface(pkg, name, old_iface, new_iface, changes);
-            }
-            None => emit(
-                changes,
-                format!("{pkg}/{name}"),
-                Category::DeclRemoved,
-                Some("interface".to_string()),
-                None,
-            ),
+fn shapes_by_key(package: &v2::Package) -> BTreeMap<ShapeKey<'_>, v2::InterfaceShape<'_>> {
+    package
+        .shapes()
+        .map(|shape| ((shape.is_inline(), shape.name), shape))
+        .collect()
+}
+
+/// The interface walk, over every shape of the package — the declared
+/// interfaces and the inline shapes of its services alike — matched by the
+/// number each carries from its `interfaces.lock` (lock design §7; plan
+/// decision PD-1), in three passes:
+///
+/// 1. an old shape with a frozen, non-zero number matches the new shape with
+///    the same frozen number, whatever either is named;
+/// 2. an old shape with no identity — `number` 0, from a snapshot published
+///    before the lock existed, or a provisional number — matches by name and
+///    form among the new shapes pass 1 left unmatched;
+/// 3. an old shape still unmatched is `InterfaceRetired` when its frozen
+///    number is in the new side's retired entries and `DeclRemoved`
+///    otherwise; a new shape still unmatched is `DeclAdded`.
+///
+/// A frozen old number therefore never matches a new provisional shape: a
+/// rename keeps its number, so a provisional shape is always a new interface.
+/// Two new shapes cannot carry one frozen number — the checker refuses the
+/// lock that would give them one (RIDL-410) — so pass 1 reads the first.
+///
+/// A matched pair whose names differ is `InterfaceRenamed`, compatible, and
+/// its body is then diffed as any other pair's; every change path carries the
+/// new side's name (plan decision PD-14), so the desk check's index finds a
+/// span, and the classifier re-finds the old side by number. The envelope and
+/// the visibility of a declared interface are compared here; an inline
+/// shape's are its service's, which `diff_service` compares under the same
+/// path, so an inline shape whose service is added or removed is reported at
+/// both levels: once as the service, once as the interface whose number went
+/// with it.
+///
+/// Changes come out in the old side's key order — the declared interfaces by
+/// name, then the inline shapes by service name — and the additions in the new
+/// side's key order.
+fn diff_interfaces(pkg: &str, old: &v2::Package, new: &v2::Package, changes: &mut Vec<Change>) {
+    let old_shapes = shapes_by_key(old);
+    let new_shapes = shapes_by_key(new);
+
+    let new_by_number: BTreeMap<u32, ShapeKey<'_>> = new_shapes
+        .iter()
+        .rev()
+        .filter(|(_, shape)| frozen(shape.interface))
+        .map(|(key, shape)| (shape.interface.number, *key))
+        .collect();
+
+    // Old key to new key, and the new keys taken so far.
+    let mut pairs: BTreeMap<ShapeKey<'_>, ShapeKey<'_>> = BTreeMap::new();
+    let mut taken: BTreeSet<ShapeKey<'_>> = BTreeSet::new();
+    // Pass 1: by frozen number.
+    for (old_key, old_shape) in &old_shapes {
+        if !frozen(old_shape.interface) {
+            continue;
+        }
+        if let Some(new_key) = new_by_number.get(&old_shape.interface.number)
+            && taken.insert(*new_key)
+        {
+            pairs.insert(*old_key, *new_key);
         }
     }
-    for name in new_by.keys() {
-        if !old_by.contains_key(name) {
+    // Pass 2: by name and form, for an old shape with no identity.
+    for (old_key, old_shape) in &old_shapes {
+        if frozen(old_shape.interface) {
+            continue;
+        }
+        if new_shapes.contains_key(old_key) && taken.insert(*old_key) {
+            pairs.insert(*old_key, *old_key);
+        }
+    }
+
+    for (old_key, old_shape) in &old_shapes {
+        let Some(new_key) = pairs.get(old_key) else {
+            let number = old_shape.interface.number;
+            let sanctioned = frozen(old_shape.interface)
+                && new.retired.iter().any(|entry| entry.number == number);
+            if sanctioned {
+                emit(
+                    changes,
+                    format!("{pkg}/{}", old_shape.name),
+                    Category::InterfaceRetired,
+                    Some("interface".to_string()),
+                    Some("retired".to_string()),
+                );
+            } else {
+                emit(
+                    changes,
+                    format!("{pkg}/{}", old_shape.name),
+                    Category::DeclRemoved,
+                    Some("interface".to_string()),
+                    None,
+                );
+            }
+            continue;
+        };
+        let new_shape = &new_shapes[new_key];
+        let name = new_shape.name;
+        if old_shape.name != name {
             emit(
                 changes,
                 format!("{pkg}/{name}"),
+                Category::InterfaceRenamed,
+                Some(old_shape.name.to_string()),
+                Some(name.to_string()),
+            );
+        }
+        if !new_shape.is_inline() {
+            if interface_envelope_differs(old_shape.interface, new_shape.interface) {
+                emit(
+                    changes,
+                    format!("{pkg}/{name}"),
+                    Category::DocOnly,
+                    None,
+                    None,
+                );
+            }
+            emit_visibility(
+                changes,
+                format!("{pkg}/{name}"),
+                old_shape.visibility(),
+                new_shape.visibility(),
+            );
+        }
+        diff_interface(pkg, name, old_shape.interface, new_shape.interface, changes);
+    }
+    for (new_key, new_shape) in &new_shapes {
+        if !taken.contains(new_key) {
+            emit(
+                changes,
+                format!("{pkg}/{}", new_shape.name),
                 Category::DeclAdded,
                 None,
                 Some("interface".to_string()),
@@ -792,12 +891,16 @@ fn diff_service(
     // inline shape, never mixed with named shapes). A switch between the two
     // forms stays `ServiceChanged` — extraction rewrites the transport
     // identity of every fallible query in the shape (ADR-0015 decision 15) —
-    // while a changed shape list is read by the five `ServiceShape*`
-    // categories below (decision 19, which narrows `ServiceChanged` to the
-    // form switch).
+    // while a changed list is read as a set by `diff_service_set` (decision
+    // 19 as amended on 2026-09-15, which narrows `ServiceChanged` to the form
+    // switch). Two inline shapes are not diffed here: an inline shape is an
+    // interface with its own lock number, and `diff_interfaces` matched it by
+    // that number, so its body was compared there — under this service's
+    // name when the number was found under it, or under the name of whichever
+    // service holds the number now.
     match (inline_shape(old), inline_shape(new)) {
-        (Some(a), Some(b)) => diff_interface(pkg, name, a, b, changes),
-        (None, None) => diff_service_shapes(pkg, name, old, new, changes),
+        (Some(_), Some(_)) => {}
+        (None, None) => diff_service_set(pkg, name, old, new, changes),
         (old_inline, new_inline) => {
             emit(
                 changes,
@@ -810,225 +913,40 @@ fn diff_service(
     }
 }
 
-/// The shape-list walk of one matched named-form service — the service-level
-/// reading of the interaction walk above (ADR-0015 decision 19): interface
-/// ids follow ridl §11's model one level up (decision 15), so the analysis is
-/// inherited, not invented. Slots key on the interface **name** — the
-/// identity a binding separates the ordinal spaces by (decision 17) — so the
-/// walk matches a removal against its tombstone the way the checker's
-/// RIDL-146 does. The keying is sound only under two guarantees the checker
-/// gives (ADR-0015 decision 24): an interface name is unique within a
-/// service (RIDL-147, with RIDL-145 and RIDL-146 covering the other
-/// collisions) and every tombstone spells a name (RIDL-148). A snapshot
-/// loaded off disk can violate both, so [`keyed_by_name`] gates the walk and
-/// an unkeyable list is compared as a whole, failing closed. A matched
-/// slot's **reference** is compared too: a retarget is a removal plus a
-/// reuse of the freed slot (decision 24), never a match.
-fn diff_service_shapes(
+/// The set walk of one matched named-form service (ADR-0015 decision 19 as
+/// amended on 2026-09-15): a service's list is a set of interface references,
+/// keyed on the canonical reference the checker lowered. An interface in one
+/// set and not the other is `ServiceInterfaceRemoved` or
+/// `ServiceInterfaceAdded`; the list's order carries nothing, so a reorder is
+/// no change. A `reserved` slot the IR may still carry is ignored: a set holds
+/// no tombstone. The change path is `<package>/<service>/<reference>`, the
+/// reference whole because two references may share a final segment.
+fn diff_service_set(
     pkg: &str,
     svc: &str,
     old: &v2::Service,
     new: &v2::Service,
     changes: &mut Vec<Change>,
 ) {
-    // A list that cannot be keyed by interface name — a nameless tombstone,
-    // one name on two slots — is IR the checker rejects (RIDL-145 to
-    // RIDL-148). Matching it by name collapses slots, which is how a dropped
-    // twin-named shape once diffed as `identical` (ADR-0015 decision 24), so
-    // such a list is compared as a whole instead: unchanged is honest, and
-    // any difference classifies breaking (ADR-0012 decision 9 — an
-    // unrecognised case never reports compatible).
-    if !keyed_by_name(old) || !keyed_by_name(new) {
-        if old.shapes != new.shapes {
-            emit(
-                changes,
-                format!("{pkg}/{svc}"),
-                Category::ServiceChanged,
-                Some("a shape list that cannot be keyed by interface name".to_string()),
-                Some("compared as a whole".to_string()),
-            );
-        }
-        return;
-    }
-
-    let old_live = live_shapes(old);
-    let new_live = live_shapes(new);
-    let old_reserved = reserved_shapes(old);
-    let new_reserved = reserved_shapes(new);
-
-    let old_live_names: BTreeSet<&str> = old_live.iter().map(|(name, ..)| *name).collect();
-    let new_live_map: BTreeMap<&str, (u32, &str)> = new_live
-        .iter()
-        .map(|(name, id, reference)| (*name, (*id, *reference)))
-        .collect();
-
-    // (name, old id, new id) for shapes present on both sides under the same
-    // reference.
-    let mut matched: Vec<(&str, u32, u32)> = Vec::new();
-    // Names present on both sides whose reference changed — retargeted, so
-    // never matched (ADR-0015 decision 24).
-    let mut retargeted: BTreeSet<&str> = BTreeSet::new();
-
-    for (name, old_id, old_ref) in &old_live {
-        let shape_path = format!("{pkg}/{svc}/{name}");
-        match new_live_map.get(name) {
-            Some((new_id, new_ref)) if new_ref == old_ref => {
-                matched.push((name, *old_id, *new_id));
-            }
-            // The reference behind a surviving name changed — a retarget.
-            // The superseded `ServiceChanged` comparison reported this
-            // breaking, and the per-slot categories keep covering it
-            // (ADR-0015 decision 24): the old interface leaves the list
-            // with no tombstone here, and the loop over the new side
-            // reports the incoming reference against the slot it takes.
-            Some(_) => {
-                retargeted.insert(*name);
-                emit(
-                    changes,
-                    shape_path,
-                    Category::ServiceShapeRemoved,
-                    Some((*old_ref).to_string()),
-                    None,
-                );
-            }
-            None => {
-                if let Some(reserved_id) = new_reserved.get(name) {
-                    // A tombstone must hold the retired shape's own slot
-                    // (ridl §11 one level up). A tombstone placed elsewhere
-                    // lets the surviving shapes slide into the freed slot.
-                    if *reserved_id == *old_id {
-                        emit(
-                            changes,
-                            shape_path,
-                            Category::ServiceShapeRetired,
-                            Some((*old_ref).to_string()),
-                            Some("reserved".to_string()),
-                        );
-                    } else {
-                        emit(
-                            changes,
-                            shape_path,
-                            Category::ServiceShapeRemoved,
-                            Some(format!("{old_ref} at slot {old_id}")),
-                            Some(format!("reserved at slot {reserved_id}")),
-                        );
-                    }
-                } else {
-                    emit(
-                        changes,
-                        shape_path,
-                        Category::ServiceShapeRemoved,
-                        Some((*old_ref).to_string()),
-                        None,
-                    );
-                }
-            }
-        }
-    }
-
-    // A tombstone is a permanent slot reservation. Dropping one, or moving
-    // it, lets every later shape slide down into the freed slot.
-    for (name, old_id) in &old_reserved {
-        if new_live_map.contains_key(name) {
-            continue; // handled as ReservedNameRedeclared below.
-        }
-        match new_reserved.get(name) {
-            Some(new_id) if new_id == old_id => {}
-            Some(new_id) => emit(
-                changes,
-                format!("{pkg}/{svc}/{name}"),
-                Category::ServiceShapeReordered,
-                Some(format!("reserved at slot {old_id}")),
-                Some(format!("reserved at slot {new_id}")),
-            ),
-            None => emit(
-                changes,
-                format!("{pkg}/{svc}/{name}"),
-                Category::ServiceShapeRemoved,
-                Some(format!("reserved at slot {old_id}")),
-                None,
-            ),
-        }
-    }
-
-    // The new-side ids of the slots that existed before the change — the
-    // anchors an addition is judged against, exactly as in the interaction
-    // walk: a new slot sitting before any of them was inserted, not appended.
-    let mut anchor_ids: Vec<u32> = matched.iter().map(|(_, _, new_id)| *new_id).collect();
-    for (name, new_id) in &new_reserved {
-        if old_live_names.contains(name) || old_reserved.contains_key(name) {
-            anchor_ids.push(*new_id);
-        }
-    }
-
-    // A tombstone minted for a name the old snapshot never held reserves a
-    // fresh slot; written before an anchor it shifts every later id.
-    for (name, new_id) in &new_reserved {
-        if old_live_names.contains(name) || old_reserved.contains_key(name) {
-            continue;
-        }
-        let category = if anchor_ids.iter().any(|&anchor| anchor > *new_id) {
-            Category::ServiceShapeInserted
-        } else {
-            Category::ServiceShapeAppended
-        };
+    let old_refs = interface_refs(old);
+    let new_refs = interface_refs(new);
+    for reference in old_refs.difference(&new_refs) {
         emit(
             changes,
-            format!("{pkg}/{svc}/{name}"),
-            category,
+            format!("{pkg}/{svc}/{reference}"),
+            Category::ServiceInterfaceRemoved,
+            Some((*reference).to_string()),
             None,
-            Some(format!("reserved at slot {new_id}")),
         );
     }
-
-    for (name, new_id, new_ref) in &new_live {
-        // A matched name is settled above — unless its reference changed, in
-        // which case the incoming reference is a new occupant of the slot
-        // and is judged here like any other addition (ADR-0015 decision 24).
-        if old_live_names.contains(name) && !retargeted.contains(name) {
-            continue;
-        }
-        let shape_path = format!("{pkg}/{svc}/{name}");
-        if old_reserved.contains_key(name) {
-            emit(
-                changes,
-                shape_path,
-                Category::ReservedNameRedeclared,
-                Some("reserved".to_string()),
-                Some((*new_ref).to_string()),
-            );
-        } else {
-            let category = if anchor_ids.iter().any(|&anchor| anchor > *new_id) {
-                Category::ServiceShapeInserted
-            } else {
-                Category::ServiceShapeAppended
-            };
-            emit(
-                changes,
-                shape_path,
-                category,
-                None,
-                Some((*new_ref).to_string()),
-            );
-        }
-    }
-
-    // Surviving shapes whose relative order changed. An absolute-id shift
-    // that preserves relative order is a consequence of a slot added or
-    // released elsewhere, and every such cause is independently reported as
-    // breaking — the interaction walk's argument, inherited whole.
-    let old_rank = rank_by(&matched, |(_, old_id, _)| *old_id);
-    let new_rank = rank_by(&matched, |(_, _, new_id)| *new_id);
-    for (name, old_id, new_id) in &matched {
-        if old_rank[name] != new_rank[name] {
-            emit(
-                changes,
-                format!("{pkg}/{svc}/{name}"),
-                Category::ServiceShapeReordered,
-                Some(old_id.to_string()),
-                Some(new_id.to_string()),
-            );
-        }
+    for reference in new_refs.difference(&old_refs) {
+        emit(
+            changes,
+            format!("{pkg}/{svc}/{reference}"),
+            Category::ServiceInterfaceAdded,
+            None,
+            Some((*reference).to_string()),
+        );
     }
 }
 
@@ -1073,68 +991,14 @@ fn inline_shape(service: &v2::Service) -> Option<&v2::Interface> {
     })
 }
 
-/// The named shapes of a service as (interface name, slot id, full
-/// reference). The name — the reference's final segment — is the identity a
-/// binding keys the ordinal spaces on (ADR-0015 decision 17) and what a
-/// service-level tombstone spells, so it is what the walk matches slots by;
-/// the full reference is what the report renders.
-fn live_shapes(service: &v2::Service) -> Vec<(&str, u32, &str)> {
+/// The interface references of a service's set — every `InterfaceRef` slot,
+/// by its canonical reference. An inline or `reserved` slot is not a member.
+fn interface_refs(service: &v2::Service) -> BTreeSet<&str> {
     service
         .shapes
         .iter()
         .filter_map(|slot| match &slot.kind {
-            Some(v2::service_shape::Kind::InterfaceRef(reference)) => Some((
-                reference.rsplit('.').next().unwrap_or(reference.as_str()),
-                slot.id,
-                reference.as_str(),
-            )),
-            _ => None,
-        })
-        .collect()
-}
-
-/// Whether a service's named shape list can be keyed by interface name — the
-/// property the checker guarantees (RIDL-145 to RIDL-148) and the shape walk
-/// stands on (ADR-0015 decisions 17 and 24): every slot recognised, every
-/// tombstone named, and no interface name held by two slots. A snapshot
-/// loaded off disk can violate any of these, and a name-keyed walk over such
-/// a list collapses slots into one another, so the caller compares the list
-/// as a whole and fails closed instead (ADR-0012 decision 9).
-fn keyed_by_name(service: &v2::Service) -> bool {
-    let mut seen = BTreeSet::new();
-    for slot in &service.shapes {
-        let name = match &slot.kind {
-            Some(v2::service_shape::Kind::InterfaceRef(reference)) => {
-                reference.rsplit('.').next().unwrap_or(reference.as_str())
-            }
-            Some(v2::service_shape::Kind::Reserved(reserved)) => match reserved.name.as_deref() {
-                Some(name) => name,
-                None => return false,
-            },
-            // `diff_service` routes a list holding an inline slot to
-            // `diff_interface` or `ServiceChanged`, so one here — like a
-            // slot with no kind at all — is IR this walk does not recognise.
-            Some(v2::service_shape::Kind::Inline(_)) | None => return false,
-        };
-        if !seen.insert(name) {
-            return false;
-        }
-    }
-    true
-}
-
-/// The names retired by service-level `reserved` tombstones, each with the
-/// slot its tombstone holds. A nameless tombstone cannot reach here — a list
-/// holding one fails [`keyed_by_name`] and is never walked (ADR-0015
-/// decision 24).
-fn reserved_shapes(service: &v2::Service) -> BTreeMap<&str, u32> {
-    service
-        .shapes
-        .iter()
-        .filter_map(|slot| match &slot.kind {
-            Some(v2::service_shape::Kind::Reserved(reserved)) => {
-                reserved.name.as_deref().map(|name| (name, slot.id))
-            }
+            Some(v2::service_shape::Kind::InterfaceRef(reference)) => Some(reference.as_str()),
             _ => None,
         })
         .collect()

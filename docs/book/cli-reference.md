@@ -66,6 +66,7 @@ Commands:
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
+  lock      Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   help      Print this message or the help of the given subcommand(s)
@@ -266,9 +267,15 @@ warning[RIDL-407]: `doorClosed` has moved in `VehicleStatus` since the published
 ```
 
 That run exits 0: two RIDL-407 warnings and an otherwise clean compile stay
-clean. The desk check runs only after a compile with no error diagnostic, so
-a workspace that fails to check at all draws no RIDL-407 warning on top of its
-real problem — it just exits 1, exactly as it would with no baseline present.
+clean. The desk check runs only after a compile with no error diagnostic other
+than RIDL-409 — a live `interfaces.lock` entry with no declaration, which
+leaves nothing out of the IR the desk check compares. A workspace with any
+other error draws no RIDL-407 warning in addition to that error: it exits 1,
+exactly as it would with no baseline present. A workspace whose only errors
+are RIDL-409 still exits 1, and the desk check runs over it: when exactly one
+declaration without an entry has the published shape of the orphan entry's
+interface, the desk check adds a label to that RIDL-409 naming the
+[`ridl lock --rename`](#ridl-lock) command to run.
 
 ### `ridl baseline`
 
@@ -296,8 +303,11 @@ root when the manifest declares `[imports]` (`ridl baseline` builds through
 `ridlc build`, non-frozen, so the same materialization step runs). Publishing
 the snapshots is wholesale: the target directory ends up holding exactly the
 snapshots the workspace declares now, and nothing else in that directory is
-touched. A two-member workspace with no `[imports]` writes two files and no
-lockfile:
+touched. The workspace's interface numbers must be recorded first: a
+provisional number is refused (RIDL-411, under the publication gate below), so
+a package with interfaces runs plain [`ridl lock`](#ridl-lock) before its
+first publication. A two-member workspace with no `[imports]`, its locks
+written, publishes two files and no `ridl.lock`:
 
 ```sh
 ridl baseline && find .ridl/baseline -type f | sort
@@ -319,10 +329,16 @@ all; the source retires it with a `reserved` line, but at an ordinal other
 than the one the interaction held; the baseline already retired the
 interaction with a `reserved` line and the source has dropped that line; or
 the source declares a live interaction under a name the baseline retires.
-The gate covers the interaction level only: a whole interface or service
+The interface level of the gate is the lock's: an interface whose number is
+provisional — a declaration with no entry in the package's `interfaces.lock`
+— is refused (RIDL-411, exit 1, nothing published), on a first publication as
+on a replacement, until plain `ridl lock` records the number; and a number the
+published baseline holds that the fresh snapshot neither carries nor retires
+is refused too (RIDL-412) — a lock line deleted by hand, since a live entry
+with no declaration already fails the build with RIDL-409. A whole service
 removed from the source is reported by `ridl diff` as breaking but is not
-refused here (ridl §17.14), and a named-form service's shape list is not
-read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
+refused here (ridl §17.14), and a named-form service's list is a set the gate
+does not read. Deleting `doorClosed` outright, with `doorOpened` and `doorLocked`
 still declared:
 
 ```sh
@@ -339,12 +355,14 @@ error[RIDL-408]: `doorClosed` is gone from the source but the baseline being rep
 ```
 
 A first publication — the output directory absent, or present and holding no
-`.ir.json` snapshot yet — has nothing to compare against, so it is never
-refused. This is the same empty-directory shape [`ridl check --baseline`
-refuses](#ridl-check) when it is named explicitly: `ridl check --baseline`
-refuses it because the user named the directory as a baseline to compare
-against, while `ridl baseline --out` treats it as a first publication because
-it is the directory being written.
+`.ir.json` snapshot yet — has no published snapshot to compare against, so
+RIDL-408 and RIDL-412 never refuse it. This is the same empty-directory shape
+[`ridl check --baseline` refuses](#ridl-check) when it is named explicitly:
+`ridl check --baseline` refuses it because the user named the directory as a
+baseline to compare against, while `ridl baseline --out` treats it as a first
+publication because it is the directory being written. RIDL-411 still refuses
+a first publication that holds a provisional interface number, because
+RIDL-411 reads the fresh snapshot alone.
 
 **Exit codes.** 0 on a clean publish. 1 when a diagnostic is an error, or when
 the publication gate above refuses the replacement — in both cases the
@@ -765,11 +783,11 @@ ridl fmt --check .
 error: cannot read ./sub: Permission denied (os error 13)
 ```
 
-Of the eight subcommands that take a path, [ADR-0010][adr-0010] decision 6
+Of the nine subcommands that take a path, [ADR-0010][adr-0010] decision 6
 found `ridl fmt` is the only one that reliably names the actual unreadable
 path this way in every case it was tested against. `ridl check`, `ridl build`,
-`ridl baseline`, `ridlc check`, and `ridlc build` still exit 2 on the same
-inputs, but with the wrong cause or none: an unreadable *workspace root*
+`ridl baseline`, `ridl lock`, `ridlc check`, and `ridlc build` still exit 2 on
+the same inputs, but with the wrong cause or none: an unreadable *workspace root*
 reports `` error: no `ridl.toml` found at or above `<path>` `` — confirmed
 directly against this build — and an unreadable subdirectory nested inside an
 otherwise-readable workspace reports a bare `error: Permission denied (os
@@ -846,7 +864,57 @@ breaking
   [breaking] payload_changed veh.cluster/VehicleStatus/currentSpeed: Speed -> Speed2
 ```
 
-The same comparison with `--format json`:
+A named-form service's list is a set of interfaces: an interface joining it
+is `service_interface_added`, one leaving it `service_interface_removed`, a
+reorder no change, and both are compatible, because an interface's number
+comes from its package's `interfaces.lock` and the routing key does not
+contain the service. A removal is still visible in source — the
+`service.member` addresses of that interface stop resolving under the service
+— so the text report lists it under a heading of its own, printed once as a
+line ending in a colon, after every change that has no heading. The JSON
+report carries the category word and no heading field. With `interface K`
+added and `J` dropped from `service veh.cluster.dash : I, J`:
+
+```sh
+ridl diff dash-old.ridl dash-new.ridl
+```
+
+```text
+compatible
+  [compatible] decl_added veh.cluster/K: (absent) -> interface
+compatible on the wire, visible in source:
+  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
+```
+
+An interface is matched by its number from the package's `interfaces.lock`,
+not by its name — a declared `interface` and a service's inline shape alike. A
+rename that keeps its number, recorded with `ridl lock <pkg> --rename Old=New`,
+is `interface_renamed`: compatible on the wire, because the number is the
+routing identity, and visible in source, because the generated identity-table
+names change, so it shares the heading above; the path carries the new name,
+and a change inside the renamed interface is reported under the new name too.
+A number gone from the new side is `interface_retired` when that side's lock
+retires it, and `decl_removed`, breaking, otherwise. A declaration with no lock
+entry carries a provisional number, which is no identity: it is always
+`decl_added`, and it is never matched to an old interface, so a rename the lock
+does not record is `decl_removed` plus `decl_added`. Two sides with no lock
+file — two bare source trees, or a snapshot published before the lock existed —
+are matched by name. With `J` renamed to `Jay` on its number, the lock beside
+each file recording it, and `Jay` no longer listed in
+`service veh.cluster.dash : I, J`:
+
+```sh
+ridl diff old/dash.ridl new/dash.ridl
+```
+
+```text
+compatible
+compatible on the wire, visible in source:
+  [compatible] interface_renamed veh.cluster/Jay: J -> Jay
+  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
+```
+
+The breaking comparison above with `--format json`:
 
 ```sh
 ridl diff old.ridl breaking.ridl --format json
@@ -934,6 +1002,8 @@ error: unknown change category `not_a_real_category`
 the categories `ridl diff` reports are:
   decl_added
   decl_removed
+  interface_renamed
+  interface_retired
   member_reordered
   interaction_appended
   interaction_inserted
@@ -952,14 +1022,194 @@ the categories `ridl diff` reports are:
   init_changed
   reserved_name_redeclared
   service_changed
-  service_shape_appended
-  service_shape_inserted
-  service_shape_reordered
-  service_shape_removed
-  service_shape_retired
+  service_interface_added
+  service_interface_removed
   doc_only
   visibility_changed
 ```
+
+### `ridl lock`
+
+```sh
+ridl lock --help
+```
+
+```text
+Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
+
+Usage: ridl lock [OPTIONS] [PATH]
+       ridl lock <COMMAND>
+
+Commands:
+  merge  The git merge driver for `interfaces.lock`: a three-way merge over entries matched by number, written to OURS. Exit 0 when the merge is clean, 1 when entries disagree (they are left between conflict markers of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an input cannot be read or does not parse (OURS is left as it was). Register it with `.gitattributes` and `git config` as the CLI reference documents
+  help   Print this message or the help of the given subcommand(s)
+
+Arguments:
+  [PATH]  A package directory, a workspace root, or a file. A directory named `merge` is spelled `./merge`, since the bare word is the subcommand [default: .]
+
+Options:
+      --rename <OLD=NEW>  Rewrite the live entry OLD to hold the key NEW, keeping its number (repeatable). NEW must be a declaration without an entry
+      --retire <NAME>     Mark the live entry NAME retired, keeping its line and its number (repeatable). NAME must no longer be declared
+  -h, --help              Print help
+```
+
+**It writes** `interfaces.lock` in the package directory, beside the `.ridl`
+sources — the line table that gives every interface of the package its
+number (ridl §11): a `#` header, `next N`, then one entry per interface,
+`Name N`, with the word `retired` after the number when the interface is
+gone. A service's inline shape is an interface too and is keyed `service:`
+followed by the service's dotted name. Only `ridl lock` writes the file: the
+compiler reads it beside the sources, and `ridl fmt` never touches it.
+
+Plain `ridl lock` is the only form that allocates. Every declared interface
+whose name has no live entry gets the next free number, in byte order of the
+name, and the file is written; a declaration that already has its entry is
+left as it is. Over a package holding `interface Zone` and `interface Cabin`
+and no lock file yet:
+
+```sh
+ridl lock . ; echo "exit: $?"
+```
+
+```text
+allocated Cabin 1
+allocated Zone 2
+exit: 0
+```
+
+```text
+# interfaces.lock — written by ridl lock; do not edit by hand.
+next 3
+Cabin 1
+Zone 2
+```
+
+Run again with nothing to allocate, it prints nothing, writes nothing and
+exits 0. Over a workspace it writes each package's own file, and each output
+line is prefixed with the package directory relative to `PATH` and a colon:
+`hvac: allocated Cabin 1`. Until `ridl lock` has run, a declaration with no
+entry compiles with a provisional number, which carries no identity.
+
+The reverse case — a live entry whose interface is gone from the source — is
+RIDL-409 from the compiler, and plain `ridl lock` refuses to allocate over it:
+nothing is written, exit 1. The two flags are that diagnostic's fix, and they
+run with RIDL-409 present:
+
+- `--rename OLD=NEW` rewrites the entry `OLD` to hold the key `NEW` in place,
+  keeping its number, when `NEW` is a declaration without an entry — the same
+  interface under a new name. Printed as `renamed Old New N`.
+- `--retire NAME` marks the entry retired, keeping its line and its number,
+  when nothing declares `NAME` any more. Printed as `retired Name N`.
+
+Both are repeatable, neither allocates, and `PATH` must resolve to exactly one
+package. A rename keeps the number because the number, not the name, is the
+interface's wire identity; the old name is then free for a later, unrelated
+interface. Starting from the file above with `interface Zone` renamed to
+`interface Lane` in the source:
+
+```sh
+ridl check . ; echo "exit: $?"
+```
+
+```text
+error[RIDL-409]: `Zone` is a live entry of `interfaces.lock` with no declaration in the package: run `ridl lock . --rename Zone=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock . --retire Zone` when the interface is gone
+  ┌─ ./interfaces.lock:4:1
+  │
+4 │ Zone 2
+  │ ^^^^^^
+
+exit: 1
+```
+
+```sh
+ridl lock . --rename Zone=Lane ; echo "exit: $?"
+```
+
+```text
+renamed Zone Lane 2
+exit: 0
+```
+
+**The merge driver.** Two branches that each edited `interfaces.lock` merge
+through `ridl lock merge`, a three-way merge over entries matched by number
+rather than over lines. git runs it when the repository registers it: one
+versioned line in `.gitattributes`, and one `git config` line per clone,
+which git does not version.
+
+```text
+interfaces.lock merge=ridl-lock
+```
+
+```sh
+git config merge.ridl-lock.driver "ridl lock merge %O %A %B %L"
+```
+
+```sh
+ridl lock merge --help
+```
+
+```text
+The git merge driver for `interfaces.lock`: a three-way merge over entries matched by number, written to OURS. Exit 0 when the merge is clean, 1 when entries disagree (they are left between conflict markers of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an input cannot be read or does not parse (OURS is left as it was). Register it with `.gitattributes` and `git config` as the CLI reference documents
+
+Usage: ridl lock merge <BASE> <OURS> <THEIRS> <MARKER_SIZE>
+
+Arguments:
+  <BASE>         The common ancestor's file (`%O`); an empty file reads as `next 1`
+  <OURS>         The current branch's file (`%A`); the result is written here
+  <THEIRS>       The other branch's file (`%B`)
+  <MARKER_SIZE>  The length of a conflict marker line (`%L`, 7 by default)
+
+Options:
+  -h, --help  Print help
+```
+
+At each number the driver applies git's own three-way rule: a change on one
+side is taken, the same change on both sides is kept once, and two different
+changes to one entry — a retire against a rename, or two renames — are left
+between conflict markers, with every other entry written plain. One rule is
+the driver's own: when both sides allocated one number to two different
+interfaces, ours keeps the number and theirs is renumbered to the next free
+one, which is safe because a branch never allocates. A live name on two
+numbers — each side allocated the same interface on its own number — is a
+conflict too. `next` is the maximum of the three sides plus one per
+renumbered entry, so it is never lowered. With `A 1, B 2` as the base, ours
+retiring `B` and theirs renaming it to `Bee`:
+
+```text
+# interfaces.lock — written by ridl lock; do not edit by hand.
+next 3
+A 1
+<<<<<<< ours
+B 2 retired
+=======
+Bee 2
+>>>>>>> theirs
+```
+
+The file is malformed (RIDL-410) until an author keeps one side and deletes
+the markers, and `ridl check` refuses it until then. git's `union` driver is
+not a substitute: it discards the base, and resurrects a renamed or retired
+entry silently. An empty BASE — what git passes when both branches created
+the file — reads as `next 1` with no entries. A package directory named
+`merge` is spelled `./merge`: the bare word is the subcommand.
+
+**Exit codes.** 0 when the file is written or there is nothing to change. 1
+on a diagnostic error over the source, with nothing written: a live entry with
+no declaration when plain `ridl lock` is asked to allocate (RIDL-409), a
+malformed lock file — a git conflict left in it included — (RIDL-410), or any
+other compile error, in any package of the workspace. 2 when the path is
+missing or unreadable, on a bad flag — `--rename` naming no live entry or a
+`NEW` that is not a declaration without an entry, `--retire` naming an
+interface that is still declared, either flag over more than one package — or
+on an I/O failure writing the file. Every cell is confirmed against the built
+binary by `crates/ridl/tests/lock_cli.rs`. `ridl lock merge` exits 0 when the
+three sides merge clean and OURS is written; 1 when entries disagree — OURS is
+written with the conflict markers and is malformed until resolved; 2 when an
+input cannot be read or does not parse (OURS is left as it was), when
+`MARKER_SIZE` is not a number from 1 up, or on an I/O failure writing OURS.
+Every cell is confirmed by `crates/ridl/tests/lock_merge.rs`, which also
+registers the driver in a temporary repository and merges two branches
+through git.
 
 ### `ridl lsp`
 
@@ -1181,8 +1431,8 @@ to `out`) and, on `check` only, the baseline desk check described
 [above](#ridl-check), which has no `ridlc` equivalent. On identical input the
 two render byte-identical diagnostics, confirmed earlier on this page.
 
-`ridl baseline`, `ridl test`, `ridl fmt`, and `ridl diff` have no `ridlc`
-counterpart at all — `ridlc`'s surface is `check` and `build`, full stop, as
+`ridl baseline`, `ridl test`, `ridl fmt`, `ridl diff`, and `ridl lock` have no
+`ridlc` counterpart at all — `ridlc`'s surface is `check` and `build`, full stop, as
 its own `--help` shows. Reach for `ridl` unless you are scripting the
 compiler directly and want its stable, default-free flags.
 
@@ -1192,10 +1442,12 @@ compiler directly and want its stable, default-free flags.
 | --- | --- | --- | --- |
 | `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
 | `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
-| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses the replacement under the tombstone rule (RIDL-408); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
+| `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
-| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike five of the other seven, which name no path at all |
+| `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other eight, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
+| `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
+| `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
 
 This table is this repository's own taxonomy, recorded in
 [ADR-0010][adr-0010]: **0** succeeded, or the verdict is affirmative; **1** a
@@ -1242,14 +1494,14 @@ For more information, try '--help'.
 `--help` itself, on any subcommand of either binary, always exits 0 — and so
 does `--version`/`-V`, covered [above](#ridl).
 
-Six of the eight subcommands that take a path also share a lesser-known gap:
+Seven of the nine subcommands that take a path also share a lesser-known gap:
 [issue driftsys/ridl#196][issue-196] records that when the *workspace root
 itself* is unreadable, `ridl check`, `ridl build`, `ridl baseline`,
-`ridlc check`, and `ridlc build` all report
+`ridl lock`, `ridlc check`, and `ridlc build` all report
 `` error: no `ridl.toml` found at or above `<path>` `` — exit 2 is right, the
 cause is wrong, confirmed directly against this build — and when a
 *subdirectory nested inside* an otherwise-readable workspace is unreadable,
-the same five report a bare `error: Permission denied (os error 13)`, naming
+the same six report a bare `error: Permission denied (os error 13)`, naming
 no path at all, also confirmed directly. `ridl test` reaches the same code
 path and wraps it with the top-level path it was given
 (`error: <path>: no ridl.toml found…` in the first case,

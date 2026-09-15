@@ -1,10 +1,9 @@
 ---
 source: crates/ridl-syntax/tests/parser_corpus.rs
-assertion_line: 72
 expression: dump(&parsed)
 input_file: crates/ridl-syntax/test_data/parser/ok/services.ridl
 ---
-SourceFile@0..791
+SourceFile@0..708
   PackageDecl@0..20
     PackageKw@0..7 "package"
     Whitespace@7..8 " "
@@ -196,60 +195,51 @@ SourceFile@0..791
     Whitespace@456..457 "\n"
     RBrace@457..458 "}"
   Whitespace@458..460 "\n\n"
-  LineComment@460..535 "// The shape list (AD ..."
-  Whitespace@535..536 "\n"
-  LineComment@536..606 "// service-level rese ..."
-  Whitespace@606..607 "\n"
-  LineComment@607..651 "// spelling with an o ..."
-  Whitespace@651..652 "\n"
-  ServiceDef@652..702
-    ServiceKw@652..659 "service"
-    Whitespace@659..660 " "
-    DottedName@660..673
-      Ident@660..663 "veh"
-      Dot@663..664 "."
-      Ident@664..668 "adas"
-      Dot@668..669 "."
-      Ident@669..673 "dash"
-    Whitespace@673..674 " "
-    Colon@674..675 ":"
-    Whitespace@675..676 " "
-    PathType@676..689
-      QualifiedName@676..689
-        Ident@676..689 "CruiseControl"
-    Comma@689..690 ","
-    Whitespace@690..691 " "
-    PathType@691..702
-      QualifiedName@691..702
-        Ident@691..702 "DoorControl"
-  Whitespace@702..704 "\n\n"
-  ServiceDef@704..790
-    ServiceKw@704..711 "service"
-    Whitespace@711..712 " "
-    DottedName@712..730
-      Ident@712..715 "veh"
-      Dot@715..716 "."
-      Ident@716..720 "body"
-      Dot@720..721 "."
-      Ident@721..730 "composite"
-    Whitespace@730..731 " "
-    Colon@731..732 ":"
-    Whitespace@732..735 "\n  "
-    PathType@735..746
-      QualifiedName@735..746
-        Ident@735..746 "DoorControl"
-    Comma@746..747 ","
-    Whitespace@747..750 "\n  "
-    ReservedEntry@750..773
-      ReservedKw@750..758 "reserved"
-      Whitespace@758..759 " "
-      Name@759..773
-        Ident@759..773 "LegacyDoorDiag"
-    Comma@773..774 ","
-    Whitespace@774..777 "\n  "
-    PathType@777..789
-      QualifiedName@777..789
-        Ident@777..789 "MotorControl"
-    Comma@789..790 ","
-  Whitespace@790..791 "\n"
+  LineComment@460..537 "// The shape list (AD ..."
+  Whitespace@537..538 "\n"
+  LineComment@538..595 "// a multi-line spell ..."
+  Whitespace@595..596 "\n"
+  ServiceDef@596..646
+    ServiceKw@596..603 "service"
+    Whitespace@603..604 " "
+    DottedName@604..617
+      Ident@604..607 "veh"
+      Dot@607..608 "."
+      Ident@608..612 "adas"
+      Dot@612..613 "."
+      Ident@613..617 "dash"
+    Whitespace@617..618 " "
+    Colon@618..619 ":"
+    Whitespace@619..620 " "
+    PathType@620..633
+      QualifiedName@620..633
+        Ident@620..633 "CruiseControl"
+    Comma@633..634 ","
+    Whitespace@634..635 " "
+    PathType@635..646
+      QualifiedName@635..646
+        Ident@635..646 "DoorControl"
+  Whitespace@646..648 "\n\n"
+  ServiceDef@648..707
+    ServiceKw@648..655 "service"
+    Whitespace@655..656 " "
+    DottedName@656..674
+      Ident@656..659 "veh"
+      Dot@659..660 "."
+      Ident@660..664 "body"
+      Dot@664..665 "."
+      Ident@665..674 "composite"
+    Whitespace@674..675 " "
+    Colon@675..676 ":"
+    Whitespace@676..679 "\n  "
+    PathType@679..690
+      QualifiedName@679..690
+        Ident@679..690 "DoorControl"
+    Comma@690..691 ","
+    Whitespace@691..694 "\n  "
+    PathType@694..706
+      QualifiedName@694..706
+        Ident@694..706 "MotorControl"
+    Comma@706..707 ","
+  Whitespace@707..708 "\n"
 errors: none

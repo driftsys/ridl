@@ -706,7 +706,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     }
   ],
   "interfaces": [],
-  "services": []
+  "services": [],
+  "retired": []
 }
 
 // ===== package veh.cluster =====
@@ -1593,7 +1594,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 1,
+      "provisional": true
     },
     {
       "name": "WheelHistory",
@@ -1688,7 +1691,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 3,
+      "provisional": true
     },
     {
       "name": "WheelDiagnostics",
@@ -1860,7 +1865,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 2,
+      "provisional": true
     },
     {
       "name": "WheelSummary",
@@ -1889,7 +1896,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 4,
+      "provisional": true
     }
   ],
   "services": [
@@ -1900,7 +1909,6 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "inline": {
             "name": "",
             "visibility": "VISIBILITY_UNSPECIFIED",
@@ -1969,7 +1977,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               }
-            ]
+            ],
+            "number": 5,
+            "provisional": true
           }
         }
       ]
@@ -1981,7 +1991,6 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "interfaceRef": "VehicleStatus"
         }
       ]
@@ -1993,7 +2002,6 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "interfaceRef": "VehicleStatus"
         }
       ]
@@ -2008,7 +2016,6 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
       ],
       "shapes": [
         {
-          "id": 1,
           "inline": {
             "name": "",
             "visibility": "VISIBILITY_UNSPECIFIED",
@@ -2573,10 +2580,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               }
-            ]
+            ],
+            "number": 6,
+            "provisional": true
           }
         }
       ]
     }
-  ]
+  ],
+  "retired": []
 }

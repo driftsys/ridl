@@ -120,8 +120,22 @@ declare_categories! {
         /// new snapshot.
         DeclAdded,
         /// A package-level declaration, interface, or service present only in the
-        /// old snapshot.
+        /// old snapshot. An interface is matched by its `interfaces.lock`
+        /// number (lock design §7), so an interface here is one whose number
+        /// is gone from the new snapshot and not retired there.
         DeclRemoved,
+        /// An interface whose `interfaces.lock` number is the same on both
+        /// sides and whose name changed (lock design §7). The number is the
+        /// interface's identity and its routing key, so nothing moves on the
+        /// wire; a rename is visible in source — it changes the generated
+        /// identity-table names in both wire backends — so the text report
+        /// lists it under the heading ([`heading`]). The path carries the new
+        /// name; the detail carries the old and the new name.
+        InterfaceRenamed,
+        /// An interface whose number the old snapshot held and the new
+        /// snapshot's retired entries list (lock design §7): the sanctioned
+        /// removal of an interface, recorded by `ridl lock --retire`.
+        InterfaceRetired,
         /// A surviving composite member whose slot in the body changed — a
         /// struct field, enum value, enum-set bit or union arm — reported only
         /// when both bodies hold the same member names. For a struct field or
@@ -172,28 +186,22 @@ declare_categories! {
         /// A resolved or declared init value changed.
         InitChanged,
         /// A name that was a `reserved` tombstone is live again — an
-        /// interaction inside a body, or a shape in a service's list.
+        /// interaction inside an interface body.
         ReservedNameRedeclared,
-        /// A service switched between the named shape list and an inline
-        /// shape. Narrowed to the form switch by ADR-0015 decision 19: a
-        /// changed shape list is read by the five `ServiceShape*` categories
+        /// A service switched between the named list and an inline shape.
+        /// Narrowed to the form switch by ADR-0015 decision 19: a changed
+        /// list is read as a set by the two `ServiceInterface*` categories
         /// below.
         ServiceChanged,
-        /// A shape added after every slot that existed before in a service's
-        /// list (ADR-0015 decision 19).
-        ServiceShapeAppended,
-        /// A shape added before the end of a service's list — every later
-        /// interface id shifts (ADR-0015 decisions 15 and 19).
-        ServiceShapeInserted,
-        /// A surviving shape whose relative order in a service's list changed
-        /// (ADR-0015 decision 19).
-        ServiceShapeReordered,
-        /// A shape removed from a service's list without a `reserved`
-        /// tombstone holding its slot (ADR-0015 decision 19).
-        ServiceShapeRemoved,
-        /// A shape removed and replaced by a `reserved` tombstone in the same
-        /// slot of a service's list (ADR-0015 decision 19).
-        ServiceShapeRetired,
+        /// An interface in a service's set that the old snapshot's set did not
+        /// hold (ADR-0015 decision 19 as amended on 2026-09-15: a service's
+        /// list is a set of interface references).
+        ServiceInterfaceAdded,
+        /// An interface the old snapshot's set held that the new one does not.
+        /// Compatible on the wire — the routing key does not contain the
+        /// service — and visible in source, so the text report lists it under
+        /// that heading ([`heading`]).
+        ServiceInterfaceRemoved,
         /// Only doc comment, labels, or deprecation metadata changed.
         DocOnly,
         /// The visibility a declaration is published at changed. Separate from
@@ -268,6 +276,15 @@ pub(crate) fn emit(
         before,
         after,
     });
+}
+
+/// Whether an interface carries an identity: a frozen, non-zero number from
+/// its package's `interfaces.lock` (lock design §7). A provisional number is
+/// no identity, and `number` 0 — never allocated — marks a snapshot published
+/// before the lock existed. The walk matches by number only when both sides
+/// have one, and the classifier re-finds the old side the same way.
+pub(crate) fn frozen(interface: &ridl_ir::v2::Interface) -> bool {
+    interface.number != 0 && !interface.provisional
 }
 
 /// Settles the verdict of every change the walk of one package pair produced.
@@ -386,6 +403,8 @@ pub fn category_word(category: Category) -> &'static str {
     match category {
         Category::DeclAdded => "decl_added",
         Category::DeclRemoved => "decl_removed",
+        Category::InterfaceRenamed => "interface_renamed",
+        Category::InterfaceRetired => "interface_retired",
         Category::MemberReordered => "member_reordered",
         Category::InteractionAppended => "interaction_appended",
         Category::InteractionInserted => "interaction_inserted",
@@ -404,13 +423,57 @@ pub fn category_word(category: Category) -> &'static str {
         Category::InitChanged => "init_changed",
         Category::ReservedNameRedeclared => "reserved_name_redeclared",
         Category::ServiceChanged => "service_changed",
-        Category::ServiceShapeAppended => "service_shape_appended",
-        Category::ServiceShapeInserted => "service_shape_inserted",
-        Category::ServiceShapeReordered => "service_shape_reordered",
-        Category::ServiceShapeRemoved => "service_shape_removed",
-        Category::ServiceShapeRetired => "service_shape_retired",
+        Category::ServiceInterfaceAdded => "service_interface_added",
+        Category::ServiceInterfaceRemoved => "service_interface_removed",
         Category::DocOnly => "doc_only",
         Category::VisibilityChanged => "visibility_changed",
+    }
+}
+
+/// The heading a category's changes are grouped under in the text report, or
+/// `None` for a category listed plainly. One heading exists: "compatible on
+/// the wire, visible in source", for a change that exits 0 but that a
+/// consumer sees in its source — an interface renamed on its number changes
+/// the generated identity-table names in both wire backends, and an interface
+/// leaving a service's set stops the `service.member` addresses of that
+/// interface resolving under the service. Each such category's `--explain`
+/// text states its own consequence; the JSON report carries the category word
+/// and no heading field.
+///
+/// Wildcard arms are denied for the reason `category_word` gives.
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
+pub fn heading(category: Category) -> Option<&'static str> {
+    match category {
+        Category::InterfaceRenamed | Category::ServiceInterfaceRemoved => {
+            Some("compatible on the wire, visible in source")
+        }
+        Category::DeclAdded
+        | Category::DeclRemoved
+        | Category::InterfaceRetired
+        | Category::MemberReordered
+        | Category::InteractionAppended
+        | Category::InteractionInserted
+        | Category::InteractionReordered
+        | Category::InteractionRemoved
+        | Category::InteractionRetired
+        | Category::KindChanged
+        | Category::PayloadChanged
+        | Category::ReturnChanged
+        | Category::ParamsChanged
+        | Category::TimingChanged
+        | Category::RpcBoundChanged
+        | Category::ContractChanged
+        | Category::WidthChanged
+        | Category::ConstraintChanged
+        | Category::InitChanged
+        | Category::ReservedNameRedeclared
+        | Category::ServiceChanged
+        | Category::ServiceInterfaceAdded
+        | Category::DocOnly
+        | Category::VisibilityChanged => None,
     }
 }
 
@@ -440,39 +503,73 @@ impl serde::Serialize for Change {
 }
 
 /// Renders a report as a human-readable summary: the report verdict on the
-/// first line, then one indented line per change.
+/// first line, then one indented line per change. A change whose category has
+/// no [`heading`] is listed first, in report order; then each heading is
+/// printed once, as its own line ending in a colon, followed by the changes
+/// under it, in report order. Headings come in [`CATEGORIES`] order.
 pub fn render_text(report: &DiffReport) -> String {
     let mut out = String::new();
     out.push_str(verdict_word(report.verdict));
     out.push('\n');
     for change in &report.changes {
-        out.push_str("  [");
-        out.push_str(verdict_word(change.verdict));
-        out.push_str("] ");
-        out.push_str(category_word(change.category));
-        out.push(' ');
-        out.push_str(&change.path);
-        match (&change.before, &change.after) {
-            (Some(before), Some(after)) => {
-                out.push_str(": ");
-                out.push_str(before);
-                out.push_str(" -> ");
-                out.push_str(after);
-            }
-            (Some(before), None) => {
-                out.push_str(": ");
-                out.push_str(before);
-                out.push_str(" -> (removed)");
-            }
-            (None, Some(after)) => {
-                out.push_str(": (absent) -> ");
-                out.push_str(after);
-            }
-            (None, None) => {}
+        if heading(change.category).is_none() {
+            push_change_line(&mut out, change);
         }
-        out.push('\n');
+    }
+    let mut printed: Vec<&'static str> = Vec::new();
+    for category in CATEGORIES {
+        let Some(title) = heading(category) else {
+            continue;
+        };
+        if printed.contains(&title) {
+            continue;
+        }
+        printed.push(title);
+        let mut under = report
+            .changes
+            .iter()
+            .filter(|change| heading(change.category) == Some(title))
+            .peekable();
+        if under.peek().is_none() {
+            continue;
+        }
+        out.push_str(title);
+        out.push_str(":\n");
+        for change in under {
+            push_change_line(&mut out, change);
+        }
     }
     out
+}
+
+/// One change of the text report: `  [verdict] category path`, then
+/// `: before -> after` where the sides apply.
+fn push_change_line(out: &mut String, change: &Change) {
+    out.push_str("  [");
+    out.push_str(verdict_word(change.verdict));
+    out.push_str("] ");
+    out.push_str(category_word(change.category));
+    out.push(' ');
+    out.push_str(&change.path);
+    match (&change.before, &change.after) {
+        (Some(before), Some(after)) => {
+            out.push_str(": ");
+            out.push_str(before);
+            out.push_str(" -> ");
+            out.push_str(after);
+        }
+        (Some(before), None) => {
+            out.push_str(": ");
+            out.push_str(before);
+            out.push_str(" -> (removed)");
+        }
+        (None, Some(after)) => {
+            out.push_str(": (absent) -> ");
+            out.push_str(after);
+        }
+        (None, None) => {}
+    }
+    out.push('\n');
 }
 
 /// Renders a report as machine-readable JSON with the stable schema

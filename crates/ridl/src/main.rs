@@ -30,19 +30,26 @@
 //! Protocol server an agent drives (`ridl-mcp`). Both delegate every behavior
 //! to their library and only wire the transport here, so one installed binary
 //! serves the editor, the agent, and the command line.
+//!
+//! `ridl lock` writes a package's `interfaces.lock` (lock design §5): plain, it
+//! allocates a number to every interface that has none; with `--rename` or
+//! `--retire`, it rewrites one package's entries in place. It lives here
+//! beside `ridl baseline` because it reads and writes a file in the workspace
+//! that is not a source (`ridlc` gains no `lock` subcommand); the compile it
+//! runs first is `ridlc`'s own.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+mod lock;
 mod property;
 
 use clap::{Parser, Subcommand};
-use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, render};
+use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
+use ridl_core::interface_lock::LockKey;
 use ridl_fmt::{FormatOutcome, format};
-use ridl_syntax::ast::{
-    AstNode as _, HasName as _, InterfaceMember, Name, ServiceShape, SourceFile,
-};
+use ridl_syntax::ast::{AstNode as _, HasName as _, InterfaceMember, Name, SourceFile};
 use ridlc::{CliRun, Emit};
 use rowan::{TextRange, TextSize};
 
@@ -145,12 +152,58 @@ enum Command {
         #[arg(long, value_name = "CATEGORY")]
         explain: Option<String>,
     },
+    /// Allocate a number to every interface that has none and write each
+    /// package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
+    /// package's entries in place instead. Exit 0 when the file is written or
+    /// nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or
+    /// I/O failure. `ridl lock merge` is the git merge driver for the file.
+    #[command(args_conflicts_with_subcommands = true)]
+    Lock {
+        /// A package directory, a workspace root, or a file. A directory
+        /// named `merge` is spelled `./merge`, since the bare word is the
+        /// subcommand.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Rewrite the live entry OLD to hold the key NEW, keeping its number
+        /// (repeatable). NEW must be a declaration without an entry.
+        #[arg(long, value_name = "OLD=NEW")]
+        rename: Vec<String>,
+        /// Mark the live entry NAME retired, keeping its line and its number
+        /// (repeatable). NAME must no longer be declared.
+        #[arg(long, value_name = "NAME")]
+        retire: Vec<String>,
+        #[command(subcommand)]
+        sub: Option<LockCommand>,
+    },
     /// Run the language server over stdio: exit 0 on a clean shutdown, 2 on a
     /// transport error. Editors spawn this; it takes no flag of its own.
     Lsp,
     /// Run the MCP server over stdio for an agent host: exit 0 on a clean
     /// shutdown, 2 on a transport error. It takes no flag of its own.
     Mcp,
+}
+
+/// The subcommands of `ridl lock`.
+#[derive(Subcommand)]
+enum LockCommand {
+    /// The git merge driver for `interfaces.lock`: a three-way merge over
+    /// entries matched by number, written to OURS. Exit 0 when the merge is
+    /// clean, 1 when entries disagree (they are left between conflict markers
+    /// of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an
+    /// input cannot be read or does not parse (OURS is left as it was).
+    /// Register it with `.gitattributes` and `git config` as the CLI
+    /// reference documents.
+    Merge {
+        /// The common ancestor's file (`%O`); an empty file reads as `next 1`.
+        base: PathBuf,
+        /// The current branch's file (`%A`); the result is written here.
+        ours: PathBuf,
+        /// The other branch's file (`%B`).
+        theirs: PathBuf,
+        /// The length of a conflict marker line (`%L`, 7 by default).
+        #[arg(value_parser = clap::value_parser!(u16).range(1..))]
+        marker_size: u16,
+    },
 }
 
 /// The `ridl diff` output format — human-readable text or machine-readable
@@ -208,6 +261,22 @@ fn main() -> ExitCode {
                 }
             },
         },
+        Command::Lock {
+            sub:
+                Some(LockCommand::Merge {
+                    base,
+                    ours,
+                    theirs,
+                    marker_size,
+                }),
+            ..
+        } => lock::run_lock_merge(&base, &ours, &theirs, usize::from(marker_size)),
+        Command::Lock {
+            path,
+            rename,
+            retire,
+            sub: None,
+        } => lock::run_lock(&path, &rename, &retire),
         Command::Lsp => run_lsp(),
         Command::Mcp => run_mcp(),
     }
@@ -480,43 +549,37 @@ fn is_source_dir(dir: &Path) -> bool {
 // ==========================================================================
 
 /// The change categories the desk check reports: the four that move a live
-/// interaction's ordinal, and the three that move a shape's slot in a
-/// service's list — the same class one level up (ADR-0015 decision 19) — and
-/// no others.
+/// interaction's ordinal, and no others.
 ///
 /// General form §6.3 asks for one thing at the desk — a reorder or an insertion
 /// caught before CI, because declaration order is wire identity and a reorder
-/// looks like tidying. A service's shape list follows the same identity model
-/// one level up (ridl §14.5), so a shape-list insert, reorder, or removal is
-/// the same tidying-shaped mistake and belongs here too. The other breaking
-/// categories (a payload type change, a narrowed constraint, a timing change)
-/// are already loud in review and stay `ridl diff`'s job in CI: this is the
-/// §6.3 mitigation, not a second diff gate.
+/// looks like tidying. The other breaking categories (a payload type change, a
+/// narrowed constraint, a timing change) are already loud in review and stay
+/// `ridl diff`'s job in CI: this is the §6.3 mitigation, not a second diff
+/// gate. A service's list is a set (ADR-0015 decision 19 as amended on
+/// 2026-09-15): its order is not an identity, so no service-level category
+/// belongs here.
 ///
-/// [`ReservedNameRedeclared`](ridl_diff::Category::ReservedNameRedeclared)
-/// covers both levels — an interaction re-declaring a body tombstone's name,
-/// and a shape re-declaring a service-level one — so [`drift_message`] selects
-/// its wording by which container the path names.
-///
-/// All seven classify [`Breaking`](ridl_diff::Verdict::Breaking) in every
+/// All four classify [`Breaking`](ridl_diff::Verdict::Breaking) in every
 /// direction, so the category alone selects them.
-const ORDINAL_CATEGORIES: [ridl_diff::Category; 7] = [
+const ORDINAL_CATEGORIES: [ridl_diff::Category; 4] = [
     ridl_diff::Category::InteractionInserted,
     ridl_diff::Category::InteractionReordered,
     ridl_diff::Category::InteractionRemoved,
     ridl_diff::Category::ReservedNameRedeclared,
-    ridl_diff::Category::ServiceShapeInserted,
-    ridl_diff::Category::ServiceShapeReordered,
-    ridl_diff::Category::ServiceShapeRemoved,
 ];
 
-/// Runs `check` and, when the compile is clean and a baseline is available,
-/// the desk check on top of it.
+/// Runs `check` and, when a baseline is available and the compile produced no
+/// error other than RIDL-409, the desk check on top of it.
 ///
-/// The desk check only ever *adds warnings*: `ridl check` keeps its 0/1/2 exit
-/// contract, so a reordered but otherwise clean workspace still exits 0. It is
-/// also skipped entirely when the compile produced an error — a diff against
-/// IR that failed to check would report noise on top of the real problem.
+/// The desk check only ever *adds* to the diagnostics — RIDL-407 warnings,
+/// and the rename label on a RIDL-409 (lock design §4) — so `ridl check`
+/// keeps its 0/1/2 exit contract: a reordered but otherwise clean workspace
+/// still exits 0, and a workspace with an orphan lock entry still exits 1. It
+/// is skipped entirely when the compile produced any other error — a diff
+/// against IR that failed to check would report noise on top of the real
+/// problem — while RIDL-409 stops nothing in lowering (an entry with no
+/// declaration has nothing to lower), so the IR it runs over is whole.
 fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
     let mut run = match ridlc::run_check(path, frozen.into()) {
         Ok(run) => run,
@@ -526,7 +589,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         }
     };
 
-    if !run.has_error() {
+    if lock::only_lock_orphans(&run.diagnostics) {
         match baseline_location(path, baseline) {
             Ok(Some(location)) => {
                 if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
@@ -584,17 +647,23 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
     // interaction with no `reserved` tombstone destroys that record, and a
     // later append then reuses the ordinal with nothing to compare against.
     // The comparison happens here, against the directory publication is about
-    // to overwrite (driftsys/ridl#315).
-    match untombstoned_removals(path, &out_dir, &staging, &mut run) {
-        Ok(false) => {}
-        Ok(true) => {
-            let _ = std::fs::remove_dir_all(&staging);
-            return finish(Ok(run));
+    // to overwrite (driftsys/ridl#315). The interface level is the lock's:
+    // `interface_refusals` refuses a provisional interface number and a
+    // published number the fresh snapshot neither carries nor retires (lock
+    // design §8). Both gates run, so one run reports every refusal.
+    let mut refused = false;
+    for gate in [untombstoned_removals, interface_refusals] {
+        match gate(path, &out_dir, &staging, &mut run) {
+            Ok(hit) => refused |= hit,
+            Err(code) => {
+                let _ = std::fs::remove_dir_all(&staging);
+                return code;
+            }
         }
-        Err(code) => {
-            let _ = std::fs::remove_dir_all(&staging);
-            return code;
-        }
+    }
+    if refused {
+        let _ = std::fs::remove_dir_all(&staging);
+        return finish(Ok(run));
     }
 
     if let Err(err) = publish_baseline(&staging, &out_dir) {
@@ -622,14 +691,12 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
 /// comparison against nothing in the cases driftsys/ridl#235 describes, and a
 /// gate that a directory layout can defeat is not a gate.
 ///
-/// Only the interaction level is covered. The interface level — a removed
-/// interface with no service-level tombstone, and an unfrozen interface number
-/// — arrives with the lock file, because the rsdl decisions note's D-7 retires
-/// the service shape-list slot model a service-level gate would rest on. That
-/// is why `ReservedNameRedeclared`, which `ridl_diff` emits for an interaction
-/// in a body and for a shape in a named-form service's list alike (ADR-0015
-/// decision 19), is refused only when the published IR holds an
-/// interaction-level tombstone for the name.
+/// Only the interaction level is covered. The interface level is the lock's:
+/// an interface's identity is its number in `interfaces.lock`, not a slot in
+/// a service's list, so a removed or renumbered interface is refused by the
+/// lock's own publication rules, not here. `ReservedNameRedeclared` is an
+/// interaction-level category, refused when the published IR holds a
+/// tombstone for the name.
 fn untombstoned_removals(
     entry: &Path,
     out_dir: &Path,
@@ -788,6 +855,142 @@ fn published_ordinal(published: &[ridl_ir::v2::Package], path: &str) -> Option<u
     published_interaction(published, path).map(|decl| decl.ordinal)
 }
 
+/// The interface level of the publication gate — the lock's own rules (lock
+/// design §8; the design's §4 table, `ridl baseline` column): a RIDL-411 for
+/// every interface in the fresh snapshots whose number is provisional, and a
+/// RIDL-412 for every interface the baseline being replaced holds under a
+/// non-zero number that the fresh snapshots neither carry nor retire. Returns
+/// whether any was recorded.
+///
+/// RIDL-411 reads the fresh snapshots alone, so a first publication is
+/// refused too: a provisional number is no identity, and a snapshot holding
+/// one records nothing a later comparison can hold the interface to. RIDL-412
+/// reads the same `diff_sets` report the RIDL-408 gate walks, keeping the
+/// interface-level `DeclRemoved` changes: `ridl_diff` matches interfaces by
+/// number, so such a change is a number the fresh side carries under no name
+/// and does not list as retired. A published `number` 0 predates the lock and
+/// was matched by name, so its removal is not refused (plan decision PD-9). In
+/// practice RIDL-412 is a lock line deleted by hand: a live entry with no
+/// declaration fails the build with RIDL-409 before publication.
+///
+/// The published snapshots are read flat from `out_dir`, as
+/// [`untombstoned_removals`] reads them and for the same reason.
+fn interface_refusals(
+    entry: &Path,
+    out_dir: &Path,
+    staging: &Path,
+    run: &mut CliRun,
+) -> Result<bool, ExitCode> {
+    let fresh = load_snapshots(&snapshot_files(staging)?, None)?;
+    let mut index: Option<DeclIndex> = None;
+    let mut refusals = Vec::new();
+    for package in &fresh {
+        for shape in package.shapes() {
+            if !shape.interface.provisional {
+                continue;
+            }
+            let index = index.get_or_insert_with(|| DeclIndex::build(entry));
+            refusals.push(Diagnostic {
+                code: DiagCode::RIDL_411,
+                severity: Severity::Error,
+                message: provisional_number_message(&package.name, &shape, entry),
+                primary: index.shape_span(&package.name, shape.name, &mut run.sources),
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            });
+        }
+    }
+
+    if out_dir.is_dir() {
+        let published = load_snapshots(&snapshot_files(out_dir)?, Some(PUBLISHED_PARSE_REMEDY))?;
+        if !published.is_empty() {
+            let report = ridl_diff::diff_sets(&published, &fresh);
+            for change in &report.changes {
+                let Some((package, shape)) = dropped_number(change, &published, &fresh) else {
+                    continue;
+                };
+                refusals.push(Diagnostic {
+                    code: DiagCode::RIDL_412,
+                    severity: Severity::Error,
+                    message: dropped_number_message(&package.name, &shape),
+                    primary: detached_span(),
+                    labels: Vec::new(),
+                    fixits: Vec::new(),
+                });
+            }
+        }
+    }
+
+    let refused = !refusals.is_empty();
+    run.diagnostics.extend(refusals);
+    Ok(refused)
+}
+
+/// The RIDL-411 message: the lock key the entry would carry, the provisional
+/// number the checker showed, and the command that records it.
+fn provisional_number_message(
+    package: &str,
+    shape: &ridl_ir::v2::InterfaceShape<'_>,
+    entry: &Path,
+) -> String {
+    let key = lock::shape_key(shape);
+    format!(
+        "`{key}` has a provisional interface number ({}) in package `{package}`: no entry in \
+         `interfaces.lock` records it, and a provisional number is no identity. Run `ridl lock \
+         {}` to allocate and record the number, then publish.",
+        shape.interface.number,
+        entry.display()
+    )
+}
+
+/// The published shape an interface-level `DeclRemoved` names, when the
+/// number it held is one the lock allocated (not 0) and the fresh package
+/// does not retire — the RIDL-412 shape. An interface-level change has a
+/// two-segment path and the walk's `interface` marker as its `before`; a
+/// service's own `DeclRemoved` carries `service` there, and a package's has
+/// one segment.
+fn dropped_number<'a>(
+    change: &ridl_diff::Change,
+    published: &'a [ridl_ir::v2::Package],
+    fresh: &[ridl_ir::v2::Package],
+) -> Option<(&'a ridl_ir::v2::Package, ridl_ir::v2::InterfaceShape<'a>)> {
+    if change.category != ridl_diff::Category::DeclRemoved
+        || change.before.as_deref() != Some("interface")
+    {
+        return None;
+    }
+    let mut parts = change.path.split('/');
+    let (Some(pkg), Some(name), None) = (parts.next(), parts.next(), parts.next()) else {
+        return None;
+    };
+    let package = published.iter().find(|package| package.name == pkg)?;
+    let shape = package.shapes().find(|shape| shape.name == name)?;
+    let number = shape.interface.number;
+    if number == 0 {
+        return None;
+    }
+    let retired = fresh
+        .iter()
+        .find(|package| package.name == pkg)
+        .is_some_and(|package| package.retired.iter().any(|entry| entry.number == number));
+    (!retired).then_some((package, shape))
+}
+
+/// The RIDL-412 message: the name and number the baseline holds, and the
+/// line that restores the record.
+fn dropped_number_message(package: &str, shape: &ridl_ir::v2::InterfaceShape<'_>) -> String {
+    let key = lock::shape_key(shape);
+    let number = shape.interface.number;
+    format!(
+        "`{key}` holds interface number {number} in the baseline being replaced, in package \
+         `{package}`, but the fresh snapshot neither declares that number nor retires it. \
+         Publishing would lose the only record that the number was allocated, and `next` could \
+         hand it to a later interface. Restore the line `{key} {number}` in the package's \
+         `interfaces.lock` from version control — `{key} {number} retired` when the interface is \
+         gone."
+    )
+}
+
 /// The directory the snapshots are built into before they are published: a
 /// hidden sibling of `out_dir`, so the move into place is a rename within one
 /// filesystem.
@@ -895,13 +1098,16 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
     start.join(".ridl").join("baseline")
 }
 
-/// Compares the checked workspace against the baseline at `location` and
-/// appends a RIDL-407 warning for every ordinal-affecting change.
+/// Compares the checked workspace against the baseline at `location`, appends
+/// a RIDL-407 warning for every ordinal-affecting change, and adds the rename
+/// label to every RIDL-409 whose orphan entry has exactly one same-shape
+/// candidate ([`rename_labels`]).
 ///
 /// The workspace is compiled a second time here, through
 /// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
 /// does not hand back the IR. The cost is paid only when a baseline is actually
-/// present, and never on a run that already failed. `explicit` — whether
+/// present, and never on a run that failed for anything but RIDL-409.
+/// `explicit` — whether
 /// `location` came from a `--baseline` flag rather than auto-discovery — is
 /// passed straight through to [`load_baseline`], which it uses to tell an
 /// explicit `--baseline` holding no snapshot (a refusal) from an
@@ -940,14 +1146,130 @@ fn desk_check(
         warnings.push(Diagnostic {
             code: DiagCode::RIDL_407,
             severity: Severity::Warning,
-            message: drift_message(change, index.names_a_service_shape(&change.path)),
+            message: drift_message(change),
             primary: index.span_of(&change.path, &mut run.sources),
             labels: Vec::new(),
             fixits: Vec::new(),
         });
     }
     run.diagnostics.extend(warnings);
+    rename_labels(&baseline, &current, &index, run);
     Ok(())
+}
+
+/// The rename hint (lock design §4; plan decision PD-5). For every RIDL-409
+/// the compile produced, when exactly one declaration without an entry in
+/// the same package has the orphan entry's shape in the published baseline,
+/// a secondary label goes on that diagnostic, at the candidate's declaration,
+/// naming the one `ridl lock <pkg> --rename Old=New`. Nothing otherwise — no
+/// baseline package, no candidate of that shape, or several — and never a
+/// second diagnostic. The orphan's key is read from the lock line the
+/// diagnostic points at (its span is the entry's line, plan decision PD-3),
+/// and its package from the lock file's directory through the index.
+fn rename_labels(
+    baseline: &[ridl_ir::v2::Package],
+    current: &[ridl_ir::v2::Package],
+    index: &DeclIndex,
+    run: &mut CliRun,
+) {
+    let orphans: Vec<(usize, LockKey, String)> = run
+        .diagnostics
+        .iter()
+        .enumerate()
+        .filter(|(_, diagnostic)| diagnostic.code == DiagCode::RIDL_409)
+        .filter_map(|(position, diagnostic)| {
+            let (key, dir) = orphan_entry(&run.sources, diagnostic)?;
+            Some((position, key, dir))
+        })
+        .collect();
+    for (position, old, dir) in orphans {
+        let Some(package) = index.package_of_dir(&dir) else {
+            continue;
+        };
+        let Some(published) = baseline
+            .iter()
+            .find(|candidate| candidate.name == package)
+            .and_then(|published| {
+                published
+                    .shapes()
+                    .find(|shape| lock::shape_key(shape) == old)
+            })
+        else {
+            continue;
+        };
+        let candidates: Vec<ridl_ir::v2::InterfaceShape<'_>> = current
+            .iter()
+            .find(|candidate| candidate.name == package)
+            .map(|fresh| {
+                fresh
+                    .shapes()
+                    .filter(|shape| {
+                        shape.interface.provisional
+                            && same_shape(published.interface, shape.interface)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let [candidate] = candidates.as_slice() else {
+            continue;
+        };
+        let new = lock::shape_key(candidate);
+        let span = index.shape_span(package, candidate.name, &mut run.sources);
+        run.diagnostics[position].labels.push(Label {
+            span,
+            message: format!(
+                "same shape as `{old}` in the published baseline: run `ridl lock {dir} --rename \
+                 {old}={new}`"
+            ),
+        });
+    }
+}
+
+/// The orphan entry a RIDL-409 points at: its key, read from the first field
+/// of the lock line under the diagnostic's span, and the package directory —
+/// the lock file's parent — as the message names it (plan decision PD-4).
+fn orphan_entry(sources: &SourceMap, diagnostic: &Diagnostic) -> Option<(LockKey, String)> {
+    let path = sources.path(diagnostic.primary.file)?;
+    let text = sources.text(diagnostic.primary.file)?;
+    let range = diagnostic.primary.range;
+    let line = text.get(usize::from(range.start())..usize::from(range.end()))?;
+    let key = line.split(' ').next()?.parse().ok()?;
+    Some((key, directory_of(path)))
+}
+
+/// Whether two interface bodies are the same shape (lock design §4): their
+/// `interactions` lists compare equal once each interaction's `doc`, `labels`
+/// and `deprecated` are blanked on both sides. Every other field of an
+/// interaction — name, kind, ordinal, payload, timing, parameters, return,
+/// contracts, visibility — and every `reserved` tombstone must match. The
+/// `Interface`'s own fields — name, visibility, doc, number, provisional flag
+/// — are not members and are not compared: the baseline's interface is frozen
+/// and the candidate is provisional, so whole values would never match.
+fn same_shape(old: &ridl_ir::v2::Interface, new: &ridl_ir::v2::Interface) -> bool {
+    fn members(interface: &ridl_ir::v2::Interface) -> Vec<ridl_ir::v2::Decl> {
+        interface
+            .interactions
+            .iter()
+            .cloned()
+            .map(|mut decl| {
+                decl.doc = String::new();
+                decl.labels = Vec::new();
+                decl.deprecated = None;
+                decl
+            })
+            .collect()
+    }
+    members(old) == members(new)
+}
+
+/// The directory a file path sits in, as a string: its parent, or `.` when
+/// the path has none — the form the loader records a package directory in and
+/// the RIDL-409 message names it in.
+fn directory_of(path: &str) -> String {
+    match Path::new(path).parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
+        _ => ".".to_string(),
+    }
 }
 
 /// The RIDL-407 message for one ordinal-affecting change.
@@ -961,13 +1283,7 @@ fn desk_check(
 /// fx.audit/Motion/reset (interaction_reordered)`: "ordinal" is an IR word, the
 /// path is a diff-report word, `interaction_reordered` is the enum variant's
 /// own spelling, and between them they stated neither consequence nor remedy.
-///
-/// `service_shape` selects the service-level wording where a category covers
-/// both levels: `ReservedNameRedeclared` is emitted for an interaction inside
-/// a body and for a shape in a service's list (ADR-0015 decision 19), and
-/// only the path's container says which — the subject of one is an
-/// interaction, of the other an interface.
-fn drift_message(change: &ridl_diff::Change, service_shape: bool) -> String {
+fn drift_message(change: &ridl_diff::Change) -> String {
     let (shape, name) = shape_and_name(&change.path);
     // "in `Motion`" when the shape is known, dropped when the path is not the
     // three-segment form every ordinal category emits.
@@ -991,35 +1307,11 @@ fn drift_message(change: &ridl_diff::Change, service_shape: bool) -> String {
              that is not its own (ridl §11) — retire it in place with `reserved {name}`, which \
              holds the slot for ever",
         ),
-        ridl_diff::Category::ReservedNameRedeclared if service_shape => format!(
-            "`{name}` is listed again{in_shape}, and the published baseline retires that \
-             interface name with `reserved`. A retired name is a permanent reservation \
-             (ridl §14.5, §11) — a consumer still holding the old contract would read this \
-             shape as the retired one, so publish it under a different interface name",
-        ),
         ridl_diff::Category::ReservedNameRedeclared => format!(
             "`{name}` is declared again{in_shape}, and the published baseline retires that name \
              with `reserved`. A retired name is a permanent wire reservation (ridl §11) — a \
              consumer still holding the old contract would read the new interaction as the \
              retired one, so give this interaction a different name",
-        ),
-        ridl_diff::Category::ServiceShapeReordered => format!(
-            "`{name}` has moved{in_shape} since the published baseline{}. A shape's place in \
-             the list is its interface id (ridl §14.5), so a consumer built against the \
-             baseline would now bind this slot to a different interface — put the shapes back \
-             in the baseline's order and add new ones at the end",
-            baseline_position(change),
-        ),
-        ridl_diff::Category::ServiceShapeInserted => format!(
-            "`{name}` is listed{in_shape} ahead of shapes the published baseline already \
-             numbers. A shape inserted above an existing one shifts every later interface id \
-             (ridl §14.5) — list it at the end instead",
-        ),
-        ridl_diff::Category::ServiceShapeRemoved => format!(
-            "`{name}` is gone{in_shape} but the published baseline still lists it. Deleting \
-             the shape frees its slot and every later shape slides into an interface id that \
-             is not its own (ridl §14.5) — retire it in place with `reserved {name}`, which \
-             holds the slot for ever",
         ),
         // `ORDINAL_CATEGORIES` is the caller's filter and holds exactly the
         // categories of the arms above. Another category reaching here would
@@ -1362,10 +1654,11 @@ struct DeclIndex {
     /// in the source being checked. A service — inline or named-form — is
     /// keyed by its dotted name, exactly as its diff paths are.
     shapes: BTreeMap<(String, String), (String, TextRange)>,
-    /// The named-form services, by `(package, dotted name)`: the containers
-    /// whose diff paths name a shape slot rather than an interaction, which
-    /// selects the service-level RIDL-407 wording.
-    named_services: BTreeSet<(String, String)>,
+    /// The package each indexed directory declares, by the directory's path
+    /// as [`directory_of`] spells it. A package's `interfaces.lock` sits in
+    /// the package directory, so the lock file's parent names the package a
+    /// RIDL-409 belongs to.
+    packages: BTreeMap<String, String>,
 }
 
 impl DeclIndex {
@@ -1394,6 +1687,7 @@ impl DeclIndex {
             let Some(package) = package_name(&source) else {
                 continue;
             };
+            index.packages.insert(directory_of(&path), package.clone());
 
             // Every interface shape, `interface` declarations and services'
             // inline shapes alike (`SourceFile::shapes`). A service's inline
@@ -1416,11 +1710,10 @@ impl DeclIndex {
 
             // Named-form services (ridl §14.5). `SourceFile::shapes` yields
             // only inline-form services, so without this pass a service-level
-            // diff path found nothing and its RIDL-407 rendered detached.
-            // Each list element is indexed under the interface name the diff
-            // paths carry — a reference's final segment, or the name a
-            // service-level tombstone spells — and the service's dotted name
-            // is the fallback for an element that is gone from the source.
+            // diff path found nothing and rendered detached. Each listed
+            // reference is indexed under its final segment, and the service's
+            // dotted name is the fallback for one that is gone from the
+            // source.
             for service in source
                 .services()
                 .filter(|service| service.colon_token().is_some())
@@ -1432,29 +1725,17 @@ impl DeclIndex {
                 if name.is_empty() {
                     continue;
                 }
-                index.named_services.insert((package.clone(), name.clone()));
                 index.shapes.insert(
                     (package.clone(), name.clone()),
                     (path.clone(), dotted.syntax().text_range()),
                 );
-                for element in service.shapes() {
-                    let (element_name, range) = match &element {
-                        ServiceShape::Interface(reference) => {
-                            let Some(final_segment) = final_ident(reference.syntax()) else {
-                                continue;
-                            };
-                            (final_segment, reference.syntax().text_range())
-                        }
-                        ServiceShape::Reserved(entry) => {
-                            let Some(retired) = entry.name().as_ref().and_then(name_text) else {
-                                continue;
-                            };
-                            (retired, entry.syntax().text_range())
-                        }
+                for reference in service.shapes() {
+                    let Some(final_segment) = final_ident(reference.syntax()) else {
+                        continue;
                     };
                     index.members.insert(
-                        (package.clone(), name.clone(), element_name),
-                        (path.clone(), range),
+                        (package.clone(), name.clone(), final_segment),
+                        (path.clone(), reference.syntax().text_range()),
                     );
                 }
             }
@@ -1485,19 +1766,6 @@ impl DeclIndex {
         }
     }
 
-    /// Whether a diff path's container is a named-form service, so the change
-    /// names a slot of its shape list rather than an interaction — the
-    /// distinction [`drift_message`] words its subject by.
-    fn names_a_service_shape(&self, diff_path: &str) -> bool {
-        let mut parts = diff_path.split('/');
-        match (parts.next(), parts.next()) {
-            (Some(package), Some(container)) => self
-                .named_services
-                .contains(&(package.to_string(), container.to_string())),
-            _ => false,
-        }
-    }
-
     /// The span a `<package>/<shape>/<interaction>` diff path points at: the
     /// interaction's declaration, the shape's name when the interaction itself
     /// is gone (a removal), and a detached span when neither is in the source —
@@ -1515,6 +1783,28 @@ impl DeclIndex {
             .get(&key)
             .or_else(|| self.shapes.get(&(key.0, key.1)));
         let Some((path, range)) = found else {
+            return detached_span();
+        };
+        let Some(text) = self.texts.get(path) else {
+            return detached_span();
+        };
+        Span {
+            file: sources.file_id(path, text),
+            range: *range,
+        }
+    }
+
+    /// The package declared in the directory `dir` — the parent of a lock
+    /// file's path — or `None` when no indexed file sits in it.
+    fn package_of_dir(&self, dir: &str) -> Option<&str> {
+        self.packages.get(dir).map(String::as_str)
+    }
+
+    /// The span of a shape's declared name — an `interface` declaration's
+    /// name, or a service's dotted name for its inline shape — or a detached
+    /// span when the source does not declare it.
+    fn shape_span(&self, package: &str, shape: &str, sources: &mut SourceMap) -> Span {
+        let Some((path, range)) = self.shapes.get(&(package.to_string(), shape.to_string())) else {
             return detached_span();
         };
         let Some(text) = self.texts.get(path) else {
@@ -1555,8 +1845,7 @@ fn package_name(source: &SourceFile) -> Option<String> {
 }
 
 /// The final identifier segment of a path node — `DiagBlock` of
-/// `fleet.c2.DiagBlock` — which is the interface name a service-level diff
-/// path carries (ADR-0015 decision 17).
+/// `fleet.c2.DiagBlock` — under which a listed reference is indexed.
 fn final_ident(node: &ridl_syntax::SyntaxNode) -> Option<String> {
     node.descendants_with_tokens()
         .filter_map(|element| element.into_token())

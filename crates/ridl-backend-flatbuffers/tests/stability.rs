@@ -24,8 +24,8 @@
 //! - `RpcBoundChanged` — a command's call throttle lowered.
 //! - `ContractChanged` — a `require` clause removed.
 //!
-//! The two remaining compatible arms, `ServiceShapeRetired` and
-//! `ServiceShapeAppended`, mutate a service's named shape list, which this
+//! The two remaining compatible arms, `ServiceInterfaceAdded` and
+//! `ServiceInterfaceRemoved`, change a service's set of interfaces, which this
 //! backend does not project at all (ADR-0013 decision 2 stops at the
 //! interaction identity table), so no number could move under them.
 
@@ -438,6 +438,8 @@ fn base_package(shape: &BaseShape) -> v2::Package {
         labels: Vec::new(),
         deprecated: None,
         interactions,
+        number: 0,
+        provisional: false,
     };
 
     v2::Package {
@@ -471,6 +473,7 @@ fn base_package(shape: &BaseShape) -> v2::Package {
         ],
         interfaces: vec![ctrl],
         services: Vec::new(),
+        retired: Vec::new(),
     }
 }
 

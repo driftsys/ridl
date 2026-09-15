@@ -281,7 +281,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 1,
+      "provisional": true
     },
     {
       "name": "Telemetry",
@@ -342,10 +344,13 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 2,
+      "provisional": true
     }
   ],
-  "services": []
+  "services": [],
+  "retired": []
 }
 
 // ===== package fleet.legacy =====
@@ -377,7 +382,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
     }
   ],
   "interfaces": [],
-  "services": []
+  "services": [],
+  "retired": []
 }
 
 // ===== package fleet.vehicle =====
@@ -393,7 +399,6 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "interfaceRef": "fleet.contracts.DoorControl"
         }
       ]
@@ -405,7 +410,6 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "interfaceRef": "fleet.contracts.DoorControl"
         }
       ]
@@ -417,7 +421,6 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "interfaceRef": "fleet.contracts.Telemetry"
         }
       ]
@@ -425,22 +428,13 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
     {
       "name": "fleet.vehicle.cockpit",
       "visibility": "VISIBILITY_PUBLIC",
-      "doc": "One address composing both shapes (ADR-0015 decision 12): the interface\nstays the generation unit, the service the addressing unit, so this\ndeclaration generates nothing new — it gives the two contracts one more\nglobal name. The tombstone holds interface id 2 permanently (ADR-0015\ndecision 15), so `Telemetry` is id 3.",
+      "doc": "One address composing both shapes (ADR-0015 decision 12): the interface\nstays the generation unit, the service the addressing unit, so this\ndeclaration generates nothing new — it gives the two contracts one more\nglobal name.",
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "interfaceRef": "fleet.contracts.DoorControl"
         },
         {
-          "id": 2,
-          "reserved": {
-            "ordinal": 2,
-            "name": "LegacyCabin"
-          }
-        },
-        {
-          "id": 3,
           "interfaceRef": "fleet.contracts.Telemetry"
         }
       ]
@@ -452,7 +446,6 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
       "labels": [],
       "shapes": [
         {
-          "id": 1,
           "inline": {
             "name": "",
             "visibility": "VISIBILITY_UNSPECIFIED",
@@ -631,10 +624,13 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 }
               }
-            ]
+            ],
+            "number": 1,
+            "provisional": true
           }
         }
       ]
     }
-  ]
+  ],
+  "retired": []
 }
