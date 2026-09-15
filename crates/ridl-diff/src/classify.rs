@@ -24,7 +24,7 @@
 
 use ridl_ir::v2;
 
-use crate::{Category, Change, Verdict};
+use crate::{Category, Change, Verdict, frozen};
 
 #[cfg(test)]
 mod classify_tests;
@@ -75,6 +75,14 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
         // the slot is preserved.
         Category::DocOnly | Category::InteractionRetired => Verdict::Compatible,
 
+        // An interface's identity is its `interfaces.lock` number (lock
+        // design §7). A rename that keeps the number moves nothing on the
+        // wire — the routing key is the number — and is visible in source,
+        // which the text report's heading says of it. A number the new side's
+        // lock retires is the sanctioned removal: the entry keeps the number
+        // forever, so it is never allocated again.
+        Category::InterfaceRenamed | Category::InterfaceRetired => Verdict::Compatible,
+
         // A service's list is a set of interface references (ADR-0015
         // decision 19 as amended on 2026-09-15). The routing key does not
         // contain the service, so an interface joining or leaving the set
@@ -113,8 +121,8 @@ pub fn classify(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdic
 /// unlisted-is-breaking rule.
 fn visibility(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
     let (Some(old_visibility), Some(new_visibility)) = (
-        find_visibility(old, &change.path),
-        find_visibility(new, &change.path),
+        find_visibility(old, &change.path, |name| find_old_shape(old, new, name)),
+        find_visibility(new, &change.path, |name| find_shape(new, name)),
     ) else {
         return Verdict::Breaking;
     };
@@ -130,13 +138,25 @@ fn visibility(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict 
 
 /// The visibility published at a change's path: an interaction inside an
 /// interface or service shape, or a package-level declaration, interface, or
-/// service.
-fn find_visibility(package: &v2::Package, path: &str) -> Option<i32> {
+/// service. `shape_of` resolves the container name the path carries to this
+/// side's shape — by name on the new side, and on the old side the way the
+/// walk matched it ([`find_old_shape`]), since a renamed interface's path
+/// carries only its new name.
+fn find_visibility<'a>(
+    package: &'a v2::Package,
+    path: &str,
+    shape_of: impl Fn(&str) -> Option<v2::InterfaceShape<'a>>,
+) -> Option<i32> {
     let mut segments = path.split('/').skip(1);
     let name = segments.next()?;
 
     if let Some(member) = segments.next() {
-        return find_interaction(package, name, member).map(|decl| decl.visibility);
+        return shape_of(name)?
+            .interface
+            .interactions
+            .iter()
+            .find(|decl| decl.name == member)
+            .map(|decl| decl.visibility);
     }
     if let Some(decl) = find_decl(package, name) {
         return Some(decl.visibility);
@@ -145,7 +165,7 @@ fn find_visibility(package: &v2::Package, path: &str) -> Option<i32> {
     // inline shape, and `InterfaceShape::visibility` reads the authoritative
     // field in each case — the owning service's for an inline shape, whose own
     // `Interface.visibility` is `VISIBILITY_UNSPECIFIED` by construction.
-    if let Some(shape) = package.shapes().find(|shape| shape.name == name) {
+    if let Some(shape) = shape_of(name) {
         return Some(shape.visibility());
     }
     // A service naming an interface after `:` carries no shape of its own, so
@@ -176,7 +196,7 @@ fn appended(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
         return Verdict::Breaking;
     };
     let (Some(old_iface), Some(new_iface)) = (
-        find_interface(old, container),
+        find_old_interface(old, new, container),
         find_interface(new, container),
     ) else {
         return Verdict::Breaking;
@@ -491,7 +511,7 @@ fn timing(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
         return Verdict::Breaking;
     };
     let (Some(old_decl), Some(new_decl)) = (
-        find_interaction(old, container, member),
+        find_old_interaction(old, new, container, member),
         find_interaction(new, container, member),
     ) else {
         return Verdict::Breaking;
@@ -556,7 +576,7 @@ fn rpc_bound(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
         return Verdict::Breaking;
     };
     let (Some(old_decl), Some(new_decl)) = (
-        find_interaction(old, container, member),
+        find_old_interaction(old, new, container, member),
         find_interaction(new, container, member),
     ) else {
         return Verdict::Breaking;
@@ -653,7 +673,7 @@ fn contract(change: &Change, old: &v2::Package, new: &v2::Package) -> Verdict {
         return Verdict::Breaking;
     };
     let (Some(old_decl), Some(new_decl)) = (
-        find_interaction(old, container, member),
+        find_old_interaction(old, new, container, member),
         find_interaction(new, container, member),
     ) else {
         return Verdict::Breaking;
@@ -730,15 +750,45 @@ fn find_decl<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Decl> {
     package.decls.iter().find(|decl| decl.name == name)
 }
 
-/// The interface a shape name refers to — a top-level interface, or the inline
-/// shape of a service, which the walk descends into under the service's own
-/// dotted name. `Package::shapes` keys both on exactly that identity, so one
-/// lookup covers them.
+/// The shape a name refers to — a top-level interface, or the inline shape of
+/// a service, which the walk descends into under the service's own dotted
+/// name. `Package::shapes` keys both on exactly that identity, so one lookup
+/// covers them.
+fn find_shape<'a>(package: &'a v2::Package, name: &str) -> Option<v2::InterfaceShape<'a>> {
+    package.shapes().find(|shape| shape.name == name)
+}
+
+/// The old side of the shape a diff path names, found the way the walk
+/// matched it (lock design §7; plan decision PD-14): by the frozen
+/// `interfaces.lock` number of the new side's shape when it has one, and by
+/// name otherwise — the new side has no identity, or does not hold the name
+/// at all. A renamed interface's member changes therefore classify as any
+/// other interface's, although their paths carry only the new name.
+fn find_old_shape<'a>(
+    old: &'a v2::Package,
+    new: &v2::Package,
+    name: &str,
+) -> Option<v2::InterfaceShape<'a>> {
+    let by_number = find_shape(new, name)
+        .filter(|shape| frozen(shape.interface))
+        .and_then(|shape| {
+            old.shapes().find(|candidate| {
+                frozen(candidate.interface) && candidate.interface.number == shape.interface.number
+            })
+        });
+    by_number.or_else(|| find_shape(old, name))
+}
+
 fn find_interface<'a>(package: &'a v2::Package, name: &str) -> Option<&'a v2::Interface> {
-    package
-        .shapes()
-        .find(|shape| shape.name == name)
-        .map(|shape| shape.interface)
+    find_shape(package, name).map(|shape| shape.interface)
+}
+
+fn find_old_interface<'a>(
+    old: &'a v2::Package,
+    new: &v2::Package,
+    name: &str,
+) -> Option<&'a v2::Interface> {
+    find_old_shape(old, new, name).map(|shape| shape.interface)
 }
 
 fn find_interaction<'a>(
@@ -747,6 +797,20 @@ fn find_interaction<'a>(
     member: &str,
 ) -> Option<&'a v2::Decl> {
     find_interface(package, container)?
+        .interactions
+        .iter()
+        .find(|decl| decl.name == member)
+}
+
+/// The old side's interaction under a `<package>/<container>/<member>` path,
+/// with the container resolved by [`find_old_shape`].
+fn find_old_interaction<'a>(
+    old: &'a v2::Package,
+    new: &v2::Package,
+    container: &str,
+    member: &str,
+) -> Option<&'a v2::Decl> {
+    find_old_interface(old, new, container)?
         .interactions
         .iter()
         .find(|decl| decl.name == member)
@@ -874,13 +938,26 @@ pub fn explain(category: Category) -> &'static str {
             "              (typl 7.4, append-only)\n",
             "  breaking    a member inserted below the highest slot ever used, a member\n",
             "              taking a retired number, any addition that moves a surviving\n",
-            "              member's slot, or any arm of a result union (ADR-0008 d4)"
+            "              member's slot, or any arm of a result union (ADR-0008 d4)\n",
+            "  note        an interface is matched by its interfaces.lock number (lock\n",
+            "              design 7): a frozen number the old side never held is a new\n",
+            "              interface, and so is every provisional one — a declaration\n",
+            "              with no lock entry carries no identity, and a rename keeps its\n",
+            "              number, so it is never a renamed interface (interface_renamed)"
         ),
         Category::DeclRemoved => concat!(
             "A declaration, interface, or service present only in the old snapshot.\n",
             "  breaking    a removed service, interface, decl, enum value, struct\n",
             "              field, or union arm withdraws something a consumer compiled\n",
             "              against\n",
+            "  note        an interface is matched by its interfaces.lock number (lock\n",
+            "              design 7), so an interface here is one whose number is gone\n",
+            "              from the new side and not retired there — a lock line deleted\n",
+            "              by hand, or a number changed by hand, which is this row plus\n",
+            "              decl_added. A number the new side's lock retires is\n",
+            "              interface_retired instead, and `ridl baseline` refuses to\n",
+            "              publish the removal of a number it does not find retired\n",
+            "              (RIDL-412)\n",
             "  caveat      a composite member retired the sanctioned way — replaced by\n",
             "              a `reserved` tombstone in its own slot (typl 7.4) — is also\n",
             "              reported breaking today. The body comparison is keyed on\n",
@@ -889,6 +966,33 @@ pub fn explain(category: Category) -> &'static str {
             "              errs on the safe side; carried as debt, see the note on\n",
             "              `diff_composite`. The interaction-level tombstone IS\n",
             "              recognised — see interaction_retired"
+        ),
+        Category::InterfaceRenamed => concat!(
+            "An interface whose interfaces.lock number is the same on both sides and\n",
+            "whose name changed.\n",
+            "  compatible  always — the number is the interface's identity and its\n",
+            "              routing key (lock design 7, rsdl decision D-7), so nothing\n",
+            "              moves on the wire. Visible in source: a rename changes the\n",
+            "              generated identity-table names in both wire backends, which\n",
+            "              is why the text report lists it under the heading\n",
+            "              \"compatible on the wire, visible in source\". The path\n",
+            "              carries the new name and the detail old -> new; changes\n",
+            "              inside the interface are reported under the new name and\n",
+            "              classified as any other interface's\n",
+            "  note        a provisional number is no identity: a declaration with no\n",
+            "              lock entry is never matched, so a rename the lock does not\n",
+            "              record is decl_removed plus decl_added, breaking, until\n",
+            "              `ridl lock <pkg> --rename Old=New` records it"
+        ),
+        Category::InterfaceRetired => concat!(
+            "An interface whose number the old snapshot held is gone from the new\n",
+            "snapshot, whose interfaces.lock retires it.\n",
+            "  compatible  always — the sanctioned removal of an interface: the entry\n",
+            "              keeps its number forever with the word `retired`, so the\n",
+            "              number is never allocated again (lock design 4 and 7, rsdl\n",
+            "              decision D-7). A number gone with no retired entry is\n",
+            "              decl_removed, breaking, and `ridl baseline` refuses to publish\n",
+            "              it (RIDL-412)"
         ),
         Category::MemberReordered => concat!(
             "A surviving composite member whose slot in the body changed.\n",

@@ -581,3 +581,46 @@ fn a_service_set_removal_renders_under_the_heading() {
         "compatible\n  [compatible] decl_added veh.cluster/K: (absent) -> interface\ncompatible on the wire, visible in source:\n  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)\n"
     );
 }
+
+/// An interface is matched by its `interfaces.lock` number (lock design §7):
+/// a rename that keeps its number is `interface_renamed`, compatible on the
+/// wire and visible in source, so the text report groups it with a set
+/// removal under the one heading, printed once. Each side is a bare `.ridl`
+/// file whose directory holds the lock (plan decision PD-8).
+#[test]
+fn the_text_report_groups_renames_and_set_removals_under_one_heading() {
+    const HEADER: &str = "# interfaces.lock — written by ridl lock; do not edit by hand.\n";
+    const TYPES: &str =
+        "package veh.cluster\ntype T: integer [0..10]\ninterface I {\n  signal a: T @10ms\n}\n";
+    let dir = TempDir::new("renamed-by-number");
+    let old = dir.write(
+        "old/dash.ridl",
+        &format!(
+            "{TYPES}interface J {{\n  signal b: T @10ms\n}}\nservice veh.cluster.dash : I, J\n"
+        ),
+    );
+    dir.write(
+        "old/interfaces.lock",
+        &format!("{HEADER}next 3\nI 1\nJ 2\n"),
+    );
+    let new = dir.write(
+        "new/dash.ridl",
+        &format!(
+            "{TYPES}interface Jay {{\n  signal b: T @10ms\n}}\nservice veh.cluster.dash : I\n"
+        ),
+    );
+    dir.write(
+        "new/interfaces.lock",
+        &format!("{HEADER}next 3\nI 1\nJay 2\n"),
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "a rename on its number and a set removal are both compatible, stderr:\n{stderr}"
+    );
+    assert_eq!(
+        stdout,
+        "compatible\ncompatible on the wire, visible in source:\n  [compatible] interface_renamed veh.cluster/Jay: J -> Jay\n  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)\n"
+    );
+}

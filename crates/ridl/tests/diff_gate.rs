@@ -245,6 +245,8 @@ fn the_category_spellings_are_pinned() {
         [
             "decl_added",
             "decl_removed",
+            "interface_renamed",
+            "interface_retired",
             "member_reordered",
             "interaction_appended",
             "interaction_inserted",

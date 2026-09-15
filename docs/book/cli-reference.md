@@ -875,6 +875,34 @@ compatible on the wire, visible in source:
   [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
 ```
 
+An interface is matched by its number from the package's `interfaces.lock`,
+not by its name — a declared `interface` and a service's inline shape alike. A
+rename that keeps its number, recorded with `ridl lock <pkg> --rename Old=New`,
+is `interface_renamed`: compatible on the wire, because the number is the
+routing identity, and visible in source, because the generated identity-table
+names change, so it shares the heading above; the path carries the new name,
+and a change inside the renamed interface is reported under the new name too.
+A number gone from the new side is `interface_retired` when that side's lock
+retires it, and `decl_removed`, breaking, otherwise. A declaration with no lock
+entry carries a provisional number, which is no identity: it is always
+`decl_added`, and it is never matched to an old interface, so a rename the lock
+does not record is `decl_removed` plus `decl_added`. Two sides with no lock
+file — two bare source trees, or a snapshot published before the lock existed —
+are matched by name. With `J` renamed to `Jay` on its number, the lock beside
+each file recording it, and `Jay` no longer listed in
+`service veh.cluster.dash : I, J`:
+
+```sh
+ridl diff old/dash.ridl new/dash.ridl
+```
+
+```text
+compatible
+compatible on the wire, visible in source:
+  [compatible] interface_renamed veh.cluster/Jay: J -> Jay
+  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
+```
+
 The breaking comparison above with `--format json`:
 
 ```sh
@@ -963,6 +991,8 @@ error: unknown change category `not_a_real_category`
 the categories `ridl diff` reports are:
   decl_added
   decl_removed
+  interface_renamed
+  interface_retired
   member_reordered
   interaction_appended
   interaction_inserted

@@ -1,10 +1,12 @@
 //! The comparison walk over two resolved IR v2 packages.
 //!
-//! The walk matches package declarations, interfaces, services, and
-//! interactions by name within their container, then compares the aspects
-//! that carry contract identity — ordinals, payloads, timings, returns,
-//! parameters, contracts, widths, constraints, and inits — emitting one
-//! [`Change`](crate::Change) per difference with an honest path.
+//! The walk matches package declarations, services, and interactions by name
+//! within their container, and interfaces — declared ones and the inline
+//! shapes of services alike — by the number each carries from its package's
+//! `interfaces.lock` (lock design §7; see `diff_interfaces`). It then compares
+//! the aspects that carry contract identity — ordinals, payloads, timings,
+//! returns, parameters, contracts, widths, constraints, and inits — emitting
+//! one [`Change`](crate::Change) per difference with an honest path.
 //!
 //! Ordinal analysis (ridl §11) is done on the surviving interactions of an
 //! interface. A new slot is [`InteractionAppended`](crate::Category::InteractionAppended)
@@ -44,13 +46,13 @@ use std::collections::{BTreeMap, BTreeSet};
 use ridl_ir::v2;
 
 use crate::classify::{struct_slots, union_slots};
-use crate::{Category, Change, emit};
+use crate::{Category, Change, emit, frozen};
 
 /// Walks two matched packages, appending every difference to `changes`.
 pub(crate) fn walk_packages(old: &v2::Package, new: &v2::Package, changes: &mut Vec<Change>) {
     let pkg = new.name.as_str();
     diff_decls(pkg, &old.decls, &new.decls, changes);
-    diff_interfaces(pkg, &old.interfaces, &new.interfaces, changes);
+    diff_interfaces(pkg, old, new, changes);
     diff_services(pkg, &old.services, &new.services, changes);
 }
 
@@ -319,49 +321,146 @@ fn diff_composite(
 // Interfaces and interactions.
 // ==========================================================================
 
-fn diff_interfaces(
-    pkg: &str,
-    old: &[v2::Interface],
-    new: &[v2::Interface],
-    changes: &mut Vec<Change>,
-) {
-    let old_by: BTreeMap<&str, &v2::Interface> = old.iter().map(|i| (i.name.as_str(), i)).collect();
-    let new_by: BTreeMap<&str, &v2::Interface> = new.iter().map(|i| (i.name.as_str(), i)).collect();
+/// A shape's place in the walk's maps: its form — `false` for a declared
+/// interface, `true` for a service's inline shape — then its identity name.
+/// The form comes first so that a declared interface and an inline shape
+/// spelled the same (`interface cabin` beside `service cabin`) are two keys,
+/// and so that the declared interfaces sort before the inline shapes.
+type ShapeKey<'a> = (bool, &'a str);
 
-    for (name, old_iface) in &old_by {
-        match new_by.get(name) {
-            Some(new_iface) => {
-                if interface_envelope_differs(old_iface, new_iface) {
-                    emit(
-                        changes,
-                        format!("{pkg}/{name}"),
-                        Category::DocOnly,
-                        None,
-                        None,
-                    );
-                }
-                emit_visibility(
-                    changes,
-                    format!("{pkg}/{name}"),
-                    old_iface.visibility,
-                    new_iface.visibility,
-                );
-                diff_interface(pkg, name, old_iface, new_iface, changes);
-            }
-            None => emit(
-                changes,
-                format!("{pkg}/{name}"),
-                Category::DeclRemoved,
-                Some("interface".to_string()),
-                None,
-            ),
+fn shapes_by_key(package: &v2::Package) -> BTreeMap<ShapeKey<'_>, v2::InterfaceShape<'_>> {
+    package
+        .shapes()
+        .map(|shape| ((shape.is_inline(), shape.name), shape))
+        .collect()
+}
+
+/// The interface walk, over every shape of the package — the declared
+/// interfaces and the inline shapes of its services alike — matched by the
+/// number each carries from its `interfaces.lock` (lock design §7; plan
+/// decision PD-1), in three passes:
+///
+/// 1. an old shape with a frozen, non-zero number matches the new shape with
+///    the same frozen number, whatever either is named;
+/// 2. an old shape with no identity — `number` 0, from a snapshot published
+///    before the lock existed, or a provisional number — matches by name and
+///    form among the new shapes pass 1 left unmatched;
+/// 3. an old shape still unmatched is `InterfaceRetired` when its frozen
+///    number is in the new side's retired entries and `DeclRemoved`
+///    otherwise; a new shape still unmatched is `DeclAdded`.
+///
+/// A frozen old number therefore never matches a new provisional shape: a
+/// rename keeps its number, so a provisional shape is always a new interface.
+/// Two new shapes cannot carry one frozen number — the checker refuses the
+/// lock that would give them one (RIDL-410) — so pass 1 reads the first.
+///
+/// A matched pair whose names differ is `InterfaceRenamed`, compatible, and
+/// its body is then diffed as any other pair's; every change path carries the
+/// new side's name (plan decision PD-14), so the desk check's index finds a
+/// span, and the classifier re-finds the old side by number. The envelope and
+/// the visibility of a declared interface are compared here; an inline
+/// shape's are its service's, which `diff_service` compares under the same
+/// path, so an inline shape whose service is added or removed is reported at
+/// both levels: once as the service, once as the interface whose number went
+/// with it.
+///
+/// Changes come out in the old side's key order — the declared interfaces by
+/// name, then the inline shapes by service name — and the additions in the new
+/// side's key order.
+fn diff_interfaces(pkg: &str, old: &v2::Package, new: &v2::Package, changes: &mut Vec<Change>) {
+    let old_shapes = shapes_by_key(old);
+    let new_shapes = shapes_by_key(new);
+
+    let new_by_number: BTreeMap<u32, ShapeKey<'_>> = new_shapes
+        .iter()
+        .rev()
+        .filter(|(_, shape)| frozen(shape.interface))
+        .map(|(key, shape)| (shape.interface.number, *key))
+        .collect();
+
+    // Old key to new key, and the new keys taken so far.
+    let mut pairs: BTreeMap<ShapeKey<'_>, ShapeKey<'_>> = BTreeMap::new();
+    let mut taken: BTreeSet<ShapeKey<'_>> = BTreeSet::new();
+    // Pass 1: by frozen number.
+    for (old_key, old_shape) in &old_shapes {
+        if !frozen(old_shape.interface) {
+            continue;
+        }
+        if let Some(new_key) = new_by_number.get(&old_shape.interface.number)
+            && taken.insert(*new_key)
+        {
+            pairs.insert(*old_key, *new_key);
         }
     }
-    for name in new_by.keys() {
-        if !old_by.contains_key(name) {
+    // Pass 2: by name and form, for an old shape with no identity.
+    for (old_key, old_shape) in &old_shapes {
+        if frozen(old_shape.interface) {
+            continue;
+        }
+        if new_shapes.contains_key(old_key) && taken.insert(*old_key) {
+            pairs.insert(*old_key, *old_key);
+        }
+    }
+
+    for (old_key, old_shape) in &old_shapes {
+        let Some(new_key) = pairs.get(old_key) else {
+            let number = old_shape.interface.number;
+            let sanctioned = frozen(old_shape.interface)
+                && new.retired.iter().any(|entry| entry.number == number);
+            if sanctioned {
+                emit(
+                    changes,
+                    format!("{pkg}/{}", old_shape.name),
+                    Category::InterfaceRetired,
+                    Some("interface".to_string()),
+                    Some("retired".to_string()),
+                );
+            } else {
+                emit(
+                    changes,
+                    format!("{pkg}/{}", old_shape.name),
+                    Category::DeclRemoved,
+                    Some("interface".to_string()),
+                    None,
+                );
+            }
+            continue;
+        };
+        let new_shape = &new_shapes[new_key];
+        let name = new_shape.name;
+        if old_shape.name != name {
             emit(
                 changes,
                 format!("{pkg}/{name}"),
+                Category::InterfaceRenamed,
+                Some(old_shape.name.to_string()),
+                Some(name.to_string()),
+            );
+        }
+        if !new_shape.is_inline() {
+            if interface_envelope_differs(old_shape.interface, new_shape.interface) {
+                emit(
+                    changes,
+                    format!("{pkg}/{name}"),
+                    Category::DocOnly,
+                    None,
+                    None,
+                );
+            }
+            emit_visibility(
+                changes,
+                format!("{pkg}/{name}"),
+                old_shape.visibility(),
+                new_shape.visibility(),
+            );
+        }
+        diff_interface(pkg, name, old_shape.interface, new_shape.interface, changes);
+    }
+    for (new_key, new_shape) in &new_shapes {
+        if !taken.contains(new_key) {
+            emit(
+                changes,
+                format!("{pkg}/{}", new_shape.name),
                 Category::DeclAdded,
                 None,
                 Some("interface".to_string()),
@@ -794,9 +893,13 @@ fn diff_service(
     // identity of every fallible query in the shape (ADR-0015 decision 15) —
     // while a changed list is read as a set by `diff_service_set` (decision
     // 19 as amended on 2026-09-15, which narrows `ServiceChanged` to the form
-    // switch).
+    // switch). Two inline shapes are not diffed here: an inline shape is an
+    // interface with its own lock number, and `diff_interfaces` matched it by
+    // that number, so its body was compared there — under this service's
+    // name when the number was found under it, or under the name of whichever
+    // service holds the number now.
     match (inline_shape(old), inline_shape(new)) {
-        (Some(a), Some(b)) => diff_interface(pkg, name, a, b, changes),
+        (Some(_), Some(_)) => {}
         (None, None) => diff_service_set(pkg, name, old, new, changes),
         (old_inline, new_inline) => {
             emit(

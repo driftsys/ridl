@@ -142,16 +142,6 @@ const ALLOWED: &[Allowed] = &[
         lines: 7,
         why: "tests mutating fixture interfaces to provoke each category",
     },
-    Allowed {
-        path: "crates/ridl-diff/src/walk.rs",
-        lines: 1,
-        why: "`walk_packages` diffs the two stores PAIRWISE — old against new, \
-              by name, detecting adds and removals. An inline shape is reached \
-              through `diff_services`, because a service switching between the \
-              reference form and an inline body has to classify as one service \
-              change rather than as an interface appearing beside a reference \
-              disappearing. A `shapes()` walk cannot express that",
-    },
 ];
 
 /// The workspace root — the parent of the `xtask` crate directory.
