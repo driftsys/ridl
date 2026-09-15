@@ -764,11 +764,33 @@ diag_codes! {
     /// `crates/ridlc/tests/corpus.rs` gives every code here a living example,
     /// and `rsdl_profile_codes_match_the_catalogue` holds the two lists equal.
     RSDL_CATALOG {
+        /// `instances` is not a parenthesised list of one or more camelCase
+        /// names — `()`, `instances = solo` (rsdl §5, §7, §16.1). Error. Raised
+        /// by the rsdl attribute check.
+        RSDL_305 = "RSDL-305", Error,
+            "`instances` is not a parenthesised list of one or more camelCase names";
+
+        /// `external` written with a value — it is a flag (rsdl §5, §16.1).
+        /// Error. Raised by the rsdl attribute check.
+        RSDL_313 = "RSDL-313", Error,
+            "`external` written with a value";
+
         /// A declaration of another profile — a type, an interface, a service —
         /// at the top level of an `.rsdl` file (rsdl §2, §16.1). Error. Raised
         /// by the parser.
         RSDL_604 = "RSDL-604", Error,
             "a declaration of another profile in an `.rsdl` file";
+
+        /// A backend key whose namespace no configured backend claims (rsdl §5,
+        /// §16.1). Warning: the key is still carried. Raised by `ridlc`, which
+        /// knows the configured backends (plan decision P-B4).
+        RSDL_804 = "RSDL-804", Warning,
+            "a backend key whose namespace no configured backend claims";
+
+        /// A `tier` value other than `PLATFORM` or `APPLICATION` (rsdl §5,
+        /// §16.1). Error. Raised by the rsdl attribute check.
+        RSDL_908 = "RSDL-908", Error,
+            "`tier` value other than `PLATFORM` or `APPLICATION`";
     }
 
     /// The manifest catalogue (ADR-0007 decision 2): the manifest `0xx` codes the

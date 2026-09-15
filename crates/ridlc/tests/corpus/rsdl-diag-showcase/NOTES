@@ -11,6 +11,12 @@ a check in another:
 
 - `profile_boundary.rsdl` — the parser's rsdl codes: RSDL-604 for a declaration
   of another profile, and FORM-102 for `internal` before an rsdl keyword.
+- `attributes.rsdl` — the attribute rules of rsdl §5: FORM-101, FORM-106,
+  FORM-107 and FORM-108 over the rsdl-owned keys, RSDL-305, RSDL-313 and
+  RSDL-908 over their values, and the RSDL-804 warning, which `ridlc` raises for
+  a backend key no configured backend claims. The bad keys sit on `Draft`, a
+  component outside the closure, so the closure, placement and distribution
+  checks have nothing to report about them.
 
 A code the showcase cannot provoke in one compile is listed in
 `RSDL_PROFILE_CODES` as `Elsewhere`, with the fixture that provokes it.

@@ -14,3 +14,57 @@ error[FORM-102]: `internal` cannot modify an rsdl declaration — the closure is
   │
 9 │ internal component Lane {}
   │ ^^^^^^^^
+
+error[FORM-106]: unknown attribute key `owner`
+  ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:5:19
+  │
+5 │ system Showcase [ owner = "fleet" ] {
+  │                   ^^^^^^^^^^^^^^^
+
+error[FORM-107]: attribute `deprecated` not valid on a line — a line takes backend keys only (rsdl reference §5)
+  ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:7:10
+  │
+7 │   Lane [ deprecated = "use Lane2" ]
+  │          ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-908]: `tier` is `PLATFORM` or `APPLICATION` (rsdl reference §3.3)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:13:21
+   │
+13 │ distribution Adas [ tier = SYSTEM ] { Lane }
+   │                     ^^^^^^^^^^^^^
+
+warning[RSDL-804]: no configured backend claims the namespace `linux`, so `linux.cpuset` is carried uninterpreted (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:18:27
+   │
+18 │   machine DevBox { Lane [ linux.cpuset = (2, 3) ] }
+   │                           ^^^^^^^^^^^^^^^^^^^^^
+
+error[FORM-107]: attribute `tier` not valid on a `component` (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:29:3
+   │
+29 │   tier = PLATFORM,
+   │   ^^^^^^^^^^^^^^^
+
+error[FORM-108]: duplicate attribute key `labels`
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:31:3
+   │
+31 │   labels = (QM),
+   │   ^^^^^^^^^^^^^
+
+error[FORM-101]: expected `deprecated = "reason"`, a string literal (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:32:3
+   │
+32 │   deprecated = draft,
+   │   ^^^^^^^^^^^^^^^^^^
+
+error[RSDL-305]: `instances` takes a parenthesised list of one or more camelCase names, such as `instances = (primary, backup)` (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:33:3
+   │
+33 │   instances = solo,
+   │   ^^^^^^^^^^^^^^^^
+
+error[RSDL-313]: `external` is a flag and takes no value — write `[ external ]` (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:34:3
+   │
+34 │   external = true,
+   │   ^^^^^^^^^^^^^^^

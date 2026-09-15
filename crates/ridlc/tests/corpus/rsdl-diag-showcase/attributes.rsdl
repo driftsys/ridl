@@ -1,0 +1,35 @@
+package rsdl.showcase
+
+// FORM-106 (rsdl reference §5): `owner` is a key no row of the §5 table and no
+// backend namespace defines.
+system Showcase [ owner = "fleet" ] {
+  // FORM-107: a line takes backend keys only.
+  Lane [ deprecated = "use Lane2" ]
+}
+
+component Lane {}
+
+// RSDL-908: `tier` is `PLATFORM` or `APPLICATION`.
+distribution Adas [ tier = SYSTEM ] { Lane }
+
+// RSDL-804, a warning: no configured backend claims `linux`. The key is still
+// carried on the placement line.
+deployment Bench for Showcase {
+  machine DevBox { Lane [ linux.cpuset = (2, 3) ] }
+}
+
+// `Draft` is not in the closure, so no rule beyond its attribute block applies
+// to it (rsdl reference §3.1).
+// FORM-107: `tier` is a distribution's key.
+// FORM-108: `labels` twice in one block.
+// FORM-101: `deprecated` takes a string literal.
+// RSDL-305: `instances` is a parenthesised list of camelCase names.
+// RSDL-313: `external` is a flag and takes no value.
+component Draft [
+  tier = PLATFORM,
+  labels = (QM),
+  labels = (QM),
+  deprecated = draft,
+  instances = solo,
+  external = true,
+] {}

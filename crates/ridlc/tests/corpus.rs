@@ -60,7 +60,7 @@
 //! directory `cargo test` sets), so the file paths that appear in the rendered
 //! diagnostics stay portable across machines.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use ridl_core::db::InputFile;
@@ -70,7 +70,7 @@ use ridl_core::diag::{
 };
 use ridl_core::package::{Package, service_catalog};
 use ridl_core::{RidlDatabase, load_workspace, parse_file, std_package};
-use ridl_sem::{check_package, resolve_package};
+use ridl_sem::{check_package, check_system, resolve_package};
 
 /// The four snapshotted artifacts of one compiled corpus entry.
 struct Compiled {
@@ -158,16 +158,34 @@ fn compile_entry(entry: &Path) -> Compiled {
     // in package-then-file order. That order is rebuilt here and remapped onto
     // the render source map. Without this the runner would compile a workspace
     // the real pipeline rejects and snapshot it as clean.
+    //
+    // The rsdl system query shares that order, and its RSDL-804 warnings come
+    // from `ridlc::unclaimed_backend_keys` with no namespace claimed, exactly
+    // as the command drivers call it.
     let catalog = service_catalog(&db, workspace, std);
-    if !catalog.diagnostics.is_empty() {
-        let mut catalog_render_ids = Vec::new();
+    let mut system = check_system(&db, workspace, std);
+    if !catalog.diagnostics.is_empty() || !system.diagnostics.is_empty() {
+        let mut workspace_render_ids = Vec::new();
         for pkg in &packages {
             for file in pkg.files(&db) {
-                catalog_render_ids.push(sources.file_id(file.path(&db), file.text(&db)));
+                workspace_render_ids.push(sources.file_id(file.path(&db), file.text(&db)));
             }
         }
-        diagnostics.extend(remap_diagnostics(catalog.diagnostics, &catalog_render_ids));
+        diagnostics.extend(remap_diagnostics(
+            catalog.diagnostics,
+            &workspace_render_ids,
+        ));
+        diagnostics.extend(remap_diagnostics(
+            std::mem::take(&mut system.diagnostics),
+            &workspace_render_ids,
+        ));
     }
+    diagnostics.extend(ridlc::unclaimed_backend_keys(
+        &db,
+        &system,
+        &BTreeSet::new(),
+        &mut sources,
+    ));
 
     // IR JSON and generated Rust are recorded only for an entry that compiles
     // without errors. For a clean entry these are the full-pipeline golden. For
@@ -689,9 +707,17 @@ fn every_test_cited_in_an_elsewhere_reason_exists() {
 /// [`rsdl_profile_codes_match_the_catalogue`] holds the `RSDL-` rows equal to
 /// `RSDL_CATALOG`.
 const RSDL_PROFILE_CODES: &[(&str, Provoked)] = &[
+    ("RSDL-305", Showcase),
+    ("RSDL-313", Showcase),
     ("RSDL-604", Showcase),
-    // The shared codes the rsdl grammar raises.
+    ("RSDL-804", Showcase),
+    ("RSDL-908", Showcase),
+    // The shared codes the rsdl grammar and the rsdl attribute check raise.
+    ("FORM-101", Showcase),
     ("FORM-102", Showcase),
+    ("FORM-106", Showcase),
+    ("FORM-107", Showcase),
+    ("FORM-108", Showcase),
 ];
 
 /// The rsdl diagnostic showcase emits exactly the codes [`RSDL_PROFILE_CODES`]

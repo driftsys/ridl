@@ -13,6 +13,9 @@ pub mod init;
 /// The ridl lint pass (E2.10a) — advisory codes over the interaction layer.
 pub mod lint;
 pub mod resolve;
+/// The rsdl checker: one workspace-level query over every `.rsdl` file (rsdl
+/// reference v0.2).
+pub mod rsdl;
 pub mod scalar;
 pub mod timing;
 // The proptest range generators (E1.18). Behind the default-on `testgen`
@@ -24,3 +27,4 @@ pub mod ucum;
 
 pub use check::{CheckedPackage, ConstValue, check_package, const_value};
 pub use resolve::{Resolution, Symbol, SymbolKind, resolve_package};
+pub use rsdl::{CheckedSystem, check_system};

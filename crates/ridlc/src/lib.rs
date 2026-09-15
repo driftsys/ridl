@@ -31,7 +31,7 @@
 //! they add the remote-import lockfile round trip on top of `compile_workspace`
 //! and, for `build`, write the selected [`Emit`] artifacts.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use ridl_core::db::InputFile;
@@ -43,7 +43,9 @@ use ridl_core::{
     Cache, Frozen, LoadedWorkspace, RidlDatabase, load_workspace, materialize_imports, parse_file,
     read_lockfile, std_package, write_lockfile,
 };
-use ridl_sem::{CheckedPackage, Resolution, check_package, resolve_package};
+use ridl_sem::{
+    CheckedPackage, CheckedSystem, Resolution, check_package, check_system, resolve_package,
+};
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
 
@@ -595,6 +597,42 @@ pub fn syntax_error_diagnostic(error: &ridl_syntax::SyntaxError, file: FileId) -
     )
 }
 
+/// RSDL-804 (rsdl reference §5): one warning for every backend key of `system`
+/// whose namespace is not in `claimed`, the namespaces the configured backends
+/// consume. The key stays in the model either way, and the warning never
+/// blocks (rsdl §13). The spans are interned into `sources`, so the returned
+/// diagnostics render against it with no remap.
+pub fn unclaimed_backend_keys(
+    db: &RidlDatabase,
+    system: &CheckedSystem,
+    claimed: &BTreeSet<String>,
+    sources: &mut SourceMap,
+) -> Vec<Diagnostic> {
+    system
+        .backend_keys()
+        .into_iter()
+        .filter(|key| !claimed.contains(&key.namespace))
+        .map(|key| {
+            let file = key.site.file;
+            Diagnostic {
+                code: DiagCode::RSDL_804,
+                severity: Severity::Warning,
+                message: format!(
+                    "no configured backend claims the namespace `{}`, so `{}.{}` is carried \
+                     uninterpreted (rsdl reference §5)",
+                    key.namespace, key.namespace, key.key
+                ),
+                primary: Span {
+                    file: sources.file_id(file.path(db), file.text(db)),
+                    range: key.site.range,
+                },
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            }
+        })
+        .collect()
+}
+
 /// The loaded-and-checked workspace shared by [`compile_workspace`] and the
 /// command drivers: the salsa [`Workspace`] and `ridl.std` handles, the
 /// per-package checked IR and resolved name views, the merged diagnostics
@@ -661,21 +699,40 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
         checked.push(checked_pkg);
     }
 
-    // The workspace-wide service catalog (E2.13): its RIDL-140 duplicate-name
-    // diagnostics span the whole workspace, so they carry FileIds indexing
-    // every file in package-then-file order — the order `service_catalog`
-    // interns them. Rebuild that order onto the render source map and remap,
-    // mirroring the per-package remap above.
+    // The two workspace-wide passes: the service catalog (E2.13), whose RIDL-140
+    // duplicate-name diagnostics span the whole workspace, and the rsdl system
+    // query (rsdl reference v0.2), which checks every `.rsdl` file at once
+    // because the closure is workspace-wide. Both carry FileIds indexing every
+    // file in package-then-file order. Rebuild that order onto the render
+    // source map and remap, mirroring the per-package remap above.
     let catalog = service_catalog(db, workspace, std);
-    if !catalog.diagnostics.is_empty() {
-        let mut catalog_render_ids = Vec::new();
+    let mut system = check_system(db, workspace, std);
+    if !catalog.diagnostics.is_empty() || !system.diagnostics.is_empty() {
+        let mut workspace_render_ids = Vec::new();
         for pkg in &packages {
             for file in pkg.files(db) {
-                catalog_render_ids.push(sources.file_id(file.path(db), file.text(db)));
+                workspace_render_ids.push(sources.file_id(file.path(db), file.text(db)));
             }
         }
-        diagnostics.extend(remap_diagnostics(catalog.diagnostics, &catalog_render_ids));
+        diagnostics.extend(remap_diagnostics(
+            catalog.diagnostics,
+            &workspace_render_ids,
+        ));
+        diagnostics.extend(remap_diagnostics(
+            std::mem::take(&mut system.diagnostics),
+            &workspace_render_ids,
+        ));
     }
+    // RSDL-804 is raised here, not in the query, because only a driver knows
+    // which backends are configured. No backend declares the namespaces it
+    // consumes until the codegen plugin contract exists (ADR-0020), so the
+    // command drivers claim none and every backend key draws the warning.
+    diagnostics.extend(unclaimed_backend_keys(
+        db,
+        &system,
+        &BTreeSet::new(),
+        &mut sources,
+    ));
 
     Ok(Compiled {
         workspace,

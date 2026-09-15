@@ -3015,11 +3015,12 @@ impl Checker<'_> {
     /// global, published declaration of one or more interfaces — either by
     /// naming shapes in a list after `:` (ADR-0015 decision 12) or with one
     /// inline body; never both (decision 14). A service is posture-neutral by
-    /// design (§14.5): providing and requiring it are rsdl concerns (§14.6),
-    /// so nothing beyond the shapes lowers here. Its dotted name lives in the
-    /// workspace catalog namespace, not the type namespace, so it is never a
-    /// `SymbolKind`. Services always publish with public visibility — a
-    /// global contract takes no `internal` modifier.
+    /// design (§14.5): in rsdl a component offers a service and requires
+    /// interfaces (rsdl reference §3.2), and posture derivation is reserved
+    /// (rsdl §12), so nothing beyond the shapes lowers here. Its dotted name
+    /// lives in the workspace catalog namespace, not the type namespace, so it
+    /// is never a `SymbolKind`. Services always publish with public visibility
+    /// — a global contract takes no `internal` modifier.
     fn lower_service(&mut self, service: &ast::ServiceDef) -> v2::Service {
         let dotted = service.name();
         let name = dotted

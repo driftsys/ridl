@@ -82,6 +82,46 @@ fn check_duplicate_declaration_exits_one() {
     );
 }
 
+/// `check` runs the rsdl system query over a package's `.rsdl` files: an
+/// attribute rule of rsdl §5 fails the check, and a backend key draws the
+/// RSDL-804 warning, because the command claims no backend namespace.
+#[test]
+fn check_reports_the_rsdl_attribute_rules() {
+    let dir = TempDir::new("check-rsdl");
+    dir.write("ridl.toml", PACKAGE_MANIFEST);
+    dir.write(
+        "system.rsdl",
+        "package veh.common\n\nsystem Vehicle [ owner ] {\n  Cruise [ linux.cpuset = (2, 3) ]\n}\n",
+    );
+    let (code, stderr) = ridlc(&["check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(code, 1, "FORM-106 fails the check, stderr:\n{stderr}");
+    assert!(
+        stderr.contains("error[FORM-106]") && stderr.contains("warning[RSDL-804]"),
+        "both rsdl diagnostics render, got:\n{stderr}"
+    );
+}
+
+/// RSDL-804 is a warning: a workspace whose only rsdl finding is an unclaimed
+/// backend key checks with exit 0 (rsdl reference §13).
+#[test]
+fn check_passes_with_only_an_rsdl_804_warning() {
+    let dir = TempDir::new("check-rsdl-warning");
+    dir.write("ridl.toml", PACKAGE_MANIFEST);
+    dir.write(
+        "system.rsdl",
+        "package veh.common\n\nsystem Vehicle [ rust.crate = \"vehicle\" ] { Cruise }\n",
+    );
+    let (code, stderr) = ridlc(&["check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "a warning does not fail the check, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("warning[RSDL-804]"),
+        "the warning renders, got:\n{stderr}"
+    );
+}
+
 /// `build` on a package directory writes `<pkg-name>.rs` and exits 0.
 #[test]
 fn build_package_writes_generated_rust() {
