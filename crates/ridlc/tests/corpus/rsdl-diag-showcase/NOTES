@@ -34,6 +34,8 @@ a check in another:
   §9: RSDL-701, RSDL-702 and RSDL-704 to RSDL-708. `Bench`, in
   `attributes.rsdl`, places every closure instance once, so it draws none of
   them.
+- `distribution.rsdl` — the distribution rules of rsdl §3.3: RSDL-901 over the
+  derived dependency of `Base` on `App`, and RSDL-903 to RSDL-907.
 - `contracts.ridl` — the ridl interfaces and services the rsdl files name. It
   draws no diagnostic.
 

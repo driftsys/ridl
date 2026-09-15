@@ -17,12 +17,14 @@
 mod attrs;
 mod closure;
 mod collect;
+mod distribution;
 mod placement;
 mod resolve;
 
 pub use closure::{
     Closure, ClosureComponent, ClosureService, ComponentId, ComponentLines, InterfaceId,
 };
+pub use distribution::{DistributionDependency, DistributionFacts};
 pub use placement::{DeploymentPlacement, Placement};
 pub use resolve::ResolvedRequire;
 
@@ -55,6 +57,8 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
     system.closure =
         closure::closure(&lookup, &system, &lines, &mut reporter).map(|mut closure| {
             closure.requires = resolve::resolve(&lookup, &system, &lines, &closure, &mut reporter);
+            closure.distribution_facts =
+                distribution::distribute(&lookup, &system, &closure, &mut reporter);
             closure
         });
     system.placements = placement::place(&lookup, &system, system.closure.as_ref(), &mut reporter);
@@ -1375,5 +1379,119 @@ deployment Bench for Vehicle {
         let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
         assert_eq!(codes(&system), ["RSDL-603", "RSDL-701"]);
         assert!(system.closure_has_errors);
+    }
+
+    /// Appendix A's distributions: every implemented closure component in one,
+    /// `Backend` in none, and `Hmi` depends on `Adas` (rsdl §3.3, §13, the
+    /// "Distributions" item after the example).
+    #[test]
+    fn appendix_a_derives_its_distribution_dependency() {
+        let system = check_topology(&[("veh/topology/system.rsdl", SYSTEM)]);
+        assert_eq!(errors(&system), Vec::<&str>::new());
+        let closure = system
+            .closure
+            .as_ref()
+            .expect("Appendix A declares a system");
+        let facts = closure
+            .distribution_facts
+            .as_ref()
+            .expect("Appendix A declares distributions");
+        let membership: Vec<Option<&str>> = facts
+            .membership
+            .iter()
+            .map(|held| held.map(|index| system.distributions[index].name.name.as_str()))
+            .collect();
+        assert_eq!(
+            membership,
+            [Some("Adas"), Some("Adas"), Some("Hmi"), None, Some("Adas")]
+        );
+        assert_eq!(
+            facts.dependencies,
+            [DistributionDependency { from: 1, to: 0 }]
+        );
+    }
+
+    /// The distribution rules (rsdl §3.3), one input per rule.
+    #[test]
+    fn a_distribution_holds_each_implemented_closure_component_once() {
+        const CLOSURE: &str = "component Lane { offers veh.adas.lane }\n\
+                               component Panel { requires LaneAssist }\n\
+                               component Backend [ external ] {}\n\
+                               component Spare {}\n\
+                               system Vehicle { Lane, Panel, Backend, veh.diag.access }\n";
+        let cases: &[(&str, &[&str])] = &[
+            ("distribution D { Lane, Panel, veh.diag.access }", &[]),
+            // A workspace with no distribution derives no installation.
+            ("", &[]),
+            ("distribution D { Lane, Panel }", &["RSDL-904"]),
+            (
+                "distribution D { Lane, Panel, veh.diag.access, Spare }",
+                &["RSDL-903"],
+            ),
+            (
+                "distribution D { Lane, Panel, veh.diag.access, Nothing }",
+                &["RSDL-903"],
+            ),
+            (
+                "distribution D { Lane, Panel, veh.diag.access, Lane.Unit }",
+                &["RSDL-307"],
+            ),
+            (
+                "distribution D { Lane, Panel, veh.diag.access, veh.adas.lane }",
+                &["RSDL-504"],
+            ),
+            (
+                "distribution D { Lane, Panel, veh.diag.access, Lane }",
+                &["RSDL-906"],
+            ),
+            (
+                "distribution D { Lane, Panel, veh.diag.access }\ndistribution E { Lane }",
+                &["RSDL-905"],
+            ),
+            (
+                "distribution D { Lane, Panel, veh.diag.access, Backend }",
+                &["RSDL-907"],
+            ),
+            // RSDL-901: `Panel`, in a `PLATFORM` distribution, requires an
+            // interface `Lane` offers, in an `APPLICATION` one.
+            (
+                "distribution P [ tier = PLATFORM ] { Panel, veh.diag.access }\n\
+                 distribution A [ tier = APPLICATION ] { Lane }",
+                &["RSDL-901"],
+            ),
+            (
+                "distribution P [ tier = APPLICATION ] { Panel, veh.diag.access }\n\
+                 distribution A [ tier = PLATFORM ] { Lane }",
+                &[],
+            ),
+            // A distribution without `tier` is exempt, on either side.
+            (
+                "distribution P [ tier = PLATFORM ] { Panel, veh.diag.access }\ndistribution A { Lane }",
+                &[],
+            ),
+        ];
+        for (distributions, expected) in cases {
+            let text = format!(
+                "package veh.topology\nimport veh.adas.LaneAssist\n{CLOSURE}{distributions}\n"
+            );
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), *expected, "`{distributions}`");
+            let facts = system
+                .closure
+                .and_then(|closure| closure.distribution_facts);
+            assert_eq!(
+                facts.is_some(),
+                !distributions.is_empty(),
+                "`{distributions}`"
+            );
+        }
+
+        // With no system there is no closure, so no distribution rule runs
+        // (rsdl §3.1).
+        let system = check_topology(&[(
+            "veh/topology/x.rsdl",
+            "package veh.topology\ndistribution D { Nothing }\n",
+        )]);
+        assert_eq!(codes(&system), Vec::<&str>::new());
     }
 }

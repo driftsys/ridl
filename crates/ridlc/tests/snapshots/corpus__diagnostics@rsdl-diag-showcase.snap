@@ -153,6 +153,12 @@ error[RSDL-307]: `Unit` is the name of the unit instance, which is never written
 28 │ component Copies [ instances = (primary, primary, Unit) ] {}
    │                                                   ^^^^
 
+error[RSDL-904]: `Rear` is in no distribution — when the workspace declares one, every implemented closure component is in exactly one (rsdl reference §3.3)
+  ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:9:11
+  │
+9 │ component Rear { offers rsdl.showcase.lights }
+  │           ^^^^
+
 error[RSDL-502]: `rsdl.showcase.lights` is offered by `Front` and by `Rear` — one closure component offers a service; redundancy is instances of that one component (rsdl reference §7, §8)
   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:9:25
   │
@@ -176,6 +182,36 @@ error[RSDL-308]: `Echo` requires `rsdl.showcase.echo`, which `rsdl.showcase.echo
    │
 25 │   requires rsdl.showcase.echo
    │            ^^^^^^^^^^^^^^^^^^
+
+error[RSDL-901]: `Base` has tier `PLATFORM` and depends on `App`, which has tier `APPLICATION`: `Driver` requires `rsdl.showcase.Horn`, which `Hooter` offers — tier inversion (rsdl reference §3.3)
+  ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:14
+  │
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+  │              ^^^^
+
+error[RSDL-905]: `Chassis` is already in the distribution `Adas` — an implemented closure component is in exactly one (rsdl reference §3.3)
+  ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:49
+  │
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+  │                                                 ^^^^^^^
+
+error[RSDL-906]: `Driver` is listed twice in `Base` (rsdl reference §3.3)
+  ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:58
+  │
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+  │                                                          ^^^^^^
+
+error[RSDL-903]: `Nothing` is not a component of the closure of `Showcase` — a distribution lists closure components and the lone services the system lists (rsdl reference §3.3)
+   ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:13:51
+   │
+13 │ distribution App [ tier = APPLICATION ] { Hooter, Nothing, Fleet }
+   │                                                   ^^^^^^^
+
+error[RSDL-907]: `Fleet` is external, and an external component is in no distribution (rsdl reference §3.3)
+   ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:13:60
+   │
+13 │ distribution App [ tier = APPLICATION ] { Hooter, Nothing, Fleet }
+   │                                                            ^^^^^
 
 error[RSDL-701]: `Rear.Unit` is placed on no machine of `Road` — every instance of the closure is on exactly one machine per deployment (rsdl reference §9)
   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:5:12

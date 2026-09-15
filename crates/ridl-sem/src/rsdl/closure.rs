@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use ridl_core::diag::DiagCode;
 use ridl_core::package::{CatalogEntry, Package, ServiceCatalog, Workspace, package_of};
 
+use super::distribution::DistributionFacts;
 use super::resolve::{ResolvedRequire, requires_own_service};
 use super::{
     CheckedSystem, ComponentDecl, MemberRef, Reference, ReferenceForm, Reporter, Site,
@@ -92,6 +93,9 @@ pub struct Closure {
     /// owning service and one offering component (rsdl §8), in closure order,
     /// then line order.
     pub requires: Vec<ResolvedRequire>,
+    /// Distribution membership and dependency (rsdl §3.3, §13), or `None` when
+    /// the workspace declares no distribution.
+    pub distribution_facts: Option<DistributionFacts>,
 }
 
 /// One component of the closure (rsdl §3.1, §6, §7).

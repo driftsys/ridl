@@ -1,0 +1,19 @@
+package rsdl.showcase
+
+// RSDL-901 (rsdl reference §3.3): `Base` has tier `PLATFORM` and holds
+// `Driver`, which requires `Horn`, offered by `Hooter` in `App`, which has tier
+// `APPLICATION`.
+// RSDL-905 (§3.3): `Chassis` is already in `Adas` (attributes.rsdl).
+// RSDL-906 (§3.3): `Driver` is listed twice in `Base`.
+distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+
+// RSDL-903 (§3.3): `Nothing` is not a closure component.
+// RSDL-907 (§3.3): `Fleet` is external, and an external component is in no
+// distribution.
+distribution App [ tier = APPLICATION ] { Hooter, Nothing, Fleet }
+
+// RSDL-904 (§3.3): `Rear` (resolution.rsdl) is in no distribution.
+
+// An external component, listed by the system and placed on on-board machines
+// as a stub (§9).
+component Fleet [ external ] {}

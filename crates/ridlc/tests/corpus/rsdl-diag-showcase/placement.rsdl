@@ -3,7 +3,7 @@ package rsdl.showcase
 // `Bench` (attributes.rsdl) places every instance of the closure once. `Road`
 // breaks one placement rule per machine.
 deployment Road for Showcase {
-  machine Ecu { Lane, Chassis, Brakes, Front, Hooter.left }
+  machine Ecu { Lane, Chassis, Brakes, Front, Hooter.left, Fleet }
   // RSDL-705 (rsdl reference §3.5): a second machine named `Ecu` in `Road`.
   // RSDL-706 (§9): `Hooter` places `Hooter.left` a second time.
   machine Ecu { Hooter }

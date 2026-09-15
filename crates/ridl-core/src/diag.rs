@@ -908,6 +908,40 @@ diag_codes! {
         RSDL_804 = "RSDL-804", Warning,
             "a backend key whose namespace no configured backend claims";
 
+        /// A `PLATFORM` distribution holds a component whose `requires` resolves
+        /// into an `APPLICATION` distribution — tier inversion; a distribution
+        /// without `tier` is exempt (rsdl §3.3, §16.1). Error. Raised by the
+        /// rsdl distribution check.
+        RSDL_901 = "RSDL-901", Error,
+            "a `PLATFORM` distribution requires into an `APPLICATION` distribution";
+
+        /// A distribution member line names something outside the closure, or
+        /// nothing (rsdl §3.3, §16.1). Error. Raised by the rsdl distribution
+        /// check.
+        RSDL_903 = "RSDL-903", Error,
+            "a distribution member line names something outside the closure, or nothing";
+
+        /// An implemented closure component in no distribution, while the
+        /// workspace declares at least one (rsdl §3.3, §16.1). Error. Raised by
+        /// the rsdl distribution check.
+        RSDL_904 = "RSDL-904", Error,
+            "an implemented closure component in no distribution";
+
+        /// A component listed by two distributions (rsdl §3.3, §16.1). Error.
+        /// Raised by the rsdl distribution check.
+        RSDL_905 = "RSDL-905", Error,
+            "a component listed by two distributions";
+
+        /// A name listed twice in one distribution body (rsdl §3.3, §16.1).
+        /// Error. Raised by the rsdl distribution check.
+        RSDL_906 = "RSDL-906", Error,
+            "a name listed twice in one distribution body";
+
+        /// An `external` component listed by a distribution (rsdl §3.3, §16.1).
+        /// Error. Raised by the rsdl distribution check.
+        RSDL_907 = "RSDL-907", Error,
+            "an `external` component listed by a distribution";
+
         /// A `tier` value other than `PLATFORM` or `APPLICATION` (rsdl §5,
         /// §16.1). Error. Raised by the rsdl attribute check.
         RSDL_908 = "RSDL-908", Error,
