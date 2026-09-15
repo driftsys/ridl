@@ -719,8 +719,7 @@ closure's contracts — the services in the closure, the interfaces they list, a
 their members — classified by the ridl categories. **It classifies contracts
 only** (D-11). The comparison at the system adds to the package comparison and
 never narrows it: a contract change in a package the closure does not reach is
-still reported, because each package is compared and published on its own (ridl
-§11).
+still reported.
 
 - A change in a deployment — an instance moved to another machine, a machine
   added, removed or made `external` — changes every link derived from the old
