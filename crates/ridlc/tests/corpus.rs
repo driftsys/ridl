@@ -122,11 +122,17 @@ fn compile_entry(entry: &Path) -> Compiled {
         let files: Vec<InputFile> = pkg.files(&db).clone();
 
         // The render ids for this package's files, in the same order the
-        // package-scoped passes stamp their FileIds (pkg.files order).
-        let render_ids: Vec<_> = files
+        // package-scoped passes stamp their FileIds (pkg.files order), then
+        // the package's `interfaces.lock` when it has one: the checker stamps
+        // a lock diagnostic (RIDL-409) with the index after the files, so the
+        // lock's own id goes last, as `ridlc::load_and_check` pushes it.
+        let mut render_ids: Vec<_> = files
             .iter()
             .map(|file| sources.file_id(file.path(&db), file.text(&db)))
             .collect();
+        if let Some(lock) = pkg.lock(&db) {
+            render_ids.push(sources.file_id(&lock.path, &lock.text));
+        }
 
         // Parser diagnostics: each file's SyntaxErrors carry their own FORM- or
         // TYPL-302 code and a real range; polish the message into the house
@@ -499,6 +505,7 @@ const RIDL_PROFILE_CODES: &[(&str, Provoked)] = &[
                      `crates/ridl/tests/baseline_gate.rs`",
         },
     ),
+    ("RIDL-409", Showcase),
     ("RIDL-410", Showcase),
     // The shared codes E2 added or folded into the ridl profile.
     ("TYPL-005", Showcase),
@@ -989,6 +996,7 @@ fn showcase_pins_every_severity() {
         ("RIDL-404", Severity::Warning),
         ("RIDL-405", Severity::Info),
         ("RIDL-406", Severity::Info),
+        ("RIDL-409", Severity::Error),
         ("RIDL-410", Severity::Error),
         ("TYPL-005", Severity::Error),
         ("TYPL-115", Severity::Info),

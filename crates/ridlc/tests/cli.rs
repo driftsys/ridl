@@ -1014,3 +1014,39 @@ fn version_flag_exits_zero() {
         "`ridlc --version` must report the binary's own name, got:\n{stdout}"
     );
 }
+
+/// A live `interfaces.lock` entry with no declaration is RIDL-409, exit 1,
+/// reported on the entry's own line of the lock file and naming `ridl lock`
+/// with the package directory (lock design §4, §8; plan decisions PD-3, PD-4).
+#[test]
+fn check_orphan_lock_entry_exits_one_with_ridl_409() {
+    let dir = TempDir::new("check-orphan");
+    dir.write("ridl.toml", PACKAGE_MANIFEST);
+    dir.write(
+        "hvac.ridl",
+        "package veh.common\ntype State: integer [0..1]\ninterface Cabin { signal c : State @[100ms..1s] }\n",
+    );
+    let lock = dir.write(
+        "interfaces.lock",
+        "# interfaces.lock — written by ridl lock; do not edit by hand.\n\
+         next 3\n\
+         Cabin 1\n\
+         Legacy 2\n",
+    );
+    let (code, stderr) = ridlc(&["check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(
+        code, 1,
+        "an orphan entry is a diagnostic error, exit 1; stderr:\n{stderr}"
+    );
+    let expected = format!(
+        "error[RIDL-409]: `Legacy` is a live entry of `interfaces.lock` with no declaration in \
+         the package: run `ridl lock {} --retire Legacy` to record that the interface is gone",
+        dir.path().display()
+    );
+    assert!(stderr.contains(&expected), "stderr:\n{stderr}");
+    let location = format!("{}:4:1", lock.display());
+    assert!(
+        stderr.contains(&location),
+        "the span is the entry's own line, {location}; stderr:\n{stderr}"
+    );
+}

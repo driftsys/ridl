@@ -756,6 +756,21 @@ diag_codes! {
         RIDL_408 = "RIDL-408", Error,
             "interaction removed, its tombstone dropped or moved, or its retired name redeclared";
 
+        /// A live entry of the package's `interfaces.lock` names an interface
+        /// the package no longer declares (lock design §4, §8) — the interface
+        /// was renamed or removed, and the lock does not record which. Error.
+        /// Emitted by the checker on the entry's own line of the lock file,
+        /// `ridlc` and `ridl` alike. The fix is `ridl lock <pkg> --retire Old`
+        /// when the interface is gone, or `ridl lock <pkg> --rename Old=New`
+        /// when a declaration without an entry is the same interface under a
+        /// new name; the message names only `--retire` when the package has
+        /// no declaration without an entry. `ridl check` adds a label naming
+        /// the one `--rename` command when the published baseline shows
+        /// exactly one declaration without an entry with the old interface's
+        /// shape.
+        RIDL_409 = "RIDL-409", Error,
+            "live `interfaces.lock` entry with no declaration";
+
         /// The package's `interfaces.lock` is malformed (lock design §2, §8):
         /// no `next` line, `next` not greater than every entry's number, one
         /// number on two entries, one live key on two entries, or a line that

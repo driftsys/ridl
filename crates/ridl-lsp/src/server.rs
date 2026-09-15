@@ -522,7 +522,7 @@ impl ServerState {
         let packages = self.workspace.packages(db).iter().copied();
         for (index, package) in packages.chain(overlay_packages).enumerate() {
             let files = package.files(db).clone();
-            let mut render_ids = Vec::with_capacity(files.len());
+            let mut render_ids = Vec::with_capacity(files.len() + 1);
             for file in &files {
                 let path = file.path(db);
                 let text = file.text(db);
@@ -530,6 +530,17 @@ impl ServerState {
                 table
                     .entry(id)
                     .or_insert_with(|| (path.clone(), text.clone()));
+                render_ids.push(id);
+            }
+            // The checker stamps a lock diagnostic (RIDL-409) with the index
+            // after the package's files, so the lock's own id goes last (plan
+            // decision PD-12), and its text joins the table so the diagnostic
+            // is published under the lock file's URI.
+            if let Some(lock) = package.lock(db) {
+                let id = sources.file_id(&lock.path, &lock.text);
+                table
+                    .entry(id)
+                    .or_insert_with(|| (lock.path.clone(), lock.text.clone()));
                 render_ids.push(id);
             }
 

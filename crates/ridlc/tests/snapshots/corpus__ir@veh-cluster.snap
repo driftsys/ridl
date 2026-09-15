@@ -1595,8 +1595,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
-      "number": 0,
-      "provisional": false
+      "number": 1,
+      "provisional": true
     },
     {
       "name": "WheelHistory",
@@ -1692,8 +1692,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
-      "number": 0,
-      "provisional": false
+      "number": 3,
+      "provisional": true
     },
     {
       "name": "WheelDiagnostics",
@@ -1866,8 +1866,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
-      "number": 0,
-      "provisional": false
+      "number": 2,
+      "provisional": true
     },
     {
       "name": "WheelSummary",
@@ -1897,8 +1897,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
           }
         }
       ],
-      "number": 0,
-      "provisional": false
+      "number": 4,
+      "provisional": true
     }
   ],
   "services": [
@@ -1979,8 +1979,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
-            "number": 0,
-            "provisional": false
+            "number": 5,
+            "provisional": true
           }
         }
       ]
@@ -2585,8 +2585,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                 }
               }
             ],
-            "number": 0,
-            "provisional": false
+            "number": 6,
+            "provisional": true
           }
         }
       ]

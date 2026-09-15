@@ -26,9 +26,11 @@
 //!   is marked `{ derivable: false }` and reported as TYPL-115 (info).
 
 use std::collections::{HashMap, HashSet};
+use std::path::Path;
 
 use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span};
+use ridl_core::interface_lock::{self, InterfaceLock, LockEntry, LockKey};
 use ridl_core::package::{Package, Workspace, package_of};
 use ridl_ir::name::snake_case;
 use ridl_ir::v2;
@@ -86,6 +88,13 @@ pub fn check_package(
         .iter()
         .map(|file| sources.file_id(file.path(db), file.text(db)))
         .collect();
+
+    // The package's `interfaces.lock`, when it has one, is interned last, so
+    // a lock diagnostic (RIDL-409) carries the index `files.len()`. Every
+    // renderer that remaps this pass's diagnostics pushes the lock's own id
+    // last in the same way (plan decision PD-12).
+    let lock = pkg.lock(db).as_ref();
+    let lock_file = lock.map(|lock| sources.file_id(&lock.path, &lock.text));
 
     // Resolve the package timing default once (ridl §9.1): the winning raw
     // `[defaults].timing` string (package `[defaults]` already shadows the
@@ -210,17 +219,172 @@ pub fn check_package(
     // declarations, emitted as ordinary diagnostics once lowering has settled.
     lint::lint_package(&mut checker, &files);
 
+    // The interface identity fold (lock design §3, §4, §8): every declared
+    // interface and every inline shape gets its number from the package's
+    // `interfaces.lock`, or a provisional one when it has no entry, and every
+    // live entry with no declaration is RIDL-409 on its own line of the lock.
+    let numbering = number_interfaces(lock.map(|lock| &lock.lock), &mut interfaces, &mut services);
+    if let (Some(lock), Some(lock_file)) = (lock, lock_file) {
+        let package_dir = package_dir(&lock.path);
+        for entry in &numbering.orphans {
+            checker.diagnostics.push(Diagnostic {
+                code: DiagCode::RIDL_409,
+                severity: Severity::Error,
+                message: orphan_entry_message(&entry.key, &package_dir, numbering.any_provisional),
+                primary: Span {
+                    file: lock_file,
+                    range: entry.range,
+                },
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            });
+        }
+    }
+
     CheckedPackage {
         ir: v2::Package {
             name: package_name,
             decls,
             interfaces,
             services,
-            // The lock's retired entries (lock design §9); the fold that
-            // reads the lock fills the list.
-            retired: Vec::new(),
+            retired: numbering.retired,
         },
         diagnostics: checker.diagnostics,
+    }
+}
+
+/// What the interface identity fold ([`number_interfaces`]) found besides the
+/// numbers it wrote into the IR.
+struct Numbering {
+    /// The lock's retired entries in number order — `Package.retired` (lock
+    /// design §9), the key spelled as the lock spells it (plan decision PD-2).
+    retired: Vec<v2::RetiredInterface>,
+    /// The live entries with no declaration, in file order: one RIDL-409 each
+    /// (lock design §4, §8).
+    orphans: Vec<LockEntry>,
+    /// Whether some declaration got a provisional number — the condition that
+    /// makes RIDL-409 name `--rename` beside `--retire`.
+    any_provisional: bool,
+}
+
+/// Gives every declared interface and every service's inline shape its
+/// `number` and `provisional` flag (lock design §3).
+///
+/// A shape whose key — the interface's name, or `service:` followed by the
+/// service's dotted name for an inline shape — has a live entry in `lock` is
+/// frozen at the entry's number. Every other shape is provisional: it takes
+/// the numbers from the lock's `next` upward (from 1 with no lock), in byte
+/// order of the name, an interface before an inline shape spelled the same.
+/// The order is the names', never the files', so a file rename or move
+/// changes no provisional number. A retired entry does not freeze anything:
+/// its name is free, and a declaration under it is a new interface (lock
+/// design §4).
+fn number_interfaces(
+    lock: Option<&InterfaceLock>,
+    interfaces: &mut [v2::Interface],
+    services: &mut [v2::Service],
+) -> Numbering {
+    let mut shapes: Vec<(LockKey, &mut v2::Interface)> = interfaces
+        .iter_mut()
+        .map(|interface| (LockKey::Interface(interface.name.clone()), interface))
+        .collect();
+    for service in services.iter_mut() {
+        let key = LockKey::Service(service.name.clone());
+        for slot in service.shapes.iter_mut() {
+            if let Some(v2::service_shape::Kind::Inline(inline)) = slot.kind.as_mut() {
+                shapes.push((key.clone(), inline));
+            }
+        }
+    }
+    // Byte order of the name; the interface first when an interface and an
+    // inline shape are spelled the same (`interface cabin`, `service cabin`).
+    shapes.sort_by(|(a, _), (b, _)| provisional_order(a).cmp(&provisional_order(b)));
+
+    let mut next = lock.map_or(1, |lock| lock.next);
+    let mut any_provisional = false;
+    let mut declared: HashSet<&LockKey> = HashSet::new();
+    for (key, interface) in &mut shapes {
+        match lock.and_then(|lock| lock.live(key)) {
+            Some(entry) => {
+                interface.number = entry.number;
+                interface.provisional = false;
+            }
+            None => {
+                interface.number = next;
+                interface.provisional = true;
+                next += 1;
+                any_provisional = true;
+            }
+        }
+    }
+    declared.extend(shapes.iter().map(|(key, _)| key));
+
+    let Some(lock) = lock else {
+        return Numbering {
+            retired: Vec::new(),
+            orphans: Vec::new(),
+            any_provisional,
+        };
+    };
+    let mut retired: Vec<&LockEntry> = lock.entries.iter().filter(|entry| entry.retired).collect();
+    retired.sort_by_key(|entry| entry.number);
+    Numbering {
+        retired: retired
+            .into_iter()
+            .map(|entry| v2::RetiredInterface {
+                name: entry.key.to_string(),
+                number: entry.number,
+            })
+            .collect(),
+        orphans: lock
+            .entries
+            .iter()
+            .filter(|entry| !entry.retired && !declared.contains(&entry.key))
+            .cloned()
+            .collect(),
+        any_provisional,
+    }
+}
+
+/// The sort key of the provisional order (lock design §3): the name's bytes,
+/// then the kind — an interface before an inline shape of the same spelling.
+fn provisional_order(key: &LockKey) -> (&str, bool) {
+    match key {
+        LockKey::Interface(name) => (name, false),
+        LockKey::Service(name) => (name, true),
+    }
+}
+
+/// The package directory `ridl lock` takes, as the loader recorded it: the
+/// parent directory of the lock file's path (plan decision PD-4), or `.` when
+/// the path has none.
+fn package_dir(lock_path: &str) -> String {
+    match Path::new(lock_path).parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
+        _ => ".".to_string(),
+    }
+}
+
+/// The RIDL-409 message for a live entry with no declaration (lock design §4,
+/// §8). The compiler reads no baseline, so it cannot tell a rename from a new
+/// interface: with a declaration without an entry in the package it names
+/// both `--rename Old=New` and `--retire Old`, and with none it names
+/// `--retire Old` alone. The `ridl check` desk check adds the label that
+/// singles out one `--rename` when the baseline shows a same-shape candidate.
+fn orphan_entry_message(key: &LockKey, package_dir: &str, any_provisional: bool) -> String {
+    let file = interface_lock::FILE_NAME;
+    if any_provisional {
+        format!(
+            "`{key}` is a live entry of `{file}` with no declaration in the package: run \
+             `ridl lock {package_dir} --rename {key}=New` when a declaration without an entry, \
+             `New`, is this interface under a new name, or `ridl lock {package_dir} --retire \
+             {key}` when the interface is gone"
+        )
+    } else {
+        format!(
+            "`{key}` is a live entry of `{file}` with no declaration in the package: run \
+             `ridl lock {package_dir} --retire {key}` to record that the interface is gone"
+        )
     }
 }
 
@@ -5141,8 +5305,9 @@ fn int64_edge(upper: bool) -> ExactValue {
 mod tests {
     use super::*;
     use ridl_core::db::RidlDatabase;
-    use ridl_core::package::{PackageOrigin, service_catalog};
+    use ridl_core::package::{PackageLock, PackageOrigin, service_catalog};
     use ridl_core::std_lib::std_package;
+    use rowan::TextSize;
     use std::collections::BTreeMap;
 
     /// The typl reference Appendix B example, verbatim.
@@ -10159,5 +10324,366 @@ interface VehicleStatus {
         // not carry the name twice regardless.
         assert_eq!(checked.ir.services.len(), 1);
         assert_eq!(checked.ir.services[0].name, "veh.adas.cruise");
+    }
+
+    // --- the interface identity fold (lock design §3, §4, §8) --------------
+
+    /// Two interfaces and one inline shape. The file order — `Zone`, `Cabin`,
+    /// then the service — is not the byte order of the names, so the fold's
+    /// order shows in the numbers it assigns.
+    const NUMBERED: &str = "package veh.hvac
+type State: integer [0..1]
+interface Zone { signal z : State @[100ms..1s] }
+interface Cabin { signal c : State @[100ms..1s] }
+service veh.hvac.rear { signal r : State @[100ms..1s] }
+";
+
+    /// A workspace-member package whose files are all `.ridl` and which
+    /// carries `lock_text` as its `interfaces.lock` (the loader's
+    /// [`PackageLock`], with the path the loader would record: the package
+    /// directory joined with the file name).
+    fn ridl_package_with_lock(
+        db: &RidlDatabase,
+        name: &str,
+        files: &[(&str, &str)],
+        lock_text: &str,
+    ) -> Package {
+        let dir = name.replace('.', "/");
+        let inputs = files
+            .iter()
+            .map(|(file_name, text)| {
+                InputFile::new(db, format!("{dir}/{file_name}"), text.to_string())
+            })
+            .collect();
+        let lock = ridl_core::interface_lock::parse(lock_text).expect("the fixture lock parses");
+        Package::new(
+            db,
+            name.to_string(),
+            inputs,
+            PackageOrigin::WorkspaceMember,
+            BTreeMap::new(),
+            None,
+            Some(PackageLock {
+                path: format!("{dir}/interfaces.lock"),
+                text: lock_text.to_string(),
+                lock,
+            }),
+        )
+    }
+
+    /// Checks a single-package workspace whose `.ridl` files ride with a lock.
+    fn check_ridl_with_lock(name: &str, files: &[(&str, &str)], lock_text: &str) -> CheckedPackage {
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let pkg = ridl_package_with_lock(&db, name, files, lock_text);
+        let ws = Workspace::new(&db, vec![pkg], BTreeMap::new());
+        check_package(&db, ws, pkg, std)
+    }
+
+    /// `(key, number, provisional)` for every shape of the package, in IR
+    /// order — an inline shape keyed `service:<name>` as the lock spells it.
+    fn numbering(checked: &CheckedPackage) -> Vec<(String, u32, bool)> {
+        checked
+            .ir
+            .shapes()
+            .map(|shape| {
+                let key = if shape.is_inline() {
+                    format!("service:{}", shape.name)
+                } else {
+                    shape.name.to_string()
+                };
+                (key, shape.interface.number, shape.interface.provisional)
+            })
+            .collect()
+    }
+
+    /// The [`FileId`] the checker stamps on a lock diagnostic: the index after
+    /// the package's `files` (plan decision PD-12), built the way any renderer
+    /// builds it — by interning that many files, then the lock.
+    fn lock_file_id(files: usize) -> FileId {
+        let mut sources = SourceMap::new();
+        for index in 0..files {
+            sources.file_id(&format!("file-{index}"), "");
+        }
+        sources.file_id("interfaces.lock", "")
+    }
+
+    /// The byte range of `line` inside `text`, which must hold it once.
+    fn line_range(text: &str, line: &str) -> TextRange {
+        let start = text.find(line).expect("the line is in the text");
+        TextRange::new(
+            TextSize::from(start as u32),
+            TextSize::from((start + line.len()) as u32),
+        )
+    }
+
+    #[test]
+    fn frozen_numbers_come_from_the_lock() {
+        let checked = check_ridl_with_lock(
+            "veh.hvac",
+            &[("hvac.ridl", NUMBERED)],
+            "next 9\nCabin 7\nservice:veh.hvac.rear 2\nZone 4\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            numbering(&checked),
+            [
+                ("Zone".to_string(), 4, false),
+                ("Cabin".to_string(), 7, false),
+                ("service:veh.hvac.rear".to_string(), 2, false),
+            ]
+        );
+    }
+
+    /// Design §3: a declaration with no entry takes the numbers from `next`
+    /// upward in byte order of the name (`Cabin` < `Zone` < `veh.hvac.rear`),
+    /// whatever the file order; with no lock at all, from 1.
+    #[test]
+    fn provisional_numbers_follow_byte_order_from_next() {
+        let checked =
+            check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], "next 3\nZone 1\n");
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            numbering(&checked),
+            [
+                ("Zone".to_string(), 1, false),
+                ("Cabin".to_string(), 3, true),
+                ("service:veh.hvac.rear".to_string(), 4, true),
+            ]
+        );
+
+        let checked = check_ridl("veh.hvac", NUMBERED);
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            numbering(&checked),
+            [
+                ("Zone".to_string(), 2, true),
+                ("Cabin".to_string(), 1, true),
+                ("service:veh.hvac.rear".to_string(), 3, true),
+            ],
+            "with no lock every number is provisional, from 1"
+        );
+    }
+
+    /// Design §3, §12 bullet 1: a file rename or move changes no number,
+    /// because the order is the names', not the files'.
+    #[test]
+    fn a_file_rename_leaves_every_number_unchanged() {
+        const ZONE: &str = "package veh.hvac\ntype State: integer [0..1]\ninterface Zone { signal z : State @[100ms..1s] }\n";
+        const CABIN: &str = "package veh.hvac\ninterface Cabin { signal c : State @[100ms..1s] }\nservice veh.hvac.rear { signal r : State @[100ms..1s] }\n";
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let before = ridl_package_files(&db, "veh.hvac", &[("a.ridl", ZONE), ("b.ridl", CABIN)]);
+        let after = ridl_package_files(&db, "veh.hvac", &[("a.ridl", CABIN), ("b.ridl", ZONE)]);
+        let ws = Workspace::new(&db, vec![before, after], BTreeMap::new());
+
+        let mut before = numbering(&check_package(&db, ws, before, std));
+        let mut after = numbering(&check_package(&db, ws, after, std));
+        before.sort();
+        after.sort();
+        assert_eq!(before, after);
+        assert_eq!(
+            before,
+            [
+                ("Cabin".to_string(), 1, true),
+                ("Zone".to_string(), 2, true),
+                ("service:veh.hvac.rear".to_string(), 3, true),
+            ]
+        );
+    }
+
+    /// Design §2, §3: `interface cabin` and `service cabin` check clean
+    /// together, get two entries, and the interface sorts first when the
+    /// spelling is the same.
+    #[test]
+    fn interface_cabin_and_service_cabin_get_two_numbers() {
+        const CABINS: &str = "package veh.hvac
+type State: integer [0..1]
+service cabin { signal s : State @[100ms..1s] }
+interface cabin { signal i : State @[100ms..1s] }
+";
+        let checked = check_ridl("veh.hvac", CABINS);
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            numbering(&checked),
+            [
+                ("cabin".to_string(), 1, true),
+                ("service:cabin".to_string(), 2, true),
+            ]
+        );
+
+        let checked = check_ridl_with_lock(
+            "veh.hvac",
+            &[("hvac.ridl", CABINS)],
+            "next 3\nservice:cabin 1\ncabin 2\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            numbering(&checked),
+            [
+                ("cabin".to_string(), 2, false),
+                ("service:cabin".to_string(), 1, false),
+            ]
+        );
+    }
+
+    /// Design §3: the inline shape's number is written on the `Interface`
+    /// inside the service's `INLINE` slot, keyed by the service's dotted
+    /// name; the service itself has no number.
+    #[test]
+    fn an_inline_shape_is_numbered_under_its_service_key() {
+        let checked = check_ridl_with_lock(
+            "veh.hvac",
+            &[("hvac.ridl", NUMBERED)],
+            "next 2\nservice:veh.hvac.rear 1\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let Some(v2::service_shape::Kind::Inline(inline)) =
+            checked.ir.services[0].shapes[0].kind.as_ref()
+        else {
+            panic!("the service holds an inline shape");
+        };
+        assert_eq!((inline.number, inline.provisional), (1, false));
+        assert_eq!(
+            numbering(&checked),
+            [
+                ("Zone".to_string(), 3, true),
+                ("Cabin".to_string(), 2, true),
+                ("service:veh.hvac.rear".to_string(), 1, false),
+            ]
+        );
+    }
+
+    /// Design §9: the lock's retired entries reach `Package.retired` in
+    /// number order, the key spelled as the lock spells it (PD-2), and a
+    /// retired entry is never an orphan.
+    #[test]
+    fn retired_entries_reach_the_ir() {
+        let checked = check_ridl_with_lock(
+            "veh.hvac",
+            &[("hvac.ridl", NUMBERED)],
+            "next 6\nCabin 1\nservice:veh.hvac.gone 5 retired\nZone 3\nOld 2 retired\nservice:veh.hvac.rear 4\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            checked.ir.retired,
+            [
+                v2::RetiredInterface {
+                    name: "Old".to_string(),
+                    number: 2,
+                },
+                v2::RetiredInterface {
+                    name: "service:veh.hvac.gone".to_string(),
+                    number: 5,
+                },
+            ]
+        );
+        assert!(
+            numbering(&checked)
+                .iter()
+                .all(|(_, _, provisional)| !provisional),
+            "every declaration has its entry"
+        );
+
+        let checked = check_ridl("veh.hvac", NUMBERED);
+        assert_eq!(checked.ir.retired, Vec::new(), "no lock, nothing retired");
+    }
+
+    /// Design §4: a retired entry's name is free. Declared again, it is a new
+    /// interface with a provisional number, and the retired entry stays.
+    #[test]
+    fn a_retired_name_declared_again_is_a_new_provisional_interface() {
+        let checked = check_ridl_with_lock(
+            "veh.hvac",
+            &[("hvac.ridl", NUMBERED)],
+            "next 4\nCabin 1 retired\nZone 2\nservice:veh.hvac.rear 3\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        assert_eq!(
+            numbering(&checked),
+            [
+                ("Zone".to_string(), 2, false),
+                ("Cabin".to_string(), 4, true),
+                ("service:veh.hvac.rear".to_string(), 3, false),
+            ]
+        );
+        assert_eq!(
+            checked.ir.retired,
+            [v2::RetiredInterface {
+                name: "Cabin".to_string(),
+                number: 1,
+            }]
+        );
+    }
+
+    /// Design §4, §8: a live entry with no declaration is RIDL-409 on the
+    /// entry's own line of the lock file (PD-3, PD-12). With no declaration
+    /// without an entry, the message names `--retire` alone, with the
+    /// package directory as `ridl lock` takes it (PD-4).
+    #[test]
+    fn an_orphan_entry_names_retire_alone() {
+        let lock = "next 5\nCabin 1\nLegacy 2\nZone 3\nservice:veh.hvac.rear 4\n";
+        let checked = check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], lock);
+        assert_eq!(codes(&checked), ["RIDL-409"]);
+        let diagnostic = &checked.diagnostics[0];
+        assert_eq!(diagnostic.severity, Severity::Error);
+        assert_eq!(
+            diagnostic.message,
+            "`Legacy` is a live entry of `interfaces.lock` with no declaration in the package: run \
+             `ridl lock veh/hvac --retire Legacy` to record that the interface is gone"
+        );
+        assert_eq!(
+            diagnostic.primary.file,
+            lock_file_id(1),
+            "the lock is index `files.len()`"
+        );
+        assert_eq!(diagnostic.primary.range, line_range(lock, "Legacy 2"));
+        assert!(
+            diagnostic.labels.is_empty(),
+            "the rename hint is `ridl check`'s alone"
+        );
+        assert!(
+            numbering(&checked)
+                .iter()
+                .all(|(_, _, provisional)| !provisional),
+            "the declared shapes keep their frozen numbers"
+        );
+    }
+
+    /// Design §4, §8: with a declaration without an entry beside the orphan,
+    /// the message names both commands — the compiler reads no baseline, so
+    /// it cannot tell a rename from a new interface. One RIDL-409 per orphan,
+    /// in file order; a `service:` key is named as the lock spells it.
+    #[test]
+    fn an_orphan_entry_beside_an_unentered_declaration_names_both_commands() {
+        let lock = "next 4\nCabin 1\nLegacy 2\nservice:veh.hvac.old 3\n";
+        let checked = check_ridl_with_lock("veh.hvac", &[("hvac.ridl", NUMBERED)], lock);
+        assert_eq!(codes(&checked), ["RIDL-409", "RIDL-409"]);
+        assert_eq!(
+            messages(&checked),
+            [
+                "`Legacy` is a live entry of `interfaces.lock` with no declaration in the package: \
+                 run `ridl lock veh/hvac --rename Legacy=New` when a declaration without an entry, \
+                 `New`, is this interface under a new name, or `ridl lock veh/hvac --retire Legacy` \
+                 when the interface is gone",
+                "`service:veh.hvac.old` is a live entry of `interfaces.lock` with no declaration in \
+                 the package: run `ridl lock veh/hvac --rename service:veh.hvac.old=New` when a \
+                 declaration without an entry, `New`, is this interface under a new name, or \
+                 `ridl lock veh/hvac --retire service:veh.hvac.old` when the interface is gone",
+            ]
+        );
+        assert_eq!(
+            checked.diagnostics[1].primary.range,
+            line_range(lock, "service:veh.hvac.old 3")
+        );
+        assert_eq!(
+            numbering(&checked),
+            [
+                ("Zone".to_string(), 4, true),
+                ("Cabin".to_string(), 1, false),
+                ("service:veh.hvac.rear".to_string(), 5, true),
+            ],
+            "the orphans' numbers are never reused: provisional numbers start at `next`"
+        );
     }
 }

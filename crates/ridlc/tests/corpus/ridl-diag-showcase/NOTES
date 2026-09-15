@@ -11,6 +11,9 @@ Three members, because one package cannot provoke everything:
   error in one family never suppresses the checker in another. Its manifest
   carries an invalid `[defaults].timing`, which is MANI-009; the built-in
   `[100ms..1000ms]` is the fallback, so RIDL-100 still reports concrete bounds.
+  Its `interfaces.lock` holds a live entry, `Legacy`, that no file declares,
+  which is RIDL-409 on the entry's own line; the package has declarations
+  without an entry too, so the message names both `--rename` and `--retire`.
 - `twin/` — package `diag.twin`. It republishes the service name
   `diag.showcase.duplicate`, because the service catalog is a workspace-wide
   namespace and RIDL-140 cannot be provoked from a single package, and it
@@ -71,7 +74,9 @@ review caught and no single-clause fixture could have. Keep both clauses.
   listed twice in one shape list), 146 (a shape re-declared under a
   service-level `reserved` name — RIDL-401 one level up),
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
-  406, 410 (a malformed `interfaces.lock`, from the `badlock/` member).
+  406, 409 (a live `interfaces.lock` entry with no declaration, from
+  `main/interfaces.lock`), 410 (a malformed `interfaces.lock`, from the
+  `badlock/` member).
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).
 - MANI: 009.
 - TYPL: 005 (the visibility rule, reaching the interaction layer), 301, 303, 304

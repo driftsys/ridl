@@ -466,6 +466,12 @@ note[RIDL-405]: error type `SharedFault` is the failure arm of queries in 3 inte
 28 │   query readThree(limit: Level): Sample | SharedFault @[..50ms]
    │                                  ^^^^^^^^^^^^^^^^^^^^
 
+error[RIDL-409]: `Legacy` is a live entry of `interfaces.lock` with no declaration in the package: run `ridl lock tests/corpus/ridl-diag-showcase/main --rename Legacy=New` when a declaration without an entry, `New`, is this interface under a new name, or `ridl lock tests/corpus/ridl-diag-showcase/main --retire Legacy` when the interface is gone
+  ┌─ tests/corpus/ridl-diag-showcase/main/interfaces.lock:4:1
+  │
+4 │ Legacy 2
+  │ ^^^^^^^^
+
 error[RIDL-140]: duplicate service name `diag.showcase.duplicate` — the service catalog is a flat global namespace
    ┌─ tests/corpus/ridl-diag-showcase/twin/twin.ridl:21:9
    │

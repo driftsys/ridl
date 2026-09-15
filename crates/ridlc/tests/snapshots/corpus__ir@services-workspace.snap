@@ -282,8 +282,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           }
         }
       ],
-      "number": 0,
-      "provisional": false
+      "number": 1,
+      "provisional": true
     },
     {
       "name": "Telemetry",
@@ -345,8 +345,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
           }
         }
       ],
-      "number": 0,
-      "provisional": false
+      "number": 2,
+      "provisional": true
     }
   ],
   "services": [],
@@ -638,8 +638,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                 }
               }
             ],
-            "number": 0,
-            "provisional": false
+            "number": 1,
+            "provisional": true
           }
         }
       ]

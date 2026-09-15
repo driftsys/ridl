@@ -2685,3 +2685,43 @@ fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
     shut_down(&client, 17);
     server.join().expect("thread joins").expect("clean exit");
 }
+
+/// RIDL-409 — a live `interfaces.lock` entry with no declaration — is
+/// published under the lock file's own URI, on the entry's line (plan
+/// decision PD-12): the checker stamps it with the index after the package's
+/// files, and the server interns the lock last and carries its text.
+#[test]
+fn a_lock_diagnostic_is_published_under_the_lock_files_uri() {
+    let dir = TempDir::new("lock");
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.hvac\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "hvac.ridl",
+        "package veh.hvac\ntype State: integer [0..1]\ninterface Cabin { signal c : State @[100ms..1s] }\n",
+    );
+    let lock = dir.write(
+        "interfaces.lock",
+        "# interfaces.lock — written by ridl lock; do not edit by hand.\nnext 3\nCabin 1\nLegacy 2\n",
+    );
+    let lock_uri = uri_of(&lock);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let published = next_publish(&client, &lock_uri);
+    assert_eq!(codes(&published.diagnostics), ["RIDL-409"]);
+    let diagnostic = &published.diagnostics[0];
+    assert_eq!(
+        diagnostic.range,
+        range((3, 0), (3, 8)),
+        "the entry `Legacy 2` on the fourth line"
+    );
+    assert!(
+        diagnostic.message.contains("--retire Legacy"),
+        "the message names the fix: {}",
+        diagnostic.message
+    );
+
+    shut_down(&client, 10);
+    server.join().expect("thread joins").expect("clean exit");
+}
