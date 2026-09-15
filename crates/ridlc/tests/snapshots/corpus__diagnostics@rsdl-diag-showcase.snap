@@ -12,7 +12,7 @@ error[RSDL-604]: `type` starts a declaration of another profile, and an `.rsdl` 
 error[FORM-102]: `internal` cannot modify an rsdl declaration — the closure is workspace-wide, so every declaration it names is visible from the system's package (rsdl reference §2)
   ┌─ tests/corpus/rsdl-diag-showcase/profile_boundary.rsdl:9:1
   │
-9 │ internal component Lane {}
+9 │ internal component Idle {}
   │ ^^^^^^^^
 
 error[FORM-106]: unknown attribute key `owner`
@@ -27,44 +27,122 @@ error[FORM-107]: attribute `deprecated` not valid on a line — a line takes bac
 7 │   Lane [ deprecated = "use Lane2" ]
   │          ^^^^^^^^^^^^^^^^^^^^^^^^
 
-error[RSDL-908]: `tier` is `PLATFORM` or `APPLICATION` (rsdl reference §3.3)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:13:21
+error[RSDL-602]: `Nothing` is not a component or a service — a `system` lists components and lone services (rsdl reference §3.1)
+  ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:9:3
+  │
+9 │   Nothing
+  │   ^^^^^^^
+
+error[RSDL-603]: `Lane` is listed twice in `Showcase` (rsdl reference §3.1)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:11:3
    │
-13 │ distribution Adas [ tier = SYSTEM ] { Lane }
+11 │   rsdl.showcase.Lane
+   │   ^^^^^^^^^^^^^^^^^^
+
+error[RSDL-504]: `rsdl.showcase.chassis` is offered by the component `Chassis`, so the service does not stand for a component — write `Chassis` (rsdl reference §6)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:13:3
+   │
+13 │   rsdl.showcase.chassis
+   │   ^^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-307]: `Lane.Unit` names the unit instance, which is never written — write `Lane` for the component's one instance (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:15:3
+   │
+15 │   Lane.Unit
+   │   ^^^^^^^^^
+
+error[RSDL-908]: `tier` is `PLATFORM` or `APPLICATION` (rsdl reference §3.3)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:21:21
+   │
+21 │ distribution Adas [ tier = SYSTEM ] { Lane }
    │                     ^^^^^^^^^^^^^
 
 warning[RSDL-804]: no configured backend claims the namespace `linux`, so `linux.cpuset` is carried uninterpreted (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:18:27
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:26:27
    │
-18 │   machine DevBox { Lane [ linux.cpuset = (2, 3) ] }
+26 │   machine DevBox { Lane [ linux.cpuset = (2, 3) ] }
    │                           ^^^^^^^^^^^^^^^^^^^^^
 
 error[FORM-107]: attribute `tier` not valid on a `component` (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:29:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:37:3
    │
-29 │   tier = PLATFORM,
+37 │   tier = PLATFORM,
    │   ^^^^^^^^^^^^^^^
 
 error[FORM-108]: duplicate attribute key `labels`
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:31:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:39:3
    │
-31 │   labels = (QM),
+39 │   labels = (QM),
    │   ^^^^^^^^^^^^^
 
 error[FORM-101]: expected `deprecated = "reason"`, a string literal (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:32:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:40:3
    │
-32 │   deprecated = draft,
+40 │   deprecated = draft,
    │   ^^^^^^^^^^^^^^^^^^
 
 error[RSDL-305]: `instances` takes a parenthesised list of one or more camelCase names, such as `instances = (primary, backup)` (rsdl reference §7)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:33:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:41:3
    │
-33 │   instances = solo,
+41 │   instances = solo,
    │   ^^^^^^^^^^^^^^^^
 
 error[RSDL-313]: `external` is a flag and takes no value — write `[ external ]` (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:34:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:42:3
    │
-34 │   external = true,
+42 │   external = true,
    │   ^^^^^^^^^^^^^^^
+
+error[TYPL-009]: duplicate declaration of `Flag`
+  ┌─ tests/corpus/rsdl-diag-showcase/names.rsdl:6:11
+  │
+6 │ component Flag {}
+  │           ^^^^
+
+error[TYPL-009]: duplicate declaration of `Lines`
+  ┌─ tests/corpus/rsdl-diag-showcase/names.rsdl:9:14
+  │
+9 │ distribution Lines {}
+  │              ^^^^^
+
+error[RSDL-601]: `Second` is a second `system`: a workspace declares at most one, and `Showcase` is declared (rsdl reference §3.1)
+  ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:5:8
+  │
+5 │ system Second { Lane }
+  │        ^^^^^^
+
+error[RSDL-309]: `Lines` offers `rsdl.showcase.status` twice — one `offers` line per service (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:16:10
+   │
+16 │   offers rsdl.showcase.status
+   │          ^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-310]: `Lane` is not a service — `offers` names one service by its dotted name, such as `veh.adas.cruise` (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:18:10
+   │
+18 │   offers Lane
+   │          ^^^^
+
+error[RSDL-311]: `rsdl.showcase.chassis` is a service with a list of interfaces, and `requires` names one interface — it lists `rsdl.showcase.Steering`, `rsdl.showcase.Braking` (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:20:12
+   │
+20 │   requires rsdl.showcase.chassis
+   │            ^^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-312]: `Wheel` is neither an interface nor a service with an inline shape — `requires` names one interface (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:23:12
+   │
+23 │   requires Wheel
+   │            ^^^^^
+
+error[RSDL-306]: `Copies` declares the instance `primary` twice (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:28:42
+   │
+28 │ component Copies [ instances = (primary, primary, Unit) ] {}
+   │                                          ^^^^^^^
+
+error[RSDL-307]: `Unit` is the name of the unit instance, which is never written — name each instance for its role, such as `primary` (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:28:51
+   │
+28 │ component Copies [ instances = (primary, primary, Unit) ] {}
+   │                                                   ^^^^

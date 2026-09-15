@@ -708,16 +708,28 @@ fn every_test_cited_in_an_elsewhere_reason_exists() {
 /// `RSDL_CATALOG`.
 const RSDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RSDL-305", Showcase),
+    ("RSDL-306", Showcase),
+    ("RSDL-307", Showcase),
+    ("RSDL-309", Showcase),
+    ("RSDL-310", Showcase),
+    ("RSDL-311", Showcase),
+    ("RSDL-312", Showcase),
     ("RSDL-313", Showcase),
+    ("RSDL-504", Showcase),
+    ("RSDL-601", Showcase),
+    ("RSDL-602", Showcase),
+    ("RSDL-603", Showcase),
     ("RSDL-604", Showcase),
     ("RSDL-804", Showcase),
     ("RSDL-908", Showcase),
-    // The shared codes the rsdl grammar and the rsdl attribute check raise.
+    // The shared codes the rsdl grammar, the rsdl attribute check and the rsdl
+    // name check raise.
     ("FORM-101", Showcase),
     ("FORM-102", Showcase),
     ("FORM-106", Showcase),
     ("FORM-107", Showcase),
     ("FORM-108", Showcase),
+    ("TYPL-009", Showcase),
 ];
 
 /// The rsdl diagnostic showcase emits exactly the codes [`RSDL_PROFILE_CODES`]

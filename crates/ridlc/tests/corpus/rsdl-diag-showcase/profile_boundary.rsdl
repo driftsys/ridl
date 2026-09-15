@@ -6,4 +6,4 @@ type Speed: km/h
 
 // FORM-102 (rsdl reference §2): the five rsdl declarations take no `internal`
 // modifier. The component after it still parses.
-internal component Lane {}
+internal component Idle {}

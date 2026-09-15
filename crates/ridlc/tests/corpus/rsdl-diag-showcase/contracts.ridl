@@ -1,0 +1,19 @@
+package rsdl.showcase
+
+// The ridl contracts the rsdl showcase names. They draw no diagnostic.
+
+type Flag: boolean
+
+interface Steering {
+  signal angle: Flag @[100ms..1s]
+}
+
+interface Braking {
+  signal active: Flag @[100ms..1s]
+}
+
+service rsdl.showcase.chassis : Steering, Braking
+
+service rsdl.showcase.status {
+  signal alive: Flag @[100ms..1s]
+}

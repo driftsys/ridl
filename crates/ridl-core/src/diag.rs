@@ -770,10 +770,65 @@ diag_codes! {
         RSDL_305 = "RSDL-305", Error,
             "`instances` is not a parenthesised list of one or more camelCase names";
 
+        /// A duplicate instance name in one component (rsdl §7, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_306 = "RSDL-306", Error,
+            "duplicate instance name in one component";
+
+        /// `Unit` written in source — as a declared instance name, or as the
+        /// instance segment of a reference (rsdl §7, §16.1). Error. Raised by
+        /// the rsdl closure check.
+        RSDL_307 = "RSDL-307", Error,
+            "`Unit` written in source";
+
+        /// The same service on two `offers` lines, or the same interface on two
+        /// `requires` lines, of one component (rsdl §3.2, §16.1). Error. Raised
+        /// by the rsdl closure check.
+        RSDL_309 = "RSDL-309", Error,
+            "the same service or interface on two lines of one component";
+
+        /// An `offers` line names something that is not a service, or nothing
+        /// (rsdl §3.2, §16.1). Error. Raised by the rsdl closure check.
+        RSDL_310 = "RSDL-310", Error,
+            "an `offers` line names something that is not a service";
+
+        /// A `requires` line names a service whose shape is a list of
+        /// interfaces; the diagnostic lists them (rsdl §3.2, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_311 = "RSDL-311", Error,
+            "a `requires` line names a service whose shape is a list of interfaces";
+
+        /// A `requires` line names something that is neither an interface nor
+        /// an inline-shape service, or nothing (rsdl §3.2, §16.1). Error. Raised
+        /// by the rsdl closure check.
+        RSDL_312 = "RSDL-312", Error,
+            "a `requires` line names neither an interface nor an inline-shape service";
+
         /// `external` written with a value — it is a flag (rsdl §5, §16.1).
         /// Error. Raised by the rsdl attribute check.
         RSDL_313 = "RSDL-313", Error,
             "`external` written with a value";
+
+        /// A member line names a service by its name while a declared component
+        /// offers it; the diagnostic names the offerer (rsdl §6, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_504 = "RSDL-504", Error,
+            "a member line names a service that a declared component offers";
+
+        /// More than one `system` in the workspace (rsdl §3.1, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_601 = "RSDL-601", Error,
+            "more than one `system` in the workspace";
+
+        /// A `system` member line names nothing that is a component or a service
+        /// (rsdl §3.1, §16.1). Error. Raised by the rsdl closure check.
+        RSDL_602 = "RSDL-602", Error,
+            "a `system` member line names neither a component nor a service";
+
+        /// A name listed twice in one `system` body (rsdl §3.1, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_603 = "RSDL-603", Error,
+            "a name listed twice in one `system` body";
 
         /// A declaration of another profile — a type, an interface, a service —
         /// at the top level of an `.rsdl` file (rsdl §2, §16.1). Error. Raised

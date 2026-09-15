@@ -109,7 +109,7 @@ fn check_passes_with_only_an_rsdl_804_warning() {
     dir.write("ridl.toml", PACKAGE_MANIFEST);
     dir.write(
         "system.rsdl",
-        "package veh.common\n\nsystem Vehicle [ rust.crate = \"vehicle\" ] { Cruise }\n",
+        "package veh.common\n\nsystem Vehicle [ rust.crate = \"vehicle\" ] { Cruise }\ncomponent Cruise {}\n",
     );
     let (code, stderr) = ridlc(&["check".as_ref(), dir.path().as_os_str()]);
     assert_eq!(

@@ -17,6 +17,17 @@ a check in another:
   a backend key no configured backend claims. The bad keys sit on `Draft`, a
   component outside the closure, so the closure, placement and distribution
   checks have nothing to report about them.
+- `closure.rsdl` — the closure rules of rsdl §3.1, §3.2, §6 and §7: RSDL-601 for
+  a second `system`; RSDL-309 to RSDL-312 on the lines of `Lines`, a component
+  the system does not list, because the rules of one component hold outside the
+  closure; RSDL-306 and RSDL-307 on an `instances` list. The member lines that
+  draw RSDL-307, RSDL-504, RSDL-602 and RSDL-603 are in the `Showcase` system
+  body in `attributes.rsdl`, the one system the closure is read from.
+- `names.rsdl` — TYPL-009 for a second declaration of one name in the package
+  (rsdl §3): an rsdl declaration named like a ridl type, and two rsdl
+  declarations of one name.
+- `contracts.ridl` — the ridl interfaces and services the rsdl files name. It
+  draws no diagnostic.
 
 A code the showcase cannot provoke in one compile is listed in
 `RSDL_PROFILE_CODES` as `Elsewhere`, with the fixture that provokes it.

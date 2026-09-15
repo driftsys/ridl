@@ -4,11 +4,16 @@
 //! A declaration or a line the parser recovered without a name or a reference
 //! is skipped: its parse error is already reported, and a model entry with no
 //! name would only draw a second diagnostic for the same mistake.
+//!
+//! [`check_declaration_names`] reports a name declared twice in one package
+//! (rsdl §3).
 
 use ridl_core::db::{InputFile, profile_of_path};
+use ridl_core::diag::DiagCode;
 use ridl_core::package::Workspace;
 use ridl_syntax::Profile;
 use ridl_syntax::ast::{self, AstNode, ComponentLineKind};
+use rowan::TextSize;
 
 use super::attrs::{self, AttrSite};
 use super::{
@@ -16,7 +21,129 @@ use super::{
     Reference, ReferenceForm, Reporter, Site, SystemDecl, UNIT_INSTANCE, is_lower_camel,
     is_lowercase_segment, is_upper_camel,
 };
-use crate::resolve::{qualified_segments, source_file};
+use crate::resolve::{
+    Declaration, declarations, declared_name, name_range, qualified_segments, source_file,
+};
+
+/// Which check reports a second declaration of a name, by the kind of the
+/// declaration (rsdl §3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NameKind {
+    /// A typl or ridl declaration: the resolver reports two of them
+    /// (TYPL-009).
+    Vocabulary,
+    /// A `deployment`: RSDL-708 reports two of them, across the workspace.
+    Deployment,
+    /// A `system`, `component` or `distribution`.
+    Rsdl,
+}
+
+/// One name declared in a package, where it is written.
+struct PackageName {
+    /// The file's position in the package, then the name's offset: the order
+    /// that decides which declaration is the second.
+    order: (usize, TextSize),
+    kind: NameKind,
+    name: String,
+    site: Site,
+}
+
+/// TYPL-009 for the rsdl declaration names (rsdl §3): the names of `system`,
+/// `component`, `distribution` and `deployment` declarations are in their
+/// package's namespace beside the typl and ridl declarations, so a second
+/// declaration of one name in a package, of any profile, is TYPL-009 at the
+/// later one, with the resolver's message. Two typl or ridl declarations are
+/// left to the resolver and two deployments to RSDL-708, so no declaration is
+/// reported twice. A `machine` name is scoped to its deployment (§3.5) and is
+/// not in the package namespace.
+pub(super) fn check_declaration_names(
+    db: &dyn salsa::Database,
+    ws: Workspace,
+    system: &CheckedSystem,
+    reporter: &mut Reporter,
+) {
+    for package in ws.packages(db) {
+        let files = package.files(db);
+        let mut names = Vec::new();
+        for (position, file) in files.iter().enumerate() {
+            if profile_of_path(file.path(db)) == Profile::Rsdl {
+                continue;
+            }
+            for declaration in declarations(&source_file(db, *file)) {
+                let (name, range) = match &declaration {
+                    Declaration::Definition(definition) => {
+                        (declared_name(definition), name_range(definition))
+                    }
+                    Declaration::Interface(interface) => {
+                        (declared_name(interface), name_range(interface))
+                    }
+                };
+                let Some(name) = name else {
+                    continue;
+                };
+                names.push(PackageName {
+                    order: (position, range.start()),
+                    kind: NameKind::Vocabulary,
+                    name,
+                    site: Site { file: *file, range },
+                });
+            }
+        }
+        let rsdl = system
+            .systems
+            .iter()
+            .map(|decl| (&decl.package, &decl.name, NameKind::Rsdl))
+            .chain(
+                system
+                    .components
+                    .iter()
+                    .map(|decl| (&decl.package, &decl.name, NameKind::Rsdl)),
+            )
+            .chain(
+                system
+                    .distributions
+                    .iter()
+                    .map(|decl| (&decl.package, &decl.name, NameKind::Rsdl)),
+            )
+            .chain(
+                system
+                    .deployments
+                    .iter()
+                    .map(|decl| (&decl.package, &decl.name, NameKind::Deployment)),
+            );
+        for (declaring, named, kind) in rsdl {
+            if declaring != package.name(db) {
+                continue;
+            }
+            let position = files
+                .iter()
+                .position(|file| *file == named.site.file)
+                .unwrap_or(files.len());
+            names.push(PackageName {
+                order: (position, named.site.range.start()),
+                kind,
+                name: named.name.clone(),
+                site: named.site,
+            });
+        }
+        names.sort_by_key(|entry| entry.order);
+        for (index, later) in names.iter().enumerate() {
+            let earlier: Vec<NameKind> = names[..index]
+                .iter()
+                .filter(|entry| entry.name == later.name)
+                .map(|entry| entry.kind)
+                .collect();
+            let reported_elsewhere = later.kind != NameKind::Rsdl && earlier.contains(&later.kind);
+            if !earlier.is_empty() && !reported_elsewhere {
+                reporter.error(
+                    DiagCode::TYPL_009,
+                    later.site,
+                    format!("duplicate declaration of `{}`", later.name),
+                );
+            }
+        }
+    }
+}
 
 /// Walks every `.rsdl` file of `ws`, in package-then-file order.
 pub(super) fn collect(
