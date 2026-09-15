@@ -2,12 +2,16 @@
 
 Transient working memory for a lane proposed 2026-09-15, alongside
 `2026-09-13-step1-lanes-plan.md` but not part of it: that plan's four lanes (A,
-B, C, L) do not cover generating a RIDL interface's Rust API over `ridl-rt` —
-Lane A built the runtime library's ports only (E11.0), and the roadmap's own
-sequence puts the codegen after E11.1 (frame spec) and E11.9 (transport),
-neither of which is in scope for the current lanes. Lane M is a deliberate
-exception: an in-process-only MVP so the team has something to write against
-soon, ahead of that full sequence. Start a fresh session in
+B, C, L) do not cover generating a RIDL interface's Rust API over `ridl-rt`.
+Lane A built the full `ridl-rt` library (E11.0) — identity, the envelope,
+payload encoding, and the ports — but no backend generates code against it yet.
+ADR-0018 decision 15 and ADR-0020 decisions 5-7 sequence that generated
+interaction face after the frame specification (E11.1) and the transport
+(E11.9); neither is in scope for the current lanes, and `docs/ROADMAP.md`
+carries no story for the face at all yet (this is not an edge the roadmap's own
+sequence diagram records — that dependency lives in the ADRs). Lane M is a
+deliberate exception: an in-process-only MVP so the team has something to write
+against soon, ahead of that full sequence. Start a fresh session in
 `.claude/worktrees/lane-m-interaction-face` and paste the block below as the
 first message, once per stage: each stage is one session, and the session ends
 when the stage's pull request has merged. Archive this file with whatever plan
@@ -15,16 +19,26 @@ or spec it produces, per `sdd-working-memory-lifecycle`.
 
 This lane is not yet listed in `2026-09-13-step1-lanes-plan.md`. M1's driver
 posts its existence to #328 and proposes whether that plan should gain a Lane M
-row (§4) and, if Lane M's implementation touches a file in §6's shared-file
-table, a line there too. Do not assume inclusion silently.
+row (§4). §6's shared-file table is also missing the one file this lane collides
+on: `crates/ridl-backend-rust/src/lib.rs` is the file Lane C's Epic 10 is
+already reshaping (see Dependencies) and the same file this lane's codegen
+extends. M1 proposes an order for it in §6, rather than leaving the collision
+uncoordinated.
 
 ## What this lane targets
 
-ADR-0018 decision 15 calls the generated `Client`/`Provider`/`dispatch` face
-"phase 2": the interaction layer the Rust backend once shipped, retracted
-because "it cannot be connected to a runtime at all, and has never been
-compiled," and restored once there is a runtime to bind it to. `ridl-rt` 0.1.0
-is that runtime now (Lane A, E11.0, merged and closed). The target shape is
+ADR-0018 decision 15 restores the generated `Client`/`Provider`/`dispatch` face
+as "phase 2" — the interaction layer the Rust backend once shipped and then
+retracted. The ADR's Alternatives-considered table gives the reason: "it cannot
+be connected to a runtime at all, and has never been compiled" (:501). `ridl-rt`
+0.1.0 (Lane A, E11.0, merged and closed) ships the ports phase 2 binds to, but
+it is a library, not a runtime — `docs/design/ridl-rt.md:3-9` is explicit that
+no runtime exists yet; a runtime is a separate crate that implements the port
+traits (ADR-0020 decision 6), and the first one, the in-process loopback, is
+E11.9, out of this lane's scope. Lane M therefore needs its own throwaway,
+test-only implementation of the port traits — just enough to drive one example
+package's round trip — alongside the numbering placeholder below; M1 must assign
+this explicitly (see Dependencies). The target shape for the generated face is
 already drafted, unbuilt, in `docs/wip/2026-09-08-ridl-rt-design.md` §8
 (:770-839): a `Client<'a, P: ...>` generic over exactly the ports an interface
 needs, a `Provider` trait the application implements, and a generated `dispatch`
@@ -44,17 +58,25 @@ over `Handler`.
   binding decodes" / "the interface numbers ... scoped by that catalog"). The
   per-member ordinal within one interface already exists from E2
   (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:87`), but a catalog-scoped
-  interface number does not exist anywhere in the IR today — it is introduced by
-  Lane L's lock design and actually assigned by executing the catalog descriptor
-  plan (#324), which sits after Lane L finishes and is explicitly out of scope
-  for every current lane. M1 must design a throwaway placeholder (for example,
-  one hardcoded interface number for a single-interface example package) and say
-  so in the spec: this numbering is disposable and gets replaced, not reused,
-  once #324 lands.
+  interface number does not exist anywhere in the IR today. Lane L's lock design
+  assigns it at compile time, in Lane L's own implementation stage (L4, not yet
+  merged); the catalog descriptor plan (#324, already merged as a docs-only
+  plan) only reads that number once its own execution lands — it does not assign
+  it. M1 must design a throwaway placeholder (for example, one hardcoded
+  interface number for a single-interface example package) and say so in the
+  spec: this numbering is disposable and gets replaced, not reused, once Lane
+  L's L4 lands.
+- **A second placeholder, alongside numbering:** `ridl-rt` ships no runtime — a
+  runtime is a separate crate that implements the port traits, and the first
+  real one (the in-process loopback) is E11.9, out of this lane's scope. M1 must
+  assign a throwaway, test-only port implementation of its own, disposable the
+  same way as the numbering placeholder, so M3's round-trip test has something
+  to run against.
 - **A coupling to expect, not block on:** Epic 10 (Lane C's typl debt) is
   actively reshaping the Rust types this lane's `Client`/`Provider` methods use
-  as arguments and return values — the lanes plan's P-5 states Epic 10 Task 6
-  changes struct and union declarations and Task 3 changes named-scalar
+  as arguments and return values, in `crates/ridl-backend-rust/src/lib.rs` — the
+  same file this lane's codegen extends. The lanes plan's P-5 states Epic 10
+  Task 6 changes struct and union declarations and Task 3 changes named-scalar
   emission. Starting Lane M now, before Lane C lands, means a follow-up touch-up
   pass once those shapes change. Acceptable at 0.x; name it as a known cost in
   the spec rather than being surprised by it later.
@@ -108,7 +130,8 @@ Read for every stage:
   (:327-358) and its 2026-09-12 amendment
 - docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md
   decisions 5-7
-- crates/ridl-rt/src/port.rs, sample.rs, contract.rs, error.rs
+- crates/ridl-rt/src/port.rs, payload.rs, encoding.rs, sample.rs, contract.rs,
+  error.rs
 - crates/ridl-backend-rust/src/lib.rs (today's Rust emitter, the codegen
   this lane extends)
 - This file's "Dependencies" section above
@@ -126,22 +149,27 @@ docs/wip/<today>-interaction-face-v0-design.md. It must settle:
     lanes) — decide the cheapest path to something real, or a narrowly
     scoped stand-in explicitly marked as throwaway, and say which.
  3. The placeholder interface-numbering scheme (see "Dependencies" above)
-    and how it is marked disposable once #324 lands.
- 4. The Client/Provider/dispatch shape from the design note §8, adapted for
+    and how it is marked disposable once Lane L's L4 lands (not #324, which
+    only reads the number L4 assigns).
+ 4. The placeholder in-process port implementation (see "Dependencies"
+    above): test-only, disposable, just enough to drive one example
+    package's round trip — not E11.9's real loopback runtime.
+ 5. The Client/Provider/dispatch shape from the design note §8, adapted for
     the payload-encoding and numbering decisions above. Confirm RA-19 and
     RA-20 still hold (a client generic over exactly the ports it needs; a
     provider trait plus dispatch; no thread, future, socket or timer in
     generated code).
- 5. Where the code is generated from: a new module in
+ 6. Where the code is generated from: a new module in
     crates/ridl-backend-rust, or elsewhere — and where the example package
     proving a round trip lives.
- 6. The coupling to Lane C's Epic 10 (P-5): name it as accepted rework, not
+ 7. The coupling to Lane C's Epic 10 (P-5): name it as accepted rework, not
     a blocker.
- 7. A tracking issue and a roadmap identifier. This lane is not yet in
-    docs/ROADMAP.md; propose a story (Epic 11 already runs E11.0-E11.9,
-    E11.12; pick the next free identifier or ask Sebastien) and open a
-    GitHub issue for it before merging this stage.
- 8. An "Alternatives considered" section, and trace links to that issue.
+ 8. A tracking issue and a roadmap identifier. This lane is not yet in
+    docs/ROADMAP.md; read docs/ROADMAP.md's Epic 11 table directly for the
+    actual next free identifier rather than assuming one (do not trust any
+    enumeration written from memory, including this file's), or ask
+    Sebastien — and open a GitHub issue for it before merging this stage.
+ 9. An "Alternatives considered" section, and trace links to that issue.
 Open a docs-only pull request, `docs(docs): design the interaction face
 MVP`. Run /review <PR> (docs-only lane). Merge after pass 2 and Sebastien's
 approval of the written spec. Post to #328: this lane exists, whether the
@@ -158,7 +186,8 @@ Gate: M2 merged. Use superpowers:subagent-driven-development over the M2
 plan: one implementer subagent per task at the model the task names, then
 the two-stage review. `just build` green after every task; `cargo fmt --all`
 before every Rust commit. The example package must compile and a round-trip
-call must pass in a test — that is this stage's done-when. Open the pull
+call must pass in a test, driven by the placeholder port implementation M1
+designed — that is this stage's done-when. Open the pull
 request `feat(ridl-backend-rust): ...` (or the crate the spec names), run
 /review <PR>, fix, run pass 2, `just verify`, merge.
 
