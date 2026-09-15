@@ -148,6 +148,13 @@ during the pass were filed rather than lost: driftsys/ridl#308 (the envelope
 sequence number has no caller scope) and driftsys/ridl#309 (an invalid event
 payload has no defined behaviour).
 
+**Filed 2026-09-15, with the lock and the catalog descriptor.** Two epics are
+new, each with its own milestone. Epic 15's stories are driftsys/ridl#371 to
+driftsys/ridl#376; Epic 16's are driftsys/ridl#377 to driftsys/ridl#382. No
+identifier reuses a parked row — the highest used before them were E9.12, E11.12
+and E14.3. E11.0's issue, driftsys/ridl#316, closed as completed when the story
+landed.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
@@ -167,16 +174,26 @@ Two conventions worth keeping, both learned from the earlier reconciliation:
 
 ## Scope
 
-**rsdl is finalized first.** The language is rewritten around the
-topology-vocabulary note's nouns and lowered to the IR the way ridl is, and its
-specification is the rsdl reference v0.2.0. Everything after it in this step
-either consumes the IR rsdl completes or runs beside it.
+**The lock is first.** Epic 15 records each interface's number in its package,
+so an interface's identity stops depending on where its declaration sits. Three
+scheduled pieces of work wait on it: the catalog hash of Epic 16, which covers
+every number and its provisional flag; E6.17, which embeds that hash in each
+region; and E14.2, because the lock retires three diagnostics and amends
+ADR-0015, which the ridl open questions cite. Anything that writes a hash or a
+golden file before the lock lands would be written twice.
 
-**Then the runtime library**, `ridl-rt` — identity, the envelope, provenance,
-freshness and the sample, the payload wrapper, the interaction descriptors and
-the ports. This is the library generated code links, not an engine: the store,
-the seqlock, the sans-IO session, the platform traits and the scheduler are
-outside this repository (§3.7) and reopened by rmdl.
+**rsdl is finalized beside it.** The language is rewritten around the
+topology-vocabulary note's nouns and lowered to the IR the way ridl is, and its
+specification is the rsdl reference v0.2.0. Only E6.17 waits for the lock and
+for the catalog descriptor; the rest of Epic 6 runs beside them.
+
+**The runtime library ran beside both, and its story has landed.** `ridl-rt` —
+identity, the envelope, provenance, freshness and the sample, the payload
+wrapper, the interaction descriptors and the ports — needed nothing from rsdl
+and nothing from the lock but the identity widths, so it did not wait for
+either. This is the library generated code links, not an engine: the store, the
+seqlock, the sans-IO session, the platform traits and the scheduler are outside
+this repository (§3.7) and reopened by rmdl.
 
 **Then the typl debt**, then the Rust codegen finalized with its three payload
 codecs, proto3, FlatBuffers and `repr(C)`. `repr(C)` is the third payload
@@ -186,12 +203,28 @@ shape of ADR-0017 and ADR-0019, written when the backend is.
 **Sequence.**
 
 ```text
-E6 rsdl finalized and lowered to the IR
-      → E11.0 ridl-rt → E11.1 frame spec → E11.9 transport and loopback
-            → typl debt (E14 dispositions · E10 value objects)
-                  → Rust codegen finalized → E11.7 FlatBuffers · E11.8 proto3 · E11.12 repr(C)
-        ╰────────────── E3.1–E3.3 · E9.10 · E9.12 · E8 thread ──────────────╯
+E15 the lock ─┬─→ E16 the catalog descriptor ─→ E6.17 the catalog hash per region
+              └─→ E14.2 ridl §17 dispositions ─┐
+                                               │
+E14.1 typl §17 dispositions ───────────────────┼─→ E14.3 both references
+E10 value objects, E10.10 last ────────────────┘     drop "Draft"
+
+E14.1 · E10, the typl debt ─→ Rust codegen finalized
+      ─→ E11.7 FlatBuffers · E11.8 proto3 · E11.12 repr(C)
+
+E6 rsdl finalized and lowered to the IR — beside the lock; only E6.17 waits
+E11.0 ridl-rt, landed ─→ E11.1 frame spec ─→ E11.9 transport and loopback
+E3.1–E3.3 · E9.10 · E9.12 · E8 — a thread beside all of it
 ```
+
+**The sequence changed on 2026-09-15.** It ran E6 before E11.0, and it had no
+place for the lock or for the catalog descriptor. E11.0 needed only the identity
+widths the lock's design fixes and nothing from the rsdl language, so it ran
+beside both rather than after rsdl. The lanes plan records that as its P-3, with
+the three decisions this page also carries: P-4, the lock's priority over the
+rsdl lowering and the catalog descriptor; P-5, the two Rust naming defects that
+move to Epic 10; and P-6, where E14.2 and E14.3 sit
+([`2026-09-13-step1-lanes-plan.md`](wip/2026-09-13-step1-lanes-plan.md) §2).
 
 **Two prerequisites block work already scheduled**, and neither is an epic: typl
 §17.11's deferred width floor, because widening a range flips the resolved
@@ -201,7 +234,86 @@ free-form tokens today. The width floor is inside the typl debt above, as E14.1;
 the second is not — E3.1 sits in the Epic 3 thread that runs beside this step,
 and the grammar edit the `labels` promotion needs is E9.12.
 
-## Epic 6 — rsdl, rewritten as a language
+## Epic 15 — interface identity and the lock
+
+**Milestone:** an interface's number is recorded in its package, and identity
+stops depending on where a declaration sits. **Value:** everything that names an
+interface from outside the source — a catalog hash, a routing table, a diff
+verdict, a published baseline — rests on that number, so while the number comes
+from a declaration's position, each of those is a fact a later edit can move
+without saying so. **Exit criteria:** a package carries an `interfaces.lock`,
+`ridl diff` matches interfaces by number rather than by name, and
+`ridl baseline` refuses to publish an interface whose number is not recorded.
+
+Design and plan of record:
+[`2026-09-13-lock-design.md`](wip/2026-09-13-lock-design.md) and
+[`2026-09-15-lock-plan.md`](wip/2026-09-15-lock-plan.md). The design satisfies
+D-7 of
+[`2026-09-12-rsdl-rewrite-decisions.md`](wip/2026-09-12-rsdl-rewrite-decisions.md)
+and driftsys/ridl#315 at the interface level.
+
+**Six stories, twelve plan tasks, one pull request.** The plan runs its twelve
+tasks on one branch, because they change one set of files in sequence — the IR,
+then the loader, then the commands, then the diff. The rows below group those
+tasks by the outcome each delivers, and they close together.
+
+**The service slot model goes with it.** ADR-0015 numbered a service's
+interfaces by their position in its list, which is what made the list
+append-only and needed the three slot diagnostics. With a number on the
+interface itself, the list becomes a set: RIDL-146, RIDL-147 and RIDL-148 are
+retired and never reused, and `reserved` in a service's list goes with them.
+
+| ID    | Story                                                                                                                                                                                                                                                                                            | Done when                                                                                                                                    | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E15.1 | The IR carries identity — `Interface.number`, `Interface.provisional`, `Package.retired` — and `interfaces.lock` has a parser, a writer and its edits (plan Tasks 1, 2)                                                                                                                          | a lock file round-trips through the parser and the writer, and the IR carries a number and its provisional flag                              | M    |
+| E15.2 | The loader reads the lock and the checker numbers every interface: a frozen number from its entry, a provisional one otherwise; RIDL-409 for a live entry with no declaration, RIDL-410 for a malformed file (plan Tasks 3, 4)                                                                   | a package with a lock file lowers with frozen numbers; an orphan entry draws RIDL-409, and a file with conflict markers draws RIDL-410       | M    |
+| E15.3 | `ridl lock` — allocation, `--rename`, `--retire` — `ridl lock merge` as the git merge driver, and the `ridl check` desk check that runs while RIDL-409 stands and names the command that fixes it; the CLI reference and ADR-0010 rows for both (plan Tasks 5, 6, 7)                             | `ridl lock` allocates a number for a new interface, a merge of two branches keeps both sides' numbers, and the rename hint names one command | L    |
+| E15.4 | The slot model retired: `ServiceInterfaceAdded` and `ServiceInterfaceRemoved` replace the slot categories, and RIDL-146 to RIDL-148 and `reserved` in a service's list are removed (plan Tasks 8, 9)                                                                                             | a service's interface list is a set, reordering it is no change, and the three codes are gone from the catalogue and never reused            | M    |
+| E15.5 | `ridl diff` matches interfaces by number, and `ridl baseline` refuses a provisional number (RIDL-411) or a published number that is absent from the fresh side and not retired (RIDL-412) (plan Tasks 10, 11)                                                                                    | a renamed interface that keeps its number diffs as `InterfaceRenamed` and exits 0, and a package with a provisional number cannot publish    | M    |
+| E15.6 | The records: the ADR-0015 and ADR-0016 amendments, the decisions index, ridl reference §16.4 and Appendices B and C, one line of the family overview's open-question index, one sentence of rsdl reference §13, and the topology-vocabulary and family general-form working notes (plan Task 12) | no record still describes a service slot, an implicit interface id, or numbering by position                                                 | S    |
+
+## Epic 16 — the catalog descriptor
+
+**Milestone:** an engine reads what a catalog contains without decoding the IR.
+**Value:** a bus configurator, a broker that hosts catalogs it was not compiled
+against, a gateway or an engine written in another language is not a codegen
+backend and receives no generated code; without a descriptor it needs the same
+facts — what is addressed, how it is numbered, and how large each payload can be
+— as an agreement negotiated outside the toolchain. **Exit criteria:**
+`ridlc build --emit catalog` writes a verified descriptor for every package that
+declares an interface, `ridl describe` prints it, and each payload carries its
+maximum encoded size for proto3 and for FlatBuffers.
+
+Design and plan of record:
+[`2026-09-13-runtime-descriptors-design.md`](wip/2026-09-13-runtime-descriptors-design.md)
+and
+[`2026-09-13-catalog-descriptor-plan.md`](wip/2026-09-13-catalog-descriptor-plan.md)
+(driftsys/ridl#324). The plan's seven dispositions on the design's open items
+are confirmed with the maintainer before it is executed.
+
+**The system descriptor is not here.** The design defines two artifacts; the
+per-deployment system descriptor embeds the catalog descriptors of its closure
+and waits for the rsdl lowering, so it takes its own rows when Epic 6 has
+landed.
+
+**Epic 15 lands first**, so the IR already carries each interface's number and
+its provisional flag. The plan's Task 3 numbers interfaces inside the descriptor
+crate because it was written before the lock; that task is reconciled with the
+IR's numbers when this epic is executed.
+
+**The `repr(C)` column stays empty** until E11.12 defines the C-representable
+layout. The encoding is present in the descriptor's enum from the start, and a
+payload with no entry for it means the toolchain cannot size that payload for
+that encoding.
+
+| ID    | Story                                                                                                                                                                                        | Done when                                                                                                                        | Size |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| E16.1 | The `ridl-descriptor` crate: the hand-written `catalog.fbs`, the accessors generated by `cargo xtask descriptor-codegen` and committed with a drift test, and the verifier (plan Tasks 1, 2) | a catalog round-trips through the builder and the reader, and a buffer with a wrong identifier or version is rejected as a whole | L    |
+| E16.2 | Interface numbering in the descriptor and the catalog hash over the reachable closure (plan Tasks 3, 4)                                                                                      | two packages with the same declarations and the same numbering hash alike, and changing one number changes the hash              | M    |
+| E16.3 | The size context, the type leaves and the string byte capacity (plan Task 5)                                                                                                                 | every type leaf yields a byte bound or is reported as unsizable                                                                  | M    |
+| E16.4 | The proto3 and FlatBuffers upper bound per payload (plan Tasks 6, 7)                                                                                                                         | each payload carries a maximum encoded size for both encodings                                                                   | M    |
+| E16.5 | The lowering from the IR and `ridlc build --emit catalog` (plan Tasks 8, 9)                                                                                                                  | the corpus package writes a descriptor that verifies, and two runs write the same bytes                                          | M    |
+| E16.6 | The JSON view, `ridl describe`, and the records: ADR-0010's exit-code row and the CLI reference entry (plan Tasks 10, 11, 12)                                                                | `ridl describe` prints a catalog's contents as JSON, and a rejected buffer exits 2 with its cause named                          | M    |
 
 **Milestone:** a system is described in rsdl and lowered to the IR. **Value:**
 the IR then carries what a runtime derives its node descriptor from, so a
@@ -233,9 +345,9 @@ uses it (`let` stays, rmdl's), and the three new words stop being legal
 identifiers in every profile.
 
 **The catalog hash is received, not computed.** The lowering embeds each
-catalog's hash (rsdl §13); the catalog descriptor work (#324) computes it, after
-the lock block has given every interface its number. E6.16 lowers every other
-fact and E6.17 adds the hash once both have landed.
+catalog's hash (rsdl §13); Epic 16 computes it, after Epic 15 has given every
+interface its number. E6.16 lowers every other fact and E6.17 adds the hash once
+both have landed.
 
 | ID    | Story                                                                                                                                                                                                                                                                                                                      | Done when                                                                                                             | Size |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---- |
@@ -244,7 +356,7 @@ fact and E6.17 adds the hash once both have landed.
 | E6.14 | Deployment and distribution checks: placement, external machines, distribution membership and tier (rsdl §3.3–§3.5, §9; RSDL-701, RSDL-702, RSDL-704 to RSDL-708, RSDL-901, RSDL-903 to RSDL-907)                                                                                                                          | each code of the group has a fixture that draws it, and Appendix A's deployments check with no error                  | M    |
 | E6.15 | Editor support for `.rsdl`: the language server's diagnostics, hover and go-to-definition on rsdl references; the VS Code language and grammar; the MCP server's profile                                                                                                                                                   | an `.rsdl` file opened in the editor shows the checker's diagnostics, and a `requires` line resolves to its interface | M    |
 | E6.16 | The lowering: the closure and per-deployment facts in the IR — producers, machines and placement, the link set with crossing kinds, the routing table, the permission list, the surface set, the region map, the attribute maps, distribution installation and dependency (rsdl §10, §11, §13)                             | Appendix A's system compiles from `.rsdl`, and its IR carries every fact of rsdl §13 except the catalog hash          | L    |
-| E6.17 | The catalog hash in each region of the lowered system (rsdl §13); needs the lock block and #324's hash                                                                                                                                                                                                                     | each region carries the hash the catalog descriptor writes for its catalog                                            | S    |
+| E6.17 | The catalog hash in each region of the lowered system (rsdl §13); needs Epic 15's numbers and Epic 16's hash                                                                                                                                                                                                               | each region carries the hash the catalog descriptor writes for its catalog                                            | S    |
 | E6.18 | `ridl diff` at the system: the closure's contracts compared by the ridl categories, with the "placement changed" and "composition changed" headings (rsdl §14)                                                                                                                                                             | moving an instance to another machine is listed under "placement changed" with no verdict                             | M    |
 | E6.19 | The rsdl book chapter, written as built                                                                                                                                                                                                                                                                                    | the chapter's examples compile in the book-example harness                                                            | S    |
 
@@ -272,11 +384,18 @@ which the re-scope moved out of this repository (§3.7). The re-scope redefines
 them as the frame specification and two of the payload codecs, keeping the
 identifiers; their issues are retitled to match.
 
-| ID    | Story                                                                                                                       | Done when                                                                                                   | Size |
-| ----- | --------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---- |
-| E11.0 | `ridl-rt` — identity, the envelope, `Provenance`/`Freshness`/`Sample`, `Payload<E>`, the interaction descriptors, the ports | a hand-written program links it and reads a sample with its provenance                                      | L    |
-| E11.1 | The frame specification — a logical frame with one binding per encoding; ordinal, kind, envelope, provenance, correlation   | one document a second implementation could be written from                                                  | M    |
-| E11.9 | `ridl-transport-ws` — the WebSocket transport crate, plus the in-process loopback runtime for tests                         | a contract reaches a second process over the transport, and the loopback runs the same tests with no socket | M    |
+**E11.0 landed on 2026-09-14** (driftsys/ridl#348 built the crate,
+driftsys/ridl#352 prepared its release; the story issue, driftsys/ridl#316, is
+closed). Its row moved to
+[the landed record](archive/roadmap-landed-record.md#epic-11--the-runtime-library-the-landed-part).
+The crates.io release of 0.1.0 is a maintainer act and is not a story here. The
+first half of the exit criteria above is therefore met; the transport half is
+E11.9.
+
+| ID    | Story                                                                                                                     | Done when                                                                                                   | Size |
+| ----- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---- |
+| E11.1 | The frame specification — a logical frame with one binding per encoding; ordinal, kind, envelope, provenance, correlation | one document a second implementation could be written from                                                  | M    |
+| E11.9 | `ridl-transport-ws` — the WebSocket transport crate, plus the in-process loopback runtime for tests                       | a contract reaches a second process over the transport, and the loopback runs the same tests with no socket | M    |
 
 ## Epic 14 — typl and ridl finalization
 
@@ -291,6 +410,12 @@ deferred to a named version, and both references drop "Draft".
 | E14.1 | typl §17 disposition pass, including §17.11's width floor and the two new rows (§3.10, §3.11) | every open question is resolved or deferred to a named version | M    |
 | E14.2 | ridl §17 disposition pass                                                                     | as above, and the QoS and bound terms agree with ADR-0015      | M    |
 | E14.3 | Both references drop "Draft"; the rxdl reference gains its status line                        | neither the typl nor the ridl reference is marked Draft        | S    |
+
+**Sequence.** E14.2 follows Epic 15: the lock retires RIDL-146 to RIDL-148 and
+amends ADR-0015, and every ridl open question that cites ADR-0015 can change
+with it. E14.3 follows three things, because each of them still edits a
+reference: E14.1, E10.10, and E14.2. The lane that merges the last of the three
+opens it.
 
 ## Epic 10 — typl value objects
 
@@ -332,6 +457,16 @@ driftsys/ridl#203 (a user package named `ridl.std` is silently shadowed and its
 artifact overwritten), driftsys/ridl#244 (exact-duplicate fields report a
 name-transform collision rather than a duplicate).
 
+**Two Rust naming defects moved here on 2026-09-15** from the Rust codegen
+section: driftsys/ridl#243 (a struct field name is emitted verbatim, so
+generated Rust draws `non_snake_case`) and driftsys/ridl#237 (union arm names
+collide under `camel_case`, emitting two variants of one name). E10.6 changes
+the struct and union declarations both defects are about, and E10.3 changes the
+named-scalar emission in the same emitter, so clearing them here changes the
+snapshots once instead of twice. The value-objects plan gains a task for the
+pair. driftsys/ridl#302 stays in the Rust codegen section: it is a wire
+discriminant question, not a naming one.
+
 ## Rust codegen, finalized
 
 **Milestone:** the Rust backend emits a complete, compiling surface with all
@@ -355,11 +490,10 @@ ADR-0018 amendments.
 | E11.8  | The proto3 payload codec plus byte-level conformance against a `protoc`-generated implementation                                                                                                                                                                                                    | our bytes parse there and its bytes parse here                                                                                                                                                                              | L    |
 | E11.12 | The `repr(C)` payload codec — a `#[repr(C)]` layout struct per type in the C-representable subset, a C header emitted from the same IR, and the codec between the layout struct and the domain type; also removes `#[repr(C)]` from the generated domain structs, which ADR-0020 decision 3 retires | a payload round-trips through the layout struct, the emitted header compiles as C, and no generated domain struct carries `#[repr(C)]` (a scalar newtype keeps `#[repr(transparent)]`, which ADR-0020 decision 3 preserves) | L    |
 
-**Known defects to clear with this work:** driftsys/ridl#243 (a struct field
-name is emitted verbatim, so generated Rust draws `non_snake_case`),
-driftsys/ridl#237 (union arm names collide under `camel_case`, emitting two
-variants of one name), driftsys/ridl#302 (a union-arm retirement would shift
-FlatBuffers wire discriminants silently).
+**Known defects to clear with this work:** driftsys/ridl#302 (a union-arm
+retirement would shift FlatBuffers wire discriminants silently).
+driftsys/ridl#243 and driftsys/ridl#237 were listed here until 2026-09-15 and
+are now Epic 10's, with the reason in that epic.
 
 **The Rust backend is ported onto the backend contract in step 2, not here.**
 Finalizing the backend before the lowering step means the porting is a second
@@ -558,23 +692,25 @@ reopening is an observation rather than an argument.
 
 # Milestone summary
 
-| Epic | Milestone                    | Step                                                                               |
-| ---- | ---------------------------- | ---------------------------------------------------------------------------------- |
-| E0   | walking skeleton             | landed — internal                                                                  |
-| E1   | typl schema language         | landed — **v0.1 preview**                                                          |
-| E2   | ridl contract boundary       | landed — v0.x                                                                      |
-| E9   | wire SSOT                    | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
-| E6   | rsdl, rewritten              | **step 1** — a system is described and lowered to the IR                           |
-| E11  | the runtime library          | **step 1** — generated code links a library                                        |
-| E14  | typl and ridl finalization   | **step 1** — the references stop being drafts                                      |
-| E10  | typl value objects           | **step 1** — types that cannot hold an invalid value                               |
-| none | Rust codegen finalized       | **step 1** — the three payload codecs, byte-conformant                             |
-| E3   | boundary model, core         | **step 1** — the attribute layer enforced                                          |
-| E8   | agent enablement             | **step 1** — threads alongside                                                     |
-| E12  | the TypeScript framework     | **step 2** — a second language, and an emulator                                    |
-| E4.5 | the plugin protocol          | **step 2** — the extension seam every domain reaches through                       |
-| E7   | the `.rxdl` profile, trimmed | **step 2** — types, interfaces and wiring in one file                              |
-| none | Kotlin, the first plugin     | after step 2                                                                       |
+| Epic | Milestone                       | Step                                                                               |
+| ---- | ------------------------------- | ---------------------------------------------------------------------------------- |
+| E0   | walking skeleton                | landed — internal                                                                  |
+| E1   | typl schema language            | landed — **v0.1 preview**                                                          |
+| E2   | ridl contract boundary          | landed — v0.x                                                                      |
+| E9   | wire SSOT                       | **step 1** — the hash over the IR and the R5 drift removed; the projections landed |
+| E15  | interface identity and the lock | **step 1** — an interface's number is recorded in its package                      |
+| E16  | the catalog descriptor          | **step 1** — an engine reads a catalog without decoding the IR                     |
+| E6   | rsdl, rewritten                 | **step 1** — a system is described and lowered to the IR                           |
+| E11  | the runtime library             | **step 1** — generated code links a library                                        |
+| E14  | typl and ridl finalization      | **step 1** — the references stop being drafts                                      |
+| E10  | typl value objects              | **step 1** — types that cannot hold an invalid value                               |
+| none | Rust codegen finalized          | **step 1** — the three payload codecs, byte-conformant                             |
+| E3   | boundary model, core            | **step 1** — the attribute layer enforced                                          |
+| E8   | agent enablement                | **step 1** — threads alongside                                                     |
+| E12  | the TypeScript framework        | **step 2** — a second language, and an emulator                                    |
+| E4.5 | the plugin protocol             | **step 2** — the extension seam every domain reaches through                       |
+| E7   | the `.rxdl` profile, trimmed    | **step 2** — types, interfaces and wiring in one file                              |
+| none | Kotlin, the first plugin        | after step 2                                                                       |
 
 Rows are in step order, not numeric order — the numbering is identity, as the
 tracker section above explains. Two rows have no epic: the Rust codegen section
