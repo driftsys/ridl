@@ -20,6 +20,7 @@ mod collect;
 mod distribution;
 mod placement;
 mod resolve;
+mod target;
 
 pub use closure::{
     Closure, ClosureComponent, ClosureService, ComponentId, ComponentLines, InterfaceId,
@@ -27,8 +28,9 @@ pub use closure::{
 pub use distribution::{DistributionDependency, DistributionFacts};
 pub use placement::{DeploymentPlacement, Placement};
 pub use resolve::ResolvedRequire;
+pub use target::{ReferenceTarget, Target, reference_at};
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 use ridl_core::db::InputFile;
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span};
@@ -136,6 +138,46 @@ impl CheckedSystem {
         }
         keys
     }
+}
+
+/// RSDL-804 (rsdl reference §5): one warning for every backend key of `system`
+/// whose namespace is not in `claimed`, the namespaces the configured backends
+/// consume. The key stays in the model either way, and the warning never
+/// blocks (rsdl §13). The spans are interned into `sources`, so the returned
+/// diagnostics render against it with no remap.
+///
+/// This is not part of [`check_system`]: only a driver knows which backends are
+/// configured, so `ridlc` and the language server call it with the set they
+/// claim.
+pub fn unclaimed_backend_keys(
+    db: &dyn salsa::Database,
+    system: &CheckedSystem,
+    claimed: &BTreeSet<String>,
+    sources: &mut SourceMap,
+) -> Vec<Diagnostic> {
+    system
+        .backend_keys()
+        .into_iter()
+        .filter(|key| !claimed.contains(&key.namespace))
+        .map(|key| {
+            let file = key.site.file;
+            Diagnostic {
+                code: DiagCode::RSDL_804,
+                severity: Severity::Warning,
+                message: format!(
+                    "no configured backend claims the namespace `{}`, so `{}.{}` is carried \
+                     uninterpreted (rsdl reference §5)",
+                    key.namespace, key.namespace, key.key
+                ),
+                primary: Span {
+                    file: sources.file_id(file.path(db), file.text(db)),
+                    range: key.site.range,
+                },
+                labels: Vec::new(),
+                fixits: Vec::new(),
+            }
+        })
+        .collect()
 }
 
 /// Where a model entry is written: its file and its byte range in that file.

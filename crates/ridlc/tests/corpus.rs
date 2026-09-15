@@ -73,7 +73,7 @@ use ridl_core::diag::{
 };
 use ridl_core::package::{Package, service_catalog};
 use ridl_core::{RidlDatabase, load_workspace, parse_file, std_package};
-use ridl_sem::{check_package, check_system, resolve_package};
+use ridl_sem::{check_package, check_system, resolve_package, unclaimed_backend_keys};
 
 /// The four snapshotted artifacts of one compiled corpus entry.
 struct Compiled {
@@ -163,7 +163,7 @@ fn compile_entry(entry: &Path) -> Compiled {
     // the real pipeline rejects and snapshot it as clean.
     //
     // The rsdl system query shares that order, and its RSDL-804 warnings come
-    // from `ridlc::unclaimed_backend_keys` with no namespace claimed, exactly
+    // from `ridl_sem::unclaimed_backend_keys` with no namespace claimed, exactly
     // as the command drivers call it.
     let catalog = service_catalog(&db, workspace, std);
     let mut system = check_system(&db, workspace, std);
@@ -183,7 +183,7 @@ fn compile_entry(entry: &Path) -> Compiled {
             &workspace_render_ids,
         ));
     }
-    diagnostics.extend(ridlc::unclaimed_backend_keys(
+    diagnostics.extend(unclaimed_backend_keys(
         &db,
         &system,
         &BTreeSet::new(),

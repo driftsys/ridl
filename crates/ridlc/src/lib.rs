@@ -44,7 +44,8 @@ use ridl_core::{
     read_lockfile, std_package, write_lockfile,
 };
 use ridl_sem::{
-    CheckedPackage, CheckedSystem, Resolution, check_package, check_system, resolve_package,
+    CheckedPackage, Resolution, check_package, check_system, resolve_package,
+    unclaimed_backend_keys,
 };
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
@@ -595,42 +596,6 @@ pub fn syntax_error_diagnostic(error: &ridl_syntax::SyntaxError, file: FileId) -
         file,
         error.range,
     )
-}
-
-/// RSDL-804 (rsdl reference §5): one warning for every backend key of `system`
-/// whose namespace is not in `claimed`, the namespaces the configured backends
-/// consume. The key stays in the model either way, and the warning never
-/// blocks (rsdl §13). The spans are interned into `sources`, so the returned
-/// diagnostics render against it with no remap.
-pub fn unclaimed_backend_keys(
-    db: &RidlDatabase,
-    system: &CheckedSystem,
-    claimed: &BTreeSet<String>,
-    sources: &mut SourceMap,
-) -> Vec<Diagnostic> {
-    system
-        .backend_keys()
-        .into_iter()
-        .filter(|key| !claimed.contains(&key.namespace))
-        .map(|key| {
-            let file = key.site.file;
-            Diagnostic {
-                code: DiagCode::RSDL_804,
-                severity: Severity::Warning,
-                message: format!(
-                    "no configured backend claims the namespace `{}`, so `{}.{}` is carried \
-                     uninterpreted (rsdl reference §5)",
-                    key.namespace, key.namespace, key.key
-                ),
-                primary: Span {
-                    file: sources.file_id(file.path(db), file.text(db)),
-                    range: key.site.range,
-                },
-                labels: Vec::new(),
-                fixits: Vec::new(),
-            }
-        })
-        .collect()
 }
 
 /// The loaded-and-checked workspace shared by [`compile_workspace`] and the
