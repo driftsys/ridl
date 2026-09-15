@@ -203,6 +203,12 @@ Every declaration and every line also takes backend keys (§5). A key not in a
 declaration's row is FORM-107; a key no row and no backend namespace defines is
 FORM-106; a key twice in one block is FORM-108.
 
+The names of `system`, `component`, `distribution` and `deployment` declarations
+are in their package's namespace, beside the package's typl and ridl
+declarations: a second declaration of one name in a package, of any profile, is
+TYPL-009 (typl §16), except two deployments of one name, which RSDL-708 reports
+(§3.4). A `machine` name is scoped to its deployment (§3.5).
+
 ### 3.1 `system`
 
 A `system` is the **closure**: the named set of components a deployment has to
@@ -711,7 +717,9 @@ RSDL-804) never blocks: the facts are produced and carry the warned condition.
 `ridl diff` compares at the system (D-10): the unit of comparison is the
 closure's contracts — the services in the closure, the interfaces they list, and
 their members — classified by the ridl categories. **It classifies contracts
-only** (D-11).
+only** (D-11). The comparison at the system adds to the package comparison and
+never narrows it: a contract change in a package the closure does not reach is
+still reported.
 
 - A change in a deployment — an instance moved to another machine, a machine
   added, removed or made `external` — changes every link derived from the old
@@ -892,6 +900,7 @@ briefly:
 package veh.common
 
 type Speed: km/h [0.0..250.0 step 0.5]
+type Engaged: boolean
 enum LeverCmd { SET = 1, CANCEL = 2, RESUME = 3 }
 struct FaultReport { count: integer [0..255] }
 ```
@@ -899,16 +908,17 @@ struct FaultReport { count: integer [0..255] }
 ```ridl
 package veh.adas
 
+import veh.common.Engaged
 import veh.common.Speed
 import veh.common.LeverCmd
 
 interface CruiseControl {
-  signal  engaged: boolean @[100ms..1s]
+  signal  engaged: Engaged @[100ms..1s]
   signal  target: Speed @[100ms..1s]
   command setLever(cmd: LeverCmd) @[..50ms]
 }
 interface LaneAssist {
-  signal active: boolean @[100ms..1s]
+  signal active: Engaged @[100ms..1s]
 }
 
 service veh.adas.cruise : CruiseControl
@@ -928,10 +938,10 @@ service veh.diag.access {
 }
 ```
 
-**The closure and the distributions** — `veh/system/system.rsdl`:
+**The closure and the distributions** — `veh/topology/system.rsdl`:
 
 ```rsdl
-package veh.system
+package veh.topology
 
 import veh.adas.CruiseControl
 import veh.adas.LaneAssist
@@ -961,10 +971,10 @@ distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.access }
 distribution Hmi  [ tier = APPLICATION ] { Panel }
 ```
 
-**Production** — `veh/system/production.rsdl`:
+**Production** — `veh/topology/production.rsdl`:
 
 ```rsdl
-package veh.system
+package veh.topology
 
 deployment Production for Vehicle {
   machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.access }
@@ -973,10 +983,10 @@ deployment Production for Vehicle {
 }
 ```
 
-**Bench** — `veh/system/bench.rsdl`, one machine, the backend stubbed on it:
+**Bench** — `veh/topology/bench.rsdl`, one machine, the backend stubbed on it:
 
 ```rsdl
-package veh.system
+package veh.topology
 
 deployment Bench for Vehicle {
   machine DevBox { Cruise, Lane, Panel, veh.diag.access, Backend }
