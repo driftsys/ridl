@@ -148,6 +148,13 @@ during the pass were filed rather than lost: driftsys/ridl#308 (the envelope
 sequence number has no caller scope) and driftsys/ridl#309 (an invalid event
 payload has no defined behaviour).
 
+**Filed 2026-09-15, with the lock and the catalog descriptor.** Two epics are
+new, each with its own milestone. Epic 15's stories are driftsys/ridl#371 to
+driftsys/ridl#376; Epic 16's are driftsys/ridl#377 to driftsys/ridl#382. No
+identifier reuses a parked row — the highest used before them were E9.12, E11.12
+and E14.3. E11.0's issue, driftsys/ridl#316, closed as completed when the story
+landed.
+
 Two conventions worth keeping, both learned from the earlier reconciliation:
 
 - **Closing a story issue never rewrites its body.** The GitHub update API
