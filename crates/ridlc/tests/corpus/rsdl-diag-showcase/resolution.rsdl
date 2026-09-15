@@ -1,0 +1,26 @@
+package rsdl.showcase
+
+// RSDL-408 (rsdl reference §8): `Braking` is listed by `rsdl.showcase.chassis`
+// and by `rsdl.showcase.brakes`, both offered in the closure.
+component Brakes { offers rsdl.showcase.brakes }
+
+// RSDL-502 (§8): `Front` and `Rear` both offer `rsdl.showcase.lights`.
+component Front { offers rsdl.showcase.lights }
+component Rear { offers rsdl.showcase.lights }
+
+// RSDL-409, a warning (§7): `Driver` requires `Horn`, offered by `Hooter`,
+// which has two instances.
+// RSDL-403 (§8): no closure service lists `Wiper`; `Wipers`, outside the
+// closure, offers one that does.
+component Hooter [ instances = (left, right) ] { offers rsdl.showcase.horn }
+component Driver {
+  requires Horn
+  requires Wiper
+}
+component Wipers { offers rsdl.showcase.wipers }
+
+// RSDL-308 (§3.2): `Echo` requires the interface of the service it offers.
+component Echo {
+  offers rsdl.showcase.echo
+  requires rsdl.showcase.echo
+}

@@ -135,11 +135,14 @@ fn dotted_name(name: &ridl_syntax::ast::QualifiedName) -> String {
 /// name resolves through the declaring package's imports. Service-level
 /// `reserved` tombstones hold a slot but name no interface, so they do not
 /// appear here; a service with an inline shape carries an empty list
-/// (ridl §14.5).
+/// (ridl §14.5). `inline` tells the inline shape from a list that names no
+/// interface, one holding only tombstones: rsdl's `requires` accepts the first
+/// and not the second (rsdl reference §3.2).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CatalogEntry {
     pub package: String,
     pub interface_refs: Vec<String>,
+    pub inline: bool,
 }
 
 /// The system-wide service catalog: every `service` declaration across the
@@ -228,6 +231,7 @@ pub fn service_catalog(db: &dyn salsa::Database, ws: Workspace, std: Package) ->
                     CatalogEntry {
                         package: package_name.clone(),
                         interface_refs: canonical_interface_refs(&names, &service),
+                        inline: service.colon_token().is_none(),
                     },
                 );
             }
@@ -507,6 +511,7 @@ mod tests {
             ["DoorControl", "veh.common.DiagBlock"],
             "slot order, local bare, import canonicalized, tombstone skipped",
         );
+        assert!(!entry.inline);
     }
 
     #[test]
@@ -527,5 +532,27 @@ mod tests {
         let entry = &catalog.entries["veh.hvac.cabin"];
         assert_eq!(entry.package, "veh.hvac");
         assert_eq!(entry.interface_refs, Vec::<String>::new());
+        assert!(entry.inline);
+    }
+
+    /// A list holding only a tombstone names no interface, as an inline shape
+    /// does; `inline` tells the two forms apart.
+    #[test]
+    fn service_catalog_tells_a_tombstone_only_list_from_an_inline_shape() {
+        use crate::std_lib::std_package;
+        let mut db = RidlDatabase::default();
+        let std = std_package(&mut db);
+        let body = ridl_package(
+            &db,
+            "veh.body",
+            "package veh.body\nservice veh.body.legacy : reserved LegacyDoorDiag\n",
+        );
+        let ws = Workspace::new(&db, vec![body], BTreeMap::new());
+
+        let catalog = service_catalog(&db, ws, std);
+
+        let entry = &catalog.entries["veh.body.legacy"];
+        assert_eq!(entry.interface_refs, Vec::<String>::new());
+        assert!(!entry.inline);
     }
 }

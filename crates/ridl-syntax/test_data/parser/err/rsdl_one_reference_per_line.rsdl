@@ -1,0 +1,6 @@
+package veh.topology
+
+// rsdl reference §3.2: `requires A, B` is a parse error at `B`.
+component Panel { requires CruiseControl, LaneAssist }
+
+component Lane { offers veh.adas.lane }

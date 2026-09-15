@@ -1,0 +1,22 @@
+package rsdl.showcase
+
+// `Bench` (attributes.rsdl) places every instance of the closure once. `Road`
+// breaks one placement rule per machine.
+deployment Road for Showcase {
+  machine Ecu { Lane, Chassis, Brakes, Front, Hooter.left, Fleet }
+  // RSDL-705 (rsdl reference §3.5): a second machine named `Ecu` in `Road`.
+  // RSDL-706 (§9): `Hooter` places `Hooter.left` a second time.
+  machine Ecu { Hooter }
+  // RSDL-707 (§9): an external machine hosts external components only.
+  machine Cloud [ external ] { Driver }
+  // RSDL-702 (§9): `Draft` (attributes.rsdl) is outside the closure.
+  machine Spare { Draft }
+  // RSDL-701 (§9): `Rear.Unit` is placed on no machine of `Road`.
+}
+
+// RSDL-704 (§3.4): `Nowhere` names no declared system.
+deployment Lab for Nowhere {}
+
+// RSDL-708 (§3.4): a second deployment named `Bench`. It is `for` the second
+// system (closure.rsdl), so it is not placed.
+deployment Bench for Second {}

@@ -1946,7 +1946,10 @@ fn hover_on_a_service_shows_its_interface_and_the_posture_note() {
     assert!(value.contains("service"), "kind: {value}");
     assert!(value.contains("veh.adas.cruise"), "service name: {value}");
     assert!(value.contains("VehicleStatus"), "interface shape: {value}");
-    assert!(value.contains("Posture-neutral"), "the §14.5 note: {value}");
+    assert!(
+        value.contains("deriving the posture per deployment is reserved (rsdl §12)"),
+        "the posture note: {value}"
+    );
 
     // The inline-shape form reports its own member count instead of a name.
     let inline = hover_markdown(
@@ -1957,8 +1960,8 @@ fn hover_on_a_service_shows_its_interface_and_the_posture_note() {
     );
     assert!(inline.contains("inline"), "inline shape: {inline}");
     assert!(
-        inline.contains("Posture-neutral"),
-        "the §14.5 note: {inline}"
+        inline.contains("deriving the posture per deployment is reserved (rsdl §12)"),
+        "the posture note: {inline}"
     );
 
     shut_down(&client, 13);
@@ -2229,7 +2232,10 @@ fn hover_and_goto_follow_a_composed_services_shape_list() {
     assert!(value.contains("DoorControl"), "slot 1: {value}");
     assert!(value.contains("reserved LegacyDoorDiag"), "slot 2: {value}");
     assert!(value.contains("HealthBlock"), "slot 3: {value}");
-    assert!(value.contains("Posture-neutral"), "the §14.5 note: {value}");
+    assert!(
+        value.contains("deriving the posture per deployment is reserved (rsdl §12)"),
+        "the posture note: {value}"
+    );
 
     // Goto-definition on the SECOND interface reference: a walk that stopped
     // at the first `PathType` child would land on `DoorControl`.
@@ -2339,5 +2345,343 @@ fn hover_on_a_payload_after_a_multibyte_comment_uses_utf16_columns() {
     );
 
     shut_down(&client, 11);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+// --- the rsdl system layer (E6.15) ----------------------------------------
+
+/// The contracts the rsdl fixture's system is built from: two interfaces, a
+/// named-shape service for each, and an inline-shape service.
+const RSDL_CONTRACTS: &str = "package veh.adas\n\
+\n\
+type Flag: boolean\n\
+\n\
+interface CruiseControl {\n\
+\x20 signal engaged: Flag @[100ms..1s]\n\
+}\n\
+\n\
+interface LaneAssist {\n\
+\x20 signal active: Flag @[100ms..1s]\n\
+}\n\
+\n\
+service veh.adas.cruise : CruiseControl\n\
+\n\
+service veh.adas.lane : LaneAssist\n\
+\n\
+service veh.adas.access {\n\
+\x20 signal alive: Flag @[1s..10s]\n\
+}\n";
+
+/// The rsdl fixture: each reference form of rsdl reference §4 in a slot that
+/// admits it — a component in a system and a distribution, an instance, a bare
+/// and a qualified interface, an inline-shape service after `requires`, a lone
+/// service, and a `for` reference. It checks with one warning, RSDL-804 on
+/// `linux.cpuset`.
+const RSDL_SYSTEM: &str = "package veh.topology\n\
+\n\
+import veh.adas.LaneAssist\n\
+\n\
+component Cruise [ instances = (primary, backup) ] {\n\
+\x20 offers veh.adas.cruise\n\
+\x20 requires LaneAssist\n\
+}\n\
+\n\
+component Lane { offers veh.adas.lane }\n\
+\n\
+component Panel { requires veh.adas.LaneAssist, requires veh.adas.access }\n\
+\n\
+system Vehicle { Cruise, Lane, Panel, veh.adas.access }\n\
+\n\
+distribution Adas { veh.adas.access, Cruise, Lane, Panel }\n\
+\n\
+deployment Production for Vehicle {\n\
+\x20 machine Hpc { Cruise.primary, Lane, veh.adas.access }\n\
+\x20 machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }\n\
+}\n";
+
+/// Writes the rsdl fixture as a two-member workspace and returns the
+/// `(contracts, system)` file URIs.
+fn write_rsdl_workspace(dir: &TempDir) -> (lt::Uri, lt::Uri) {
+    dir.write(
+        "ridl.toml",
+        "[workspace]\nmembers = [\"adas\", \"topology\"]\n",
+    );
+    for (member, package) in [("adas", "veh.adas"), ("topology", "veh.topology")] {
+        std::fs::create_dir_all(dir.path().join(member)).expect("create the member directory");
+        dir.write(
+            &format!("{member}/ridl.toml"),
+            &format!("[package]\nname = \"{package}\"\nversion = \"1.0.0\"\n"),
+        );
+    }
+    let contracts = dir.write("adas/adas.ridl", RSDL_CONTRACTS);
+    let system = dir.write("topology/system.rsdl", RSDL_SYSTEM);
+    (uri_of(&contracts), uri_of(&system))
+}
+
+/// The range of the `occurrence`-th match of `needle` in `text`, on one line.
+fn range_of(text: &str, needle: &str, occurrence: usize) -> lt::Range {
+    let start = find_pos(text, needle, occurrence);
+    let length = needle.encode_utf16().count() as u32;
+    range(
+        (start.line, start.character),
+        (start.line, start.character + length),
+    )
+}
+
+/// The position `offset` UTF-16 units into the `occurrence`-th match of
+/// `needle` in `text`.
+fn pos_in(text: &str, needle: &str, occurrence: usize, offset: u32) -> lt::Position {
+    let start = find_pos(text, needle, occurrence);
+    pos(start.line, start.character + offset)
+}
+
+/// An `.rsdl` file publishes what the rsdl system query raises, and the
+/// RSDL-804 warning `ridl check` shows for a backend key no backend claims:
+/// from the loaded workspace, then from an edited buffer.
+#[test]
+fn an_rsdl_file_publishes_the_system_checks_and_rsdl_804() {
+    let dir = TempDir::new("rsdl-diagnostics");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let initial = next_publish(&client, &system);
+    assert_eq!(codes(&initial.diagnostics), vec!["RSDL-804"]);
+    assert_eq!(
+        initial.diagnostics[0].range,
+        range_of(RSDL_SYSTEM, "linux.cpuset = (2, 3)", 0),
+        "the warning spans the whole backend key",
+    );
+    assert_eq!(
+        initial.diagnostics[0].severity,
+        Some(lt::DiagnosticSeverity::WARNING)
+    );
+
+    // A system member line naming nothing is RSDL-602 (rsdl reference §3.1),
+    // which only the system query raises.
+    let edited = RSDL_SYSTEM.replace(
+        "Panel, veh.adas.access }",
+        "Panel, veh.adas.access, Missing }",
+    );
+    did_open(&client, &system, &edited);
+    let opened = next_publish(&client, &system);
+    assert_eq!(codes(&opened.diagnostics), vec!["RSDL-602", "RSDL-804"]);
+    assert_eq!(opened.diagnostics[0].range, range_of(&edited, "Missing", 0));
+    assert_eq!(
+        opened.diagnostics[0].severity,
+        Some(lt::DiagnosticSeverity::ERROR)
+    );
+
+    shut_down(&client, 2);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Go-to-definition follows each rsdl reference form (rsdl reference §4) to
+/// the declaration the checker binds it to: in the `.rsdl` file for a
+/// component, an instance and the system, in the ridl contract for a service
+/// and an interface.
+#[test]
+fn goto_definition_follows_each_rsdl_reference_form() {
+    let dir = TempDir::new("rsdl-goto");
+    let (contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    // (what the cursor is on, cursor, file and range of the declaration).
+    let cases = [
+        (
+            "a component in a system member line",
+            pos_in(RSDL_SYSTEM, "{ Cruise, Lane", 0, 3),
+            &system,
+            range_of(RSDL_SYSTEM, "Cruise", 0),
+        ),
+        (
+            "a component in a distribution member line",
+            pos_in(RSDL_SYSTEM, "access, Cruise", 0, 9),
+            &system,
+            range_of(RSDL_SYSTEM, "Cruise", 0),
+        ),
+        (
+            "the instance segment of a placement line",
+            pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9),
+            &system,
+            range_of(RSDL_SYSTEM, "primary", 0),
+        ),
+        (
+            "the component segment of a placement line",
+            pos_in(RSDL_SYSTEM, "Cruise.backup", 0, 2),
+            &system,
+            range_of(RSDL_SYSTEM, "Cruise", 0),
+        ),
+        (
+            "the `for` reference",
+            pos_in(RSDL_SYSTEM, "for Vehicle", 0, 5),
+            &system,
+            range_of(RSDL_SYSTEM, "Vehicle", 0),
+        ),
+        (
+            "a service on an `offers` line",
+            pos_in(RSDL_SYSTEM, "offers veh.adas.cruise", 0, 12),
+            &contracts,
+            range_of(RSDL_CONTRACTS, "veh.adas.cruise", 0),
+        ),
+        (
+            "a bare interface on a `requires` line",
+            pos_in(RSDL_SYSTEM, "requires LaneAssist", 0, 10),
+            &contracts,
+            range_of(RSDL_CONTRACTS, "LaneAssist", 0),
+        ),
+        (
+            "a qualified interface on a `requires` line",
+            pos_in(RSDL_SYSTEM, "requires veh.adas.LaneAssist", 0, 20),
+            &contracts,
+            range_of(RSDL_CONTRACTS, "LaneAssist", 0),
+        ),
+        (
+            "an inline-shape service on a `requires` line",
+            pos_in(RSDL_SYSTEM, "requires veh.adas.access", 0, 12),
+            &contracts,
+            range_of(RSDL_CONTRACTS, "veh.adas.access", 0),
+        ),
+        (
+            "a lone service in a placement line",
+            pos_in(RSDL_SYSTEM, "Lane, veh.adas.access }", 0, 8),
+            &contracts,
+            range_of(RSDL_CONTRACTS, "veh.adas.access", 0),
+        ),
+    ];
+    for (id, (what, cursor, uri, declaration)) in (10..).zip(cases) {
+        let response = definition_at(&client, id, system.clone(), cursor)
+            .unwrap_or_else(|| panic!("{what} resolves"));
+        let location = match response {
+            lt::GotoDefinitionResponse::Scalar(location) => location,
+            other => panic!("{what}: expected a single location, got {other:?}"),
+        };
+        assert_eq!(location.uri.as_str(), uri.as_str(), "{what}: the file");
+        assert_eq!(location.range, declaration, "{what}: the declared name");
+    }
+
+    shut_down(&client, 30);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// A reference the checker binds to nothing has no definition, even when its
+/// text names a declaration: an instance in a system member line is RSDL-602
+/// (rsdl reference §3.1), and a service that a declared component offers,
+/// written as a member line, is RSDL-504 (§6).
+#[test]
+fn goto_definition_follows_no_rsdl_reference_the_checker_rejects() {
+    let dir = TempDir::new("rsdl-goto-rejected");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+
+    let edited = RSDL_SYSTEM.replace(
+        "system Vehicle { Cruise, Lane, Panel, veh.adas.access }",
+        "system Vehicle { Cruise.primary, Lane, Panel, veh.adas.access, veh.adas.cruise }",
+    );
+    did_open(&client, &system, &edited);
+    let cases = [
+        (
+            "an instance in a system member line",
+            pos_in(&edited, "{ Cruise.primary", 0, 10),
+        ),
+        (
+            "a service its component offers, in a system member line",
+            pos_in(&edited, "access, veh.adas.cruise", 0, 12),
+        ),
+    ];
+    for (id, (what, cursor)) in (10..).zip(cases) {
+        let response = definition_at(&client, id, system.clone(), cursor);
+        assert!(response.is_none(), "{what}: got {response:?}");
+    }
+
+    shut_down(&client, 12);
+    server.join().expect("thread joins").expect("clean exit");
+}
+
+/// Hover on an rsdl reference renders what it names: a component with its
+/// instances and lines, an instance, the system, a ridl interface, and a ridl
+/// service with its posture note.
+#[test]
+fn hover_on_an_rsdl_reference_renders_the_named_declaration() {
+    let dir = TempDir::new("rsdl-hover");
+    let (_contracts, system) = write_rsdl_workspace(&dir);
+    let (client, server) = start(uri_of(dir.path()));
+    let hover = |id: i32, needle: &str, offset: u32| {
+        let cursor = pos_in(RSDL_SYSTEM, needle, 0, offset);
+        hover_markdown(&client, id, system.clone(), cursor)
+    };
+    // (request id, cursor needle and offset, what the markdown holds).
+    let cases: [(i32, &str, u32, &[&str]); 6] = [
+        (
+            10,
+            "{ Cruise, Lane",
+            3,
+            &[
+                "component veh.topology.Cruise",
+                "**Instances:** `primary`, `backup`",
+                "**Offers:** `veh.adas.cruise`",
+                "**Requires:** `LaneAssist`",
+            ],
+        ),
+        (
+            11,
+            "Lane, Panel",
+            1,
+            &["**Instances:** the unit instance `Unit`"],
+        ),
+        (
+            12,
+            "for Vehicle",
+            5,
+            &[
+                "system veh.topology.Vehicle",
+                "**Members:** `Cruise`, `Lane`, `Panel`, `veh.adas.access`",
+            ],
+        ),
+        (
+            13,
+            "requires veh.adas.LaneAssist",
+            20,
+            &["`veh.adas.LaneAssist`", "interface"],
+        ),
+        (
+            14,
+            "requires veh.adas.access",
+            12,
+            &["service veh.adas.access { … }", "**Shape:** inline"],
+        ),
+        (
+            15,
+            "offers veh.adas.cruise",
+            12,
+            &[
+                "service veh.adas.cruise : CruiseControl",
+                "deriving the posture per deployment is reserved (rsdl §12)",
+            ],
+        ),
+    ];
+    for (id, needle, offset, parts) in cases {
+        let markdown = hover(id, needle, offset);
+        for part in parts {
+            assert!(
+                markdown.contains(part),
+                "`{part}` at `{needle}`:\n{markdown}"
+            );
+        }
+    }
+
+    // An instance hover covers the instance segment only.
+    let cursor = pos_in(RSDL_SYSTEM, "Cruise.primary", 0, 9);
+    let instance = hover_at(&client, 16, system.clone(), cursor).expect("an instance hovers");
+    let lt::HoverContents::Markup(markup) = instance.contents else {
+        panic!("expected markdown hover");
+    };
+    assert!(
+        markup.value.contains("veh.topology.Cruise.primary"),
+        "{}",
+        markup.value
+    );
+    assert_eq!(instance.range, Some(range_of(RSDL_SYSTEM, "primary", 1)));
+
+    shut_down(&client, 17);
     server.join().expect("thread joins").expect("clean exit");
 }

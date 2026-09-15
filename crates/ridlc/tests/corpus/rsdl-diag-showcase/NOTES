@@ -1,0 +1,43 @@
+# rsdl-diag-showcase coverage notes
+
+This package is crafted so its compile emits one instance of every diagnostic
+the rsdl profile implements. The `@rsdl-diag-showcase` diagnostics snapshot
+(`crates/ridlc/tests/snapshots/`) is the rsdl diagnostic index, the way
+`ridl-diag-showcase` is for the ridl codes. `RSDL_PROFILE_CODES` in
+`crates/ridlc/tests/corpus.rs` is the machine-checked index.
+
+One file per diagnostic family, so a parse error in one family never suppresses
+a check in another:
+
+- `profile_boundary.rsdl` — the parser's rsdl codes: RSDL-604 for a declaration
+  of another profile, and FORM-102 for `internal` before an rsdl keyword.
+- `attributes.rsdl` — the attribute rules of rsdl §5: FORM-101, FORM-106,
+  FORM-107 and FORM-108 over the rsdl-owned keys, RSDL-305, RSDL-313 and
+  RSDL-908 over their values, and the RSDL-804 warning, which `ridlc` raises for
+  a backend key no configured backend claims. The bad keys sit on `Draft`, a
+  component outside the closure, so the closure, placement and distribution
+  checks have nothing to report about them.
+- `closure.rsdl` — the closure rules of rsdl §3.1, §3.2, §6 and §7: RSDL-601 for
+  a second `system`; RSDL-309 to RSDL-312 on the lines of `Lines`, a component
+  the system does not list, because the rules of one component hold outside the
+  closure; RSDL-306 and RSDL-307 on an `instances` list. The member lines that
+  draw RSDL-307, RSDL-504, RSDL-602 and RSDL-603 are in the `Showcase` system
+  body in `attributes.rsdl`, the one system the closure is read from.
+- `names.rsdl` — TYPL-009 for a second declaration of one name in the package
+  (rsdl §3): an rsdl declaration named like a ridl type, and two rsdl
+  declarations of one name.
+- `resolution.rsdl` — the resolution rules of rsdl §8 and §3.2: RSDL-403,
+  RSDL-408, RSDL-502, RSDL-308, and the RSDL-409 warning. Its closure
+  components are listed in `Showcase` and placed on `DevBox`, so the placement
+  checks have nothing to report about them.
+- `placement.rsdl` — the deployment and placement rules of rsdl §3.4, §3.5 and
+  §9: RSDL-701, RSDL-702 and RSDL-704 to RSDL-708. `Bench`, in
+  `attributes.rsdl`, places every closure instance once, so it draws none of
+  them.
+- `distribution.rsdl` — the distribution rules of rsdl §3.3: RSDL-901 over the
+  derived dependency of `Base` on `App`, and RSDL-903 to RSDL-907.
+- `contracts.ridl` — the ridl interfaces and services the rsdl files name. It
+  draws no diagnostic.
+
+A code the showcase cannot provoke in one compile is listed in
+`RSDL_PROFILE_CODES` as `Elsewhere`, with the fixture that provokes it.

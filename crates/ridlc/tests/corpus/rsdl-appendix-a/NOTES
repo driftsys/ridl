@@ -1,0 +1,13 @@
+# rsdl-appendix-a
+
+The rsdl reference Appendix A as a workspace, every file as the reference writes
+it. The manifest names the package `veh`, which holds no source; its
+subdirectories are the packages `veh.common`, `veh.adas`, `veh.diag` and
+`veh.topology` (ADR-0002 §1), at the paths the reference gives below `veh/`.
+
+The entry checks with no error. Its diagnostics snapshot records the three
+warnings the example lists: RSDL-409 twice, for `Panel`'s and `Backend`'s
+`requires CruiseControl`, and RSDL-804 once, for `linux.cpuset`, because no
+command driver claims a backend namespace yet (plan decision P-B4). The IR,
+Rust and TypeScript snapshots are the four packages' own artifacts; the system
+facts are lowered in Part B4.

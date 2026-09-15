@@ -1,0 +1,17 @@
+package veh.adas
+
+import veh.common.Engaged
+import veh.common.Speed
+import veh.common.LeverCmd
+
+interface CruiseControl {
+  signal  engaged: Engaged @[100ms..1s]
+  signal  target: Speed @[100ms..1s]
+  command setLever(cmd: LeverCmd) @[..50ms]
+}
+interface LaneAssist {
+  signal active: Engaged @[100ms..1s]
+}
+
+service veh.adas.cruise : CruiseControl
+service veh.adas.lane   : LaneAssist

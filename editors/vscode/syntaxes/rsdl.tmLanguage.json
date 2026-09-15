@@ -1,0 +1,81 @@
+{
+  "name": "rsdl",
+  "scopeName": "source.rsdl",
+  "fileTypes": ["rsdl"],
+  "information_for_contributors": [
+    "Keyword list source of truth: crates/ridl-syntax/src/keywords.rs (RSDL_KEYWORDS).",
+    "An .rsdl file holds the five rsdl declarations over the typl file structure, so",
+    "this grammar includes the typl patterns it shares by reference (source.typl#...)",
+    "rather than copying them. What it adds is the eight rsdl keywords of rsdl reference",
+    "§2 (system component distribution deployment machine offers requires for) and the",
+    "attribute block of rsdl §5, with its rsdl-owned keys and its `namespace.key`",
+    "backend keys. Update this grammar and keywords.rs together when the registry changes."
+  ],
+  "patterns": [
+    { "include": "source.typl#comments" },
+    { "include": "source.typl#strings" },
+    { "include": "#attributes" },
+    { "include": "source.typl#numbers" },
+    { "include": "#keywords-declaration" },
+    { "include": "#keywords-line" },
+    { "include": "#keywords-clause" },
+    { "include": "source.typl#keywords-control" },
+    { "include": "source.typl#keywords-modifier" },
+    { "include": "source.typl#constants-language" },
+    { "include": "source.typl#screaming-snake" },
+    { "include": "source.typl#type-names" },
+    { "include": "source.typl#punctuation" }
+  ],
+  "repository": {
+    "keywords-declaration": {
+      "comment": "rsdl §3 — the five declarations.",
+      "match": "\\b(system|component|distribution|deployment|machine)\\b",
+      "name": "storage.type.rsdl"
+    },
+    "keywords-line": {
+      "comment": "rsdl §4 — the keyword of a component line.",
+      "match": "\\b(offers|requires)\\b",
+      "name": "keyword.other.line.rsdl"
+    },
+    "keywords-clause": {
+      "comment": "rsdl §3.4 — the relation clause of a deployment.",
+      "match": "\\bfor\\b",
+      "name": "keyword.other.clause.rsdl"
+    },
+    "attributes": {
+      "comment": "rsdl §5 — the attribute block after a name or at the end of a line.",
+      "begin": "\\[",
+      "beginCaptures": {
+        "0": { "name": "punctuation.section.brackets.begin.rsdl" }
+      },
+      "end": "\\]",
+      "endCaptures": {
+        "0": { "name": "punctuation.section.brackets.end.rsdl" }
+      },
+      "patterns": [
+        { "include": "source.typl#comments" },
+        { "include": "source.typl#strings" },
+        { "include": "source.typl#numbers" },
+        { "include": "source.typl#constants-language" },
+        { "include": "#backend-key" },
+        { "include": "#owned-key" },
+        { "include": "source.typl#screaming-snake" },
+        { "include": "source.typl#punctuation" }
+      ]
+    },
+    "backend-key": {
+      "comment": "rsdl §5 — a backend key, two camelCase names around a dot, carried uninterpreted.",
+      "match": "\\b([a-z][A-Za-z0-9]*)(\\.)([a-z][A-Za-z0-9]*)\\b",
+      "captures": {
+        "1": { "name": "entity.name.namespace.rsdl" },
+        "2": { "name": "punctuation.accessor.rsdl" },
+        "3": { "name": "variable.other.property.rsdl" }
+      }
+    },
+    "owned-key": {
+      "comment": "rsdl §5 — the rsdl-owned keys and the family keys `labels` and `deprecated`.",
+      "match": "\\b(instances|external|tier|labels|deprecated)\\b",
+      "name": "variable.other.property.rsdl"
+    }
+  }
+}

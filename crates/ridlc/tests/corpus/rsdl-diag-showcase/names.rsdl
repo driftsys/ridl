@@ -1,0 +1,9 @@
+package rsdl.showcase
+
+// TYPL-009 (rsdl reference §3): an rsdl declaration's name is in the package
+// namespace beside the typl and ridl declarations, and `Flag` is a type in
+// contracts.ridl.
+component Flag {}
+
+// TYPL-009 (§3): `Lines` is a component in closure.rsdl.
+distribution Lines {}

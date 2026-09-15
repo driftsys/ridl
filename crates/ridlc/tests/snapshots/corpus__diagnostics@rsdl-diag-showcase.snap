@@ -1,0 +1,256 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.diagnostics
+input_file: crates/ridlc/tests/corpus/rsdl-diag-showcase/ridl.toml
+---
+error[RSDL-604]: `type` starts a declaration of another profile, and an `.rsdl` file declares `system`, `component`, `distribution` and `deployment` only — a type is declared in a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)
+  ┌─ tests/corpus/rsdl-diag-showcase/profile_boundary.rsdl:5:1
+  │
+5 │ type Speed: km/h
+  │ ^^^^
+
+error[FORM-102]: `internal` cannot modify an rsdl declaration — the closure is workspace-wide, so every declaration it names is visible from the system's package (rsdl reference §2)
+  ┌─ tests/corpus/rsdl-diag-showcase/profile_boundary.rsdl:9:1
+  │
+9 │ internal component Idle {}
+  │ ^^^^^^^^
+
+error[FORM-106]: unknown attribute key `owner`
+  ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:5:19
+  │
+5 │ system Showcase [ owner = "fleet" ] {
+  │                   ^^^^^^^^^^^^^^^
+
+error[FORM-107]: attribute `deprecated` not valid on a line — a line takes backend keys only (rsdl reference §5)
+  ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:7:10
+  │
+7 │   Lane [ deprecated = "use Lane2" ]
+  │          ^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-602]: `Nothing` is not a component or a service — a `system` lists components and lone services (rsdl reference §3.1)
+  ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:9:3
+  │
+9 │   Nothing
+  │   ^^^^^^^
+
+error[RSDL-603]: `Lane` is listed twice in `Showcase` (rsdl reference §3.1)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:11:3
+   │
+11 │   rsdl.showcase.Lane
+   │   ^^^^^^^^^^^^^^^^^^
+
+error[RSDL-504]: `rsdl.showcase.chassis` is offered by the component `Chassis`, so the service does not stand for a component — write `Chassis` (rsdl reference §6)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:13:3
+   │
+13 │   rsdl.showcase.chassis
+   │   ^^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-307]: `Lane.Unit` names the unit instance, which is never written — write `Lane` for the component's one instance (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:15:3
+   │
+15 │   Lane.Unit
+   │   ^^^^^^^^^
+
+error[RSDL-908]: `tier` is `PLATFORM` or `APPLICATION` (rsdl reference §3.3)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:23:21
+   │
+23 │ distribution Adas [ tier = SYSTEM ] { Lane, Chassis, Brakes, Front }
+   │                     ^^^^^^^^^^^^^
+
+warning[RSDL-804]: no configured backend claims the namespace `linux`, so `linux.cpuset` is carried uninterpreted (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:29:12
+   │
+29 │     Lane [ linux.cpuset = (2, 3) ]
+   │            ^^^^^^^^^^^^^^^^^^^^^
+
+error[FORM-107]: attribute `tier` not valid on a `component` (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:42:3
+   │
+42 │   tier = PLATFORM,
+   │   ^^^^^^^^^^^^^^^
+
+error[FORM-108]: duplicate attribute key `labels`
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:44:3
+   │
+44 │   labels = (QM),
+   │   ^^^^^^^^^^^^^
+
+error[FORM-101]: expected `deprecated = "reason"`, a string literal (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:45:3
+   │
+45 │   deprecated = draft,
+   │   ^^^^^^^^^^^^^^^^^^
+
+error[RSDL-305]: `instances` takes a parenthesised list of one or more camelCase names, such as `instances = (primary, backup)` (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:46:3
+   │
+46 │   instances = solo,
+   │   ^^^^^^^^^^^^^^^^
+
+error[RSDL-313]: `external` is a flag and takes no value — write `[ external ]` (rsdl reference §5)
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:47:3
+   │
+47 │   external = true,
+   │   ^^^^^^^^^^^^^^^
+
+error[TYPL-009]: duplicate declaration of `Flag`
+  ┌─ tests/corpus/rsdl-diag-showcase/names.rsdl:6:11
+  │
+6 │ component Flag {}
+  │           ^^^^
+
+error[TYPL-009]: duplicate declaration of `Lines`
+  ┌─ tests/corpus/rsdl-diag-showcase/names.rsdl:9:14
+  │
+9 │ distribution Lines {}
+  │              ^^^^^
+
+error[RSDL-601]: `Second` is a second `system`: a workspace declares at most one, and `Showcase` is declared (rsdl reference §3.1)
+  ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:5:8
+  │
+5 │ system Second { Lane }
+  │        ^^^^^^
+
+error[RSDL-408]: `rsdl.showcase.Braking` is listed by the closure services `rsdl.showcase.brakes` and `rsdl.showcase.chassis` — an interface has one owning service in the closure (rsdl reference §8)
+  ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:9:28
+  │
+9 │ component Chassis { offers rsdl.showcase.chassis }
+  │                            ^^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-309]: `Lines` offers `rsdl.showcase.status` twice — one `offers` line per service (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:16:10
+   │
+16 │   offers rsdl.showcase.status
+   │          ^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-310]: `Lane` is not a service — `offers` names one service by its dotted name, such as `veh.adas.cruise` (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:18:10
+   │
+18 │   offers Lane
+   │          ^^^^
+
+error[RSDL-311]: `rsdl.showcase.chassis` is a service with a list of interfaces, and `requires` names one interface — it lists `rsdl.showcase.Steering`, `rsdl.showcase.Braking` (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:20:12
+   │
+20 │   requires rsdl.showcase.chassis
+   │            ^^^^^^^^^^^^^^^^^^^^^
+
+error[RSDL-312]: `Wheel` is neither an interface nor a service with an inline shape — `requires` names one interface (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:23:12
+   │
+23 │   requires Wheel
+   │            ^^^^^
+
+error[RSDL-306]: `Copies` declares the instance `primary` twice (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:28:42
+   │
+28 │ component Copies [ instances = (primary, primary, Unit) ] {}
+   │                                          ^^^^^^^
+
+error[RSDL-307]: `Unit` is the name of the unit instance, which is never written — name each instance for its role, such as `primary` (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:28:51
+   │
+28 │ component Copies [ instances = (primary, primary, Unit) ] {}
+   │                                                   ^^^^
+
+error[RSDL-904]: `Rear` is in no distribution — when the workspace declares one, every implemented closure component is in exactly one (rsdl reference §3.3)
+  ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:9:11
+  │
+9 │ component Rear { offers rsdl.showcase.lights }
+  │           ^^^^
+
+error[RSDL-502]: `rsdl.showcase.lights` is offered by `Front` and by `Rear` — one closure component offers a service; redundancy is instances of that one component (rsdl reference §7, §8)
+  ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:9:25
+  │
+9 │ component Rear { offers rsdl.showcase.lights }
+  │                         ^^^^^^^^^^^^^^^^^^^^
+
+warning[RSDL-409]: `Driver` requires `rsdl.showcase.Horn`, which resolves to `Hooter`, a redundant provider set of 2 instances — not yet realizable: every link is lowered to each instance, and the runtime has no arbitration yet (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:17:12
+   │
+17 │   requires Horn
+   │            ^^^^
+
+error[RSDL-403]: no closure service lists `rsdl.showcase.Wiper`, which `Driver` requires; `Wipers` offers `rsdl.showcase.wipers`, which lists it, and the system does not list `Wipers` (rsdl reference §8)
+   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:18:12
+   │
+18 │   requires Wiper
+   │            ^^^^^
+
+error[RSDL-308]: `Echo` requires `rsdl.showcase.echo`, which `rsdl.showcase.echo` lists, and `Echo` offers `rsdl.showcase.echo` — a component cannot be in its own provider set (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:25:12
+   │
+25 │   requires rsdl.showcase.echo
+   │            ^^^^^^^^^^^^^^^^^^
+
+error[RSDL-901]: `Base` has tier `PLATFORM` and depends on `App`, which has tier `APPLICATION`: `Driver` requires `rsdl.showcase.Horn`, which `Hooter` offers — tier inversion (rsdl reference §3.3)
+  ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:14
+  │
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+  │              ^^^^
+
+error[RSDL-905]: `Chassis` is already in the distribution `Adas` — an implemented closure component is in exactly one (rsdl reference §3.3)
+  ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:49
+  │
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+  │                                                 ^^^^^^^
+
+error[RSDL-906]: `Driver` is listed twice in `Base` (rsdl reference §3.3)
+  ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:8:58
+  │
+8 │ distribution Base [ tier = PLATFORM ] { Driver, Chassis, Driver }
+  │                                                          ^^^^^^
+
+error[RSDL-903]: `Nothing` is not a component of the closure of `Showcase` — a distribution lists closure components and the lone services the system lists (rsdl reference §3.3)
+   ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:13:51
+   │
+13 │ distribution App [ tier = APPLICATION ] { Hooter, Nothing, Fleet }
+   │                                                   ^^^^^^^
+
+error[RSDL-907]: `Fleet` is external, and an external component is in no distribution (rsdl reference §3.3)
+   ┌─ tests/corpus/rsdl-diag-showcase/distribution.rsdl:13:60
+   │
+13 │ distribution App [ tier = APPLICATION ] { Hooter, Nothing, Fleet }
+   │                                                            ^^^^^
+
+error[RSDL-701]: `Rear.Unit` is placed on no machine of `Road` — every instance of the closure is on exactly one machine per deployment (rsdl reference §9)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:5:12
+  │
+5 │ deployment Road for Showcase {
+  │            ^^^^
+
+error[RSDL-705]: `Ecu` is declared twice in `Road` — a machine name is unique in its deployment (rsdl reference §3.5)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:9:11
+  │
+9 │   machine Ecu { Hooter }
+  │           ^^^
+
+error[RSDL-706]: `Hooter.left` is placed twice in `Road` — first on `Ecu` (rsdl reference §9)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:9:17
+  │
+9 │   machine Ecu { Hooter }
+  │                 ^^^^^^
+
+error[RSDL-707]: `Cloud` is an `external` machine and hosts external components only, and `Driver` is implemented in this workspace (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:11:32
+   │
+11 │   machine Cloud [ external ] { Driver }
+   │                                ^^^^^^
+
+error[RSDL-702]: `Draft` is outside the closure of `Showcase` — a machine places closure components, their instances and the lone services the system lists (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:13:19
+   │
+13 │   machine Spare { Draft }
+   │                   ^^^^^
+
+error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` the workspace's system (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:18:20
+   │
+18 │ deployment Lab for Nowhere {}
+   │                    ^^^^^^^
+
+error[RSDL-708]: a deployment named `Bench` is already declared in the workspace — a deployment name is unique (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:22:12
+   │
+22 │ deployment Bench for Second {}
+   │            ^^^^^

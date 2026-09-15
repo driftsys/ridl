@@ -143,7 +143,7 @@ pub(crate) fn field_ordinal(ir: &v2::Package, struct_name: &str, field_name: &st
 /// `pkg` is the package the cursor was in; it is preferred when its name matches
 /// so a symbol declared in a standalone overlay (which `package_of` cannot find)
 /// still renders its full IR — mirroring the checker's own `package_handle`.
-fn symbol_markdown(
+pub(crate) fn symbol_markdown(
     db: &dyn salsa::Database,
     ws: Workspace,
     std: Package,
@@ -366,11 +366,12 @@ fn symbol_kind(kind: SymbolKind) -> &'static str {
 /// verbatim.
 const STRATUM_THREE: &str = "infrastructure failure — detected, undeclared";
 
-/// The ridl §14.5 note every service hover closes with.
+/// The note every service hover closes with: the ridl §14.5 posture
+/// neutrality, and rsdl v0.2's reservation of the posture (rsdl §12).
 const POSTURE_NOTE: &str = "Posture-neutral by design: this declaration says nothing about how the \
-    contract is realized on the wire. rsdl and deployment choose the posture — static (its \
-    signals and events packed into bus frames) or discovered (SOME/IP, DDS, uProtocol) — from \
-    the same declaration (ridl §14.5).";
+    contract is realized on the wire — static (its signals and events packed into bus frames) or \
+    discovered (SOME/IP, DDS, uProtocol) (ridl §14.5). rsdl derives no posture in this release: \
+    deriving the posture per deployment is reserved (rsdl §12).";
 
 /// The hover for an interaction: the cursor on an interaction's name, or on the
 /// `|` of its inline fallible return.
@@ -772,7 +773,7 @@ fn strata_note(fallible: &v2::FallibleType) -> String {
 /// note. A named-form service renders every slot — references and `reserved`
 /// tombstones alike, in slot order (ADR-0015 decision 12) — so the hover
 /// shows the same list the source declares.
-fn render_service(service: &v2::Service) -> String {
+pub(crate) fn render_service(service: &v2::Service) -> String {
     let inline = service.shapes.iter().find_map(|slot| match &slot.kind {
         Some(v2::service_shape::Kind::Inline(shape)) => Some(shape),
         _ => None,

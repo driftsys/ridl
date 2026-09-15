@@ -26,11 +26,13 @@ pub struct InputFile {
 }
 
 /// The [`Profile`] a source path selects (E2 task 2): a `.ridl` file parses
-/// under [`Profile::Ridl`]; everything else — `.typl` first of all — parses
-/// under [`Profile::Typl`].
+/// under [`Profile::Ridl`], a `.rsdl` file under [`Profile::Rsdl`]; everything
+/// else — `.typl` first of all — parses under [`Profile::Typl`].
 pub fn profile_of_path(path: &str) -> Profile {
     if path.ends_with(".ridl") {
         Profile::Ridl
+    } else if path.ends_with(".rsdl") {
+        Profile::Rsdl
     } else {
         Profile::Typl
     }
@@ -117,6 +119,60 @@ mod tests {
         assert_eq!(profile_of_path("a/b.ridl"), Profile::Ridl);
         assert_eq!(profile_of_path("a/b.typl"), Profile::Typl);
         assert_eq!(profile_of_path("no_extension"), Profile::Typl);
+    }
+
+    #[test]
+    fn profile_of_path_selects_rsdl_by_extension() {
+        assert_eq!(profile_of_path("veh/topology/system.rsdl"), Profile::Rsdl);
+        assert_eq!(profile_of_path("a/b.rsdl.typl"), Profile::Typl);
+    }
+
+    /// The registry change of rsdl v0.2 (rsdl reference §2, typl §1.4), seen
+    /// through file paths: a word the registry gained is a reserved word in a
+    /// `.typl` and a `.ridl` file (FORM-105 as a declared name), and a word it
+    /// lost is an ordinary name in a `.typl` file.
+    #[test]
+    fn the_rsdl_registry_change_reaches_typl_and_ridl_files() {
+        let db = RidlDatabase::default();
+        let codes = |path: &str, text: String| -> Vec<&'static str> {
+            let file = InputFile::new(&db, path.to_string(), text);
+            parse_file(&db, file)
+                .errors()
+                .iter()
+                .map(|e| e.code)
+                .collect()
+        };
+        for word in ["offers", "distribution", "machine"] {
+            let text = format!("package p\ntype {word}: m\n");
+            assert_eq!(
+                codes("x.typl", text.clone()),
+                vec!["FORM-105"],
+                "`{word}` in .typl"
+            );
+            assert_eq!(codes("x.ridl", text), vec!["FORM-105"], "`{word}` in .ridl");
+        }
+        for word in [
+            "provides",
+            "instance",
+            "assurance",
+            "target",
+            "place",
+            "on",
+            "transport",
+            "bundle",
+            "time",
+            "base",
+            "redundant",
+            "supervise",
+            "degraded",
+        ] {
+            let text = format!("package p\ntype {word}: m\n");
+            assert_eq!(
+                codes("x.typl", text),
+                Vec::<&str>::new(),
+                "`{word}` in .typl"
+            );
+        }
     }
 
     /// The profile boundary rides on the path: the same text draws TYPL-302

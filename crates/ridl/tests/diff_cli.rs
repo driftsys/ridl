@@ -157,6 +157,27 @@ fn a_source_tree_holding_stray_ir_artifacts_still_compiles() {
     assert_eq!(stdout, "identical\n", "stdout:\n{stdout:?}");
 }
 
+/// A directory holding an IR artifact and a `.rsdl` file is a source tree, as
+/// it is with a `.typl` or `.ridl` file: it reaches the compiler, which reports
+/// the missing manifest, instead of being described as an artifact directory.
+#[test]
+fn a_directory_holding_an_rsdl_file_is_a_source_tree() {
+    let dir = TempDir::new("rsdl-tree");
+    dir.write("src/veh.cluster.ir.txtpb", "name: \"veh.cluster\"\n");
+    dir.write("src/system.rsdl", "package veh.cluster\n");
+    let src = dir.path().join("src");
+    let source = dir.write("new.ridl", BASE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), src.as_os_str(), source.as_os_str()]);
+
+    assert_eq!(code, 2, "the tree has no manifest:\n{stderr}");
+    assert!(stdout.is_empty(), "no report over a failed side:\n{stdout}");
+    assert!(
+        !stderr.contains("the directory holds IR artifacts"),
+        "a source tree is compiled, not described as artifacts:\n{stderr}"
+    );
+}
+
 /// A `ridl.toml` path designates its workspace, the same as handing the
 /// workspace root itself — only IR artifacts are recognised by name, and
 /// every other file reaches the source compiler ([`load_diff_side`]).

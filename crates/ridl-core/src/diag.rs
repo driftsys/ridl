@@ -10,7 +10,7 @@
 //!
 //! # Namespaces (ADR-0007 decision 2)
 //!
-//! Codes are grouped by hundreds and never renumbered or reused. Four
+//! Codes are grouped by hundreds and never renumbered or reused. Five
 //! namespaces are in play across the family, one catalogue each:
 //!
 //! - `FORM-…` — the shared family grammar: lexical `0xx`, parse `1xx`, and the
@@ -20,6 +20,8 @@
 //!   [`TYPL_CATALOG`].
 //! - `RIDL-…` — ridl interaction rules, defined by the ridl reference §16.
 //!   [`RIDL_CATALOG`].
+//! - `RSDL-…` — rsdl system rules, defined by the rsdl reference §16.
+//!   [`RSDL_CATALOG`].
 //! - `MANI-…` — manifest, lockfile, cache, and fetch: the manifest `0xx` codes
 //!   (E1.5) and the distribution `1xx` codes (E1.6). [`MANI_CATALOG`].
 //!
@@ -129,7 +131,7 @@ macro_rules! diag_codes {
         )+
 
         /// Every catalogue this module declares, each paired with its constant's
-        /// name. The error index (E4.2) reads this rather than naming the four
+        /// name. The error index (E4.2) reads this rather than naming the
         /// catalogues one at a time, and so do the guards below.
         pub const ALL_CATALOGS: &[(&str, &[CatalogEntry])] = &[
             $((stringify!($catalog), $catalog),)+
@@ -753,6 +755,197 @@ diag_codes! {
         /// ordinal moved and which neither classifies nor gates.
         RIDL_408 = "RIDL-408", Error,
             "interaction removed, its tombstone dropped or moved, or its retired name redeclared";
+    }
+
+    /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
+    /// severity the rsdl reference §16.1 table classifies it at. A code is
+    /// declared with the pass that raises it. The §16.2 reserved codes and the
+    /// §16.3 retired codes are never declared. `RSDL_PROFILE_CODES` in
+    /// `crates/ridlc/tests/corpus.rs` gives every code here a living example,
+    /// and `rsdl_profile_codes_match_the_catalogue` holds the two lists equal.
+    RSDL_CATALOG {
+        /// `instances` is not a parenthesised list of one or more camelCase
+        /// names — `()`, `instances = solo` (rsdl §5, §7, §16.1). Error. Raised
+        /// by the rsdl attribute check.
+        RSDL_305 = "RSDL-305", Error,
+            "`instances` is not a parenthesised list of one or more camelCase names";
+
+        /// A duplicate instance name in one component (rsdl §7, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_306 = "RSDL-306", Error,
+            "duplicate instance name in one component";
+
+        /// `Unit` written in source — as a declared instance name, or as the
+        /// instance segment of a reference (rsdl §7, §16.1). Error. Raised by
+        /// the rsdl closure check.
+        RSDL_307 = "RSDL-307", Error,
+            "`Unit` written in source";
+
+        /// A component requires an interface listed by a service it offers
+        /// (rsdl §3.2, §16.1). Error. Raised by the rsdl closure check.
+        RSDL_308 = "RSDL-308", Error,
+            "a component requires an interface listed by a service it offers";
+
+        /// The same service on two `offers` lines, or the same interface on two
+        /// `requires` lines, of one component (rsdl §3.2, §16.1). Error. Raised
+        /// by the rsdl closure check.
+        RSDL_309 = "RSDL-309", Error,
+            "the same service or interface on two lines of one component";
+
+        /// An `offers` line names something that is not a service, or nothing
+        /// (rsdl §3.2, §16.1). Error. Raised by the rsdl closure check.
+        RSDL_310 = "RSDL-310", Error,
+            "an `offers` line names something that is not a service";
+
+        /// A `requires` line names a service whose shape is a list of
+        /// interfaces; the diagnostic lists them (rsdl §3.2, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_311 = "RSDL-311", Error,
+            "a `requires` line names a service whose shape is a list of interfaces";
+
+        /// A `requires` line names something that is neither an interface nor
+        /// an inline-shape service, or nothing (rsdl §3.2, §16.1). Error. Raised
+        /// by the rsdl closure check.
+        RSDL_312 = "RSDL-312", Error,
+            "a `requires` line names neither an interface nor an inline-shape service";
+
+        /// `external` written with a value — it is a flag (rsdl §5, §16.1).
+        /// Error. Raised by the rsdl attribute check.
+        RSDL_313 = "RSDL-313", Error,
+            "`external` written with a value";
+
+        /// A closure component requires an interface that no closure service
+        /// lists — a missing provider (rsdl §8, §16.1). Error. Raised by the rsdl
+        /// resolution.
+        RSDL_403 = "RSDL-403", Error,
+            "a closure component requires an interface no closure service lists";
+
+        /// An interface listed by two services of the closure, raised for every
+        /// interface they list (rsdl §8, §16.1). Error. Raised by the rsdl
+        /// resolution.
+        RSDL_408 = "RSDL-408", Error,
+            "an interface listed by two services of the closure";
+
+        /// A `requires` resolves to a redundant provider set — an offering
+        /// component with more than one instance (rsdl §7, §16.1). Warning, not
+        /// yet realizable: the lowering proceeds. Raised by the rsdl resolution.
+        RSDL_409 = "RSDL-409", Warning,
+            "a `requires` resolves to a redundant provider set";
+
+        /// Two closure components offer one service (rsdl §8, §16.1). Error.
+        /// Raised by the rsdl resolution.
+        RSDL_502 = "RSDL-502", Error,
+            "two closure components offer one service";
+
+        /// A member line names a service by its name while a declared component
+        /// offers it; the diagnostic names the offerer (rsdl §6, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_504 = "RSDL-504", Error,
+            "a member line names a service that a declared component offers";
+
+        /// More than one `system` in the workspace (rsdl §3.1, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_601 = "RSDL-601", Error,
+            "more than one `system` in the workspace";
+
+        /// A `system` member line names nothing that is a component or a service
+        /// (rsdl §3.1, §16.1). Error. Raised by the rsdl closure check.
+        RSDL_602 = "RSDL-602", Error,
+            "a `system` member line names neither a component nor a service";
+
+        /// A name listed twice in one `system` body (rsdl §3.1, §16.1). Error.
+        /// Raised by the rsdl closure check.
+        RSDL_603 = "RSDL-603", Error,
+            "a name listed twice in one `system` body";
+
+        /// A declaration of another profile — a type, an interface, a service —
+        /// at the top level of an `.rsdl` file (rsdl §2, §16.1). Error. Raised
+        /// by the parser.
+        RSDL_604 = "RSDL-604", Error,
+            "a declaration of another profile in an `.rsdl` file";
+
+        /// An instance of a closure component with no placement in a deployment
+        /// (rsdl §9, §16.1). Error; blocks that deployment only (§13). Raised by
+        /// the rsdl placement check.
+        RSDL_701 = "RSDL-701", Error,
+            "an instance of a closure component with no placement in a deployment";
+
+        /// A placement line names a component, instance or service outside the
+        /// closure, or a name that resolves to nothing (rsdl §9, §16.1). Error.
+        /// Raised by the rsdl placement check.
+        RSDL_702 = "RSDL-702", Error,
+            "a placement line names something outside the closure, or nothing";
+
+        /// `deployment … for Y` where `Y` resolves to no declared `system`
+        /// (rsdl §3.4, §16.1). Error. Raised by the rsdl placement check.
+        RSDL_704 = "RSDL-704", Error,
+            "a deployment is `for` no declared `system`";
+
+        /// Two machines with one name in one deployment (rsdl §3.5, §16.1).
+        /// Error. Raised by the rsdl placement check.
+        RSDL_705 = "RSDL-705", Error,
+            "two machines with one name in one deployment";
+
+        /// An instance placed twice in one deployment, also `Cruise` together
+        /// with `Cruise.primary` (rsdl §9, §16.1). Error. Raised by the rsdl
+        /// placement check.
+        RSDL_706 = "RSDL-706", Error,
+            "an instance placed twice in one deployment";
+
+        /// An `external` machine lists an implemented component (rsdl §9,
+        /// §16.1). Error. Raised by the rsdl placement check.
+        RSDL_707 = "RSDL-707", Error,
+            "an `external` machine lists an implemented component";
+
+        /// Two deployments with one name in the workspace (rsdl §3.4, §16.1).
+        /// Error. Raised by the rsdl placement check.
+        RSDL_708 = "RSDL-708", Error,
+            "two deployments with one name in the workspace";
+
+        /// A backend key whose namespace no configured backend claims (rsdl §5,
+        /// §16.1). Warning: the key is still carried. Raised by `ridlc`, which
+        /// knows the configured backends (plan decision P-B4).
+        RSDL_804 = "RSDL-804", Warning,
+            "a backend key whose namespace no configured backend claims";
+
+        /// A `PLATFORM` distribution holds a component whose `requires` resolves
+        /// into an `APPLICATION` distribution — tier inversion; a distribution
+        /// without `tier` is exempt (rsdl §3.3, §16.1). Error. Raised by the
+        /// rsdl distribution check.
+        RSDL_901 = "RSDL-901", Error,
+            "a `PLATFORM` distribution requires into an `APPLICATION` distribution";
+
+        /// A distribution member line names something outside the closure, or
+        /// nothing (rsdl §3.3, §16.1). Error. Raised by the rsdl distribution
+        /// check.
+        RSDL_903 = "RSDL-903", Error,
+            "a distribution member line names something outside the closure, or nothing";
+
+        /// An implemented closure component in no distribution, while the
+        /// workspace declares at least one (rsdl §3.3, §16.1). Error. Raised by
+        /// the rsdl distribution check.
+        RSDL_904 = "RSDL-904", Error,
+            "an implemented closure component in no distribution";
+
+        /// A component listed by two distributions (rsdl §3.3, §16.1). Error.
+        /// Raised by the rsdl distribution check.
+        RSDL_905 = "RSDL-905", Error,
+            "a component listed by two distributions";
+
+        /// A name listed twice in one distribution body (rsdl §3.3, §16.1).
+        /// Error. Raised by the rsdl distribution check.
+        RSDL_906 = "RSDL-906", Error,
+            "a name listed twice in one distribution body";
+
+        /// An `external` component listed by a distribution (rsdl §3.3, §16.1).
+        /// Error. Raised by the rsdl distribution check.
+        RSDL_907 = "RSDL-907", Error,
+            "an `external` component listed by a distribution";
+
+        /// A `tier` value other than `PLATFORM` or `APPLICATION` (rsdl §5,
+        /// §16.1). Error. Raised by the rsdl attribute check.
+        RSDL_908 = "RSDL-908", Error,
+            "`tier` value other than `PLATFORM` or `APPLICATION`";
     }
 
     /// The manifest catalogue (ADR-0007 decision 2): the manifest `0xx` codes the

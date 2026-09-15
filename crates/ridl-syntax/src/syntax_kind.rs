@@ -51,6 +51,17 @@ pub enum SyntaxKind {
     FixedKw,
     RequireKw,
     EnsureKw,
+    // Keywords the rsdl profile activates beyond typl's set (rsdl reference
+    // §2). Under `Profile::Typl` and `Profile::Ridl` these words still lex to
+    // `ReservedWord`.
+    SystemKw,
+    ComponentKw,
+    DistributionKw,
+    DeploymentKw,
+    MachineKw,
+    OffersKw,
+    RequiresKw,
+    ForKw,
     /// A family-registry word that the active profile does not use (typl
     /// reference §1.4). Reserved in every profile, never a valid identifier.
     ReservedWord,
@@ -163,6 +174,16 @@ pub enum SyntaxKind {
     // Appendix C).
     ServiceDef,
     DottedName,
+    // Nodes of the rsdl grammar (`family.ungram` — rsdl reference §3, §4,
+    // Appendix B).
+    SystemDef,
+    ComponentDef,
+    ComponentLine,
+    DistributionDef,
+    DeploymentDef,
+    MachineDef,
+    MemberLine,
+    Reference,
     /// A recovery node: error recovery wraps the tokens it skips in one of
     /// these, so broken input still produces a lossless tree. It is the one
     /// node kind with no rule in `family.ungram`, and the last variant — the

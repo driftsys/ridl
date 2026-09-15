@@ -157,12 +157,10 @@ plus typl's `package`, `import` and `as`. Every family keyword is reserved in
 every profile (typl §1.4). The v0.1 words `provides`, `instance`, `assurance`,
 `target`, `place`, `on`, `transport`, `bundle`, `time`, `base`, `redundant`,
 `supervise` and `degraded` are retired from rsdl, and so is the `<-` wiring
-arrow. The family registry (typl §1.4) and the implemented registry still
-reserve those words and do not yet reserve `offers`, `distribution` and
-`machine`; both registries change when the rsdl checker is built (roadmap Epic
-6). At that change a retired word leaves the registry unless another profile
-uses it (`let` stays, rmdl's), which makes it a legal identifier in every
-profile, and the three new words stop being legal identifiers in every profile.
+arrow. No other profile uses a retired word, so each has left the family
+registry (typl §1.4) and the implemented registry and is a legal identifier in
+every profile (`let` stays, rmdl's); `offers`, `distribution` and `machine` are
+reserved in both registries and are not legal identifiers in any profile.
 `requires` (a component line) and the predicate attribute key `require` (general
 form §4.3) never share a position: `require` is recognised only inside `[ ]`,
 and no rsdl declaration or line admits it.

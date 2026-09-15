@@ -119,8 +119,8 @@ enum Command {
         #[arg(long, value_enum, default_value = "text")]
         format: property::TestFormat,
     },
-    /// Reformat `.typl` and `.ridl` files in place (defaults to the current
-    /// directory).
+    /// Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the
+    /// current directory).
     Fmt {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -456,20 +456,20 @@ fn is_non_json_ir(path: &Path) -> bool {
 }
 
 /// Whether `path` is a source file by the rule the workspace loader collects
-/// with: a file whose extension is `typl` or `ridl`. Used only to tell a
-/// source tree from a snapshot directory ([`is_source_dir`]) — a diff
+/// with: a file whose extension is `typl`, `ridl` or `rsdl`. Used only to tell
+/// a source tree from a snapshot directory ([`is_source_dir`]) — a diff
 /// *argument* is never gated on this, because a source file's own name is
 /// unconstrained ([`load_diff_side`]).
 fn is_source_file(path: &Path) -> bool {
     path.is_file()
-        && path
-            .extension()
-            .is_some_and(|extension| extension == "typl" || extension == "ridl")
+        && path.extension().is_some_and(|extension| {
+            extension == "typl" || extension == "ridl" || extension == "rsdl"
+        })
 }
 
 /// Whether `dir` is a source tree by its direct contents: it holds a
-/// `ridl.toml` or at least one `.typl`/`.ridl` file. A snapshot directory —
-/// `.ridl/baseline/`, or a build `--out-dir` — holds neither.
+/// `ridl.toml` or at least one `.typl`, `.ridl` or `.rsdl` file. A snapshot
+/// directory — `.ridl/baseline/`, or a build `--out-dir` — holds neither.
 fn is_source_dir(dir: &Path) -> bool {
     dir.join("ridl.toml").is_file()
         || files_matching(dir, is_source_file).is_ok_and(|files| !files.is_empty())
@@ -1369,10 +1369,11 @@ struct DeclIndex {
 }
 
 impl DeclIndex {
-    /// Indexes every `.typl` and `.ridl` file under `entry`. A file that
-    /// cannot be read is skipped rather than reported: the compile already ran
-    /// clean over this tree, so anything unreadable here is outside what any
-    /// caller of this index reports — neither the desk check nor the
+    /// Indexes every `.typl`, `.ridl` and `.rsdl` file under `entry` (an
+    /// `.rsdl` file declares no shape and no service, so it adds nothing). A
+    /// file that cannot be read is skipped rather than reported: the compile
+    /// already ran clean over this tree, so anything unreadable here is outside
+    /// what any caller of this index reports — neither the desk check nor the
     /// publication gate. An unreadable *directory* is not skipped in the same sense —
     /// `collect_source_files` fails on the first one it meets, and
     /// `unwrap_or_default` turns that into an empty index rather than a
@@ -1624,8 +1625,8 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     }
 }
 
-/// Formats every `.typl` and `.ridl` file under `path`, each parsed under the
-/// profile its extension selects.
+/// Formats every `.typl`, `.ridl` and `.rsdl` file under `path`, each parsed
+/// under the profile its extension selects.
 ///
 /// A file with parse errors is never rewritten (a formatter must not eat broken
 /// code); its diagnostics render to stderr and the run exits 1. In `--check`
@@ -1681,8 +1682,8 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
     }
 }
 
-/// Every `.typl` and `.ridl` file under `path`: `path` itself when it is a
-/// file, otherwise a recursive walk that skips hidden directories.
+/// Every `.typl`, `.ridl` and `.rsdl` file under `path`: `path` itself when it
+/// is a file, otherwise a recursive walk that skips hidden directories.
 ///
 /// A directory the walk cannot read — `path` itself, when it does not exist
 /// or is not readable, or a subdirectory the walk descends into — is an error
@@ -1710,7 +1711,7 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
                 }
             } else if child
                 .extension()
-                .is_some_and(|ext| ext == "typl" || ext == "ridl")
+                .is_some_and(|ext| ext == "typl" || ext == "ridl" || ext == "rsdl")
             {
                 files.push(child);
             }

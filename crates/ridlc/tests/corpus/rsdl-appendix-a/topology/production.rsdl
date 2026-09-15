@@ -1,0 +1,7 @@
+package veh.topology
+
+deployment Production for Vehicle {
+  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.access }
+  machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }
+  machine Cloud   [ external ] { Backend }
+}

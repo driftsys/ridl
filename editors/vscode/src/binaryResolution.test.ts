@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { test } from "node:test";
 import {
   bundledBinaryPath,
+  clientDocumentSelector,
   isLegacyServerName,
   resolveBinary,
   resolveLspCommand,
@@ -93,10 +94,19 @@ test("the LSP command spawns the same binary with the lsp subcommand", () => {
   assert.deepEqual(resolved, { command: bundled, args: ["lsp"] });
 });
 
-test("the language client starts for typl and ridl documents, not others", () => {
+test("the language client starts for typl, ridl and rsdl documents, not others", () => {
   assert.equal(shouldStartClientForLanguage("typl"), true);
   assert.equal(shouldStartClientForLanguage("ridl"), true);
+  assert.equal(shouldStartClientForLanguage("rsdl"), true);
   assert.equal(shouldStartClientForLanguage("plaintext"), false);
   assert.equal(shouldStartClientForLanguage("markdown"), false);
   assert.equal(shouldStartClientForLanguage(""), false);
+});
+
+test("the language client is scoped to typl, ridl and rsdl files", () => {
+  assert.deepEqual(clientDocumentSelector(), [
+    { scheme: "file", language: "typl" },
+    { scheme: "file", language: "ridl" },
+    { scheme: "file", language: "rsdl" },
+  ]);
 });

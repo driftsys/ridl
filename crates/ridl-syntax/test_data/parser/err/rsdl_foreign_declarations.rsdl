@@ -1,0 +1,15 @@
+package veh.topology
+
+// rsdl reference §2: a type, an interface or a service declared in an `.rsdl`
+// file is RSDL-604. Each declaration draws one diagnostic, and the component
+// after them still parses.
+type Speed: km/h [0.0..250.0 step 0.5]
+internal struct Fault { count: integer [0..255] }
+interface LaneAssist {
+  signal active: boolean @[100ms..1s]
+}
+service veh.diag.access {
+  query readFaults(): FaultReport @[..100ms]
+}
+
+component Lane { offers veh.adas.lane }

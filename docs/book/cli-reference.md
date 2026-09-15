@@ -64,7 +64,7 @@ Commands:
   baseline  Publish the current workspace as a baseline: one `<pkg-name>.ir.json` snapshot per package, written to `.ridl/baseline/` at the workspace root
   build     Compile to the selected artifacts (defaults to the current directory)
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
-  fmt       Reformat `.typl` and `.ridl` files in place (defaults to the current directory)
+  fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
@@ -649,7 +649,7 @@ ridl fmt --help
 ```
 
 ```text
-Reformat `.typl` and `.ridl` files in place (defaults to the current directory)
+Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
 
 Usage: ridl fmt [OPTIONS] [PATH]
 
@@ -661,8 +661,11 @@ Options:
   -h, --help   Print help
 ```
 
-**It writes** every `.typl`/`.ridl` file under `PATH` back to itself in
-canonical form, unless `--check` is given or the file fails to parse.
+**It writes** every `.typl`/`.ridl`/`.rsdl` file under `PATH` back to itself in
+canonical form, unless `--check` is given or the file fails to parse. An `.rsdl`
+file takes the file layout (the header, one blank line between declarations).
+The formatter has no layout rules for the rsdl declarations, so it keeps each
+one as written, as it does a ridl `interface` or `service`.
 
 **Exit codes.** 0 when nothing needed rewriting, or the rewrite (without
 `--check`) succeeded. 1 under `--check` when a file would change, without

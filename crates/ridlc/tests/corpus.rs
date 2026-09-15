@@ -45,6 +45,16 @@
 //!   cross-package service path, including an inline shape whose whole
 //!   vocabulary is imported. See `services-workspace/NOTES`.
 //!
+//! The rsdl system layer (E6):
+//!
+//! - `rsdl-diag-showcase/` — the rsdl counterpart of `ridl-diag-showcase`: a
+//!   package emitting one instance of every implemented rsdl-profile
+//!   diagnostic. [`RSDL_PROFILE_CODES`] below is the machine-checked index;
+//!   `rsdl-diag-showcase/NOTES` is the prose one.
+//! - `rsdl-appendix-a/` — the rsdl reference Appendix A, verbatim, as a
+//!   workspace of four packages. It checks with only the warnings the example
+//!   lists.
+//!
 //! The malformed programs live in `tests/malformed/` and are driven by
 //! `tests/totality.rs`: they are single files with no manifest, so the corpus
 //! glob has nothing to do with them.
@@ -53,7 +63,7 @@
 //! directory `cargo test` sets), so the file paths that appear in the rendered
 //! diagnostics stay portable across machines.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
 use ridl_core::db::InputFile;
@@ -63,7 +73,7 @@ use ridl_core::diag::{
 };
 use ridl_core::package::{Package, service_catalog};
 use ridl_core::{RidlDatabase, load_workspace, parse_file, std_package};
-use ridl_sem::{check_package, resolve_package};
+use ridl_sem::{check_package, check_system, resolve_package, unclaimed_backend_keys};
 
 /// The four snapshotted artifacts of one compiled corpus entry.
 struct Compiled {
@@ -151,16 +161,34 @@ fn compile_entry(entry: &Path) -> Compiled {
     // in package-then-file order. That order is rebuilt here and remapped onto
     // the render source map. Without this the runner would compile a workspace
     // the real pipeline rejects and snapshot it as clean.
+    //
+    // The rsdl system query shares that order, and its RSDL-804 warnings come
+    // from `ridl_sem::unclaimed_backend_keys` with no namespace claimed, exactly
+    // as the command drivers call it.
     let catalog = service_catalog(&db, workspace, std);
-    if !catalog.diagnostics.is_empty() {
-        let mut catalog_render_ids = Vec::new();
+    let mut system = check_system(&db, workspace, std);
+    if !catalog.diagnostics.is_empty() || !system.diagnostics.is_empty() {
+        let mut workspace_render_ids = Vec::new();
         for pkg in &packages {
             for file in pkg.files(&db) {
-                catalog_render_ids.push(sources.file_id(file.path(&db), file.text(&db)));
+                workspace_render_ids.push(sources.file_id(file.path(&db), file.text(&db)));
             }
         }
-        diagnostics.extend(remap_diagnostics(catalog.diagnostics, &catalog_render_ids));
+        diagnostics.extend(remap_diagnostics(
+            catalog.diagnostics,
+            &workspace_render_ids,
+        ));
+        diagnostics.extend(remap_diagnostics(
+            std::mem::take(&mut system.diagnostics),
+            &workspace_render_ids,
+        ));
     }
+    diagnostics.extend(unclaimed_backend_keys(
+        &db,
+        &system,
+        &BTreeSet::new(),
+        &mut sources,
+    ));
 
     // IR JSON and generated Rust are recorded only for an entry that compiles
     // without errors. For a clean entry these are the full-pipeline golden. For
@@ -388,7 +416,9 @@ fn a_composed_service_compiles_and_round_trips_through_the_ir() {
 /// hand. That gap is recorded as separate work in issue #172.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Provoked {
-    /// Emitted by the `ridl-diag-showcase` corpus entry.
+    /// Emitted by the diagnostic showcase of the table's profile: the
+    /// `ridl-diag-showcase` entry for [`RIDL_PROFILE_CODES`], the
+    /// `rsdl-diag-showcase` entry for [`RSDL_PROFILE_CODES`].
     Showcase,
     /// Emitted elsewhere, by a fixture this crate does not compile. The first
     /// field is that fixture's path **from the repository root**, checked to
@@ -645,7 +675,7 @@ fn every_ridl_profile_code_has_a_living_example() {
 #[test]
 fn every_test_cited_in_an_elsewhere_reason_exists() {
     let root = repository_root();
-    for (code, provoked) in RIDL_PROFILE_CODES {
+    for (code, provoked) in RIDL_PROFILE_CODES.iter().chain(RSDL_PROFILE_CODES) {
         let Elsewhere { reason, .. } = provoked else {
             continue;
         };
@@ -669,6 +699,242 @@ fn every_test_cited_in_an_elsewhere_reason_exists() {
             );
         }
     }
+}
+
+/// Every code the rsdl profile implements (rsdl reference §16.1, plus the shared
+/// FORM codes an `.rsdl` file draws), paired with where the corpus provokes it.
+/// `Showcase` means the `rsdl-diag-showcase` entry emits it; `Elsewhere` names
+/// the fixture that does and the reason the showcase cannot.
+///
+/// A code joins this list in the change that first raises it, and
+/// [`rsdl_profile_codes_match_the_catalogue`] holds the `RSDL-` rows equal to
+/// `RSDL_CATALOG`.
+const RSDL_PROFILE_CODES: &[(&str, Provoked)] = &[
+    ("RSDL-305", Showcase),
+    ("RSDL-306", Showcase),
+    ("RSDL-307", Showcase),
+    ("RSDL-308", Showcase),
+    ("RSDL-309", Showcase),
+    ("RSDL-310", Showcase),
+    ("RSDL-311", Showcase),
+    ("RSDL-312", Showcase),
+    ("RSDL-313", Showcase),
+    ("RSDL-403", Showcase),
+    ("RSDL-408", Showcase),
+    ("RSDL-409", Showcase),
+    ("RSDL-502", Showcase),
+    ("RSDL-504", Showcase),
+    ("RSDL-601", Showcase),
+    ("RSDL-602", Showcase),
+    ("RSDL-603", Showcase),
+    ("RSDL-604", Showcase),
+    ("RSDL-701", Showcase),
+    ("RSDL-702", Showcase),
+    ("RSDL-704", Showcase),
+    ("RSDL-705", Showcase),
+    ("RSDL-706", Showcase),
+    ("RSDL-707", Showcase),
+    ("RSDL-708", Showcase),
+    ("RSDL-804", Showcase),
+    ("RSDL-901", Showcase),
+    ("RSDL-903", Showcase),
+    ("RSDL-904", Showcase),
+    ("RSDL-905", Showcase),
+    ("RSDL-906", Showcase),
+    ("RSDL-907", Showcase),
+    ("RSDL-908", Showcase),
+    // The shared codes the rsdl grammar, the rsdl attribute check and the rsdl
+    // name check raise.
+    ("FORM-101", Showcase),
+    ("FORM-102", Showcase),
+    ("FORM-106", Showcase),
+    ("FORM-107", Showcase),
+    ("FORM-108", Showcase),
+    ("TYPL-009", Showcase),
+];
+
+/// The rsdl diagnostic showcase emits exactly the codes [`RSDL_PROFILE_CODES`]
+/// marks [`Showcase`], and nothing else — set equality, as for the ridl
+/// showcase ([`showcase_provokes_exactly_the_expected_codes`]).
+#[test]
+fn rsdl_showcase_provokes_exactly_the_expected_codes() {
+    let compiled = compile_entry(Path::new("tests/corpus/rsdl-diag-showcase"));
+
+    let actual: std::collections::BTreeSet<&str> = compiled
+        .coded
+        .iter()
+        .map(|(code, _)| code.as_str())
+        .collect();
+    let expected: std::collections::BTreeSet<&str> = RSDL_PROFILE_CODES
+        .iter()
+        .filter(|(_, where_)| *where_ == Showcase)
+        .map(|(code, _)| *code)
+        .collect();
+
+    let missing: Vec<&str> = expected.difference(&actual).copied().collect();
+    let unexpected: Vec<&str> = actual.difference(&expected).copied().collect();
+    assert!(
+        missing.is_empty() && unexpected.is_empty(),
+        "the rsdl diagnostic showcase drifted.\n  no longer provoked: {missing:?}\n  \
+         newly provoked: {unexpected:?}",
+    );
+}
+
+/// `RSDL_PROFILE_CODES` holds every `RSDL-` code the catalogue declares, and no
+/// others — the rsdl counterpart of [`ridl_profile_codes_match_the_catalogue`].
+#[test]
+fn rsdl_profile_codes_match_the_catalogue() {
+    let catalogued: std::collections::BTreeSet<&str> = ridl_core::diag::RSDL_CATALOG
+        .iter()
+        .map(|entry| entry.code.as_str())
+        .collect();
+    let listed: std::collections::BTreeSet<&str> = RSDL_PROFILE_CODES
+        .iter()
+        .map(|(code, _)| *code)
+        .filter(|code| code.starts_with("RSDL-"))
+        .collect();
+
+    let unlisted: Vec<&str> = catalogued.difference(&listed).copied().collect();
+    let uncatalogued: Vec<&str> = listed.difference(&catalogued).copied().collect();
+    assert!(
+        unlisted.is_empty() && uncatalogued.is_empty(),
+        "`RSDL_PROFILE_CODES` and `RSDL_CATALOG` disagree.\n  \
+         in the catalogue, absent from this list: {unlisted:?}\n  \
+         in this list, absent from the catalogue: {uncatalogued:?}",
+    );
+}
+
+/// Every rsdl-profile code recorded as [`Elsewhere`] names a fixture that
+/// exists on disk and is not emitted by the showcase — the half of
+/// [`every_ridl_profile_code_has_a_living_example`] that
+/// [`rsdl_showcase_provokes_exactly_the_expected_codes`] does not already
+/// cover.
+#[test]
+fn every_rsdl_profile_code_has_a_living_example() {
+    let showcase: std::collections::BTreeSet<String> =
+        compile_entry(Path::new("tests/corpus/rsdl-diag-showcase"))
+            .coded
+            .into_iter()
+            .map(|(code, _)| code)
+            .collect();
+    let root = repository_root();
+    for (code, provoked) in RSDL_PROFILE_CODES {
+        if let Elsewhere { fixture, reason } = provoked {
+            assert!(
+                root.join(fixture).exists(),
+                "{code}: the fixture recorded as its living example is gone: {fixture}\n  \
+                 recorded reason: {reason}",
+            );
+            assert!(
+                !showcase.contains(*code),
+                "{code} is recorded as provoked elsewhere, but the rsdl showcase emits it now \
+                 — move it to `Showcase`",
+            );
+        }
+    }
+}
+
+/// The rsdl codes in force, read from the rsdl reference §16.1 table, each with
+/// the severity its row gives.
+fn rsdl_reference_codes() -> std::collections::BTreeMap<String, Severity> {
+    let path = repository_root().join("docs/specification/rsdl-language-reference.md");
+    let reference = std::fs::read_to_string(&path).expect("the rsdl reference is readable");
+    let table = reference
+        .split("### 16.1 Codes in force")
+        .nth(1)
+        .and_then(|rest| rest.split("### 16.2").next())
+        .expect("the rsdl reference has a §16.1 table");
+    table
+        .lines()
+        .filter_map(|line| {
+            let cells: Vec<&str> = line.split('|').map(str::trim).collect();
+            let [_, code, _, severity, ..] = cells.as_slice() else {
+                return None;
+            };
+            if !code.starts_with("RSDL-") {
+                return None;
+            }
+            let severity = match *severity {
+                "error" => Severity::Error,
+                warning if warning.starts_with("warning") => Severity::Warning,
+                other => panic!("{code}: the §16.1 table gives the unknown severity `{other}`"),
+            };
+            Some((code.to_string(), severity))
+        })
+        .collect()
+}
+
+/// `RSDL_PROFILE_CODES` lists exactly the codes of the rsdl reference §16.1
+/// table, in both directions, and the catalogue gives each code the severity
+/// its row gives. With [`rsdl_profile_codes_match_the_catalogue`], the table,
+/// this list and `RSDL_CATALOG` hold one set of codes.
+#[test]
+fn rsdl_profile_codes_match_the_reference_table() {
+    let reference = rsdl_reference_codes();
+    let in_table: BTreeSet<&str> = reference.keys().map(String::as_str).collect();
+    let listed: BTreeSet<&str> = RSDL_PROFILE_CODES
+        .iter()
+        .map(|(code, _)| *code)
+        .filter(|code| code.starts_with("RSDL-"))
+        .collect();
+
+    let unlisted: Vec<&str> = in_table.difference(&listed).copied().collect();
+    let untabled: Vec<&str> = listed.difference(&in_table).copied().collect();
+    assert!(
+        unlisted.is_empty() && untabled.is_empty(),
+        "`RSDL_PROFILE_CODES` and the rsdl reference §16.1 table disagree.\n  \
+         in the table, absent from this list: {unlisted:?}\n  \
+         in this list, absent from the table: {untabled:?}",
+    );
+    for entry in ridl_core::diag::RSDL_CATALOG {
+        let code = entry.code.as_str();
+        assert_eq!(
+            reference.get(code),
+            Some(&entry.severity),
+            "{code}: the catalogue severity differs from the rsdl reference §16.1 table",
+        );
+    }
+}
+
+/// The rsdl showcase emits every `RSDL-` code at the severity the reference
+/// §16.1 table gives it, and every shared code (`FORM-`, TYPL-009) as an error.
+/// The catalogue severity is checked above; this checks the passes, which set a
+/// diagnostic's severity themselves.
+#[test]
+fn rsdl_showcase_emits_each_code_at_its_reference_severity() {
+    let reference = rsdl_reference_codes();
+    let compiled = compile_entry(Path::new("tests/corpus/rsdl-diag-showcase"));
+    for (code, severity) in &compiled.coded {
+        let expected = if code.starts_with("RSDL-") {
+            reference[code]
+        } else {
+            Severity::Error
+        };
+        assert_eq!(
+            *severity, expected,
+            "{code} is emitted at the wrong severity"
+        );
+    }
+}
+
+/// rsdl reference Appendix A, verbatim, as a workspace. It checks with no
+/// error, and its only diagnostics are the warnings the example lists: RSDL-409
+/// twice, for `Panel`'s and `Backend`'s `requires CruiseControl`, and RSDL-804
+/// for `linux.cpuset`, which the command drivers raise because they claim no
+/// backend namespace (plan decision P-B4). The coded list is in the order the
+/// diagnostics snapshot lists them.
+#[test]
+fn rsdl_appendix_a_checks_with_only_its_listed_warnings() {
+    let compiled = compile_entry(Path::new("tests/corpus/rsdl-appendix-a"));
+    let warning = |code: &str| (code.to_string(), Severity::Warning);
+    assert_eq!(
+        compiled.coded,
+        [
+            warning("RSDL-409"),
+            warning("RSDL-409"),
+            warning("RSDL-804")
+        ]
+    );
 }
 
 /// Severity is part of what a diagnostic promises: the reference §16 tables

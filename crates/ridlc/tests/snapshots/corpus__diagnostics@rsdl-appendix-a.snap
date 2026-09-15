@@ -1,0 +1,22 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.diagnostics
+input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
+---
+warning[RSDL-409]: `Panel` requires `veh.adas.CruiseControl`, which resolves to `Cruise`, a redundant provider set of 2 instances — not yet realizable: every link is lowered to each instance, and the runtime has no arbitration yet (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-appendix-a/topology/system.rsdl:15:12
+   │
+15 │   requires CruiseControl
+   │            ^^^^^^^^^^^^^
+
+warning[RSDL-409]: `Backend` requires `veh.adas.CruiseControl`, which resolves to `Cruise`, a redundant provider set of 2 instances — not yet realizable: every link is lowered to each instance, and the runtime has no arbitration yet (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-appendix-a/topology/system.rsdl:21:12
+   │
+21 │   requires CruiseControl
+   │            ^^^^^^^^^^^^^
+
+warning[RSDL-804]: no configured backend claims the namespace `linux`, so `linux.cpuset` is carried uninterpreted (rsdl reference §5)
+  ┌─ tests/corpus/rsdl-appendix-a/topology/production.rsdl:5:44
+  │
+5 │   machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }
+  │                                            ^^^^^^^^^^^^^^^^^^^^^

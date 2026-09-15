@@ -1,0 +1,28 @@
+package rsdl.showcase
+
+// RSDL-601 (rsdl reference §3.1): a workspace declares at most one `system`,
+// and `Showcase` (attributes.rsdl) is declared first. The body is not read.
+system Second { Lane }
+
+// `Chassis` offers `rsdl.showcase.chassis`, so that service stands for no
+// component: listing it in `Showcase` is RSDL-504 (§6).
+component Chassis { offers rsdl.showcase.chassis }
+
+// The rules of one component hold for a component the system does not list
+// (§3.1, §3.2).
+component Lines {
+  // RSDL-309: the same service on a second `offers` line.
+  offers rsdl.showcase.status
+  offers rsdl.showcase.status
+  // RSDL-310: `offers` names a service, and `Lane` is a component.
+  offers Lane
+  // RSDL-311: `rsdl.showcase.chassis` lists two interfaces.
+  requires rsdl.showcase.chassis
+  // RSDL-312: `Wheel` is neither an interface nor a service with an inline
+  // shape.
+  requires Wheel
+}
+
+// RSDL-306 (§7): `primary` twice. RSDL-307: the unit instance is never
+// written.
+component Copies [ instances = (primary, primary, Unit) ] {}

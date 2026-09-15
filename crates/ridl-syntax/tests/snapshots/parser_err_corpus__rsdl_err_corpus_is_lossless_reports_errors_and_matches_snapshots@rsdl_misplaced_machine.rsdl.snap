@@ -1,0 +1,57 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/rsdl_misplaced_machine.rsdl
+---
+SourceFile@0..226
+  PackageDecl@0..20
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..20
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..20 "topology"
+  Whitespace@20..22 "\n\n"
+  LineComment@22..100 "// A machine is decla ..."
+  Whitespace@100..101 "\n"
+  LineComment@101..149 "// and a deployment n ..."
+  Whitespace@149..150 "\n"
+  ErrorNode@150..175
+    MachineKw@150..157 "machine"
+    Whitespace@157..158 " "
+    Ident@158..164 "DevBox"
+    Whitespace@164..165 " "
+    LBrace@165..166 "{"
+    Whitespace@166..167 " "
+    Ident@167..173 "Cruise"
+    Whitespace@173..174 " "
+    RBrace@174..175 "}"
+  Whitespace@175..177 "\n\n"
+  DeploymentDef@177..225
+    DeploymentKw@177..187 "deployment"
+    Whitespace@187..188 " "
+    Name@188..193
+      Ident@188..193 "Bench"
+    Whitespace@193..194 " "
+    LBrace@194..195 "{"
+    Whitespace@195..198 "\n  "
+    MachineDef@198..223
+      MachineKw@198..205 "machine"
+      Whitespace@205..206 " "
+      Name@206..212
+        Ident@206..212 "DevBox"
+      Whitespace@212..213 " "
+      LBrace@213..214 "{"
+      Whitespace@214..215 " "
+      MemberLine@215..221
+        Reference@215..221
+          QualifiedName@215..221
+            Ident@215..221 "Cruise"
+      Whitespace@221..222 " "
+      RBrace@222..223 "}"
+    Whitespace@223..224 "\n"
+    RBrace@224..225 "}"
+  Whitespace@225..226 "\n"
+errors:
+  FORM-102 150..157 unexpected token at top level
+  FORM-101 194..195 expected `for` and the system this deployment places

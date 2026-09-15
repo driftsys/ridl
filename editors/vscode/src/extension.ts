@@ -1,17 +1,17 @@
 // The RIDL VS Code extension entry point (docs/ROADMAP.md epics E1.17,
-// E2.10b).
+// E2.10b, E6.15).
 //
 // `activate` registers the "Install ridl to PATH" command and the MCP
 // server definition provider unconditionally — both are cheap and spawn no
 // process. It starts the LSP client (over stdio against the `ridl` binary,
-// run as `ridl lsp`, crates/ridl) only once a `typl` or `ridl` document is
-// open: one already open at activation, or the first one opened later. One
-// server serves both languages: the compiler selects the profile from the
-// file extension, so a `.ridl` file and a `.typl` file of the same package
-// are checked together. The same binary also runs as `ridl mcp` for the
-// Model Context Protocol server. binaryResolution.ts picks the binary in
-// three tiers: the `ridl.serverPath` setting, the binary bundled in the
-// extension, then `ridl` resolved from PATH.
+// run as `ridl lsp`, crates/ridl) only once a `typl`, `ridl` or `rsdl`
+// document is open: one already open at activation, or the first one opened
+// later. One server serves the three languages: the compiler selects the
+// profile from the file extension, so the `.typl`, `.ridl` and `.rsdl` files
+// of one workspace are checked together. The same binary also runs as
+// `ridl mcp` for the Model Context Protocol server. binaryResolution.ts picks
+// the binary in three tiers: the `ridl.serverPath` setting, the binary bundled
+// in the extension, then `ridl` resolved from PATH.
 
 import { execFile } from "node:child_process";
 import * as fs from "node:fs";
@@ -26,6 +26,7 @@ import {
   TransportKind,
 } from "vscode-languageclient/node";
 import {
+  clientDocumentSelector,
   isLegacyServerName,
   resolveLspCommand,
   resolveMcpDefinition,
@@ -82,7 +83,7 @@ export async function deactivate(): Promise<void> {
   }
 }
 
-/** Starts the language client the first time a `typl` or `ridl` document is open; a no-op afterward. */
+/** Starts the language client the first time a `typl`, `ridl` or `rsdl` document is open; a no-op afterward. */
 async function startClientIfNeeded(context: vscode.ExtensionContext): Promise<void> {
   if (clientStarted) return;
   clientStarted = true;
@@ -97,7 +98,7 @@ function configuredServerPath(): string | undefined {
   return value && value.trim().length > 0 ? value.trim() : undefined;
 }
 
-/** Builds the language client: stdio transport to `ridl lsp`, scoped to `.typl` and `.ridl` files. */
+/** Builds the language client: stdio transport to `ridl lsp`, scoped to `.typl`, `.ridl` and `.rsdl` files. */
 function createClient(context: vscode.ExtensionContext): LanguageClient {
   const { command, args } = resolveLspCommand({
     configuredPath: configuredServerPath(),
@@ -112,10 +113,7 @@ function createClient(context: vscode.ExtensionContext): LanguageClient {
   };
 
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [
-      { scheme: "file", language: "typl" },
-      { scheme: "file", language: "ridl" },
-    ],
+    documentSelector: clientDocumentSelector(),
   };
 
   // The client id "ridl" ties this client to the `ridl.trace.server` setting:

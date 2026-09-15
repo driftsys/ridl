@@ -1,0 +1,24 @@
+package veh.topology
+
+// rsdl reference §3.1.
+system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }
+
+// rsdl reference §3.2.
+component Cruise [ instances = (primary, backup) ] {
+  offers   veh.adas.cruise
+  requires LaneAssist
+}
+component Lane    { offers veh.adas.lane }
+component Panel   { requires CruiseControl, requires LaneAssist }
+component Backend [ external ] { requires CruiseControl }
+
+// rsdl reference §3.3.
+distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.access }
+distribution Hmi  [ tier = APPLICATION ] { Panel }
+
+// rsdl reference §3.4 and §3.5.
+deployment Production for Vehicle {
+  machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.access }
+  machine Cockpit { Cruise.backup, Panel [ linux.cpuset = (2, 3) ] }
+  machine Cloud   [ external ] { Backend }
+}

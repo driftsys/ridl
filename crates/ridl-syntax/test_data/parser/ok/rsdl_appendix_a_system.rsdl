@@ -1,0 +1,29 @@
+// rsdl reference Appendix A, verbatim.
+package veh.topology
+
+import veh.adas.CruiseControl
+import veh.adas.LaneAssist
+
+/// Adaptive cruise, two copies: one per compute node.
+component Cruise [ instances = (primary, backup), labels = (ASIL_B) ] {
+  offers   veh.adas.cruise
+  requires LaneAssist
+}
+
+component Lane { offers veh.adas.lane }
+
+component Panel {
+  requires CruiseControl
+  requires LaneAssist
+}
+
+/// The fleet backend. No implementation in this workspace.
+component Backend [ external ] {
+  requires CruiseControl
+  requires veh.diag.access
+}
+
+system Vehicle { Cruise, Lane, Panel, Backend, veh.diag.access }
+
+distribution Adas [ tier = PLATFORM ]    { Cruise, Lane, veh.diag.access }
+distribution Hmi  [ tier = APPLICATION ] { Panel }

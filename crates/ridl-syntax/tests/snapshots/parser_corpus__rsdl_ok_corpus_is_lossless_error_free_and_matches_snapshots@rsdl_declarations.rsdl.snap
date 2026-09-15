@@ -1,0 +1,405 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/rsdl_declarations.rsdl
+---
+SourceFile@0..829
+  PackageDecl@0..20
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..20
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..20 "topology"
+  Whitespace@20..22 "\n\n"
+  LineComment@22..46 "// rsdl reference §3.1."
+  Whitespace@46..47 "\n"
+  SystemDef@47..111
+    SystemKw@47..53 "system"
+    Whitespace@53..54 " "
+    Name@54..61
+      Ident@54..61 "Vehicle"
+    Whitespace@61..62 " "
+    LBrace@62..63 "{"
+    Whitespace@63..64 " "
+    MemberLine@64..70
+      Reference@64..70
+        QualifiedName@64..70
+          Ident@64..70 "Cruise"
+    Comma@70..71 ","
+    Whitespace@71..72 " "
+    MemberLine@72..76
+      Reference@72..76
+        QualifiedName@72..76
+          Ident@72..76 "Lane"
+    Comma@76..77 ","
+    Whitespace@77..78 " "
+    MemberLine@78..83
+      Reference@78..83
+        QualifiedName@78..83
+          Ident@78..83 "Panel"
+    Comma@83..84 ","
+    Whitespace@84..85 " "
+    MemberLine@85..92
+      Reference@85..92
+        QualifiedName@85..92
+          Ident@85..92 "Backend"
+    Comma@92..93 ","
+    Whitespace@93..94 " "
+    MemberLine@94..109
+      Reference@94..109
+        QualifiedName@94..109
+          Ident@94..97 "veh"
+          Dot@97..98 "."
+          Ident@98..102 "diag"
+          Dot@102..103 "."
+          Ident@103..109 "access"
+    Whitespace@109..110 " "
+    RBrace@110..111 "}"
+  Whitespace@111..113 "\n\n"
+  LineComment@113..137 "// rsdl reference §3.2."
+  Whitespace@137..138 "\n"
+  ComponentDef@138..241
+    ComponentKw@138..147 "component"
+    Whitespace@147..148 " "
+    Name@148..154
+      Ident@148..154 "Cruise"
+    Whitespace@154..155 " "
+    AttrBlock@155..188
+      LBracket@155..156 "["
+      Whitespace@156..157 " "
+      Attribute@157..186
+        Name@157..166
+          Ident@157..166 "instances"
+        Whitespace@166..167 " "
+        Eq@167..168 "="
+        Whitespace@168..169 " "
+        AttrValue@169..186
+          LParen@169..170 "("
+          AttrValue@170..177
+            Literal@170..177
+              Ident@170..177 "primary"
+          Comma@177..178 ","
+          Whitespace@178..179 " "
+          AttrValue@179..185
+            Literal@179..185
+              Ident@179..185 "backup"
+          RParen@185..186 ")"
+      Whitespace@186..187 " "
+      RBracket@187..188 "]"
+    Whitespace@188..189 " "
+    LBrace@189..190 "{"
+    Whitespace@190..193 "\n  "
+    ComponentLine@193..217
+      OffersKw@193..199 "offers"
+      Whitespace@199..202 "   "
+      Reference@202..217
+        QualifiedName@202..217
+          Ident@202..205 "veh"
+          Dot@205..206 "."
+          Ident@206..210 "adas"
+          Dot@210..211 "."
+          Ident@211..217 "cruise"
+    Whitespace@217..220 "\n  "
+    ComponentLine@220..239
+      RequiresKw@220..228 "requires"
+      Whitespace@228..229 " "
+      Reference@229..239
+        QualifiedName@229..239
+          Ident@229..239 "LaneAssist"
+    Whitespace@239..240 "\n"
+    RBrace@240..241 "}"
+  Whitespace@241..242 "\n"
+  ComponentDef@242..284
+    ComponentKw@242..251 "component"
+    Whitespace@251..252 " "
+    Name@252..256
+      Ident@252..256 "Lane"
+    Whitespace@256..260 "    "
+    LBrace@260..261 "{"
+    Whitespace@261..262 " "
+    ComponentLine@262..282
+      OffersKw@262..268 "offers"
+      Whitespace@268..269 " "
+      Reference@269..282
+        QualifiedName@269..282
+          Ident@269..272 "veh"
+          Dot@272..273 "."
+          Ident@273..277 "adas"
+          Dot@277..278 "."
+          Ident@278..282 "lane"
+    Whitespace@282..283 " "
+    RBrace@283..284 "}"
+  Whitespace@284..285 "\n"
+  ComponentDef@285..350
+    ComponentKw@285..294 "component"
+    Whitespace@294..295 " "
+    Name@295..300
+      Ident@295..300 "Panel"
+    Whitespace@300..303 "   "
+    LBrace@303..304 "{"
+    Whitespace@304..305 " "
+    ComponentLine@305..327
+      RequiresKw@305..313 "requires"
+      Whitespace@313..314 " "
+      Reference@314..327
+        QualifiedName@314..327
+          Ident@314..327 "CruiseControl"
+    Comma@327..328 ","
+    Whitespace@328..329 " "
+    ComponentLine@329..348
+      RequiresKw@329..337 "requires"
+      Whitespace@337..338 " "
+      Reference@338..348
+        QualifiedName@338..348
+          Ident@338..348 "LaneAssist"
+    Whitespace@348..349 " "
+    RBrace@349..350 "}"
+  Whitespace@350..351 "\n"
+  ComponentDef@351..408
+    ComponentKw@351..360 "component"
+    Whitespace@360..361 " "
+    Name@361..368
+      Ident@361..368 "Backend"
+    Whitespace@368..369 " "
+    AttrBlock@369..381
+      LBracket@369..370 "["
+      Whitespace@370..371 " "
+      Attribute@371..379
+        Name@371..379
+          Ident@371..379 "external"
+      Whitespace@379..380 " "
+      RBracket@380..381 "]"
+    Whitespace@381..382 " "
+    LBrace@382..383 "{"
+    Whitespace@383..384 " "
+    ComponentLine@384..406
+      RequiresKw@384..392 "requires"
+      Whitespace@392..393 " "
+      Reference@393..406
+        QualifiedName@393..406
+          Ident@393..406 "CruiseControl"
+    Whitespace@406..407 " "
+    RBrace@407..408 "}"
+  Whitespace@408..410 "\n\n"
+  LineComment@410..434 "// rsdl reference §3.3."
+  Whitespace@434..435 "\n"
+  DistributionDef@435..509
+    DistributionKw@435..447 "distribution"
+    Whitespace@447..448 " "
+    Name@448..452
+      Ident@448..452 "Adas"
+    Whitespace@452..453 " "
+    AttrBlock@453..472
+      LBracket@453..454 "["
+      Whitespace@454..455 " "
+      Attribute@455..470
+        Name@455..459
+          Ident@455..459 "tier"
+        Whitespace@459..460 " "
+        Eq@460..461 "="
+        Whitespace@461..462 " "
+        AttrValue@462..470
+          Literal@462..470
+            Ident@462..470 "PLATFORM"
+      Whitespace@470..471 " "
+      RBracket@471..472 "]"
+    Whitespace@472..476 "    "
+    LBrace@476..477 "{"
+    Whitespace@477..478 " "
+    MemberLine@478..484
+      Reference@478..484
+        QualifiedName@478..484
+          Ident@478..484 "Cruise"
+    Comma@484..485 ","
+    Whitespace@485..486 " "
+    MemberLine@486..490
+      Reference@486..490
+        QualifiedName@486..490
+          Ident@486..490 "Lane"
+    Comma@490..491 ","
+    Whitespace@491..492 " "
+    MemberLine@492..507
+      Reference@492..507
+        QualifiedName@492..507
+          Ident@492..495 "veh"
+          Dot@495..496 "."
+          Ident@496..500 "diag"
+          Dot@500..501 "."
+          Ident@501..507 "access"
+    Whitespace@507..508 " "
+    RBrace@508..509 "}"
+  Whitespace@509..510 "\n"
+  DistributionDef@510..560
+    DistributionKw@510..522 "distribution"
+    Whitespace@522..523 " "
+    Name@523..526
+      Ident@523..526 "Hmi"
+    Whitespace@526..528 "  "
+    AttrBlock@528..550
+      LBracket@528..529 "["
+      Whitespace@529..530 " "
+      Attribute@530..548
+        Name@530..534
+          Ident@530..534 "tier"
+        Whitespace@534..535 " "
+        Eq@535..536 "="
+        Whitespace@536..537 " "
+        AttrValue@537..548
+          Literal@537..548
+            Ident@537..548 "APPLICATION"
+      Whitespace@548..549 " "
+      RBracket@549..550 "]"
+    Whitespace@550..551 " "
+    LBrace@551..552 "{"
+    Whitespace@552..553 " "
+    MemberLine@553..558
+      Reference@553..558
+        QualifiedName@553..558
+          Ident@553..558 "Panel"
+    Whitespace@558..559 " "
+    RBrace@559..560 "}"
+  Whitespace@560..562 "\n\n"
+  LineComment@562..596 "// rsdl reference §3 ..."
+  Whitespace@596..597 "\n"
+  DeploymentDef@597..828
+    DeploymentKw@597..607 "deployment"
+    Whitespace@607..608 " "
+    Name@608..618
+      Ident@608..618 "Production"
+    Whitespace@618..619 " "
+    ForKw@619..622 "for"
+    Whitespace@622..623 " "
+    Reference@623..630
+      QualifiedName@623..630
+        Ident@623..630 "Vehicle"
+    Whitespace@630..631 " "
+    LBrace@631..632 "{"
+    Whitespace@632..635 "\n  "
+    MachineDef@635..714
+      MachineKw@635..642 "machine"
+      Whitespace@642..643 " "
+      Name@643..650
+        Ident@643..650 "AdasHpc"
+      Whitespace@650..651 " "
+      AttrBlock@651..672
+        LBracket@651..652 "["
+        Whitespace@652..653 " "
+        Attribute@653..670
+          Name@653..659
+            Ident@653..659 "labels"
+          Whitespace@659..660 " "
+          Eq@660..661 "="
+          Whitespace@661..662 " "
+          AttrValue@662..670
+            LParen@662..663 "("
+            AttrValue@663..669
+              Literal@663..669
+                Ident@663..669 "ASIL_B"
+            RParen@669..670 ")"
+        Whitespace@670..671 " "
+        RBracket@671..672 "]"
+      Whitespace@672..673 " "
+      LBrace@673..674 "{"
+      Whitespace@674..675 " "
+      MemberLine@675..689
+        Reference@675..689
+          QualifiedName@675..689
+            Ident@675..681 "Cruise"
+            Dot@681..682 "."
+            Ident@682..689 "primary"
+      Comma@689..690 ","
+      Whitespace@690..691 " "
+      MemberLine@691..695
+        Reference@691..695
+          QualifiedName@691..695
+            Ident@691..695 "Lane"
+      Comma@695..696 ","
+      Whitespace@696..697 " "
+      MemberLine@697..712
+        Reference@697..712
+          QualifiedName@697..712
+            Ident@697..700 "veh"
+            Dot@700..701 "."
+            Ident@701..705 "diag"
+            Dot@705..706 "."
+            Ident@706..712 "access"
+      Whitespace@712..713 " "
+      RBrace@713..714 "}"
+    Whitespace@714..717 "\n  "
+    MachineDef@717..783
+      MachineKw@717..724 "machine"
+      Whitespace@724..725 " "
+      Name@725..732
+        Ident@725..732 "Cockpit"
+      Whitespace@732..733 " "
+      LBrace@733..734 "{"
+      Whitespace@734..735 " "
+      MemberLine@735..748
+        Reference@735..748
+          QualifiedName@735..748
+            Ident@735..741 "Cruise"
+            Dot@741..742 "."
+            Ident@742..748 "backup"
+      Comma@748..749 ","
+      Whitespace@749..750 " "
+      MemberLine@750..781
+        Reference@750..755
+          QualifiedName@750..755
+            Ident@750..755 "Panel"
+        Whitespace@755..756 " "
+        AttrBlock@756..781
+          LBracket@756..757 "["
+          Whitespace@757..758 " "
+          Attribute@758..779
+            Name@758..763
+              Ident@758..763 "linux"
+            Dot@763..764 "."
+            Name@764..770
+              Ident@764..770 "cpuset"
+            Whitespace@770..771 " "
+            Eq@771..772 "="
+            Whitespace@772..773 " "
+            AttrValue@773..779
+              LParen@773..774 "("
+              AttrValue@774..775
+                Literal@774..775
+                  IntNumber@774..775 "2"
+              Comma@775..776 ","
+              Whitespace@776..777 " "
+              AttrValue@777..778
+                Literal@777..778
+                  IntNumber@777..778 "3"
+              RParen@778..779 ")"
+          Whitespace@779..780 " "
+          RBracket@780..781 "]"
+      Whitespace@781..782 " "
+      RBrace@782..783 "}"
+    Whitespace@783..786 "\n  "
+    MachineDef@786..826
+      MachineKw@786..793 "machine"
+      Whitespace@793..794 " "
+      Name@794..799
+        Ident@794..799 "Cloud"
+      Whitespace@799..802 "   "
+      AttrBlock@802..814
+        LBracket@802..803 "["
+        Whitespace@803..804 " "
+        Attribute@804..812
+          Name@804..812
+            Ident@804..812 "external"
+        Whitespace@812..813 " "
+        RBracket@813..814 "]"
+      Whitespace@814..815 " "
+      LBrace@815..816 "{"
+      Whitespace@816..817 " "
+      MemberLine@817..824
+        Reference@817..824
+          QualifiedName@817..824
+            Ident@817..824 "Backend"
+      Whitespace@824..825 " "
+      RBrace@825..826 "}"
+    Whitespace@826..827 "\n"
+    RBrace@827..828 "}"
+  Whitespace@828..829 "\n"
+errors: none

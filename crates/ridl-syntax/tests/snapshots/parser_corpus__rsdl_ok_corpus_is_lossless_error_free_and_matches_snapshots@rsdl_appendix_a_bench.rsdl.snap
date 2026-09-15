@@ -1,0 +1,76 @@
+---
+source: crates/ridl-syntax/tests/parser_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/ok/rsdl_appendix_a_bench.rsdl
+---
+SourceFile@0..162
+  LineComment@0..39 "// rsdl reference App ..."
+  Whitespace@39..40 "\n"
+  PackageDecl@40..60
+    PackageKw@40..47 "package"
+    Whitespace@47..48 " "
+    QualifiedName@48..60
+      Ident@48..51 "veh"
+      Dot@51..52 "."
+      Ident@52..60 "topology"
+  Whitespace@60..62 "\n\n"
+  DeploymentDef@62..161
+    DeploymentKw@62..72 "deployment"
+    Whitespace@72..73 " "
+    Name@73..78
+      Ident@73..78 "Bench"
+    Whitespace@78..79 " "
+    ForKw@79..82 "for"
+    Whitespace@82..83 " "
+    Reference@83..90
+      QualifiedName@83..90
+        Ident@83..90 "Vehicle"
+    Whitespace@90..91 " "
+    LBrace@91..92 "{"
+    Whitespace@92..95 "\n  "
+    MachineDef@95..159
+      MachineKw@95..102 "machine"
+      Whitespace@102..103 " "
+      Name@103..109
+        Ident@103..109 "DevBox"
+      Whitespace@109..110 " "
+      LBrace@110..111 "{"
+      Whitespace@111..112 " "
+      MemberLine@112..118
+        Reference@112..118
+          QualifiedName@112..118
+            Ident@112..118 "Cruise"
+      Comma@118..119 ","
+      Whitespace@119..120 " "
+      MemberLine@120..124
+        Reference@120..124
+          QualifiedName@120..124
+            Ident@120..124 "Lane"
+      Comma@124..125 ","
+      Whitespace@125..126 " "
+      MemberLine@126..131
+        Reference@126..131
+          QualifiedName@126..131
+            Ident@126..131 "Panel"
+      Comma@131..132 ","
+      Whitespace@132..133 " "
+      MemberLine@133..148
+        Reference@133..148
+          QualifiedName@133..148
+            Ident@133..136 "veh"
+            Dot@136..137 "."
+            Ident@137..141 "diag"
+            Dot@141..142 "."
+            Ident@142..148 "access"
+      Comma@148..149 ","
+      Whitespace@149..150 " "
+      MemberLine@150..157
+        Reference@150..157
+          QualifiedName@150..157
+            Ident@150..157 "Backend"
+      Whitespace@157..158 " "
+      RBrace@158..159 "}"
+    Whitespace@159..160 "\n"
+    RBrace@160..161 "}"
+  Whitespace@161..162 "\n"
+errors: none

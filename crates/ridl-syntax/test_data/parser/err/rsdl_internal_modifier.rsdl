@@ -1,0 +1,5 @@
+package veh.topology
+
+// rsdl reference §2: `internal` before an rsdl keyword is FORM-102. The
+// component still parses.
+internal component Lane { offers veh.adas.lane }

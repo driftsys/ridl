@@ -12,7 +12,8 @@
 //! The state model is the incremental overlay design described in the crate
 //! docs: one workspace load at initialize, then `set_text` on the existing
 //! salsa [`InputFile`]s per edit, with every recompute going through the
-//! memoized `parse_file` / `resolve_package` / `check_package` queries.
+//! memoized `parse_file` / `resolve_package` / `check_package` /
+//! `check_system` queries.
 //!
 //! Two scope limits of this task, both by design:
 //!
@@ -24,7 +25,7 @@
 //!   back to a path (only a [`FileId::DETACHED`] span) is not published;
 //!   `ridl check` still renders it.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
@@ -37,14 +38,15 @@ use ridl_core::diag::{
     DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, house_style_message, remap_diagnostics,
 };
 use ridl_core::package::{Package, PackageOrigin, Workspace};
-use ridl_core::{LoadedWorkspace, load_workspace, std_package};
-use ridl_sem::{check_package, resolve_package};
+use ridl_core::{LoadedWorkspace, load_workspace, profile_of_path, std_package};
+use ridl_sem::{check_package, check_system, resolve_package, unclaimed_backend_keys};
+use ridl_syntax::Profile;
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
 use salsa::Setter as _;
 
 use crate::convert::{self, LineIndex};
-use crate::{complete, hover, inlay, nav, rename};
+use crate::{complete, hover, inlay, nav, rename, rsdl};
 
 type Error = Box<dyn std::error::Error + Send + Sync>;
 
@@ -498,6 +500,9 @@ impl ServerState {
     /// package's files into a fresh [`SourceMap`] (collecting the issued ids
     /// in the same file order) and rewrites the spans onto those ids with
     /// [`remap_diagnostics`] before conversion.
+    ///
+    /// The rsdl system query runs once over the workspace afterwards (rsdl
+    /// reference v0.2), as in `ridlc`.
     fn analyze(&self) -> Batch {
         let db = &self.db;
         let mut sources = SourceMap::new();
@@ -509,8 +514,12 @@ impl ServerState {
             .values()
             .map(|(_, package)| *package)
             .collect();
+        // The render ids of the workspace's files in package-then-file order,
+        // the order the workspace-wide rsdl diagnostics index them in.
+        let mut workspace_render_ids: Vec<FileId> = Vec::new();
+        let workspace_packages = self.workspace.packages(db).len();
         let packages = self.workspace.packages(db).iter().copied();
-        for package in packages.chain(overlay_packages) {
+        for (index, package) in packages.chain(overlay_packages).enumerate() {
             let files = package.files(db).clone();
             let mut render_ids = Vec::with_capacity(files.len());
             for file in &files {
@@ -521,6 +530,10 @@ impl ServerState {
                     .entry(id)
                     .or_insert_with(|| (path.clone(), text.clone()));
                 render_ids.push(id);
+            }
+
+            if index < workspace_packages {
+                workspace_render_ids.extend(&render_ids);
             }
 
             for (file, id) in files.iter().zip(&render_ids) {
@@ -544,6 +557,23 @@ impl ServerState {
             let checked = check_package(db, self.workspace, package, self.std);
             all.extend(remap_diagnostics(checked.diagnostics.clone(), &render_ids));
         }
+        // The rsdl system query checks every `.rsdl` file of the workspace at
+        // once, because the closure is workspace-wide; a standalone overlay is
+        // outside it. RSDL-804 is raised by the driver, not the query: the
+        // server configures no backend, as the command line does not, so no
+        // namespace is claimed and every backend key draws the warning
+        // `ridl check` shows.
+        let mut system = check_system(db, self.workspace, self.std);
+        all.extend(remap_diagnostics(
+            std::mem::take(&mut system.diagnostics),
+            &workspace_render_ids,
+        ));
+        all.extend(unclaimed_backend_keys(
+            db,
+            &system,
+            &BTreeSet::new(),
+            &mut sources,
+        ));
         batch(all, &table)
     }
 
@@ -593,12 +623,20 @@ impl ServerState {
 
     /// `textDocument/hover`: the declaration or field the cursor names, rendered
     /// as markdown (E1.15b).
+    ///
+    /// In an `.rsdl` file, the declaration an rsdl reference names (E6.15); a
+    /// typl symbol lookup never runs there, because a component name is not a
+    /// typl symbol.
     fn hover(&mut self, params: &lt::HoverParams) -> Option<lt::Hover> {
         let position = params.text_document_position_params.position;
         let path = convert::uri_to_path(&params.text_document_position_params.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let info = hover::hover(&self.db, self.workspace, self.std, package, file, offset)?;
+        let info = if profile_of_path(&path) == Profile::Rsdl {
+            rsdl::hover(&self.db, self.workspace, self.std, package, file, offset)?
+        } else {
+            hover::hover(&self.db, self.workspace, self.std, package, file, offset)?
+        };
         let range = self.line_index_of(file).range(info.range);
         Some(lt::Hover {
             contents: lt::HoverContents::Markup(lt::MarkupContent {
@@ -611,6 +649,8 @@ impl ServerState {
 
     /// `textDocument/definition`: the declaration site of the symbol the cursor
     /// names, resolved through imports and qualified references (E1.15b).
+    ///
+    /// In an `.rsdl` file, the declaration an rsdl reference names (E6.15).
     fn goto_definition(
         &mut self,
         params: &lt::GotoDefinitionParams,
@@ -619,8 +659,14 @@ impl ServerState {
         let path = convert::uri_to_path(&params.text_document_position_params.text_document.uri)?;
         let (file, package) = self.locate(&path)?;
         let offset = self.line_index_of(file).offset(position);
-        let located = nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)?;
-        let location = self.location(located.symbol.file, located.symbol.range)?;
+        let (target, range) = if profile_of_path(&path) == Profile::Rsdl {
+            rsdl::definition(&self.db, self.workspace, self.std, file, offset)?
+        } else {
+            let located =
+                nav::symbol_at(&self.db, self.workspace, self.std, package, file, offset)?;
+            (located.symbol.file, located.symbol.range)
+        };
+        let location = self.location(target, range)?;
         Some(lt::GotoDefinitionResponse::Scalar(location))
     }
 

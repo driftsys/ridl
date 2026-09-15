@@ -19,16 +19,19 @@ use serde::{Deserialize, Serialize};
 // This enum is the only gate on the profile, and its doc comment is the
 // description the tool's JSON schema carries to an agent. `ridlc` reads the
 // profile off the file extension and treats every extension that is not
-// `.ridl` as typl, so a profile name this enum did not reject would be
-// checked as typl rather than refused.
-/// Which language a source text is parsed as. These are the two profiles the
-/// compiler has; the `.rxdl` form does not exist yet (epic E3.5).
+// `.ridl` or `.rsdl` as typl, so a profile name this enum did not reject
+// would be checked as typl rather than refused.
+/// Which language a source text is parsed as. These are the three profiles the
+/// compiler has; the `.rxdl` form does not exist yet (epic E3.5). An rsdl text
+/// is parsed and its names are resolved, but the rsdl system checks read the
+/// whole workspace and do not run on one text.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, JsonSchema)]
 #[serde(rename_all = "lowercase")]
 #[schemars(crate = "rmcp::schemars")]
 pub enum Profile {
     Typl,
     Ridl,
+    Rsdl,
 }
 
 impl Profile {
@@ -38,6 +41,7 @@ impl Profile {
         match self {
             Profile::Typl => "input.typl",
             Profile::Ridl => "input.ridl",
+            Profile::Rsdl => "input.rsdl",
         }
     }
 }
@@ -46,7 +50,7 @@ impl Profile {
 #[derive(Debug, Deserialize, JsonSchema)]
 #[schemars(crate = "rmcp::schemars")]
 pub struct CheckParams {
-    /// The full text of one `.typl` or `.ridl` file.
+    /// The full text of one `.typl`, `.ridl` or `.rsdl` file.
     pub source: String,
     /// Which language `source` is parsed as.
     pub profile: Profile,
@@ -108,7 +112,7 @@ impl RidlMcp {
 
     #[tool(
         name = "ridl_check",
-        description = "Type-check one typl or ridl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. Every span reports the path `input.typl` or `input.ridl`, a fixed synthetic name for the text you supplied rather than a file on disk."
+        description = "Type-check one typl, ridl or rsdl source text against the embedded ridl.std. Returns the compiler's coded diagnostics with their spans and fix-its, verbatim. Every span reports the path `input.typl`, `input.ridl` or `input.rsdl`, a fixed synthetic name for the text you supplied rather than a file on disk. An rsdl text is parsed and its names are resolved; the rsdl system checks read the whole workspace, so `ridl check` runs them and this tool does not."
     )]
     async fn ridl_check(
         &self,
@@ -166,7 +170,7 @@ impl ServerHandler for RidlMcp {
             .with_server_info(Implementation::new("ridl-mcp", self.version.clone()))
             .with_instructions(
                 "RIDL compiler tools. Call ridl_check with a source text and a profile \
-                 (typl or ridl) to get coded diagnostics with fix-its.",
+                 (typl, ridl or rsdl) to get coded diagnostics with fix-its.",
             )
     }
 }
@@ -281,9 +285,38 @@ mod tests {
     }
 
     #[test]
+    fn check_parses_an_rsdl_source_under_the_rsdl_profile() {
+        let component = "package p\n\ncomponent Idle {}\n".to_string();
+        let rsdl = check(&CheckParams {
+            source: component.clone(),
+            profile: Profile::Rsdl,
+        });
+        let typl = check(&CheckParams {
+            source: component,
+            profile: Profile::Typl,
+        });
+        assert!(rsdl.diagnostics.iter().all(|d| d.severity != "error"));
+        assert!(typl.diagnostics.iter().any(|d| d.severity == "error"));
+
+        // rsdl reference §2: `internal` before an rsdl keyword is FORM-102.
+        let internal = check(&CheckParams {
+            source: "package p\n\ninternal component Idle {}\n".to_string(),
+            profile: Profile::Rsdl,
+        });
+        let error = internal
+            .diagnostics
+            .iter()
+            .find(|diagnostic| diagnostic.severity == "error")
+            .expect("an error diagnostic");
+        assert_eq!(error.code, "FORM-102");
+        assert_eq!(error.span.path, "input.rsdl");
+    }
+
+    #[test]
     fn profile_deserializes_lowercase_only() {
         assert!(serde_json::from_str::<Profile>("\"typl\"").is_ok());
         assert!(serde_json::from_str::<Profile>("\"ridl\"").is_ok());
+        assert!(serde_json::from_str::<Profile>("\"rsdl\"").is_ok());
         assert!(serde_json::from_str::<Profile>("\"rxdl\"").is_err());
         assert!(serde_json::from_str::<Profile>("\"Typl\"").is_err());
     }
@@ -505,12 +538,15 @@ mod tests {
     }
 
     #[test]
-    fn the_advertised_schema_offers_only_the_two_profiles() {
+    fn the_advertised_schema_offers_only_the_three_profiles() {
         let server = RidlMcp::new();
         let tools = server.tool_router.list_all();
         let tool = tools.first().expect("one tool");
         let schema = serde_json::to_value(&*tool.input_schema).expect("the schema serializes");
-        assert_eq!(schema["$defs"]["Profile"]["enum"], json!(["typl", "ridl"]));
+        assert_eq!(
+            schema["$defs"]["Profile"]["enum"],
+            json!(["typl", "ridl", "rsdl"])
+        );
         assert_eq!(schema["required"], json!(["source", "profile"]));
     }
 }

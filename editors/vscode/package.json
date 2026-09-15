@@ -1,7 +1,7 @@
 {
   "name": "ridl-vscode",
-  "displayName": "RIDL (typl + ridl)",
-  "description": "Syntax highlighting and a language server client for the RIDL family: typl, the type language, and ridl, the interface description language.",
+  "displayName": "RIDL (typl + ridl + rsdl)",
+  "description": "Syntax highlighting and a language server client for the RIDL family: typl, the type language, ridl, the interface description language, and rsdl, the system description language.",
   "version": "0.0.1",
   "publisher": "driftsys",
   "license": "MIT",
@@ -53,6 +53,17 @@
           ".ridl"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "rsdl",
+        "aliases": [
+          "rsdl",
+          "RIDL system description"
+        ],
+        "extensions": [
+          ".rsdl"
+        ],
+        "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
@@ -65,6 +76,11 @@
         "language": "ridl",
         "scopeName": "source.ridl",
         "path": "./syntaxes/ridl.tmLanguage.json"
+      },
+      {
+        "language": "rsdl",
+        "scopeName": "source.rsdl",
+        "path": "./syntaxes/rsdl.tmLanguage.json"
       }
     ],
     "configuration": {
@@ -92,7 +108,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js"
+    "test": "npm run compile && node --test out/binaryResolution.test.js out/installToPath.test.js out/contributions.test.js"
   },
   "dependencies": {
     "vscode-languageclient": "10.1.0"

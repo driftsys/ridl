@@ -206,7 +206,7 @@ every crate the workspace holds — see `AGENTS.md` for that.
   does and does not reach.
 
 - **`editors/vscode`** — the VS Code extension: an LSP client plus TextMate
-  grammars for both `.typl` and `.ridl`, built with npm/tsc.
+  grammars for `.typl`, `.ridl` and `.rsdl`, built with npm/tsc.
 
 - **`xtask`** — `cargo xtask codegen`, the typed-AST generator over
   `family.ungram`.

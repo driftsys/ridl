@@ -1,0 +1,53 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.typescript
+input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
+---
+// ===== package veh.adas =====
+
+
+// ===== package veh.common =====
+/**
+ * @unit km/h
+ * @range [0..250 step 0.5]
+ */
+export type Speed = number & { readonly __ridl: 'veh.common.Speed' };
+
+export function initSpeed(): Speed {
+  return 0.0 as Speed;
+}
+
+export type Engaged = boolean & { readonly __ridl: 'veh.common.Engaged' };
+
+export function initEngaged(): Engaged {
+  return false as Engaged;
+}
+
+export enum LeverCmd {
+  SET = 1,
+  CANCEL = 2,
+  RESUME = 3,
+}
+
+export function initLeverCmd(): LeverCmd {
+  return LeverCmd.SET;
+}
+
+export interface FaultReport {
+  /**
+   * @range [0..255]
+   */
+  count: number;
+}
+
+export function initFaultReport(): FaultReport {
+  return {
+    count: 0,
+  };
+}
+
+
+// ===== package veh.diag =====
+
+
+// ===== package veh.topology =====

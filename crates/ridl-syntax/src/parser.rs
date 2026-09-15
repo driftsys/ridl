@@ -56,8 +56,13 @@
 //! **TYPL-304**, and a `require`/`ensure` attribute emits **TYPL-303** with
 //! the same recovery. In a `.ridl` parse durations and `@` are ordinary tokens,
 //! and a `ReservedWord` at declaration-start position — a word of the
-//! uxdl/rmdl/rsdl profiles — emits **RIDL-403** (ridl reference §16.4). Both
-//! declaration-start boundaries recover exactly as FORM-105 does. The stream
+//! uxdl/rmdl/rsdl profiles — emits **RIDL-403** (ridl reference §16.4). In a
+//! `.rsdl` parse a declaration of another profile at declaration-start position
+//! — a typl definition, `interface`, `service`, or any other `ReservedWord` —
+//! emits **RSDL-604** (rsdl reference §2), and an `internal` or `error`
+//! modifier before an rsdl declaration emits FORM-102. The typl and ridl
+//! declaration-start boundaries recover exactly as FORM-105 does; the rsdl one
+//! consumes a `{ … }` body whole. The stream
 //! grammar parses under both profiles (E2 task 3): a `<T>` in type position
 //! builds a `StreamType` node everywhere, and in a `.typl` parse it
 //! additionally emits **TYPL-301** (`stream type in typl context`) and
@@ -187,7 +192,10 @@ fn ungrammatical_reserved_noun(kind: SyntaxKind) -> &'static str {
 /// resynchronization points recovery falls back to, both at the file level
 /// and when a block body runs past an unclosed `}` into the next declaration.
 /// `interface` joins the set with E2.1a; under [`Profile::Typl`] it never
-/// occurs (the word lexes to `ReservedWord` there).
+/// occurs (the word lexes to `ReservedWord` there). The four top-level rsdl
+/// declaration keywords join it with the rsdl grammar; they occur only under
+/// [`Profile::Rsdl`]. `machine` is not among them: a machine is declared only
+/// inside a deployment body (rsdl reference Appendix B).
 fn is_top_level_start(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -203,6 +211,65 @@ fn is_top_level_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::UnionKw
             | SyntaxKind::InterfaceKw
             | SyntaxKind::ServiceKw
+            | SyntaxKind::SystemKw
+            | SyntaxKind::ComponentKw
+            | SyntaxKind::DistributionKw
+            | SyntaxKind::DeploymentKw
+    )
+}
+
+/// Whether `kind` starts an rsdl declaration, `machine` included — what an
+/// `internal` or `error` modifier in an `.rsdl` file is refused in front of
+/// (FORM-102, rsdl reference §2).
+fn is_rsdl_declaration_start(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::SystemKw
+            | SyntaxKind::ComponentKw
+            | SyntaxKind::DistributionKw
+            | SyntaxKind::DeploymentKw
+            | SyntaxKind::MachineKw
+    )
+}
+
+/// The three body kinds of the rsdl containers (rsdl reference §3, §4): what
+/// starts a line, what parses it, and how the body is named in a diagnostic.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RsdlBody {
+    /// A `system`, `distribution` or `machine` body: bare member lines.
+    Members,
+    /// A `component` body: `offers` and `requires` lines.
+    ComponentLines,
+    /// A `deployment` body: `machine` declarations.
+    Machines,
+}
+
+impl RsdlBody {
+    fn starts_line(self, kind: SyntaxKind) -> bool {
+        match self {
+            // A reference starts like a `QualifiedName` ([`Parser::at_path_segment`]).
+            Self::Members => matches!(
+                kind,
+                SyntaxKind::Ident
+                    | SyntaxKind::BooleanKw
+                    | SyntaxKind::IntegerKw
+                    | SyntaxKind::FloatKw
+                    | SyntaxKind::StringKw
+                    | SyntaxKind::BytesKw
+            ),
+            Self::ComponentLines => matches!(kind, SyntaxKind::OffersKw | SyntaxKind::RequiresKw),
+            Self::Machines => kind == SyntaxKind::MachineKw,
+        }
+    }
+}
+
+/// The RSDL-604 message for a declaration of another profile at the top level
+/// of an `.rsdl` file, naming the word that starts it (rsdl reference §2).
+fn rsdl_foreign_declaration_message(word: &str) -> String {
+    format!(
+        "`{word}` starts a declaration of another profile, and an `.rsdl` file declares \
+         `system`, `component`, `distribution` and `deployment` only — a type is declared in \
+         a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)"
     )
 }
 
@@ -500,8 +567,24 @@ impl<'a> Parser<'a> {
                     | SyntaxKind::EnumsetKw
                     | SyntaxKind::UnionKw
                     | SyntaxKind::InterfaceKw,
-                ) => self.definition(),
+                ) => {
+                    if self.profile == Profile::Rsdl {
+                        self.rsdl_typl_word_at_top_level();
+                    } else {
+                        self.definition();
+                    }
+                }
                 Some(SyntaxKind::ServiceKw) => self.service_def(),
+                Some(SyntaxKind::SystemKw) => {
+                    self.rsdl_container(SyntaxKind::SystemDef, RsdlBody::Members);
+                }
+                Some(SyntaxKind::ComponentKw) => {
+                    self.rsdl_container(SyntaxKind::ComponentDef, RsdlBody::ComponentLines);
+                }
+                Some(SyntaxKind::DistributionKw) => {
+                    self.rsdl_container(SyntaxKind::DistributionDef, RsdlBody::Members);
+                }
+                Some(SyntaxKind::DeploymentKw) => self.deployment_def(),
                 Some(SyntaxKind::ReservedWord) => {
                     if !self.profile_boundary_at_top_level() {
                         self.err_and_recover("at top level", is_top_level_start);
@@ -523,7 +606,12 @@ impl<'a> Parser<'a> {
     ///   typl reference §16.4);
     /// - in a `.ridl` parse, any `ReservedWord` — a behaviour,
     ///   user-interaction, or architecture word of the uxdl/rmdl/rsdl
-    ///   profiles — draws **RIDL-403**.
+    ///   profiles — draws **RIDL-403**;
+    /// - in a `.rsdl` parse, any `ReservedWord` — `interface` and `service`
+    ///   first of all — draws **RSDL-604** (rsdl reference §2), with the
+    ///   brace-aware recovery of [`Parser::rsdl_foreign_declaration`]. The typl
+    ///   definition keywords are active in an `.rsdl` file and reach
+    ///   [`Parser::rsdl_typl_word_at_top_level`] instead.
     ///
     /// All recover exactly as FORM-105 does ([`Parser::recover`]: the run
     /// lands in one `ErrorNode`, resynchronizing at the next top-level
@@ -558,10 +646,229 @@ impl<'a> Parser<'a> {
                      as a name, choose one the family does not reserve (ridl reference §16.4)"
                 ),
             ),
+            Profile::Rsdl => {
+                self.rsdl_foreign_declaration(0);
+                return true;
+            }
         };
         self.error_at_current(code, message);
         self.recover(is_top_level_start);
         true
+    }
+
+    /// A typl definition keyword or an `internal`/`error` modifier at the top
+    /// level of an `.rsdl` file. A modifier run in front of an rsdl declaration
+    /// keyword is FORM-102 on each modifier (rsdl reference §2: the five
+    /// declarations take no modifier), and the declaration after it still
+    /// parses. Anything else is a typl declaration, RSDL-604: the modifiers,
+    /// the keyword and the rest of the declaration land in one `ErrorNode`
+    /// ([`Parser::rsdl_foreign_declaration`]), so the declaration draws one
+    /// diagnostic, not one per word.
+    fn rsdl_typl_word_at_top_level(&mut self) {
+        let mut modifiers = 0;
+        while matches!(
+            self.nth(modifiers),
+            Some(SyntaxKind::InternalKw | SyntaxKind::ErrorKw)
+        ) {
+            modifiers += 1;
+        }
+        if modifiers > 0 && self.nth(modifiers).is_some_and(is_rsdl_declaration_start) {
+            for _ in 0..modifiers {
+                let word = self.current_text();
+                self.error_at_current(
+                    "FORM-102",
+                    format!(
+                        "`{word}` cannot modify an rsdl declaration — the closure is \
+                         workspace-wide, so every declaration it names is visible from the \
+                         system's package (rsdl reference §2)"
+                    ),
+                );
+                self.start(SyntaxKind::ErrorNode);
+                self.bump();
+                self.builder.finish_node();
+            }
+            return;
+        }
+        self.rsdl_foreign_declaration(modifiers);
+    }
+
+    /// RSDL-604 (rsdl reference §2): a declaration of another profile at the
+    /// top level of an `.rsdl` file, starting at the current token after
+    /// `modifiers` `internal`/`error` words. The declaration draws one
+    /// diagnostic, on its first token, naming its keyword. Recovery is
+    /// brace-aware, like [`Parser::recover_definition_in_body`]: a body
+    /// `{ … }` is consumed whole, so a ridl word inside it (`signal`) is not
+    /// taken for the next declaration; at depth 0 recovery stops at a
+    /// top-level keyword or at a reserved word, which starts the next
+    /// declaration of another profile.
+    fn rsdl_foreign_declaration(&mut self, modifiers: usize) {
+        let keyword = self.nth_text(modifiers);
+        self.error_at_current("RSDL-604", rsdl_foreign_declaration_message(keyword));
+        self.start(SyntaxKind::ErrorNode);
+        for _ in 0..=modifiers {
+            self.bump();
+        }
+        let mut depth = 0usize;
+        while let Some(kind) = self.current() {
+            match kind {
+                SyntaxKind::LBrace => depth += 1,
+                SyntaxKind::RBrace if depth > 0 => depth -= 1,
+                _ if depth == 0
+                    && (is_top_level_start(kind) || kind == SyntaxKind::ReservedWord) =>
+                {
+                    break;
+                }
+                _ => {}
+            }
+            self.bump();
+        }
+        self.builder.finish_node();
+    }
+
+    /// Source text of the `n`-th significant token ahead (`nth_text(0)` is
+    /// [`Parser::current_text`]), or `""` past the end of input.
+    fn nth_text(&self, n: usize) -> &'a str {
+        self.tokens[self.pos..]
+            .iter()
+            .filter(|token| !token.kind.is_trivia())
+            .nth(n)
+            .map_or("", |token| token.text)
+    }
+
+    /// The rsdl containers with no relation clause — `system`, `component`,
+    /// `distribution` and `machine` (rsdl reference §3, general form §2 Shape
+    /// 3): `kw Name AttrBlock? '{' lines '}'`.
+    fn rsdl_container(&mut self, kind: SyntaxKind, body: RsdlBody) {
+        self.start(kind);
+        self.bump(); // the declaration keyword
+        self.name();
+        if self.at(SyntaxKind::LBracket) {
+            self.attr_block();
+        }
+        self.rsdl_body(body);
+        self.builder.finish_node();
+    }
+
+    /// `DeploymentDef = 'deployment' Name 'for' system:Reference AttrBlock?
+    /// '{' (machines:MachineDef ','?)* '}'` (rsdl reference §3.4). The clause
+    /// comes before the attributes (R5). A missing `for` is FORM-101 and the
+    /// body still parses.
+    fn deployment_def(&mut self) {
+        self.start(SyntaxKind::DeploymentDef);
+        self.bump(); // 'deployment'
+        self.name();
+        if self.at(SyntaxKind::ForKw) {
+            self.bump(); // 'for'
+            self.reference();
+        } else {
+            self.error_at_current(
+                "FORM-101",
+                "expected `for` and the system this deployment places".to_string(),
+            );
+        }
+        if self.at(SyntaxKind::LBracket) {
+            self.attr_block();
+        }
+        self.rsdl_body(RsdlBody::Machines);
+        self.builder.finish_node();
+    }
+
+    /// The body loop of an rsdl container, the rsdl counterpart of
+    /// [`Parser::block_body`]: lines separated by newlines or commas, a
+    /// trailing comma permitted (R8). A token that starts no line of this body
+    /// is FORM-102 and recovery resynchronizes at the next line, comma or `}`.
+    /// A reference where a component line is expected is the one-reference-
+    /// per-line rule (rsdl reference §3.2), and its message says so.
+    fn rsdl_body(&mut self, body: RsdlBody) {
+        if !self.block_open() {
+            return;
+        }
+        loop {
+            self.eat_trivia();
+            match self.current() {
+                None => {
+                    self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                    break;
+                }
+                Some(SyntaxKind::RBrace) => {
+                    self.bump();
+                    break;
+                }
+                Some(SyntaxKind::Comma) => self.bump(),
+                Some(kind) if body.starts_line(kind) => match body {
+                    RsdlBody::Members => self.member_line(),
+                    RsdlBody::ComponentLines => self.component_line(),
+                    RsdlBody::Machines => {
+                        self.rsdl_container(SyntaxKind::MachineDef, RsdlBody::Members);
+                    }
+                },
+                Some(kind) if is_top_level_start(kind) => {
+                    self.error_at_current("FORM-103", "unclosed `{`".to_string());
+                    break;
+                }
+                Some(_) => {
+                    let sync = move |kind: SyntaxKind| {
+                        matches!(kind, SyntaxKind::RBrace | SyntaxKind::Comma)
+                            || body.starts_line(kind)
+                            || is_top_level_start(kind)
+                    };
+                    if body == RsdlBody::ComponentLines && self.at_path_segment() {
+                        self.error_at_current(
+                            "FORM-102",
+                            format!(
+                                "`{}` is a second reference — a component line takes one \
+                                 reference, so write its own `offers` or `requires` before it \
+                                 (rsdl reference §3.2)",
+                                self.current_text()
+                            ),
+                        );
+                        self.recover(sync);
+                    } else {
+                        let context = match body {
+                            RsdlBody::Members => "in a member list",
+                            RsdlBody::ComponentLines => "in a component body",
+                            RsdlBody::Machines => "in a deployment body",
+                        };
+                        self.err_and_recover(context, sync);
+                    }
+                }
+            }
+        }
+    }
+
+    /// `MemberLine = Reference AttrBlock?` — a bare reference in a `system`,
+    /// `distribution` or `machine` body (rsdl reference §4).
+    fn member_line(&mut self) {
+        self.start(SyntaxKind::MemberLine);
+        self.reference();
+        if self.at(SyntaxKind::LBracket) {
+            self.attr_block();
+        }
+        self.builder.finish_node();
+    }
+
+    /// `ComponentLine = ('offers' | 'requires') Reference AttrBlock?` (rsdl
+    /// reference §3.2).
+    fn component_line(&mut self) {
+        self.start(SyntaxKind::ComponentLine);
+        self.bump(); // 'offers' | 'requires'
+        self.reference();
+        if self.at(SyntaxKind::LBracket) {
+            self.attr_block();
+        }
+        self.builder.finish_node();
+    }
+
+    /// `Reference = QualifiedName` (rsdl reference §4, Appendix B). No node is
+    /// built when the reference is missing.
+    fn reference(&mut self) {
+        if !self.at_path_segment() {
+            self.error_at_current("FORM-101", "expected a reference".to_string());
+            return;
+        }
+        self.start(SyntaxKind::Reference);
+        self.qualified_name();
+        self.builder.finish_node();
     }
 
     /// `PackageDecl = 'package' QualifiedName`
@@ -1335,6 +1642,13 @@ impl<'a> Parser<'a> {
             }
             _ => {
                 self.name(); // the attr key
+                // A backend key `namespace.key` (rsdl reference §5, Appendix
+                // B `key`). Only the rsdl profile admits the dotted key; under
+                // typl and ridl the `.` stays an unexpected token in the block.
+                if self.profile == Profile::Rsdl && self.at(SyntaxKind::Dot) {
+                    self.bump(); // '.'
+                    self.name();
+                }
                 if self.at(SyntaxKind::Eq) {
                     self.bump();
                     self.attr_value();
@@ -2358,6 +2672,80 @@ mod tests {
             vec!["RIDL-403"],
         );
         assert_eq!(def_names_in(Profile::Ridl, input), vec!["Fine"]);
+    }
+
+    // rsdl reference §2, the boundary seen from the other two profiles: an
+    // rsdl declaration in a `.typl` file draws the generic FORM-102 (the typl
+    // boundary names ridl words only), and in a `.ridl` file RIDL-403. Both
+    // recover at the next top-level keyword.
+    #[test]
+    fn rsdl_declaration_in_typl_and_ridl_draws_their_existing_codes() {
+        let input = "package p\ndistribution Adas { Cruise }\ntype Fine: m\n";
+        for (profile, code) in [(Profile::Typl, "FORM-102"), (Profile::Ridl, "RIDL-403")] {
+            let parsed = parse(input, profile);
+            assert_eq!(parsed.syntax().text().to_string(), input);
+            assert_eq!(
+                parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+                vec![code],
+                "under {profile:?}",
+            );
+            assert_eq!(
+                def_names_in(profile, input),
+                vec!["Fine"],
+                "under {profile:?}"
+            );
+        }
+    }
+
+    // rsdl reference §2 and §3.1: under the rsdl profile the five declarations
+    // parse clean, and a declaration of another profile is RSDL-604 — once per
+    // declaration, with the rsdl declaration after it still parsed.
+    #[test]
+    fn rsdl_profile_parses_its_declarations_and_rejects_the_others() {
+        let clean = "package p\nsystem Vehicle { Cruise, veh.diag.access }\n";
+        assert_eq!(parse(clean, Profile::Rsdl).errors(), &[]);
+
+        for foreign in [
+            "type Speed: km/h",
+            "internal type Speed: km/h",
+            "struct S { a: integer [0..1] }",
+            "interface I { signal s: S @10ms }",
+            "service veh.a.b : I",
+        ] {
+            let input = format!("package p\n{foreign}\nsystem Vehicle {{ Cruise }}\n");
+            let parsed = parse(&input, Profile::Rsdl);
+            assert_eq!(parsed.syntax().text().to_string(), input);
+            assert_eq!(
+                parsed.errors().iter().map(|e| e.code).collect::<Vec<_>>(),
+                vec!["RSDL-604"],
+                "`{foreign}`",
+            );
+            assert!(
+                parsed
+                    .syntax()
+                    .children()
+                    .any(|node| node.kind() == SyntaxKind::SystemDef),
+                "the system after `{foreign}` still parses",
+            );
+        }
+    }
+
+    // rsdl reference §5: a backend key `namespace.key` is an rsdl attribute
+    // key. Under ridl the `.` stays an unexpected token.
+    #[test]
+    fn a_backend_key_parses_under_rsdl_only() {
+        let rsdl = "package p\nsystem V [ linux.cpuset = (2, 3), linux.realtime ] { A }\n";
+        assert_eq!(parse(rsdl, Profile::Rsdl).errors(), &[]);
+
+        let ridl = "package p\ninterface I {\n  command c() [ linux.cpuset = 1 ]\n}\n";
+        assert_eq!(
+            parse(ridl, Profile::Ridl)
+                .errors()
+                .iter()
+                .map(|e| e.code)
+                .collect::<Vec<_>>(),
+            vec!["FORM-102"],
+        );
     }
 
     /// Recovery from a rejected return type stops *before* a sync token — it

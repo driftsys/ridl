@@ -1,0 +1,49 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.rust
+input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
+---
+// ===== package veh.adas =====
+
+
+// ===== package veh.common =====
+#[repr(transparent)]
+pub struct Speed(pub f64);
+impl Default for Speed {
+    fn default() -> Self {
+        Speed(0.0)
+    }
+}
+#[repr(transparent)]
+pub struct Engaged(pub bool);
+impl Default for Engaged {
+    fn default() -> Self {
+        Engaged(false)
+    }
+}
+#[repr(i64)]
+pub enum LeverCmd {
+    SET = 1,
+    CANCEL = 2,
+    RESUME = 3,
+}
+impl Default for LeverCmd {
+    fn default() -> Self {
+        LeverCmd::SET
+    }
+}
+#[repr(C)]
+pub struct FaultReport {
+    pub count: i64,
+}
+impl Default for FaultReport {
+    fn default() -> Self {
+        FaultReport { count: 0 }
+    }
+}
+
+
+// ===== package veh.diag =====
+
+
+// ===== package veh.topology =====

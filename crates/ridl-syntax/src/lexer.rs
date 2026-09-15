@@ -214,7 +214,8 @@ struct Raw {
 ///
 /// The profile decides only which registry words are active keywords: under
 /// [`Profile::Typl`] the stream is identical to the E1 lexer's; under
-/// [`Profile::Ridl`] the nine ridl words lex to their keyword variants.
+/// [`Profile::Ridl`] the nine ridl words lex to their keyword variants; under
+/// [`Profile::Rsdl`] the eight rsdl words do.
 /// Everything else — durations, `@`, the expr operators — is a family token
 /// in both profiles; the parser draws the profile boundaries.
 pub fn lex(input: &str, profile: Profile) -> Vec<Token<'_>> {
@@ -458,6 +459,96 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// The rsdl v0.2 keyword line (rsdl reference §2), paired with the token
+    /// kind each word lexes to under `Profile::Rsdl`.
+    const RSDL_WORDS: [(&str, SyntaxKind); 8] = [
+        ("system", SyntaxKind::SystemKw),
+        ("component", SyntaxKind::ComponentKw),
+        ("distribution", SyntaxKind::DistributionKw),
+        ("deployment", SyntaxKind::DeploymentKw),
+        ("machine", SyntaxKind::MachineKw),
+        ("offers", SyntaxKind::OffersKw),
+        ("requires", SyntaxKind::RequiresKw),
+        ("for", SyntaxKind::ForKw),
+    ];
+
+    /// The rsdl v0.1 words the v0.2 reference retires (rsdl reference §2). No
+    /// other profile uses one, so each leaves the registry.
+    const RETIRED_RSDL_WORDS: [&str; 13] = [
+        "provides",
+        "instance",
+        "assurance",
+        "target",
+        "place",
+        "on",
+        "transport",
+        "bundle",
+        "time",
+        "base",
+        "redundant",
+        "supervise",
+        "degraded",
+    ];
+
+    // Every word of the rsdl keyword line is reserved in every profile: an
+    // active keyword under `Profile::Rsdl`, a `ReservedWord` under the other
+    // two. `offers`, `distribution` and `machine` are the three the registry
+    // gained with rsdl v0.2.
+    #[test]
+    fn rsdl_words_lex_by_profile() {
+        for (word, kind) in RSDL_WORDS {
+            assert_eq!(
+                kinds_in(Profile::Rsdl, word),
+                vec![kind],
+                "`{word}` must lex to its keyword variant under Rsdl",
+            );
+            for profile in [Profile::Typl, Profile::Ridl] {
+                assert_eq!(
+                    kinds_in(profile, word),
+                    vec![SyntaxKind::ReservedWord],
+                    "`{word}` must stay ReservedWord under {profile:?}",
+                );
+            }
+        }
+    }
+
+    // A retired rsdl word is an ordinary identifier in every profile.
+    #[test]
+    fn retired_rsdl_words_are_identifiers_in_every_profile() {
+        for word in RETIRED_RSDL_WORDS {
+            for profile in [Profile::Typl, Profile::Ridl, Profile::Rsdl] {
+                assert_eq!(
+                    kinds_in(profile, word),
+                    vec![SyntaxKind::Ident],
+                    "`{word}` must lex to Ident under {profile:?}",
+                );
+            }
+        }
+    }
+
+    // The typl words stay active under `Profile::Rsdl`, and a ridl word is a
+    // reserved word there.
+    #[test]
+    fn rsdl_profile_keeps_the_typl_keywords_and_reserves_the_ridl_words() {
+        assert_eq!(
+            kinds_in(Profile::Rsdl, "package"),
+            vec![SyntaxKind::PackageKw]
+        );
+        assert_eq!(
+            kinds_in(Profile::Rsdl, "internal"),
+            vec![SyntaxKind::InternalKw]
+        );
+        assert_eq!(kinds_in(Profile::Rsdl, "true"), vec![SyntaxKind::TrueKw]);
+        assert_eq!(
+            kinds_in(Profile::Rsdl, "service"),
+            vec![SyntaxKind::ReservedWord]
+        );
+        assert_eq!(
+            kinds_in(Profile::Rsdl, "require"),
+            vec![SyntaxKind::ReservedWord]
+        );
     }
 
     // E2 task 2 step (b), lexer half: durations and `@` are ordinary tokens

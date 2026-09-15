@@ -1,0 +1,316 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.ir_json
+input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
+---
+// ===== package veh.adas =====
+{
+  "name": "veh.adas",
+  "decls": [],
+  "interfaces": [
+    {
+      "name": "CruiseControl",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "interactions": [
+        {
+          "name": "engaged",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "",
+          "labels": [],
+          "ordinal": 1,
+          "signalDef": {
+            "payload": "veh.common.Engaged",
+            "init": {
+              "derivable": true,
+              "value": "false"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            }
+          }
+        },
+        {
+          "name": "target",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "",
+          "labels": [],
+          "ordinal": 2,
+          "signalDef": {
+            "payload": "veh.common.Speed",
+            "init": {
+              "derivable": true,
+              "value": "0"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            }
+          }
+        },
+        {
+          "name": "setLever",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "",
+          "labels": [],
+          "ordinal": 3,
+          "commandDef": {
+            "params": [
+              {
+                "name": "cmd",
+                "type": {
+                  "optional": false,
+                  "named": "veh.common.LeverCmd"
+                }
+              }
+            ],
+            "contracts": [],
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "maxUs": "50000",
+              "defaultApplied": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "LaneAssist",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "interactions": [
+        {
+          "name": "active",
+          "visibility": "VISIBILITY_UNSPECIFIED",
+          "isError": false,
+          "doc": "",
+          "labels": [],
+          "ordinal": 1,
+          "signalDef": {
+            "payload": "veh.common.Engaged",
+            "init": {
+              "derivable": true,
+              "value": "false"
+            },
+            "timing": {
+              "mode": "TIMING_MODE_RANGE",
+              "minUs": "100000",
+              "maxUs": "1000000",
+              "defaultApplied": false
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "services": [
+    {
+      "name": "veh.adas.cruise",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "shapes": [
+        {
+          "id": 1,
+          "interfaceRef": "CruiseControl"
+        }
+      ]
+    },
+    {
+      "name": "veh.adas.lane",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "shapes": [
+        {
+          "id": 1,
+          "interfaceRef": "LaneAssist"
+        }
+      ]
+    }
+  ]
+}
+
+// ===== package veh.common =====
+{
+  "name": "veh.common",
+  "decls": [
+    {
+      "name": "Speed",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "ordinal": 0,
+      "typeDef": {
+        "backing": {
+          "unit": "km/h"
+        },
+        "constraint": {
+          "min": "0",
+          "max": "250",
+          "step": "0.5"
+        },
+        "init": {
+          "derivable": true,
+          "value": "0"
+        },
+        "floatWidth": "FLOAT_WIDTH_F32"
+      }
+    },
+    {
+      "name": "Engaged",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "ordinal": 0,
+      "typeDef": {
+        "backing": {
+          "primitive": "PRIMITIVE_TYPE_BOOLEAN"
+        },
+        "init": {
+          "derivable": true,
+          "value": "false"
+        }
+      }
+    },
+    {
+      "name": "LeverCmd",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "ordinal": 0,
+      "enumDef": {
+        "values": [
+          {
+            "name": "SET",
+            "value": "1",
+            "doc": ""
+          },
+          {
+            "name": "CANCEL",
+            "value": "2",
+            "doc": ""
+          },
+          {
+            "name": "RESUME",
+            "value": "3",
+            "doc": ""
+          }
+        ],
+        "reserved": []
+      }
+    },
+    {
+      "name": "FaultReport",
+      "visibility": "VISIBILITY_PUBLIC",
+      "isError": false,
+      "doc": "",
+      "labels": [],
+      "ordinal": 0,
+      "structDef": {
+        "members": [
+          {
+            "field": {
+              "name": "count",
+              "ordinal": 1,
+              "type": {
+                "optional": false,
+                "inlineScalar": {
+                  "backing": {
+                    "primitive": "PRIMITIVE_TYPE_INTEGER"
+                  },
+                  "constraint": {
+                    "min": "0",
+                    "max": "255"
+                  },
+                  "intWidth": "INT_WIDTH_U8"
+                }
+              },
+              "init": {
+                "derivable": true,
+                "value": "0"
+              },
+              "doc": "",
+              "labels": []
+            }
+          }
+        ],
+        "fixedLayout": true
+      }
+    }
+  ],
+  "interfaces": [],
+  "services": []
+}
+
+// ===== package veh.diag =====
+{
+  "name": "veh.diag",
+  "decls": [],
+  "interfaces": [],
+  "services": [
+    {
+      "name": "veh.diag.access",
+      "visibility": "VISIBILITY_PUBLIC",
+      "doc": "",
+      "labels": [],
+      "shapes": [
+        {
+          "id": 1,
+          "inline": {
+            "name": "",
+            "visibility": "VISIBILITY_UNSPECIFIED",
+            "doc": "",
+            "labels": [],
+            "interactions": [
+              {
+                "name": "readFaults",
+                "visibility": "VISIBILITY_UNSPECIFIED",
+                "isError": false,
+                "doc": "",
+                "labels": [],
+                "ordinal": 1,
+                "queryDef": {
+                  "params": [],
+                  "returnType": {
+                    "value": {
+                      "optional": false,
+                      "named": "veh.common.FaultReport"
+                    }
+                  },
+                  "contracts": [],
+                  "timing": {
+                    "mode": "TIMING_MODE_RANGE",
+                    "maxUs": "100000",
+                    "defaultApplied": false
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
+
+// ===== package veh.topology =====
+{
+  "name": "veh.topology",
+  "decls": [],
+  "interfaces": [],
+  "services": []
+}
