@@ -17,11 +17,13 @@
 mod attrs;
 mod closure;
 mod collect;
+mod placement;
 mod resolve;
 
 pub use closure::{
     Closure, ClosureComponent, ClosureService, ComponentId, ComponentLines, InterfaceId,
 };
+pub use placement::{DeploymentPlacement, Placement};
 pub use resolve::ResolvedRequire;
 
 use std::collections::HashMap;
@@ -55,7 +57,13 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
             closure.requires = resolve::resolve(&lookup, &system, &lines, &closure, &mut reporter);
             closure
         });
+    system.placements = placement::place(&lookup, &system, system.closure.as_ref(), &mut reporter);
     system.component_lines = lines;
+    // rsdl §13: an RSDL-7xx error blocks its own deployment, recorded on its
+    // placement; every other error blocks every deployment.
+    system.closure_has_errors = reporter.diagnostics.iter().any(|diagnostic| {
+        diagnostic.severity == Severity::Error && !diagnostic.code.as_str().starts_with("RSDL-7")
+    });
     system.diagnostics = reporter.diagnostics;
     system
 }
@@ -78,6 +86,13 @@ pub struct CheckedSystem {
     /// The closure of the first `system`, or `None` when the workspace declares
     /// none (rsdl §3.1).
     pub closure: Option<Closure>,
+    /// The placement of the closure in each deployment, parallel to
+    /// `deployments` (rsdl §9).
+    pub placements: Vec<DeploymentPlacement>,
+    /// Whether an error other than an RSDL-7xx one was raised: rsdl §13 blocks
+    /// lowering for every deployment then. An error in an attribute block
+    /// (a FORM code) counts here, wherever the block is written.
+    pub closure_has_errors: bool,
     /// The rsdl diagnostics, with the workspace file ids described in the
     /// module documentation.
     pub diagnostics: Vec<Diagnostic>,
@@ -1009,8 +1024,7 @@ service veh.diag.access {
                 )],
                 // Two deployments of one name are RSDL-708, not TYPL-009 (rsdl
                 // reference §3.4); this query suppresses TYPL-009 for the pair.
-                // RSDL-708 itself lands with the deployment checks (plan Task 6).
-                &[],
+                &["RSDL-708"],
             ),
             (
                 &[
@@ -1037,10 +1051,9 @@ service veh.diag.access {
                     "package p\nsystem S {}\ndeployment D for S {\n  machine M {}\n  machine M {}\n}\n",
                 )],
                 // A machine name is scoped to its deployment, not the package
-                // namespace (rsdl reference §3.5), so this query draws nothing;
-                // two machines of one name are RSDL-705, which lands with the
-                // deployment checks (plan Task 6).
-                &[],
+                // namespace (rsdl reference §3.5), so this query draws no
+                // TYPL-009; two machines of one name are RSDL-705.
+                &["RSDL-705"],
             ),
             (
                 &[(
@@ -1215,5 +1228,152 @@ service veh.diag.access {
             missing.message
         );
         assert_eq!(missing.severity, Severity::Error);
+    }
+
+    /// rsdl reference Appendix A, `bench.rsdl`, with the same package.
+    const BENCH: &str = r#"package veh.topology
+
+deployment Bench for Vehicle {
+  machine DevBox { Cruise, Lane, Panel, veh.diag.access, Backend }
+}
+"#;
+
+    /// Appendix A's two deployments place every closure instance exactly once
+    /// (rsdl §9), and a placement line's backend keys apply to the placement it
+    /// makes (rsdl §13, the attribute map).
+    #[test]
+    fn appendix_a_places_every_instance_once_per_deployment() {
+        let system = check_topology(&[
+            ("veh/topology/system.rsdl", SYSTEM),
+            ("veh/topology/production.rsdl", PRODUCTION),
+            ("veh/topology/bench.rsdl", BENCH),
+        ]);
+        assert_eq!(errors(&system), Vec::<&str>::new());
+        assert!(!system.closure_has_errors);
+        let closure = system
+            .closure
+            .as_ref()
+            .expect("Appendix A declares a system");
+        let placed = |index: usize| -> Vec<(String, &str)> {
+            system.placements[index]
+                .placements
+                .iter()
+                .map(|placement| {
+                    let component = closure.components[placement.component].id.text();
+                    let machine = &system.deployments[index].machines[placement.machine];
+                    (
+                        format!("{component}.{}", placement.instance),
+                        machine.name.name.as_str(),
+                    )
+                })
+                .collect()
+        };
+        let production = [
+            ("Cruise.primary", "AdasHpc"),
+            ("Lane.Unit", "AdasHpc"),
+            ("veh.diag.access.Unit", "AdasHpc"),
+            ("Cruise.backup", "Cockpit"),
+            ("Panel.Unit", "Cockpit"),
+            ("Backend.Unit", "Cloud"),
+        ];
+        assert_eq!(
+            placed(0),
+            production.map(|(instance, machine)| (instance.to_string(), machine))
+        );
+        let bench = [
+            ("Cruise.primary", "DevBox"),
+            ("Cruise.backup", "DevBox"),
+            ("Lane.Unit", "DevBox"),
+            ("Panel.Unit", "DevBox"),
+            ("veh.diag.access.Unit", "DevBox"),
+            ("Backend.Unit", "DevBox"),
+        ];
+        assert_eq!(
+            placed(1),
+            bench.map(|(instance, machine)| (instance.to_string(), machine))
+        );
+        assert!(
+            system
+                .placements
+                .iter()
+                .all(|placement| !placement.has_errors)
+        );
+
+        let panel = &system.placements[0].placements[4];
+        let line = &system.deployments[0].machines[panel.machine].members[panel.line];
+        assert_eq!(line.reference.text(), "Panel");
+        assert_eq!(line.backend_keys[0].namespace, "linux");
+    }
+
+    /// The deployment, machine and placement rules (rsdl §3.4, §3.5, §7, §9),
+    /// one input per rule.
+    #[test]
+    fn a_deployment_places_every_closure_instance_exactly_once() {
+        const CLOSURE: &str = "component Cruise [ instances = (primary, backup) ] { offers veh.adas.cruise }\n\
+                               component Backend [ external ] { requires veh.diag.access }\n\
+                               component Spare {}\n\
+                               system Vehicle { Cruise, Backend, veh.diag.access }\n";
+        const PLACED: &str = "Cruise, veh.diag.access, Backend";
+        let cases: &[(String, &[&str])] = &[
+            // An external component on an on-board machine is a stub (rsdl §9).
+            (format!("deployment P for Vehicle {{ machine A {{ {PLACED} }} }}"), &[]),
+            (
+                "deployment P for veh.topology.Vehicle {\n  machine A { Cruise.primary, Cruise.backup, veh.diag.access }\n  machine Cloud [ external ] { Backend }\n}".to_string(),
+                &[],
+            ),
+            ("deployment P for Nowhere {}".to_string(), &["RSDL-704"]),
+            (
+                format!("deployment P for Vehicle {{ machine A {{ {PLACED} }} }}\ndeployment P for Vehicle {{ machine A {{ {PLACED} }} }}"),
+                &["RSDL-708"],
+            ),
+            (
+                "deployment P for Vehicle {\n  machine A { Cruise, veh.diag.access }\n  machine A { Backend }\n}".to_string(),
+                &["RSDL-705"],
+            ),
+            (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Spare }} }}"), &["RSDL-702"]),
+            (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Nothing }} }}"), &["RSDL-702"]),
+            (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Cruise.spare }} }}"), &["RSDL-702"]),
+            (
+                "deployment P for Vehicle { machine A { Cruise.primary, veh.diag.access, Backend } }".to_string(),
+                &["RSDL-701"],
+            ),
+            (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Cruise.primary }} }}"), &["RSDL-706"]),
+            (
+                "deployment P for Vehicle {\n  machine A { Cruise.primary, veh.diag.access, Backend }\n  machine B { Cruise }\n}".to_string(),
+                &["RSDL-706"],
+            ),
+            (
+                "deployment P for Vehicle {\n  machine A { Backend }\n  machine Cloud [ external ] { Cruise, veh.diag.access }\n}".to_string(),
+                &["RSDL-707", "RSDL-707"],
+            ),
+            (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, Cruise.Unit }} }}"), &["RSDL-307"]),
+            (format!("deployment P for Vehicle {{ machine A {{ {PLACED}, veh.adas.cruise }} }}"), &["RSDL-504"]),
+        ];
+        for (deployments, expected) in cases {
+            let text = format!("package veh.topology\n{CLOSURE}{deployments}\n");
+            let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+            assert_eq!(codes(&system), *expected, "`{deployments}`");
+        }
+    }
+
+    /// rsdl §13: an RSDL-7xx error blocks its own deployment, and any other
+    /// error blocks every deployment.
+    #[test]
+    fn a_placement_error_blocks_its_own_deployment_only() {
+        let text = "package veh.topology\n\
+                    component Lane { offers veh.adas.lane }\n\
+                    system Vehicle { Lane }\n\
+                    deployment Good for Vehicle { machine A { Lane } }\n\
+                    deployment Bad for Vehicle { machine A {} }\n";
+        let system = check_topology(&[("veh/topology/x.rsdl", text)]);
+        assert_eq!(codes(&system), ["RSDL-701"]);
+        assert!(!system.closure_has_errors);
+        let blocked: Vec<bool> = system.placements.iter().map(|p| p.has_errors).collect();
+        assert_eq!(blocked, [false, true]);
+
+        let text = text.replace("system Vehicle { Lane }", "system Vehicle { Lane, Lane }");
+        let system = check_topology(&[("veh/topology/x.rsdl", text.as_str())]);
+        assert_eq!(codes(&system), ["RSDL-603", "RSDL-701"]);
+        assert!(system.closure_has_errors);
     }
 }

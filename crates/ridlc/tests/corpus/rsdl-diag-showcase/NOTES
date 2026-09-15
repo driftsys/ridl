@@ -30,6 +30,10 @@ a check in another:
   RSDL-408, RSDL-502, RSDL-308, and the RSDL-409 warning. Its closure
   components are listed in `Showcase` and placed on `DevBox`, so the placement
   checks have nothing to report about them.
+- `placement.rsdl` — the deployment and placement rules of rsdl §3.4, §3.5 and
+  §9: RSDL-701, RSDL-702 and RSDL-704 to RSDL-708. `Bench`, in
+  `attributes.rsdl`, places every closure instance once, so it draws none of
+  them.
 - `contracts.ridl` — the ridl interfaces and services the rsdl files name. It
   draws no diagnostic.
 

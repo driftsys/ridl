@@ -864,6 +864,44 @@ diag_codes! {
         RSDL_604 = "RSDL-604", Error,
             "a declaration of another profile in an `.rsdl` file";
 
+        /// An instance of a closure component with no placement in a deployment
+        /// (rsdl §9, §16.1). Error; blocks that deployment only (§13). Raised by
+        /// the rsdl placement check.
+        RSDL_701 = "RSDL-701", Error,
+            "an instance of a closure component with no placement in a deployment";
+
+        /// A placement line names a component, instance or service outside the
+        /// closure, or a name that resolves to nothing (rsdl §9, §16.1). Error.
+        /// Raised by the rsdl placement check.
+        RSDL_702 = "RSDL-702", Error,
+            "a placement line names something outside the closure, or nothing";
+
+        /// `deployment … for Y` where `Y` resolves to no declared `system`
+        /// (rsdl §3.4, §16.1). Error. Raised by the rsdl placement check.
+        RSDL_704 = "RSDL-704", Error,
+            "a deployment is `for` no declared `system`";
+
+        /// Two machines with one name in one deployment (rsdl §3.5, §16.1).
+        /// Error. Raised by the rsdl placement check.
+        RSDL_705 = "RSDL-705", Error,
+            "two machines with one name in one deployment";
+
+        /// An instance placed twice in one deployment, also `Cruise` together
+        /// with `Cruise.primary` (rsdl §9, §16.1). Error. Raised by the rsdl
+        /// placement check.
+        RSDL_706 = "RSDL-706", Error,
+            "an instance placed twice in one deployment";
+
+        /// An `external` machine lists an implemented component (rsdl §9,
+        /// §16.1). Error. Raised by the rsdl placement check.
+        RSDL_707 = "RSDL-707", Error,
+            "an `external` machine lists an implemented component";
+
+        /// Two deployments with one name in the workspace (rsdl §3.4, §16.1).
+        /// Error. Raised by the rsdl placement check.
+        RSDL_708 = "RSDL-708", Error,
+            "two deployments with one name in the workspace";
+
         /// A backend key whose namespace no configured backend claims (rsdl §5,
         /// §16.1). Warning: the key is still carried. Raised by `ridlc`, which
         /// knows the configured backends (plan decision P-B4).

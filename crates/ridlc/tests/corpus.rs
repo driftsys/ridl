@@ -725,6 +725,13 @@ const RSDL_PROFILE_CODES: &[(&str, Provoked)] = &[
     ("RSDL-602", Showcase),
     ("RSDL-603", Showcase),
     ("RSDL-604", Showcase),
+    ("RSDL-701", Showcase),
+    ("RSDL-702", Showcase),
+    ("RSDL-704", Showcase),
+    ("RSDL-705", Showcase),
+    ("RSDL-706", Showcase),
+    ("RSDL-707", Showcase),
+    ("RSDL-708", Showcase),
     ("RSDL-804", Showcase),
     ("RSDL-908", Showcase),
     // The shared codes the rsdl grammar, the rsdl attribute check and the rsdl

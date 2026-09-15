@@ -176,3 +176,45 @@ error[RSDL-308]: `Echo` requires `rsdl.showcase.echo`, which `rsdl.showcase.echo
    │
 25 │   requires rsdl.showcase.echo
    │            ^^^^^^^^^^^^^^^^^^
+
+error[RSDL-701]: `Rear.Unit` is placed on no machine of `Road` — every instance of the closure is on exactly one machine per deployment (rsdl reference §9)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:5:12
+  │
+5 │ deployment Road for Showcase {
+  │            ^^^^
+
+error[RSDL-705]: `Ecu` is declared twice in `Road` — a machine name is unique in its deployment (rsdl reference §3.5)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:9:11
+  │
+9 │   machine Ecu { Hooter }
+  │           ^^^
+
+error[RSDL-706]: `Hooter.left` is placed twice in `Road` — first on `Ecu` (rsdl reference §9)
+  ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:9:17
+  │
+9 │   machine Ecu { Hooter }
+  │                 ^^^^^^
+
+error[RSDL-707]: `Cloud` is an `external` machine and hosts external components only, and `Driver` is implemented in this workspace (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:11:32
+   │
+11 │   machine Cloud [ external ] { Driver }
+   │                                ^^^^^^
+
+error[RSDL-702]: `Draft` is outside the closure of `Showcase` — a machine places closure components, their instances and the lone services the system lists (rsdl reference §9)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:13:19
+   │
+13 │   machine Spare { Draft }
+   │                   ^^^^^
+
+error[RSDL-704]: `Nowhere` names no declared `system` — a deployment is `for` the workspace's system (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:18:20
+   │
+18 │ deployment Lab for Nowhere {}
+   │                    ^^^^^^^
+
+error[RSDL-708]: a deployment named `Bench` is already declared in the workspace — a deployment name is unique (rsdl reference §3.4)
+   ┌─ tests/corpus/rsdl-diag-showcase/placement.rsdl:22:12
+   │
+22 │ deployment Bench for Second {}
+   │            ^^^^^

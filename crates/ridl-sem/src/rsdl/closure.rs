@@ -141,15 +141,35 @@ pub(super) enum MemberTarget {
     Unknown,
 }
 
+impl Closure {
+    /// The closure component `target` names, as an index into
+    /// [`Closure::components`], or `None` when it is outside the closure.
+    pub(super) fn component_for(&self, target: &MemberTarget) -> Option<usize> {
+        self.components.iter().position(|component| match target {
+            MemberTarget::Component(decl) | MemberTarget::Instance(decl, _) => {
+                component.decl == Some(*decl)
+            }
+            MemberTarget::Implicit(service) => {
+                component.id
+                    == ComponentId::Implicit {
+                        service: service.clone(),
+                    }
+            }
+            MemberTarget::Unknown => false,
+        })
+    }
+}
+
 /// The name lookups the rsdl passes share (rsdl §4): the declared components
-/// by package and name, the imports of each package, the package resolutions
-/// that bind an interface name, the service catalog, and the declared offerer
-/// of each service.
+/// and systems by package and name, the imports of each package, the package
+/// resolutions that bind an interface name, the service catalog, and the
+/// declared offerer of each service.
 pub(super) struct Lookup<'a> {
     db: &'a dyn salsa::Database,
     ws: Workspace,
     pub(super) catalog: &'a ServiceCatalog,
     components: HashMap<(String, String), usize>,
+    systems: HashMap<(String, String), usize>,
     /// Per package: each local name an import binds, to the imported package
     /// path and name. Imports bind package-wide (ADR-0002 §2).
     imports: HashMap<String, HashMap<String, (String, String)>>,
@@ -177,6 +197,12 @@ impl<'a> Lookup<'a> {
                 .entry((decl.package.clone(), decl.name.name.clone()))
                 .or_insert(index);
         }
+        let mut systems = HashMap::new();
+        for (index, decl) in system.systems.iter().enumerate() {
+            systems
+                .entry((decl.package.clone(), decl.name.name.clone()))
+                .or_insert(index);
+        }
         let packages: HashSet<&String> = system
             .systems
             .iter()
@@ -199,6 +225,7 @@ impl<'a> Lookup<'a> {
             ws,
             catalog,
             components,
+            systems,
             imports,
             resolutions,
             declared_offerer: HashMap::new(),
@@ -220,6 +247,12 @@ impl<'a> Lookup<'a> {
     /// package `from` names, as an index into `CheckedSystem::components`.
     pub(super) fn component(&self, from: &str, package: Option<&str>, name: &str) -> Option<usize> {
         self.declared(&self.components, from, package, name)
+    }
+
+    /// The declared system a `for` reference written in package `from` names,
+    /// as an index into `CheckedSystem::systems`.
+    pub(super) fn system(&self, from: &str, package: Option<&str>, name: &str) -> Option<usize> {
+        self.declared(&self.systems, from, package, name)
     }
 
     /// rsdl §4 and typl §3.2: a qualified name binds the declaration of that
