@@ -456,20 +456,20 @@ fn is_non_json_ir(path: &Path) -> bool {
 }
 
 /// Whether `path` is a source file by the rule the workspace loader collects
-/// with: a file whose extension is `typl` or `ridl`. Used only to tell a
-/// source tree from a snapshot directory ([`is_source_dir`]) — a diff
+/// with: a file whose extension is `typl`, `ridl` or `rsdl`. Used only to tell
+/// a source tree from a snapshot directory ([`is_source_dir`]) — a diff
 /// *argument* is never gated on this, because a source file's own name is
 /// unconstrained ([`load_diff_side`]).
 fn is_source_file(path: &Path) -> bool {
     path.is_file()
-        && path
-            .extension()
-            .is_some_and(|extension| extension == "typl" || extension == "ridl")
+        && path.extension().is_some_and(|extension| {
+            extension == "typl" || extension == "ridl" || extension == "rsdl"
+        })
 }
 
 /// Whether `dir` is a source tree by its direct contents: it holds a
-/// `ridl.toml` or at least one `.typl`/`.ridl` file. A snapshot directory —
-/// `.ridl/baseline/`, or a build `--out-dir` — holds neither.
+/// `ridl.toml` or at least one `.typl`, `.ridl` or `.rsdl` file. A snapshot
+/// directory — `.ridl/baseline/`, or a build `--out-dir` — holds neither.
 fn is_source_dir(dir: &Path) -> bool {
     dir.join("ridl.toml").is_file()
         || files_matching(dir, is_source_file).is_ok_and(|files| !files.is_empty())
@@ -1653,6 +1653,16 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
             }
         };
         let profile = ridl_core::profile_of_path(&file.to_string_lossy());
+        // The formatter has no layout rules for the rsdl declarations. The
+        // directory walk does not collect `.rsdl` files, so only an explicit
+        // path reaches here, and it is refused rather than rewritten.
+        if profile == ridl_syntax::Profile::Rsdl {
+            eprintln!(
+                "error: cannot format {}: `ridl fmt` does not format `.rsdl` files yet",
+                file.display()
+            );
+            return ExitCode::from(2);
+        }
         match format(&text, profile) {
             FormatOutcome::Formatted(formatted) => {
                 if formatted != text {

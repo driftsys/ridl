@@ -558,6 +558,9 @@ impl<'a> Parser<'a> {
                      as a name, choose one the family does not reserve (ridl reference §16.4)"
                 ),
             ),
+            // The rsdl profile has no boundary code of its own in the parser
+            // yet: a word of another profile draws the generic FORM-102.
+            Profile::Rsdl => return false,
         };
         self.error_at_current(code, message);
         self.recover(is_top_level_start);

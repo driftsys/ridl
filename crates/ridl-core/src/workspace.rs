@@ -255,7 +255,7 @@ impl Loader {
                 }
             } else if path
                 .extension()
-                .is_some_and(|ext| ext == "typl" || ext == "ridl")
+                .is_some_and(|ext| ext == "typl" || ext == "ridl" || ext == "rsdl")
             {
                 source_files.push(path);
             }
@@ -916,6 +916,41 @@ mod tests {
         }
         assert!(files.iter().any(|f| f.path(&db).ends_with("a.typl")));
         assert!(files.iter().any(|f| f.path(&db).ends_with("b.ridl")));
+    }
+
+    /// A package directory loads its `.rsdl` files beside its `.typl` and
+    /// `.ridl` files (rsdl reference §2: a package may hold all three), each
+    /// parsed under the profile its extension selects.
+    #[test]
+    fn a_package_directory_loads_its_rsdl_files() {
+        let dir = TempDir::new("rsdl");
+        dir.write("ridl.toml", PACKAGE_MANIFEST);
+        dir.write("a.typl", "package veh.common\ntype A: m\n");
+        dir.write("b.ridl", "package veh.common\ntype B: s\n");
+        dir.write("c.rsdl", "package veh.common\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(loaded.diagnostics, Vec::new(), "a clean mixed package");
+
+        let packages = loaded.workspace.packages(&db).clone();
+        assert_eq!(packages.len(), 1, "one package directory, one package");
+        let files = packages[0].files(&db).clone();
+        let paths: Vec<&str> = files.iter().map(|f| f.path(&db).as_str()).collect();
+        assert_eq!(files.len(), 3, "the .rsdl file loads too: {paths:?}");
+        let rsdl = files
+            .iter()
+            .find(|f| f.path(&db).ends_with("c.rsdl"))
+            .expect("the .rsdl file is a package file");
+        assert_eq!(
+            crate::db::profile_of_path(rsdl.path(&db)),
+            ridl_syntax::Profile::Rsdl
+        );
+        assert_eq!(
+            parse_file(&db, *rsdl).errors(),
+            &[],
+            "the .rsdl file parses clean"
+        );
     }
 
     /// Single-file mode accepts a bare `.ridl` entry, like a bare `.typl`.

@@ -51,6 +51,17 @@ pub enum SyntaxKind {
     FixedKw,
     RequireKw,
     EnsureKw,
+    // Keywords the rsdl profile activates beyond typl's set (rsdl reference
+    // §2). Under `Profile::Typl` and `Profile::Ridl` these words still lex to
+    // `ReservedWord`.
+    SystemKw,
+    ComponentKw,
+    DistributionKw,
+    DeploymentKw,
+    MachineKw,
+    OffersKw,
+    RequiresKw,
+    ForKw,
     /// A family-registry word that the active profile does not use (typl
     /// reference §1.4). Reserved in every profile, never a valid identifier.
     ReservedWord,

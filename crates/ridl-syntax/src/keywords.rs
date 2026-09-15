@@ -19,8 +19,8 @@ use crate::syntax_kind::SyntaxKind;
 /// profile-boundary diagnostics (TYPL-304 / RIDL-403).
 ///
 /// `ridl-core` derives the profile from the file extension
-/// (`profile_of_path`): `.ridl` selects [`Profile::Ridl`], everything else
-/// parses as typl.
+/// (`profile_of_path`): `.ridl` selects [`Profile::Ridl`], `.rsdl` selects
+/// [`Profile::Rsdl`], everything else parses as typl.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Profile {
     /// `.typl` — the vocabulary layer. Behavior is identical to the E1
@@ -29,6 +29,10 @@ pub enum Profile {
     /// `.ridl` — the interface-description layer. The typl keywords plus the
     /// nine ridl words are active; durations and `@` are ordinary tokens.
     Ridl,
+    /// `.rsdl` — the system-description layer (rsdl reference §2). The typl
+    /// keywords plus the eight rsdl words are active; durations and `@` are
+    /// ordinary tokens, as under [`Profile::Ridl`].
+    Rsdl,
 }
 
 /// The keywords the typl profile uses (typl reference §1.4), paired with the
@@ -72,6 +76,21 @@ const RIDL_KEYWORDS: &[(&str, SyntaxKind)] = &[
     ("fixed", SyntaxKind::FixedKw),
     ("require", SyntaxKind::RequireKw),
     ("ensure", SyntaxKind::EnsureKw),
+];
+
+/// The eight words the rsdl profile activates beyond typl's set (rsdl reference
+/// §2): the five declaration keywords, the two component-line keywords, and the
+/// `for` of a deployment's relation clause. Every entry here is also present in
+/// [`FAMILY_RESERVED`]; the `family_registry_is_consistent` test guards that.
+const RSDL_KEYWORDS: &[(&str, SyntaxKind)] = &[
+    ("system", SyntaxKind::SystemKw),
+    ("component", SyntaxKind::ComponentKw),
+    ("distribution", SyntaxKind::DistributionKw),
+    ("deployment", SyntaxKind::DeploymentKw),
+    ("machine", SyntaxKind::MachineKw),
+    ("offers", SyntaxKind::OffersKw),
+    ("requires", SyntaxKind::RequiresKw),
+    ("for", SyntaxKind::ForKw),
 ];
 
 /// The full family reserved-word registry (typl reference §1.4): the words the
@@ -154,25 +173,18 @@ pub const FAMILY_RESERVED: &[&str] = &[
     "state",
     "transition",
     "automaton",
-    // rsdl.
-    "component",
+    // rsdl — rsdl reference §2. The v0.1 words (`provides`, `instance`,
+    // `assurance`, `target`, `place`, `on`, `transport`, `bundle`, `time`,
+    // `base`, `redundant`, `supervise`, `degraded`) left the registry with
+    // rsdl v0.2: no other profile uses one, so each is an identifier again.
     "system",
+    "component",
+    "distribution",
     "deployment",
-    "provides",
+    "machine",
+    "offers",
     "requires",
-    "instance",
     "for",
-    "assurance",
-    "target",
-    "place",
-    "on",
-    "transport",
-    "bundle",
-    "time",
-    "base",
-    "redundant",
-    "supervise",
-    "degraded",
 ];
 
 /// The [`SyntaxKind`] a typl keyword lexes to, or `None` if `text` is not a
@@ -195,6 +207,15 @@ pub fn ridl_keyword(text: &str) -> Option<SyntaxKind> {
         .map(|(_, kind)| *kind)
 }
 
+/// The [`SyntaxKind`] one of the eight rsdl words lexes to under
+/// [`Profile::Rsdl`], or `None` if `text` is not one of them.
+pub fn rsdl_keyword(text: &str) -> Option<SyntaxKind> {
+    RSDL_KEYWORDS
+        .iter()
+        .find(|(word, _)| *word == text)
+        .map(|(_, kind)| *kind)
+}
+
 /// The [`SyntaxKind`] `text` lexes to as an active keyword of `profile`, or
 /// `None` when the profile does not use it — it may still be a reserved word
 /// of another profile ([`is_reserved`]) or an ordinary identifier.
@@ -202,6 +223,7 @@ pub fn keyword_in(profile: Profile, text: &str) -> Option<SyntaxKind> {
     match profile {
         Profile::Typl => typl_keyword(text),
         Profile::Ridl => typl_keyword(text).or_else(|| ridl_keyword(text)),
+        Profile::Rsdl => typl_keyword(text).or_else(|| rsdl_keyword(text)),
     }
 }
 
@@ -218,19 +240,29 @@ mod tests {
 
     #[test]
     fn family_registry_is_consistent() {
-        // Every keyword the typl or ridl profile uses is in the family
+        // Every keyword the typl, ridl or rsdl profile uses is in the family
         // registry.
-        for (word, _) in TYPL_KEYWORDS.iter().chain(RIDL_KEYWORDS) {
+        for (word, _) in TYPL_KEYWORDS
+            .iter()
+            .chain(RIDL_KEYWORDS)
+            .chain(RSDL_KEYWORDS)
+        {
             assert!(
                 FAMILY_RESERVED.contains(word),
                 "used keyword `{word}` is missing from FAMILY_RESERVED",
             );
         }
-        // No word is claimed by both profiles' own tables.
+        // No word is claimed by two profiles' own tables.
         for (word, _) in RIDL_KEYWORDS {
             assert!(
                 typl_keyword(word).is_none(),
                 "`{word}` is in both TYPL_KEYWORDS and RIDL_KEYWORDS",
+            );
+        }
+        for (word, _) in RSDL_KEYWORDS {
+            assert!(
+                typl_keyword(word).is_none() && ridl_keyword(word).is_none(),
+                "`{word}` is in RSDL_KEYWORDS and in the typl or ridl table",
             );
         }
         // The registry has no duplicate entries.

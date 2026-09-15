@@ -158,18 +158,16 @@ equations; typl/ridl express init as bare `= value`; its ambient time values
 `->`-as-followed-by, `node`, `returns`, `realizes`, and a surface `step`
 considered and rejected — models are contract-blind, so no `realizes`; `step`
 remains typl's quantization keyword alone), plus its reserved set `merge`,
-`current`, `state`, `transition`, `automaton`; and rsdl's `component`, `system`,
-`deployment`, `provides`, `requires`, `instance`, `for`, `assurance`, `target`,
-`place`, `on`, `transport`, `bundle`, `time`, `base` (it also reuses `model`
-from rmdl, `interface`/`service`/`signal`/`event`/`command`/`query` from ridl —
-same concepts, one registry entry each; `composition`, `binding`, `wire`,
-`delegate`, `publish`, `spk`, `apk` considered and rejected — components use
-application notation and inline `provides`/`requires`), plus its reserved
-resilience set `redundant`, `supervise`, `degraded`. (`node` and `returns` were
-considered and rejected by rmdl — never reserved.) The per-profile keyword
-sections of each language reference enumerate their own additions; the union of
-those sections **is** the registry until the platform spec extracts it as a
-standalone normative list.
+`current`, `state`, `transition`, `automaton`; and rsdl's `system`, `component`,
+`distribution`, `deployment`, `machine`, `offers`, `requires`, `for` (rsdl
+reference §2 — the rsdl v0.1 words `provides`, `instance`, `assurance`,
+`target`, `place`, `on`, `transport`, `bundle`, `time`, `base`, `redundant`,
+`supervise` and `degraded` left the registry with rsdl v0.2, because no other
+profile uses them, and each is an ordinary identifier in every profile). (`node`
+and `returns` were considered and rejected by rmdl — never reserved.) The
+per-profile keyword sections of each language reference enumerate their own
+additions; the union of those sections **is** the registry until the platform
+spec extracts it as a standalone normative list.
 
 **Registry admission test — language, never runtime** (family doctrine, audit
 passed). Every registry entry names a _describable property_ — a shape, an

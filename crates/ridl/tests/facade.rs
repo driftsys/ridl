@@ -100,6 +100,49 @@ fn check_defaults_to_current_directory() {
     );
 }
 
+/// `ridl check` reads the `.rsdl` files of a package directory: a diagnostic in
+/// one is reported against that file and fails the check, where before the
+/// loader skipped the file and the check passed.
+#[test]
+fn check_reports_a_diagnostic_in_an_rsdl_file() {
+    let dir = TempDir::new("check-rsdl");
+    dir.write("ridl.toml", PACKAGE_MANIFEST);
+    dir.write("speed.typl", SPEED_SOURCE);
+    // rsdl reference §2: `internal` before an rsdl keyword is FORM-102.
+    dir.write(
+        "system.rsdl",
+        "package veh.common\n\ninternal component Cruise {}\n",
+    );
+
+    let (code, stderr) = ridl(&["check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(
+        code, 1,
+        "the .rsdl diagnostic fails the check, stderr:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("FORM-102") && stderr.contains("system.rsdl"),
+        "the diagnostic names its code and the .rsdl file, got:\n{stderr}"
+    );
+}
+
+/// `ridl fmt` refuses an explicit `.rsdl` path — exit 2, no rewrite — because
+/// the formatter has no layout rules for the rsdl declarations.
+#[test]
+fn fmt_refuses_an_rsdl_file() {
+    let dir = TempDir::new("fmt-rsdl");
+    let input = "package veh.topology\n\ncomponent   Cruise {}\n";
+    let file = dir.write("system.rsdl", input);
+
+    let (code, stderr) = ridl(&["fmt".as_ref(), file.as_os_str()]);
+    assert_eq!(code, 2, "an .rsdl file is not formatted, stderr:\n{stderr}");
+    assert!(
+        stderr.contains("does not format `.rsdl` files"),
+        "the message names the cause, got:\n{stderr}"
+    );
+    let unchanged = std::fs::read_to_string(&file).expect("the file is still readable");
+    assert_eq!(unchanged, input, "an .rsdl file must never be rewritten");
+}
+
 /// `ridl fmt <file>` rewrites a non-canonical file in place to the tight style.
 #[test]
 fn fmt_rewrites_in_place() {
