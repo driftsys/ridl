@@ -76,8 +76,8 @@ pub trait SignalWriter: Attached {
     /// Publishes everything staged. It cannot fail, so it reports nothing —
     /// including that the runtime behind the port is gone. A caller learns
     /// that from [`WriteError::Detached`] on a later `set`, `invalidate` or
-    /// `touch`, never from `commit`, and the changes staged before it are not
-    /// published.
+    /// `touch`, never from that `commit`. What becomes of the changes staged
+    /// before a commit whose runtime has already detached is not fixed here.
     fn commit(&mut self);
 }
 
@@ -144,11 +144,12 @@ pub trait Caller: Attached {
     /// `None` for a query's correlation.
     ///
     /// `None` has two causes this method does not separate: the acknowledgment
-    /// is not known yet, and `c` is not a command's correlation — a query's,
-    /// or one already passed to [`forget`](Caller::forget). A caller that
-    /// polls `ack` on a correlation that is not a command's therefore never
-    /// finishes. The return carries no error, so keep the correlations
-    /// [`command`](Caller::command) returned and ask only about those.
+    /// is not known yet, and `c` is a query's correlation, for which `None` is
+    /// the standing answer. A caller that polls `ack` for a query's
+    /// correlation therefore never finishes. The return carries no error, so
+    /// keep the correlations [`command`](Caller::command) returned and ask
+    /// only about those. After [`forget`](Caller::forget) a correlation's
+    /// outcome is no longer retrievable, so do not ask about it.
     fn ack(&mut self, c: Correlation) -> Option<Result<(), CallError>>;
     /// A query's reply, once it is known: the reply bytes copied into the front
     /// of `out` and their length, or the error. `Ok(None)` while unknown.
@@ -247,11 +248,9 @@ pub trait ScannableSignals: SignalReader {
     /// increments.
     ///
     /// The return carries no error, so an interface the port's catalog does
-    /// not hold has no reserved answer and cannot be told from a real
-    /// generation. Ask only about an interface of
-    /// [`catalog`](Attached::catalog): [`scan`](ScannableSignals::scan)'s loop
-    /// compares marks against this counter, so a wrong `iface` misreads the
-    /// loop rather than reporting anything.
+    /// not hold has no reserved answer: it gives a `u64` the caller cannot
+    /// tell from a real generation. Ask only about an interface of
+    /// [`catalog`](Attached::catalog).
     fn generation(&self, iface: InterfaceNo) -> u64;
     /// Writes the changes into `out`, interface by interface, in the order of
     /// `marks`, and updates `marks`. An interface's changes are written all
