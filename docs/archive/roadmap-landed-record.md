@@ -309,6 +309,34 @@ debt: driftsys/ridl#218.
 | E9.8 | **proto3 projection** — schemas from IR identity, per ADR-0013's shape-and-identity ceiling                                                                                                                                                                           | the cruise-control package emits valid proto3                                                                                           | L    |
 | E9.9 | **FlatBuffers projection** — the column Appendix B was missing. The _schema_ emit; the FlatBuffers _codec_ for the store and queue is E11.7                                                                                                                           | the cruise-control package emits a valid FlatBuffers schema                                                                             | L    |
 
+## Epic 11 — the runtime library, the landed part
+
+**Milestone:** generated code has a library to be written against. **Value:**
+every codegen ecosystem has a runtime library its generated code links —
+`prost`, `serde`, the `flatbuffers` runtime — and without one, generated code
+either carries its own copy of the envelope and the provenance rules or invents
+them per project. The rest of the epic — the frame specification and the
+transport — is still on
+[the forward plan](../ROADMAP.md#epic-11--the-runtime-library-and-the-frame).
+
+**Delivered 2026-09-14.** `crates/ridl-rt` 0.1.0 landed in driftsys/ridl#348,
+built test-first from
+[`2026-09-13-ridl-rt-v0.1-design.md`](2026-09-13-ridl-rt-v0.1-design.md) and
+[its plan](2026-09-14-ridl-rt-v0.1-plan.md); driftsys/ridl#351 revised the API
+before the release, and driftsys/ridl#352 prepared the release and closed the
+story, driftsys/ridl#316. The crate's decisions are
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) and its
+as-built record is [`ridl-rt.md`](../design/ridl-rt.md). Publishing 0.1.0 to
+crates.io and pushing its tag are maintainer acts
+([ADR-0007](../decisions/ADR-0007-e1-execution.md) decision 14), not story work.
+
+Two items are out of 0.1 by decision, each with its own issue: `Inline` payloads
+(RA-X7, which waits for typl §17.11) and streams (RA-X1, driftsys/ridl#336).
+
+| ID    | Story                                                                                                                       | Done when                                                              | Size |
+| ----- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- | ---- |
+| E11.0 | `ridl-rt` — identity, the envelope, `Provenance`/`Freshness`/`Sample`, `Payload<E>`, the interaction descriptors, the ports | a hand-written program links it and reads a sample with its provenance | L    |
+
 ## Tracker correspondence
 
 **Reconciled 2026-08-09.** 44 issues closed (E0.1–E2.11 as delivered; the five
