@@ -15,6 +15,7 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use ridl_core::diag::DiagCode;
 use ridl_core::package::{CatalogEntry, Package, ServiceCatalog, Workspace, package_of};
 
+use super::resolve::{ResolvedRequire, requires_own_service};
 use super::{
     CheckedSystem, ComponentDecl, MemberRef, Reference, ReferenceForm, Reporter, Site,
     UNIT_INSTANCE,
@@ -66,7 +67,7 @@ impl InterfaceId {
 
 /// The resolved lines of one declared component, parallel to its `offers` and
 /// `requires` lines (rsdl §3.2). An entry is `None` when its line drew
-/// RSDL-307, RSDL-309, RSDL-310, RSDL-311 or RSDL-312.
+/// RSDL-307, RSDL-308, RSDL-309, RSDL-310, RSDL-311 or RSDL-312.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ComponentLines {
     /// The dotted name of the service each `offers` line names.
@@ -87,6 +88,10 @@ pub struct Closure {
     /// each with the closure services that list it, in service name order.
     /// More than one owner is RSDL-408.
     pub interface_owners: BTreeMap<InterfaceId, Vec<String>>,
+    /// Every `requires` line of a closure component that resolves to one
+    /// owning service and one offering component (rsdl §8), in closure order,
+    /// then line order.
+    pub requires: Vec<ResolvedRequire>,
 }
 
 /// One component of the closure (rsdl §3.1, §6, §7).
@@ -372,6 +377,9 @@ pub(super) fn component_lines(
                             );
                         }
                         first
+                    })
+                    .filter(|interface| {
+                        !requires_own_service(lookup, component, &offers, line, interface, reporter)
                     });
                 requires.push(interface);
             }

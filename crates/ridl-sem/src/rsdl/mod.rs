@@ -17,10 +17,12 @@
 mod attrs;
 mod closure;
 mod collect;
+mod resolve;
 
 pub use closure::{
     Closure, ClosureComponent, ClosureService, ComponentId, ComponentLines, InterfaceId,
 };
+pub use resolve::ResolvedRequire;
 
 use std::collections::HashMap;
 
@@ -48,7 +50,11 @@ pub fn check_system(db: &dyn salsa::Database, ws: Workspace, std: Package) -> Ch
     let mut lookup = closure::Lookup::new(db, ws, std, &system, &catalog);
     let lines = closure::component_lines(&lookup, &system, &mut reporter);
     lookup.record_offers(&lines);
-    system.closure = closure::closure(&lookup, &system, &lines, &mut reporter);
+    system.closure =
+        closure::closure(&lookup, &system, &lines, &mut reporter).map(|mut closure| {
+            closure.requires = resolve::resolve(&lookup, &system, &lines, &closure, &mut reporter);
+            closure
+        });
     system.component_lines = lines;
     system.diagnostics = reporter.diagnostics;
     system
@@ -305,6 +311,14 @@ impl Reporter {
     }
 
     fn error(&mut self, code: DiagCode, site: Site, message: String) {
+        self.push(code, Severity::Error, site, message);
+    }
+
+    fn warning(&mut self, code: DiagCode, site: Site, message: String) {
+        self.push(code, Severity::Warning, site, message);
+    }
+
+    fn push(&mut self, code: DiagCode, severity: Severity, site: Site, message: String) {
         let file = self
             .file_ids
             .get(&site.file)
@@ -312,7 +326,7 @@ impl Reporter {
             .unwrap_or(FileId::DETACHED);
         self.diagnostics.push(Diagnostic {
             code,
-            severity: Severity::Error,
+            severity,
             message,
             primary: Span {
                 file,
@@ -1065,5 +1079,141 @@ service veh.diag.access {
             sources.file_id(path, text);
         }
         assert_eq!(sources.path(duplicate.primary.file), Some("p/b.ridl"));
+    }
+
+    /// Appendix A resolves every `requires` line of its closure (rsdl §8), and
+    /// warns twice: for `Panel`'s and `Backend`'s `requires CruiseControl`, which
+    /// resolve to `Cruise`, a redundant provider set (the "Warnings" item after
+    /// the example).
+    #[test]
+    fn appendix_a_resolves_every_requires_line() {
+        let system = check_topology(&[("veh/topology/system.rsdl", SYSTEM)]);
+        assert_eq!(codes(&system), ["RSDL-409", "RSDL-409"]);
+        let closure = system
+            .closure
+            .as_ref()
+            .expect("Appendix A declares a system");
+        let resolved: Vec<(&str, String, &str, &str)> = closure
+            .requires
+            .iter()
+            .map(|require| {
+                (
+                    closure.components[require.consumer].id.text(),
+                    require.interface.text(),
+                    require.service.as_str(),
+                    closure.components[require.producer].id.text(),
+                )
+            })
+            .collect();
+        let expected = [
+            ("Cruise", "veh.adas.LaneAssist", "veh.adas.lane", "Lane"),
+            (
+                "Panel",
+                "veh.adas.CruiseControl",
+                "veh.adas.cruise",
+                "Cruise",
+            ),
+            ("Panel", "veh.adas.LaneAssist", "veh.adas.lane", "Lane"),
+            (
+                "Backend",
+                "veh.adas.CruiseControl",
+                "veh.adas.cruise",
+                "Cruise",
+            ),
+            (
+                "Backend",
+                "veh.diag.access",
+                "veh.diag.access",
+                "veh.diag.access",
+            ),
+        ];
+        assert_eq!(
+            resolved,
+            expected.map(|(consumer, interface, service, producer)| {
+                (consumer, interface.to_string(), service, producer)
+            })
+        );
+    }
+
+    /// The resolution rules (rsdl §3.2, §7, §8), one input per rule.
+    #[test]
+    fn a_requires_line_resolves_to_one_service_and_one_offerer() {
+        let body: &[(&str, &str)] = &[(
+            "veh/body/body.ridl",
+            "package veh.body\n\
+             interface Doors {\n  signal locked: boolean @[100ms..1s]\n}\n\
+             interface Horn {\n  signal sounding: boolean @[100ms..1s]\n}\n\
+             service veh.body.doors : Doors\n\
+             service veh.body.horn : Horn\n\
+             service veh.body.cabin : Doors, Horn\n\
+             service veh.body.twin : Doors, Horn\n",
+        )];
+        let cases: &[(&str, &[&str])] = &[
+            // One owning service, one offering component.
+            (
+                "component D { offers veh.body.doors }\ncomponent U { requires veh.body.Doors }\nsystem S { D, U }",
+                &[],
+            ),
+            // A lone service stands for its offering component (rsdl §6).
+            (
+                "component U { requires veh.body.Horn }\nsystem S { U, veh.body.horn }",
+                &[],
+            ),
+            // RSDL-502: two closure components offer one service.
+            (
+                "component D { offers veh.body.doors }\ncomponent E { offers veh.body.doors }\nsystem S { D, E }",
+                &["RSDL-502"],
+            ),
+            // RSDL-408: one interface, two closure services, required or not.
+            (
+                "component D { offers veh.body.doors }\ncomponent C { offers veh.body.cabin }\nsystem S { D, C }",
+                &["RSDL-408"],
+            ),
+            // RSDL-408 for every interface the two services list.
+            (
+                "component C { offers veh.body.cabin }\ncomponent T { offers veh.body.twin }\nsystem S { C, T }",
+                &["RSDL-408", "RSDL-408"],
+            ),
+            // RSDL-403: no closure service lists `Horn`.
+            (
+                "component D { offers veh.body.doors }\ncomponent U { requires veh.body.Horn }\nsystem S { D, U }",
+                &["RSDL-403"],
+            ),
+            // RSDL-308, a rule of one component: it holds with no system.
+            (
+                "component H { offers veh.body.horn, requires veh.body.Horn }",
+                &["RSDL-308"],
+            ),
+            // RSDL-409, a warning: the offering component has two instances.
+            (
+                "component H [ instances = (left, right) ] { offers veh.body.horn }\n\
+                 component U { requires veh.body.Horn }\nsystem S { H, U }",
+                &["RSDL-409"],
+            ),
+        ];
+        for (decls, expected) in cases {
+            let text = format!("package veh.topology\n{decls}\n");
+            let topology: &[(&str, &str)] = &[("veh/topology/x.rsdl", text.as_str())];
+            let system = check(&[("veh.body", body), ("veh.topology", topology)]);
+            assert_eq!(codes(&system), *expected, "`{decls}`");
+        }
+
+        // RSDL-403 names a component outside the closure that offers a service
+        // listing the interface.
+        let topology: &[(&str, &str)] = &[(
+            "veh/topology/x.rsdl",
+            "package veh.topology\ncomponent H { offers veh.body.horn }\n\
+             component U { requires veh.body.Horn }\nsystem S { U }\n",
+        )];
+        let system = check(&[("veh.body", body), ("veh.topology", topology)]);
+        let [missing] = system.diagnostics.as_slice() else {
+            panic!("one diagnostic, got {:?}", system.diagnostics);
+        };
+        assert!(
+            missing.message.contains("`H` offers `veh.body.horn`"),
+            "got: {}",
+            missing.message
+        );
+        assert_eq!(missing.severity, Severity::Error);
     }
 }

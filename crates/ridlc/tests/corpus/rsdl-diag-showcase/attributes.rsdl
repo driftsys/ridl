@@ -13,17 +13,22 @@ system Showcase [ owner = "fleet" ] {
   rsdl.showcase.chassis
   // RSDL-307 (§7): the unit instance is never written.
   Lane.Unit
+  // The closure components of resolution.rsdl.
+  Chassis, Brakes, Front, Rear, Hooter, Driver
 }
 
 component Lane {}
 
 // RSDL-908: `tier` is `PLATFORM` or `APPLICATION`.
-distribution Adas [ tier = SYSTEM ] { Lane }
+distribution Adas [ tier = SYSTEM ] { Lane, Chassis, Brakes, Front }
 
 // RSDL-804, a warning: no configured backend claims `linux`. The key is still
 // carried on the placement line.
 deployment Bench for Showcase {
-  machine DevBox { Lane [ linux.cpuset = (2, 3) ] }
+  machine DevBox {
+    Lane [ linux.cpuset = (2, 3) ]
+    Chassis, Brakes, Front, Rear, Hooter, Driver
+  }
 }
 
 // `Draft` is not in the closure, so no rule beyond its attribute block applies

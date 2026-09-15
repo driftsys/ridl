@@ -781,6 +781,11 @@ diag_codes! {
         RSDL_307 = "RSDL-307", Error,
             "`Unit` written in source";
 
+        /// A component requires an interface listed by a service it offers
+        /// (rsdl §3.2, §16.1). Error. Raised by the rsdl closure check.
+        RSDL_308 = "RSDL-308", Error,
+            "a component requires an interface listed by a service it offers";
+
         /// The same service on two `offers` lines, or the same interface on two
         /// `requires` lines, of one component (rsdl §3.2, §16.1). Error. Raised
         /// by the rsdl closure check.
@@ -808,6 +813,29 @@ diag_codes! {
         /// Error. Raised by the rsdl attribute check.
         RSDL_313 = "RSDL-313", Error,
             "`external` written with a value";
+
+        /// A closure component requires an interface that no closure service
+        /// lists — a missing provider (rsdl §8, §16.1). Error. Raised by the rsdl
+        /// resolution.
+        RSDL_403 = "RSDL-403", Error,
+            "a closure component requires an interface no closure service lists";
+
+        /// An interface listed by two services of the closure, raised for every
+        /// interface they list (rsdl §8, §16.1). Error. Raised by the rsdl
+        /// resolution.
+        RSDL_408 = "RSDL-408", Error,
+            "an interface listed by two services of the closure";
+
+        /// A `requires` resolves to a redundant provider set — an offering
+        /// component with more than one instance (rsdl §7, §16.1). Warning, not
+        /// yet realizable: the lowering proceeds. Raised by the rsdl resolution.
+        RSDL_409 = "RSDL-409", Warning,
+            "a `requires` resolves to a redundant provider set";
+
+        /// Two closure components offer one service (rsdl §8, §16.1). Error.
+        /// Raised by the rsdl resolution.
+        RSDL_502 = "RSDL-502", Error,
+            "two closure components offer one service";
 
         /// A member line names a service by its name while a declared component
         /// offers it; the diagnostic names the offerer (rsdl §6, §16.1). Error.

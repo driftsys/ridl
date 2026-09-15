@@ -52,45 +52,45 @@ error[RSDL-307]: `Lane.Unit` names the unit instance, which is never written —
    │   ^^^^^^^^^
 
 error[RSDL-908]: `tier` is `PLATFORM` or `APPLICATION` (rsdl reference §3.3)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:21:21
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:23:21
    │
-21 │ distribution Adas [ tier = SYSTEM ] { Lane }
+23 │ distribution Adas [ tier = SYSTEM ] { Lane, Chassis, Brakes, Front }
    │                     ^^^^^^^^^^^^^
 
 warning[RSDL-804]: no configured backend claims the namespace `linux`, so `linux.cpuset` is carried uninterpreted (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:26:27
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:29:12
    │
-26 │   machine DevBox { Lane [ linux.cpuset = (2, 3) ] }
-   │                           ^^^^^^^^^^^^^^^^^^^^^
+29 │     Lane [ linux.cpuset = (2, 3) ]
+   │            ^^^^^^^^^^^^^^^^^^^^^
 
 error[FORM-107]: attribute `tier` not valid on a `component` (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:37:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:42:3
    │
-37 │   tier = PLATFORM,
+42 │   tier = PLATFORM,
    │   ^^^^^^^^^^^^^^^
 
 error[FORM-108]: duplicate attribute key `labels`
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:39:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:44:3
    │
-39 │   labels = (QM),
+44 │   labels = (QM),
    │   ^^^^^^^^^^^^^
 
 error[FORM-101]: expected `deprecated = "reason"`, a string literal (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:40:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:45:3
    │
-40 │   deprecated = draft,
+45 │   deprecated = draft,
    │   ^^^^^^^^^^^^^^^^^^
 
 error[RSDL-305]: `instances` takes a parenthesised list of one or more camelCase names, such as `instances = (primary, backup)` (rsdl reference §7)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:41:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:46:3
    │
-41 │   instances = solo,
+46 │   instances = solo,
    │   ^^^^^^^^^^^^^^^^
 
 error[RSDL-313]: `external` is a flag and takes no value — write `[ external ]` (rsdl reference §5)
-   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:42:3
+   ┌─ tests/corpus/rsdl-diag-showcase/attributes.rsdl:47:3
    │
-42 │   external = true,
+47 │   external = true,
    │   ^^^^^^^^^^^^^^^
 
 error[TYPL-009]: duplicate declaration of `Flag`
@@ -110,6 +110,12 @@ error[RSDL-601]: `Second` is a second `system`: a workspace declares at most one
   │
 5 │ system Second { Lane }
   │        ^^^^^^
+
+error[RSDL-408]: `rsdl.showcase.Braking` is listed by the closure services `rsdl.showcase.brakes` and `rsdl.showcase.chassis` — an interface has one owning service in the closure (rsdl reference §8)
+  ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:9:28
+  │
+9 │ component Chassis { offers rsdl.showcase.chassis }
+  │                            ^^^^^^^^^^^^^^^^^^^^^
 
 error[RSDL-309]: `Lines` offers `rsdl.showcase.status` twice — one `offers` line per service (rsdl reference §3.2)
    ┌─ tests/corpus/rsdl-diag-showcase/closure.rsdl:16:10
@@ -146,3 +152,27 @@ error[RSDL-307]: `Unit` is the name of the unit instance, which is never written
    │
 28 │ component Copies [ instances = (primary, primary, Unit) ] {}
    │                                                   ^^^^
+
+error[RSDL-502]: `rsdl.showcase.lights` is offered by `Front` and by `Rear` — one closure component offers a service; redundancy is instances of that one component (rsdl reference §7, §8)
+  ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:9:25
+  │
+9 │ component Rear { offers rsdl.showcase.lights }
+  │                         ^^^^^^^^^^^^^^^^^^^^
+
+warning[RSDL-409]: `Driver` requires `rsdl.showcase.Horn`, which resolves to `Hooter`, a redundant provider set of 2 instances — not yet realizable: every link is lowered to each instance, and the runtime has no arbitration yet (rsdl reference §7)
+   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:17:12
+   │
+17 │   requires Horn
+   │            ^^^^
+
+error[RSDL-403]: no closure service lists `rsdl.showcase.Wiper`, which `Driver` requires; `Wipers` offers `rsdl.showcase.wipers`, which lists it, and the system does not list `Wipers` (rsdl reference §8)
+   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:18:12
+   │
+18 │   requires Wiper
+   │            ^^^^^
+
+error[RSDL-308]: `Echo` requires `rsdl.showcase.echo`, which `rsdl.showcase.echo` lists, and `Echo` offers `rsdl.showcase.echo` — a component cannot be in its own provider set (rsdl reference §3.2)
+   ┌─ tests/corpus/rsdl-diag-showcase/resolution.rsdl:25:12
+   │
+25 │   requires rsdl.showcase.echo
+   │            ^^^^^^^^^^^^^^^^^^

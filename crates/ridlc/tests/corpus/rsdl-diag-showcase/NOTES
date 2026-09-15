@@ -26,6 +26,10 @@ a check in another:
 - `names.rsdl` — TYPL-009 for a second declaration of one name in the package
   (rsdl §3): an rsdl declaration named like a ridl type, and two rsdl
   declarations of one name.
+- `resolution.rsdl` — the resolution rules of rsdl §8 and §3.2: RSDL-403,
+  RSDL-408, RSDL-502, RSDL-308, and the RSDL-409 warning. Its closure
+  components are listed in `Showcase` and placed on `DevBox`, so the placement
+  checks have nothing to report about them.
 - `contracts.ridl` — the ridl interfaces and services the rsdl files name. It
   draws no diagnostic.
 
