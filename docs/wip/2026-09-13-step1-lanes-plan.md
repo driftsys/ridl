@@ -104,18 +104,23 @@ Agreed with Sebastien on 2026-09-13.
 
 Two sessions were running when this plan was written. No lane enters their
 worktrees, checks out their branches, or runs a formatter in their directories.
+**Both have since merged** — S1 as #327, and S2 as #330
+(`baseline-tombstone-gate`) and #331 (`member-reordered-category`) — so the
+table below is a record of what each one changed, which is what the §6 orders
+are built on, not a live warning. Gates G1 and G2 both hold. #331 also appended
+items 14 and 15 to typl §17, which is why stage C1's table below has fifteen
+rows and not thirteen.
 
 | Session          | Branch and worktree                                                                                         | Files it changes                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | ---------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | S1 tooling       | `feat/ridl-mcp-v0`, `.claude/worktrees/feat+ridl-mcp-v0`, PR #327                                           | `crates/ridl` (including `src/main.rs` and `tests/`), `crates/ridl-core/src/diag.rs` and its snapshot, `ridl-lsp`, the new `ridl-mcp`, `crates/ridlc/src/lib.rs` and `tests/`, `editors/vscode`, `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `justfile`, `.github/workflows/`, `.gitignore`, `install.sh`, `install.ps1`, `AGENTS.md`, `README.md`, `CONTRIBUTING.md`, `docs/ROADMAP.md`, `docs/book/cli-reference.md`, `docs/technotes/`, `docs/archive/`, ADR-0005, ADR-0007, ADR-0010 |
 | S2 baseline gate | `baseline-tombstone-gate`, `.claude/worktrees/baseline-tombstone-gate`; two pull requests (its design, D-6) | `crates/ridl/src/main.rs`, `crates/ridl/tests/` (`baseline_gate.rs` new, `baseline_desk.rs`), `crates/ridl-core/src/diag.rs` (RIDL-408), `crates/ridlc/tests/corpus.rs` (the RIDL-408 catalogue row), `ridl-diff` (`MemberReordered`), ADR-0010, the ridl reference (including new §17.12 and §17.13), `docs/specification/ridl-family-overview.md` (the open-question index), `docs/book/cli-reference.md`, `docs/wip/README.md`, `docs/archive/` (its own design and plan)              |
 
-S2's design and plan are archived under `docs/archive/` on its local branch, and
-reach `main` when S2 merges. Until then a lane reads them with
-`git show baseline-tombstone-gate:docs/archive/2026-09-13-baseline-gate-design.md`
-(and `-plan.md`), never by checking the branch out. The branch is still
-changing: `git diff --stat origin/main...baseline-tombstone-gate` gives its
-current file list.
+S2's design and plan reached `main` when S2 merged, and its branch,
+`baseline-tombstone-gate`, has been deleted. Read them at
+`docs/archive/2026-09-13-baseline-gate-design.md` (and `-plan.md`); the
+`git show baseline-tombstone-gate:...` this section used to give no longer
+resolves.
 
 ## 4. The lanes
 
@@ -170,12 +175,12 @@ dispositions that plan takes.
 
 Driver prompt: `2026-09-13-lane-c-typl-driver.md`. Stories: #318, #246 to #255.
 
-| Stage | Work                                                                                                                                                                                                                  | Model                                                                                       | Starts when   |
-| ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------- |
-| C1    | E14.1: one disposition per typl §17 question (13 items; items 12 and 13 are the two rows the re-scope added, from §3.10 and §3.11 of the release-scope note), §17.11 first, plus a row for the decision #245 asks for | Fable drafts, Sebastien decides                                                             | G1 or G2      |
-| C2    | Bring `docs/wip/typl-value-objects-plan.md` up to date with the code: Task 9 (TypeScript) moves to step 2, and a task is added for #243 and #237                                                                      | Sonnet checks each reference, Opus edits                                                    | G1 or G2      |
-| C3    | Defects #244 and #203; #245 once C1 has decided it                                                                                                                                                                    | Sonnet for #244, Opus for #203 and #245                                                     | G1, G2        |
-| C4    | Epic 10 Tasks 1 to 8 and 10, plus the #243 and #237 task                                                                                                                                                              | Fable for Tasks 3 and 6 and the naming task; Opus for 1, 7, 8 and 10; Sonnet for 2, 4 and 5 | C2 merged, G2 |
+| Stage | Work                                                                                                                                                                                                                                                              | Model                                                                                       | Starts when   |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------- |
+| C1    | E14.1: one disposition per typl §17 question (15 items; items 12 and 13 are the two rows the re-scope added, from §3.10 and §3.11 of the release-scope note, and items 14 and 15 are the two #331 added), §17.11 first, plus a row for the decision #245 asks for | Fable drafts, Sebastien decides                                                             | G1 or G2      |
+| C2    | Bring `docs/wip/typl-value-objects-plan.md` up to date with the code: Task 9 (TypeScript) moves to step 2, and a task is added for #243 and #237                                                                                                                  | Sonnet checks each reference, Opus edits                                                    | G1 or G2      |
+| C3    | Defects #244 and #203; #245 once C1 has decided it                                                                                                                                                                                                                | Sonnet for #244, Opus for #203 and #245                                                     | G1, G2        |
+| C4    | Epic 10 Tasks 1 to 8 and 10, plus the #243 and #237 task                                                                                                                                                                                                          | Fable for Tasks 3 and 6 and the naming task; Opus for 1, 7, 8 and 10; Sonnet for 2, 4 and 5 | C2 merged, G2 |
 
 E14.3 (#320: both references drop "Draft", and the rxdl reference gains its
 status line) follows C1, C4 Task 10 and L5 (P-6).
