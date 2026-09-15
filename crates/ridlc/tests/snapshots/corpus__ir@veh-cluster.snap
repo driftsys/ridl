@@ -706,7 +706,8 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
     }
   ],
   "interfaces": [],
-  "services": []
+  "services": [],
+  "retired": []
 }
 
 // ===== package veh.cluster =====
@@ -1593,7 +1594,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 0,
+      "provisional": false
     },
     {
       "name": "WheelHistory",
@@ -1688,7 +1691,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 0,
+      "provisional": false
     },
     {
       "name": "WheelDiagnostics",
@@ -1860,7 +1865,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 0,
+      "provisional": false
     },
     {
       "name": "WheelSummary",
@@ -1889,7 +1896,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 0,
+      "provisional": false
     }
   ],
   "services": [
@@ -1969,7 +1978,9 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               }
-            ]
+            ],
+            "number": 0,
+            "provisional": false
           }
         }
       ]
@@ -2573,10 +2584,13 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
                   }
                 }
               }
-            ]
+            ],
+            "number": 0,
+            "provisional": false
           }
         }
       ]
     }
-  ]
+  ],
+  "retired": []
 }

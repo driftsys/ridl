@@ -178,6 +178,8 @@ fn interface(name: &str, interactions: Vec<v2::Decl>) -> v2::Interface {
         labels: Vec::new(),
         deprecated: None,
         interactions,
+        number: 0,
+        provisional: false,
     }
 }
 
@@ -188,6 +190,7 @@ fn pkg(interactions: Vec<v2::Decl>) -> v2::Package {
         decls: Vec::new(),
         interfaces: vec![interface("I", interactions)],
         services: Vec::new(),
+        retired: Vec::new(),
     }
 }
 
@@ -198,6 +201,7 @@ fn decl_pkg(decls: Vec<v2::Decl>) -> v2::Package {
         decls,
         interfaces: Vec::new(),
         services: Vec::new(),
+        retired: Vec::new(),
     }
 }
 
@@ -1359,6 +1363,7 @@ fn service_pkg(services: Vec<v2::Service>) -> v2::Package {
         decls: Vec::new(),
         interfaces: Vec::new(),
         services,
+        retired: Vec::new(),
     }
 }
 
@@ -1433,6 +1438,8 @@ fn service_inline(
                 labels: Vec::new(),
                 deprecated: None,
                 interactions,
+                number: 0,
+                provisional: false,
             })),
         }],
     }
@@ -1858,6 +1865,7 @@ fn an_interface_removed_is_breaking() {
         decls: Vec::new(),
         interfaces: Vec::new(),
         services: Vec::new(),
+        retired: Vec::new(),
     };
     assert_row(&old, &new, Category::DeclRemoved, Verdict::Breaking);
 }
@@ -1869,6 +1877,7 @@ fn an_interface_appended_is_compatible() {
         decls: Vec::new(),
         interfaces: Vec::new(),
         services: Vec::new(),
+        retired: Vec::new(),
     };
     let new = pkg(vec![signal("a", 1, "T")]);
     assert_row(&old, &new, Category::DeclAdded, Verdict::Compatible);

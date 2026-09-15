@@ -71,6 +71,8 @@ fn interface(name: &str, interactions: Vec<v2::Decl>) -> v2::Interface {
         labels: Vec::new(),
         deprecated: None,
         interactions,
+        number: 0,
+        provisional: false,
     }
 }
 
@@ -80,6 +82,7 @@ fn pkg(name: &str, iface: v2::Interface) -> v2::Package {
         decls: Vec::new(),
         interfaces: vec![iface],
         services: Vec::new(),
+        retired: Vec::new(),
     }
 }
 

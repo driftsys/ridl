@@ -281,7 +281,9 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 0,
+      "provisional": false
     },
     {
       "name": "Telemetry",
@@ -342,10 +344,13 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
             }
           }
         }
-      ]
+      ],
+      "number": 0,
+      "provisional": false
     }
   ],
-  "services": []
+  "services": [],
+  "retired": []
 }
 
 // ===== package fleet.legacy =====
@@ -377,7 +382,8 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
     }
   ],
   "interfaces": [],
-  "services": []
+  "services": [],
+  "retired": []
 }
 
 // ===== package fleet.vehicle =====
@@ -631,10 +637,13 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
                   }
                 }
               }
-            ]
+            ],
+            "number": 0,
+            "provisional": false
           }
         }
       ]
     }
-  ]
+  ],
+  "retired": []
 }

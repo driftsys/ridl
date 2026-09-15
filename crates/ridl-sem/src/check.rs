@@ -216,6 +216,9 @@ pub fn check_package(
             decls,
             interfaces,
             services,
+            // The lock's retired entries (lock design §9); the fold that
+            // reads the lock fills the list.
+            retired: Vec::new(),
         },
         diagnostics: checker.diagnostics,
     }
@@ -2957,6 +2960,10 @@ impl Checker<'_> {
             labels: doc_info.labels,
             deprecated: doc_info.deprecated,
             interactions,
+            // The identity from `interfaces.lock` (lock design §1, §3); the
+            // fold that reads the lock sets both.
+            number: 0,
+            provisional: false,
         }
     }
 
@@ -3566,6 +3573,10 @@ impl Checker<'_> {
             labels: Vec::new(),
             deprecated: None,
             interactions,
+            // The inline shape is numbered under its service's `service:` key
+            // (lock design §3); the fold that reads the lock sets both.
+            number: 0,
+            provisional: false,
         }
     }
 

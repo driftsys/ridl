@@ -86,14 +86,17 @@ const ALLOWED: &[Allowed] = &[
     },
     Allowed {
         path: "crates/ridl-ir/src/lib.rs",
-        lines: 5,
+        lines: 9,
         why: "the IR-side `shapes()` helper itself; `referenced_packages`, \
               which reads `Service.shape` directly because it must record \
               the qualifier of a cross-package `interface_ref` — a value \
               `shapes()` yields nothing for — and reaches an inline \
-              shape's interactions through that same match; plus three \
+              shape's interactions through that same match; plus seven \
               test lines reaching into the named-interface store \
-              `shapes()` builds from",
+              `shapes()` builds from, four of them the identity round \
+              trip and the pre-lock snapshot test, which set and \
+              read `number` and `provisional` on a fixture's first \
+              interface",
     },
     Allowed {
         path: "crates/ridl-sem/src/check.rs",

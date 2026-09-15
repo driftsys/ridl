@@ -392,6 +392,8 @@ fn base_package(shape: &BaseShape) -> v2::Package {
         labels: Vec::new(),
         deprecated: None,
         interactions,
+        number: 0,
+        provisional: false,
     };
 
     v2::Package {
@@ -425,6 +427,7 @@ fn base_package(shape: &BaseShape) -> v2::Package {
         ],
         interfaces: vec![ctrl],
         services: Vec::new(),
+        retired: Vec::new(),
     }
 }
 

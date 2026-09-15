@@ -47,7 +47,25 @@ message Package {
   // E2 (earmarked 3–15): interfaces and services, source order.
   repeated Interface interfaces = 3;
   repeated Service services = 4;
-  // 5–15 remain open for later profiles.
+  // The retired entries of the package's `interfaces.lock`, in number
+  // order: each one holds an interface number that was allocated, then
+  // retired, and is never allocated again (lock design §2, §9). `ridl diff`
+  // reads the list to tell a retired interface from a removed one, and
+  // `ridl baseline` refuses a published number that is neither live nor
+  // listed here (lock design §7, §8). Empty until the compiler folds the
+  // lock in.
+  repeated RetiredInterface retired = 5;
+  // 6–15 remain open for later profiles.
+}
+
+// One retired entry of a package's `interfaces.lock` (lock design §2, §9).
+message RetiredInterface {
+  // The lock key as the file spells it: the interface's CamelCase name, or
+  // `service:` followed by the dotted name of the service whose inline
+  // shape the entry numbered (lock design §3).
+  string name = 1;
+  // The number the entry holds forever; 1-based, never 0 (lock design §1).
+  uint32 number = 2;
 }
 
 // Declaration visibility (typl §3.3): public is the language default,
@@ -396,7 +414,8 @@ message MapType {
 // The ridl interaction layer (E2) — ridl language reference §3–§14.
 // ---------------------------------------------------------------------
 
-// The abstract contract shape (ridl §14.0) — identity-less, flat.
+// The abstract contract shape (ridl §14.0) — flat; its identity is
+// `number`, not its name (lock design §1, §7).
 message Interface {
   // CamelCase name (ridl §15); "" for a service's inline shape
   // (ridl §14.5).
@@ -411,6 +430,18 @@ message Interface {
   // Interactions and reserved tombstones, declaration order; every
   // member's Decl.kind is one of members 16–21 above.
   repeated Decl interactions = 6;
+  // The interface number from the package's `interfaces.lock`, the
+  // routing identity of this shape — an inline shape included (lock design
+  // §1, §3). 1-based, per package. 0 is never allocated: it marks a
+  // snapshot written before the lock existed, the one case `ridl diff`
+  // matches by name (lock design §7). 0 until the compiler folds the lock
+  // in.
+  uint32 number = 7;
+  // True when `number` was not read from the lock but assigned at compile
+  // time, from `next` upward in byte order of the name (lock design §3). A
+  // provisional number carries no identity: `ridl diff` never matches on
+  // it and `ridl baseline` refuses to publish it (RIDL-411).
+  bool provisional = 8;
 }
 
 // A global published declaration of one or more interfaces (ridl §14.5,
