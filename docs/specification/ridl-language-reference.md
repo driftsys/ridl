@@ -144,7 +144,7 @@ interface  service  signal  event  command  query  fixed
 
 `interface` names the abstract contract shape; `service` names a global
 published declaration of one or more of them (§14). Both are ridl's — the
-contract SSOT — while _providing_ and _requiring_ them is rsdl's.
+contract SSOT — while _offering_ services and _requiring_ interfaces is rsdl's.
 
 A signal's init override carries **no keyword**: it is a bare `= value` suffix
 (§4.4), the same idiom typl uses for a type or field init (typl §5.8). There is
@@ -219,8 +219,8 @@ system** — gPTP/PTP (IEEE 802.1AS in vehicle networks) or an equivalent shared
 realtime clock. Envelope timestamps are stamped in that domain and are therefore
 **comparable system-wide**: cross-node latency, end-to-end freshness, and global
 event ordering are meaningful by assumption, not by luck. The concrete mechanism
-and sync topology are deployment properties (rsdl declares the time base per
-system); _that a synchronized base exists_ is a platform assumption every
+and sync topology are deployment configuration, which rsdl does not declare
+(rsdl §3.4); _that a synchronized base exists_ is a platform assumption every
 contract may rely on. Loss of synchronization is a detectable system failure
 like any other — surfaced by the runtime, handled by failure management (§10.4),
 never silently absorbed.
@@ -1079,9 +1079,10 @@ must hold, never how the runtime achieves it. Candidate surfaces, gated through
 the `@labels`/profile system first and promoted to keywords only when earned:
 typl — invalid/SNA sentinel values (typl §17.8); ridl — per-signal failsafe
 values, availability requirements on interactions; rmdl — degraded-mode models
-and observers acting as safety monitors; rsdl — redundancy, supervision
-topology, fallback wiring. Deferred as a body of work of its own (§17.8) — in
-v0.2 the contract's job ends at making every failure _visible and typed_.
+and observers acting as safety monitors; rsdl — arbitration over the redundant
+provider sets it derives from instances (rsdl §7), supervision topology,
+fallback wiring. Deferred as a body of work of its own (§17.8) — in v0.2 the
+contract's job ends at making every failure _visible and typed_.
 
 ---
 
@@ -1248,7 +1249,7 @@ endpoint):
 - **`service`** — a **global, named, published declaration of one or more
   interfaces**: the SSOT catalog entry that gives contracts concrete identity in
   the system, addressable as `service.member`. The analogue of a global named
-  instance. What actually gets provided, deployed, and (optionally) discovered.
+  instance. What actually gets offered, deployed, and (optionally) discovered.
 
 `interface : service :: type : global-named-instance`. This section covers both.
 
@@ -1257,8 +1258,10 @@ endpoint):
 An `interface` groups interactions under a named, reusable contract shape. It
 has **no identity and no location** — it is not a runtime unit, not addressable,
 not deployed. It exists to be _realized_ by services (§14.5) and to type them.
-Multiple services may share one interface (a redundant twin, a second vehicle
-variant, a family of sensors).
+Multiple services may share one interface (a second vehicle variant, a family of
+sensors). Within one rsdl system each interface is listed by one service,
+because the routing key names no service (rsdl §8, RSDL-408); whether ridl
+rejects a shared interface across a whole workspace is open (rsdl §17, item 10).
 
 ```ridl
 /**
@@ -1305,8 +1308,8 @@ interface VehicleStatus {
 
 A `service` is a **global, named declaration** that contracts of the given
 interface shapes exist in the system. It is the **SSOT catalog entry**:
-system-visible at design time, addressable by name, and the unit that rsdl
-components _provide_ (§14.6) and that deployment realizes.
+system-visible at design time, addressable by name, and the unit that an rsdl
+component _offers_ (§14.6) and that deployment realizes.
 
 ```ridl
 service veh.adas.cruise      : CruiseControl
@@ -1412,19 +1415,21 @@ service veh.body.doors :
   (ADR-0015 decision 15).
 
 - **Posture-neutral by design.** A service declaration says _nothing_ about how
-  it is realized on the wire. rsdl and deployment choose the **posture** —
-  static (its signals/events packed into bus frames, Classic/CAN) or discovered
-  (SOME/IP/DDS/uProtocol, Adaptive) — from the same declaration (rsdl §8). This
-  is the whole point of ridl being the bus SSOT: `service veh.adas.cruise`
-  compiles down to static CAN signals _or_ a discovered service, no rewrite. One
-  constraint follows from transport physics: a `command`/`query` member (RPC)
-  cannot be realized on a pure static bus — buses carry dataflow, not calls — so
-  a service deployed statically realizes only its `signal`/`event` members; its
-  control API requires the discovered posture (enforced at deploy time, rsdl
-  §8).
-- **Providing and redundancy** are rsdl concerns (§14.6): a component `provides`
-  a service; two components providing the same service is _declared redundancy_
-  (rsdl §10), not a conflict.
+  it is realized on the wire. The **posture** — static (its signals/events
+  packed into bus frames, Classic/CAN) or discovered (SOME/IP/DDS/uProtocol,
+  Adaptive) — is a deployment matter, so the same declaration can be realized
+  either way. This is the whole point of ridl being the bus SSOT:
+  `service veh.adas.cruise` can compile down to static CAN signals _or_ a
+  discovered service, no rewrite. One constraint follows from transport physics:
+  a `command`/`query` member (RPC) cannot be realized on a pure static bus —
+  buses carry dataflow, not calls — so a service deployed statically realizes
+  only its `signal`/`event` members; its control API requires the discovered
+  posture. Deriving the posture per deployment, and enforcing that constraint at
+  deploy time, are deferred: rsdl reserves both (rsdl §12, RSDL-803).
+- **Offering and redundancy** are rsdl concerns (§14.6): a component `offers` a
+  service, and exactly one component of a system offers each service (rsdl §8,
+  RSDL-502). Redundancy is derived from that component's instances, never
+  declared by a second offerer (rsdl §7).
 
 #### Coherence — the published set is simultaneous
 
@@ -1446,16 +1451,18 @@ The rule is **implicit, not declared** — there is no `coherent` keyword. Three
 rules the family already states produce it: §4.2 gives every flow exactly one
 owning provider; a provider computes its outputs in one step (rmdl's topological
 schedule, rmdl §6); and each provider realizes the service it publishes as a
-whole (rsdl §5.3, RSDL-502). So the values a provider publishes in one step are
-a simultaneous state by construction. Signals publishing at different rates do
-not break this: in a given step some cells are written and others are not, but
-every value present is one that provider held at that step, so the observed set
+whole — a component offers a service whole (rsdl §3.2), and one component offers
+it (rsdl §8, RSDL-502). So the values a provider publishes in one step are a
+simultaneous state by construction. Signals publishing at different rates do not
+break this: in a given step some cells are written and others are not, but every
+value present is one that provider held at that step, so the observed set
 remains a state that existed.
 
-Declared redundancy does not weaken the rule. Two components may provide the
-same service (§14.6 above, rsdl §10), and the rule then holds of each provider's
-published set — which is what a consumer reads, since a consumer reads one
-provider at a time.
+Redundancy does not weaken the rule. A redundant provider set is several
+instances of the one component that offers the service (§14.6 above, rsdl §7),
+and the rule then holds of each instance's published set — which is what a
+consumer reads, since a consumer reads one provider at a time. How a consumer
+chooses between the instances is arbitration, which rsdl reserves (rsdl §12).
 
 Declaring `coherent` would declare a consequence of how the platform executes,
 which the general form §4.1 deletion test exists to reject. It would also be
@@ -1484,8 +1491,10 @@ Two consequences follow:
 - Where a binding cannot preserve the grouping, that is a **deploy-time
   constraint**, not a weaker contract. The precedent is the posture constraint
   above — a statically deployed service's control API requires the discovered
-  posture — and the owner is the same: rsdl derives the transport and checks
-  feasibility against the contract at deploy time (rsdl §8).
+  posture — and the owner is the same: the deployment. rsdl lowers only the
+  crossing kind of each link, and the transport is the implementer's
+  configuration (rsdl §10); the check of feasibility against the contract at
+  deploy time is reserved with posture derivation (rsdl §12, RSDL-801).
 
 Appendix B carries the per-target realization.
 
@@ -1513,14 +1522,19 @@ logical name.
 
 ### 14.6 How components relate to services (forward reference)
 
-Interfaces and services are ridl (the contract SSOT); _providing_ and
-_requiring_ them is rsdl. In brief (full treatment in the rsdl reference): a
-`component` **provides** a service (implements its members — produces its
-signals/events, accepts its commands/queries) and **requires** services or
-individual members it consumes. A pure behaviour (`model`, rmdl) knows nothing
-of any of this — it is a contract-blind reaction; the component is what binds a
-reaction to a service. This keeps the layers clean: ridl declares contracts,
-rmdl computes, rsdl connects.
+Interfaces and services are ridl (the contract SSOT); _offering_ services and
+_requiring_ interfaces is rsdl. In brief (full treatment in rsdl §3.2 and §8): a
+`component` **offers** a service whole (implements the members of every
+interface the service lists — produces their signals/events, accepts their
+commands/queries) and **requires** each interface it consumes, one per line. An
+inline-shape service is required by its dotted name, which names its one
+interface. The verbs differ because the sides differ: the service is the unit of
+publication and addressing, the interface the unit of contract. A `requires`
+line never names a provider; the compiler resolves it to the one component that
+offers the owning service. A pure behaviour (`model`, rmdl) knows nothing of any
+of this — it is a contract-blind reaction; binding a reaction to a component's
+interface members is reserved until rmdl is scheduled (rsdl §12). This keeps the
+layers clean: ridl declares contracts, rmdl computes, rsdl connects.
 
 ---
 
@@ -1746,10 +1760,11 @@ and the same spelling is the constant.
    Likely split: supervision topology and fallback wiring in rsdl; supervision
    hooks in the `ridl-rt` runtime spec; assurance policy via `@labels` profiles.
    The family may later grow **declarative property surfaces** for this — e.g. a
-   signal's failsafe value in ridl, degraded-mode models in rmdl, redundancy
-   requirements in rsdl — always properties (what must hold), never mechanisms
-   (how). Needs its own document before any keyword lands; start via profile
-   vocabulary, promote to syntax only when earned.
+   signal's failsafe value in ridl, degraded-mode models in rmdl, failover and
+   voting requirements over the redundant provider sets rsdl derives (rsdl §7) —
+   always properties (what must hold), never mechanisms (how). Needs its own
+   document before any keyword lands; start via profile vocabulary, promote to
+   syntax only when earned.
 9. ~~**uxdl divergence budget.**~~ **Closed by ADR-0012.** The question was
    which rules here are shared with uxdl and which are ridl-only. The answer is
    that none diverge: uxdl is retired, every rule in this document is
@@ -2124,7 +2139,7 @@ uniform from struct fields to interface methods.
 | **delivery acknowledgment (ack)**    | runtime-level confirmation that a command was received and accepted (validated, precondition passed) — or negatively acknowledged with a Stratum 2 category; enables retries and supervision, never visible in the contract                                  |
 | **query**                            | request/response RPC — reply mandatory; an inline `T \| E` return makes it fallible                                                                                                                                                                          |
 | **fixed**                            | a value provisioned externally (build/factory/FOTA), immutable for the software-instance lifetime, safe to cache                                                                                                                                             |
-| **provider**                         | the component that owns an interface: publishes its signals/events, executes its commands/queries                                                                                                                                                            |
+| **provider**                         | the component that owns an interface — the one component that offers the service listing it (rsdl §3.2, §8): publishes its signals/events, executes its commands/queries                                                                                     |
 | **consumer**                         | any component bound to an interface it does not own: subscribes, calls                                                                                                                                                                                       |
 | **state vs occurrence**              | the load-bearing distinction behind signal/event: state exists while unchanged and may be cached; an occurrence happens once and is meaningful individually                                                                                                  |
 | **timing annotation**                | the `@` clause making publication timing part of the contract: `@Xms` strict periodic or `@[min..max]`                                                                                                                                                       |
@@ -2148,9 +2163,9 @@ uniform from struct fields to interface methods.
 | **`reserved`**                       | tombstone keeping a retired interaction's ordinal slot occupied so wire identities are never reused                                                                                                                                                          |
 | **append-only**                      | the evolution discipline implied by ordinals: new interactions at the end, deletions by tombstone, reorder = wire break                                                                                                                                      |
 | **interface**                        | the abstract contract _shape_ — a reusable, identity-less group of interactions; a contract type, realized by services (`interface : service :: type : instance`)                                                                                            |
-| **service**                          | a global, named, published declaration of an interface — the SSOT catalog entry, addressed `service.member`; posture-neutral (deploys static or discovered); what components provide                                                                         |
+| **service**                          | a global, named, published declaration of an interface — the SSOT catalog entry, addressed `service.member`; posture-neutral (can deploy static or discovered; deriving the posture is reserved, rsdl §12); what a component offers                          |
 | **service catalog**                  | the flat global namespace of all `service` declarations — the system-wide SSOT of contracts                                                                                                                                                                  |
-| **posture**                          | how a service is realized on the wire — static (bus signals/events, Classic) or discovered (SOME/IP/DDS/uProtocol, Adaptive); chosen at deployment, not in the contract                                                                                      |
+| **posture**                          | how a service is realized on the wire — static (bus signals/events, Classic) or discovered (SOME/IP/DDS/uProtocol, Adaptive); a deployment matter, not in the contract; deriving it per deployment is reserved (rsdl §12)                                    |
 | **binding**                          | generated per-transport code realising a contract: validation, caching, error mapping, (de)serialization                                                                                                                                                     |
 | **envelope**                         | runtime-supplied metadata on every interaction instance — timestamp + per-channel sequence number — never declared, never in payloads; powers timing evaluation, dedup, loss detection, E2E counters, and replay (§3.1)                                      |
 | **system time**                      | the platform's one synchronized time base (gPTP/PTP or shared realtime clock) — an assumed platform property; envelope timestamps live in it and are comparable system-wide (§3.1)                                                                           |

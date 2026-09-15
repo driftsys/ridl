@@ -169,8 +169,8 @@ Two conventions worth keeping, both learned from the earlier reconciliation:
 
 **rsdl is finalized first.** The language is rewritten around the
 topology-vocabulary note's nouns and lowered to the IR the way ridl is, and its
-specification is being authored now. Everything after it in this step either
-consumes the IR rsdl completes or runs beside it.
+specification is the rsdl reference v0.2.0. Everything after it in this step
+either consumes the IR rsdl completes or runs beside it.
 
 **Then the runtime library**, `ridl-rt` — identity, the envelope, provenance,
 freshness and the sample, the payload wrapper, the interaction descriptors and
@@ -215,16 +215,38 @@ together and the IR is the schema, so there is no separate deployment-descriptor
 step and no TOML descriptor as the user-facing surface (§3.1). Story E11.6, the
 hand-written deployment-facts schema, closed as superseded.
 
-**The specification is being authored now**, and it decides the story breakdown.
-The eleven existing E6 story rows were written against the previous grammar;
-they are preserved verbatim under "Parked stories (unscheduled)" in
-[the landed record](archive/roadmap-landed-record.md#parked-stories-unscheduled)
-and are refiled in one pass when the rsdl specification lands, so that the
-rewrite is not made to inherit a breakdown built for the grammar it replaces.
-The one open question the rewrite confirms against the first system is rsdl's
-noun set: the topology-vocabulary note's §7 keeps `component` and the
-roadmap-simplification note's S-36 dropped it; the vocabulary note is later and
-takes precedence.
+**The specification is the
+[rsdl reference v0.2.0](specification/rsdl-language-reference.md)**, and it
+decides the story breakdown below. The eleven earlier E6 story rows were written
+against the previous grammar; they stay preserved verbatim under "Parked stories
+(unscheduled)" in
+[the landed record](archive/roadmap-landed-record.md#parked-stories-unscheduled),
+their issues are closed as not planned, and the new stories take new
+identifiers, from E6.12. The noun set is settled: `component` stays and
+`process` goes (rsdl §1.3, §1.4).
+
+**The keyword registry changes with the checker.** The family registry (typl
+§1.4) and the implemented registry still reserve the retired v0.1 rsdl words and
+do not yet reserve `offers`, `distribution` and `machine`. Both change in E6.12,
+as rsdl §2 states: a retired word leaves the registry unless another profile
+uses it (`let` stays, rmdl's), and the three new words stop being legal
+identifiers in every profile.
+
+**The catalog hash is received, not computed.** The lowering embeds each
+catalog's hash (rsdl §13); the catalog descriptor work (#324) computes it, after
+the lock block has given every interface its number. E6.16 lowers every other
+fact and E6.17 adds the hash once both have landed.
+
+| ID    | Story                                                                                                                                                                                                                                                                                          | Done when                                                                                                             | Size |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---- |
+| E6.12 | The `.rsdl` profile: the file recognised wherever a tool selects a profile by extension; the keyword registry change; the parser for the five declarations, member lines, `offers`/`requires` lines and the attribute block (rsdl §2–§5, Appendix B; RSDL-604)                                 | every example in the rsdl reference parses, and a type, interface or service declared in an `.rsdl` file is RSDL-604  | M    |
+| E6.13 | Closure checks: `system`, `component` and its keys, instances and the unit instance, the implicit component, resolution, backend keys (rsdl §3.1, §3.2, §5–§8; RSDL-3xx, RSDL-403, RSDL-408, RSDL-409, RSDL-5xx, RSDL-6xx, RSDL-804)                                                           | Appendix A checks with no error, and each code of the group has a fixture that draws it                               | L    |
+| E6.14 | Deployment and distribution checks: placement, external machines, distribution membership and tier (rsdl §3.3–§3.5, §9; RSDL-7xx, RSDL-9xx)                                                                                                                                                    | each code of the group has a fixture that draws it, and Appendix A's deployments check with no error                  | M    |
+| E6.15 | Editor support for `.rsdl`: the language server's diagnostics, hover and go-to-definition on rsdl references; the VS Code language and grammar; the MCP server's profile                                                                                                                       | an `.rsdl` file opened in the editor shows the checker's diagnostics, and a `requires` line resolves to its interface | M    |
+| E6.16 | The lowering: the closure and per-deployment facts in the IR — producers, machines and placement, the link set with crossing kinds, the routing table, the permission list, the surface set, the region map, the attribute maps, distribution installation and dependency (rsdl §10, §11, §13) | Appendix A's system compiles from `.rsdl`, and its IR carries every fact of rsdl §13 except the catalog hash          | L    |
+| E6.17 | The catalog hash in each region of the lowered system (rsdl §13); needs the lock block and #324's hash                                                                                                                                                                                         | each region carries the hash the catalog descriptor writes for its catalog                                            | S    |
+| E6.18 | `ridl diff` at the system: the closure's contracts compared by the ridl categories, with the "placement changed" and "composition changed" headings (rsdl §14)                                                                                                                                 | moving an instance to another machine is listed under "placement changed" with no verdict                             | M    |
+| E6.19 | The rsdl book chapter, written as built                                                                                                                                                                                                                                                        | the chapter's examples compile in the book-example harness                                                            | S    |
 
 ## Epic 11 — the runtime library and the frame
 
