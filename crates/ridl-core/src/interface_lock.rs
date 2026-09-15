@@ -45,6 +45,7 @@
 
 use core::fmt;
 use core::str::FromStr;
+use std::collections::{BTreeMap, BTreeSet};
 #[cfg(feature = "fs")]
 use std::path::Path;
 
@@ -353,13 +354,7 @@ impl InterfaceLock {
         let mut entries: Vec<&LockEntry> = self.entries.iter().collect();
         entries.sort_by_key(|entry| entry.number);
         for entry in entries {
-            out.push_str(&entry.key.to_string());
-            out.push(' ');
-            out.push_str(&entry.number.to_string());
-            if entry.retired {
-                out.push_str(" retired");
-            }
-            out.push('\n');
+            push_line(&mut out, entry);
         }
         out
     }
@@ -428,6 +423,227 @@ impl InterfaceLock {
         entry.retired = true;
         Ok(entry.number)
     }
+}
+
+/// One entry as a line of the file: `Key number`, then ` retired` for a
+/// retired entry, then `\n`.
+fn push_line(out: &mut String, entry: &LockEntry) {
+    out.push_str(&entry.key.to_string());
+    out.push(' ');
+    out.push_str(&entry.number.to_string());
+    if entry.retired {
+        out.push_str(" retired");
+    }
+    out.push('\n');
+}
+
+/// What `ridl lock merge` writes to OURS (lock design §6).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MergeOutcome {
+    /// Every entry agreed: the merged table, which the driver renders. Its
+    /// entries carry the empty range at 0, as allocated entries do.
+    Clean(InterfaceLock),
+    /// At least one entry disagreed: the whole file text, with git conflict
+    /// markers around only the disagreeing entries. The text does not parse
+    /// (RIDL-410) until an author resolves it.
+    Conflict { text: String },
+}
+
+/// Which side a merged entry came from.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Side {
+    Ours,
+    Theirs,
+    Both,
+}
+
+/// One block between conflict markers: what OURS holds and what THEIRS holds,
+/// placed in the file at the number `at`.
+struct Conflict {
+    at: u32,
+    ours: Vec<LockEntry>,
+    theirs: Vec<LockEntry>,
+}
+
+/// A three-way merge over entries, not lines (lock design §6): the git merge
+/// driver's whole computation, with no file access.
+///
+/// Entries are matched by number, and two entries agree when their key and
+/// their retired flag agree — the line's position and range do not count. At
+/// each number the rule is git's own three-way rule, with one extension:
+///
+/// - OURS and THEIRS agree: kept once. (Absent from both: dropped.)
+/// - one side is as BASE: the other side's version is taken — an addition, a
+///   rename, a retire, or, for a line deleted by hand, its absence.
+/// - both sides differ from BASE and from each other, and BASE holds the
+///   number: a conflict on that entry.
+/// - both sides differ, and BASE holds no such number — both sides allocated
+///   the number: OURS keeps it and THEIRS's entry is renumbered to the next
+///   free number, which is safe because a branch never allocates (§6,
+///   "Renumbering THEIRS is safe").
+///
+/// The merged entries are then checked as a table would be: a live key on two
+/// numbers is a conflict between the entries the two sides brought, placed at
+/// the lower number (§6, last row). `next` is the maximum of the three sides'
+/// `next`, plus one per renumbered entry — renumbering allocates from that
+/// maximum upward, so `next` is never lowered.
+///
+/// `marker_size` is the length of each marker line (`<<<<<<< ours`,
+/// `=======`, `>>>>>>> theirs`); git passes its `conflict-marker-size`
+/// attribute, 7 by default, and the caller passes at least 1.
+pub fn merge(
+    base: &InterfaceLock,
+    ours: &InterfaceLock,
+    theirs: &InterfaceLock,
+    marker_size: usize,
+) -> MergeOutcome {
+    let base_at = by_number(base);
+    let ours_at = by_number(ours);
+    let theirs_at = by_number(theirs);
+    let numbers: BTreeSet<u32> = base_at
+        .keys()
+        .chain(ours_at.keys())
+        .chain(theirs_at.keys())
+        .copied()
+        .collect();
+
+    let mut next = base.next.max(ours.next).max(theirs.next);
+    let mut resolved: Vec<(Side, LockEntry)> = Vec::new();
+    let mut conflicts: Vec<Conflict> = Vec::new();
+    for number in numbers {
+        let b = base_at.get(&number).copied();
+        let o = ours_at.get(&number).copied();
+        let t = theirs_at.get(&number).copied();
+        if agree(o, t) {
+            if let Some(entry) = o {
+                resolved.push((Side::Both, fresh(entry)));
+            }
+        } else if agree(o, b) {
+            if let Some(entry) = t {
+                resolved.push((Side::Theirs, fresh(entry)));
+            }
+        } else if agree(t, b) {
+            if let Some(entry) = o {
+                resolved.push((Side::Ours, fresh(entry)));
+            }
+        } else if let (None, Some(ours_entry), Some(theirs_entry)) = (b, o, t) {
+            resolved.push((Side::Ours, fresh(ours_entry)));
+            let mut renumbered = fresh(theirs_entry);
+            renumbered.number = next;
+            next = next
+                .checked_add(1)
+                .expect("interface numbers stay far below u32::MAX");
+            resolved.push((Side::Theirs, renumbered));
+        } else {
+            conflicts.push(Conflict {
+                at: number,
+                ours: o.map(fresh).into_iter().collect(),
+                theirs: t.map(fresh).into_iter().collect(),
+            });
+        }
+    }
+
+    // A live key on two numbers: the entries the two sides brought are one
+    // conflict, and leave the merged table.
+    let mut by_key: BTreeMap<&LockKey, Vec<usize>> = BTreeMap::new();
+    for (index, (_, entry)) in resolved.iter().enumerate() {
+        if !entry.retired {
+            by_key.entry(&entry.key).or_default().push(index);
+        }
+    }
+    let duplicated: Vec<Vec<usize>> = by_key
+        .into_values()
+        .filter(|indices| indices.len() > 1)
+        .collect();
+    let mut in_conflict = vec![false; resolved.len()];
+    for indices in duplicated {
+        let mut conflict = Conflict {
+            at: u32::MAX,
+            ours: Vec::new(),
+            theirs: Vec::new(),
+        };
+        for index in indices {
+            in_conflict[index] = true;
+            let (side, entry) = &resolved[index];
+            conflict.at = conflict.at.min(entry.number);
+            if *side != Side::Theirs {
+                conflict.ours.push(entry.clone());
+            }
+            if *side != Side::Ours {
+                conflict.theirs.push(entry.clone());
+            }
+        }
+        conflicts.push(conflict);
+    }
+
+    let mut entries: Vec<LockEntry> = resolved
+        .into_iter()
+        .zip(in_conflict)
+        .filter(|(_, taken)| !taken)
+        .map(|((_, entry), _)| entry)
+        .collect();
+    entries.sort_by_key(|entry| entry.number);
+    if conflicts.is_empty() {
+        return MergeOutcome::Clean(InterfaceLock { next, entries });
+    }
+
+    // The file in number order, each conflict block at its number.
+    let mut text = format!("{HEADER}\nnext {next}\n");
+    conflicts.sort_by_key(|conflict| conflict.at);
+    let mut conflicts = conflicts.into_iter().peekable();
+    for entry in &entries {
+        while conflicts
+            .peek()
+            .is_some_and(|conflict| conflict.at < entry.number)
+        {
+            push_conflict(&mut text, &conflicts.next().expect("peeked"), marker_size);
+        }
+        push_line(&mut text, entry);
+    }
+    for conflict in conflicts {
+        push_conflict(&mut text, &conflict, marker_size);
+    }
+    MergeOutcome::Conflict { text }
+}
+
+fn by_number(lock: &InterfaceLock) -> BTreeMap<u32, &LockEntry> {
+    lock.entries
+        .iter()
+        .map(|entry| (entry.number, entry))
+        .collect()
+}
+
+/// Whether two sides hold the same thing at a number: both absent, or both
+/// present with the same key and retired flag.
+fn agree(a: Option<&LockEntry>, b: Option<&LockEntry>) -> bool {
+    match (a, b) {
+        (None, None) => true,
+        (Some(a), Some(b)) => a.key == b.key && a.retired == b.retired,
+        _ => false,
+    }
+}
+
+/// A copy of `entry` with no line yet.
+fn fresh(entry: &LockEntry) -> LockEntry {
+    LockEntry {
+        range: TextRange::default(),
+        ..entry.clone()
+    }
+}
+
+fn push_conflict(out: &mut String, conflict: &Conflict, marker_size: usize) {
+    out.push_str(&"<".repeat(marker_size));
+    out.push_str(" ours\n");
+    for entry in &conflict.ours {
+        push_line(out, entry);
+    }
+    out.push_str(&"=".repeat(marker_size));
+    out.push('\n');
+    for entry in &conflict.theirs {
+        push_line(out, entry);
+    }
+    out.push_str(&">".repeat(marker_size));
+    out.push_str(" theirs\n");
 }
 
 /// The raw text of `dir/interfaces.lock`, or `None` when the file does not
@@ -935,6 +1151,47 @@ C 3
             LockEditError::KeyAlreadyLive(key("service:a.b")).to_string(),
             "`service:a.b` is already a live entry in interfaces.lock"
         );
+    }
+
+    // --- the merge driver's own rules ------------------------------------
+    //
+    // The §6 table rows are pinned against the built binary in
+    // `crates/ridl/tests/lock_merge.rs`. These pin the two rules for a line
+    // deleted by hand, which the design's table does not list.
+
+    fn table(next: u32, entries: &str) -> InterfaceLock {
+        parse(&format!("{HEADER}\nnext {next}\n{entries}")).expect("a valid table")
+    }
+
+    #[test]
+    fn merge_drops_a_line_deleted_on_one_side_and_unchanged_on_the_other() {
+        let base = table(3, "A 1\nB 2\n");
+        let ours = table(3, "A 1\n");
+        let theirs = table(4, "A 1\nB 2\nC 3\n");
+        let expected = table(4, "A 1\nC 3\n").render();
+        match merge(&base, &ours, &theirs, 7) {
+            MergeOutcome::Clean(lock) => assert_eq!(lock.render(), expected),
+            MergeOutcome::Conflict { text } => panic!("unexpected conflict:\n{text}"),
+        }
+        match merge(&base, &theirs, &ours, 7) {
+            MergeOutcome::Clean(lock) => assert_eq!(lock.render(), expected),
+            MergeOutcome::Conflict { text } => panic!("unexpected conflict:\n{text}"),
+        }
+    }
+
+    #[test]
+    fn merge_conflicts_when_a_line_deleted_on_one_side_changed_on_the_other() {
+        let base = table(3, "A 1\nB 2\n");
+        let ours = table(3, "A 1\n");
+        let theirs = table(3, "A 1\nB 2 retired\n");
+        let MergeOutcome::Conflict { text } = merge(&base, &ours, &theirs, 7) else {
+            panic!("a deletion against a change is a conflict");
+        };
+        assert_eq!(
+            text,
+            format!("{HEADER}\nnext 3\nA 1\n<<<<<<< ours\n=======\nB 2 retired\n>>>>>>> theirs\n")
+        );
+        assert!(parse(&text).is_err(), "a conflict text does not parse");
     }
 
     // --- the `fs` half -------------------------------------------------

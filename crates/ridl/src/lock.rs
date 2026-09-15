@@ -23,14 +23,24 @@
 //! follow ADR-0010 decision 1: 0 when the file is written or there is nothing
 //! to change, 1 on a diagnostic error over the source, 2 on a bad flag or a
 //! path or I/O failure.
+//!
+//! `ridl lock merge BASE OURS THEIRS MARKER_SIZE` is the git merge driver for
+//! the file (lock design §6): it reads the three sides, runs
+//! [`interface_lock::merge`] — a three-way merge over entries matched by
+//! number, with no file access — and writes the result to OURS. Exit 0 when
+//! the merge is clean, 1 when entries disagree (OURS then holds git conflict
+//! markers around only the disagreeing entries and is RIDL-410 until an
+//! author resolves it), 2 when an input cannot be read or does not parse
+//! (OURS is then left as it was).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use ridl_core::diag::{DiagCode, Diagnostic, Severity, render};
-use ridl_core::interface_lock::{self, InterfaceLock, InvalidLockKey, LockKey};
+use ridl_core::interface_lock::{self, InterfaceLock, InvalidLockKey, LockKey, MergeOutcome};
 use ridl_core::{RidlDatabase, load_workspace};
 use ridl_ir::v2;
+use rowan::TextRange;
 
 /// One package of the run: its directory, its lock as loaded — the empty
 /// lock when the directory has none — and its checked IR.
@@ -318,4 +328,65 @@ fn relative_dir(entry: &Path, dir: &Path) -> String {
         Ok(relative) => relative.display().to_string(),
         Err(_) => dir.display().to_string(),
     }
+}
+
+/// Runs `ridl lock merge`: the git merge driver over `base`, `ours` and
+/// `theirs`, writing the result to `ours`. An empty BASE — what git passes as
+/// `%O` when both sides created the file — reads as `next 1` with no entries;
+/// an empty OURS or THEIRS is a file that does not parse.
+pub fn run_lock_merge(base: &Path, ours: &Path, theirs: &Path, marker_size: usize) -> ExitCode {
+    let sides = (
+        read_side(base, true),
+        read_side(ours, false),
+        read_side(theirs, false),
+    );
+    let (base, ours_lock, theirs_lock) = match sides {
+        (Ok(base), Ok(ours), Ok(theirs)) => (base, ours, theirs),
+        (Err(code), _, _) | (_, Err(code), _) | (_, _, Err(code)) => return code,
+    };
+    let (text, code) = match interface_lock::merge(&base, &ours_lock, &theirs_lock, marker_size) {
+        MergeOutcome::Clean(merged) => (merged.render(), ExitCode::SUCCESS),
+        MergeOutcome::Conflict { text } => {
+            eprintln!(
+                "error: {}: the two sides disagree; the disagreeing entries are between git \
+                 conflict markers, and the file is malformed (RIDL-410) until they are resolved \
+                 by hand",
+                ours.display()
+            );
+            (text, ExitCode::FAILURE)
+        }
+    };
+    if let Err(err) = std::fs::write(ours, text) {
+        eprintln!("error: cannot write {}: {err}", ours.display());
+        return ExitCode::from(2);
+    }
+    code
+}
+
+/// One side of the merge, parsed. A side that cannot be read, or that does
+/// not parse, is exit 2 with the reason: the driver merges tables, and a side
+/// that is not one is an input it cannot answer over.
+fn read_side(path: &Path, empty_is_default: bool) -> Result<InterfaceLock, ExitCode> {
+    let text = std::fs::read_to_string(path).map_err(|err| {
+        eprintln!("error: cannot read {}: {err}", path.display());
+        ExitCode::from(2)
+    })?;
+    if empty_is_default && text.trim().is_empty() {
+        return Ok(InterfaceLock::default());
+    }
+    interface_lock::parse(&text).map_err(|err| {
+        eprintln!(
+            "error: {}:{}: {}",
+            path.display(),
+            line_of(&text, err.range),
+            err.message
+        );
+        ExitCode::from(2)
+    })
+}
+
+/// The 1-based line holding the start of `range` in `text`.
+fn line_of(text: &str, range: TextRange) -> usize {
+    let start = usize::from(range.start()).min(text.len());
+    text[..start].matches('\n').count() + 1
 }

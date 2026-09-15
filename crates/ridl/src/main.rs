@@ -158,8 +158,12 @@ enum Command {
     /// package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one
     /// package's entries in place instead. Exit 0 when the file is written or
     /// nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or
-    /// I/O failure.
+    /// I/O failure. `ridl lock merge` is the git merge driver for the file.
+    #[command(args_conflicts_with_subcommands = true)]
     Lock {
+        /// A package directory, a workspace root, or a file. A directory
+        /// named `merge` is spelled `./merge`, since the bare word is the
+        /// subcommand.
         #[arg(default_value = ".")]
         path: PathBuf,
         /// Rewrite the live entry OLD to hold the key NEW, keeping its number
@@ -170,6 +174,8 @@ enum Command {
         /// (repeatable). NAME must no longer be declared.
         #[arg(long, value_name = "NAME")]
         retire: Vec<String>,
+        #[command(subcommand)]
+        sub: Option<LockCommand>,
     },
     /// Run the language server over stdio: exit 0 on a clean shutdown, 2 on a
     /// transport error. Editors spawn this; it takes no flag of its own.
@@ -177,6 +183,29 @@ enum Command {
     /// Run the MCP server over stdio for an agent host: exit 0 on a clean
     /// shutdown, 2 on a transport error. It takes no flag of its own.
     Mcp,
+}
+
+/// The subcommands of `ridl lock`.
+#[derive(Subcommand)]
+enum LockCommand {
+    /// The git merge driver for `interfaces.lock`: a three-way merge over
+    /// entries matched by number, written to OURS. Exit 0 when the merge is
+    /// clean, 1 when entries disagree (they are left between conflict markers
+    /// of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an
+    /// input cannot be read or does not parse (OURS is left as it was).
+    /// Register it with `.gitattributes` and `git config` as the CLI
+    /// reference documents.
+    Merge {
+        /// The common ancestor's file (`%O`); an empty file reads as `next 1`.
+        base: PathBuf,
+        /// The current branch's file (`%A`); the result is written here.
+        ours: PathBuf,
+        /// The other branch's file (`%B`).
+        theirs: PathBuf,
+        /// The length of a conflict marker line (`%L`, 7 by default).
+        #[arg(value_parser = clap::value_parser!(u16).range(1..))]
+        marker_size: u16,
+    },
 }
 
 /// The `ridl diff` output format — human-readable text or machine-readable
@@ -235,9 +264,20 @@ fn main() -> ExitCode {
             },
         },
         Command::Lock {
+            sub:
+                Some(LockCommand::Merge {
+                    base,
+                    ours,
+                    theirs,
+                    marker_size,
+                }),
+            ..
+        } => lock::run_lock_merge(&base, &ours, &theirs, usize::from(marker_size)),
+        Command::Lock {
             path,
             rename,
             retire,
+            sub: None,
         } => lock::run_lock(&path, &rename, &retire),
         Command::Lsp => run_lsp(),
         Command::Mcp => run_mcp(),

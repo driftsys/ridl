@@ -66,7 +66,7 @@ Commands:
   test      Run the property suite over a workspace: the range self-corpora and the contract-clause sampling (ridl §13). Exit 0 when every run passes, 1 on a self-corpus failure or an evaluation error, 2 on a compile error
   fmt       Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the current directory)
   diff      Compare two IR snapshots or source trees and classify the change: exit 0 compatible or identical, 1 breaking, 2 error
-  lock      Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure
+  lock      Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
   lsp       Run the language server over stdio: exit 0 on a clean shutdown, 2 on a transport error. Editors spawn this; it takes no flag of its own
   mcp       Run the MCP server over stdio for an agent host: exit 0 on a clean shutdown, 2 on a transport error. It takes no flag of its own
   help      Print this message or the help of the given subcommand(s)
@@ -975,12 +975,17 @@ ridl lock --help
 ```
 
 ```text
-Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure
+Allocate a number to every interface that has none and write each package's `interfaces.lock`; with `--rename` or `--retire`, rewrite one package's entries in place instead. Exit 0 when the file is written or nothing changes, 1 on a diagnostic error, 2 on a bad flag or a path or I/O failure. `ridl lock merge` is the git merge driver for the file
 
 Usage: ridl lock [OPTIONS] [PATH]
+       ridl lock <COMMAND>
+
+Commands:
+  merge  The git merge driver for `interfaces.lock`: a three-way merge over entries matched by number, written to OURS. Exit 0 when the merge is clean, 1 when entries disagree (they are left between conflict markers of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an input cannot be read or does not parse (OURS is left as it was). Register it with `.gitattributes` and `git config` as the CLI reference documents
+  help   Print this message or the help of the given subcommand(s)
 
 Arguments:
-  [PATH]  [default: .]
+  [PATH]  A package directory, a workspace root, or a file. A directory named `merge` is spelled `./merge`, since the bare word is the subcommand [default: .]
 
 Options:
       --rename <OLD=NEW>  Rewrite the live entry OLD to hold the key NEW, keeping its number (repeatable). NEW must be a declaration without an entry
@@ -1065,6 +1070,69 @@ renamed Zone Lane 2
 exit: 0
 ```
 
+**The merge driver.** Two branches that each edited `interfaces.lock` merge
+through `ridl lock merge`, a three-way merge over entries matched by number
+rather than over lines. git runs it when the repository registers it: one
+versioned line in `.gitattributes`, and one `git config` line per clone,
+which git does not version.
+
+```text
+interfaces.lock merge=ridl-lock
+```
+
+```sh
+git config merge.ridl-lock.driver "ridl lock merge %O %A %B %L"
+```
+
+```sh
+ridl lock merge --help
+```
+
+```text
+The git merge driver for `interfaces.lock`: a three-way merge over entries matched by number, written to OURS. Exit 0 when the merge is clean, 1 when entries disagree (they are left between conflict markers of MARKER_SIZE, and the file is RIDL-410 until resolved), 2 when an input cannot be read or does not parse (OURS is left as it was). Register it with `.gitattributes` and `git config` as the CLI reference documents
+
+Usage: ridl lock merge <BASE> <OURS> <THEIRS> <MARKER_SIZE>
+
+Arguments:
+  <BASE>         The common ancestor's file (`%O`); an empty file reads as `next 1`
+  <OURS>         The current branch's file (`%A`); the result is written here
+  <THEIRS>       The other branch's file (`%B`)
+  <MARKER_SIZE>  The length of a conflict marker line (`%L`, 7 by default)
+
+Options:
+  -h, --help  Print help
+```
+
+At each number the driver applies git's own three-way rule: a change on one
+side is taken, the same change on both sides is kept once, and two different
+changes to one entry — a retire against a rename, or two renames — are left
+between conflict markers, with every other entry written plain. One rule is
+the driver's own: when both sides allocated one number to two different
+interfaces, ours keeps the number and theirs is renumbered to the next free
+one, which is safe because a branch never allocates. A live name on two
+numbers — each side allocated the same interface on its own number — is a
+conflict too. `next` is the maximum of the three sides plus one per
+renumbered entry, so it is never lowered. With `A 1, B 2` as the base, ours
+retiring `B` and theirs renaming it to `Bee`:
+
+```text
+# interfaces.lock — written by ridl lock; do not edit by hand.
+next 3
+A 1
+<<<<<<< ours
+B 2 retired
+=======
+Bee 2
+>>>>>>> theirs
+```
+
+The file is malformed (RIDL-410) until an author keeps one side and deletes
+the markers, and `ridl check` refuses it until then. git's `union` driver is
+not a substitute: it discards the base, and resurrects a renamed or retired
+entry silently. An empty BASE — what git passes when both branches created
+the file — reads as `next 1` with no entries. A package directory named
+`merge` is spelled `./merge`: the bare word is the subcommand.
+
 **Exit codes.** 0 when the file is written or there is nothing to change. 1
 on a diagnostic error over the source, with nothing written: a live entry with
 no declaration when plain `ridl lock` is asked to allocate (RIDL-409), a
@@ -1074,7 +1142,14 @@ missing or unreadable, on a bad flag — `--rename` naming no live entry or a
 `NEW` that is not a declaration without an entry, `--retire` naming an
 interface that is still declared, either flag over more than one package — or
 on an I/O failure writing the file. Every cell is confirmed against the built
-binary by `crates/ridl/tests/lock_cli.rs`.
+binary by `crates/ridl/tests/lock_cli.rs`. `ridl lock merge` exits 0 when the
+three sides merge clean and OURS is written; 1 when entries disagree — OURS is
+written with the conflict markers and is malformed until resolved; 2 when an
+input cannot be read or does not parse (OURS is left as it was), when
+`MARKER_SIZE` is not a number from 1 up, or on an I/O failure writing OURS.
+Every cell is confirmed by `crates/ridl/tests/lock_merge.rs`, which also
+registers the driver in a temporary repository and merges two branches
+through git.
 
 ### `ridl lsp`
 
@@ -1312,6 +1387,7 @@ compiler directly and want its stable, default-free flags.
 | `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other eight, which name no path at all |
 | `ridl diff` | the change is compatible, or the two sides are identical | the change is breaking | a side fails to compile, an input is missing, or neither `--explain` nor both inputs were given |
 | `ridl lock` | the file is written, or there is nothing to change | a diagnostic error over the source, nothing written: a live entry with no declaration under plain `ridl lock` (RIDL-409), a malformed lock file (RIDL-410), or any other compile error | the path is missing or unreadable; a bad flag — `--rename` naming no live entry or a `NEW` that is not a declaration without an entry, `--retire` naming a still-declared interface, either flag over more than one package; an I/O failure writing |
+| `ridl lock merge` | the three sides merge clean, and the result is written to OURS | entries disagree: OURS is written with conflict markers around only the disagreeing entries, and is malformed (RIDL-410) until resolved | an input cannot be read or does not parse (OURS is left as it was), `MARKER_SIZE` is not a number from 1 up, or an I/O failure writing OURS |
 
 This table is this repository's own taxonomy, recorded in
 [ADR-0010][adr-0010]: **0** succeeded, or the verdict is affirmative; **1** a
