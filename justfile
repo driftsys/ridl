@@ -381,15 +381,18 @@ book-check:
 # or more backticks or tildes, indented by at most three spaces, and closes only
 # at a fence of the same character that is at least as long and has no info
 # string, as in CommonMark. So a four-backtick fence can quote a Markdown file
-# that holds three-backtick fences. A trailing carriage return is ignored. Two
-# CommonMark cases are not followed: a fence inside a block quote, and a fence
-# in a list item indented four spaces or more, are read as text. A code span
+# that holds three-backtick fences. A trailing carriage return is ignored. Not
+# every CommonMark case is followed; among those that are not, a fence inside a
+# block quote or on a list item's own line is read as text. A code span
 # such as `element[](min..max)` is documentation of another language's syntax,
 # not a link. External schemes and bare anchors are skipped; an anchor on a real
 # path is trimmed, so the file is checked and the fragment is not.
 #
-# Before the scan, the recipe runs the extraction over a built-in sample and
-# fails if the fence rules above do not give exactly the expected links.
+# Before the scan, the recipe runs the extraction over a built-in sample that
+# exercises each rule above (nesting, a longer closer, an info string, the other
+# fence character, zero to four spaces of indentation, fewer than three
+# backticks, trailing blanks and a carriage return) and fails unless exactly the
+# expected links come out.
 link-check:
     #!/usr/bin/env bash
     set -uo pipefail
@@ -412,12 +415,16 @@ link-check:
     sample="$(mktemp)"
     trap 'rm -f "$sample"' EXIT
     printf '%s\n' '[a](before.md)' '````markdown' '```rsdl' '[b](nested.md)' '```' '````' \
-        '   ```text' '[c](indented.md)' '   ```' \
-        '~~~' '[d](tilde.md)' '```' '[e](tilde-still.md)' '~~~' \
-        $'```crlf\r' $'[f](crlf.md)\r' $'```\r' \
-        '```' '[g](info.md)' '```text' '[h](info-still.md)' '```' \
+        ' ```text' '[c](one-space.md)' ' ```' '   ```text' '[d](three-spaces.md)' '   ```' \
+        '    ```' '[e](four-spaces.md)' \
+        '~~~' '[f](tilde.md)' '```' '[g](tilde-still.md)' '~~~' \
+        '````' '```' '[h](short-closer.md)' '`````' '[i](long-closer.md)' \
+        $'```crlf\r' $'[j](crlf.md)\r' $'```\r' \
+        '```' '[k](info.md)' '```text' '[l](info-still.md)' $'```  \t' '[m](trailing.md)' \
+        '``' '[n](two-backticks.md)' \
         '[z](after.md)' > "$sample"
-    if [ "$(extract_links "$sample" | tr '\n' ' ')" != "before.md after.md " ]; then
+    expected="before.md four-spaces.md long-closer.md trailing.md two-backticks.md after.md "
+    if [ "$(extract_links "$sample" | tr '\n' ' ')" != "$expected" ]; then
         echo "link-check: the fence rules no longer give the expected links on the built-in sample:" >&2
         extract_links "$sample" >&2
         exit 1
