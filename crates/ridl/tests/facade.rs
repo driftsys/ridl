@@ -125,22 +125,42 @@ fn check_reports_a_diagnostic_in_an_rsdl_file() {
     );
 }
 
-/// `ridl fmt` refuses an explicit `.rsdl` path — exit 2, no rewrite — because
-/// the formatter has no layout rules for the rsdl declarations.
+/// `ridl fmt` formats an explicit `.rsdl` path under the rsdl profile: the file
+/// layout is applied (one blank line between declarations) and each rsdl
+/// declaration is kept as written, so a second `--check` pass changes nothing.
 #[test]
-fn fmt_refuses_an_rsdl_file() {
+fn fmt_formats_an_rsdl_file() {
     let dir = TempDir::new("fmt-rsdl");
-    let input = "package veh.topology\n\ncomponent   Cruise {}\n";
+    let input = "package veh.topology\n\ncomponent   Cruise {}\nsystem Vehicle { Cruise }\n";
     let file = dir.write("system.rsdl", input);
 
     let (code, stderr) = ridl(&["fmt".as_ref(), file.as_os_str()]);
-    assert_eq!(code, 2, "an .rsdl file is not formatted, stderr:\n{stderr}");
-    assert!(
-        stderr.contains("does not format `.rsdl` files"),
-        "the message names the cause, got:\n{stderr}"
+    assert_eq!(code, 0, "the .rsdl file formats, stderr:\n{stderr}");
+    let formatted = std::fs::read_to_string(&file).expect("the file is still readable");
+    assert_eq!(
+        formatted,
+        "package veh.topology\n\ncomponent   Cruise {}\n\nsystem Vehicle { Cruise }\n"
     );
+
+    let (code, stderr) = ridl(&["fmt".as_ref(), "--check".as_ref(), file.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "the formatted file is a fixed point, stderr:\n{stderr}"
+    );
+}
+
+/// A directory walk collects `.rsdl` files: `ridl fmt --check` over a tree
+/// whose one file to change is an `.rsdl` file exits 1.
+#[test]
+fn fmt_check_walks_into_rsdl_files() {
+    let dir = TempDir::new("fmt-rsdl-walk");
+    let input = "package veh.topology\n\ncomponent Cruise {}\nsystem Vehicle { Cruise }\n";
+    let file = dir.write("system.rsdl", input);
+
+    let (code, stderr) = ridl(&["fmt".as_ref(), "--check".as_ref(), dir.path().as_os_str()]);
+    assert_eq!(code, 1, "the .rsdl file would change, stderr:\n{stderr}");
     let unchanged = std::fs::read_to_string(&file).expect("the file is still readable");
-    assert_eq!(unchanged, input, "an .rsdl file must never be rewritten");
+    assert_eq!(unchanged, input, "`--check` writes nothing");
 }
 
 /// `ridl fmt <file>` rewrites a non-canonical file in place to the tight style.

@@ -78,11 +78,17 @@ export function resolveLspCommand(input: ResolveInput): { command: string; args:
   return { command, args: [...LSP_ARGS] };
 }
 
-// The language ids the language client serves. A `.typl` and a `.ridl` file
-// of the same package are checked together by one server (see extension.ts).
-const CLIENT_LANGUAGE_IDS = ["typl", "ridl"] as const;
+// The language ids the language client serves. The `.typl`, `.ridl` and
+// `.rsdl` files of one workspace are checked together by one server (see
+// extension.ts).
+const CLIENT_LANGUAGE_IDS = ["typl", "ridl", "rsdl"] as const;
 
 /** Whether an open document of this language id is a reason to start the language client. */
 export function shouldStartClientForLanguage(languageId: string): boolean {
   return (CLIENT_LANGUAGE_IDS as readonly string[]).includes(languageId);
+}
+
+/** The language client's document selector: a `file` document of each client language. */
+export function clientDocumentSelector(): { scheme: string; language: string }[] {
+  return CLIENT_LANGUAGE_IDS.map((language) => ({ scheme: "file", language }));
 }

@@ -20,10 +20,10 @@ and download the binary from the newest `editor-v*` GitHub Release.
 
 ### `ridl_check`
 
-| Parameter | Type                 | Meaning                              |
-| --------- | -------------------- | ------------------------------------ |
-| `source`  | string               | the full text of one file            |
-| `profile` | `"typl"` or `"ridl"` | which language `source` is parsed as |
+| Parameter | Type                           | Meaning                              |
+| --------- | ------------------------------ | ------------------------------------ |
+| `source`  | string                         | the full text of one file            |
+| `profile` | `"typl"`, `"ridl"` or `"rsdl"` | which language `source` is parsed as |
 
 Returns `{ "diagnostics": [ … ] }`, where each element is:
 
@@ -52,15 +52,17 @@ workspace and this tool does not. The two points:
   neither. The CLI has no such constraint, and a bare array is what a `jq`
   pipeline expects.
 - **`span.path`.** This tool's input is a source string with no file, so every
-  span reports the fixed synthetic path `input.typl` or `input.ridl`.
-  `ridl check --format json <file>` reports the real path it read.
+  span reports the fixed synthetic path `input.typl`, `input.ridl` or
+  `input.rsdl`. `ridl check --format json <file>` reports the real path it read.
 
 This is the first agent-facing diagnostic contract; a change to its shape is a
 change to an external contract (ADR-0005 §7).
 
 The source is checked as a standalone file against the embedded `ridl.std` only:
-no workspace, no other imports. The `.rxdl` form is not a profile yet (epic
-E3.5).
+no workspace, no other imports. An rsdl source is parsed and its names are
+resolved; the rsdl system checks (the closure, resolution, placement,
+distributions and attribute keys) read the whole workspace, so `ridl check` runs
+them and this tool does not. The `.rxdl` form is not a profile yet (epic E3.5).
 
 ## Host configuration
 

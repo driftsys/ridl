@@ -78,8 +78,9 @@ pub enum FormatOutcome {
 }
 
 /// Formats `text` into the canonical tight style, parsing it under `profile`
-/// (`Profile::Typl` for a `.typl` file, `Profile::Ridl` for a `.ridl` file —
-/// the formatting rules themselves are profile-independent).
+/// (`Profile::Typl` for a `.typl` file, `Profile::Ridl` for a `.ridl` file,
+/// `Profile::Rsdl` for a `.rsdl` file — the formatting rules themselves are
+/// profile-independent).
 ///
 /// A syntactically valid input yields [`FormatOutcome::Formatted`]; an input
 /// with any parse error yields [`FormatOutcome::ParseErrors`] and is not
@@ -327,8 +328,9 @@ fn format_element(node: &SyntaxNode, indent: usize) -> Vec<String> {
         SyntaxKind::ReservedEntry => line(format_reserved_entry(node)),
         SyntaxKind::EnumValue | SyntaxKind::EnumSetBit => line(format_value_assignment(node)),
         SyntaxKind::UnionArm => line(format_union_arm(node)),
-        // Unreachable for an error-free tree; the honest fallback is the node's
-        // own text so no source is lost.
+        // A declaration with no layout rules here — a ridl `interface` or
+        // `service`, or one of the five rsdl declarations — is emitted as
+        // written, so no source is lost.
         _ => line(node.text().to_string()),
     }
 }

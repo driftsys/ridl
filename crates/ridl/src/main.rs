@@ -119,8 +119,8 @@ enum Command {
         #[arg(long, value_enum, default_value = "text")]
         format: property::TestFormat,
     },
-    /// Reformat `.typl` and `.ridl` files in place (defaults to the current
-    /// directory).
+    /// Reformat `.typl`, `.ridl` and `.rsdl` files in place (defaults to the
+    /// current directory).
     Fmt {
         #[arg(default_value = ".")]
         path: PathBuf,
@@ -1369,10 +1369,11 @@ struct DeclIndex {
 }
 
 impl DeclIndex {
-    /// Indexes every `.typl` and `.ridl` file under `entry`. A file that
-    /// cannot be read is skipped rather than reported: the compile already ran
-    /// clean over this tree, so anything unreadable here is outside what any
-    /// caller of this index reports — neither the desk check nor the
+    /// Indexes every `.typl`, `.ridl` and `.rsdl` file under `entry` (an
+    /// `.rsdl` file declares no shape and no service, so it adds nothing). A
+    /// file that cannot be read is skipped rather than reported: the compile
+    /// already ran clean over this tree, so anything unreadable here is outside
+    /// what any caller of this index reports — neither the desk check nor the
     /// publication gate. An unreadable *directory* is not skipped in the same sense —
     /// `collect_source_files` fails on the first one it meets, and
     /// `unwrap_or_default` turns that into an empty index rather than a
@@ -1624,8 +1625,8 @@ fn finish(run: std::io::Result<CliRun>) -> ExitCode {
     }
 }
 
-/// Formats every `.typl` and `.ridl` file under `path`, each parsed under the
-/// profile its extension selects.
+/// Formats every `.typl`, `.ridl` and `.rsdl` file under `path`, each parsed
+/// under the profile its extension selects.
 ///
 /// A file with parse errors is never rewritten (a formatter must not eat broken
 /// code); its diagnostics render to stderr and the run exits 1. In `--check`
@@ -1653,16 +1654,6 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
             }
         };
         let profile = ridl_core::profile_of_path(&file.to_string_lossy());
-        // The formatter has no layout rules for the rsdl declarations. The
-        // directory walk does not collect `.rsdl` files, so only an explicit
-        // path reaches here, and it is refused rather than rewritten.
-        if profile == ridl_syntax::Profile::Rsdl {
-            eprintln!(
-                "error: cannot format {}: `ridl fmt` does not format `.rsdl` files yet",
-                file.display()
-            );
-            return ExitCode::from(2);
-        }
         match format(&text, profile) {
             FormatOutcome::Formatted(formatted) => {
                 if formatted != text {
@@ -1691,8 +1682,8 @@ fn run_fmt(path: &Path, check: bool) -> ExitCode {
     }
 }
 
-/// Every `.typl` and `.ridl` file under `path`: `path` itself when it is a
-/// file, otherwise a recursive walk that skips hidden directories.
+/// Every `.typl`, `.ridl` and `.rsdl` file under `path`: `path` itself when it
+/// is a file, otherwise a recursive walk that skips hidden directories.
 ///
 /// A directory the walk cannot read — `path` itself, when it does not exist
 /// or is not readable, or a subdirectory the walk descends into — is an error
@@ -1720,7 +1711,7 @@ fn collect_source_files(path: &Path) -> Result<Vec<PathBuf>, (PathBuf, std::io::
                 }
             } else if child
                 .extension()
-                .is_some_and(|ext| ext == "typl" || ext == "ridl")
+                .is_some_and(|ext| ext == "typl" || ext == "ridl" || ext == "rsdl")
             {
                 files.push(child);
             }
