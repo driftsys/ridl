@@ -72,3 +72,30 @@ fn ridl_ok_corpus_is_lossless_error_free_and_matches_snapshots() {
         insta::assert_snapshot!(dump(&parsed));
     });
 }
+
+/// The rsdl half of the ok corpus: every `.rsdl` file parses under
+/// [`Profile::Rsdl`] with the same lossless, zero-error contract. The files hold
+/// the rsdl reference §3 examples and Appendix A verbatim, plus the attribute
+/// positions Appendix B widens.
+#[test]
+fn rsdl_ok_corpus_is_lossless_error_free_and_matches_snapshots() {
+    insta::glob!("../test_data/parser/ok", "*.rsdl", |path| {
+        let input = std::fs::read_to_string(path).expect("a readable corpus file");
+        let parsed = parse(&input, Profile::Rsdl);
+
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "parse is not lossless for {}",
+            path.display(),
+        );
+        assert!(
+            parsed.errors().is_empty(),
+            "ok-corpus file {} must parse with zero errors, got: {:?}",
+            path.display(),
+            parsed.errors(),
+        );
+
+        insta::assert_snapshot!(dump(&parsed));
+    });
+}

@@ -10,7 +10,7 @@
 //!
 //! # Namespaces (ADR-0007 decision 2)
 //!
-//! Codes are grouped by hundreds and never renumbered or reused. Four
+//! Codes are grouped by hundreds and never renumbered or reused. Five
 //! namespaces are in play across the family, one catalogue each:
 //!
 //! - `FORM-…` — the shared family grammar: lexical `0xx`, parse `1xx`, and the
@@ -20,6 +20,8 @@
 //!   [`TYPL_CATALOG`].
 //! - `RIDL-…` — ridl interaction rules, defined by the ridl reference §16.
 //!   [`RIDL_CATALOG`].
+//! - `RSDL-…` — rsdl system rules, defined by the rsdl reference §16.
+//!   [`RSDL_CATALOG`].
 //! - `MANI-…` — manifest, lockfile, cache, and fetch: the manifest `0xx` codes
 //!   (E1.5) and the distribution `1xx` codes (E1.6). [`MANI_CATALOG`].
 //!
@@ -129,7 +131,7 @@ macro_rules! diag_codes {
         )+
 
         /// Every catalogue this module declares, each paired with its constant's
-        /// name. The error index (E4.2) reads this rather than naming the four
+        /// name. The error index (E4.2) reads this rather than naming the
         /// catalogues one at a time, and so do the guards below.
         pub const ALL_CATALOGS: &[(&str, &[CatalogEntry])] = &[
             $((stringify!($catalog), $catalog),)+
@@ -753,6 +755,20 @@ diag_codes! {
         /// ordinal moved and which neither classifies nor gates.
         RIDL_408 = "RIDL-408", Error,
             "interaction removed, its tombstone dropped or moved, or its retired name redeclared";
+    }
+
+    /// The rsdl catalogue: every `RSDL-` code declared in this module, with the
+    /// severity the rsdl reference §16.1 table classifies it at. A code is
+    /// declared with the pass that raises it. The §16.2 reserved codes and the
+    /// §16.3 retired codes are never declared. `RSDL_PROFILE_CODES` in
+    /// `crates/ridlc/tests/corpus.rs` gives every code here a living example,
+    /// and `rsdl_profile_codes_match_the_catalogue` holds the two lists equal.
+    RSDL_CATALOG {
+        /// A declaration of another profile — a type, an interface, a service —
+        /// at the top level of an `.rsdl` file (rsdl §2, §16.1). Error. Raised
+        /// by the parser.
+        RSDL_604 = "RSDL-604", Error,
+            "a declaration of another profile in an `.rsdl` file";
     }
 
     /// The manifest catalogue (ADR-0007 decision 2): the manifest `0xx` codes the

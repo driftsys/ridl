@@ -1,0 +1,44 @@
+---
+source: crates/ridl-syntax/tests/parser_err_corpus.rs
+expression: dump(&parsed)
+input_file: crates/ridl-syntax/test_data/parser/err/rsdl_internal_modifier.rsdl
+---
+SourceFile@0..172
+  PackageDecl@0..20
+    PackageKw@0..7 "package"
+    Whitespace@7..8 " "
+    QualifiedName@8..20
+      Ident@8..11 "veh"
+      Dot@11..12 "."
+      Ident@12..20 "topology"
+  Whitespace@20..22 "\n\n"
+  LineComment@22..95 "// rsdl reference §2 ..."
+  Whitespace@95..96 "\n"
+  LineComment@96..122 "// component still pa ..."
+  Whitespace@122..123 "\n"
+  ErrorNode@123..131
+    InternalKw@123..131 "internal"
+  Whitespace@131..132 " "
+  ComponentDef@132..171
+    ComponentKw@132..141 "component"
+    Whitespace@141..142 " "
+    Name@142..146
+      Ident@142..146 "Lane"
+    Whitespace@146..147 " "
+    LBrace@147..148 "{"
+    Whitespace@148..149 " "
+    ComponentLine@149..169
+      OffersKw@149..155 "offers"
+      Whitespace@155..156 " "
+      Reference@156..169
+        QualifiedName@156..169
+          Ident@156..159 "veh"
+          Dot@159..160 "."
+          Ident@160..164 "adas"
+          Dot@164..165 "."
+          Ident@165..169 "lane"
+    Whitespace@169..170 " "
+    RBrace@170..171 "}"
+  Whitespace@171..172 "\n"
+errors:
+  FORM-102 123..131 `internal` cannot modify an rsdl declaration — the closure is workspace-wide, so every declaration it names is visible from the system's package (rsdl reference §2)

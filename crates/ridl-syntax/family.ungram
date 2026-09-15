@@ -39,6 +39,10 @@ SourceFile =
   definitions:Definition*
   interfaces:InterfaceDef*
   services:ServiceDef*
+  systems:SystemDef*
+  components:ComponentDef*
+  distributions:DistributionDef*
+  deployments:DeploymentDef*
 
 PackageDecl =
   'package' QualifiedName
@@ -317,9 +321,13 @@ DottedName =
 AttrBlock =
   '[' (attributes:Attribute ','?)* ']'
 
+// A key is one name, or — in an `.rsdl` file only — a backend key
+// `namespace.key` (rsdl reference §5, Appendix B `key`): two names around a
+// `.`. Both segments share the `key` label, so `Attribute::key()` stays the
+// first `Name` child; `Attribute::key_segments()` in src/ast.rs reads both.
 Attribute =
-  key:Name
-| key:Name '=' value:AttrValue
+  key:Name ('.' key:Name)?
+| key:Name ('.' key:Name)? '=' value:AttrValue
 | ('require' | 'ensure') expr:Expr
 
 // `const_value` (gf §4.2): a literal or a SCREAMING_SNAKE constant
@@ -328,6 +336,54 @@ Attribute =
 AttrValue =
   Literal
 | '(' (values:AttrValue ','?)* ')'
+
+// ---------- rsdl declarations (rsdl reference §3, §4, Appendix B) ----------
+//
+// The five declarations of the rsdl profile. Each is the family's container
+// shape (general form §2, Shape 3): keyword, CamelCase name, the relation
+// clause (`for`, on a deployment only), the attribute block, then the body.
+// A `machine` occurs only inside a deployment body. Bodies follow R8: newline
+// and comma interchangeable, trailing comma legal.
+//
+// The body lines are references, never declarations (rsdl §4). A bare
+// `MemberLine` is the body item of `system`, `distribution` and `machine` —
+// one node for all three, because its kind is the kind of the declaration
+// the name resolves to (D-11) and the container tells what it may name. A
+// `ComponentLine` is the keyword-plus-reference item of a `component` body.
+// One reference per line: a second reference is a new body item, so
+// `requires A, B` is FORM-102 at `B` (rsdl §3.2).
+
+SystemDef =
+  'system' Name AttrBlock? '{' (lines:MemberLine ','?)* '}'
+
+ComponentDef =
+  'component' Name AttrBlock? '{' (lines:ComponentLine ','?)* '}'
+
+ComponentLine =
+  ('offers' | 'requires') Reference AttrBlock?
+
+DistributionDef =
+  'distribution' Name AttrBlock? '{' (lines:MemberLine ','?)* '}'
+
+DeploymentDef =
+  'deployment' Name 'for' system:Reference AttrBlock? '{' (machines:MachineDef ','?)* '}'
+
+MachineDef =
+  'machine' Name AttrBlock? '{' (lines:MemberLine ','?)* '}'
+
+MemberLine =
+  Reference AttrBlock?
+
+// A reference (rsdl §4, Appendix B `reference = qualified_id`): one dotted
+// name whose role is read from case and confirmed by lookup. It wraps the
+// family `QualifiedName` — typl Appendix E's `qualified_id` — rather than
+// ridl's `DottedName`, which is a service's own declared name. A reference
+// is a use, and the passes that read uses already read `QualifiedName`: the
+// resolver counts a one-segment reference as a use of its import (TYPL-007),
+// so `import veh.adas.LaneAssist` followed by `requires LaneAssist` is not
+// an unused import.
+Reference =
+  QualifiedName
 
 // ---------- The guaranteed-subset expr grammar (E2.4) ----------
 //

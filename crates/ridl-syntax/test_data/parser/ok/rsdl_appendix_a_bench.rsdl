@@ -1,0 +1,6 @@
+// rsdl reference Appendix A, verbatim.
+package veh.topology
+
+deployment Bench for Vehicle {
+  machine DevBox { Cruise, Lane, Panel, veh.diag.access, Backend }
+}

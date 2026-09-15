@@ -1,0 +1,16 @@
+# rsdl-diag-showcase coverage notes
+
+This package is crafted so its compile emits one instance of every diagnostic
+the rsdl profile implements. The `@rsdl-diag-showcase` diagnostics snapshot
+(`crates/ridlc/tests/snapshots/`) is the rsdl diagnostic index, the way
+`ridl-diag-showcase` is for the ridl codes. `RSDL_PROFILE_CODES` in
+`crates/ridlc/tests/corpus.rs` is the machine-checked index.
+
+One file per diagnostic family, so a parse error in one family never suppresses
+a check in another:
+
+- `profile_boundary.rsdl` — the parser's rsdl codes: RSDL-604 for a declaration
+  of another profile, and FORM-102 for `internal` before an rsdl keyword.
+
+A code the showcase cannot provoke in one compile is listed in
+`RSDL_PROFILE_CODES` as `Elsewhere`, with the fixture that provokes it.

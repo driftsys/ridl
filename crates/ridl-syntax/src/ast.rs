@@ -11,7 +11,7 @@
 //! - the enums over pure node alternations ([`Definition`], [`Backing`],
 //!   [`StructMember`], [`FieldType`]);
 //! - the [`HasName`] / [`HasModifiers`] / [`HasDocComments`] trait trio
-//!   shared by the six definition kinds;
+//!   shared by the definition kinds of every profile;
 //! - the position-sensitive accessors whose roles are told apart by anchor
 //!   tokens ([`Constraint::min`] and friends, [`ConstDef::regex`]).
 //!
@@ -412,6 +412,12 @@ impl HasName for QueryDef {}
 impl HasName for FixedDef {}
 impl HasName for InterfaceMember {}
 
+impl HasName for SystemDef {}
+impl HasName for ComponentDef {}
+impl HasName for DistributionDef {}
+impl HasName for DeploymentDef {}
+impl HasName for MachineDef {}
+
 impl HasModifiers for TypeDef {}
 impl HasModifiers for ConstDef {}
 impl HasModifiers for StructDef {}
@@ -436,6 +442,14 @@ impl HasDocComments for QueryDef {}
 impl HasDocComments for FixedDef {}
 impl HasDocComments for InterfaceMember {}
 impl HasDocComments for ServiceDef {}
+
+impl HasDocComments for SystemDef {}
+impl HasDocComments for ComponentDef {}
+impl HasDocComments for ComponentLine {}
+impl HasDocComments for DistributionDef {}
+impl HasDocComments for DeploymentDef {}
+impl HasDocComments for MachineDef {}
+impl HasDocComments for MemberLine {}
 
 impl DottedName {
     /// The `lowercase_id` segments of the dotted name, in source order — the
@@ -547,6 +561,31 @@ impl SourceFile {
     }
 }
 
+// --- rsdl lines (rsdl reference §3.2, §4) ----------------------------------
+
+/// Which keyword a [`ComponentLine`] carries (rsdl reference §3.2).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ComponentLineKind {
+    /// `offers` — the line names a service.
+    Offers,
+    /// `requires` — the line names an interface, or an inline-shape service.
+    Requires,
+}
+
+impl ComponentLine {
+    /// The line's keyword. Always `Some` on a tree the parser built: a
+    /// component line starts at its keyword.
+    pub fn kind(&self) -> Option<ComponentLineKind> {
+        if self.offers_token().is_some() {
+            Some(ComponentLineKind::Offers)
+        } else if self.requires_token().is_some() {
+            Some(ComponentLineKind::Requires)
+        } else {
+            None
+        }
+    }
+}
+
 // --- position-sensitive accessors ----------------------------------------
 
 /// The role a scalar literal plays inside a [`Constraint`], decided by the
@@ -646,6 +685,14 @@ pub enum PredicateKind {
 }
 
 impl Attribute {
+    /// The key's name segments in source order: one for a family key
+    /// (`labels`), two for an rsdl backend key (`linux.cpuset`, rsdl reference
+    /// §5). Empty for a predicate attribute, and for a key the parser held in
+    /// an `ErrorNode` (a reserved word, FORM-105).
+    pub fn key_segments(&self) -> AstChildren<Name> {
+        support::children(self.syntax())
+    }
+
     /// The predicate keyword of a `require`/`ensure` attribute; `None` for
     /// the flag and assignment forms.
     pub fn predicate_kind(&self) -> Option<PredicateKind> {

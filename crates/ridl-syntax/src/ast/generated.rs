@@ -45,6 +45,18 @@ impl SourceFile {
     pub fn services(&self) -> AstChildren<ServiceDef> {
         support::children(&self.syntax)
     }
+    pub fn systems(&self) -> AstChildren<SystemDef> {
+        support::children(&self.syntax)
+    }
+    pub fn components(&self) -> AstChildren<ComponentDef> {
+        support::children(&self.syntax)
+    }
+    pub fn distributions(&self) -> AstChildren<DistributionDef> {
+        support::children(&self.syntax)
+    }
+    pub fn deployments(&self) -> AstChildren<DeploymentDef> {
+        support::children(&self.syntax)
+    }
 }
 /// A `PackageDecl` node (`family.ungram` rule `PackageDecl`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -167,6 +179,156 @@ impl ServiceDef {
     }
     pub fn l_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn r_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBrace)
+    }
+}
+/// A `SystemDef` node (`family.ungram` rule `SystemDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SystemDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for SystemDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::SystemDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl SystemDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn lines(&self) -> AstChildren<MemberLine> {
+        support::children(&self.syntax)
+    }
+    pub fn system_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::SystemKw)
+    }
+    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn r_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBrace)
+    }
+}
+/// A `ComponentDef` node (`family.ungram` rule `ComponentDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComponentDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for ComponentDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::ComponentDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl ComponentDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn lines(&self) -> AstChildren<ComponentLine> {
+        support::children(&self.syntax)
+    }
+    pub fn component_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::ComponentKw)
+    }
+    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn r_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBrace)
+    }
+}
+/// A `DistributionDef` node (`family.ungram` rule `DistributionDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DistributionDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for DistributionDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::DistributionDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl DistributionDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn lines(&self) -> AstChildren<MemberLine> {
+        support::children(&self.syntax)
+    }
+    pub fn distribution_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::DistributionKw)
+    }
+    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn r_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBrace)
+    }
+}
+/// A `DeploymentDef` node (`family.ungram` rule `DeploymentDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DeploymentDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for DeploymentDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::DeploymentDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl DeploymentDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn system(&self) -> Option<Reference> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn machines(&self) -> AstChildren<MachineDef> {
+        support::children(&self.syntax)
+    }
+    pub fn deployment_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::DeploymentKw)
+    }
+    pub fn for_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::ForKw)
+    }
+    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
     }
     pub fn r_brace_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::RBrace)
@@ -1350,6 +1512,9 @@ impl Attribute {
     pub fn expr(&self) -> Option<Expr> {
         support::child(&self.syntax)
     }
+    pub fn dot_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Dot)
+    }
     pub fn eq_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::Eq)
     }
@@ -1388,6 +1553,108 @@ impl AttrValue {
     }
     pub fn r_paren_token(&self) -> Option<SyntaxToken> {
         support::token(&self.syntax, SyntaxKind::RParen)
+    }
+}
+/// A `MemberLine` node (`family.ungram` rule `MemberLine`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MemberLine {
+    syntax: SyntaxNode,
+}
+impl AstNode for MemberLine {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::MemberLine).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl MemberLine {
+    pub fn reference(&self) -> Option<Reference> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+}
+/// A `ComponentLine` node (`family.ungram` rule `ComponentLine`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ComponentLine {
+    syntax: SyntaxNode,
+}
+impl AstNode for ComponentLine {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::ComponentLine).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl ComponentLine {
+    pub fn reference(&self) -> Option<Reference> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn offers_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::OffersKw)
+    }
+    pub fn requires_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RequiresKw)
+    }
+}
+/// A `Reference` node (`family.ungram` rule `Reference`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Reference {
+    syntax: SyntaxNode,
+}
+impl AstNode for Reference {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::Reference).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl Reference {
+    pub fn qualified_name(&self) -> Option<QualifiedName> {
+        support::child(&self.syntax)
+    }
+}
+/// A `MachineDef` node (`family.ungram` rule `MachineDef`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct MachineDef {
+    syntax: SyntaxNode,
+}
+impl AstNode for MachineDef {
+    fn cast(syntax: SyntaxNode) -> Option<Self> {
+        (syntax.kind() == SyntaxKind::MachineDef).then_some(Self { syntax })
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.syntax
+    }
+}
+impl MachineDef {
+    pub fn name(&self) -> Option<Name> {
+        support::child(&self.syntax)
+    }
+    pub fn attr_block(&self) -> Option<AttrBlock> {
+        support::child(&self.syntax)
+    }
+    pub fn lines(&self) -> AstChildren<MemberLine> {
+        support::children(&self.syntax)
+    }
+    pub fn machine_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::MachineKw)
+    }
+    pub fn l_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::LBrace)
+    }
+    pub fn comma_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::Comma)
+    }
+    pub fn r_brace_token(&self) -> Option<SyntaxToken> {
+        support::token(&self.syntax, SyntaxKind::RBrace)
     }
 }
 /// A `BinaryExpr` node (`family.ungram` rule `BinaryExpr`).

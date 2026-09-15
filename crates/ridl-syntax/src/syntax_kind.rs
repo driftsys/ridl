@@ -174,6 +174,16 @@ pub enum SyntaxKind {
     // Appendix C).
     ServiceDef,
     DottedName,
+    // Nodes of the rsdl grammar (`family.ungram` — rsdl reference §3, §4,
+    // Appendix B).
+    SystemDef,
+    ComponentDef,
+    ComponentLine,
+    DistributionDef,
+    DeploymentDef,
+    MachineDef,
+    MemberLine,
+    Reference,
     /// A recovery node: error recovery wraps the tokens it skips in one of
     /// these, so broken input still produces a lossless tree. It is the one
     /// node kind with no rule in `family.ungram`, and the last variant — the

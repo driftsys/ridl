@@ -1,0 +1,16 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: compiled.diagnostics
+input_file: crates/ridlc/tests/corpus/rsdl-diag-showcase/ridl.toml
+---
+error[RSDL-604]: `type` starts a declaration of another profile, and an `.rsdl` file declares `system`, `component`, `distribution` and `deployment` only — a type is declared in a `.typl` file, an interface or a service in a `.ridl` file (rsdl reference §2)
+  ┌─ tests/corpus/rsdl-diag-showcase/profile_boundary.rsdl:5:1
+  │
+5 │ type Speed: km/h
+  │ ^^^^
+
+error[FORM-102]: `internal` cannot modify an rsdl declaration — the closure is workspace-wide, so every declaration it names is visible from the system's package (rsdl reference §2)
+  ┌─ tests/corpus/rsdl-diag-showcase/profile_boundary.rsdl:9:1
+  │
+9 │ internal component Lane {}
+  │ ^^^^^^^^

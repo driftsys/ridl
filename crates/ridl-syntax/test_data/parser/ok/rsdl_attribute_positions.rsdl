@@ -1,0 +1,36 @@
+package veh.topology
+
+// The two value positions rsdl widens (rsdl reference Appendix B): the value
+// and the list item admit a bare name, so the checker, not the parser, reports
+// `instances = solo` (RSDL-305) and a declared `Unit` (RSDL-307).
+component Solo [ instances = solo ] {}
+component Unitary [ instances = (Unit) ] {}
+component Empty [ instances = () ] {}
+
+// Flags, assignments, backend keys on declarations and on every kind of line,
+// doc comments on lines, and trailing commas.
+component Cruise [
+  instances = (primary, backup,),
+  deprecated = "use Cruise2",
+  rust.crate = "cruise",
+  someip.serviceId = 4660,
+  linux.realtime,
+] {
+  /// The service this component offers.
+  offers veh.adas.cruise [ someip.instanceId = 1 ],
+  requires veh.adas.LaneAssist [ dds.reliable ],
+}
+
+system Vehicle [ labels = (ASIL_B, PRIVATE) ] {
+  /// The one component.
+  Cruise [ ts.module = "cruise" ],
+}
+
+distribution Adas [ tier = PLATFORM, sign.key = "adas" ] { veh.topology.Cruise, }
+
+deployment Bench for veh.topology.Vehicle [ labels = (QM) ] {
+  machine DevBox [ external, linux.cpuset = (0, 1) ] {
+    veh.topology.Cruise.primary [ linux.cpuset = (2) ],
+    Cruise.backup,
+  }
+}

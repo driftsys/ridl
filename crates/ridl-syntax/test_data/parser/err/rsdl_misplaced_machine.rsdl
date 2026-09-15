@@ -1,0 +1,9 @@
+package veh.topology
+
+// A machine is declared only inside a deployment (rsdl reference Appendix B),
+// and a deployment names its system with `for`.
+machine DevBox { Cruise }
+
+deployment Bench {
+  machine DevBox { Cruise }
+}

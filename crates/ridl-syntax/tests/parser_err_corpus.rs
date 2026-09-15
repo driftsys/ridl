@@ -75,3 +75,28 @@ fn ridl_err_corpus_is_lossless_reports_errors_and_matches_snapshots() {
         insta::assert_snapshot!(dump(&parsed));
     });
 }
+
+/// The rsdl half of the err corpus: broken `.rsdl` input parsed under
+/// [`Profile::Rsdl`], with the same lossless, at-least-one-diagnostic recovery
+/// contract.
+#[test]
+fn rsdl_err_corpus_is_lossless_reports_errors_and_matches_snapshots() {
+    insta::glob!("../test_data/parser/err", "*.rsdl", |path| {
+        let input = std::fs::read_to_string(path).expect("a readable corpus file");
+        let parsed = parse(&input, Profile::Rsdl);
+
+        assert_eq!(
+            parsed.syntax().text().to_string(),
+            input,
+            "recovery is not lossless for {}",
+            path.display(),
+        );
+        assert!(
+            !parsed.errors().is_empty(),
+            "err-corpus file {} must report at least one diagnostic",
+            path.display(),
+        );
+
+        insta::assert_snapshot!(dump(&parsed));
+    });
+}
