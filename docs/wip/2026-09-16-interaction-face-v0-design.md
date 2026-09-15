@@ -16,8 +16,9 @@ stage does not merge until Sebastien has approved the written spec.
 ## 1. Scope
 
 The MVP generates, for one example ridl package, the consumer and provider faces
-of one interface, and proves them with an in-process round trip in a test. It is
-in-process only.
+of its interfaces, and proves them with an in-process round trip in a test. The
+package holds two interfaces, for the reason §7 gives, and the round trip runs
+against the first. It is in-process only.
 
 **In scope.** The interface and interaction descriptors of
 `crates/ridl-rt/src/contract.rs`; a `Client` generic over exactly the ports its
@@ -68,8 +69,8 @@ cannot carry is a reason to simplify the example package, not to grow the
 stand-in.
 
 **Alternative rejected: generate `Payload<ReprC>` for a restricted type
-subset.** This is more real, and it is a down-payment on E11.12 rather than a
-throwaway. It was rejected because it pre-empts an epic whose design is not
+subset.** This is more real, and it would be a first part of E11.12 rather than
+a throwaway. It was rejected because it pre-empts an epic whose design is not
 written: the layout struct, the emitted C header, and the removal of
 `#[repr(C)]` from the generated domain structs are all E11.12's, and a partial
 answer generated now would have to be reconciled with them. The MVP's question
@@ -96,10 +97,12 @@ provisional number, not using one; nothing in this lane publishes. The example
 package gets its number for free at compile time, and `PROVISIONAL` is emitted
 as `true`, which is an honest statement rather than a placeholder.
 
-## 4. The catalog hash: a zero placeholder, tied to E16.2
+## 4. Two gaps the driver document did not list
 
-**This decision is not on the driver prompt's list.** It was found while reading
-`contract.rs` and it blocks M3, so it is settled here.
+**Neither is on the driver prompt's list.** Both were found while reading
+`contract.rs`, and both block M3, so both are settled here.
+
+### 4.1 The catalog hash: a zero placeholder, tied to E16.2
 
 `Interface::CATALOG` is a `&'static CatalogRef`, and a `CatalogRef` is a package
 name plus a `CatalogHash([u8; 32])`. That hash is SHA-256 over the reachable
@@ -124,6 +127,44 @@ An alternative — hashing something cheap and local, such as the package name �
 was rejected because it would put a second, wrong definition of the catalog hash
 into the tree, and a wrong hash that looks computed is worse than a zero that
 obviously is not.
+
+### 4.2 The members' encoded sizes: every field `None`
+
+`Interface::MEMBERS` is `&'static [Member]`, and every `Member` carries
+`payloads: &'static [PayloadInfo]`, each holding an
+`EncodedSizes { proto3,
+flatbuffers, repr_c }` of `Option<u32>`
+(`contract.rs:136-186`). The emitter has to write something there, and under §2
+it can compute nothing: the only size that exists in this MVP is the
+`Payload::MAX_SIZE` of a hand-written impl that lives in the test, which
+generated code cannot reference.
+
+**Decision. The emitter writes
+`EncodedSizes { proto3: None, flatbuffers: None,
+repr_c: None }` for every
+payload.** One entry per payload, two for a query, so the shape of the list is
+still correct and only the sizes are absent.
+
+This matches the plan of record exactly.
+`docs/wip/2026-09-13-catalog-descriptor-plan.md:88-91` already holds the
+`repr(C)` column absent from every payload's size list until E11.12, and gives
+the reading that makes all three columns absent correct here: "the reader treats
+a missing entry as 'the toolchain cannot size this payload for this encoding'".
+For this MVP the toolchain genuinely cannot.
+
+**One thing to reconcile, and it is not this lane's to settle.** `contract.rs`
+documents `None` more strongly than the plan does — "a field is `None` when that
+encoding **cannot carry** the payload" (`contract.rs:178-180`) — and under that
+reading `repr_c: None` beside §2's choice of `ReprC` states something false. The
+two readings differ, the plan's is the one E16.2 is being built to, and the doc
+comment is the one that shipped. Lane M does not change `ridl-rt` to settle it;
+M1 records the discrepancy here and on the tracking issue so E16.2 resolves it,
+and M3's generated doc comment says which reading the `None`s are written under.
+
+The face itself never reads these sizes: generated code sizes its buffers from
+`<T as Payload<E>>::MAX_SIZE`, which the hand-written impl supplies. So the
+absent sizes cost the MVP nothing and cost a future catalog consumer everything,
+which is the right way round for a placeholder.
 
 ## 5. The placeholder ports: test-only, one file, disposable
 
@@ -166,8 +207,8 @@ package's interface the emitter writes one module holding:
   `NUMBER`, `PROVISIONAL`, `NAME` and `MEMBERS`;
 - a unit struct per interaction with `impl Interaction` plus the kind's trait —
   `Signal`, `Event`, `Command`, `Query` or `Fixed` — carrying the payload or
-  argument and reply types, `init()` for a signal, and `require()` for a command
-  or a query;
+  argument and reply types, `init()` for a signal, `require()` for a command or
+  a query, and `ensure()` for a query;
 - `Client<'a, P>`, generic over exactly the ports the interface's interactions
   need and no others, with one method per consumer-side interaction;
 - `Publisher<'a, W>` over `SignalWriter + EventSink`, with one method per
@@ -175,10 +216,28 @@ package's interface the emitter writes one module holding:
 - `trait Provider` with one method per command and query;
 - `fn dispatch<H: Handler, P: Provider>(h: &mut H, p: &mut P, buf: &mut [u8]) -> usize`.
 
+**The `Provider` method signatures, settled here.** The design note's §8 shows
+`fn set_gear(&mut self, g: Gear) -> Result<(), Rejected>`, and the `ridl-rt` 0.1
+design record hands that to the Rust codegen as a known defect:
+`docs/archive/2026-09-13-ridl-rt-v0.1-design.md:852-856` — it "contradicts ridl
+§6.1, because a command has no failure the application reports". `Rejected` is
+also not a type `ridl-rt` has; `error.rs` carries `Contract`, `Transport` and
+`CallError`. The record is right and §8 is wrong, so:
+
+- a command is `fn set_target(&mut self, desired: Speed);` — it returns nothing;
+- a query is `fn average_speed(&mut self, window: Duration) -> Speed;`.
+
+Every outcome the caller can see as an error is settled by `dispatch` before or
+around the provider call, never returned from it: `Transport::Corrupt` when the
+argument bytes fail `verify`, and `Contract::PreconditionFailed` when `require`
+fails. That is what `Handler::settle`'s own documentation describes, and it is
+why the provider needs no error return.
+
 **RA-19 holds.** The port bounds on `Client` are computed from the interaction
 kinds the interface actually declares: an interface with no query and no command
 produces a `Client` with no `Caller` bound. This is a property M3 tests
-directly, with an interface of each shape, not something it asserts in prose.
+directly, which is why §7's fixture declares a second interface — one interface
+cannot exhibit both the presence and the absence of a bound.
 
 **RA-20 holds.** Generated code contains no thread, future, socket or timer. A
 query returns a `Correlation` and a separate `*_reply` method polls it; nothing
@@ -187,11 +246,16 @@ are ready and returns how many it settled — the loop that calls it is the
 application's or the runtime's.
 
 Two reductions from §8, both following from §1: no method is bounded on
-`CoherentSignals`, and `ensure` is not evaluated. `require` is, because
-`contract.rs` already declares it on `Command` and `Query` and the dispatch has
-to call something before the provider runs. `ensure` needs the reply in hand and
-a place to put the failure, and the MVP settles `Contract::PreconditionFailed`
-from `require` only. M2 records `ensure` as a follow-up, not as a silent gap.
+`CoherentSignals`, and **`ensure` is emitted but never called**. The distinction
+matters and the first draft of this section got it wrong: `Query::ensure` is a
+required method with no default body (`contract.rs:120-129`), so an `impl Query`
+that omits it does not compile. The emitter therefore writes `ensure` for every
+query — returning `Ok(())` when the query declares no `ensure` clause, and the
+translated clauses when it does — and `dispatch` does not call it. What the MVP
+leaves out is the evaluation, not the method: the MVP settles
+`Contract::PreconditionFailed` from `require` only, and never
+`Contract::ContractBroken`. M2 records calling `ensure` as a follow-up, not as a
+silent gap.
 
 ## 7. Where the code is generated from, and where the round trip lives
 
@@ -215,19 +279,59 @@ that compiles the emitted text needs it.
 `crates/ridl-backend-rust/tests/fixtures/`, modelled on
 `crates/ridl-backend-proto/tests/fixtures/cruise.ridl` but cut down to what §2's
 stand-in can carry: fixed-width named scalars, one enum, one struct of those,
-and one interface declaring one signal, one event, one command and one query.
-One of every kind the descriptors cover except `fixed`, which M2 may add if it
-costs nothing.
+and **two interfaces**.
+
+- The first declares one signal, one event, one command and one query — one of
+  every kind the descriptors cover except `fixed`, which M2 may add if it costs
+  nothing. This is the interface the round trip runs against.
+- The second declares one signal and nothing else. It exists only so §6's RA-19
+  claim is testable: its `Client` must carry no `Caller` and no `EventSource`
+  bound, and a test that names the full port set must fail to compile against
+  it. One interface cannot show both halves of that property.
+
+**Every command and query in the fixture takes exactly one parameter, whose type
+is a declared type of the package, and every query replies with one.** So
+`Command::Args`, `Query::Args` and `Query::Reply` are declared types named
+directly. This is a real constraint, not a stylistic one: the design note's §8
+shows `type Args = SetGearArgs`, an induced argument struct, and **the Rust
+backend emits no induced type from an interface today** — `generate` iterates
+`package.decls` only, and `emit_decl`'s catch-all still refers to an `interact`
+module that no longer exists (`lib.rs:238-240`). Emitting induced argument
+structs is real work that the MVP does not need, so M2 records a multi-parameter
+call as a follow-up and the fixture stays inside the restriction.
+
+**How the emitted text becomes compiled code.** `generate` returns a `String` at
+run time (`lib.rs:54,90-94`), so a test cannot link its output without a
+mechanism, and the driver's item 6 asks for one.
+
+**Decision. The generated face is checked in and included, not compiled by
+spawning cargo.** M3 writes the emitter's output for the fixture to
+`crates/ridl-backend-rust/tests/generated/<package>.rs`, the round-trip test
+brings it in with `include!`, and a second, separate test runs `generate` over
+the fixture and asserts the result equals the checked-in file byte for byte,
+failing with the instruction to regenerate. The generated code is then genuinely
+compiled and linked by `cargo test`, and it cannot drift from the emitter.
+
+The alternative — writing the output to a temporary crate and spawning cargo,
+the shape `crates/ridl-backend-proto/tests/support/mod.rs` uses for `protox` —
+was rejected on two grounds: `protox` is a library called in process while this
+would be a cargo build inside a test, and the temporary crate would need its own
+path dependency on `ridl-rt`, which makes `ridl-rt` a dev-dependency of the
+backend insufficient and puts a generated manifest in the test's care.
 
 **The round trip.** A test in `crates/ridl-backend-rust/tests/` that compiles
-the generated face together with the placeholder ports of §5 and the hand-
-written `Payload<ReprC>` impls of §2, then: publishes a signal and reads it back
-through `Client`, raises an event and receives it, and sends a command and a
-query through `Client`, runs `dispatch` against a `Provider`, and observes the
-acknowledgment and the reply. **That test passing is M3's done-when.** Note that
-the generated code must be compiled, not just snapshotted — a snapshot test
-would have told us nothing, and "has never been compiled" is the exact complaint
+the included generated face together with the placeholder ports of §5 and the
+hand-written `Payload<ReprC>` impls of §2, then: publishes a signal and reads it
+back through `Client`, raises an event and receives it, and sends a command and
+a query through `Client`, runs `dispatch` against a `Provider`, and observes the
+acknowledgment and the reply. **That test passing is M3's done-when.** The
+generated code must be compiled, not just snapshotted — a snapshot test would
+have told us nothing, and "has never been compiled" is the exact complaint
 ADR-0018's Alternatives table made about the retracted layer.
+
+The orphan rule permits the hand-written `impl Payload<ReprC> for Speed` that §2
+depends on, because `include!` puts the generated types in the test crate, which
+makes them local there.
 
 ## 8. The coupling to Lane C's Epic 10 — accepted rework
 
@@ -277,29 +381,39 @@ rule, saying so on #328 before it pushes.
 
 ## 10. Alternatives considered
 
-| Alternative                                                  | Why not                                                                                                                                                                                                               |
-| ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Wait for E11.1 and E11.9, as ADR-0018 decision 15 sequences  | That is the correct order and this lane is a deliberate exception to it. The team has nothing to write against today, and the face's shape is the thing most worth learning early, because every later epic binds it. |
-| Generate a `Payload<ReprC>` codec for a restricted subset    | Pre-empts E11.12, whose layout struct and C header are unwritten. See §2.                                                                                                                                             |
-| Invent a fourth encoding, or a JSON stand-in                 | ADR-0020 decision 1 closes the set and `Encoding` is sealed, so it is not expressible without changing `ridl-rt`. Correctly impossible.                                                                               |
-| Put the placeholder ports in a new `ridl-loopback` crate now | That is E11.9's name and E11.9's design. Taking the name now would either constrain that story or force a rename. See §5.                                                                                             |
-| Put the face in a new crate beside `ridl-backend-rust`       | The face is the same backend's phase 2. Two crates would split one backend's output and give the plugin system of ADR-0020 decision 9 two things to invoke instead of one.                                            |
-| Snapshot the generated face instead of compiling it          | "It cannot be connected to a runtime at all, and has never been compiled" is what ADR-0018 said about the retracted layer. Repeating it would reproduce the defect.                                                   |
-| Hash the package name into the catalog hash                  | A wrong hash that looks computed is worse than a zero that obviously is not. See §4.                                                                                                                                  |
+| Alternative                                                    | Why not                                                                                                                                                                                                               |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wait for E11.1 and E11.9, as ADR-0018 decision 15 sequences    | That is the correct order and this lane is a deliberate exception to it. The team has nothing to write against today, and the face's shape is the thing most worth learning early, because every later epic binds it. |
+| Generate a `Payload<ReprC>` codec for a restricted subset      | Pre-empts E11.12, whose layout struct and C header are unwritten. See §2.                                                                                                                                             |
+| Invent a fourth encoding, or a JSON stand-in                   | ADR-0020 decision 1 closes the set and `Encoding` is sealed, so it is not expressible without changing `ridl-rt`. Correctly impossible.                                                                               |
+| Put the placeholder ports in a new `ridl-loopback` crate now   | That is E11.9's name and E11.9's design. Taking the name now would either constrain that story or force a rename. See §5.                                                                                             |
+| Put the face in a new crate beside `ridl-backend-rust`         | The face is the same backend's phase 2. Two crates would split one backend's output and give the plugin system of ADR-0020 decision 9 two things to invoke instead of one.                                            |
+| Snapshot the generated face instead of compiling it            | "It cannot be connected to a runtime at all, and has never been compiled" is what ADR-0018 said about the retracted layer. Repeating it would reproduce the defect.                                                   |
+| Hash the package name into the catalog hash                    | A wrong hash that looks computed is worse than a zero that obviously is not. See §4.1.                                                                                                                                |
+| Compile the generated face by spawning cargo on a temp crate   | The temp crate needs its own path dependency on `ridl-rt`, which makes a dev-dependency on the backend insufficient and puts a generated manifest in the test's care. See §7.                                         |
+| Follow the design note §8's `Provider -> Result<(), Rejected>` | `Rejected` is not a `ridl-rt` type, and the `ridl-rt` 0.1 design record already records that this return contradicts ridl §6.1. See §6.                                                                               |
+| Emit induced argument structs for multi-parameter calls        | The Rust backend emits no induced type from an interface today. Real work the MVP does not need; the fixture stays at one parameter per call instead. See §7.                                                         |
 
 ## 11. What Sebastien should look at first
 
-Every decision here was taken without him. These four carry the most judgement:
+Every decision here was taken without him. These five carry the most judgement:
 
 1. **§2, no generated codec.** The MVP proves the face and not the encoding. If
    the point of the MVP is for the team to write real payloads against it, this
    is the wrong call and §2's rejected alternative is the right one.
-2. **§4, the zero catalog hash.** This dependency was not in the driver
+2. **§4.1, the zero catalog hash.** This dependency was not in the driver
    document. If E16.2 is closer than it looks, waiting for it is cheaper than
-   placing a placeholder that §4 admits stops being safe at two packages.
-3. **§6, `ensure` not evaluated.** A deliberate reduction. It makes the MVP's
-   provider side incomplete against ridl §6 and §7.
-4. **§9, E11.13 and the `docs/ROADMAP.md` ordering.** The identifier is
+   placing a placeholder that §4.1 admits stops being safe at two packages.
+3. **§4.2, the all-`None` encoded sizes — and the discrepancy under it.**
+   `contract.rs` documents `None` as "that encoding cannot carry the payload";
+   the catalog descriptor plan documents it as "the toolchain cannot size this
+   payload for this encoding". Those are different statements and E16.2 is being
+   built to the second. Lane M writes `None` and does not change `ridl-rt`, but
+   somebody should decide which reading is the real one.
+4. **§6, `ensure` emitted but not called.** A deliberate reduction. It makes the
+   MVP's provider side incomplete against ridl §7: no query ever settles
+   `Contract::ContractBroken`.
+5. **§9, E11.13 and the `docs/ROADMAP.md` ordering.** The identifier is
    mechanical and checked; whether M1 may edit the roadmap before B2 is a
    coordination call.
 
@@ -317,5 +431,5 @@ Every decision here was taken without him. These four carry the most judgement:
 - Depends on: `crates/ridl-rt` 0.1.0 (E11.0, landed); the IR's interface
   numbering (E15.1 and E15.2, landed, #391)
 - Waits for nothing. Blocked by nothing.
-- Replaced later by: E11.7, E11.8 or E11.12 (§2's stand-in), E11.9 (§5's
-  placeholder ports), E16.2 (§4's zero hash)
+- Replaced later by: E11.7, E11.8 or E11.12 (§2's stand-in and §4.2's absent
+  sizes), E11.9 (§5's placeholder ports), E16.2 (§4.1's zero hash)
