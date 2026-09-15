@@ -267,9 +267,15 @@ warning[RIDL-407]: `doorClosed` has moved in `VehicleStatus` since the published
 ```
 
 That run exits 0: two RIDL-407 warnings and an otherwise clean compile stay
-clean. The desk check runs only after a compile with no error diagnostic, so
-a workspace that fails to check at all draws no RIDL-407 warning on top of its
-real problem — it just exits 1, exactly as it would with no baseline present.
+clean. The desk check runs only after a compile with no error diagnostic other
+than RIDL-409 — a live `interfaces.lock` entry with no declaration, which
+leaves nothing out of the IR the desk check compares. A workspace with any
+other error draws no RIDL-407 warning in addition to that error: it exits 1,
+exactly as it would with no baseline present. A workspace whose only errors
+are RIDL-409 still exits 1, and the desk check runs over it: when exactly one
+declaration without an entry has the published shape of the orphan entry's
+interface, the desk check adds a label to that RIDL-409 naming the
+[`ridl lock --rename`](#ridl-lock) command to run.
 
 ### `ridl baseline`
 

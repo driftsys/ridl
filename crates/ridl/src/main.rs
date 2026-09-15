@@ -46,7 +46,8 @@ mod lock;
 mod property;
 
 use clap::{Parser, Subcommand};
-use ridl_core::diag::{DiagCode, Diagnostic, FileId, Severity, SourceMap, Span, render};
+use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span, render};
+use ridl_core::interface_lock::LockKey;
 use ridl_fmt::{FormatOutcome, format};
 use ridl_syntax::ast::{
     AstNode as _, HasName as _, InterfaceMember, Name, ServiceShape, SourceFile,
@@ -540,13 +541,17 @@ const ORDINAL_CATEGORIES: [ridl_diff::Category; 7] = [
     ridl_diff::Category::ServiceShapeRemoved,
 ];
 
-/// Runs `check` and, when the compile is clean and a baseline is available,
-/// the desk check on top of it.
+/// Runs `check` and, when a baseline is available and the compile produced no
+/// error other than RIDL-409, the desk check on top of it.
 ///
-/// The desk check only ever *adds warnings*: `ridl check` keeps its 0/1/2 exit
-/// contract, so a reordered but otherwise clean workspace still exits 0. It is
-/// also skipped entirely when the compile produced an error — a diff against
-/// IR that failed to check would report noise on top of the real problem.
+/// The desk check only ever *adds* to the diagnostics — RIDL-407 warnings,
+/// and the rename label on a RIDL-409 (lock design §4) — so `ridl check`
+/// keeps its 0/1/2 exit contract: a reordered but otherwise clean workspace
+/// still exits 0, and a workspace with an orphan lock entry still exits 1. It
+/// is skipped entirely when the compile produced any other error — a diff
+/// against IR that failed to check would report noise on top of the real
+/// problem — while RIDL-409 stops nothing in lowering (an entry with no
+/// declaration has nothing to lower), so the IR it runs over is whole.
 fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFormat) -> ExitCode {
     let mut run = match ridlc::run_check(path, frozen.into()) {
         Ok(run) => run,
@@ -556,7 +561,7 @@ fn run_check(path: &Path, frozen: bool, baseline: Option<&Path>, format: CheckFo
         }
     };
 
-    if !run.has_error() {
+    if lock::only_lock_orphans(&run.diagnostics) {
         match baseline_location(path, baseline) {
             Ok(Some(location)) => {
                 if let Err(code) = desk_check(path, &location, baseline.is_some(), &mut run) {
@@ -925,13 +930,16 @@ fn default_baseline_dir(entry: &Path) -> PathBuf {
     start.join(".ridl").join("baseline")
 }
 
-/// Compares the checked workspace against the baseline at `location` and
-/// appends a RIDL-407 warning for every ordinal-affecting change.
+/// Compares the checked workspace against the baseline at `location`, appends
+/// a RIDL-407 warning for every ordinal-affecting change, and adds the rename
+/// label to every RIDL-409 whose orphan entry has exactly one same-shape
+/// candidate ([`rename_labels`]).
 ///
 /// The workspace is compiled a second time here, through
 /// [`ridlc::compile_workspace`], because `run_check` renders diagnostics but
 /// does not hand back the IR. The cost is paid only when a baseline is actually
-/// present, and never on a run that already failed. `explicit` — whether
+/// present, and never on a run that failed for anything but RIDL-409.
+/// `explicit` — whether
 /// `location` came from a `--baseline` flag rather than auto-discovery — is
 /// passed straight through to [`load_baseline`], which it uses to tell an
 /// explicit `--baseline` holding no snapshot (a refusal) from an
@@ -977,7 +985,123 @@ fn desk_check(
         });
     }
     run.diagnostics.extend(warnings);
+    rename_labels(&baseline, &current, &index, run);
     Ok(())
+}
+
+/// The rename hint (lock design §4; plan decision PD-5). For every RIDL-409
+/// the compile produced, when exactly one declaration without an entry in
+/// the same package has the orphan entry's shape in the published baseline,
+/// a secondary label goes on that diagnostic, at the candidate's declaration,
+/// naming the one `ridl lock <pkg> --rename Old=New`. Nothing otherwise — no
+/// baseline package, no candidate of that shape, or several — and never a
+/// second diagnostic. The orphan's key is read from the lock line the
+/// diagnostic points at (its span is the entry's line, plan decision PD-3),
+/// and its package from the lock file's directory through the index.
+fn rename_labels(
+    baseline: &[ridl_ir::v2::Package],
+    current: &[ridl_ir::v2::Package],
+    index: &DeclIndex,
+    run: &mut CliRun,
+) {
+    let orphans: Vec<(usize, LockKey, String)> = run
+        .diagnostics
+        .iter()
+        .enumerate()
+        .filter(|(_, diagnostic)| diagnostic.code == DiagCode::RIDL_409)
+        .filter_map(|(position, diagnostic)| {
+            let (key, dir) = orphan_entry(&run.sources, diagnostic)?;
+            Some((position, key, dir))
+        })
+        .collect();
+    for (position, old, dir) in orphans {
+        let Some(package) = index.package_of_dir(&dir) else {
+            continue;
+        };
+        let Some(published) = baseline
+            .iter()
+            .find(|candidate| candidate.name == package)
+            .and_then(|published| {
+                published
+                    .shapes()
+                    .find(|shape| lock::shape_key(shape) == old)
+            })
+        else {
+            continue;
+        };
+        let candidates: Vec<ridl_ir::v2::InterfaceShape<'_>> = current
+            .iter()
+            .find(|candidate| candidate.name == package)
+            .map(|fresh| {
+                fresh
+                    .shapes()
+                    .filter(|shape| {
+                        shape.interface.provisional
+                            && same_shape(published.interface, shape.interface)
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let [candidate] = candidates.as_slice() else {
+            continue;
+        };
+        let new = lock::shape_key(candidate);
+        let span = index.shape_span(package, candidate.name, &mut run.sources);
+        run.diagnostics[position].labels.push(Label {
+            span,
+            message: format!(
+                "same shape as `{old}` in the published baseline: run `ridl lock {dir} --rename \
+                 {old}={new}`"
+            ),
+        });
+    }
+}
+
+/// The orphan entry a RIDL-409 points at: its key, read from the first field
+/// of the lock line under the diagnostic's span, and the package directory —
+/// the lock file's parent — as the message names it (plan decision PD-4).
+fn orphan_entry(sources: &SourceMap, diagnostic: &Diagnostic) -> Option<(LockKey, String)> {
+    let path = sources.path(diagnostic.primary.file)?;
+    let text = sources.text(diagnostic.primary.file)?;
+    let range = diagnostic.primary.range;
+    let line = text.get(usize::from(range.start())..usize::from(range.end()))?;
+    let key = line.split(' ').next()?.parse().ok()?;
+    Some((key, directory_of(path)))
+}
+
+/// Whether two interface bodies are the same shape (lock design §4): their
+/// `interactions` lists compare equal once each interaction's `doc`, `labels`
+/// and `deprecated` are blanked on both sides. Every other field of an
+/// interaction — name, kind, ordinal, payload, timing, parameters, return,
+/// contracts, visibility — and every `reserved` tombstone must match. The
+/// `Interface`'s own fields — name, visibility, doc, number, provisional flag
+/// — are not members and are not compared: the baseline's interface is frozen
+/// and the candidate is provisional, so whole values would never match.
+fn same_shape(old: &ridl_ir::v2::Interface, new: &ridl_ir::v2::Interface) -> bool {
+    fn members(interface: &ridl_ir::v2::Interface) -> Vec<ridl_ir::v2::Decl> {
+        interface
+            .interactions
+            .iter()
+            .cloned()
+            .map(|mut decl| {
+                decl.doc = String::new();
+                decl.labels = Vec::new();
+                decl.deprecated = None;
+                decl
+            })
+            .collect()
+    }
+    members(old) == members(new)
+}
+
+/// The directory a file path sits in, as a string: its parent, or `.` when
+/// the path has none — the form the loader records a package directory in and
+/// the RIDL-409 message names it in.
+fn directory_of(path: &str) -> String {
+    match Path::new(path).parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir.to_string_lossy().into_owned(),
+        _ => ".".to_string(),
+    }
 }
 
 /// The RIDL-407 message for one ordinal-affecting change.
@@ -1396,6 +1520,11 @@ struct DeclIndex {
     /// whose diff paths name a shape slot rather than an interaction, which
     /// selects the service-level RIDL-407 wording.
     named_services: BTreeSet<(String, String)>,
+    /// The package each indexed directory declares, by the directory's path
+    /// as [`directory_of`] spells it. A package's `interfaces.lock` sits in
+    /// the package directory, so the lock file's parent names the package a
+    /// RIDL-409 belongs to.
+    packages: BTreeMap<String, String>,
 }
 
 impl DeclIndex {
@@ -1424,6 +1553,7 @@ impl DeclIndex {
             let Some(package) = package_name(&source) else {
                 continue;
             };
+            index.packages.insert(directory_of(&path), package.clone());
 
             // Every interface shape, `interface` declarations and services'
             // inline shapes alike (`SourceFile::shapes`). A service's inline
@@ -1545,6 +1675,28 @@ impl DeclIndex {
             .get(&key)
             .or_else(|| self.shapes.get(&(key.0, key.1)));
         let Some((path, range)) = found else {
+            return detached_span();
+        };
+        let Some(text) = self.texts.get(path) else {
+            return detached_span();
+        };
+        Span {
+            file: sources.file_id(path, text),
+            range: *range,
+        }
+    }
+
+    /// The package declared in the directory `dir` — the parent of a lock
+    /// file's path — or `None` when no indexed file sits in it.
+    fn package_of_dir(&self, dir: &str) -> Option<&str> {
+        self.packages.get(dir).map(String::as_str)
+    }
+
+    /// The span of a shape's declared name — an `interface` declaration's
+    /// name, or a service's dotted name for its inline shape — or a detached
+    /// span when the source does not declare it.
+    fn shape_span(&self, package: &str, shape: &str, sources: &mut SourceMap) -> Span {
+        let Some((path, range)) = self.shapes.get(&(package.to_string(), shape.to_string())) else {
             return detached_span();
         };
         let Some(text) = self.texts.get(path) else {

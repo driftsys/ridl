@@ -1136,15 +1136,31 @@ interface VehicleStatus {
   `ridl-diff` per its category rules; the diff exit-code contract (concept note
   §9.1) applies
 
-**The same model applies one level up, to the interfaces of a service** (§14.5,
-ADR-0015 decision 15): a service's shape list assigns each composed interface an
-implicit **interface id**, 1-based by declaration order, with an inline shape at
-slot 1. Appending a shape at the end is the sanctioned evolution; inserting or
-reordering shifts ids and is breaking; removing one requires a service-level
-`reserved` tombstone to hold its slot. An interaction's ordinal space stays
-local to its interface — a binding keys the spaces on the interface **name**,
-never on the list position (§14.5) — so the two levels never renumber each
-other.
+**One level up, an interface's identity is its number, and the number lives
+outside the source.** Every interface of a package — a declared `interface` and
+a service's inline shape (§14.5) alike — carries an **interface number** from
+the package's `interfaces.lock`, a line table in the package directory beside
+the sources that only `ridl lock` writes: a `next N` line, then one entry per
+interface, `Name N`, keyed by the interface's name or, for an inline shape, by
+`service:` and the service's dotted name. The number is 1-based, per package,
+and is the interface's routing identity; a rename keeps it, and an entry is
+never removed or renumbered — a retired interface keeps its line with the word
+`retired`, and its number is never allocated again. A declaration with no entry
+compiles with a **provisional** number, taken from `next` upward in byte order
+of the name, which carries no identity until plain `ridl lock` allocates and
+records it. The compiler reads the file as a package input and refuses the
+departures it cannot resolve: a live entry with no declaration is **RIDL-409**,
+fixed on the branch that made the change with `ridl lock <pkg> --rename Old=New`
+or `ridl lock <pkg> --retire Old` — with a published baseline, `ridl check`
+names the one `--rename` when exactly one declaration without an entry has the
+old interface's shape, member for member — and a malformed file, a merge
+conflict left in it included, is **RIDL-410**. Publication refuses what the
+build cannot see: `ridl baseline` refuses a provisional number (**RIDL-411**)
+and a published number that is absent from the fresh side and not retired
+(**RIDL-412**). An interaction's ordinal space stays local to its interface — a
+binding keys the spaces on the package and the interface **number**, never on a
+name or on a position in a service's list (§14.5) — so the two levels never
+renumber each other.
 
 ---
 

@@ -288,7 +288,7 @@ fn write(package: &LockedPackage) -> Result<(), ExitCode> {
 
 /// The lock key of one shape: the interface's name, or `service:` and the
 /// service's dotted name for an inline shape (lock design §3).
-fn shape_key(shape: &v2::InterfaceShape<'_>) -> LockKey {
+pub(crate) fn shape_key(shape: &v2::InterfaceShape<'_>) -> LockKey {
     if shape.is_inline() {
         LockKey::Service(shape.name.to_string())
     } else {
