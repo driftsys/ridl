@@ -134,7 +134,7 @@ obviously is not.
 `payloads: &'static [PayloadInfo]`, each holding an
 `EncodedSizes { proto3,
 flatbuffers, repr_c }` of `Option<u32>`
-(`contract.rs:136-186`). The emitter has to write something there, and under §2
+(`contract.rs:138-198`). The emitter has to write something there, and under §2
 it can compute nothing: the only size that exists in this MVP is the
 `Payload::MAX_SIZE` of a hand-written impl that lives in the test, which
 generated code cannot reference.
@@ -154,7 +154,7 @@ For this MVP the toolchain genuinely cannot.
 
 **One thing to reconcile, and it is not this lane's to settle.** `contract.rs`
 documents `None` more strongly than the plan does — "a field is `None` when that
-encoding **cannot carry** the payload" (`contract.rs:178-180`) — and under that
+encoding **cannot carry** the payload" (`contract.rs:188-189`) — and under that
 reading `repr_c: None` beside §2's choice of `ReprC` states something false. The
 two readings differ, the plan's is the one E16.2 is being built to, and the doc
 comment is the one that shipped. Lane M does not change `ridl-rt` to settle it;
@@ -165,6 +165,17 @@ The face itself never reads these sizes: generated code sizes its buffers from
 `<T as Payload<E>>::MAX_SIZE`, which the hand-written impl supplies. So the
 absent sizes cost the MVP nothing and cost a future catalog consumer everything,
 which is the right way round for a placeholder.
+
+**One consequence for M2.** `dispatch(h, p, buf)`'s `buf` belongs to the caller,
+and `Handler::next_claim` returns `ReadError::Short` without consuming the claim
+(`port.rs:196-197`), so a `buf` that is too small makes `dispatch` return 0
+forever rather than fail. With the descriptor's sizes absent, nothing tells the
+caller how large `buf` must be. **The emitter therefore writes a generated
+constant for it** — the maximum of the interface's own argument `MAX_SIZE`
+values — and the round trip uses that constant rather than a number chosen by
+hand. The same reasoning applies to `EventSource::next`, whose payload type is
+not known until `RawOccurrence.ord` is read: the emitter takes the maximum over
+the interface's event types, which it can compute from the per-type consts.
 
 ## 5. The placeholder ports: test-only, one file, disposable
 
@@ -205,10 +216,12 @@ package's interface the emitter writes one module holding:
 
 - a unit struct per interface with `impl Interface`, carrying `CATALOG`,
   `NUMBER`, `PROVISIONAL`, `NAME` and `MEMBERS`;
-- a unit struct per interaction with `impl Interaction` plus the kind's trait —
-  `Signal`, `Event`, `Command`, `Query` or `Fixed` — carrying the payload or
-  argument and reply types, `init()` for a signal, `require()` for a command or
-  a query, and `ensure()` for a query;
+- a unit struct per interaction with `impl Interaction`, carrying **both of that
+  trait's required items** — `type Iface` and `const MEMBER`
+  (`contract.rs:68-73`) — plus the kind's trait, `Signal`, `Event`, `Command`,
+  `Query` or `Fixed`, carrying the payload or argument and reply types, `init()`
+  for a signal, `require()` for a command or a query, and `ensure()` for a
+  query;
 - `Client<'a, P>`, generic over exactly the ports the interface's interactions
   need and no others, with one method per consumer-side interaction;
 - `Publisher<'a, W>` over `SignalWriter + EventSink`, with one method per
@@ -227,17 +240,47 @@ also not a type `ridl-rt` has; `error.rs` carries `Contract`, `Transport` and
 - a command is `fn set_target(&mut self, desired: Speed);` — it returns nothing;
 - a query is `fn average_speed(&mut self, window: Duration) -> Speed;`.
 
-Every outcome the caller can see as an error is settled by `dispatch` before or
-around the provider call, never returned from it: `Transport::Corrupt` when the
-argument bytes fail `verify`, and `Contract::PreconditionFailed` when `require`
-fails. That is what `Handler::settle`'s own documentation describes, and it is
-why the provider needs no error return.
+**What `dispatch` settles, and the stratum it settles it in.** Every outcome the
+caller can see as an error is settled by `dispatch` before or around the
+provider call, never returned from it. There are **three** outcomes, not two,
+because `Payload::verify` checks structure and typl constraints in one pass and
+reports them as two distinct variants (`payload.rs:146-153`):
+
+| Cause                       | Settled as                     |
+| --------------------------- | ------------------------------ |
+| `VerifyError::Structure(m)` | `Transport::Corrupt`           |
+| `VerifyError::Contract(v)`  | `Contract::InvalidValue(v)`    |
+| `require` returns `Err(())` | `Contract::PreconditionFailed` |
+
+Collapsing the first two into `Transport::Corrupt` would settle a range or
+enum-variant violation as a transport corruption, which reaches the caller in
+the wrong stratum. `Handler::settle`'s own documentation separates them —
+`CallError::Contract` when "the arguments break their typl constraints", and
+`Transport::Corrupt` when "the argument bytes fail the structure check"
+(`port.rs:199-203`) — and ridl §6.1 says the same from the language side, a
+negative acknowledgment carrying the stratum 2 category.
+`Contract::InvalidValue` is that stratum (`error.rs:12-13`).
 
 **RA-19 holds.** The port bounds on `Client` are computed from the interaction
 kinds the interface actually declares: an interface with no query and no command
 produces a `Client` with no `Caller` bound. This is a property M3 tests
 directly, which is why §7's fixture declares a second interface — one interface
 cannot exhibit both the presence and the absence of a bound.
+
+**The test runs the direction a trait bound allows, which is not the obvious
+one.** A bound is a lower bound: a port type that implements more traits than a
+bound requires satisfies it anyway, so instantiating the signal-only interface's
+`Client` with §5's full loopback proves nothing — it compiles whether or not the
+emitter added a `Caller` bound the interface does not need. The property is
+shown with a **minimal** port type that implements `SignalReader` and its
+`Attached` supertrait and nothing else:
+
+- it **must** construct the signal-only interface's `Client`. That fails to
+  compile if the emitter emitted a bound the interface does not need, which is
+  exactly RA-19's claim.
+- it **must not** construct the first interface's `Client`, which is a
+  `compile_fail` case, because that interface needs `Caller` and `EventSource`
+  as well.
 
 **RA-20 holds.** Generated code contains no thread, future, socket or timer. A
 query returns a `Correlation` and a separate `*_reply` method polls it; nothing
@@ -248,7 +291,7 @@ application's or the runtime's.
 Two reductions from §8, both following from §1: no method is bounded on
 `CoherentSignals`, and **`ensure` is emitted but never called**. The distinction
 matters and the first draft of this section got it wrong: `Query::ensure` is a
-required method with no default body (`contract.rs:120-129`), so an `impl Query`
+required method with no default body (`contract.rs:133`), so an `impl Query`
 that omits it does not compile. The emitter therefore writes `ensure` for every
 query — returning `Ok(())` when the query declares no `ensure` clause, and the
 translated clauses when it does — and `dispatch` does not call it. What the MVP
@@ -285,9 +328,10 @@ and **two interfaces**.
   every kind the descriptors cover except `fixed`, which M2 may add if it costs
   nothing. This is the interface the round trip runs against.
 - The second declares one signal and nothing else. It exists only so §6's RA-19
-  claim is testable: its `Client` must carry no `Caller` and no `EventSource`
-  bound, and a test that names the full port set must fail to compile against
-  it. One interface cannot show both halves of that property.
+  claim is testable, in the direction §6 gives: a minimal port type implementing
+  `SignalReader` and `Attached` alone must construct this interface's `Client`,
+  and must fail to construct the first interface's. One interface cannot show
+  both halves of that property.
 
 **Every command and query in the fixture takes exactly one parameter, whose type
 is a declared type of the package, and every query replies with one.** So
@@ -318,6 +362,30 @@ was rejected on two grounds: `protox` is a library called in process while this
 would be a cargo build inside a test, and the temporary crate would need its own
 path dependency on `ridl-rt`, which makes `ridl-rt` a dev-dependency of the
 backend insufficient and puts a generated manifest in the test's care.
+
+**What `include!` costs, and where the lint allows go.** This is the one price
+the alternative above does not pay, and it is worth stating because it binds the
+emitter rather than the test. `just lint` is
+`cargo clippy --workspace --all-targets -- -D warnings`, and `--all-targets`
+covers integration tests, so **every line of the checked-in generated face has
+to be clippy-clean at deny level** — a bar nothing the emitter produces has had
+to meet, because nothing it emits is compiled in-tree today.
+
+The usual remedy for generated code, a file-level `#![allow(...)]`, is not
+available: an inner attribute inside an `include!`d file is a hard error. So:
+
+- **the emitter must never emit an inner attribute**, which is true today —
+  `generate` builds `quote! { #(#items)* }` and parses it as a `syn::File` with
+  no `attrs` — and M3 must keep it true;
+- **the allows are outer attributes on the module that wraps the `include!`**,
+  written by hand in the test, not by the emitter. They cannot be part of the
+  generated file, because the byte-equality guard compares the emitter's output
+  against that file and an allow the emitter did not write would fail the
+  comparison.
+
+If M3 finds the generated face needs so many allows that the wrapping module
+becomes the real specification of what the emitter may produce, that is a signal
+the emitter should be fixed instead, and M2 should say so.
 
 **The round trip.** A test in `crates/ridl-backend-rust/tests/` that compiles
 the included generated face together with the placeholder ports of §5 and the
