@@ -1521,89 +1521,98 @@ fn a_service_appended_is_compatible() {
     assert_row(&old, &new, Category::DeclAdded, Verdict::Compatible);
 }
 
-/// A changed reference is no longer one `ServiceChanged` (ADR-0015 decision
-/// 19 narrows that category to the form switch): the old interface leaves the
-/// list with no tombstone, and the new one takes the slot it freed — two
-/// changes, both breaking.
+/// A changed reference is a removal and an addition in the service's set
+/// (ADR-0015 decision 19 as amended on 2026-09-15): the old interface leaves
+/// the set, the new one joins it, and both are compatible.
 #[test]
-fn a_service_interface_ref_change_is_a_removal_plus_a_reused_slot() {
+fn a_service_interface_ref_change_is_a_removal_plus_an_addition() {
     let old = service_pkg(vec![service_ref("Cluster", "I")]);
     let new = service_pkg(vec![service_ref("Cluster", "J")]);
-    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
     assert_row(
         &old,
         &new,
-        Category::ServiceShapeAppended,
-        Verdict::Breaking,
+        Category::ServiceInterfaceRemoved,
+        Verdict::Compatible,
+    );
+    assert_row(
+        &old,
+        &new,
+        Category::ServiceInterfaceAdded,
+        Verdict::Compatible,
     );
 }
 
 // ==========================================================================
-// The service shape list (ADR-0015 decision 19).
+// A service's set of interfaces (ADR-0015 decision 19 as amended).
 // ==========================================================================
 
-/// A shape appended into a slot that never existed is the sanctioned
-/// evolution — the interaction-append rule one level up.
+/// An interface joining a service's set is compatible: nothing that existed
+/// moved, and the routing key does not contain the service.
 #[test]
-fn a_service_shape_appended_into_a_fresh_slot_is_compatible() {
+fn adding_an_interface_to_a_service_is_compatible() {
     let old = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
     let new = service_pkg(vec![service_shapes(
         "Cluster",
         vec![ref_slot(1, "I"), ref_slot(2, "J")],
     )]);
-    assert_row(
-        &old,
-        &new,
-        Category::ServiceShapeAppended,
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
         Verdict::Compatible,
+        "got {:?}",
+        report.changes
+    );
+    assert_eq!(
+        report.changes,
+        vec![Change {
+            path: "veh.cluster/Cluster/J".to_string(),
+            category: Category::ServiceInterfaceAdded,
+            verdict: Verdict::Compatible,
+            before: None,
+            after: Some("J".to_string()),
+        }]
     );
 }
 
-/// The other reading of an append (ADR-0015 decision 19): the walk labels the
-/// new shape appended because it sits after every surviving slot, but the
-/// slot it takes was freed by an untombstoned removal, so the interface id is
-/// reused — visible only by looking back at what the old snapshot held there,
-/// which is why the check lives in the classifier.
+/// An interface leaving a service's set is compatible too — a split is a
+/// removal plus an addition, and a consumer that loses its only provider is
+/// a wiring error for rsdl, not a package diff. It is visible in source, so
+/// the text report lists it under its heading.
 #[test]
-fn a_service_shape_appended_into_a_freed_slot_is_breaking() {
+fn removing_an_interface_from_a_service_is_compatible_under_the_heading() {
     let old = service_pkg(vec![service_shapes(
         "Cluster",
         vec![ref_slot(1, "I"), ref_slot(2, "J")],
     )]);
-    let new = service_pkg(vec![service_shapes(
-        "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "K")],
-    )]);
-    assert_row(
-        &old,
-        &new,
-        Category::ServiceShapeAppended,
-        Verdict::Breaking,
+    let new = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Compatible,
+        "got {:?}",
+        report.changes
     );
+    assert_eq!(
+        report.changes,
+        vec![Change {
+            path: "veh.cluster/Cluster/J".to_string(),
+            category: Category::ServiceInterfaceRemoved,
+            verdict: Verdict::Compatible,
+            before: Some("J".to_string()),
+            after: None,
+        }]
+    );
+    assert_eq!(
+        crate::heading(Category::ServiceInterfaceRemoved),
+        Some("compatible on the wire, visible in source")
+    );
+    assert_eq!(crate::heading(Category::ServiceInterfaceAdded), None);
 }
 
+/// A service's list is a set, so its order carries nothing and a reorder is
+/// no change at all.
 #[test]
-fn a_service_shape_inserted_is_breaking() {
-    let old = service_pkg(vec![service_shapes(
-        "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "J")],
-    )]);
-    let new = service_pkg(vec![service_shapes(
-        "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "K"), ref_slot(3, "J")],
-    )]);
-    assert_row(
-        &old,
-        &new,
-        Category::ServiceShapeInserted,
-        Verdict::Breaking,
-    );
-}
-
-/// Both moved shapes are flagged, and both classify breaking — the
-/// interaction-reorder behavior one level up.
-#[test]
-fn a_service_shape_reorder_is_breaking() {
+fn reordering_a_services_list_is_identical() {
     let old = service_pkg(vec![service_shapes(
         "Cluster",
         vec![ref_slot(1, "I"), ref_slot(2, "J")],
@@ -1613,104 +1622,42 @@ fn a_service_shape_reorder_is_breaking() {
         vec![ref_slot(1, "J"), ref_slot(2, "I")],
     )]);
     let report = diff_packages(&old, &new);
-    assert_eq!(report.verdict, Verdict::Breaking);
-    let reordered: Vec<&Change> = report
-        .changes
-        .iter()
-        .filter(|change| change.category == Category::ServiceShapeReordered)
-        .collect();
     assert_eq!(
-        reordered.len(),
-        2,
-        "both moved shapes are flagged, got {:?}",
-        report.changes
-    );
-    assert!(
-        reordered
-            .iter()
-            .all(|change| change.verdict == Verdict::Breaking),
-        "got {reordered:?}"
-    );
-    // A reorder is invisible to transport identity (ADR-0015 decision 17: a
-    // binding keys the ordinal spaces on the interface name, not the list
-    // position), so the two id moves are the WHOLE report — no payload,
-    // return, or identity change rides along.
-    assert_eq!(
-        report.changes.len(),
-        2,
-        "the reorder is the only change, got {:?}",
+        report.verdict,
+        Verdict::Identical,
+        "got {:?}",
         report.changes
     );
 }
 
+/// Until the IR loses its `Reserved` slot, the set walk ignores one: a set
+/// holds no tombstone, so a snapshot that still carries one diffs as if the
+/// slot were not there.
 #[test]
-fn a_service_shape_removed_without_a_tombstone_is_breaking() {
+fn a_reserved_slot_in_a_services_list_is_ignored_by_the_set_walk() {
     let old = service_pkg(vec![service_shapes(
         "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "J")],
-    )]);
-    let new = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
-    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
-}
-
-/// The sanctioned retirement: the tombstone holds the retired shape's own
-/// slot, so every later id holds and the identity model is intact.
-#[test]
-fn a_service_shape_retired_to_a_tombstone_in_its_slot_is_compatible() {
-    let old = service_pkg(vec![service_shapes(
-        "Cluster",
-        vec![ref_slot(1, "I"), ref_slot(2, "J")],
+        vec![ref_slot(1, "I"), reserved_slot(2, "X"), ref_slot(3, "J")],
     )]);
     let new = service_pkg(vec![service_shapes(
         "Cluster",
-        vec![reserved_slot(1, "I"), ref_slot(2, "J")],
-    )]);
-    assert_row(
-        &old,
-        &new,
-        Category::ServiceShapeRetired,
-        Verdict::Compatible,
-    );
-}
-
-/// A tombstone written out of the retired shape's slot is not a retirement:
-/// the freed slot is what the survivors slide into.
-#[test]
-fn a_service_shape_tombstone_out_of_its_slot_is_breaking() {
-    let old = service_pkg(vec![service_shapes(
-        "Cluster",
         vec![ref_slot(1, "I"), ref_slot(2, "J")],
     )]);
-    let new = service_pkg(vec![service_shapes(
-        "Cluster",
-        vec![ref_slot(1, "J"), reserved_slot(2, "I")],
-    )]);
-    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
-}
-
-/// A name retired by a service-level tombstone coming back as a live shape is
-/// the redeclared-reserved rule one level up (RIDL-146's diff reading).
-#[test]
-fn a_service_shape_redeclaring_a_reserved_name_is_breaking() {
-    let old = service_pkg(vec![service_shapes("Cluster", vec![reserved_slot(1, "I")])]);
-    let new = service_pkg(vec![service_shapes("Cluster", vec![ref_slot(1, "I")])]);
-    assert_row(
-        &old,
-        &new,
-        Category::ReservedNameRedeclared,
-        Verdict::Breaking,
+    let report = diff_packages(&old, &new);
+    assert_eq!(
+        report.verdict,
+        Verdict::Identical,
+        "got {:?}",
+        report.changes
     );
 }
 
-/// The E9.6 regression (ADR-0015 decision 24): a composed reference
-/// retargeted to a different interface with the same final name. The walk
-/// matches slots by interface name, so without the reference comparison the
-/// slot read as unchanged and the report came out `identical` — compatible
-/// by omission, where the superseded `ServiceChanged` comparison had
-/// reported it breaking. A matched slot whose reference differs is a removal
-/// and a reuse of the freed slot, and both classify breaking.
+/// Two references with one final segment are two members of the set: the set
+/// is keyed on the canonical reference, so retargeting one to the other is a
+/// removal plus an addition, both compatible, and never `identical` (the
+/// E9.6 regression of ADR-0015 decision 24 stays covered).
 #[test]
-fn a_retargeted_slot_with_the_same_interface_name_is_breaking() {
+fn a_retargeted_reference_with_the_same_final_name_is_a_removal_plus_an_addition() {
     let old = service_pkg(vec![service_shapes(
         "fleet.app.diag",
         vec![ref_slot(1, "fleet.c1.DiagBlock")],
@@ -1722,120 +1669,28 @@ fn a_retargeted_slot_with_the_same_interface_name_is_breaking() {
     let report = diff_packages(&old, &new);
     assert_eq!(
         report.verdict,
-        Verdict::Breaking,
+        Verdict::Compatible,
         "got {:?}",
         report.changes
     );
-    assert_row(&old, &new, Category::ServiceShapeRemoved, Verdict::Breaking);
-    assert_row(
-        &old,
-        &new,
-        Category::ServiceShapeAppended,
-        Verdict::Breaking,
-    );
-}
-
-/// Fail closed (ADR-0015 decision 24, ADR-0012 decision 9): two live shapes
-/// with one interface name are IR the checker rejects (RIDL-147), and the
-/// name-keyed walk cannot compare them slot by slot — dropping the second
-/// slot used to collapse into its twin and report `identical`. The list is
-/// compared as a whole, and any difference is breaking.
-#[test]
-fn a_shape_list_with_colliding_names_fails_closed() {
-    let old = service_pkg(vec![service_shapes(
-        "fleet.app.diag",
+    assert_eq!(
+        report.changes,
         vec![
-            ref_slot(1, "fleet.c1.DiagBlock"),
-            ref_slot(2, "fleet.c2.DiagBlock"),
-        ],
-    )]);
-    let new = service_pkg(vec![service_shapes(
-        "fleet.app.diag",
-        vec![ref_slot(1, "fleet.c1.DiagBlock")],
-    )]);
-    let report = diff_packages(&old, &new);
-    assert_eq!(
-        report.verdict,
-        Verdict::Breaking,
-        "got {:?}",
-        report.changes
-    );
-}
-
-/// The guard fails closed on a difference, not on the shape of the IR alone:
-/// the same unkeyable list on both sides is no change at all.
-#[test]
-fn an_unchanged_colliding_shape_list_is_identical() {
-    let service = service_shapes(
-        "fleet.app.diag",
-        vec![
-            ref_slot(1, "fleet.c1.DiagBlock"),
-            ref_slot(2, "fleet.c2.DiagBlock"),
-        ],
-    );
-    let old = service_pkg(vec![service.clone()]);
-    let new = service_pkg(vec![service]);
-    let report = diff_packages(&old, &new);
-    assert_eq!(
-        report.verdict,
-        Verdict::Identical,
-        "got {:?}",
-        report.changes
-    );
-}
-
-/// A nameless tombstone (RIDL-148 IR) makes the list unkeyable too: it is
-/// invisible to the name-keyed reserved map, so dropping it slid every later
-/// shape down a slot with nothing reported at all.
-#[test]
-fn dropping_a_nameless_tombstone_fails_closed() {
-    let nameless = v2::ServiceShape {
-        id: 2,
-        kind: Some(v2::service_shape::Kind::Reserved(v2::Reserved {
-            ordinal: 2,
-            name: None,
-            value: Some(2),
-        })),
-    };
-    let old = service_pkg(vec![service_shapes(
-        "fleet.app.diag",
-        vec![ref_slot(1, "I"), nameless, ref_slot(3, "J")],
-    )]);
-    let new = service_pkg(vec![service_shapes(
-        "fleet.app.diag",
-        vec![ref_slot(1, "I"), ref_slot(2, "J")],
-    )]);
-    let report = diff_packages(&old, &new);
-    assert_eq!(
-        report.verdict,
-        Verdict::Breaking,
-        "got {:?}",
-        report.changes
-    );
-}
-
-/// The one-step retire-and-redeclare: the new side holds a tombstone and a
-/// live shape under one name — RIDL-146 IR — which used to report
-/// `identical`. The unkeyable side fails the walk closed.
-#[test]
-fn a_live_shape_beside_its_own_tombstone_fails_closed() {
-    let old = service_pkg(vec![service_shapes(
-        "fleet.app.diag",
-        vec![ref_slot(1, "fleet.c1.DiagBlock")],
-    )]);
-    let new = service_pkg(vec![service_shapes(
-        "fleet.app.diag",
-        vec![
-            reserved_slot(1, "DiagBlock"),
-            ref_slot(2, "fleet.c2.DiagBlock"),
-        ],
-    )]);
-    let report = diff_packages(&old, &new);
-    assert_eq!(
-        report.verdict,
-        Verdict::Breaking,
-        "got {:?}",
-        report.changes
+            Change {
+                path: "veh.cluster/fleet.app.diag/fleet.c1.DiagBlock".to_string(),
+                category: Category::ServiceInterfaceRemoved,
+                verdict: Verdict::Compatible,
+                before: Some("fleet.c1.DiagBlock".to_string()),
+                after: None,
+            },
+            Change {
+                path: "veh.cluster/fleet.app.diag/fleet.c2.DiagBlock".to_string(),
+                category: Category::ServiceInterfaceAdded,
+                verdict: Verdict::Compatible,
+                before: None,
+                after: Some("fleet.c2.DiagBlock".to_string()),
+            },
+        ]
     );
 }
 

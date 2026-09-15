@@ -556,3 +556,28 @@ fn format_json_matches_the_schema_and_exit_code() {
         "the payload change is present and breaking, stdout:\n{stdout}"
     );
 }
+
+/// A named-form service's list is a set (ADR-0015 decision 19 as amended):
+/// an interface leaving it is compatible on the wire and visible in source,
+/// so the text report lists it under that heading, after every unheaded
+/// change, with the heading printed once.
+#[test]
+fn a_service_set_removal_renders_under_the_heading() {
+    const HEADER: &str = "package veh.cluster\ntype T: integer [0..10]\ninterface I {\n  signal a: T @10ms\n}\ninterface J {\n  signal b: T @10ms\n}\n";
+    let dir = TempDir::new("service-set");
+    let old = dir.write(
+        "old.ridl",
+        &format!("{HEADER}service veh.cluster.dash : I, J\n"),
+    );
+    let new = dir.write(
+        "new.ridl",
+        &format!("{HEADER}interface K {{\n  signal c: T @10ms\n}}\nservice veh.cluster.dash : I\n"),
+    );
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(code, 0, "a set removal is compatible, stderr:\n{stderr}");
+    assert_eq!(
+        stdout,
+        "compatible\n  [compatible] decl_added veh.cluster/K: (absent) -> interface\ncompatible on the wire, visible in source:\n  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)\n"
+    );
+}

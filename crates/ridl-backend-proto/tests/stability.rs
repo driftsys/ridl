@@ -20,8 +20,8 @@
 //! - `RpcBoundChanged` — a command's call throttle lowered.
 //! - `ContractChanged` — a `require` clause removed.
 //!
-//! The two remaining compatible arms, `ServiceShapeRetired` and
-//! `ServiceShapeAppended`, mutate a service's named shape list, which this
+//! The two remaining compatible arms, `ServiceInterfaceAdded` and
+//! `ServiceInterfaceRemoved`, change a service's set of interfaces, which this
 //! backend does not project at all (ADR-0013 decision 2 stops at the
 //! interaction identity table), so no number could move under them.
 

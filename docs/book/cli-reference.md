@@ -853,7 +853,29 @@ breaking
   [breaking] payload_changed veh.cluster/VehicleStatus/currentSpeed: Speed -> Speed2
 ```
 
-The same comparison with `--format json`:
+A named-form service's list is a set of interfaces: an interface joining it
+is `service_interface_added`, one leaving it `service_interface_removed`, a
+reorder no change, and both are compatible, because an interface's number
+comes from its package's `interfaces.lock` and the routing key does not
+contain the service. A removal is still visible in source — the
+`service.member` addresses of that interface stop resolving under the service
+— so the text report lists it under a heading of its own, printed once as a
+line ending in a colon, after every change that has no heading. The JSON
+report carries the category word and no heading field. With `interface K`
+added and `J` dropped from `service veh.cluster.dash : I, J`:
+
+```sh
+ridl diff dash-old.ridl dash-new.ridl
+```
+
+```text
+compatible
+  [compatible] decl_added veh.cluster/K: (absent) -> interface
+compatible on the wire, visible in source:
+  [compatible] service_interface_removed veh.cluster/veh.cluster.dash/J: J -> (removed)
+```
+
+The breaking comparison above with `--format json`:
 
 ```sh
 ridl diff old.ridl breaking.ridl --format json
@@ -959,11 +981,8 @@ the categories `ridl diff` reports are:
   init_changed
   reserved_name_redeclared
   service_changed
-  service_shape_appended
-  service_shape_inserted
-  service_shape_reordered
-  service_shape_removed
-  service_shape_retired
+  service_interface_added
+  service_interface_removed
   doc_only
   visibility_changed
 ```

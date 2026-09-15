@@ -551,34 +551,24 @@ fn is_source_dir(dir: &Path) -> bool {
 // ==========================================================================
 
 /// The change categories the desk check reports: the four that move a live
-/// interaction's ordinal, and the three that move a shape's slot in a
-/// service's list — the same class one level up (ADR-0015 decision 19) — and
-/// no others.
+/// interaction's ordinal, and no others.
 ///
 /// General form §6.3 asks for one thing at the desk — a reorder or an insertion
 /// caught before CI, because declaration order is wire identity and a reorder
-/// looks like tidying. A service's shape list follows the same identity model
-/// one level up (ridl §14.5), so a shape-list insert, reorder, or removal is
-/// the same tidying-shaped mistake and belongs here too. The other breaking
-/// categories (a payload type change, a narrowed constraint, a timing change)
-/// are already loud in review and stay `ridl diff`'s job in CI: this is the
-/// §6.3 mitigation, not a second diff gate.
+/// looks like tidying. The other breaking categories (a payload type change, a
+/// narrowed constraint, a timing change) are already loud in review and stay
+/// `ridl diff`'s job in CI: this is the §6.3 mitigation, not a second diff
+/// gate. A service's list is a set (ADR-0015 decision 19 as amended on
+/// 2026-09-15): its order is not an identity, so no service-level category
+/// belongs here.
 ///
-/// [`ReservedNameRedeclared`](ridl_diff::Category::ReservedNameRedeclared)
-/// covers both levels — an interaction re-declaring a body tombstone's name,
-/// and a shape re-declaring a service-level one — so [`drift_message`] selects
-/// its wording by which container the path names.
-///
-/// All seven classify [`Breaking`](ridl_diff::Verdict::Breaking) in every
+/// All four classify [`Breaking`](ridl_diff::Verdict::Breaking) in every
 /// direction, so the category alone selects them.
-const ORDINAL_CATEGORIES: [ridl_diff::Category; 7] = [
+const ORDINAL_CATEGORIES: [ridl_diff::Category; 4] = [
     ridl_diff::Category::InteractionInserted,
     ridl_diff::Category::InteractionReordered,
     ridl_diff::Category::InteractionRemoved,
     ridl_diff::Category::ReservedNameRedeclared,
-    ridl_diff::Category::ServiceShapeInserted,
-    ridl_diff::Category::ServiceShapeReordered,
-    ridl_diff::Category::ServiceShapeRemoved,
 ];
 
 /// Runs `check` and, when a baseline is available and the compile produced no
@@ -1018,7 +1008,7 @@ fn desk_check(
         warnings.push(Diagnostic {
             code: DiagCode::RIDL_407,
             severity: Severity::Warning,
-            message: drift_message(change, index.names_a_service_shape(&change.path)),
+            message: drift_message(change),
             primary: index.span_of(&change.path, &mut run.sources),
             labels: Vec::new(),
             fixits: Vec::new(),
@@ -1155,13 +1145,7 @@ fn directory_of(path: &str) -> String {
 /// fx.audit/Motion/reset (interaction_reordered)`: "ordinal" is an IR word, the
 /// path is a diff-report word, `interaction_reordered` is the enum variant's
 /// own spelling, and between them they stated neither consequence nor remedy.
-///
-/// `service_shape` selects the service-level wording where a category covers
-/// both levels: `ReservedNameRedeclared` is emitted for an interaction inside
-/// a body and for a shape in a service's list (ADR-0015 decision 19), and
-/// only the path's container says which — the subject of one is an
-/// interaction, of the other an interface.
-fn drift_message(change: &ridl_diff::Change, service_shape: bool) -> String {
+fn drift_message(change: &ridl_diff::Change) -> String {
     let (shape, name) = shape_and_name(&change.path);
     // "in `Motion`" when the shape is known, dropped when the path is not the
     // three-segment form every ordinal category emits.
@@ -1185,35 +1169,11 @@ fn drift_message(change: &ridl_diff::Change, service_shape: bool) -> String {
              that is not its own (ridl §11) — retire it in place with `reserved {name}`, which \
              holds the slot for ever",
         ),
-        ridl_diff::Category::ReservedNameRedeclared if service_shape => format!(
-            "`{name}` is listed again{in_shape}, and the published baseline retires that \
-             interface name with `reserved`. A retired name is a permanent reservation \
-             (ridl §14.5, §11) — a consumer still holding the old contract would read this \
-             shape as the retired one, so publish it under a different interface name",
-        ),
         ridl_diff::Category::ReservedNameRedeclared => format!(
             "`{name}` is declared again{in_shape}, and the published baseline retires that name \
              with `reserved`. A retired name is a permanent wire reservation (ridl §11) — a \
              consumer still holding the old contract would read the new interaction as the \
              retired one, so give this interaction a different name",
-        ),
-        ridl_diff::Category::ServiceShapeReordered => format!(
-            "`{name}` has moved{in_shape} since the published baseline{}. A shape's place in \
-             the list is its interface id (ridl §14.5), so a consumer built against the \
-             baseline would now bind this slot to a different interface — put the shapes back \
-             in the baseline's order and add new ones at the end",
-            baseline_position(change),
-        ),
-        ridl_diff::Category::ServiceShapeInserted => format!(
-            "`{name}` is listed{in_shape} ahead of shapes the published baseline already \
-             numbers. A shape inserted above an existing one shifts every later interface id \
-             (ridl §14.5) — list it at the end instead",
-        ),
-        ridl_diff::Category::ServiceShapeRemoved => format!(
-            "`{name}` is gone{in_shape} but the published baseline still lists it. Deleting \
-             the shape frees its slot and every later shape slides into an interface id that \
-             is not its own (ridl §14.5) — retire it in place with `reserved {name}`, which \
-             holds the slot for ever",
         ),
         // `ORDINAL_CATEGORIES` is the caller's filter and holds exactly the
         // categories of the arms above. Another category reaching here would
@@ -1556,10 +1516,6 @@ struct DeclIndex {
     /// in the source being checked. A service — inline or named-form — is
     /// keyed by its dotted name, exactly as its diff paths are.
     shapes: BTreeMap<(String, String), (String, TextRange)>,
-    /// The named-form services, by `(package, dotted name)`: the containers
-    /// whose diff paths name a shape slot rather than an interaction, which
-    /// selects the service-level RIDL-407 wording.
-    named_services: BTreeSet<(String, String)>,
     /// The package each indexed directory declares, by the directory's path
     /// as [`directory_of`] spells it. A package's `interfaces.lock` sits in
     /// the package directory, so the lock file's parent names the package a
@@ -1632,7 +1588,6 @@ impl DeclIndex {
                 if name.is_empty() {
                     continue;
                 }
-                index.named_services.insert((package.clone(), name.clone()));
                 index.shapes.insert(
                     (package.clone(), name.clone()),
                     (path.clone(), dotted.syntax().text_range()),
@@ -1682,19 +1637,6 @@ impl DeclIndex {
                 (package.to_string(), shape.to_string(), member_name),
                 (path.to_string(), declaration_range(&member, text)),
             );
-        }
-    }
-
-    /// Whether a diff path's container is a named-form service, so the change
-    /// names a slot of its shape list rather than an interaction — the
-    /// distinction [`drift_message`] words its subject by.
-    fn names_a_service_shape(&self, diff_path: &str) -> bool {
-        let mut parts = diff_path.split('/');
-        match (parts.next(), parts.next()) {
-            (Some(package), Some(container)) => self
-                .named_services
-                .contains(&(package.to_string(), container.to_string())),
-            _ => false,
         }
     }
 

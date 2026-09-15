@@ -40,6 +40,13 @@ This ADR was accepted under the delegated authority recorded in
 written for review, and execution of roadmap stories E9.4 to E9.6 needs the
 decisions fixed rather than pending.
 
+**Amendment (2026-09-15) — the interface lock.** The lock design
+([`docs/wip/2026-09-13-lock-design.md`](../wip/2026-09-13-lock-design.md) §7 and
+§9, which applies rsdl decision D-7) gives every interface a number from its
+package's `interfaces.lock` and retires the slot model of a service's list.
+Decision 19 changed with it; the change is written into that decision below,
+dated.
+
 ## Context
 
 The question that produced both notes: can ridl be the single source of truth
@@ -382,6 +389,25 @@ indistinguishable, so no claim about any of the three can be exercised.
     is superseded by the five categories; the second half stays, for the reason
     decision 15 gives. Distinct categories rather than branches follow the same
     ADR-0012 decision 9 argument as decision 8.
+
+    **Amendment (2026-09-15) — a service's list is a set.** The lock design (§7
+    and §9) retires the slot model: an interface's number comes from its
+    package's `interfaces.lock`, not from its place in a service's list, so the
+    list is a set of interface references and its order carries nothing. The
+    five categories above are replaced by two, both compatible:
+
+    | Category                  | Verdict                                                                                                                                                                                                                                                                                              |
+    | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `ServiceInterfaceAdded`   | compatible always — nothing that existed moved, and the routing key does not contain the service                                                                                                                                                                                                     |
+    | `ServiceInterfaceRemoved` | compatible always on the wire — a split into two services is a removal plus an addition, and a consumer that loses its only provider is a wiring error for rsdl, not a package diff — and visible in source, since the `service.member` addresses of that interface stop resolving under the service |
+
+    `ridl diff`'s text report lists `ServiceInterfaceRemoved` under a heading of
+    its own, "compatible on the wire, visible in source", after every unheaded
+    change; the JSON report carries the category word and no heading field. A
+    reorder of the list is no change. `ServiceChanged` keeps only the switch
+    between the named list and the inline shape. The paragraph on
+    `ServiceShapeRetired` no longer applies: a set holds no tombstone, and a
+    removed interface's number stays retired in the lock, not in the list.
 
 20. **IR: the `Service` message reserves its retired field numbers.** The
     current `oneof shape { string interface_ref = 10; Interface inline = 11; }`
