@@ -23,10 +23,18 @@ In scope, in the order Sebastien asked for it:
 Added, because items 2 and 3 depend on it: **the lock block** — the per-package
 lock file of `docs/wip/2026-09-12-rsdl-rewrite-decisions.md` D-7.
 
+Added on 2026-09-16, after the fact: **the generated interaction face**, roadmap
+story E11.13 (#393), as Lane M. It is not one of the four items Sebastien asked
+for and it is out of ADR-0018 decision 15's sequence; it is here because the
+team needs a face to write against before E11.1 and E11.9 land, and because the
+face binds only the `ridl-rt` ports that item 1 shipped.
+
 Not in scope: E11.1 (the frame specification), E11.9 (the transport), the three
 payload codecs E11.7, E11.8 and E11.12, the execution of the catalog descriptor
-plan (#324), the Epic 3 thread, E9.10, E9.12, Epic 8, and all of step 2. Lane A
-and lane L each name the next story they hand over to.
+plan (#324), the Epic 3 thread, E9.10, E9.12, Epic 8, and all of step 2. Lane M
+stands in for the codecs and the transport with placeholders it marks as
+throwaway, rather than pulling any of them in. Lane A and lane L each name the
+next story they hand over to.
 
 ## 2. Decisions taken in the planning session
 
@@ -189,6 +197,39 @@ Driver prompt: `2026-09-13-lane-c-typl-driver.md`. Stories: #318, #246 to #255.
 E14.3 (#320: both references drop "Draft", and the rxdl reference gains its
 status line) follows C1, C4 Task 10 and L5 (P-6).
 
+### Lane M — the generated interaction face
+
+Driver prompt: `2026-09-15-lane-m-driver.md`. Story: E11.13, #393.
+
+**Added 2026-09-16, after the other four.** This lane was proposed on 2026-09-15
+alongside this plan rather than in it, and M1 landed before it was listed here.
+It is a deliberate exception to ADR-0018 decision 15's sequence: the generated
+face is specified to follow E11.1 and E11.9, and this lane builds an
+in-process-only MVP of it before either, so the team has a face to write
+against. It can do that because the face binds the **ports** of `ridl-rt`, which
+shipped with E11.0, and E11.1 and E11.9 sit below those ports.
+
+| Stage | Work                                                                                                                            | Model                                                            | Starts when |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------- |
+| M1    | The spec: `docs/wip/2026-09-16-interaction-face-v0-design.md` — scope, payload encoding, numbering, the placeholders, the shape | Opus                                                             | landed      |
+| M2    | Implementation plan from the approved spec                                                                                      | Opus                                                             | M1 merged   |
+| M3    | The emitter's `descriptors.rs` and `face.rs`, the example package, the round trip                                               | Opus for `Client`/`Provider`/`dispatch`; Sonnet for the plumbing | M2 merged   |
+| M4    | Progressive documentation of the `ridl-rt` traits, written against what M3 generates                                            | Opus                                                             | M3 merged   |
+
+**No gate.** The lane's one hard dependency, `ridl-rt` 0.1.0 (E11.0), is merged,
+and the IR numbering it needs landed with L4. It waits on nothing and blocks
+nothing.
+
+**One sequencing preference, not a gate.** M3 extends
+`crates/ridl-backend-rust/src/lib.rs`, which Lane C's Epic 10 is reshaping
+(P-5). The spec's §8 accepts the resulting rework rather than blocking on it,
+but if Epic 10 is close to landing when M3 is ready, let it land first: the
+rework then disappears and nothing in the spec changes.
+
+M1 carries three placeholders that later stories retire — a hand-written payload
+implementation (E11.7, E11.8 or E11.12), test-only ports (E11.9), and a zero
+catalog hash (E16.2).
+
 ## 5. Gates
 
 A gate is a fact a driver checks with a command before starting the stage that
@@ -219,13 +260,25 @@ coordination issue before it pushes.
 | `crates/ridl-core/src/diag.rs`                           | S1 and S2 → L4 → C3 → B3                              |
 | `crates/ridl-diff/`                                      | S2 → L4                                               |
 | `crates/ridl/src/main.rs`                                | S1 and S2 → L4 (`ridl lock`) → #324 (`ridl describe`) |
+| `crates/ridl-backend-rust/src/lib.rs`                    | C4 → M3                                               |
 | `Cargo.toml`, `Cargo.lock`, `.git-std.toml`, `AGENTS.md` | S1 → A3 (the new crate) → the next new crate          |
-| `docs/ROADMAP.md`                                        | S1 → L3 → B2                                          |
+| `docs/ROADMAP.md`                                        | S1 → L3 → M1 → B2                                     |
 | `docs/specification/ridl-language-reference.md`          | S2 → B1 (§4 census items) → L4 → L5 → E14.3           |
 | `docs/specification/ridl-family-overview.md`             | S2 → B1 (§4 census items) → L5                        |
 | `docs/specification/typl-language-reference.md`          | C1 → C4 Task 10 → E14.3                               |
 | `docs/book/cli-reference.md`                             | S1 and S2 → L4 → #324                                 |
 | `docs/decisions/ADR-0010-cli-conventions.md`             | S1 and S2 → L4 (`ridl lock`) → #324 (`ridl describe`) |
+
+**`crates/ridl-backend-rust/src/lib.rs` was missing from this table** until
+2026-09-16. It is the file Lane C's Epic 10 reshapes (Tasks 3 and 6, P-5) and
+the one Lane M's codegen extends, so it was a collision no row covered. M3 goes
+after C4 because Epic 10 rewrites the file's emit functions while M3 adds two
+module declarations and one call, and the smaller change rebases onto the larger
+one more easily than the reverse.
+
+`docs/ROADMAP.md` records M1 where it actually went: it added the E11.13 row
+ahead of B2, with no other pull request holding the file open, by this section's
+own rule.
 
 ## 7. Rules every lane follows
 
