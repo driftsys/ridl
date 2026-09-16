@@ -41,15 +41,21 @@ written for review, and execution of roadmap stories E9.4 to E9.6 needs the
 decisions fixed rather than pending.
 
 **Amendment (2026-09-15) — the interface lock.** The lock design
-([`docs/wip/2026-09-13-lock-design.md`](../wip/2026-09-13-lock-design.md) §7, §9
-and §10, which applies rsdl decision D-7) gives every interface a number from
-its package's `interfaces.lock` and retires the slot model of a service's list.
-Decisions 12, 15, 17, 18, 19, 20 and 24 changed with it; each change is written
-into its decision below, dated, and "Documents to amend" and open item 1 carry
-the same date. Decisions 10, 13, 14 and 16 are unchanged by the lock. Two
+([`docs/archive/2026-09-13-lock-design.md`](../archive/2026-09-13-lock-design.md)
+§7, §9 and §10, which applies rsdl decision D-7) gives every interface a number
+from its package's `interfaces.lock` and retires the slot model of a service's
+list. Decisions 12, 15, 17, 18, 19, 20 and 24 changed with it; each change is
+written into its decision below, dated, and "Documents to amend" and open item 1
+carry the same date. Decisions 10, 13, 14 and 16 are unchanged by the lock. Two
 further dated paragraphs, in decisions 9 and 10, follow this record's citations
 into the rsdl reference v0.2.0 (rewritten 2026-09-13), which renumbered the
 sections they name and reserved two of the codes.
+
+**Amendment (2026-09-16) — the coherence group's identity.** The ridl §17
+disposition pass (story driftsys/ridl#319) found the last sentence of decision
+9's quoted rule still identifying the coherence group by the interface name,
+which the lock's decision 17 had already replaced as a binding key. Decision 9
+carries the dated paragraph, and "Documents to amend" carries the row.
 
 ## Context
 
@@ -235,6 +241,22 @@ indistinguishable, so no claim about any of the three can be exercised.
    The quoted text carries no reference to this record, so it transplants into
    the reference as it stands. Where §14 needs to point at the deploy-time
    constraint, it points at the transport prose decision 10 becomes, not here.
+
+   **Amendment (2026-09-16) — the group's identity is the interface number.**
+   The last sentence of the quoted rule is the one the lock changes, and the
+   ridl §17 disposition pass (story driftsys/ridl#319) changed it in the
+   reference. Decision 17 as amended keys a binding on (package, interface
+   number), and ridl §11 keeps that number across a rename, so identifying the
+   coherence group by the interface **name** would make a rename move the group
+   while the wire key held. The group is the **provided interface**, identified
+   by its number in the package's `interfaces.lock` — an inline shape included,
+   under its `service:` entry — and the interface's name, or the service's
+   dotted name for an inline shape, is how the group is written rather than what
+   identifies it. Nothing else in this decision changes: the rule is still about
+   production, still implicit, and still conditional on the binding for what a
+   consumer observes. rsdl §3.2's citation of "ridl §14.5, group identity" for
+   an inline-shape service's dotted name stands, because that name is still how
+   the group is written.
 
    It is **implicit, not declared.** Three rules the family already states
    produce it: §4.2 gives every flow exactly one owning provider; a provider
@@ -669,6 +691,7 @@ indistinguishable, so no claim about any of the three can be exercised.
 | ridl §16.4 (2026-09-15)        | RIDL-146 to RIDL-148 marked retired by the lock; RIDL-409 to RIDL-412 added                                                                              |
 | `ir.proto` (2026-09-15)        | `ServiceShape` reserves fields 1 and 12; `Interface.number`, `Interface.provisional`, `Package.retired` (decision 20 as amended)                         |
 | ADR-0016 (2026-09-15)          | its two RIDL-147 mentions (decision 3, References) cite the retirement                                                                                   |
+| ridl §14.5 (2026-09-16)        | the coherence group is identified by the interface's lock number, not by its name (decision 9 as amended)                                                |
 
 ## Open
 

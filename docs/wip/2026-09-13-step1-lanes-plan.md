@@ -60,11 +60,11 @@ Agreed with Sebastien on 2026-09-13.
   D-7 and the runtime descriptors design state no width. If lane L chooses a
   different width, that plan's Task 1 schema changes with it. _Settled since
   this was written:_ Sebastien approved the widths on 2026-09-13, recorded in §1
-  of `docs/wip/2026-09-13-lock-design.md` and in the lane L comment on #328 that
-  holds gate GW. The decision above stands as taken; the widths it left open are
-  no longer open. D-7 owns numbering, so the first section of lane L's design
-  fixes the widths. Lane A writes the rest of its spec in the meantime and does
-  not fix its identity types until Sebastien has approved that section.
+  of `docs/archive/2026-09-13-lock-design.md` and in the lane L comment on #328
+  that holds gate GW. The decision above stands as taken; the widths it left
+  open are no longer open. D-7 owns numbering, so the first section of lane L's
+  design fixes the widths. Lane A writes the rest of its spec in the meantime
+  and does not fix its identity types until Sebastien has approved that section.
 - **P-3 `ridl-rt` runs beside rsdl and the lock, not after rsdl.** The roadmap's
   step 1 sequence puts E6 before E11.0. E11.0 needs only the identity widths
   from D-7, and nothing from the rsdl language. The roadmap pull request (lane

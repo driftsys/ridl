@@ -204,21 +204,32 @@ By home; see each reference for full statements.
   `enumset` reorder comparison (typl §8 and §9) · byte order as a type property
   (typl §4.6) · a canonical encoding as a type-layer property (typl §12.2) · the
   layout consequence of a width change (typl §5.6).
-- **ridl §17**: selective broadcasts · actions/long-operations idiom ·
-  mid-stream invalid policy · reflection service · failure-management spec (with
-  safety/HA properties direction) — the QoS boundary question is answered by the
-  ADR-0015 absorption principle (ridl §17.5), the signal-groups question is
-  closed by the ADR-0015 coherence rule: the struct idiom is confirmed (ridl
-  §17.3), and interaction-set reuse is answered by composition — a service
-  carries a list of interfaces, and mixins were rejected because they flatten
-  (ridl §17.2, §14.5) · **whether the `ridl baseline` publication gate should
-  also refuse a moved existing tombstone (ridl §17.12)** · **a whole package
-  removed or renamed bypasses the same gate (ridl §17.13)** · **a whole service
-  removed, or a service whose form switches, bypasses the same gate; the
-  interface half closed with the lock (ridl §17.14)**
-- **rxdl §11**: the intent occurrence keyword · the acquisition/query cell ·
-  interaction citation paths (ridl's, recorded there) · journeys and screen flow
-  · accessibility metadata
+- **ridl §17**: three questions remain, each deferred to **ridl v0.3** with the
+  observation that reopens it — the failure-management specification and its
+  safety/HA property direction (§17.8), the explicit one-time read and its
+  reserved acquisition query cell (§17.10), and the influence quantity (§17.11).
+  The other eleven are closed, and the disposition pass of 2026-09-16 closed
+  seven of them: subscription granularity is the interaction, so per-client
+  delivery and eventgroup-style subsetting are not contract terms (§17.1, ridl
+  §5.1) · the long-operation triple is documented convention and takes no sugar
+  (§17.4, ridl §15) · a stream element that violates its constraints ends the
+  call, and a failure declared as data by a result-union element type is Stratum
+  1 instead, which does not (§17.6, ridl §12.4) · there is no normative
+  `ridl.reflect` package, because the catalog descriptor — specified, and
+  scheduled as Epic 16 — is the enumeration surface (§17.7) · and the three
+  publication-gate questions resolve as no further refusal, with ridl §11 now
+  stating what the gate protects — the record of a retirement — and what
+  `ridl diff` gates (§17.12, §17.13, §17.14). The four closed earlier: the QoS
+  boundary is the ADR-0015 absorption principle (§17.5), the signal-groups
+  question is closed by the ADR-0015 coherence rule with the struct idiom
+  confirmed (§17.3), interaction-set reuse is answered by composition — a
+  service carries a list of interfaces, and mixins were rejected because they
+  flatten (§17.2, ridl §14.5) — and the uxdl divergence budget is closed by
+  ADR-0012 (§17.9).
+- **rxdl §11**: the intent occurrence keyword · the acquisition/query cell
+  **(deferred to ridl v0.3 with ridl §17.10, which owns it)** · interaction
+  citation paths (ridl's, recorded there) · journeys and screen flow ·
+  accessibility metadata
 - **ADR-0012 open**: availability beyond `during` (five sources,
   consumer-evaluability) · absent versus disabled
 - **rmdl §12**: multi-activation (`merge`/`current` reserved) · query behaviour

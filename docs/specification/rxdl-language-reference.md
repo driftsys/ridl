@@ -306,13 +306,17 @@ allocated with E7a.
    `supply` is the working candidate; `provide` and `tell` remain live. `enter`
    was rejected for modality, `submit` for implying a commit and an
    acknowledgment an occurrence does not have.
-2. **The acquisition/query cell.** An explicit one-time read. What separates it
-   from `measure` is **maintenance**, not duration: `measure` obliges the
-   provider to hold a current value, and forcing an explicit read into it would
-   make the binding poll forever for something wanted only on request. Periodic
-   and on-change acquisition need no new cell — `@[min..max]` already
-   distinguishes them, rate floor against staleness bound. `read` is the
-   candidate spelling.
+2. **The acquisition/query cell.** An explicit one-time read. **Deferred to ridl
+   v0.3 with ridl §17.10, which owns it** — the cell is reserved in ridl §3.2,
+   and a spelling here cannot land before the cell does. What separates it from
+   `measure` is **maintenance**, not duration: `measure` obliges the provider to
+   hold a current value, and forcing an explicit read into it would make the
+   binding poll forever for something wanted only on request. Periodic and
+   on-change acquisition need no new cell — `@[min..max]` already distinguishes
+   them, rate floor against staleness bound. `read` is the candidate spelling.
+   **Reopened by** a world-boundary contract that needs an on-request read of a
+   quantity too expensive to hold current, which is the observation ridl §17.10
+   names.
 3. **Interaction citation paths.** The projection from a declaration to the
    stable identifier that specifications, journeys, tests, and telemetry cite —
    uxil's founding problem. **Not rxdl's**: the observability semantic

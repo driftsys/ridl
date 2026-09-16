@@ -2,11 +2,12 @@
 
 Status: working note, 2026-09-13, design agreed in conversation with Sebastien
 section by section. Nothing here is ratified. Stage L1 of lane L in
-[`2026-09-13-step1-lanes-plan.md`](2026-09-13-step1-lanes-plan.md). Read after
-[`2026-09-12-rsdl-rewrite-decisions.md`](2026-09-12-rsdl-rewrite-decisions.md)
+[`2026-09-13-step1-lanes-plan.md`](../wip/2026-09-13-step1-lanes-plan.md). Read
+after
+[`2026-09-12-rsdl-rewrite-decisions.md`](../wip/2026-09-12-rsdl-rewrite-decisions.md)
 D-7 and the two identity studies
-([`2026-09-12-interface-id-study.md`](2026-09-12-interface-id-study.md),
-[`2026-09-12-interface-id-study-2.md`](2026-09-12-interface-id-study-2.md)).
+([`2026-09-12-interface-id-study.md`](../wip/2026-09-12-interface-id-study.md),
+[`2026-09-12-interface-id-study-2.md`](../wip/2026-09-12-interface-id-study-2.md)).
 
 Satisfies: rsdl decisions D-7 (numbers live outside the source, at every level)
 and the §4 amendment items about identity and the lock; driftsys/ridl#315 at the
@@ -25,8 +26,8 @@ Approved by Sebastien on 2026-09-13, before the rest of this note was written
 
 The routing key is (catalog slot, interface number, member ordinal). The catalog
 slot is assigned per connection and is outside this note
-([`2026-09-08-topology-vocabulary.md`](2026-09-08-topology-vocabulary.md) §6
-gives it as `u8`).
+([`2026-09-08-topology-vocabulary.md`](../wip/2026-09-08-topology-vocabulary.md)
+§6 gives it as `u8`).
 
 **Why `u32`.** Every consumer that exists already carries 32 bits: the checker's
 ordinal counter, the IR's `uint32 ordinal`, the proto3 backend's
@@ -35,7 +36,7 @@ defined at `crates/ridl-backend-proto/src/lib.rs:196` and applied to each value
 at `:1106`), the FlatBuffers backend's `enum <Interface>Ordinal : uint`
 (`crates/ridl-backend-flatbuffers/src/lib.rs:1223`), and the catalog descriptor
 plan's schema and hash input
-([`2026-09-13-catalog-descriptor-plan.md`](2026-09-13-catalog-descriptor-plan.md)
+([`2026-09-13-catalog-descriptor-plan.md`](../wip/2026-09-13-catalog-descriptor-plan.md)
 `:296`, `:306`, `:319`, and `entry.number.to_le_bytes()` at `:1327`). A narrower
 width would save at most 4 bytes in a frame header, and would add a range check
 at lowering, a diagnostic, and a second place where the bound can drift from the
@@ -49,13 +50,13 @@ SOME/IP binding accepts an ordinal below 32768. No record states that bound, and
 no such backend exists yet; the check is that backend's when it is written.
 
 **What the widths change.** Only the identity types of
-[`2026-09-08-ridl-rt-design.md`](2026-09-08-ridl-rt-design.md) §2 (`:205-207`):
-`Ordinal(pub u32)`, `InterfaceId(pub u32)` per catalog instead of per service,
-and no `ServiceId`. Lane A's `ridl-rt` spec (stage A1) states the types, and it
-supersedes those lines. The widths change nothing in the IR, in either wire
-backend, or in Tasks 1, 3 and 4 of the catalog descriptor plan, which already
-use 32 bits. The lock itself changes the IR, Task 3 and Task 4 for other reasons
-(§3, §9, §11).
+[`2026-09-08-ridl-rt-design.md`](../wip/2026-09-08-ridl-rt-design.md) §2
+(`:205-207`): `Ordinal(pub u32)`, `InterfaceId(pub u32)` per catalog instead of
+per service, and no `ServiceId`. Lane A's `ridl-rt` spec (stage A1) states the
+types, and it supersedes those lines. The widths change nothing in the IR, in
+either wire backend, or in Tasks 1, 3 and 4 of the catalog descriptor plan,
+which already use 32 bits. The lock itself changes the IR, Task 3 and Task 4 for
+other reasons (§3, §9, §11).
 
 **Not decided here.**
 
