@@ -36,6 +36,13 @@ and #203, minting TYPL-215, RIDL-413 and TYPL-010.
 `docs/wip/typl-value-objects-plan.md`, what a colliding union arm does. It gates
 the #237 half of Task 11 and nothing else.
 
+**C4 has its own driver prompt**,
+[`2026-09-16-lane-c-c4-driver.md`](2026-09-16-lane-c-c4-driver.md). Use it
+rather than the C4 line in the routing above and the `== C4 ==` block in the
+prompt below. C4 runs as four sessions instead of one, because it is ten tasks
+with a pull request each, and under the review and model routing Sebastien set
+on 2026-09-16. The C1 to C3 material below stands as the record of what ran.
+
 ## The prompt
 
 ```text
