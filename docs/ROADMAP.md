@@ -214,6 +214,7 @@ E14.1 · E10, the typl debt ─→ Rust codegen finalized
 
 E6 rsdl finalized and lowered to the IR — beside the lock; only E6.17 waits
 E11.0 ridl-rt, landed ─→ E11.1 frame spec ─→ E11.9 transport and loopback
+E11.13 interaction face MVP — deliberately out of sequence, before E11.1 and E11.9
 E3.1–E3.3 · E9.10 · E9.12 · E8 — a thread beside all of it
 ```
 
@@ -396,6 +397,19 @@ E11.9.
 | ----- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---- |
 | E11.1 | The frame specification — a logical frame with one binding per encoding; ordinal, kind, envelope, provenance, correlation | one document a second implementation could be written from                                                  | M    |
 | E11.9 | `ridl-transport-ws` — the WebSocket transport crate, plus the in-process loopback runtime for tests                       | a contract reaches a second process over the transport, and the loopback runs the same tests with no socket | M    |
+
+**E11.13 is a new identifier**, the next free one in Epic 11. It is the MVP of
+the generated interaction face, taken deliberately out of sequence: ADR-0018
+decision 15 places the face after E11.1 and E11.9, and this story runs before
+both so the team has a face to write against. It is in-process only, and it
+carries three explicit placeholders that later stories retire — a hand-written
+payload implementation (E11.7, E11.8 or E11.12), test-only ports (E11.9), and a
+zero catalog hash (E16.2). Its design is
+[`docs/wip/2026-09-16-interaction-face-v0-design.md`](wip/2026-09-16-interaction-face-v0-design.md).
+
+| ID     | Story                                                                                                                                                                                                                                   | Done when                                                                                                        | Size |
+| ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---- |
+| E11.13 | The generated interaction face, MVP — interface and interaction descriptors, a `Client` generic over exactly the ports it needs, a `Publisher`, a `Provider` trait and a generated `dispatch`, for one example package, in process only | an example package's generated face compiles, and a signal, an event, a command and a query round-trip in a test | M    |
 
 ## Epic 14 — typl and ridl finalization
 
