@@ -12,17 +12,24 @@ sound for it.
 **Architecture:** The IR already carries the constraints; no IR schema change is
 needed except one shared classifier. The Rust backend gains a private inner
 field, `new`/`new_unchecked`, `TryFrom`/`From`, and a derive eligibility pass
-reusing the recursion in `defaults.rs`. `ridlc` starts emitting a `lib.rs` and
-`Cargo.toml` so the Rust output compiles standalone. One checker change is
-needed after all: Task 11 extends RIDL-149 to a union's arms. The TypeScript
-backend keeps its compile-time brand and gains factory functions in step 2, not
-here (Task 9).
+reusing the recursion in `defaults.rs`. The constraint error is not generated:
+the constructors return `ridl_rt::payload::Violation`, which `ridl-rt` 0.1
+already defines and already carries as ridl §10.2's `INVALID_VALUE`. `ridlc`
+starts emitting a `lib.rs` and `Cargo.toml` so the Rust output compiles
+standalone. One checker change is needed after all: Task 11 extends RIDL-149 to
+a union's arms. The TypeScript backend keeps its compile-time brand and gains
+factory functions in step 2, not here (Task 9).
 
 **Tech Stack:** Rust 2024, `proc-macro2`/`quote`/`prettyplease` (Rust emitter),
 `insta` snapshots, `protox`-generated IR types.
 
 **Spec:** `docs/wip/typl-value-objects-design.md`. Where this plan and the spec
-disagree, the spec is authoritative.
+disagree, the spec is authoritative — with one recorded exception. The spec
+places the constraint error in a per-package vocabulary emitted by a module that
+driftsys/ridl#241 has since retracted, and `ridl-rt` now defines that type; Task
+2 states the reasoning, and Task 10 corrects the spec before it is archived.
+Where the spec is stale about the tree rather than wrong about the design, this
+plan says so at the point of use rather than silently diverging.
 
 ## Currency
 
@@ -47,6 +54,14 @@ Two structural changes came with the refresh: Task 9 (TypeScript) moved to step
 2, and Task 11 was added for the two Rust naming defects. Both are recorded
 where they happen.
 
+**A third structural change followed on the same day.** Task 2 was rewritten
+again: the generated code defines no constraint error, and the constructors
+return `ridl_rt::payload::Violation`, which `ridl-rt` 0.1 already carries. The
+crate did not exist when the design spec was written, so the spec places that
+type in a per-package vocabulary that driftsys/ridl#241 has since retracted. The
+reasoning is in Task 2 under "Why not a generated type", and it closes Open item
+3 rather than answering it.
+
 **Line references were replaced by symbol names** wherever a symbol exists. The
 line numbers this plan carried had drifted by eleven lines in
 `crates/ridl-backend-rust/src/lib.rs` alone, and a symbol name does not drift.
@@ -55,11 +70,17 @@ as the identifier.
 
 ## Global Constraints
 
-- **The generated Rust default build stays dependency-free** except for the
+- **The generated Rust default build takes one dependency, `ridl-rt`**, which is
+  `no_std` and has no dependency of its own in any feature combination, plus the
   optional `regex` behind `validate-pattern`. Emitted code names only `core`,
-  `alloc`, and `std` paths otherwise.
-- **Codegen never panics.** Every failure is a `GenerateError` value (ADR-0004
-  section 5).
+  `alloc`, `std` and `ridl_rt` paths. The rule this replaces said
+  "dependency-free"; it was written on 2026-08-03, before `ridl-rt` existed, and
+  its purpose was to keep `regex` off a constrained target, which still holds.
+  ADR-0020 decision 6 states that generated Rust links `ridl-rt`.
+- **Codegen never panics.** Every failure is a `GenerateError` value. This cites
+  ADR-0004 section 5, which is about the diagnostic model and states neither
+  half; the citation predates this plan's refresh and is left for whoever
+  executes Task 10 to correct or drop.
 - **Conventional Commits**, linted by git-std against `.git-std.toml`. Scopes
   used here: `ridl-ir`, `ridl-backend-rust`, `ridl-sem`, `ridlc`, `adr`, `typl`.
 - **Never push to `main`.** Each task lands as its own pull request, one per
@@ -200,140 +221,180 @@ normalized rather than validated."
 
 ---
 
-### Task 2: The Rust `ConstraintError` vocabulary
+### Task 2: Depend on `ridl-rt` for the constraint error
 
 **Model:** Sonnet (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
+**The generated code defines no error type. It uses
+`ridl_rt::payload::Violation`.** This reverses what this plan said before
+2026-09-16, and it closes Open item 3 rather than proposing an answer to it —
+see "Why not a generated type" below.
+
 **Files:**
 
-- Create: `crates/ridl-backend-rust/src/vocabulary.rs` — the package vocabulary
-  emitter. There is no file to modify: `interact.rs`, which this plan first
-  named as the vocabulary emitter, was deleted whole by commit `7d539bc`
-  ("feat(repo)!: retract the interaction layer and record the runtime
-  architecture", driftsys/ridl#241) and nothing replaced it. The crate's `src/`
-  is now `lib.rs`, `defaults.rs`, `tests.rs` and `snapshots/` only.
-- Modify: `crates/ridl-backend-rust/src/lib.rs` — declare the module beside
-  `mod
-  defaults;` and call the emitter from `generate` (`lib.rs:54`).
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — the emitted `use` line, so
+  each package module names the type once and the constructors spell it short.
+- Modify: `crates/ridlc/src/lib.rs` — Task 7's generated manifest gains
+  `ridl-rt` as a dependency.
 - Test: `crates/ridl-backend-rust/src/tests.rs`
 
 **Interfaces:**
 
-- Consumes: nothing.
-- Produces: an emitted `pub enum ConstraintError` with variants
-  `Range { type_name: &'static str }`, `Length { type_name: &'static str }`,
-  `Pattern { type_name: &'static str }`, `Variant { type_name: &'static str }`.
-  Tasks 3, 4, 5, and 8 construct these. Also
-  `pub(crate) fn vocabulary::emit_constraint_error() -> TokenStream`.
+- Consumes: `ridl_rt::payload::Violation` and `ridl_rt::payload::Rule`, which
+  exist today in `crates/ridl-rt/src/payload.rs:177` and `:186`.
+- Produces: no type. Tasks 3, 4, 5 and 8 construct `Violation` values.
 
-The retraction changed the shape of this task. `generate` no longer gates any
-emission on whether the package declares an interface or a service — it emits
-every declaration unconditionally — so there is no early return to make
-unconditional. The premise still holds: a pure typl package emits no vocabulary
-today, because no vocabulary emitter exists at all. The work is to add one, not
-to widen one.
+**What `ridl-rt` already carries**, verified at `origin/main`:
 
-**One error type per emitted crate, not one per package.** driftsys/ridl#252
-records that the retracted interaction layer emitted its vocabulary once per
-package, so two packages in one crate collided, and that whatever replaces it
-"must be nameable across every package in a workspace at once". Emitting
-`pub enum ConstraintError` into every package module does compile — the modules
-are distinct — but it gives one crate N mutually incompatible error types, so a
-consumer that constructs a `veh.common` type and a `veh.adas` type cannot write
-one `match`. The design spec's sentence placing `ConstraintError` in the
-per-package vocabulary "beside `Provenance` and `SignalHandle`" was written
-before the retraction and does not settle this.
+```rust
+// crates/ridl-rt/src/payload.rs
+/// A value that breaks a typl constraint.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Violation {
+    /// The name of the typl type whose constraint failed.
+    pub type_name: &'static str,
+    /// The kind of constraint that failed.
+    pub rule: Rule,
+}
 
-Proposed resolution, to confirm before implementing (Open item 3): the emitter
-writes `ConstraintError` into the generated crate root that Task 7 creates, and
-each package module carries `use crate::ConstraintError;`. Single-file mode
-emits no crate root, so it keeps the definition in the one file it writes. That
-makes Task 7 a prerequisite of the crate-root form, so either Task 7 moves
-before this one, or this task emits per package and Task 7 hoists.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rule { Range, Step, Length, Pattern, Variant }
+```
+
+That is the design spec's `ConstraintError` under another name: the same
+`type_name: &'static str`, and `Rule` covering all four kinds the spec named
+plus `Step`. `ridl-rt` also carries it upward already —
+`error::Contract::InvalidValue(Violation)` is ridl §10.2's `INVALID_VALUE`
+(`crates/ridl-rt/src/error.rs:12`) — so a constructor's rejection and a
+runtime's contract error are one type end to end, with no conversion written
+anywhere.
+
+`Rule::Step` is a kind no generated constructor produces: the design defers step
+to rounding rather than checking (design spec, Deferred). `Rule` is
+`#[non_exhaustive]`, so a consumer must have a wildcard arm regardless.
+
+#### Why not a generated type
+
+The plan carried a generated `pub enum ConstraintError` from 2026-08-03 until
+2026-09-16, and proposed under Open item 3 to hoist it to the generated crate
+root. Both are wrong, for a reason that outlives either:
+
+1. **Its shape does not depend on the contract.** Everything else the backends
+   emit is derived from the `.ridl` source — this type is fixed for every
+   package that will ever exist. A type that is the same in every generated
+   crate is a library's job, not a generator's.
+2. **`ridl-rt` is the crate for exactly this.** Its own description is "the
+   vocabulary that code generated from ridl and a runtime agree on: … and
+   contract and transport errors", and ADR-0020 decision 6 states plainly that
+   "generated Rust links `ridl-rt`"
+   (`docs/decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md:199`).
+   A package's generated Rust is compiled to `wasm32` against it (decision 7),
+   and `just wasm-check` already covers `-p ridl-rt` for that reason
+   (`docs/design/ridl-rt.md:253`).
+3. **It costs a constrained target nothing.** `ridl-rt` is `#![no_std]`,
+   `#![forbid(unsafe_code)]`, has no `extern crate alloc`, and **has no
+   dependency in any feature combination** (`docs/design/ridl-rt.md:249`,
+   ADR-0021 decision 8). The plan's dependency-free rule was written against
+   `regex`, which stays behind `validate-pattern`, and does not reach here.
+4. **It settles driftsys/ridl#252 by construction.** That issue records the
+   retracted interaction layer emitting its vocabulary once per package, so two
+   packages in one crate collided, and requires that whatever replaces it "must
+   be nameable across every package in a workspace at once". One type in one
+   library is nameable from everywhere, with no crate root to hoist into and no
+   single-file special case. A consumer that constructs a `veh.common` type and
+   a `veh.adas` type writes one `match`.
+5. **The design spec's placement is stale, not overruled.** It put
+   `ConstraintError` in "the package vocabulary the `interact` module already
+   emits beside `Provenance` and `SignalHandle`". That module was retracted by
+   driftsys/ridl#241, and `Provenance` now lives in `ridl-rt`. The spec named
+   the company the type should keep; that company moved, and this follows it.
+
+Why the plan did not say this from the start: the design spec is dated
+2026-08-03 and `ridl-rt` did not exist. Stage C2's refresh caught the deleted
+`interact.rs` but kept the generated type, which is why Open item 3 was filed
+rather than answered.
+
+#### What this costs, named plainly
+
+**A pure typl package's generated Rust now has a dependency.** A package
+declaring only types, with no interaction anywhere, links `ridl-rt` to name one
+struct. That is a real change and it is the one judgement in this task. It is
+taken because ADR-0020 decision 6 already makes `ridl-rt` the dependency of
+generated Rust without qualifying it by what the package declares, and because a
+zero-dependency `no_std` crate is the cheapest dependency available. If that is
+ever unwanted, the escape is a `ridl-rt` cargo feature that the generated
+manifest sets, not a second copy of the type.
 
 - [ ] **Step 1: Write the failing test**
 
 ```rust
 #[test]
-fn constraint_error_vocabulary_for_pure_typl_package() {
-    // A package with no interface still needs the error type, because a
-    // named scalar's constructor returns it.
-    insta::assert_snapshot!(rust_for(vec![speed_decl()]));
+fn a_pure_typl_package_names_the_runtime_violation() {
+    // A package with no interface still reaches ridl-rt, because a named
+    // scalar's constructor returns its Violation.
+    let source = rust_for(vec![speed_decl()]);
+    assert!(source.contains("use ridl_rt::payload::{Rule, Violation};"), "got:\n{source}");
+    // No generated error type: the library owns this one.
+    assert!(!source.contains("enum ConstraintError"));
 }
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `cargo test -p ridl-backend-rust --locked constraint_error_vocabulary`
-Expected: FAIL — insta reports a new snapshot; inspect it and confirm no
-`ConstraintError` appears in the output.
+Run:
+`cargo test -p ridl-backend-rust --locked a_pure_typl_package_names_the_runtime`
+Expected: FAIL — nothing emits a `use` of `ridl-rt` today.
 
 - [ ] **Step 3: Write the implementation**
 
-In `crates/ridl-backend-rust/src/vocabulary.rs`:
+Emit the `use` at the top of each package module, from `generate` (`lib.rs:54`),
+when the package declares a non-vacuous named scalar, an `enum` or an `enumset`
+— that is, when Tasks 3, 5 or 8 will construct a `Violation`. Emitting it
+unconditionally would draw `unused_imports` on a package that declares only
+vacuous types, and the compile proofs deny lints by name, so nothing would catch
+it.
 
 ```rust
-/// The constraint-violation error every validating constructor returns.
-///
-/// Dependency-free: it names only `core` paths and holds a `&'static str`, so
-/// it allocates nothing and compiles under `no_std`. `std::error::Error` is
-/// implemented under the `std` feature, which the generated manifest enables
-/// by default (design spec, decision 4).
-pub(crate) fn emit_constraint_error() -> TokenStream {
-    quote! {
-        /// A value rejected by its type's typl constraints.
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-        pub enum ConstraintError {
-            /// Outside the declared `[min..max]` range.
-            Range { type_name: &'static str },
-            /// Outside the declared length bounds.
-            Length { type_name: &'static str },
-            /// Did not satisfy the declared `match` pattern.
-            Pattern { type_name: &'static str },
-            /// Not a declared enum discriminant or enum-set bit.
-            Variant { type_name: &'static str },
-        }
-
-        impl core::fmt::Display for ConstraintError {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                match self {
-                    Self::Range { type_name } => write!(f, "{type_name}: value outside its declared range"),
-                    Self::Length { type_name } => write!(f, "{type_name}: value outside its declared length bounds"),
-                    Self::Pattern { type_name } => write!(f, "{type_name}: value did not match its declared pattern"),
-                    Self::Variant { type_name } => write!(f, "{type_name}: value is not a declared variant"),
-                }
-            }
-        }
-
-        #[cfg(feature = "std")]
-        impl std::error::Error for ConstraintError {}
-    }
+if package_constructs_a_violation(ir) {
+    items.push(quote! { use ridl_rt::payload::{Rule, Violation}; });
 }
 ```
 
-In `crates/ridl-backend-rust/src/lib.rs`, in `generate` (`lib.rs:54`), emit it
-before the declaration loop:
-
-```rust
-let mut items: Vec<TokenStream> = Vec::new();
-items.push(vocabulary::emit_constraint_error());
-```
+`ridl-rt` is a path dependency inside this workspace and a version dependency in
+the generated manifest. Task 7 writes the latter; add it there rather than here,
+and take the version from `crates/ridl-rt/Cargo.toml` rather than writing a
+literal that will drift.
 
 - [ ] **Step 4: Run the test and accept the snapshot**
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
-Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. Review the diff
-— every existing snapshot gains the `ConstraintError` block.
+Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. Every snapshot
+for a package with a constrained type gains the `use` line.
+
+**The compile proofs need the dependency.** `appendix_b_compiles_with_rustc` and
+the others drive `rustc` directly on a single file with no `--extern`, so
+generated code naming `ridl_rt` will not compile there. Each proof needs
+`ridl-rt` built and passed as `--extern ridl_rt=<path>`, or the proof moves to a
+`trybuild`-style fixture crate. Settle this in this task rather than in Task 3,
+which is the first task whose output actually names the type.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add crates/ridl-backend-rust/
-git commit -m "feat(ridl-backend-rust)!: emit the ConstraintError vocabulary
+git add crates/
+git commit -m "feat(ridl-backend-rust): return the runtime Violation from constructors
 
-Every validating constructor returns it, so it is emitted for any package
-declaring a constrained named scalar, an enum, or an enumset - not only for
-one declaring an interface."
+ridl-rt already defines the constraint violation - payload::Violation, with
+the same type_name and a Rule covering every kind - and error.rs already
+carries it as Contract::InvalidValue, ridl 10.2's INVALID_VALUE. Generating
+a second type per package would give one crate N incompatible error types,
+which is the defect #252 records, and its shape does not depend on the
+contract, so it belongs in the library rather than the generator.
+
+ADR-0020 decision 6 already makes ridl-rt the dependency of generated Rust.
+The crate is no_std with no dependency in any feature combination, so a
+constrained target pays nothing for it."
 ```
 
 ---
@@ -355,10 +416,10 @@ The core change, and the breaking one.
 
 **Interfaces:**
 
-- Consumes: `ridl_ir::v2::constraint_is_vacuous` (Task 1), the emitted
-  `ConstraintError` (Task 2).
+- Consumes: `ridl_ir::v2::constraint_is_vacuous` (Task 1),
+  `ridl_rt::payload::{Violation, Rule}` (Task 2).
 - Produces: for a constrained named scalar `Speed` over `f64`, an emitted
-  `Speed::new(f64) -> Result<Speed, ConstraintError>`,
+  `Speed::new(f64) -> Result<Speed, Violation>`,
   `Speed::new_unchecked(f64) -> Speed` (`pub const`), `Speed::get(self) -> f64`,
   `impl TryFrom<f64> for Speed`, `impl From<Speed> for f64`. Task 4 emits the
   vacuous counterpart; Task 8 adds the pattern branch inside `new`.
@@ -377,7 +438,7 @@ fn constrained_scalar_is_a_value_object() {
         source.contains("pub struct Speed(f64)"),
         "inner field must be private, got:\n{source}"
     );
-    assert!(source.contains("pub fn new(value: f64) -> Result<Self, ConstraintError>"));
+    assert!(source.contains("pub fn new(value: f64) -> Result<Self, Violation>"));
     assert!(source.contains("pub const fn new_unchecked(value: f64) -> Self"));
     assert!(source.contains("pub const fn get(self) -> f64"));
     assert!(source.contains("impl TryFrom<f64> for Speed"));
@@ -444,7 +505,7 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
 
         impl #name {
             /// Constructs the value, enforcing its typl constraints.
-            #vis fn new(value: #inner) -> Result<Self, ConstraintError> {
+            #vis fn new(value: #inner) -> Result<Self, Violation> {
                 #checks
                 Ok(Self(value))
             }
@@ -462,7 +523,7 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
         }
 
         impl TryFrom<#inner> for #name {
-            type Error = ConstraintError;
+            type Error = Violation;
             fn try_from(value: #inner) -> Result<Self, Self::Error> {
                 Self::new(value)
             }
@@ -493,7 +554,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
         let lit = scalar_literal(td, min);
         checks.push(quote! {
             if #value < #lit {
-                return Err(ConstraintError::Range { type_name: #type_name });
+                return Err(Violation { type_name: #type_name, rule: Rule::Range });
             }
         });
     }
@@ -501,7 +562,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
         let lit = scalar_literal(td, max);
         checks.push(quote! {
             if #value > #lit {
-                return Err(ConstraintError::Range { type_name: #type_name });
+                return Err(Violation { type_name: #type_name, rule: Rule::Range });
             }
         });
     }
@@ -516,7 +577,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             let lit = proc_macro2::Literal::u64_unsuffixed(min);
             checks.push(quote! {
                 if #len < #lit {
-                    return Err(ConstraintError::Length { type_name: #type_name });
+                    return Err(Violation { type_name: #type_name, rule: Rule::Length });
                 }
             });
         }
@@ -524,7 +585,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             let lit = proc_macro2::Literal::u64_unsuffixed(max);
             checks.push(quote! {
                 if #len > #lit {
-                    return Err(ConstraintError::Length { type_name: #type_name });
+                    return Err(Violation { type_name: #type_name, rule: Rule::Length });
                 }
             });
         }
@@ -742,7 +803,7 @@ latter with Error = Infallible."
 
 **Interfaces:**
 
-- Consumes: the emitted `ConstraintError` (Task 2).
+- Consumes: `ridl_rt::payload::{Violation, Rule}` (Task 2).
 - Produces: `impl TryFrom<i64> for <Enum>`, `impl From<<Enum>> for i64`, and the
   same pair for each enum set.
 
@@ -754,7 +815,7 @@ fn enum_converts_from_a_raw_discriminant() {
     let source = rust_for(vec![gear_position_decl()]);
     assert!(source.contains("impl TryFrom<i64> for GearPosition"));
     assert!(source.contains("impl From<GearPosition> for i64"));
-    assert!(source.contains("ConstraintError::Variant"));
+    assert!(source.contains("Rule::Variant"));
 }
 
 #[test]
@@ -793,11 +854,11 @@ Append to `emit_enum`'s returned stream:
 
     quote! {
         impl TryFrom<i64> for #name {
-            type Error = ConstraintError;
+            type Error = Violation;
             fn try_from(value: i64) -> Result<Self, Self::Error> {
                 match value {
                     #(#arms,)*
-                    _ => Err(ConstraintError::Variant { type_name: #type_name }),
+                    _ => Err(Violation { type_name: #type_name, rule: Rule::Variant }),
                 }
             }
         }
@@ -823,10 +884,10 @@ Append to `emit_enum_set`'s returned stream:
         }
 
         impl TryFrom<i64> for #name {
-            type Error = ConstraintError;
+            type Error = Violation;
             fn try_from(value: i64) -> Result<Self, Self::Error> {
                 if value & !Self::DECLARED_MASK != 0 {
-                    return Err(ConstraintError::Variant { type_name: #type_name });
+                    return Err(Violation { type_name: #type_name, rule: Rule::Variant });
                 }
                 Ok(Self(value))
             }
@@ -1223,10 +1284,13 @@ engine, and the crate root in step 3 below is already built that way.
 Single-file mode keeps writing only `<stem>.rs`, matching the existing
 single-file asymmetry documented on `Emit::TypeScript`.
 
-This is also where driftsys/ridl#252's constraint is discharged: whatever the
-backends emit once per package has to be nameable across every package in one
-crate at once. That is what Task 2's `ConstraintError` question turns on, so
-read Task 2's note and Open item 3 before writing this.
+driftsys/ridl#252's constraint no longer bites here. It required that whatever
+the backends emit once per package be "nameable across every package in a
+workspace at once"; Task 2 settled that by taking the constraint error from
+`ridl-rt` rather than generating one, so there is no per-package vocabulary left
+to hoist. What this task must still do is add `ridl-rt` to the generated
+manifest, with the version read from `crates/ridl-rt/Cargo.toml` rather than
+written as a literal.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1248,6 +1312,7 @@ fn rust_emit_writes_a_compiling_crate() {
     let manifest = std::fs::read_to_string(out.path().join("Cargo.toml")).unwrap();
     assert!(manifest.contains("default = [\"validate-pattern\", \"std\"]"));
     assert!(manifest.contains("regex = { version = \"1\", optional = true }"));
+    assert!(manifest.contains("ridl-rt = "));
 
     let lib = std::fs::read_to_string(out.path().join("lib.rs")).unwrap();
     assert!(lib.contains("pub mod veh"));
@@ -1283,11 +1348,18 @@ validate-pattern = ["dep:regex"]
 std = []
 
 [dependencies]
+ridl-rt = "0.1"
 regex = { version = "1", optional = true }
 
 [lib]
 path = "lib.rs"
 ```
+
+`ridl-rt` is not optional and carries no feature here: it is `no_std`, has no
+dependency of its own in any feature combination, and the generated constructors
+name `payload::Violation` from it (Task 2). Read the version from
+`crates/ridl-rt/Cargo.toml` at emit time rather than writing a literal, so the
+two cannot drift.
 
 Emit `lib.rs` from the package names. Each dotted name becomes a path in a
 nested `mod` tree whose leaf carries `#[path]`, so the emitted file names stay
@@ -1400,10 +1472,10 @@ default.
 fn pattern_check_is_feature_gated() {
     let source = rust_for(vec![vin_decl()]);
     assert!(source.contains("#[cfg(feature = \"validate-pattern\")]"));
-    assert!(source.contains("ConstraintError::Pattern"));
+    assert!(source.contains("Rule::Pattern"));
     // The length check is not gated - it needs no dependency.
     let gated = source.split("#[cfg(feature = \"validate-pattern\")]").next().unwrap();
-    assert!(gated.contains("ConstraintError::Length"));
+    assert!(gated.contains("Rule::Length"));
 }
 ```
 
@@ -1433,7 +1505,7 @@ if let Some(pattern) = c.pattern.as_deref() {
                     regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
                 });
             if !PATTERN.is_match(&#value) {
-                return Err(ConstraintError::Pattern { type_name: #type_name });
+                return Err(Violation { type_name: #type_name, rule: Rule::Pattern });
             }
         }
     });
@@ -1506,6 +1578,14 @@ roadmap says the same beneath the Epic 10 table.
   shared: the order is C1 (E14.1), then this task, then E14.3
   (`docs/wip/2026-09-13-step1-lanes-plan.md` §6). Do not open a pull request
   touching it while another lane's is open.
+- Modify: `docs/wip/typl-value-objects-design.md` — the `ConstraintError`
+  paragraph under "The Rust surface", and the `ConstraintError` occurrences in
+  decisions 1 to 4 and in the surface listings. The spec says the type "joins
+  the dependency-free package vocabulary the `interact` module already emits
+  beside `Provenance` and `SignalHandle`". That module was retracted by
+  driftsys/ridl#241, `Provenance` now lives in `ridl-rt`, and Task 2 takes the
+  type from there too. Correct the spec before archiving it, so the archived
+  record does not contradict the code that shipped from it.
 - Delete: `docs/wip/typl-value-objects-design.md`,
   `docs/wip/typl-value-objects-plan.md` (archive per the working-memory rule)
 
@@ -1841,13 +1921,22 @@ not of the whole directory, which carries other lanes' working memory.
    by a `--crate-name` flag. Confirm before implementing Task 7.
 2. **Whether `ridl-diff` classifies a constraint appearing where none existed as
    breaking** (Task 10, Step 1). Verify rather than assume.
-3. **Where `ConstraintError` is defined when one crate holds several packages**
-   (Task 2, and Task 7 which creates the crate root). Proposed: once at the
-   generated crate root, with `use crate::ConstraintError;` in each package
-   module, and in the single file when single-file mode writes no crate root.
-   driftsys/ridl#252 is where the per-package form is recorded as a defect.
-   Confirm before implementing Task 2.
+3. **Where the constraint error is defined — answered 2026-09-16, not open.** It
+   is `ridl_rt::payload::Violation`; the generated code defines no error type at
+   all. Task 2 carries the reasoning and the one cost. Kept here as a numbered
+   item because Task 7's manifest and Tasks 3, 4, 5 and 8 all rest on it, and
+   because the design spec still says otherwise — the spec is dated 2026-08-03,
+   before `ridl-rt` existed, and Task 10 is where that sentence is corrected.
 4. **What a colliding union arm does** (Task 11, decision D). Proposed: report a
    diagnostic under RIDL-149 over both pinned transforms, pin `camel_case` into
    `ridl-ir`, and do not rename. Sebastien decides; the #243 half of Task 11
    does not wait for it.
+5. **`Violation` implements neither `Display` nor `std::error::Error`**
+   (`crates/ridl-rt/src/payload.rs:177`), and `ridl-rt` declares no `std`
+   feature. Every generated constructor returns this type, so a consumer writing
+   `fn main() -> Result<(), Box<dyn Error>>` cannot apply `?` to it. Both
+   additions are additive rather than breaking under ADR-0021 decision 10 — that
+   rule is about a public struct gaining a _field_ — so this can ship in a later
+   0.x without a break, and none of Epic 10 is blocked on it. It is recorded
+   here because Epic 10 is what makes the gap reachable: before this epic,
+   nothing outside a runtime ever held a `Violation`.
