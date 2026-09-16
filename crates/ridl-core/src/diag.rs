@@ -288,9 +288,9 @@ diag_codes! {
         /// generated artifact is overwritten by the standard package's too,
         /// because the output base is the package name; in single-file mode
         /// the base is the file stem, so that second consequence follows only
-        /// when the file is itself named `ridl.std.typl`. Reported on the
-        /// `package` declaration, in a workspace member and in single-file
-        /// mode alike.
+        /// when the stem is itself `ridl.std`, whatever the extension.
+        /// Reported on the `package` declaration, in a workspace member and
+        /// in single-file mode alike.
         TYPL_010 = "TYPL-010", Error,
             "package name is reserved for a package the compiler provides";
 

@@ -275,10 +275,10 @@ unit of visibility, cycle checking, and codegen output.
 **A package cannot take a name the compiler provides** (TYPL-010). Today that is
 `ridl.std` alone. Such a package can never be used: every package already
 imports all of `ridl.std` implicitly (§3.2) rather than through an import, so
-the declarations are unreachable under their own name, and the generated
-artifact is overwritten by the standard package's own. The reservation is the
-set of packages the compiler provides, not the `ridl.` prefix — `ridl.stdlib` is
-an ordinary package name.
+the declarations are unreachable under their own name. Where the generated
+artifact is named for the package, it is overwritten by the standard package's
+own as well. The reservation is the set of packages the compiler provides, not
+the `ridl.` prefix — `ridl.stdlib` is an ordinary package name.
 
 ### 3.2 Imports
 

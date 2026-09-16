@@ -440,9 +440,9 @@ impl Loader {
             // The artifact overwrite that issue reports is a consequence in
             // package and workspace mode, where the output base is the package
             // name; in single-file mode the base is the file stem, so it
-            // collides only when the file is itself named `ridl.std.typl`.
-            // That distinction belongs in the catalogue entry, not in a
-            // message that would then be false for some of the inputs it
+            // collides only when that stem is itself `ridl.std`, whatever the
+            // extension. That distinction belongs in the catalogue entry, not
+            // in a message that would then be false for some of the inputs it
             // greets.
             self.diagnostics.push(error(
                 DiagCode::TYPL_010,
@@ -605,6 +605,23 @@ mod tests {
             "the message names the package: {}",
             diagnostic.message
         );
+        // The message states only what holds for every input that draws it.
+        // The artifact collision does not: in single-file mode the output base
+        // is the file stem. Asserting the absence keeps that clause from
+        // returning to the message without the test noticing.
+        assert!(
+            diagnostic.message.contains("unreachable"),
+            "the message states the consequence that always holds: {}",
+            diagnostic.message
+        );
+        for conditional in ["artifact", "overwrit"] {
+            assert!(
+                !diagnostic.message.contains(conditional),
+                "`{conditional}` is true only where the output base is the package name, \
+                 so it belongs in the catalogue entry, not the message: {}",
+                diagnostic.message
+            );
+        }
         // The declaration is what is pointed at, not the manifest or the
         // directory: it is the one place a workspace member and single-file
         // mode both pass through. Both ends are asserted, against the source
