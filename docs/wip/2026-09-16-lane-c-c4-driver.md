@@ -41,14 +41,44 @@ Tasks 3, 6 and 11 take the stronger model because they are the three the lanes
 plan gave to Fable: the breaking change to every generated named scalar, the
 derive-eligibility recursion, and the naming defects that carry decision D.
 
-**Two seats and a refuter, not four seats.** Two reasons, both measured rather
-than assumed. Across C3's four review passes, nine of ten findings were test
-precision and **none** was an executable-code defect, so the tests lens is where
-the yield is; and the earlier cost record in the review command names
-`review-tests` as the best-yielding seat at $2.55 for six unique kept findings.
-Mixing model families also finds more than adding a third seat of the same
+### Two seats and a refuter, not four — a cost decision with a named risk
+
+This is worth stating accurately, because the first draft of this file stated it
+inaccurately and in the direction that flattered the conclusion. The review of
+this pull request caught that.
+
+**What C3 actually produced.** Fourteen kept findings across four review passes
+on #406 and #407. Nine were test precision. **Five were not**, and all five came
+from the two seats this routing removes — the docs and compliance lenses. Worse
+for the argument: the two findings C3's own ledgers rated highest were both
+theirs. #407 pass 1's ledger calls its docs finding "the one that mattered" — a
+diagnostic message asserting something untrue of some of the inputs it greets —
+and pass 2's Critical, the scratch file committed at the repository root, was
+raised by compliance.
+
+So the honest summary is that **the tests lens has the best yield per finding,
+and the dropped lenses found the most consequential ones.** One stage is thin
+evidence either way.
+
+**What is well sourced.** Mixing model families beats adding a third seat of one
 family: an earlier ledger recorded nineteen multi-seat duplicate groups across
-two pull requests reviewed by four Claude seats.
+two pull requests reviewed by four Claude seats. Separately, the 2026-09-14
+review-cost measurement — recorded outside this repository — found the tests
+seat the best-yielding of the four, at six unique kept findings for $2.55, with
+compliance producing seventeen findings of which thirteen duplicated another
+seat and one survived. That measurement is real; the first draft of this file
+cited it to the wrong document.
+
+**So the reduction is taken on cost, not on evidence that two lenses are
+enough**, and the risk is mitigated rather than denied: **seat 1's brief is
+widened** to carry what docs and compliance were catching — whether the change
+does what it claims, whether prose and code still agree, and whether the records
+this change touches still agree with each other. That widening is the reason two
+seats is defensible; without it the evidence above argues for three.
+
+**Revisit this** if a defect of the docs or compliance kind reaches `main`
+through a C4 pull request. Record the seat tag on every ledger line, which is
+what makes that judgement possible later.
 
 ## The prompt
 
@@ -131,16 +161,28 @@ finding in pass 2. Name every path you stage.
 == Review of a pull request ==
 Two seats in parallel, one refuter, at most two passes.
 
-  Seat 1 — gpt-5.6-sol. Correctness and defects: does the change do what it
-           claims, and what breaks.
+  Seat 1 — gpt-5.6-sol. Correctness, and the records. Three questions, and the
+           second and third matter as much as the first:
+             (a) does the change do what it claims, and what breaks;
+             (b) does every statement it makes about the code match the code —
+                 a diagnostic message, a doc comment, a specification sentence;
+             (c) do the records this change touches still agree with each other
+                 after it.
+           (b) and (c) are here because C3 dropped them from no seat and they
+           still produced its two most consequential findings: a message that
+           asserted something untrue of some inputs, and two records left
+           disagreeing where they had agreed before.
   Seat 2 — Opus 5, taking the TESTS lens explicitly: would each test fail if the
            behaviour were wrong. Not whether tests exist.
-           Keep this lens by name. Across C3's four review passes, nine of ten
-           findings were test precision and none was a code defect; the measured
-           cost record also names the tests seat as the best-yielding one.
+           Keep this lens by name. It had the best yield per finding in C3 and in
+           the 2026-09-14 cost measurement before it.
   Refuter — Sonnet 5, high effort, one per finding (batch by file above eight).
            Keep a finding when it is not REFUTED and confidence >= 60. Record a
            dropped finding with the refuter's reasoning; never discard silently.
+
+TAG EVERY LEDGER LINE WITH ITS SEAT. That tag is the evidence for whether two
+seats was the right call. If a docs or compliance defect reaches main through a
+C4 pull request, the routing goes back to three seats.
 
 Give each seat only the work product: a two-sentence description, the
 requirements, BASE and HEAD, and the rule-file paths. Never your session, your
@@ -151,8 +193,8 @@ it, and say in the ledger that you did.
 
 VERIFY A KEPT TEST FINDING BY MUTANT. Apply the exact mutation the finding names,
 confirm the suite passed before your fix and fails after, and record both in the
-ledger. C3 did this eleven times and it caught two tests that passed for the
-wrong reason.
+ledger. C3 did this on every kept test finding, and twice it caught a test that
+passed for the wrong reason.
 
 You may decline a kept finding. Record it in the ledger with the reasoning, so
 the judgement is reviewable. Do not implement a suggestion you believe is wrong.
@@ -200,13 +242,16 @@ Plain literal prose everywhere: no idioms, no figures of speech. Never name a
 private or consumer project in a repository file.
 ```
 
-## Two rules above that came from C3, and what they cost to learn
+## Three rules above that came from C3, and what they cost to learn
 
-**"Read the diff yourself."** C3's implementing agent reported accurately and
-the report was still not enough: reviewing its work turned up four findings that
-only reading the diff surfaces, including a test whose assertion was decorative
-— it compared against a hard-coded expression that evaluated to zero while
-reading as though it derived an offset from the fixture.
+**"Read the diff yourself."** Stated as a precaution rather than as something C3
+proved: the ledgers record what the review seats found, not what the driver's
+own diff-read caught before the pull request, so there is no measured case here
+either way. The reason to keep it is that a report and a diff are different
+artefacts — an implementer's report describes what it believes it did, and the
+review seats on both C3 pull requests found real defects inside work whose
+reports were accurate. The cheapest place to find those is before a seat is paid
+to.
 
 **"Stage explicit paths."** A review subagent wrote a scratch `review.diff` into
 the lane worktree, and `git add -A` carried it into a commit at the repository
@@ -216,7 +261,8 @@ subagent, or a formatter sweep, can put a file in the worktree at any time. The
 #406 implementer hit the same class from the other side when the pre-commit
 `prim .` pulled an unstaged edit into a staged commit.
 
-**"Verify a kept test finding by mutant."** C3 applied eleven, and two of them
-found tests that passed for the wrong reason — one where an exact duplicate
-entering the projection map left the code set unchanged, and one where a swapped
-pair of label spans left every unit test green.
+**"Verify a kept test finding by mutant."** C3 applied it to every kept test
+finding, and twice it found a test that passed for the wrong reason — one where
+an exact duplicate entering the projection map left the code set unchanged, and
+one where a swapped pair of label spans left every unit test green. Both would
+have shipped as green suites.
