@@ -308,6 +308,22 @@ error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_
 39 │   parseHttpResponse : Ratio
    │   ^^^^^^^^^^^^^^^^^
 
+error[TYPL-215]: `value` is already declared in this struct — a name identifies one field. Rename or remove one of them (typl §7)
+   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:51:3
+   │
+50 │   value : Ratio
+   │   ----- `value` is declared here
+51 │   value : Ratio
+   │   ^^^^^
+
+error[RIDL-413]: `value` is already declared in this parameter list — a name identifies one parameter. Rename or remove one of them (ridl §6.1, §7.1)
+   ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:56:34
+   │
+56 │   command setBoth(value : Ratio, value : Ratio) @[..500ms]
+   │                   -----          ^^^^^
+   │                   │               
+   │                   `value` is declared here
+
 error[RIDL-141]: `Sample` is not an interface, and a service publishes an interface — name the interface that carries these interactions, or give the service an inline `{ … }` body of its own (ridl §14.5)
    ┌─ tests/corpus/ridl-diag-showcase/main/services.ridl:15:34
    │

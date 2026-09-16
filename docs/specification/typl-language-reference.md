@@ -661,7 +661,9 @@ type Email : string [1..254 match /^[^@]+@[^@]+\.[^@]+$/]
 
 A `struct` is a named composite with a **fixed, closed set** of named fields.
 There are no additional/unknown properties — a struct is closed by definition
-(contrast JSON Schema's open-world default, Appendix G).
+(contrast JSON Schema's open-world default, Appendix G). A field name is unique
+within its struct (TYPL-215): a name identifies one field, so a struct cannot
+declare two.
 
 ```ridl
 struct DriverProfile {
@@ -1132,6 +1134,7 @@ the family overview §7 and are not restated here.
 | TYPL-212 | `error` modifier on a declaration other than `enum`, `struct`, `union`                                     | error    |
 | TYPL-213 | union mixing error and non-error arms without the result-union shape (exactly one success + one error arm) | error    |
 | TYPL-214 | `error union` containing a non-error-typed arm                                                             | error    |
+| TYPL-215 | field name declared twice in one struct                                                                    | error    |
 
 ### 16.4 Profile Boundary (TYPL-3xx)
 

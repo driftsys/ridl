@@ -73,11 +73,14 @@ review caught and no single-clause fixture could have. Keep both clauses.
   201, 202, 301, 302, 303, 304, 305, 306, 307, 308, 401, 402, 403, 404, 405,
   406, 409 (a live `interfaces.lock` entry with no declaration, from
   `main/interfaces.lock`), 410 (a malformed `interfaces.lock`, from the
-  `badlock/` member).
+  `badlock/` member), 413 (a parameter name declared twice, exactly, from
+  `main/projection.ridl` — distinct from the transform-only collision
+  RIDL-149 also draws there).
 - FORM: 106, 107, 108 (the general form §4.3 attribute allow-list).
 - MANI: 009.
-- TYPL: 005 (the visibility rule, reaching the interaction layer), 301, 303, 304
-  (the profile boundary, folded in from the E1 debt list).
+- TYPL: 005 (the visibility rule, reaching the interaction layer), 215 (a
+  struct field name declared twice, exactly, from `main/projection.ridl`),
+  301, 303, 304 (the profile boundary, folded in from the E1 debt list).
 
 The list above is not prose: `crates/ridlc/tests/corpus.rs` holds it as
 `RIDL_PROFILE_CODES` and asserts the showcase emits **exactly** that set —
