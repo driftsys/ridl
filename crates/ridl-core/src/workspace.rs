@@ -435,12 +435,21 @@ impl Loader {
             // directory, because that is the one place both paths meet: a
             // workspace member and single-file mode both arrive here, and the
             // issue this closes (driftsys/ridl#203) names both.
+            //
+            // The message states only the unreachability, which always holds.
+            // The artifact overwrite that issue reports is a consequence in
+            // package and workspace mode, where the output base is the package
+            // name; in single-file mode the base is the file stem, so it
+            // collides only when the file is itself named `ridl.std.typl`.
+            // That distinction belongs in the catalogue entry, not in a
+            // message that would then be false for some of the inputs it
+            // greets.
             self.diagnostics.push(error(
                 DiagCode::TYPL_010,
                 file_id,
                 *range,
                 format!(
-                    "`{declared}` is provided by the compiler, so a package cannot declare it; every package already imports all of `{declared}` implicitly (typl §3.2), which leaves these declarations unreachable under their own name and overwrites this package's generated artifact. Rename the package"
+                    "`{declared}` is provided by the compiler, so a package cannot declare it; every package already imports all of `{declared}` implicitly (typl §3.2), which leaves these declarations unreachable under their own name. Rename the package"
                 ),
             ));
         }
@@ -574,12 +583,13 @@ mod tests {
     /// overwritten by the standard package's own.
     #[test]
     fn a_package_declaring_a_reserved_name_is_refused() {
+        const SOURCE: &str = "package ridl.std\ntype MyOwnType: m\n";
         let dir = TempDir::new("reserved-name");
         dir.write(
             "ridl.toml",
             "[package]\nname = \"ridl.std\"\nversion = \"1.0.0\"\n",
         );
-        dir.write("own.typl", "package ridl.std\ntype MyOwnType: m\n");
+        dir.write("own.typl", SOURCE);
 
         let mut db = RidlDatabase::default();
         let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
@@ -589,21 +599,27 @@ mod tests {
             "got: {:?}",
             loaded.diagnostics
         );
-        // The declaration is what is pointed at, not the manifest or the
-        // directory: it is the one place a workspace member and single-file
-        // mode both pass through.
         let diagnostic = &loaded.diagnostics[0];
         assert!(
             diagnostic.message.contains("ridl.std"),
             "the message names the package: {}",
             diagnostic.message
         );
+        // The declaration is what is pointed at, not the manifest or the
+        // directory: it is the one place a workspace member and single-file
+        // mode both pass through. Both ends are asserted, against the source
+        // itself, so an over-wide span covering the whole file cannot pass.
+        let declaration = SOURCE
+            .lines()
+            .next()
+            .expect("the declaration is the first line");
         assert_eq!(
-            usize::from(diagnostic.primary.range.start()),
-            "package own.typl"
-                .find("package")
-                .expect("the declaration starts the file"),
-            "reported on the `package` declaration"
+            (
+                usize::from(diagnostic.primary.range.start()),
+                usize::from(diagnostic.primary.range.end()),
+            ),
+            (0, declaration.len()),
+            "reported on `{declaration}` exactly"
         );
     }
 

@@ -284,10 +284,13 @@ diag_codes! {
         /// §3.1, §16.1). Error, and not a warning, because such a package can
         /// never work: `ridl.std` is implicitly imported by every package
         /// (typl §3.2) rather than resolved through an import, so a user copy
-        /// is unreachable by its own name, and since the standard package
-        /// gained an artifact of its own the user's output file is overwritten
-        /// as well. Reported on the `package` declaration, in a workspace
-        /// member and in single-file mode alike.
+        /// is unreachable by its own name. In package and workspace mode the
+        /// generated artifact is overwritten by the standard package's too,
+        /// because the output base is the package name; in single-file mode
+        /// the base is the file stem, so that second consequence follows only
+        /// when the file is itself named `ridl.std.typl`. Reported on the
+        /// `package` declaration, in a workspace member and in single-file
+        /// mode alike.
         TYPL_010 = "TYPL-010", Error,
             "package name is reserved for a package the compiler provides";
 

@@ -45,7 +45,7 @@ pub fn std_package(db: &mut RidlDatabase) -> Package {
     let file = InputFile::new(&*db, RIDL_STD_PATH.to_string(), RIDL_STD_SOURCE.to_string());
     let package = Package::new(
         &*db,
-        "ridl.std".to_string(),
+        RIDL_STD_NAME.to_string(),
         vec![file],
         PackageOrigin::Std,
         std::collections::BTreeMap::new(),
