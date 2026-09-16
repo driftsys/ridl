@@ -6,12 +6,13 @@ Working memory for Lane M, the MVP of the generated `Client`/`Provider`/
 settles what M2 plans and M3 builds. Archive it with the plan when the lane's
 last stage lands, per `sdd-gardening`.
 
-**Status: every decision below was taken on delegated authority.** Sebastien
-delegated the decisions for this session rather than answering them one at a
-time, so this is not the section-by-section brainstorming the driver prompt
-describes. Each decision states its reasoning and its alternatives so it can be
-read and overturned. §11 lists the four that most deserve a second opinion. The
-stage does not merge until Sebastien has approved the written spec.
+**Status: approved 2026-09-16.** Every decision below was taken on delegated
+authority — Sebastien delegated the decisions for the session rather than
+answering them one at a time, so this is not the section-by-section
+brainstorming the driver prompt describes. Each decision states its reasoning
+and its alternatives so it can be read and overturned. §11 lists the five that
+carried the most judgement, with what he decided on each: four kept, and
+`ensure` reversed so the MVP calls it. That change is applied throughout.
 
 ## 1. Scope
 
@@ -24,7 +25,8 @@ against the first. It is in-process only.
 `crates/ridl-rt/src/contract.rs`; a `Client` generic over exactly the ports its
 interface needs; a `Publisher` over the writer ports; a `Provider` trait the
 application implements; a generated `dispatch` that routes a claim by ordinal,
-decodes arguments, evaluates `require`, calls the provider and settles.
+decodes arguments, evaluates `require`, calls the provider, evaluates `ensure`
+on a query, and settles.
 
 **Out of scope, and why that is safe for an MVP.**
 
@@ -264,6 +266,12 @@ that can arrive, including one the generated code does not recognise:
 | `VerifyError::Structure(m)`                 | `Transport::Corrupt`           |
 | `VerifyError::Contract(v)`                  | `Contract::InvalidValue(v)`    |
 | `require` returns `Err(())`                 | `Contract::PreconditionFailed` |
+| `ensure` returns `Err(())`, a query only    | `Contract::ContractBroken`     |
+
+The rows are in the order `dispatch` evaluates them: route, check the bytes,
+check the precondition, call the provider, check the postcondition, settle. The
+last row is the only one evaluated after the provider runs, and it is the only
+one that discards a reply the provider already produced.
 
 The first row is the fallback arm of the generated `match`. Without it an
 unroutable claim is never settled, which breaks `port.rs:187`;
@@ -271,15 +279,15 @@ unroutable claim is never settled, which breaks `port.rs:187`;
 this, "the peers disagree on an interface number or an ordinal"
 (`error.rs:18-20`).
 
-The middle two exist separately because `Payload::verify` checks structure and
-typl constraints in one pass and reports them as two distinct variants
-(`payload.rs:146-153`). Collapsing them into `Transport::Corrupt` would settle a
-range or enum-variant violation as a transport corruption, which reaches the
-caller in the wrong stratum. `Handler::settle`'s own documentation separates
-them — `CallError::Contract` when "the arguments break their typl constraints",
-and `Transport::Corrupt` when "the argument bytes fail the structure check"
-(`port.rs:199-203`) — and ridl §6.1 says the same from the language side, a
-negative acknowledgment carrying the stratum 2 category.
+The two `VerifyError` rows exist separately because `Payload::verify` checks
+structure and typl constraints in one pass and reports them as two distinct
+variants (`payload.rs:146-153`). Collapsing them into `Transport::Corrupt` would
+settle a range or enum-variant violation as a transport corruption, which
+reaches the caller in the wrong stratum. `Handler::settle`'s own documentation
+separates them — `CallError::Contract` when "the arguments break their typl
+constraints", and `Transport::Corrupt` when "the argument bytes fail the
+structure check" (`port.rs:199-203`) — and ridl §6.1 says the same from the
+language side, a negative acknowledgment carrying the stratum 2 category.
 `Contract::InvalidValue` is that stratum (`error.rs:12-13`).
 
 **RA-19 holds.** The port bounds on `Client` are computed from the interaction
@@ -315,17 +323,26 @@ in the generated file waits. `dispatch` is a single pass over the claims that
 are ready and returns how many it settled — the loop that calls it is the
 application's or the runtime's.
 
-Two reductions from §8, both following from §1: no method is bounded on
-`CoherentSignals`, and **`ensure` is emitted but never called**. The distinction
-matters and the first draft of this section got it wrong: `Query::ensure` is a
-required method with no default body (`contract.rs:133`), so an `impl Query`
-that omits it does not compile. The emitter therefore writes `ensure` for every
-query — returning `Ok(())` when the query declares no `ensure` clause, and the
-translated clauses when it does — and `dispatch` does not call it. What the MVP
-leaves out is the evaluation, not the method: the MVP settles
-`Contract::PreconditionFailed` from `require` only, and never
-`Contract::ContractBroken`. M2 records calling `ensure` as a follow-up, not as a
-silent gap.
+**One reduction from §8, following from §1: no method is bounded on
+`CoherentSignals`.** `ensure` is **not** a second reduction — the emitter writes
+it and `dispatch` calls it.
+
+An earlier draft of this spec excluded the evaluation and kept only the
+emission, which was wrong twice over. The emission is not optional:
+`Query::ensure` is a required method with no default body (`contract.rs:133`),
+so an `impl Query` that omits it does not compile, and the first draft omitted
+it. And excluding the _call_ saved almost nothing while costing something real.
+The emitter has to write the method regardless; `dispatch` already holds the
+arguments and the reply at the moment it settles; `Contract::ContractBroken`
+already exists (`error.rs:16-17`). Calling it is a few lines in the generated
+dispatch. Not calling it would leave the MVP's provider side quietly incomplete
+against ridl §7 — no query could ever settle `ContractBroken`, so the first
+person to write an `ensure` clause would get silence where a contract error
+belongs.
+
+So the emitter writes `ensure` for every query, returning `Ok(())` when the
+query declares no `ensure` clause and the translated clauses when it does, and
+`dispatch` calls it after the provider returns and before it settles.
 
 ## 7. Where the code is generated from, and where the round trip lives
 
@@ -353,7 +370,10 @@ and **two interfaces**.
 
 - The first declares one signal, one event, one command and one query — one of
   every kind the descriptors cover except `fixed`, which M2 may add if it costs
-  nothing. This is the interface the round trip runs against.
+  nothing. The command declares a `require` clause and the query declares both a
+  `require` and an `ensure` clause, so the round trip has a failing precondition
+  and a failing postcondition to observe. This is the interface the round trip
+  runs against.
 - The second declares one signal and nothing else. It exists only so §6's RA-19
   claim is testable, in the direction §6 gives: a minimal port type implementing
   `SignalReader` and `Attached` alone must construct this interface's `Client`.
@@ -422,9 +442,18 @@ the included generated face together with the placeholder ports of §5 and the
 hand-written `Payload<ReprC>` impls of §2, then: publishes a signal and reads it
 back through `Client`, raises an event and receives it, and sends a command and
 a query through `Client`, runs `dispatch` against a `Provider`, and observes the
-acknowledgment and the reply. **That test passing is M3's done-when.** The
-generated code must be compiled, not just snapshotted — a snapshot test would
-have told us nothing, and "has never been compiled" is the exact complaint
+acknowledgment and the reply. **That test passing is M3's done-when.**
+
+Two settlements from §6's table are exercised beside the success path, because
+both are cheap once the round trip stands and both are easy to get wrong: a
+`require` clause that fails settles `Contract::PreconditionFailed`, and an
+`ensure` clause that fails on a query settles `Contract::ContractBroken`. The
+fixture's command and query each declare one clause so there is something to
+fail. M2 decides whether the remaining three rows are worth a test in this
+story.
+
+The generated code must be compiled, not just snapshotted — a snapshot test
+would have told us nothing, and "has never been compiled" is the exact complaint
 ADR-0018's Alternatives table made about the retracted layer.
 
 The orphan rule permits the hand-written `impl Payload<ReprC> for Speed` that §2
@@ -492,28 +521,44 @@ rule, saying so on #328 before it pushes.
 | Follow the design note §8's `Provider -> Result<(), Rejected>` | `Rejected` is not a `ridl-rt` type, and the `ridl-rt` 0.1 design record already records that this return contradicts ridl §6.1. See §6.                                                                               |
 | Emit induced argument structs for multi-parameter calls        | The Rust backend emits no induced type from an interface today. Real work the MVP does not need; the fixture stays at one parameter per call instead. See §7.                                                         |
 
-## 11. What Sebastien should look at first
+## 11. Decisions taken on delegated authority
 
-Every decision here was taken without him. These five carry the most judgement:
+Every decision here was taken without Sebastien, in one session, rather than in
+the section-by-section brainstorming M1's driver describes. Five carried enough
+judgement to be listed for review. **He reviewed them on 2026-09-16 and approved
+the spec with one change, which is already applied: item 4 was reversed.**
 
-1. **§2, no generated codec.** The MVP proves the face and not the encoding. If
-   the point of the MVP is for the team to write real payloads against it, this
-   is the wrong call and §2's rejected alternative is the right one.
-2. **§4.1, the zero catalog hash.** This dependency was not in the driver
-   document. If E16.2 is closer than it looks, waiting for it is cheaper than
-   placing a placeholder that §4.1 admits stops being safe at two packages.
-3. **§4.2, the all-`None` encoded sizes — and the discrepancy under it.**
-   `contract.rs` documents `None` as "that encoding cannot carry the payload";
-   the catalog descriptor plan documents it as "the toolchain cannot size this
-   payload for this encoding". Those are different statements and E16.2 is being
-   built to the second. Lane M writes `None` and does not change `ridl-rt`, but
-   somebody should decide which reading is the real one.
-4. **§6, `ensure` emitted but not called.** A deliberate reduction. It makes the
-   MVP's provider side incomplete against ridl §7: no query ever settles
-   `Contract::ContractBroken`.
-5. **§9, E11.13 and the `docs/ROADMAP.md` ordering.** The identifier is
-   mechanical and checked; whether M1 may edit the roadmap before B2 is a
-   coordination call.
+1. **§2, no generated codec.** Kept. The MVP proves the face and not the
+   encoding, and the face binds ports, which shipped. The condition that would
+   reverse it is recorded: if the team is to write against this on their own
+   packages rather than react to its shape, they would have to hand-write a
+   `Payload` impl per type, and §2's rejected alternative becomes the right
+   call.
+2. **§4.1, the zero catalog hash.** Kept. E16.2 is an M-sized story with its own
+   design note, and blocking a short MVP on it inverts the cost.
+3. **§4.2, the all-`None` encoded sizes.** Kept — it is what the catalog
+   descriptor plan already holds for the `repr(C)` column. **The discrepancy
+   under it is being fixed separately:** `contract.rs` documents `None` as "that
+   encoding cannot carry the payload" while the plan documents it as "the
+   toolchain cannot size this payload for this encoding", E16.2 is being built
+   to the second, and the first is what shipped. That is a doc-comment change to
+   `ridl-rt`, made in its own pull request rather than folded into this lane.
+4. **§6, `ensure`. Reversed — the MVP calls it.** The spec first emitted
+   `ensure` without calling it. The exclusion saved almost nothing: the emitter
+   must write the method regardless, `dispatch` already holds the arguments and
+   the reply where it would call it, and `Contract::ContractBroken` already
+   exists. It cost something real: no query could settle `ContractBroken`,
+   leaving the provider side quietly incomplete against ridl §7. §6 and its
+   settlement table now carry the call.
+5. **§9, E11.13 and the `docs/ROADMAP.md` ordering.** Kept. The identifier is
+   mechanical and checked; the roadmap edit goes ahead of B2, which rebases over
+   two added lines.
+
+**One sequencing preference, recorded with the approval.** §8 accepts the Epic
+10 rework rather than blocking on it, and that stands. But if Lane C's Epic 10
+is close to landing, let it land before M3 starts: the rework cost disappears
+entirely and nothing in this spec changes. Start M3 ahead of it only if Epic 10
+is more than about a week out.
 
 ## Trace
 
