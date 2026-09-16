@@ -272,6 +272,14 @@ package name, and the name mirrors the directory path relative to the manifest
 root. Mismatch is a hard error (TYPL-002). The package — not the file — is the
 unit of visibility, cycle checking, and codegen output.
 
+**A package cannot take a name the compiler provides** (TYPL-010). Today that is
+`ridl.std` alone. Such a package can never be used: every package already
+imports all of `ridl.std` implicitly (§3.2) rather than through an import, so
+the declarations are unreachable under their own name, and the generated
+artifact is overwritten by the standard package's own. The reservation is the
+set of packages the compiler provides, not the `ridl.` prefix — `ridl.stdlib` is
+an ordinary package name.
+
 ### 3.2 Imports
 
 Imports are qualified and named:
@@ -1086,17 +1094,18 @@ the family overview §7 and are not restated here.
 
 ### 16.1 Module (TYPL-0xx)
 
-| Code     | Rule                                               | Severity |
-| -------- | -------------------------------------------------- | -------- |
-| TYPL-001 | more than one `package` declaration per file       | error    |
-| TYPL-002 | package name does not mirror directory path        | error    |
-| TYPL-003 | wildcard, relative, or re-exporting import         | error    |
-| TYPL-004 | circular package imports                           | error    |
-| TYPL-005 | public declaration exposes an `internal` type      | error    |
-| TYPL-006 | conflicting imports without alias                  | error    |
-| TYPL-007 | unused import                                      | warning  |
-| TYPL-008 | alias without an actual collision                  | warning  |
-| TYPL-009 | duplicate definition of the same name in a package | error    |
+| Code     | Rule                                                         | Severity |
+| -------- | ------------------------------------------------------------ | -------- |
+| TYPL-001 | more than one `package` declaration per file                 | error    |
+| TYPL-002 | package name does not mirror directory path                  | error    |
+| TYPL-003 | wildcard, relative, or re-exporting import                   | error    |
+| TYPL-004 | circular package imports                                     | error    |
+| TYPL-005 | public declaration exposes an `internal` type                | error    |
+| TYPL-006 | conflicting imports without alias                            | error    |
+| TYPL-007 | unused import                                                | warning  |
+| TYPL-008 | alias without an actual collision                            | warning  |
+| TYPL-009 | duplicate definition of the same name in a package           | error    |
+| TYPL-010 | package name is reserved for a package the compiler provides | error    |
 
 ### 16.2 Scalars and Constants (TYPL-1xx)
 
