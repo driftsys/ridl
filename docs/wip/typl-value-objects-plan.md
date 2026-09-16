@@ -592,9 +592,10 @@ Then: `cargo test -p ridl-backend-rust --locked && cargo test -p ridl --locked`
 Expected: PASS, including the three `rustc` compile proofs in `tests.rs` —
 `appendix_b_compiles_with_rustc`, `constructible_collections_compile`, and
 `a_tuple_under_an_internal_declaration_is_package_private`. Those are the real
-check that the emitted code is valid Rust. Each one denies named lints rather
-than `-D warnings`, so a naming lint does not fail them; Task 11 is where that
-matters.
+check that the emitted code is valid Rust. None of them fails on a warning: the
+first two pass no `-D` flag at all and assert only `status.success()`, and the
+third denies two lints by name. So a naming lint does not fail any of them; Task
+11 is where that matters.
 
 - [ ] **Step 5: Commit**
 
@@ -1612,7 +1613,7 @@ rename.** Four reasons.
    suffix it picks would move as arms are added, so a generated API would change
    under a change ADR-0016 decision 6 calls compatible.
 2. **Two backends already refuse it, less helpfully.** The proto3 backend
-   (`crates/ridl-backend-proto/src/lib.rs:495`) and the FlatBuffers backend
+   (`crates/ridl-backend-proto/src/lib.rs:496`) and the FlatBuffers backend
    (`crates/ridl-backend-flatbuffers/src/lib.rs:344`) both project an arm name
    through `ridl_ir::name::snake_case` and claim it in a symbol table that
    errors on a second claim. So a colliding package is already unbuildable for
@@ -1694,15 +1695,19 @@ starts projecting them", and E9.8 did extend the check —
 decision 4)". So the collision hazard is closed before this change lands, which
 is the order that decision asked for, reached from the other side.
 
-Then add the regression guard. The three `rustc` compile proofs deny lints by
-name rather than using `-D warnings`, which is why this defect never failed a
-test: `appendix_b_compiles_with_rustc` and `constructible_collections_compile`
-and `a_tuple_under_an_internal_declaration_is_package_private` in
-`crates/ridl-backend-rust/src/tests.rs`, and `rustc_accepts` in
-`crates/ridlc/tests/corpus.rs:1225`. Add `-D non_snake_case` to each. Check
-first that no other generated item draws it — an enum variant keeps its typl
-`SCREAMING_SNAKE` spelling and draws `non_camel_case_types`, a different lint,
-which stays undenied.
+Then add the regression guard. No `rustc` compile proof fails on a warning
+today, which is why this defect never failed a test, and the four differ in how
+they reach that. `appendix_b_compiles_with_rustc`
+(`crates/ridl-backend-rust/src/tests.rs:1232`) and
+`constructible_collections_compile` (`tests.rs:1302`) pass no `-D` flag at all
+and assert only `status.success()`.
+`a_tuple_under_an_internal_declaration_is_package_private` (`tests.rs:611`) and
+`rustc_accepts` in `crates/ridlc/tests/corpus.rs:1208` each deny two lints by
+name, `private-interfaces` and `private-bounds`, and nothing else. Add
+`-D non_snake_case` to all four — for the first two that means adding a deny
+flag where there was none. Check first that no other generated item draws it —
+an enum variant keeps its typl `SCREAMING_SNAKE` spelling and draws
+`non_camel_case_types`, a different lint, which stays undenied.
 
 The TypeScript backend is not touched: camelCase is idiomatic there, and
 driftsys/ridl#243 says so.
