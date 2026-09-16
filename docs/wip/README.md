@@ -136,6 +136,14 @@ design note, from the archive.
   design/plan pair is archived — see
   [`../archive/README.md`](../archive/README.md). The state of the other three
   lanes is on #328.
+- **2026-09-16-lane-c-c4-driver.md** — the driver prompt for lane C's last
+  stage, C4 (Epic 10). Its own file because C4 is the largest stage of the four
+  lanes — ten live tasks, one pull request each — so it runs as four sessions
+  rather than one, and because it uses a cheaper two-seat review across model
+  families instead of the four-seat one the 2026-09-13 prompts describe — a cost
+  decision with a risk the file names, not an evidence-driven one. It carries
+  the model routing Sebastien set on 2026-09-16 and three rules C3 paid to
+  learn. Archive it with the lanes plan.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
