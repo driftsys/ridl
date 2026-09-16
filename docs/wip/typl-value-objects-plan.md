@@ -9,19 +9,49 @@
 enforced at construction, and give every generated type the derives that are
 sound for it.
 
-**Architecture:** The IR already carries the constraints; no checker or IR
-schema change is needed except one shared classifier. The Rust backend gains a
-private inner field, `new`/`new_unchecked`, `TryFrom`/`From`, and a derive
-eligibility pass reusing the recursion in `defaults.rs`. The TypeScript backend
-keeps its compile-time brand and gains factory functions. `ridlc` starts
-emitting a `lib.rs` and `Cargo.toml` so the Rust output compiles standalone.
+**Architecture:** The IR already carries the constraints; no IR schema change is
+needed except one shared classifier. The Rust backend gains a private inner
+field, `new`/`new_unchecked`, `TryFrom`/`From`, and a derive eligibility pass
+reusing the recursion in `defaults.rs`. `ridlc` starts emitting a `lib.rs` and
+`Cargo.toml` so the Rust output compiles standalone. One checker change is
+needed after all: Task 11 extends RIDL-149 to a union's arms. The TypeScript
+backend keeps its compile-time brand and gains factory functions in step 2, not
+here (Task 9).
 
 **Tech Stack:** Rust 2024, `proc-macro2`/`quote`/`prettyplease` (Rust emitter),
-plain string emission (TypeScript emitter), `insta` snapshots,
-`protox`-generated IR types.
+`insta` snapshots, `protox`-generated IR types.
 
 **Spec:** `docs/wip/typl-value-objects-design.md`. Where this plan and the spec
 disagree, the spec is authoritative.
+
+## Currency
+
+Written 2026-08-03. Refreshed 2026-09-16 against `origin/main` at 86e10d7,
+because three changes landed after it was written and moved what it points at:
+
+- **driftsys/ridl#241 retracted the interaction layer.** Commit `7d539bc`
+  deleted `crates/ridl-backend-rust/src/interact.rs`,
+  `crates/ridl-backend-ts/src/interact*`, `c_header.rs` and
+  `templates/c_header.j2` outright. Nothing replaced them
+  ([ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+  decision 15 records this as a retraction, not a relocation). Task 2 and Task 7
+  named those files and are rewritten below.
+- **driftsys/ridl#242 and driftsys/ridl#303 added two wire backends**,
+  `crates/ridl-backend-proto` and `crates/ridl-backend-flatbuffers`. Neither is
+  touched by this plan; see the wire-backend constraint below.
+- **driftsys/ridl#238 pinned the name transform**
+  ([ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
+  decisions 1 to 5), which is what Task 11 is written against.
+
+Two structural changes came with the refresh: Task 9 (TypeScript) moved to step
+2, and Task 11 was added for the two Rust naming defects. Both are recorded
+where they happen.
+
+**Line references were replaced by symbol names** wherever a symbol exists. The
+line numbers this plan carried had drifted by eleven lines in
+`crates/ridl-backend-rust/src/lib.rs` alone, and a symbol name does not drift.
+Where a line number remains it is the one at 86e10d7 and is given as an aid, not
+as the identifier.
 
 ## Global Constraints
 
@@ -31,9 +61,16 @@ disagree, the spec is authoritative.
 - **Codegen never panics.** Every failure is a `GenerateError` value (ADR-0004
   section 5).
 - **Conventional Commits**, linted by git-std against `.git-std.toml`. Scopes
-  used here: `ridl-ir`, `ridl-backend-rust`, `ridl-backend-ts`, `ridlc`, `adr`,
-  `typl`.
-- **Never push to `main`.** This work lands on `feat/typl-value-objects` via PR.
+  used here: `ridl-ir`, `ridl-backend-rust`, `ridl-sem`, `ridlc`, `adr`, `typl`.
+- **Never push to `main`.** Each task lands as its own pull request, one per
+  Epic 10 story, per `docs/wip/2026-09-13-step1-lanes-plan.md` §4 (stage C4).
+  The single `feat/typl-value-objects` branch this plan first named is
+  superseded by that.
+- **The two wire backends are out of scope.** `crates/ridl-backend-proto` and
+  `crates/ridl-backend-flatbuffers` emit a schema, not a constructor
+  ([ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 2), so no
+  task touches them. Their snapshots do change when a name transform changes;
+  Task 11 is the only task where that happens.
 - **Run `just verify` before opening the PR** (`lint-commits`, then the full
   `build` gate). Individual tasks run `just test` and `just lint`.
 - **Snapshots are `insta`.** Review changes with `cargo insta review`; never
@@ -46,13 +83,20 @@ disagree, the spec is authoritative.
 
 ### Task 1: The shared vacuous-constraint classifier
 
+**Model:** Opus (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
+
 Both backends must agree on when a constraint has nothing to check. A duplicated
 predicate would drift, so it lives in `ridl-ir` beside the generated types.
 
 **Files:**
 
 - Modify: `crates/ridl-ir/src/lib.rs`
-- Test: `crates/ridl-ir/src/lib.rs` (the existing `#[cfg(test)] mod tests`)
+- Test: `crates/ridl-ir/src/lib.rs`. The crate has no general
+  `#[cfg(test)] mod
+  tests`; its one top-level test module is
+  `mod v2_round_trip` (`lib.rs:662`), which already does `use crate::v2;`. Add a
+  test module of its own beside it rather than putting a classifier test in a
+  round-trip module.
 
 **Interfaces:**
 
@@ -158,14 +202,19 @@ normalized rather than validated."
 
 ### Task 2: The Rust `ConstraintError` vocabulary
 
+**Model:** Sonnet (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
+
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/interact.rs` (the vocabulary emitter,
-  around lines 187-300 where `Provenance` and the metadata structs are emitted)
-- Modify: `crates/ridl-backend-rust/src/lib.rs` (call the vocabulary emitter
-  unconditionally — today it returns empty for a pure typl package, see
-  `interact::emit`'s doc comment "Returns an empty stream when the package
-  declares neither an interface nor a service")
+- Create: `crates/ridl-backend-rust/src/vocabulary.rs` — the package vocabulary
+  emitter. There is no file to modify: `interact.rs`, which this plan first
+  named as the vocabulary emitter, was deleted whole by commit `7d539bc`
+  ("feat(repo)!: retract the interaction layer and record the runtime
+  architecture", driftsys/ridl#241) and nothing replaced it. The crate's `src/`
+  is now `lib.rs`, `defaults.rs`, `tests.rs` and `snapshots/` only.
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — declare the module beside
+  `mod
+  defaults;` and call the emitter from `generate` (`lib.rs:54`).
 - Test: `crates/ridl-backend-rust/src/tests.rs`
 
 **Interfaces:**
@@ -175,12 +224,32 @@ normalized rather than validated."
   `Range { type_name: &'static str }`, `Length { type_name: &'static str }`,
   `Pattern { type_name: &'static str }`, `Variant { type_name: &'static str }`.
   Tasks 3, 4, 5, and 8 construct these. Also
-  `pub(crate) fn interact::emit_constraint_error() -> TokenStream`.
+  `pub(crate) fn vocabulary::emit_constraint_error() -> TokenStream`.
 
-Note the behaviour change: a pure typl package currently emits no vocabulary at
-all. `ConstraintError` must now be emitted for any package that declares a
-non-vacuous named scalar, an `enum`, or an `enumset`, whether or not it declares
-an interface.
+The retraction changed the shape of this task. `generate` no longer gates any
+emission on whether the package declares an interface or a service — it emits
+every declaration unconditionally — so there is no early return to make
+unconditional. The premise still holds: a pure typl package emits no vocabulary
+today, because no vocabulary emitter exists at all. The work is to add one, not
+to widen one.
+
+**One error type per emitted crate, not one per package.** driftsys/ridl#252
+records that the retracted interaction layer emitted its vocabulary once per
+package, so two packages in one crate collided, and that whatever replaces it
+"must be nameable across every package in a workspace at once". Emitting
+`pub enum ConstraintError` into every package module does compile — the modules
+are distinct — but it gives one crate N mutually incompatible error types, so a
+consumer that constructs a `veh.common` type and a `veh.adas` type cannot write
+one `match`. The design spec's sentence placing `ConstraintError` in the
+per-package vocabulary "beside `Provenance` and `SignalHandle`" was written
+before the retraction and does not settle this.
+
+Proposed resolution, to confirm before implementing (Open item 3): the emitter
+writes `ConstraintError` into the generated crate root that Task 7 creates, and
+each package module carries `use crate::ConstraintError;`. Single-file mode
+emits no crate root, so it keeps the definition in the one file it writes. That
+makes Task 7 a prerequisite of the crate-root form, so either Task 7 moves
+before this one, or this task emits per package and Task 7 hoists.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -201,7 +270,7 @@ Expected: FAIL — insta reports a new snapshot; inspect it and confirm no
 
 - [ ] **Step 3: Write the implementation**
 
-In `crates/ridl-backend-rust/src/interact.rs`:
+In `crates/ridl-backend-rust/src/vocabulary.rs`:
 
 ```rust
 /// The constraint-violation error every validating constructor returns.
@@ -242,12 +311,12 @@ pub(crate) fn emit_constraint_error() -> TokenStream {
 }
 ```
 
-In `crates/ridl-backend-rust/src/lib.rs`, in `generate`, emit it before the
-declaration loop and independently of `interact::emit`'s interface check:
+In `crates/ridl-backend-rust/src/lib.rs`, in `generate` (`lib.rs:54`), emit it
+before the declaration loop:
 
 ```rust
 let mut items: Vec<TokenStream> = Vec::new();
-items.push(interact::emit_constraint_error());
+items.push(vocabulary::emit_constraint_error());
 ```
 
 - [ ] **Step 4: Run the test and accept the snapshot**
@@ -271,13 +340,17 @@ one declaring an interface."
 
 ### Task 3: Constrained named scalars — private inner, `new`, `TryFrom`
 
+**Model:** Fable (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
+
 The core change, and the breaking one.
 
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_type_def` (line 266),
-  `emit_const` (line 283)
-- Modify: `crates/ridl-backend-rust/src/defaults.rs` — lines 55 and 183
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_type_def`
+  (`lib.rs:255`), `emit_const` (`lib.rs:272`)
+- Modify: `crates/ridl-backend-rust/src/defaults.rs` — the two tuple-struct
+  construction sites, `Some(quote! { #name_id(#inner) })` (`defaults.rs:55`) and
+  `Some(quote! { #path(#inner) })` (`defaults.rs:183`)
 - Test: `crates/ridl-backend-rust/src/tests.rs`
 
 **Interfaces:**
@@ -436,7 +509,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
     // (§5.4), which is why the two use different expressions.
     if c.len_min.is_some() || c.len_max.is_some() {
         let len = match backing_scalar(td) {
-            Some(ScalarBacking::String) => quote! { #value.chars().count() as u64 },
+            ScalarBacking::String => quote! { #value.chars().count() as u64 },
             _ => quote! { #value.len() as u64 },
         };
         if let Some(min) = c.len_min {
@@ -461,13 +534,16 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
 
 /// The accessor. A `Copy` backing returns by value from a `const fn`; `String`
 /// and `Vec<u8>` borrow, and gain `into_inner` for the owned form.
+///
+/// `backing_scalar` is total — it returns `ScalarBacking`, not an `Option`
+/// (`lib.rs:645`), and maps a unit backing and an absent backing to `Float`.
 fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> TokenStream {
     match backing_scalar(td) {
-        Some(ScalarBacking::String) => quote! {
+        ScalarBacking::String => quote! {
             #vis fn get(&self) -> &str { &self.0 }
             #vis fn into_inner(self) -> String { self.0 }
         },
-        Some(ScalarBacking::Bytes) => quote! {
+        ScalarBacking::Bytes => quote! {
             #vis fn get(&self) -> &[u8] { &self.0 }
             #vis fn into_inner(self) -> Vec<u8> { self.0 }
         },
@@ -500,9 +576,9 @@ In `defaults.rs`, change both construction sites from tuple syntax to
 `new_unchecked`:
 
 ```rust
-// line 55
+// defaults.rs:55, inside the named-scalar default
 Some(quote! { #name_id::new_unchecked(#inner) })
-// line 183
+// defaults.rs:183, inside the same-package reference default
 Some(quote! { #path::new_unchecked(#inner) })
 ```
 
@@ -513,8 +589,13 @@ In `emit_const`, change the three `#type_name(#value)` forms to
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked && cargo test -p ridl --locked`
-Expected: PASS, including the `rustc` compile-proof tests at `tests.rs:610` and
-`tests.rs:788` — those are the real check that the emitted code is valid Rust.
+Expected: PASS, including the three `rustc` compile proofs in `tests.rs` —
+`appendix_b_compiles_with_rustc`, `constructible_collections_compile`, and
+`a_tuple_under_an_internal_declaration_is_package_private`. Those are the real
+check that the emitted code is valid Rust. None of them fails on a warning: the
+first two pass no `-D` flag at all and assert only `status.success()`, and the
+third denies two lints by name. So a naming lint does not fail any of them; Task
+11 is where that matters.
 
 - [ ] **Step 5: Commit**
 
@@ -539,6 +620,8 @@ with get() or From, and construct with new() or new_unchecked()."
 ---
 
 ### Task 4: Vacuous named scalars — infallible construction
+
+**Model:** Sonnet (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
 **Files:**
 
@@ -629,7 +712,7 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. The
-`named_scalar_backings` snapshot at `tests.rs:171` now shows `Enabled` and
+`named_scalar_backings` snapshot (`tests.rs:172`) now shows `Enabled` and
 `Counter` on the vacuous path and `Label`/`Blob` on the constrained path, since
 both carry the defaulted length bound.
 
@@ -649,10 +732,12 @@ latter with Error = Infallible."
 
 ### Task 5: `TryFrom<i64>` for enum and enum set
 
+**Model:** Sonnet (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
+
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_enum` (line 400),
-  `emit_enum_set` (line 424)
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_enum` (`lib.rs:389`),
+  `emit_enum_set` (`lib.rs:413`)
 - Test: `crates/ridl-backend-rust/src/tests.rs`
 
 **Interfaces:**
@@ -753,9 +838,10 @@ Append to `emit_enum_set`'s returned stream:
     }
 ```
 
-Note the enum set's inner field is already emitted as `#vis i64` at
-`lib.rs:438`; change it to private `i64` for consistency with Task 3, and add
-`#vis const fn get(self) -> i64 { self.0 }` to its impl block.
+Note the enum set's inner field is already emitted as `#vis i64` —
+`#vis struct #name(#vis i64);` at `lib.rs:427` — change it to a private `i64`
+for consistency with Task 3, and add `#vis const fn get(self) -> i64 { self.0 }`
+to its impl block.
 
 - [ ] **Step 4: Run the tests**
 
@@ -780,6 +866,8 @@ get()."
 ---
 
 ### Task 6: Sound derives
+
+**Model:** Fable (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
 **Files:**
 
@@ -935,7 +1023,7 @@ fn numeric_named_scalar(decl: &v2::Decl) -> bool {
     };
     matches!(
         backing_scalar(td),
-        Some(ScalarBacking::Float) | Some(ScalarBacking::Integer)
+        ScalarBacking::Float | ScalarBacking::Integer
     )
 }
 
@@ -950,8 +1038,12 @@ fn decl_eligibility(ctx: &Ctx, decl: &v2::Decl, seen: &mut HashSet<String>) -> E
         Some(v2::decl::Kind::EnumDef(_)) => Eligibility::ALL,
         Some(v2::decl::Kind::EnumSetDef(_)) => Eligibility::ALL,
         Some(v2::decl::Kind::StructDef(sd)) => sd
-            .fields
+            .members
             .iter()
+            .filter_map(|m| match &m.member {
+                Some(v2::struct_member::Member::Field(field)) => Some(field),
+                _ => None,
+            })
             .fold(Eligibility::ALL, |acc, f| acc.meet(field_eligibility(ctx, f, seen))),
         Some(v2::decl::Kind::UnionDef(ud)) => ud
             .arms
@@ -967,23 +1059,30 @@ fn decl_eligibility(ctx: &Ctx, decl: &v2::Decl, seen: &mut HashSet<String>) -> E
 
 fn scalar_eligibility(td: &v2::TypeDef) -> Eligibility {
     match backing_scalar(td) {
-        // A unit backing implies float, so it lands here too.
-        Some(ScalarBacking::Float) => Eligibility { copy: true, eq: false },
-        Some(ScalarBacking::Integer) | Some(ScalarBacking::Boolean) => Eligibility::ALL,
-        Some(ScalarBacking::String) | Some(ScalarBacking::Bytes) => {
+        // A unit backing implies float, so it lands here too, as does an
+        // absent backing: `backing_scalar` is total and maps both to `Float`.
+        ScalarBacking::Float => Eligibility { copy: true, eq: false },
+        ScalarBacking::Integer | ScalarBacking::Boolean => Eligibility::ALL,
+        ScalarBacking::String | ScalarBacking::Bytes => {
             Eligibility { copy: false, eq: true }
         }
-        None => Eligibility::NONE,
     }
 }
 ```
+
+Two IR shapes to note, because the obvious spelling does not compile. A
+`v2::StructDef` holds `repeated StructMember members`, not `fields`, and each
+`StructMember` is a `oneof { Field field; Reserved reserved; }` — which is why
+the fold above filters. `defaults.rs` already walks it that way
+(`defaults.rs:84`). And a `v2::Field`'s type is `field.r#type`, raw-identifier
+escaped because `type` is a Rust keyword; there is no `field_type` member.
 
 ```rust
 /// One field's contribution. An `Option<T>` keeps `T`'s eligibility — both
 /// `Copy` and `Eq` pass through it. A collection is never `Copy` because
 /// `Vec` is not, but keeps `Eq` when its element does.
 fn field_eligibility(ctx: &Ctx, field: &v2::Field, seen: &mut HashSet<String>) -> Eligibility {
-    let Some(ft) = field.field_type.as_ref() else {
+    let Some(ft) = field.r#type.as_ref() else {
         return Eligibility::NONE;
     };
     let base = match &ft.kind {
@@ -1014,7 +1113,16 @@ fn field_eligibility(ctx: &Ctx, field: &v2::Field, seen: &mut HashSet<String>) -
         Some(v2::field_type::Kind::Tuple(t)) => t
             .fields
             .iter()
-            .fold(Eligibility::ALL, |acc, f| acc.meet(field_eligibility(ctx, f, seen))),
+            .fold(Eligibility::ALL, |acc, f| {
+                // A `TupleField` is not a `Field`: it carries `name` and
+                // `r#type` only, so it goes through the FieldType-taking twin.
+                let inner = f
+                    .r#type
+                    .as_ref()
+                    .map(|ft| field_type_eligibility(ctx, ft, seen))
+                    .unwrap_or(Eligibility::NONE);
+                acc.meet(inner)
+            }),
         _ => Eligibility::NONE,
     };
     base
@@ -1045,15 +1153,20 @@ Add `field_type_eligibility(ctx, ft, seen)` as the `FieldType`-taking twin of
 `field_eligibility`; they differ only in unwrapping the `Field` envelope, so
 factor the `match` into it and have `field_eligibility` delegate.
 
-The exact `v2::field_type::Kind` variant names and the `Array`/`Map` element
-accessors must be read from `crates/ridl-ir/proto/ridl/ir/v2/ir.proto` before
-writing this — the names above follow the shape `defaults.rs` walks, and any
-mismatch surfaces immediately as a compile error rather than silently.
+The `v2::field_type::Kind` variants at 86e10d7 are `Named(String)`,
+`Primitive(i32)`, `InlineScalar(TypeDef)`, `Tuple(TupleType)`,
+`Array(ArrayType)`, `Map(MapType)` and `Stream(StreamType)`
+(`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:355`). `Stream` falls to the
+`_ => Eligibility::NONE` arm. `ArrayType::element`, `MapType::key` and
+`MapType::value` are each a single boxed `FieldType`, so `.as_deref()` yields
+`Option<&FieldType>`. Re-read the proto before writing this anyway: a mismatch
+surfaces as a compile error rather than silently, but reading is faster.
 
-In `lib.rs`: add `mod derives;` beside `mod defaults;`, prepend the attribute in
-`emit_decl` so every emitted item carries it, and raise `struct Ctx<'a>` and its
-`lookup` method to `pub(crate)` so `derives.rs` can reach them — `defaults.rs`
-already takes `&Ctx`, so this is a visibility change only.
+In `lib.rs`: add `mod derives;` beside `mod defaults;` and prepend the attribute
+in `emit_decl` so every emitted item carries it. No visibility change is needed
+— `pub(crate) struct Ctx<'a>` (`lib.rs:183`) and `pub(crate) fn lookup`
+(`lib.rs:208`) are already `pub(crate)`, and `defaults.rs` already uses
+`crate::Ctx`.
 
 - [ ] **Step 4: Run the tests**
 
@@ -1082,12 +1195,23 @@ graceful failure."
 
 ### Task 7: `--emit rust` writes a compiling crate
 
+**Model:** Opus (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
+
 **Files:**
 
 - Modify: `crates/ridlc/src/lib.rs` — `write_emits`, and the `Emit::Rust` arm
-- Create: `crates/ridlc/templates/cargo.toml.j2` (minijinja, matching the
-  existing `templates/c_header.j2` precedent)
+- Modify: `crates/ridl-backend-rust/Cargo.toml` — remove the
+  `minijinja = "2.5.0"` dependency, which no `.rs` file in the workspace uses
+  since commit `7d539bc` deleted `c_header.rs` and its template
 - Test: `crates/ridlc/src/lib.rs` tests, or `crates/ridl/tests/`
+
+The manifest and the crate root are built as plain strings, not from a template.
+This plan first said to create `crates/ridlc/templates/cargo.toml.j2` "matching
+the existing `templates/c_header.j2` precedent"; that precedent is gone —
+`crates/ridl-backend-rust/templates/c_header.j2` was deleted by the same
+retraction commit, no `.j2` file remains anywhere in the repository, and `ridlc`
+has never depended on `minijinja`. Two short `format!` bodies need no templating
+engine, and the crate root in step 3 below is already built that way.
 
 **Interfaces:**
 
@@ -1098,6 +1222,11 @@ graceful failure."
 
 Single-file mode keeps writing only `<stem>.rs`, matching the existing
 single-file asymmetry documented on `Emit::TypeScript`.
+
+This is also where driftsys/ridl#252's constraint is discharged: whatever the
+backends emit once per package has to be nameable across every package in one
+crate at once. That is what Task 2's `ConstraintError` question turns on, so
+read Task 2's note and Open item 3 before writing this.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1135,12 +1264,13 @@ FAIL — `Cargo.toml` does not exist.
 
 - [ ] **Step 3: Write the implementation**
 
-Create `crates/ridlc/templates/cargo.toml.j2`:
+Write the manifest from a `format!` body in `crates/ridlc/src/lib.rs`, with this
+content:
 
-```jinja
+```toml
 # Generated by ridlc. Do not edit.
 [package]
-name = "{{ crate_name }}"
+name = "{crate_name}"
 version = "0.0.0"
 edition = "2024"
 
@@ -1244,10 +1374,19 @@ workspace mode. Single-file mode is unchanged."
 
 ### Task 8: Pattern validation behind `validate-pattern`
 
+**Model:** Opus (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
+
 **Files:**
 
 - Modify: `crates/ridl-backend-rust/src/lib.rs` — `constraint_checks`
 - Test: `crates/ridl-backend-rust/src/tests.rs`
+
+**The feature is on by default**, per design spec decision 4 and Task 7's
+manifest, and a constrained target builds `--no-default-features`. The story
+issue, driftsys/ridl#253, says "the feature is off by default"; the design spec
+is authoritative where the two disagree (see the `Spec:` line above). Reconcile
+the issue text in a comment when the task lands rather than changing the
+default.
 
 **Interfaces:**
 
@@ -1325,123 +1464,48 @@ which core does not have."
 
 ---
 
-### Task 9: TypeScript vocabulary and factories
+### Task 9: TypeScript vocabulary and factories — moved to step 2
 
-**Files:**
+This task is not executed here. The TypeScript value layer moved out of Epic 10
+on 2026-09-12 with the release re-scope, and this plan follows it.
 
-- Modify: `crates/ridl-backend-ts/src/lib.rs` — `emit_type_def` (line 225),
-  `generate` (to emit the vocabulary)
-- Test: `crates/ridl-backend-ts/src/tests.rs`
+**What moved.** The task body that stood here emitted a `ConstraintError` class,
+a `TryResult<T>` type, and a `speed` / `trySpeed` / `speedUnchecked` factory
+trio per named scalar from `crates/ridl-backend-ts/src/lib.rs`. It is superseded
+rather than carried over: the TypeScript backend is rebuilt in step 2 as three
+modules (`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md` §3.5)
+and is also built as a `ridlc-gen-ts` plugin binary over the lowered codegen
+model (§3.8 of the same note), so a value layer written against today's emitter
+would be written twice. The surface the design spec fixes — the brand kept, the
+runtime value left a primitive, three functions for a constrained type and one
+for a vacuous one — still stands as the specification of what step 2 builds.
 
-**Interfaces:**
+**The tracker half is already done.** Story E10.9 (driftsys/ridl#254) was closed
+as not planned on 2026-09-12, along with E10.11, and refiled under §3.5 and §3.8
+of the release-scope note. `docs/ROADMAP.md`'s Epic 10 section records the move.
+**Do not reopen driftsys/ridl#254.** No issue is filed or reopened for this
+task; step 2's TypeScript stories carry it.
 
-- Consumes: `constraint_is_vacuous` (Task 1).
-- Produces: emitted `ConstraintError` class, `TryResult<T>` type, and per type
-  `speed(v)`, `trySpeed(v)`, `speedUnchecked(v)`.
-
-- [ ] **Step 1: Write the failing test**
-
-```rust
-#[test]
-fn constrained_scalar_emits_three_factories() {
-    let source = ts_for(vec![speed_decl()]);
-    assert!(source.contains("export function speed(value: number): Speed"));
-    assert!(source.contains("export function trySpeed(value: number): TryResult<Speed>"));
-    assert!(source.contains("export function speedUnchecked(value: number): Speed"));
-    assert!(source.contains("export type TryResult<T>"));
-}
-
-#[test]
-fn vacuous_scalar_emits_one_factory() {
-    let decls = vec![public_decl(
-        "Enabled",
-        primitive_type(v2::PrimitiveType::Boolean, init_value(true, Some("false")), None),
-    )];
-    let source = ts_for(decls);
-    assert!(source.contains("export function enabled(value: boolean): Enabled"));
-    assert!(!source.contains("tryEnabled"));
-    assert!(!source.contains("enabledUnchecked"));
-}
-```
-
-- [ ] **Step 2: Run the tests to verify they fail**
-
-Run: `cargo test -p ridl-backend-ts --locked factories` Expected: FAIL — only
-the brand type is emitted.
-
-- [ ] **Step 3: Write the implementation**
-
-Emit the vocabulary once per module:
-
-```ts
-export class ConstraintError extends Error {
-  constructor(readonly typeName: string, readonly constraint: 'range' | 'length' | 'pattern' | 'variant') {
-    super(`${typeName}: value violates its declared ${constraint} constraint`);
-    this.name = 'ConstraintError';
-  }
-}
-
-export type TryResult<T> =
-  | { readonly ok: true; readonly value: T }
-  | { readonly ok: false; readonly error: ConstraintError };
-```
-
-Then per constrained type, with the factory name being the lowerCamel of the
-declaration name — safe because type names are CamelCase and constants are
-SCREAMING_SNAKE (typl §15.1), so the namespaces cannot collide:
-
-```ts
-export function speed(value: number): Speed {
-  if (value < 0.0 || value > 250.0) throw new ConstraintError('Speed', 'range');
-  return value as Speed;
-}
-
-export function trySpeed(value: number): TryResult<Speed> {
-  try { return { ok: true, value: speed(value) }; }
-  catch (error) { return { ok: false, error: error as ConstraintError }; }
-}
-
-export function speedUnchecked(value: number): Speed {
-  return value as Speed;
-}
-```
-
-Length checks use `[...value].length` for strings, so a surrogate pair counts as
-one character — typl §5.3 bounds strings in characters, not UTF-16 code units.
-Pattern checks use `RegExp` directly; no feature gate exists in TypeScript.
-
-A vacuous type emits only the first function, with no checks in its body.
-
-- [ ] **Step 4: Run the tests**
-
-Run: `cargo insta test -p ridl-backend-ts --accept --unreferenced=reject` Then:
-`cargo test -p ridl-backend-ts --locked` Expected: PASS, including
-`appendix_b_compiles_with_tsc_strict` at `tests.rs:1378`, which is the real
-check.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add crates/ridl-backend-ts/
-git commit -m "feat(ridl-backend-ts): emit validating factories for named scalars
-
-The brand is kept rather than replaced by a class, so runtime values stay
-primitives and JSON.stringify and the wire shape are unchanged. A
-constrained type emits a throwing factory, a result-returning one, and an
-unchecked cast; a vacuous type emits only the first.
-
-String length is measured in code points, matching typl 5.3, which bounds
-strings in characters rather than UTF-16 code units."
-```
+**What this leaves open in Epic 10.** Task 1's classifier has a two-backend
+done-when — "both backends agree on which types need a fallible constructor" —
+and only the Rust half completes here. The TypeScript half completes in step 2,
+against the same `ridl_ir::v2::constraint_is_vacuous`, which is why the
+classifier stays in `ridl-ir` rather than moving into the Rust backend. The
+roadmap says the same beneath the Epic 10 table.
 
 ---
 
 ### Task 10: Record the decision and verify the diff classification
 
+**Model:** Opus (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
+
 **Files:**
 
 - Modify: `docs/decisions/ADR-0013-codegen-backend-scope.md`
-- Modify: `docs/specification/typl-language-reference.md` — §5.7
+- Modify: `docs/specification/typl-language-reference.md` — §5.7. This file is
+  shared: the order is C1 (E14.1), then this task, then E14.3
+  (`docs/wip/2026-09-13-step1-lanes-plan.md` §6). Do not open a pull request
+  touching it while another lane's is open.
 - Delete: `docs/wip/typl-value-objects-design.md`,
   `docs/wip/typl-value-objects-plan.md` (archive per the working-memory rule)
 
@@ -1472,7 +1536,9 @@ backend, and cite ADR-0013.
 
 Per `sdd-working-memory-lifecycle`, move both `docs/wip/` files to
 `docs/archive/` once the durable records above are written. Run the
-`sdd-gardening` skill rather than doing it by hand.
+`sdd-gardening` skill rather than doing it by hand. Task 11 is part of this plan
+and runs independently of this task, so do this step only after Task 11 has also
+landed; otherwise Task 11 loses the document it executes.
 
 - [ ] **Step 5: Run the full gate and commit**
 
@@ -1480,6 +1546,275 @@ Per `sdd-working-memory-lifecycle`, move both `docs/wip/` files to
 just verify
 git add docs/
 git commit -m "docs(typl): record validating constructors in ADR-0013 and typl 5.7"
+```
+
+---
+
+### Task 11: The two Rust naming defects
+
+**Model:** Fable (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
+
+Clears driftsys/ridl#243 (a struct field name is emitted verbatim, so generated
+Rust draws `non_snake_case`) and driftsys/ridl#237 (union arm names collide
+under `camel_case`, emitting two variants of one name). Both moved into Epic 10
+on 2026-09-15, recorded in `docs/ROADMAP.md`'s Epic 10 section and decided as
+P-5 of `docs/wip/2026-09-13-step1-lanes-plan.md`: Task 6 changes the struct and
+union declarations both defects are about, and Task 3 changes the named-scalar
+emission in the same emitter, so clearing them here changes the snapshots once
+instead of twice.
+
+Read
+[ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
+decisions 1 to 5 before starting. The pinned transform is
+`ridl_ir::name::snake_case` (`crates/ridl-ir/src/name.rs:24`); the Rust backend
+is already a dependent of `ridl-ir`, so neither half needs a new transform
+written.
+
+**Run this task after Task 6.** Both halves rewrite the same snapshots Task 6
+rewrites, and Task 6 is the larger change.
+
+**Files:**
+
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_field` (`lib.rs:370`),
+  `emit_union` (`lib.rs:436`), `camel_case` (`lib.rs:855`)
+- Modify: `crates/ridl-ir/src/name.rs` — the pinned `camel_case`, if decision D
+  below is taken as proposed
+- Modify: `crates/ridl-sem/src/check.rs` — RIDL-149 over a union's arms, beside
+  the existing member, parameter and struct-field namespaces
+- Modify: `crates/ridlc/tests/corpus.rs` — the `rustc_accepts` lint list
+- Test: `crates/ridl-backend-rust/src/tests.rs`,
+  `crates/ridl-sem/src/check.rs`'s test module, `crates/ridlc/tests/corpus.rs`
+
+**Not a shared file, as proposed.** `crates/ridl-core/src/diag.rs` is in the §6
+shared-file order (S1 and S2 → L4 → C3 → B3) and this task does not touch it,
+because decision D reuses RIDL-149 rather than minting a code. If Sebastien
+chooses a new code instead, this task joins that order and waits its turn.
+
+**Interfaces:**
+
+- Consumes: `ridl_ir::name::snake_case`.
+- Produces: `pub fn ridl_ir::name::camel_case(name: &str) -> String` (decision D
+  as proposed), and RIDL-149 over one more namespace.
+
+#### Decision D — what #237 does about a colliding union arm
+
+**Fable drafts this; Sebastien decides. Do not start the #237 half until it is
+decided.** The #243 half needs no decision and may start first.
+
+The options are: rename the arm, report a diagnostic, or both.
+
+**Proposed: report a diagnostic, and pin `camel_case` beside `snake_case`. No
+rename.** Four reasons.
+
+1. **Fail-closed is the rule this defect class already has.** RIDL-149 was
+   minted for exactly "two names distinct in source projecting to one
+   identifier" (ADR-0016 decision 3) and it rejects the package; it does not
+   rename. A rename invents an identifier the contract does not state, and the
+   suffix it picks would move as arms are added, so a generated API would change
+   under a change ADR-0016 decision 6 calls compatible.
+2. **Two backends already refuse it, less helpfully.** The proto3 backend
+   (`crates/ridl-backend-proto/src/lib.rs:496`) and the FlatBuffers backend
+   (`crates/ridl-backend-flatbuffers/src/lib.rs:344`) both project an arm name
+   through `ridl_ir::name::snake_case` and claim it in a symbol table that
+   errors on a second claim. So a colliding package is already unbuildable for
+   two of the four backends, as a `GenerateError` at generate time. A check in
+   `ridl-sem` moves the refusal to `ridl check`, where it names the two arms in
+   the source, and makes the backends' refusal unreachable for a checked package
+   — the relationship the proto3 backend's own comment describes (`lib.rs:473`).
+3. **The check cannot key on `snake_case` alone, and this is the part that is
+   easy to get wrong.** The two transforms are incomparable: neither collision
+   set contains the other. Three arm pairs, each computed from the two functions
+   as they stand at 86e10d7:
+
+   | Arms                       | `camel_case`                          | `snake_case`                            |
+   | -------------------------- | ------------------------------------- | --------------------------------------- |
+   | `foo_bar`, `fooBar`        | `FooBar`, `FooBar` — collides         | `foo_bar`, `foo_bar` — collides         |
+   | `XY`, `x_y`                | `XY`, `XY` — collides                 | `xy`, `x_y` — distinct                  |
+   | `HTTPServer`, `httpServer` | `HTTPServer`, `HttpServer` — distinct | `http_server`, `http_server` — collides |
+
+   Row 2 is the Rust defect a `snake_case`-keyed check would pass through, and
+   row 3 is the wire-backend refusal a `camel_case`-keyed check would pass
+   through. So the union arm namespace is checked under **both** transforms, and
+   the package is rejected when either collides. Row 2 and row 3 each become a
+   test.
+4. **The transform has to leave the backend for the check to key on it.**
+   ADR-0016 decision 5 puts the check in `ridl-sem`, which does not depend on a
+   backend, and decision 2's argument — a projection is a pure function from IR
+   identity to a target namespace, so it belongs with the IR — applies to
+   `camel_case` unchanged. One definition, two callers: the check and the Rust
+   emitter. driftsys/ridl#237's own note raises this as the question worth
+   settling first.
+
+**Recording it.** ADR-0016 is Accepted, and its consequences already record this
+defect as one the record does not close (the entry ending "Recorded on
+driftsys/ridl#237"). Whichever option is taken is written back there as a short
+amendment: union arms join the checked namespaces, and `camel_case` joins the
+pinned transforms or does not. Write it in Task 10's documentation pull request
+or in this task's; it must not be skipped in both.
+
+#### The #243 half
+
+- [ ] **Step 1: Write the failing test**
+
+```rust
+#[test]
+fn a_struct_field_name_is_projected_to_snake_case() {
+    // typl §15.1 makes field names camelCase, so an untransformed name
+    // draws `non_snake_case` at every consumer of the generated module.
+    let source = rust_for(vec![struct_with_field("Reading", "sensorId", "Speed")]);
+    assert!(source.contains("pub sensor_id:"), "got:\n{source}");
+    assert!(!source.contains("pub sensorId:"));
+}
+```
+
+`struct_with_field(name, field_name, type_ref)` is the fixture builder Task 6
+adds; this task runs after Task 6, so it is present.
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run: `cargo test -p ridl-backend-rust --locked a_struct_field_name_is_projected`
+Expected: FAIL — `emit_field` renders `ident(&field.name)` with no transform, so
+the emitted field is `pub sensorId`. The same string is visible in the committed
+snapshots today: grep `crates/ridl-backend-rust/src/snapshots/` for `sensorId`.
+
+- [ ] **Step 3: Write the implementation**
+
+In `emit_field` (`lib.rs:370`), render the name through the pinned transform:
+
+```rust
+let field_name = ident(&ridl_ir::name::snake_case(&field.name));
+```
+
+The `hint` on the next line, which names an induced tuple struct, keeps
+`camel_case(&field.name)` — it builds a type name, not a field name.
+
+Nothing needs minting: ADR-0016 decision 4 held struct fields out of RIDL-149
+"until E9.8 extends both the transform and this check to them in the commit that
+starts projecting them", and E9.8 did extend the check —
+`crates/ridl-sem/src/check.rs:5837`, "RIDL-149 over struct fields (ADR-0016
+decision 4)". So the collision hazard is closed before this change lands, which
+is the order that decision asked for, reached from the other side.
+
+Then add the regression guard. No `rustc` compile proof fails on a warning
+today, which is why this defect never failed a test, and the four differ in how
+they reach that. `appendix_b_compiles_with_rustc`
+(`crates/ridl-backend-rust/src/tests.rs:1232`) and
+`constructible_collections_compile` (`tests.rs:1302`) pass no `-D` flag at all
+and assert only `status.success()`.
+`a_tuple_under_an_internal_declaration_is_package_private` (`tests.rs:611`) and
+`rustc_accepts` in `crates/ridlc/tests/corpus.rs:1208` each deny two lints by
+name, `private-interfaces` and `private-bounds`, and nothing else. Add
+`-D non_snake_case` to all four — for the first two that means adding a deny
+flag where there was none. Check first that no other generated item draws it —
+an enum variant keeps its typl `SCREAMING_SNAKE` spelling and draws
+`non_camel_case_types`, a different lint, which stays undenied.
+
+The TypeScript backend is not touched: camelCase is idiomatic there, and
+driftsys/ridl#243 says so.
+
+- [ ] **Step 4: Run the tests and accept the snapshots**
+
+Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
+Then: `cargo test --workspace --locked` Expected: PASS. Every snapshot with a
+multi-word field changes, in this crate and in the `ridlc` corpus. The proto3
+and FlatBuffers snapshots do not change — they already project through
+`snake_case`, so their output is the same before and after.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add crates/
+git commit -m "fix(ridl-backend-rust)!: project a struct field name to snake_case
+
+A field name reached generated Rust verbatim, so every multi-word typl
+field drew non_snake_case at every consumer. It now goes through the
+pinned transform, ridl_ir::name::snake_case (ADR-0016 decisions 1 and 2).
+RIDL-149 already rejects a package whose field names would collide under
+that transform, so the collision hazard was closed before this change.
+
+The compile proofs now deny non_snake_case by name, which is what would
+have caught this.
+
+BREAKING CHANGE: a multi-word field is renamed on every generated Rust
+struct. Read it at its snake_case name.
+
+Closes #243."
+```
+
+#### The #237 half
+
+Starts only after decision D. The steps below assume it is taken as proposed.
+
+- [ ] **Step 6: Write the failing tests**
+
+In `crates/ridl-ir/src/name.rs`, for the moved transform:
+
+```rust
+#[test]
+fn the_two_transforms_are_incomparable() {
+    // Neither collision set contains the other, which is why a union's
+    // arms are checked under both (ADR-0016 amendment, Task 11 decision D).
+    assert_eq!(camel_case("XY"), camel_case("x_y"));
+    assert_ne!(snake_case("XY"), snake_case("x_y"));
+    assert_ne!(camel_case("HTTPServer"), camel_case("httpServer"));
+    assert_eq!(snake_case("HTTPServer"), snake_case("httpServer"));
+}
+```
+
+In `crates/ridl-sem/src/check.rs`'s test module, beside the struct-field cases
+at `check.rs:5837`, one case per row of decision D's table: arms `foo_bar` and
+`fooBar` draw RIDL-149, arms `XY` and `x_y` draw RIDL-149, arms `HTTPServer` and
+`httpServer` draw RIDL-149, and a union whose arms collide under neither draws
+nothing.
+
+- [ ] **Step 7: Run the tests to verify they fail**
+
+Run: `cargo test -p ridl-ir --locked the_two_transforms_are_incomparable` and
+`cargo test -p ridl-sem --locked union_arm` Expected: FAIL — `camel_case` is not
+in `ridl-ir`, and no check covers a union's arms.
+
+- [ ] **Step 8: Write the implementation**
+
+Move `camel_case` from `crates/ridl-backend-rust/src/lib.rs:855` to
+`crates/ridl-ir/src/name.rs` as a `pub fn`, with a doc comment that says what
+`snake_case`'s says: the transform is not injective, and a package whose names
+collide under it is rejected by RIDL-149. Delete the backend copy and have
+`emit_union` and the induced-tuple `hint` call the pinned one. The behaviour
+does not change, so no snapshot moves in this step.
+
+Then extend the RIDL-149 check. `Checker::colliding_projected_name`
+(`check.rs:3306`) is already written as "two names in one scope that collide
+after the pinned name transform" and is already shared by the member and
+parameter checks; add a union's arms as a fourth namespace, keyed on both
+transforms — a package is rejected when either collides. A reserved arm is
+skipped, matching `emit_union`.
+
+- [ ] **Step 9: Run the tests**
+
+Run:
+`cargo test -p ridl-ir -p ridl-sem -p ridl-backend-rust --locked && cargo clippy --workspace --all-targets -- -D warnings`
+Expected: PASS. Add the new diagnostic to the corpus expectation table
+(`crates/ridlc/tests/corpus.rs:983` lists RIDL-149 already) if a corpus fixture
+exercises it.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add crates/
+git commit -m "fix(ridl-sem): reject a union whose arms collide after a name transform
+
+ridlc accepted a union with arms foo_bar and fooBar and emitted a Rust enum
+with the variant FooBar twice, which rustc rejects with E0428, while ridl
+check reported nothing. RIDL-149 now covers a union's arms.
+
+The arms are checked under both pinned transforms, because neither
+collision set contains the other: XY and x_y collide under camel_case but
+not under snake_case, and HTTPServer and httpServer collide under
+snake_case but not under camel_case. camel_case moves to ridl-ir beside
+snake_case for the same reason snake_case is there - the check runs in
+ridl-sem, which depends on no backend (ADR-0016 decisions 2 and 5).
+
+Closes #237."
 ```
 
 ---
@@ -1492,10 +1827,12 @@ Before opening the PR:
 just verify     # lint-commits, then the full build gate
 ```
 
-`just build` covers `toolchain-check`, `gate-parity`, `fmt-check`, `book-check`,
-`compile`, `test`, `lint`, `wasm-check`, and `check`. The `docs/wip/` directory
-must be empty by then, or the working-memory gate flags the branch as
-unfinished.
+`just build` covers `toolchain-check`, `gate-parity`, `install-check`,
+`fmt-check`, `book-check`, `link-check`, `compile`, `test`, `lint`,
+`wasm-check`, `compat-check`, and `check`. This plan's own two `docs/wip/` files
+are archived by Task 10 step 4, after Task 11 has landed;
+`sdd-working-memory-lifecycle` asks that of the documents a piece of work owns,
+not of the whole directory, which carries other lanes' working memory.
 
 ## Open
 
@@ -1504,3 +1841,13 @@ unfinished.
    by a `--crate-name` flag. Confirm before implementing Task 7.
 2. **Whether `ridl-diff` classifies a constraint appearing where none existed as
    breaking** (Task 10, Step 1). Verify rather than assume.
+3. **Where `ConstraintError` is defined when one crate holds several packages**
+   (Task 2, and Task 7 which creates the crate root). Proposed: once at the
+   generated crate root, with `use crate::ConstraintError;` in each package
+   module, and in the single file when single-file mode writes no crate root.
+   driftsys/ridl#252 is where the per-package form is recorded as a defect.
+   Confirm before implementing Task 2.
+4. **What a colliding union arm does** (Task 11, decision D). Proposed: report a
+   diagnostic under RIDL-149 over both pinned transforms, pin `camel_case` into
+   `ridl-ir`, and do not rename. Sebastien decides; the #243 half of Task 11
+   does not wait for it.
