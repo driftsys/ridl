@@ -1914,6 +1914,13 @@ impl Checker<'_> {
             }
         }
 
+        // TYPL-215: a field name declared twice, exactly (issue #244). Keyed
+        // on the raw source name, and checked before RIDL-149's projection
+        // map so an exact duplicate never reaches it — an exact duplicate
+        // collides trivially under any name transform, and RIDL-149's message
+        // describes a transform that did nothing.
+        let mut declared: HashMap<String, TextRange> = HashMap::new();
+
         // RIDL-149: two field names that collide after the pinned name
         // transform (ADR-0016 decisions 3 and 4). Struct fields joined this
         // check when E9.8 started projecting them onto proto3, whose field
@@ -1949,17 +1956,22 @@ impl Checker<'_> {
                     }
                     if let Some(name) = member_name(field.name()) {
                         let range = member_name_range(field.name(), field.syntax());
-                        let projection = snake_case(&name);
-                        if let Some((first_name, first)) = projected.get(&projection).cloned() {
-                            self.colliding_projected_name(
-                                &name,
-                                &first_name,
-                                &projection,
-                                range,
-                                first,
-                            );
+                        if let Some(first) = declared.get(&name).copied() {
+                            self.duplicate_field(&name, range, first);
                         } else {
-                            projected.insert(projection, (name, range));
+                            declared.insert(name.clone(), range);
+                            let projection = snake_case(&name);
+                            if let Some((first_name, first)) = projected.get(&projection).cloned() {
+                                self.colliding_projected_name(
+                                    &name,
+                                    &first_name,
+                                    &projection,
+                                    range,
+                                    first,
+                                );
+                            } else {
+                                projected.insert(projection, (name, range));
+                            }
                         }
                     }
                     let lowered = self.lower_field(&field, ordinal);
@@ -2986,6 +2998,42 @@ impl Checker<'_> {
             ),
             first,
             format!("`{name}` is declared here, and this is the one that is kept"),
+        );
+    }
+
+    /// TYPL-215: a field name declared twice in one struct — the same source
+    /// name, not merely a collision after the projection (that is RIDL-149).
+    /// Unlike RIDL-402, neither declaration is dropped: both fields still
+    /// lower, so the message states the rule and points at the first
+    /// declaration without claiming a winner.
+    fn duplicate_field(&mut self, name: &str, range: TextRange, first: TextRange) {
+        self.error_with_label(
+            DiagCode::TYPL_215,
+            range,
+            format!(
+                "`{name}` is already declared in this struct — a name identifies one field. \
+                 Rename or remove one of them (typl §7)"
+            ),
+            first,
+            format!("`{name}` is declared here"),
+        );
+    }
+
+    /// RIDL-413: a parameter name declared twice in one parameter list — the
+    /// same source name, not merely a collision after the projection (that is
+    /// RIDL-149). Unlike RIDL-402, neither declaration is dropped: both
+    /// parameters still lower, so the message states the rule and points at
+    /// the first declaration without claiming a winner.
+    fn duplicate_param(&mut self, name: &str, range: TextRange, first: TextRange) {
+        self.error_with_label(
+            DiagCode::RIDL_413,
+            range,
+            format!(
+                "`{name}` is already declared in this parameter list — a name identifies one \
+                 parameter. Rename or remove one of them (ridl §6.1, §7.1)"
+            ),
+            first,
+            format!("`{name}` is declared here"),
         );
     }
 
@@ -4354,17 +4402,28 @@ impl Checker<'_> {
         // pre-pass rather than a check inside the map, because the map's
         // closure returns the lowered `Param` and threading the seen-set
         // through it would not read any clearer.
+        //
+        // RIDL-413 (issue #244) runs first, keyed on the raw source name: an
+        // exact duplicate collides trivially under any name transform, and
+        // RIDL-149's message describes a transform that did nothing, so an
+        // exact duplicate must never reach the projection map below.
+        let mut declared: HashMap<String, TextRange> = HashMap::new();
         let mut projected: HashMap<String, (String, TextRange)> = HashMap::new();
         for param in params.params() {
             let Some(name) = member_name(param.name()) else {
                 continue;
             };
             let range = member_name_range(param.name(), param.syntax());
-            let projection = snake_case(&name);
-            if let Some((first_name, first)) = projected.get(&projection).cloned() {
-                self.colliding_projected_name(&name, &first_name, &projection, range, first);
+            if let Some(first) = declared.get(&name).copied() {
+                self.duplicate_param(&name, range, first);
             } else {
-                projected.insert(projection, (name, range));
+                declared.insert(name.clone(), range);
+                let projection = snake_case(&name);
+                if let Some((first_name, first)) = projected.get(&projection).cloned() {
+                    self.colliding_projected_name(&name, &first_name, &projection, range, first);
+                } else {
+                    projected.insert(projection, (name, range));
+                }
             }
         }
         params
@@ -5887,6 +5946,138 @@ mod tests {
         assert_eq!(
             codes(&checked),
             vec!["TYPL-210", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    // --- TYPL-215: exact duplicate struct field name (issue #244) ---------
+
+    /// An exact duplicate field name is a different mistake from a collision
+    /// under the transform: the two names are already the same in source, so
+    /// the transform did nothing, and RIDL-149's message ("both become …
+    /// under the name transform") would be false of this input. TYPL-215
+    /// covers it instead, and RIDL-149 must not also fire.
+    #[test]
+    fn typl_215_two_struct_fields_with_the_same_name_are_refused() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct Reading {\n\
+               value : integer [0..1]\n\
+               value : integer [0..1]\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-215"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(checked.diagnostics[0].message.contains("value"));
+    }
+
+    /// Two field names distinct in source that only collide after the
+    /// transform still draw RIDL-149, not TYPL-215 — this fix must not change
+    /// that behaviour.
+    #[test]
+    fn ridl_149_still_fires_alone_for_a_transform_only_collision() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct Reading {\n\
+               parseHTTPResponse : integer [0..1]\n\
+               parseHttpResponse : integer [0..1]\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// Three fields, `value`, `value`, `Value`, in that order: the second
+    /// `value` is an exact duplicate of the first (TYPL-215), and `Value` is
+    /// a transform-only collision against the first `value` (RIDL-149) — the
+    /// second `value` never reaches the projection map, so `Value` is
+    /// compared against the first `value`, not the second.
+    #[test]
+    fn typl_215_and_ridl_149_both_report_in_declaration_order() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct Reading {\n\
+               value : integer [0..1]\n\
+               value : integer [0..1]\n\
+               Value : integer [0..1]\n\
+             }\n",
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-215", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    // --- RIDL-413: exact duplicate parameter name (issue #244) -------------
+
+    /// The parameter-list counterpart of TYPL-215: two parameters named
+    /// `value` are an exact duplicate, and RIDL-149's transform-collision
+    /// message would be false of this input.
+    #[test]
+    fn ridl_413_two_parameters_with_the_same_name_are_refused() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface Svc {{\n  command setBoth(value : Speed, value : Speed) \
+                 @[..500ms]\n}}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-413"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(checked.diagnostics[0].message.contains("value"));
+    }
+
+    /// Two parameter names distinct in source that only collide after the
+    /// transform still draw RIDL-149, not RIDL-413.
+    #[test]
+    fn ridl_149_still_fires_alone_for_a_parameter_transform_only_collision() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface Svc {{\n  command setBoth(parseHTTPResponse : Speed, \
+                 parseHttpResponse : Speed) @[..500ms]\n}}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// Three parameters, `value`, `value`, `Value`, in that order: the same
+    /// ordering guarantee as the struct-field case, over a parameter list.
+    #[test]
+    fn ridl_413_and_ridl_149_both_report_in_declaration_order() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface Svc {{\n  command setBoth(value : Speed, value : Speed, \
+                 Value : Speed) @[..500ms]\n}}\n"
+            ),
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-413", "RIDL-149"],
             "got: {:?}",
             checked.diagnostics
         );
