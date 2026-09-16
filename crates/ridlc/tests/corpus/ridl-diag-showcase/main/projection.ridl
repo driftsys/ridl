@@ -38,3 +38,20 @@ struct ProjectionFields {
   parseHTTPResponse : Ratio
   parseHttpResponse : Ratio
 }
+
+// TYPL-215 and RIDL-413: a name declared twice, exactly — not a
+// transform-only collision, because the two source names are already the
+// same before any transform runs, and RIDL-149's message ("both become …
+// under the name transform") would be false of this input (issue #244).
+// Both examples still lower; neither check drops the duplicate member.
+
+/// Two struct fields declared under the same name.
+struct DuplicateField {
+  value : Ratio
+  value : Ratio
+}
+
+/// Two parameters declared under the same name.
+interface DuplicateParams {
+  command setBoth(value : Ratio, value : Ratio) @[..500ms]
+}
