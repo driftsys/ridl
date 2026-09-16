@@ -234,3 +234,15 @@ provenance. Nothing here is normative — the current references live in
   #351); and `WriteError` and `RaiseError` carry no `Contract` variant (predates
   #351). [The `ridl-rt` design record](../design/ridl-rt.md) and the crate's
   rustdoc describe the API as built.
+- **2026-09-13-lock-design.md** and **2026-09-15-lock-plan.md** — the design and
+  plan for the interface lock, lane L of the 2026-09-13 step-1 coordination
+  (driftsys/ridl#328): the identity widths, `interfaces.lock`, provisional
+  numbering, `ridl lock` with its `merge` driver, the publication refusals, and
+  the retirement of the service slot model. The durable records are
+  [ADR-0015's 2026-09-15 amendment](../decisions/ADR-0015-qos-absorption-and-rpc-bounds.md)
+  (decisions 12, 15, 17, 18, 19, 20 and 24),
+  [ADR-0010](../decisions/ADR-0010-cli-conventions.md) (the `ridl lock` rows),
+  the ridl reference §11 and §14.5, the diagnostics RIDL-409 to RIDL-412, and
+  [the CLI reference](../book/cli-reference.md). Read the design's §1 for the
+  identity widths lane A consumed, and the plan as a plan: its twelve tasks are
+  the sequence the implementation followed, not a description of the result.

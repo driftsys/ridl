@@ -22,8 +22,8 @@ the record and this note is the proposal.
 which amends this note. The amendments are marked in place with the decision
 that makes each one. The identity items (V-17, V-X2 and the `lock` line of §7)
 were left to the lock design
-([`2026-09-13-lock-design.md`](2026-09-13-lock-design.md)), which settled them;
-each is marked in place, dated 2026-09-15.
+([`2026-09-13-lock-design.md`](../archive/2026-09-13-lock-design.md)), which
+settled them; each is marked in place, dated 2026-09-15.
 
 ## 1. The nouns
 

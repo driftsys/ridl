@@ -137,7 +137,7 @@ Read for every stage:
   error.rs
 - crates/ridl-backend-rust/src/lib.rs (today's Rust emitter, the codegen
   this lane extends)
-- docs/wip/2026-09-13-lock-design.md §3 (provisional numbering) — Lane L's L4
+- docs/archive/2026-09-13-lock-design.md §3 (provisional numbering) — Lane L's L4
   landed after this file's first draft; the IR's `Interface.number` and
   `Interface.provisional` fields are real now (`crates/ridl-ir/proto/ridl/ir/v2/ir.proto`)
 - This file's "Dependencies" section above

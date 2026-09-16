@@ -247,9 +247,9 @@ without saying so. **Exit criteria:** a package carries an `interfaces.lock`,
 `ridl baseline` refuses to publish an interface whose number is not recorded.
 
 Design and plan of record:
-[`2026-09-13-lock-design.md`](wip/2026-09-13-lock-design.md) and
-[`2026-09-15-lock-plan.md`](wip/2026-09-15-lock-plan.md). The design satisfies
-D-7 of
+[`2026-09-13-lock-design.md`](archive/2026-09-13-lock-design.md) and
+[`2026-09-15-lock-plan.md`](archive/2026-09-15-lock-plan.md). The design
+satisfies D-7 of
 [`2026-09-12-rsdl-rewrite-decisions.md`](wip/2026-09-12-rsdl-rewrite-decisions.md)
 and driftsys/ridl#315 at the interface level.
 

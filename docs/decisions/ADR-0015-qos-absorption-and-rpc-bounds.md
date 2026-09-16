@@ -41,12 +41,12 @@ written for review, and execution of roadmap stories E9.4 to E9.6 needs the
 decisions fixed rather than pending.
 
 **Amendment (2026-09-15) — the interface lock.** The lock design
-([`docs/wip/2026-09-13-lock-design.md`](../wip/2026-09-13-lock-design.md) §7, §9
-and §10, which applies rsdl decision D-7) gives every interface a number from
-its package's `interfaces.lock` and retires the slot model of a service's list.
-Decisions 12, 15, 17, 18, 19, 20 and 24 changed with it; each change is written
-into its decision below, dated, and "Documents to amend" and open item 1 carry
-the same date. Decisions 10, 13, 14 and 16 are unchanged by the lock. Two
+([`docs/archive/2026-09-13-lock-design.md`](../archive/2026-09-13-lock-design.md)
+§7, §9 and §10, which applies rsdl decision D-7) gives every interface a number
+from its package's `interfaces.lock` and retires the slot model of a service's
+list. Decisions 12, 15, 17, 18, 19, 20 and 24 changed with it; each change is
+written into its decision below, dated, and "Documents to amend" and open item 1
+carry the same date. Decisions 10, 13, 14 and 16 are unchanged by the lock. Two
 further dated paragraphs, in decisions 9 and 10, follow this record's citations
 into the rsdl reference v0.2.0 (rewritten 2026-09-13), which renumbered the
 sections they name and reserved two of the codes.
