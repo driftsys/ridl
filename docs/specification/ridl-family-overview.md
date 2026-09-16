@@ -215,16 +215,16 @@ By home; see each reference for full statements.
   (§17.4, ridl §15) · a stream element that violates its constraints ends the
   stream, and continuing past one is declared by a result-union element type
   (§17.6, ridl §12.4) · there is no normative `ridl.reflect` package, because
-  the catalog descriptor is the enumeration surface (§17.7) · and the three
-  publication-gate questions resolve as no further refusal, with ridl §11 now
-  stating what the gate protects — the record of a retirement — and what
-  `ridl diff` gates (§17.12, §17.13, §17.14). The four closed earlier: the QoS
-  boundary is the ADR-0015 absorption principle (§17.5), the signal-groups
-  question is closed by the ADR-0015 coherence rule with the struct idiom
-  confirmed (§17.3), interaction-set reuse is answered by composition — a
-  service carries a list of interfaces, and mixins were rejected because they
-  flatten (§17.2, ridl §14.5) — and the uxdl divergence budget is closed by
-  ADR-0012 (§17.9).
+  the catalog descriptor — specified, and scheduled as Epic 16 — is the
+  enumeration surface (§17.7) · and the three publication-gate questions resolve
+  as no further refusal, with ridl §11 now stating what the gate protects — the
+  record of a retirement — and what `ridl diff` gates (§17.12, §17.13, §17.14).
+  The four closed earlier: the QoS boundary is the ADR-0015 absorption principle
+  (§17.5), the signal-groups question is closed by the ADR-0015 coherence rule
+  with the struct idiom confirmed (§17.3), interaction-set reuse is answered by
+  composition — a service carries a list of interfaces, and mixins were rejected
+  because they flatten (§17.2, ridl §14.5) — and the uxdl divergence budget is
+  closed by ADR-0012 (§17.9).
 - **rxdl §11**: the intent occurrence keyword · the acquisition/query cell
   **(deferred to ridl v0.3 with ridl §17.10, which owns it)** · interaction
   citation paths (ridl's, recorded there) · journeys and screen flow ·
