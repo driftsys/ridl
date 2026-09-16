@@ -6005,21 +6005,85 @@ mod tests {
     /// compared against the first `value`, not the second.
     #[test]
     fn typl_215_and_ridl_149_both_report_in_declaration_order() {
-        let checked = check_source(
-            "app",
-            "package app\n\
+        let source = "package app\n\
              struct Reading {\n\
                value : integer [0..1]\n\
                value : integer [0..1]\n\
                Value : integer [0..1]\n\
-             }\n",
-        );
+             }\n";
+        let checked = check_source("app", source);
         assert_eq!(
             codes(&checked),
             vec!["TYPL-215", "RIDL-149"],
             "got: {:?}",
             checked.diagnostics
         );
+        // Which `value` RIDL-149 points at is the whole ordering guarantee,
+        // and the code set alone does not pin it: inserting the exact
+        // duplicate into the projection map would leave the set unchanged and
+        // move this label to the second `value`. `Value` is capitalised, so
+        // searching for `value` cannot match it.
+        let first = source
+            .find("value")
+            .expect("the first field is in the source");
+        let label = &checked.diagnostics[1].labels[0];
+        assert_eq!(
+            usize::from(label.span.range.start()),
+            first,
+            "`Value` must be compared against the first `value`, not the second"
+        );
+    }
+
+    /// The duplicate is reported, not dropped: both fields still lower, so
+    /// the message claims no winner. Asserted over the IR, because no
+    /// diagnostic can show it.
+    #[test]
+    fn typl_215_reports_the_duplicate_without_dropping_it() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct Reading {\n\
+               value : integer [0..1]\n\
+               value : integer [0..1]\n\
+             }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-215"]);
+        let members = &struct_def(&checked, "Reading").members;
+        assert_eq!(
+            members.len(),
+            2,
+            "both fields still lower — this check reports and does not drop"
+        );
+    }
+
+    /// The same name three times reports twice, and every report points back
+    /// at the first declaration: the map records the first and is never
+    /// overwritten by a later duplicate.
+    #[test]
+    fn typl_215_reports_every_repeat_against_the_first_declaration() {
+        let source = "package app\n\
+             struct Reading {\n\
+               value : integer [0..1]\n\
+               value : integer [0..1]\n\
+               value : integer [0..1]\n\
+             }\n";
+        let checked = check_source("app", source);
+        assert_eq!(
+            codes(&checked),
+            vec!["TYPL-215", "TYPL-215"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let first = source
+            .find("value")
+            .expect("the first field is in the source");
+        for diagnostic in &checked.diagnostics {
+            assert_eq!(
+                usize::from(diagnostic.labels[0].span.range.start()),
+                first,
+                "every repeat points at the first declaration"
+            );
+        }
     }
 
     // --- RIDL-413: exact duplicate parameter name (issue #244) -------------
@@ -6068,18 +6132,55 @@ mod tests {
     /// ordering guarantee as the struct-field case, over a parameter list.
     #[test]
     fn ridl_413_and_ridl_149_both_report_in_declaration_order() {
-        let checked = check_ridl(
-            "app",
-            &format!(
-                "{PRELUDE}interface Svc {{\n  command setBoth(value : Speed, value : Speed, \
-                 Value : Speed) @[..500ms]\n}}\n"
-            ),
+        let source = format!(
+            "{PRELUDE}interface Svc {{\n  command setBoth(value : Speed, value : Speed, \
+             Value : Speed) @[..500ms]\n}}\n"
         );
+        let checked = check_ridl("app", &source);
         assert_eq!(
             codes(&checked),
             vec!["RIDL-413", "RIDL-149"],
             "got: {:?}",
             checked.diagnostics
+        );
+        // As in the struct-field case, the code set alone does not pin which
+        // `value` RIDL-149 compares against. `PRELUDE` is searched too, so
+        // the offset is taken from the parameter list rather than the file.
+        let list = source
+            .find("setBoth(")
+            .expect("the parameter list is in the source");
+        let first = list
+            + source[list..]
+                .find("value")
+                .expect("the first parameter is in the list");
+        let label = &checked.diagnostics[1].labels[0];
+        assert_eq!(
+            usize::from(label.span.range.start()),
+            first,
+            "`Value` must be compared against the first `value`, not the second"
+        );
+    }
+
+    /// The parameter counterpart of the no-drop contract: both parameters
+    /// still lower, so the message claims no winner.
+    #[test]
+    fn ridl_413_reports_the_duplicate_without_dropping_it() {
+        let checked = check_ridl(
+            "app",
+            &format!(
+                "{PRELUDE}interface Svc {{\n  command setBoth(value : Speed, value : Speed) \
+                 @[..500ms]\n}}\n"
+            ),
+        );
+        assert_eq!(codes(&checked), vec!["RIDL-413"]);
+        let Some(v2::decl::Kind::CommandDef(command)) = &interaction(&checked, "setBoth").kind
+        else {
+            panic!("`setBoth` is not a command");
+        };
+        assert_eq!(
+            command.params.len(),
+            2,
+            "both parameters still lower — this check reports and does not drop"
         );
     }
 
