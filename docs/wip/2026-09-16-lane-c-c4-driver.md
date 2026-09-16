@@ -57,24 +57,34 @@ and pass 2's Critical, the scratch file committed at the repository root, was
 raised by compliance.
 
 So the honest summary is that **the tests lens has the best yield per finding,
-and the dropped lenses found the most consequential ones.** One stage is thin
+and the dropped lenses raised the most consequential ones.** One stage is thin
 evidence either way.
 
-**What is well sourced.** Mixing model families beats adding a third seat of one
-family: an earlier ledger recorded nineteen multi-seat duplicate groups across
-two pull requests reviewed by four Claude seats. Separately, the 2026-09-14
-review-cost measurement — recorded outside this repository — found the tests
-seat the best-yielding of the four, at six unique kept findings for $2.55, with
-compliance producing seventeen findings of which thirteen duplicated another
-seat and one survived. That measurement is real; the first draft of this file
-cited it to the wrong document.
+**One thing the seat tags show that cuts the other way, and it matters.** Two of
+those five were not found by a dropped lens alone. #407 pass 1's docs finding is
+tagged `docs+bugs`, and the Critical is tagged `compliance+docs+tests` — so a
+retained seat co-found each of them, the correctness lens on the first and the
+tests lens on the second. Under this routing both would plausibly still have
+been caught. That is the strongest evidence for two seats being enough, and it
+comes from the seat tags rather than from an argument, which is why every ledger
+line carries one.
 
-**So the reduction is taken on cost, not on evidence that two lenses are
-enough**, and the risk is mitigated rather than denied: **seat 1's brief is
-widened** to carry what docs and compliance were catching — whether the change
-does what it claims, whether prose and code still agree, and whether the records
-this change touches still agree with each other. That widening is the reason two
-seats is defensible; without it the evidence above argues for three.
+**What is well sourced.** Mixing model families beats adding a third seat of the
+same family: an earlier ledger recorded nineteen multi-seat duplicate groups
+across two pull requests reviewed by four Claude seats. Separately, the
+2026-09-14 review-cost measurement — recorded outside this repository — found
+the tests seat the best-yielding of the four, at six unique kept findings for
+$2.55, with compliance producing seventeen findings of which thirteen duplicated
+another seat and one survived. That measurement is real; the first draft of this
+file cited it to the wrong document.
+
+**So the reduction is taken on cost, with the co-discovery above as the reason
+to expect it to hold**, and the residual risk is mitigated rather than denied:
+**seat 1's brief is widened** to carry what docs and compliance were catching —
+whether the change does what it claims, whether prose and code still agree, and
+whether the records this change touches still agree with each other. That
+widening is the reason two seats is defensible; without it the evidence above
+argues for three.
 
 **Revisit this** if a defect of the docs or compliance kind reaches `main`
 through a C4 pull request. Record the seat tag on every ledger line, which is
@@ -169,9 +179,10 @@ Two seats in parallel, one refuter, at most two passes.
              (c) do the records this change touches still agree with each other
                  after it.
            (b) and (c) are here because C3 dropped them from no seat and they
-           still produced its two most consequential findings: a message that
-           asserted something untrue of some inputs, and two records left
-           disagreeing where they had agreed before.
+           still raised its two most consequential findings: a message that
+           asserted something untrue of some of its inputs (b), and a scratch
+           file committed at the repository root, alongside two records left
+           disagreeing where they had agreed (c).
   Seat 2 — Opus 5, taking the TESTS lens explicitly: would each test fail if the
            behaviour were wrong. Not whether tests exist.
            Keep this lens by name. It had the best yield per finding in C3 and in
