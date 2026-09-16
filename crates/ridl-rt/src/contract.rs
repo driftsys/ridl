@@ -185,8 +185,19 @@ pub struct PayloadInfo {
     pub max_size: EncodedSizes,
 }
 
-/// A payload's largest encoded size in bytes, one field per core encoding. A
-/// field is `None` when that encoding cannot carry the payload.
+/// A payload's largest encoded size in bytes, one field per core encoding.
+///
+/// A field is `None` when the toolchain cannot size the payload for that
+/// encoding. That covers two cases the reader does not have to tell apart: the
+/// encoding cannot carry the payload at all, and the encoding can carry it but
+/// the size is not derivable yet, because the story that defines the layout has
+/// not landed. The `repr(C)` column is `None` for every payload until E11.12
+/// defines the C-representable layout, and a backend that emits descriptors
+/// before its codec exists writes `None` for that codec's column too.
+///
+/// So a consumer reads `None` as "no size is available here", never as "this
+/// payload cannot be encoded this way", and asks the catalog descriptor rather
+/// than this field when it needs to know which encodings a payload has.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct EncodedSizes {
     /// The proto3 size.
