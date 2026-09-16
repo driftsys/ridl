@@ -140,6 +140,29 @@ Each stage ends with at least one pull request: C3 opens one per defect, and C4
 one per Epic 10 story. The model named is the one that does the stage's main
 work. The driver of every lane is Opus.
 
+**Fable is unavailable until 2026-09-19, and every row below that names it reads
+as Opus at high effort.** Where a row names Opus, that is Opus at medium effort.
+Sonnet rows are unchanged. Recorded here on 2026-09-16, at Sebastien's
+direction, because this table and the four driver prompts beside it were written
+on 2026-09-13, before the outage, and a session reading them would otherwise ask
+for a model it cannot run. `2026-09-15-lane-m-driver.md` §"Model routing" is
+where the outage was first written down; this is the same fact, with the effort
+levels named.
+
+The distinction the effort levels keep is the one the table already draws: Fable
+holds the design-sensitive half of a stage and Opus the rest — L4 reads "Fable
+for numbering, merge and diff; Opus for the command", B3 "Fable for grammar and
+semantics, Opus for the LSP". Collapsing both to one model without the effort
+split would lose that.
+
+The stages already run under the outage — A1, A3, B1, B3, B4, L1, L2, L4, L5 and
+C1 — substituted without recording what they used. That is not recoverable from
+the record, and it is not worth reconstructing; it is noted so a later reader
+does not take those rows as evidence of what Fable produces.
+
+If a stage has not started by 2026-09-19, prefer Fable for its touchy portion
+instead — check with Sebastien before assuming the outage has lifted.
+
 ### Lane A — `ridl-rt` 0.1.0
 
 Driver prompt: `2026-09-13-lane-a-ridl-rt-driver.md`. Story: #316.
