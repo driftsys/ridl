@@ -6054,6 +6054,18 @@ mod tests {
             2,
             "both fields still lower — this check reports and does not drop"
         );
+        // Cardinality alone would also hold if the second field were dropped
+        // and the first lowered twice. The ordinals distinguish the two: they
+        // are 1-based declaration order (typl §7.4), so a clone of the first
+        // would carry ordinal 1 twice.
+        let ordinals: Vec<u32> = members
+            .iter()
+            .filter_map(|member| match &member.member {
+                Some(v2::struct_member::Member::Field(field)) => Some(field.ordinal),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(ordinals, vec![1, 2], "each declaration lowers as itself");
     }
 
     /// The same name three times reports twice, and every report points back
@@ -6082,6 +6094,10 @@ mod tests {
                 usize::from(diagnostic.labels[0].span.range.start()),
                 first,
                 "every repeat points at the first declaration"
+            );
+            assert!(
+                usize::from(diagnostic.primary.range.start()) > first,
+                "the primary span is the repeat, not the first declaration"
             );
         }
     }
@@ -6162,13 +6178,17 @@ mod tests {
     }
 
     /// The parameter counterpart of the no-drop contract: both parameters
-    /// still lower, so the message claims no winner.
+    /// still lower, so the message claims no winner. The two carry different
+    /// types, because a `Param` has no ordinal to tell one from the other —
+    /// cardinality alone would also hold if the second were dropped and the
+    /// first lowered twice.
     #[test]
     fn ridl_413_reports_the_duplicate_without_dropping_it() {
         let checked = check_ridl(
             "app",
             &format!(
-                "{PRELUDE}interface Svc {{\n  command setBoth(value : Speed, value : Speed) \
+                "{PRELUDE}type Ratio: float [0.0..1.0 step 0.1]\n\
+                 interface Svc {{\n  command setBoth(value : Speed, value : Ratio) \
                  @[..500ms]\n}}\n"
             ),
         );
@@ -6182,6 +6202,57 @@ mod tests {
             2,
             "both parameters still lower — this check reports and does not drop"
         );
+        let types: Vec<&str> = command
+            .params
+            .iter()
+            .filter_map(|param| match param.r#type.as_ref()?.kind.as_ref()? {
+                v2::field_type::Kind::Named(name) => Some(name.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            types,
+            vec!["Speed", "Ratio"],
+            "each declaration lowers as itself"
+        );
+    }
+
+    /// The parameter counterpart of the first-declaration rule: the same name
+    /// three times reports twice, and every report points back at the first
+    /// parameter. Without this the struct side is pinned and the parameter
+    /// side is not — swapping the two spans in `duplicate_param` would leave
+    /// every other parameter test passing.
+    #[test]
+    fn ridl_413_reports_every_repeat_against_the_first_declaration() {
+        let source = format!(
+            "{PRELUDE}interface Svc {{\n  command setBoth(value : Speed, value : Speed, \
+             value : Speed) @[..500ms]\n}}\n"
+        );
+        let checked = check_ridl("app", &source);
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-413", "RIDL-413"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        let list = source
+            .find("setBoth(")
+            .expect("the parameter list is in the source");
+        let first = list
+            + source[list..]
+                .find("value")
+                .expect("the first parameter is in the list");
+        for diagnostic in &checked.diagnostics {
+            assert_eq!(
+                usize::from(diagnostic.labels[0].span.range.start()),
+                first,
+                "every repeat points at the first declaration"
+            );
+            assert!(
+                usize::from(diagnostic.primary.range.start()) > first,
+                "the primary span is the repeat, not the first declaration"
+            );
+        }
     }
 
     // --- TYPL-212/213/214: error vocabulary and result unions -------------
