@@ -185,18 +185,25 @@ Chronological; each recorded in full where cited.
 
 By home; see each reference for full statements.
 
-- **typl §17**: string-backed enums · exclusive bounds · uniqueItems · recursion
-  policy · unit conversion algebra · scientific notation · expr-core deferrals
-  (arithmetic bounds, predicates, infix `match`, invariants) · explicit wire
-  sentinels **(narrowed by ADR-0013 decision 7 to the standards-conformance case
-  — where the backend may choose, `?` needs no syntax)** · byte order home ·
-  canonical encoding · **explicit wire-width floor (deferred `wire` clause,
-  §17.11)** · **integer-backed unit types (§17.12)** · **what a `string` is made
-  of and how it is encoded (§17.13 — to be resolved as normative text in §4 by
-  the finalization pass, not deferred)** · **whether `ridl-diff` should compare
-  `enum`/`enumset` reorder by explicit value instead of position (§17.14)** ·
-  **whether a mid-body insert should also report `member_reordered` for the
-  members it shifts (§17.15)**
+- **typl §17**: every question is now disposed of, and §17's own ledger records
+  each one. Still open, each deferred to a named version: string-backed enums
+  (§17.1, v0.2) · `uniqueItems` as an array constraint, the `set` container
+  rejected (§17.3, v0.2) · unit conversion algebra (§17.5, the rmdl era) ·
+  scientific notation (§17.6, v0.2) · the expr-core deferrals — arithmetic
+  bounds, predicates, infix `match`, invariants (§17.7, the `expr` core) ·
+  standards-fixed invalid sentinels, **narrowed by ADR-0013 decision 7 to the
+  case where a published standard fixes the value** (§17.8, v0.2) · the
+  deployment surface for byte order (§17.9, rsdl v0.2) · the canonical-encoding
+  rule, owned by the frame specification (§17.10, v0.3) · the explicit
+  wire-width floor, the deferred `wire` clause (§17.11, v0.2) · integer-backed
+  unit types (§17.12, v0.2) · whether a reorder arriving with an addition or a
+  removal should also report `member_reordered` (§17.15, v0.2, behind
+  driftsys/ridl#302). **Resolved and moved out of §17:** exclusive bounds
+  (closed — typl §5.5) · recursion policy (closed — typl §7.3) · what a `string`
+  is made of and how it is encoded (typl §4 and §4.4) · value-aware `enum` and
+  `enumset` reorder comparison (typl §8 and §9) · byte order as a type property
+  (typl §4.6) · a canonical encoding as a type-layer property (typl §12.2) · the
+  layout consequence of a width change (typl §5.6).
 - **ridl §17**: selective broadcasts · actions/long-operations idiom ·
   mid-stream invalid policy · reflection service · failure-management spec (with
   safety/HA properties direction) — the QoS boundary question is answered by the

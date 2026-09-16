@@ -133,9 +133,9 @@ true  false  step  match  reserved  error
 idiom. There is **no `default` keyword** (retired) and **no `init` keyword** in
 typl (`init` is rmdl's, where two equations per flow must be disambiguated). The
 **`wire` clause and explicit width names** (`uint8`…`float64`) are **deferred to
-v0.1's open questions** (§17.11): range-first inference plus `ridl-diff`
-breaking-change detection cover the common case, and forward-compat
-width-pinning is a niche refinement not worth ten keywords in v0.1.
+v0.2** (§17.11): range-first inference plus `ridl-diff` breaking-change
+detection cover the common case, and forward-compat width-pinning is a niche
+refinement not worth ten keywords in v0.1.
 
 Keywords **reserved family-wide** but rejected by `.typl` (current registry —
 grows with the other profiles): ridl's `interface`, `service`, `signal`,
@@ -328,13 +328,13 @@ Five primitive types. Primitives are lowercase keywords — visually distinct fr
 `CamelCase` named types. They serve as backing types in `type` definitions;
 direct use as field types is restricted (§15.3).
 
-| Primitive | Meaning                                                         | Constraint                        |
-| --------- | --------------------------------------------------------------- | --------------------------------- |
-| `boolean` | logical true/false                                              | none                              |
-| `integer` | whole number — width inferred from range                        | recommended — profile may require |
-| `float`   | real number — width inferred from range and step                | recommended — profile may require |
-| `string`  | character sequence — default `[0..256]` if unspecified (§17.13) | recommended — profile may require |
-| `bytes`   | opaque binary buffer — default `[0..256]` if unspecified        | recommended — profile may require |
+| Primitive | Meaning                                                               | Constraint                        |
+| --------- | --------------------------------------------------------------------- | --------------------------------- |
+| `boolean` | logical true/false                                                    | none                              |
+| `integer` | whole number — width inferred from range                              | recommended — profile may require |
+| `float`   | real number — width inferred from range and step                      | recommended — profile may require |
+| `string`  | sequence of Unicode scalar values — default `[0..256]` if unspecified | recommended — profile may require |
+| `bytes`   | opaque binary buffer — default `[0..256]` if unspecified              | recommended — profile may require |
 
 ### 4.1 Boolean
 
@@ -368,7 +368,7 @@ genuinely needs all 64 unsigned bits is modelled as `bytes [8]`.
 that safely contains the range. The resolved width is part of the contract:
 widening a range across a width boundary changes the wire type, which is a
 **breaking change** classified by `ridl-diff`. (An explicit width **floor** to
-pre-empt such flips — a `wire` clause — is a deferred open question, §17.11.)
+pre-empt such flips — a `wire` clause — is deferred to v0.2, §17.11.)
 
 ### 4.3 Float
 
@@ -403,18 +403,53 @@ and FlatBuffers keep native `float`/`double`. See Appendix D.
 
 ### 4.4 String
 
-Bound is in characters; encoding (ASCII, UTF-8, UTF-16) is a codegen concern per
-target. Default `[0..256]` when unspecified (warning).
+A `string` is a sequence of **Unicode scalar values**. `string [N]` bounds the
+count of scalar values — not graphemes, which are unbounded, and not bytes,
+which `bytes` counts. Default `[0..256]` when unspecified (warning).
 
-**§17.13 revises both halves of the first sentence** and is where the current
-rule is stated: a character is a Unicode scalar value, and every encoding
-carries a `string` as UTF-8 rather than choosing per target. Until the
-finalization pass moves that text here, §17.13 governs.
+Every encoding carries a `string` as **UTF-8**. The in-memory representation is
+the target language's own — UTF-8 in Rust, UTF-16 in TypeScript, Kotlin and C# —
+and the codec converts at the buffer, as every proto and FlatBuffers runtime on
+those platforms already does. The byte capacity of `string [N]` is therefore
+4·N, which is UTF-16's worst case as well, so UTF-8 costs nothing at the
+maximum.
+
+> **Why not UTF-16 on the wire.** proto3 `string` must be UTF-8 and FlatBuffers
+> `string` is UTF-8, so a UTF-16 wire form means emitting `bytes` and `[ushort]`
+> in the schemas. A consumer generated from those schemas would then see an
+> opaque byte field where the contract says text, which breaks
+> [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
+> decision 4's rule that interoperability is at the bytes, mediated by the
+> emitted schema.
+
+One consequence is not a projection rule and belongs to a runtime rather than to
+an encoding: a JavaScript string may hold a lone surrogate, which is not a
+scalar value and which `TextEncoder` silently replaces with U+FFFD, so a codec
+compiled to wasm cannot see the violation. The TypeScript runtime package checks
+well-formedness at its boundary, before handing the string to the codec, and
+rejects.
+
+Two rules are an encoding's own rather than this reference's: the fixed-capacity
+form a `string` takes in a packed inline layout, and whether a terminator is
+guaranteed for a C reader. Both belong to the `repr(C)` projection record
+([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
+decision 4), which is written when that backend is.
 
 ### 4.5 Bytes
 
 Bound is in bytes; constraint syntax mirrors `string` but has no `match`.
 Default `[0..256]` when unspecified (warning).
+
+### 4.6 Byte Order
+
+**Byte order is not a type property.** A typl declaration never states one, and
+none of the ten inferred widths (§4.2, §4.3) carries an endianness.
+
+Each encoding fixes it: proto3 and FlatBuffers each define their own, and the
+`repr(C)` projection declares one. A transport that carries a per-signal choice
+— CAN and DBC's Intel/Motorola selection is the case that raises the question —
+takes that choice from the deployment, which is rsdl's, and never from the type.
+The rsdl surface for stating it lands with the rsdl rewrite at v0.2 (§17.9).
 
 ---
 
@@ -440,10 +475,12 @@ type Voltage     : V     [0.0..48.0 step 0.1]
 type Ratio       : %     [0.0..100.0 step 0.1]
 ```
 
-The underlying primitive is `float`. UCUM expressions are **case-sensitive**.
-Because a unit type carries unit, range, and step, downstream layers inherit
-dimensional checking and range-driven saturation — rmdl computes with `Speed`,
-not bare `real` (concept note §6).
+In v0.1 the underlying primitive is `float`, whatever the literal type of the
+range (§17.12 records the v0.2 rule, under which integer literals give an
+integer backing). UCUM expressions are **case-sensitive**. Because a unit type
+carries unit, range, and step, downstream layers inherit dimensional checking
+and range-driven saturation — rmdl computes with `Speed`, not bare `real`
+(concept note §6).
 
 Common automotive UCUM units: `km/h`, `Cel`, `N.m`, `/min`, `m/s2`, `bar`, `V`,
 `A`, `W`, `%`.
@@ -481,8 +518,14 @@ No `match` — bytes are opaque.
 
 Ranges are **closed** (inclusive) on both ends. Either bound may be omitted
 (`[0..]`, `[..255]`), in which case the missing bound defaults to the widest
-value the inferred width allows. Exclusive bounds are not supported in v0.1 (see
-§17 and Appendix G).
+value the inferred width allows.
+
+**Exclusive bounds are not supported, and are not planned.** An integer's
+exclusive bound is written as the closed bound one value inside it. A float's
+exclusive bound has no definable neighbour: §4.3 derives the width from the
+range, so "the next representable value" would depend on a width that depends on
+the bound itself. The forcing case that would reopen this: a published contract
+whose semantics genuinely require an open interval on a float.
 
 ### 5.6 Width Is Inferred, Never Written
 
@@ -500,8 +543,15 @@ semantically innocent edit (hardest on FlatBuffers and CAN, invisible on proto3
 varint). v0.1 handles this with the **`ridl-diff` gate alone**: it classifies
 every resolved-width change as breaking, so the flip is caught in CI. An
 _explicit width floor_ that would pre-empt the flip at the source — a `wire`
-clause pinning headroom above the boundary — is deliberately deferred; see
-§17.11.
+clause pinning headroom above the boundary — is deferred to v0.2; see §17.11.
+
+**A resolved width is part of the contract on every encoding, and part of the
+memory layout on some.** On an encoding with a fixed inline layout there is no
+vtable to absorb a change of size, so a width change moves every later field.
+The `ridl-diff` classification above covers both cases, because it is the
+resolved width that it compares. A backend that emits a fixed inline layout must
+therefore treat a width change as a **layout** break and must not rely on a
+reader tolerating it.
 
 ### 5.7 Type Identity — Nominal
 
@@ -649,9 +699,16 @@ expr-core attributes owned by higher profiles and are rejected in `.typl`
 A struct (or union) must not reference itself, directly or through any chain of
 composite references. Recursion makes the wire size unbounded, which contradicts
 the bounded-size guarantee every typl composite otherwise carries. Recursive
-composite reference is a compile error in v0.1 (TYPL-206). If a genuine
-tree/graph payload need arises, it must be modelled with explicit indices into a
-bounded array. (Open to revisiting — §17.)
+composite reference is a compile error (TYPL-206). A genuine tree- or
+graph-shaped payload is modelled with explicit indices into a bounded array.
+
+**This is not provisional.** The bounded-size guarantee is what the rest of the
+language rests on: §12 requires an explicit bound on every variable-size
+collection, §4.3 infers float width from a count of representable values, and an
+encoding with a fixed inline layout cannot exist at all for a shape whose size
+is not known at compile time. The forcing case that would reopen it: a published
+contract whose payload is genuinely tree-shaped and whose depth cannot be
+bounded at the source.
 
 ### 7.4 Field Identity and Evolution
 
@@ -677,8 +734,16 @@ struct DriverProfile {
 ```
 
 Re-declaring a field under a reserved name is a compile error (TYPL-210).
-`reserved` is also valid in `enum` bodies with the retired integer value
-(`reserved 3`) so a wire value is never reused with a new meaning.
+
+**`reserved` in an `enum` body.** Both forms are legal there, and they guarantee
+different things. `reserved 3` retires the wire **value** 3: it is never reused
+with a new meaning. `reserved Retired` retires the **name** `Retired`: it is
+never re-declared, and it says nothing about any wire value — a value is retired
+only by the integer form, because the value a retired name once carried is not
+recoverable from the source that no longer declares it. Re-declaring either
+draws TYPL-210. A backend projects a name tombstone where its target has a name
+reservation of its own — proto3's `reserved "NAME";` — and drops it where its
+target has none, as FlatBuffers does.
 
 - **`ridl-diff` is the enforcement point.** Ordinals are fully derivable from
   source — no sidecar state, no lockfile-assigned numbers. The CI plane
@@ -724,7 +789,20 @@ enum GearPosition {
 - Backing type is `integer`, implicit; all values explicitly assigned; values
   unique (TYPL-203)
 - First value conventionally `= 0` for proto3 compatibility
-- String-backed enums are not supported in v0.1 — see §17 and Appendix G
+- String-backed enums are not supported in v0.1; planned for v0.2 (§17.1)
+
+**Identity is the value, not the position.** An `enum` value's wire identity is
+the explicit number it declares, and nothing about it depends on where the value
+sits in the body. Reordering the members of an `enum` body therefore changes
+nothing on any wire and is not a change. This is the opposite of a struct field
+or a union arm, whose identity _is_ its declaration order (§7.4), and it is why
+an `enum` value may be inserted in the middle of a body while a struct field may
+not.
+
+> **As built.** `ridl-diff` still compares these members by their position in
+> the body and reports a textual reorder as breaking. That is a conservative
+> tool behaviour, not the language rule above; driftsys/ridl#397 makes the
+> comparison value-aware.
 
 ---
 
@@ -732,6 +810,10 @@ enum GearPosition {
 
 An `enumset` is a named bitfield — multiple flags active simultaneously. Backing
 width inferred from the highest bit position.
+
+An `enumset` bit's identity is the bit position it declares, not its position in
+the body, so reordering the members of an `enumset` body changes nothing on any
+wire and is not a change — the same rule as §8's, for the same reason.
 
 ### 9.1 Standalone Form
 
@@ -885,6 +967,16 @@ Keys must be a named string type or primitive:
 metadata : [Label : Name; 0..32]
 sensors  : [Label : Speed; 1..8]
 ```
+
+**A map has no declared entry order, and typl defines no canonical payload
+encoding.** A map is the only typl construct whose ordering is free: an array is
+ordered, a struct field and a union arm are identified by ordinal (§7.4), and an
+`enum` value and an `enumset` bit carry explicit numbers (§8, §9). So a
+bit-reproducible byte sequence — what a signed payload, a content hash or a
+replay plane needs — is a property of an encoding and of the frame that carries
+it, not of the type. The rule that fixes it, including the entry order a map
+serialises in, belongs to the frame specification and to each projection record
+(§17.10).
 
 ### 12.3 Bound Rules
 
@@ -1067,193 +1159,283 @@ Emitted when a `.typl` file (or a package declared `profile = "typl"` in
 
 ## 17. Open Questions
 
-1. **String-backed enums.** JSON Schema, TypeScript, and OpenAPI make string
-   enums the common case; typl v0.1 supports only integer-backed enums (wire
-   efficiency, DBC/CAN mapping). Candidate design:
-   `enum Region : string { EU = "eu", US = "us" }` — integer wire form with a
-   declared string rendering. Deferred.
-2. **Exclusive range bounds.** `exclusiveMinimum`/`exclusiveMaximum` have no
-   typl equivalent; closed bounds + `step` cover the practical automotive cases.
-   Revisit if a real contract needs open intervals.
-3. **`uniqueItems` for arrays.** Not expressible. A `set` collection
-   (`{T; min..max}`?) would cover it; deferred until demanded.
-4. **Recursion policy (§7.3).** Hard error today. If tree-shaped payloads become
-   a real need, a depth-bounded recursion annotation is the likely shape.
-5. **Unit conversion semantics.** UCUM units are currently _labels with
-   dimensional identity_. Whether typl-core defines convertibility (`km/h` ↔
-   `m/s`) for rmdl's benefit, or leaves conversion to codegen, is open.
-6. **Scientific notation** in float literals (blocked at the family lexer level
-   in v0.1).
-7. **Value-rule expressions — deferred to the `expr` core by decision.** typl
-   v0.1 constraints are deliberately closed-form: literal/const ranges, `step`,
-   length bounds, and `match` patterns. Everything requiring a general
-   expression language is deferred to the family `expr` core (concept note open
-   question 6) and will arrive with `require`/`ensure`: **(a)** arithmetic in
-   constraint bounds (`[0.0..MAX_SPEED * 0.5]` — v0.1 bounds accept only
-   literals and plain constant references); **(b)** predicate constraints on a
-   single value (`value % 2 == 0`); **(c)** regex matching as a predicate
-   operator — declarative `match` on string types exists today; when expr lands,
-   the **same `match` keyword** serves infix in predicates
-   (`require vin match VIN_PATTERN`): one keyword, one concept (pattern
-   conformance), two positions. (A `~` sigil was considered and rejected — the
-   family is deliberately sigil-poor, and `match` reads as English to
-   non-programmer audiences); **(d)** cross-field invariants on structs
-   (`min <= max`) — the likely surface is a struct-level `invariant` block
-   completing the Eiffel triad beside ridl's `require`/`ensure`. Rationale for
-   deferral: closed-form constraints keep every typl type decidable for width
-   inference and mechanically derivable into property-test generators; general
-   expressions in constraint position need fencing rules (const-evaluable subset
-   only) that belong to the expr-core specification, not here.
-8. **Init and invalid sentinel values.** _Substantially resolved since drafted:_
-   the init half became §5.8 (init values — a declared bare `= value` or
-   derived), and the invalid half is handled at the interaction layer — ridl
-   §4.5 propagates invalidity as channel state, with the SNA sentinel as its
-   **CAN/AUTOSAR wire realisation**.
+Every question this section has carried is disposed of. A question is either
+**resolved** — its rule has moved into the section of this reference that
+governs it, and it no longer appears below — or **deferred to a named version**,
+in which case it appears below with that version.
 
-   _Narrowed further by
-   [ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 7:_ where
-   the codegen is free to choose the value, no typl syntax is needed — `?`
-   declares the absence and the backend picks a value the range does not use.
-   What remains open is only the case where the backend **may not choose**,
-   because a published standard has fixed the value. Two sub-cases are known and
-   are the inputs to that decision when it is taken:
+The numbers are stable. Other documents cite these questions by number, so a
+resolved question's number is retired rather than reused, and the ledger records
+where its rule now lives. A number with no entry after the ledger is resolved.
 
-   - a single fixed value, as in a brownfield DBC signal whose SNA encoding is
-     already deployed;
-   - several fixed values with **distinct meanings**, as in the ETSI ITS
-     vehicle-length data type, which separates "longer than this field can
-     express" from "not measured". One reserved value cannot carry both, and a
-     consumer can act on the first while it can only abstain on the second.
+### 17.0 Disposition Ledger
 
-   The question is answerable when a conformance target exists. Modelling one
-   published message end to end — a Cooperative Awareness Message is the
-   candidate, since it carries genuinely optional fields, fixed-value fields,
-   and fields whose meaning depends on a sibling — is the way to test a proposal
-   before it becomes syntax.
-9. **Byte order.** CAN/DBC signals carry per-signal byte order (Intel/Motorola);
-   SOME/IP defaults big-endian. typl is silent. Endianness is almost certainly a
-   _transport/deployment_ property (rsdl or codegen profile), not a type
-   property — but that decision needs writing down, and the §7.4 mixed-version
-   decoder rule depends on transport framing too.
-10. **Canonical (deterministic) encoding.** Signed payloads, content-hashing of
-    data, and the replay/test plane all want a bit-reproducible encoding
-    (protobuf's deterministic-marshal caveats are the cautionary tale; map
-    ordering is the classic leak). Likely an IR-spec concern: define canonical
-    field and map ordering per transport.
-11. **Explicit wire-width floor — a deferred `wire` clause.** v0.1 has no
-    surface syntax for wire width (§5.6): a range _is_ the width, inferred once
-    by the compiler, and the ten concrete width names (`uint8 … float64`) are
-    not writable anywhere. This leaves one hazard unhanded at the source:
-    widening a range across a width boundary silently flips the wire type
-    (`uint8 → uint16`), a wire ABI break that today only the `ridl-diff` CI gate
-    catches. A future **`wire` clause** would let an author pin an explicit
-    width _floor_ above the boundary —
-    `type Counter : integer [0..250] wire uint16` — reserving evolution headroom
-    so a later widening does not flip the transport encoding. Design constraints
-    already settled for whenever it lands: the named width must be **at least**
-    the inferred width and of the same signedness class (narrower or
-    sign-incompatible is an error); it never changes the language-layer type
-    (`int64`/`float64`) or the value constraints — the range still validates,
-    only the transport encoding widens; and it is a floor, never a parallel type
-    system (ranges remain the semantic truth). Deferred because the `ridl-diff`
-    gate already prevents the silent break in CI, and the clause is pure
-    evolution ergonomics — worth adding once real contracts have hit the flip in
-    practice and can shape the exact rules (e.g. whether the floor should also
-    be declarable per-field, and how it interacts with the scaled-integer wire
-    form of quantized floats).
-12. **Integer-backed unit types.** A unit type's backing is the literal type of
-    its range: integer literals give an integer backing, float literals give a
-    float backing, and a unit type with no range keeps today's float default, so
-    a range-less declaration is unchanged. A unit type whose range is written
-    with integer literals does change backing, which is what the corpus check
-    below is for. `Latency : ms [0..5000]` is then an integer type carrying a
-    unit, and `Timestamp : us` and `Duration : ms` become declarable in typl as
-    the integers a runtime library already makes them. The grammar already
-    distinguishes `int_lit` from `float_lit`, and TYPL-105 already rejects a
-    `step` whose literal type differs from the range's, so a backing cannot flip
-    unnoticed by editing one number wherever a `step` is declared; where none
-    is, `ridl-diff` is what sees the change, because the backing reaches the IR.
-    The domain type, the width and every encoding follow the rules plain
-    `integer` already has, and the unit algebra of §17.5 is untouched. An
-    explicit backing keyword was rejected: TYPL-105 already makes the flip
-    explicit, and this is the rule every language uses for `1` against `1.0`.
-    Disposition: a v0.2 syntax change. The corpus check when it is implemented
-    is that every unit type written with integer literals today is either a
-    wanted integer or a missing `.0`. Recorded in
-    [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
-    §3.10.
-13. **What a `string` is made of, and how it is encoded.** §4's primitives table
-    calls a `string` a character sequence, §4.4 bounds it in characters, and
-    neither says what a character is; §4.4 does answer how a value reaches a
-    buffer, and answers it the other way — "encoding (ASCII, UTF-8, UTF-16) is a
-    codegen concern per target" — which is the statement this item replaces. The
-    rule to record, as normative text in §4 rather than as a deferral: a
-    `string` is a sequence of Unicode scalar values, and `string [N]` bounds the
-    count of scalar values — not graphemes, which are unbounded, and not bytes,
-    which `bytes` already counts; every encoding carries it as UTF-8, while the
-    in-memory representation stays the language's own (UTF-8 in Rust, UTF-16 in
-    TypeScript, Kotlin and C#) and the codec converts at the buffer, as every
-    proto and FlatBuffers runtime on those platforms already does; and the byte
-    capacity of `string [N]` is 4·N, which is UTF-16's worst case as well, so
-    UTF-8 costs nothing at the maximum. UTF-16 on the wire was rejected: proto3
-    `string` must be UTF-8 and FlatBuffers `string` is UTF-8, so a UTF-16 wire
-    means emitting `bytes` and `[ushort]` in the schemas, and a consumer
-    generated from those schemas sees an opaque byte field where the contract
-    says text, which breaks
-    [ADR-0018](../decisions/ADR-0018-runtime-core-and-generated-surface.md)
-    decision 4's rule that interoperability is at the bytes, mediated by the
-    emitted schema. Per target it is one sentence in
-    [ADR-0017](../decisions/ADR-0017-proto3-projection-rules.md) and one in
-    [ADR-0019](../decisions/ADR-0019-flatbuffers-projection-rules.md), neither
-    of which carries it yet; the fixed-capacity form, and whether a terminator
-    is guaranteed for a C reader, belong to the `repr(C)` projection record
-    ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-    decision 4). One rule is not a projection rule: a JavaScript string may hold
-    a lone surrogate, which `TextEncoder` replaces with U+FFFD and a wasm codec
-    cannot see, so the TypeScript runtime package checks well-formedness at its
-    boundary, before handing the string to the codec, and rejects. That check is
-    the one encoding-aware thing that package carries; every per-type encoding
-    impl and every typl constraint check lives in the generated package
-    ([ADR-0020](../decisions/ADR-0020-third-encoding-runtime-layering-and-plugin-system.md)
-    decision 7). Recorded in
-    [`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
-    §3.11.
-14. **Value-aware enum and enum-set reorder comparison.** `ridl-diff`'s
-    composite-body walk compares a struct field and a union arm by ordinal,
-    because the ordinal is their wire identity (§7.4); an `enum` value and an
-    `enumset` bit carry an explicit number instead (§8, §9), so a textual
-    reorder that changes no number moves no wire value. The walk is not
-    value-aware — it compares an `enum` value or `enumset` bit by its position
-    in the body — so, when both bodies hold the same member names, a textual
-    `enum` or `enumset` reorder is reported the same as a struct-field reorder:
-    breaking (`member_reordered`, with the old and new position in the detail).
-    When the same edit also adds or removes a member, the walk stops at the
-    addition or removal and reports no `member_reordered` (§17.15): an `enum`
-    reorder that arrives with an appended value reaches the classifier as
-    `decl_added` alone, which is compatible, because the classifier judges an
-    `enum` addition by its value. Whether the walk should instead compare `enum`
-    and `enumset` members by their explicit values, and report a textual-only
-    reorder as no change, is open; the conservative, position-based treatment
-    was kept deliberately rather than settled either way
-    (`crates/ridl-diff/src/walk.rs`, `diff_composite` and its `positions`
-    helper).
-15. **A reorder in the same edit as an addition or a removal carries no
-    `member_reordered`.** The walk reports `member_reordered` only when both
-    bodies hold the same member names; with a member added or removed, the
-    report carries the addition or removal alone and does not name the survivors
-    that moved. A member inserted in the middle of a struct or union body, with
-    every later member left in its written order, shifts the ordinal of every
-    member after it and is reported today as one `decl_added`, which the
-    classifier judges breaking under §7.4's append-only rule — the classifier
-    reads the body to judge the addition's direction, not the reorder walk. An
-    `enum` value or `enumset` bit inserted mid-body shifts no number and is
-    judged by its value. A member removed is one `decl_removed`, breaking,
-    whether or not a tombstone replaced it (the carried-debt note above
-    `crates/ridl-diff/src/walk.rs`'s `diff_composite`). Whether the survivors an
-    insertion shifts, or the survivors reordered alongside an addition or
-    removal, should also be reported with `member_reordered` is open; widening
-    the case would reach the name-keyed matching logic that carried-debt comment
-    guards (driftsys/ridl#302).
+| #     | Question                                               | Disposition                                                                                                         |
+| ----- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| 17.1  | String-backed enums                                    | deferred to **v0.2**                                                                                                |
+| 17.2  | Exclusive range bounds                                 | **resolved** — not supported and not planned; the rule and its reason are §5.5                                      |
+| 17.3  | `uniqueItems` for arrays                               | deferred to **v0.2**, as an array constraint; the `set` container is rejected                                       |
+| 17.4  | Recursion policy                                       | **resolved** — the hard error stands; the rule and its reason are §7.3                                              |
+| 17.5  | Unit conversion semantics                              | deferred to **the rmdl era**                                                                                        |
+| 17.6  | Scientific notation in float literals                  | deferred to **v0.2**                                                                                                |
+| 17.7  | Value-rule expressions                                 | deferred to **the family `expr` core**                                                                              |
+| 17.8  | Standards-fixed invalid sentinel values                | deferred to **v0.2**; the rest of the original question is resolved                                                 |
+| 17.9  | Byte order                                             | **resolved for typl** — byte order is not a type property, §4.6; the deployment surface is rsdl's, at **rsdl v0.2** |
+| 17.10 | Canonical (deterministic) encoding                     | **resolved for typl** — not a type-layer property, §12.2; the rule is the frame specification's, at **v0.3**        |
+| 17.11 | Explicit wire-width floor                              | **split**: the layout consequence is resolved in §5.6; the `wire` clause is deferred to **v0.2**                    |
+| 17.12 | Integer-backed unit types                              | deferred to **v0.2**                                                                                                |
+| 17.13 | What a `string` is made of, and how it is encoded      | **resolved** — the rule is §4 and §4.4                                                                              |
+| 17.14 | Value-aware enum and enum-set reorder comparison       | **resolved** — the rule is §8 and §9                                                                                |
+| 17.15 | A reorder in the same edit as an addition or a removal | deferred to **v0.2**, sequenced behind driftsys/ridl#302                                                            |
+
+One question outside this section was disposed of in the same pass: whether a
+name-based `reserved` is legal in an `enum` body, and what it guarantees
+(driftsys/ridl#245). It is legal and it retires the name; the rule is §7.4.
+
+### 17.1 String-Backed Enums — deferred to v0.2
+
+JSON Schema, TypeScript, and OpenAPI make string enums the common case; typl
+v0.1 supports only integer-backed enums (wire efficiency, DBC/CAN mapping).
+Candidate design: `enum Region : string { EU = "eu", US = "us" }` — integer wire
+form with a declared string rendering.
+
+**Deferred to v0.2**, with the candidate design above as the starting point. The
+wire form stays integer, so nothing in §4.2's width table, in `ridl-diff`, or in
+any encoding changes; what is added is a rendering per value, carried to the
+targets that have somewhere to put it. It is the one gap in Appendix G's matrix
+with named external consumers.
+
+### 17.3 `uniqueItems` for Arrays — deferred to v0.2
+
+Not expressible today. The `set` collection once suggested here
+(`{T; min..max}`) is **rejected**: no target this family emits has a set type —
+proto3, FlatBuffers and `repr(C)` each carry a vector plus a rule — so a set
+container would add a surface with no projection, and every backend would
+flatten it back into an array.
+
+Uniqueness is instead a **constraint on an array**, alongside the range, `step`,
+length bound and `match`: enforced by the generated validator and carried as
+documentation on the wire targets. **Deferred to v0.2**, where the generated
+validator is the enforcement point.
+
+### 17.5 Unit Conversion Semantics — deferred to the rmdl era
+
+UCUM units are currently _labels with dimensional identity_. Whether typl-core
+defines convertibility (`km/h` ↔ `m/s`), or leaves conversion to codegen, is
+open.
+
+**Deferred to the rmdl era** — the question is claimed by rmdl §12 open question
+8, where cross-unit arithmetic (`Speed * Duration : Length`) makes it concrete,
+and RMDL-106's explicit-conversion rule is the stopgap until then. typl's own
+commitment is unchanged and is not waiting on that answer: a unit is a label
+with dimensional identity, and nominal identity (§5.7) forbids implicit
+conversion in every profile.
+
+### 17.6 Scientific Notation in Float Literals — deferred to v0.2
+
+A v0.1 float literal must contain a decimal point and admits no exponent (§2.5).
+The restriction is at the family lexer, so it binds every profile, and rmdl is
+where it is felt: gains, tolerances and small time constants are where exponent
+notation earns its place.
+
+**Deferred to v0.2**, as a family lexer change. **Precondition:** the exponent
+form must not collide with the number-plus-unit-atom merge the same lexer
+performs. That merge is restricted to the UCUM time atoms (`us`, `ms`, `s`,
+`min`, `h`), none of which begins with `e`, but UCUM has atoms that do (`eV`).
+The check before the pattern changes is that no literal position in the v0.2
+grammar admits a bare unit atom after a number.
+
+### 17.7 Value-Rule Expressions — deferred to the family `expr` core
+
+typl v0.1 constraints are deliberately closed-form: literal/const ranges,
+`step`, length bounds, and `match` patterns. Everything requiring a general
+expression language is deferred to the family `expr` core and will arrive with
+`require`/`ensure`: **(a)** arithmetic in constraint bounds
+(`[0.0..MAX_SPEED * 0.5]` — v0.1 bounds accept only literals and plain constant
+references); **(b)** predicate constraints on a single value (`value % 2 == 0`);
+**(c)** regex matching as a predicate operator — declarative `match` on string
+types exists today; when expr lands, the **same `match` keyword** serves infix
+in predicates (`require vin match VIN_PATTERN`): one keyword, one concept
+(pattern conformance), two positions. (A `~` sigil was considered and rejected —
+the family is deliberately sigil-poor, and `match` reads as English to
+non-programmer audiences); **(d)** cross-field invariants on structs
+(`min <= max`) — the likely surface is a struct-level `invariant` block
+completing the Eiffel triad beside ridl's `require`/`ensure`.
+
+Rationale for the deferral: closed-form constraints keep every typl type
+decidable for width inference and mechanically derivable into property-test
+generators; general expressions in constraint position need fencing rules
+(const-evaluable subset only) that belong to the expr-core specification, not
+here. TYPL-303 already rejects `require`/`ensure` in a `.typl` context, which is
+the boundary this deferral protects.
+
+**The target is anchored.** The `expr` core is the
+[expr-core Specification](expr-core-specification.md) (family overview §2;
+concept note open question 6), whose guaranteed subset is roadmap story E2 and
+whose function layer is E5.1. Sub-items (a) to (c) are constraint-position
+expressions and are the expr core's entirely. Sub-item (d)'s expression language
+is likewise the expr core's, but its **surface** — a struct-level `invariant`
+block — is a typl declaration shape and lands in §7 when the expr core does.
+
+### 17.8 Standards-Fixed Invalid Sentinel Values — deferred to v0.2
+
+Most of the original question is resolved and lives elsewhere. The init half is
+§5.8 (a declared bare `= value`, or derived). The invalid half is handled at the
+interaction layer: ridl §4.5 propagates invalidity as channel state, with the
+SNA sentinel as its CAN/AUTOSAR wire realisation. Where the codegen is free to
+choose the value, [ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md)
+decision 7 settles it and no typl syntax is needed — `?` declares the absence,
+the backend picks a value the declared range does not use and does not surface
+it in the generated API, and where the range has no room the backend fails with
+a diagnostic.
+
+What remains open is the case where the backend **may not** choose, because a
+published standard has fixed the value. Two sub-cases are known and are the
+inputs to the decision:
+
+- a single fixed value, as in a brownfield DBC signal whose SNA encoding is
+  already deployed;
+- several fixed values with **distinct meanings**, as in the ETSI ITS
+  vehicle-length data type, which separates "longer than this field can express"
+  from "not measured". One reserved value cannot carry both, and a consumer can
+  act on the first while it can only abstain on the second. This is a contract
+  fact rather than a backend fact, which is why it is not pushed to a backend
+  annotation.
+
+**Deferred to v0.2.** It is answerable when a conformance target exists:
+modelling one published message end to end — a Cooperative Awareness Message is
+the candidate — is the way to test a proposal before it becomes syntax.
+
+### 17.9 Byte Order — resolved for typl; the deployment surface is rsdl v0.2
+
+CAN/DBC signals carry per-signal byte order (Intel/Motorola) and SOME/IP
+defaults big-endian, and typl was silent.
+
+**Resolved for typl:** byte order is not a type property. The rule is §4.6.
+
+**Deferred, rsdl v0.2:** the surface by which a deployment states the byte order
+of a transport that carries a choice belongs to rsdl, and lands with the rsdl
+rewrite at v0.2 (family overview decision ledger #36). A typl rule cannot be
+written against rsdl surface that does not exist yet, which is why this half is
+named rather than written here. The same deployment surface is what §7.4's
+mixed-version decoder rule needs on a transport that cannot carry unknown
+trailing fields.
+
+### 17.10 Canonical (Deterministic) Encoding — resolved for typl; the rule is the frame specification's, at v0.3
+
+Signed payloads, content-hashing of data, and the replay/test plane all want a
+bit-reproducible encoding (protobuf's deterministic-marshal caveats are the
+cautionary tale; map ordering is the classic leak).
+
+**One correction to this question as it was first written.** It guessed the
+answer was "likely an IR-spec concern". The **IR's** own canonical form is
+settled — [ADR-0014](../decisions/ADR-0014-ir-encodings.md) decision 9 makes the
+binary encoding canonical — and that is a different artifact. This question is
+about the **payload** encoding a contract's values travel in, which ADR-0014
+does not touch.
+
+**Resolved for typl:** a canonical payload encoding is not a type-layer
+property, and the one ordering typl controls is a map's key order. The rule is
+§12.2.
+
+**Deferred, v0.3:** a reproducible byte sequence for a transmitted unit is a
+property of an encoding and its frame, so the rule belongs to the frame
+specification (roadmap story E11.1) and to each projection record, not to this
+reference.
+
+### 17.11 Explicit Wire-Width Floor — a deferred `wire` clause, v0.2
+
+v0.1 has no surface syntax for wire width (§5.6): a range _is_ the width,
+inferred once by the compiler, and the ten concrete width names
+(`uint8 … float64`) are not writable anywhere. This leaves one hazard unhanded
+at the source: widening a range across a width boundary silently flips the wire
+type (`uint8 → uint16`), a wire ABI break that today only the `ridl-diff` CI
+gate catches.
+
+A future **`wire` clause** would let an author pin an explicit width _floor_
+above the boundary — `type Counter : integer [0..250] wire uint16` — reserving
+evolution headroom so a later widening does not flip the transport encoding.
+
+**Design constraints already settled, for whenever it lands:** the named width
+must be **at least** the inferred width and of the same signedness class
+(narrower or sign-incompatible is an error); it never changes the language-layer
+type (`int64`/`float64`) or the value constraints — the range still validates,
+only the transport encoding widens; and it is a floor, never a parallel type
+system (ranges remain the semantic truth). Whether the floor should also be
+declarable per-field, and how it interacts with the scaled-integer wire form of
+quantized floats, are the two rules a real contract should shape.
+
+**Deferred to v0.2.** The `ridl-diff` gate already prevents the silent break in
+CI, and the clause is pure evolution ergonomics. The forcing case that reopens
+it is [ADR-0013](../decisions/ADR-0013-codegen-backend-scope.md) decision 6's: a
+deployment that needs to widen a range on a FlatBuffers-bound contract without a
+coordinated flag day.
+
+**One catalogue entry moves with the clause.** TYPL-112 makes a concrete
+wire-width name written in source an error (§16.2). A `wire` clause makes that
+rule conditional — the name becomes writable in exactly one position — so the
+two are reconciled together when the clause lands.
+
+**The half that is not deferred** is the consequence a fixed inline layout
+carries, which is now stated in §5.6: a resolved width change is a layout break
+as well as a wire break, and `ridl-diff` classifies it breaking on both counts.
+No encoding has to wait for the clause to know that.
+
+### 17.12 Integer-Backed Unit Types — deferred to v0.2
+
+A unit type's backing would be the literal type of its range: integer literals
+give an integer backing, float literals give a float backing, and a unit type
+with no range keeps today's float default, so a range-less declaration is
+unchanged. `Latency : ms [0..5000]` is then an integer type carrying a unit, and
+`Timestamp : us` and `Duration : ms` become declarable in typl as the integers a
+runtime library already makes them.
+
+The grammar already distinguishes `int_lit` from `float_lit`, and TYPL-105
+already rejects a `step` whose literal type differs from the range's, so a
+backing cannot flip unnoticed by editing one number wherever a `step` is
+declared; where none is, `ridl-diff` is what sees the change, because the
+backing reaches the IR. The domain type, the width and every encoding follow the
+rules plain `integer` already has, and the unit algebra of §17.5 is untouched.
+An explicit backing keyword was rejected: TYPL-105 already makes the flip
+explicit, and this is the rule every language uses for `1` against `1.0`.
+
+**Deferred to v0.2, and it is not a v0.1 change.** §5.1 fixes the backing of a
+unit type to `float`, so the new rule changes the backing, the inferred width
+and the IR of every unit type already declared with integer literals, and
+`ridl-diff` classifies each as a breaking width change. A point release that
+turns every such published contract into a breaking diff is not a point release.
+The corpus check runs before the change lands, not after: every unit type
+written with integer literals today is either a wanted integer or a missing
+`.0`. Recorded in
+[`docs/wip/2026-09-12-release-scope-and-plugin-system-design.md`](../wip/2026-09-12-release-scope-and-plugin-system-design.md)
+§3.10.
+
+### 17.15 A Reorder in the Same Edit as an Addition or a Removal — deferred to v0.2
+
+`ridl-diff`'s walk reports `member_reordered` only when both bodies hold the
+same member names; with a member added or removed, the report carries the
+addition or removal alone and does not name the survivors that moved.
+
+**Until it is taken, the report is incomplete rather than wrong.** A member
+inserted in the middle of a struct or union body, with every later member left
+in its written order, shifts the ordinal of every member after it and is
+reported as one `decl_added`, which the classifier judges breaking under §7.4's
+append-only rule — the classifier reads the body to judge the addition's
+direction, rather than relying on the reorder walk. An `enum` value or `enumset`
+bit inserted mid-body shifts no number and is judged by its value (§8, §9). A
+member removed is one `decl_removed`, breaking, whether or not a tombstone
+replaced it.
+
+**Deferred to v0.2, sequenced behind driftsys/ridl#302.** Widening the case
+reaches the name-keyed matching logic that `crates/ridl-diff/src/walk.rs`'s
+carried-debt comment guards, and #302 records why that logic cannot move alone:
+on FlatBuffers a union arm's discriminant is implicit in declaration order, so a
+tombstoned retirement that the widened logic would call compatible shifts every
+later arm. #302 also records why the backend cannot move alone — explicit union
+member values pin the discriminants, but `flatc` 25.12.19 accepts the form while
+`planus` 1.3.0 rejects it, so taking it would put the union path outside the
+validity oracle. The blocking constraint is that oracle gap, and no edit to this
+reference removes it.
 
 ---
 
@@ -1537,8 +1719,9 @@ remains a contract-breaking change per `ridl-diff`.
 **FlatBuffers.** Full `uint8..uint64` palette — the cleanest width mapping.
 Field ids are the typl ordinals emitted as `(id: N)` attributes. FlatBuffers is
 the most width-brittle target: any resolved-width change is a hard wire break —
-the primary motivation for a future `wire` floor (§17.11); in v0.1 the
-`ridl-diff` gate is the sole guard. A struct whose fields are all fixed-width
+the primary motivation for the `wire` floor deferred to v0.2 (§17.11); until it
+lands the `ridl-diff` gate is the sole guard, and it is also a layout break
+rather than only a wire break (§5.6). A struct whose fields are all fixed-width
 and non-optional may be emitted as a FlatBuffers `struct` (inline, zero
 indirection) instead of a `table`; the IR carries a `fixed_layout` flag for
 this. **The built FlatBuffers projection does not take that allowance**
@@ -1725,7 +1908,7 @@ This specification is the successor, not a superset. The mapping:
 | `int[0..300]`, `float[0..1.0]` postfix ranges           | `integer [0..300]`, `float [0.0..1.0 step s]`                       | kept in spirit; family `name : Type [constraint]` syntax; `step` added                                                                                               |
 | `string[3..6]`, `bytes[32]` length shapes               | `string [3..6]`, `bytes [32]`                                       | kept                                                                                                                                                                 |
 | `pattern /re/` shape                                    | `match /re/` inside the string constraint                           | merged into the constraint; named regex constants added                                                                                                              |
-| `'low' \| 'mid' \| 'high'` literal-union enums          | `enum` (integer-backed)                                             | **not carried over** — string enums are an open question (§17.1)                                                                                                     |
+| `'low' \| 'mid' \| 'high'` literal-union enums          | `enum` (integer-backed)                                             | **not carried over** — string enums are planned for v0.2 (§17.1)                                                                                                     |
 | `{ field: shape }` records                              | `struct`                                                            | kept; structs are named and closed                                                                                                                                   |
 | `element[](min..max)` arrays                            | `[T; min..max]`                                                     | kept; bounds made mandatory                                                                                                                                          |
 | `shape?` optional                                       | `field : T?`                                                        | kept                                                                                                                                                                 |
@@ -1762,14 +1945,14 @@ stricter), ✗ not expressible (deliberate or open).
 | `type: array`                                                 | `[T; N]`, `[T; min..max]`                                                              | ✓ bounds mandatory                                                                                                                                                            |
 | `type: object` (free-form)                                    | `struct` (closed) or `[K:V; min..max]` map                                             | ≈ stricter                                                                                                                                                                    |
 | `minimum` / `maximum`                                         | `[min..max]`                                                                           | ✓                                                                                                                                                                             |
-| `exclusiveMinimum` / `exclusiveMaximum`                       | —                                                                                      | ✗ open question §17.2                                                                                                                                                         |
+| `exclusiveMinimum` / `exclusiveMaximum`                       | —                                                                                      | ✗ deliberate — not supported and not planned (§5.5)                                                                                                                           |
 | `multipleOf`                                                  | `step` (quantization anchored at range min)                                            | ✓                                                                                                                                                                             |
 | `minLength` / `maxLength`                                     | `string [min..max]`                                                                    | ✓                                                                                                                                                                             |
 | `pattern`                                                     | `match /re/` or named regex `const`                                                    | ✓ + reusable named patterns                                                                                                                                                   |
 | `format` (uuid, email, uri, ipv4, date, …)                    | `ridl.std` named types (`Uuid`, `Email`, `Uri`, `IpV4`, `Date`, …)                     | ✓ and normative (JSON Schema `format` is annotation-only by default)                                                                                                          |
 | `contentEncoding` / `contentMediaType`                        | `bytes` + doc comment                                                                  | ≈ partial                                                                                                                                                                     |
 | `minItems` / `maxItems`                                       | `[T; min..max]`                                                                        | ✓ mandatory                                                                                                                                                                   |
-| `uniqueItems`                                                 | —                                                                                      | ✗ open question §17.3                                                                                                                                                         |
+| `uniqueItems`                                                 | —                                                                                      | ✗ v0.2 (§17.3) — an array constraint, not a `set` container                                                                                                                   |
 | `prefixItems` (positional tuple)                              | named tuples `(a: T, b: U)`                                                            | ≈ named, not positional — deliberate                                                                                                                                          |
 | `contains` / `minContains` / `maxContains`                    | —                                                                                      | ✗ deliberate (validation logic, not shape)                                                                                                                                    |
 | `properties` + `required`                                     | `struct` fields; optional via `?` (required is the default)                            | ✓ inverted default, stricter                                                                                                                                                  |
@@ -1779,7 +1962,7 @@ stricter), ✗ not expressible (deliberate or open).
 | `minProperties` / `maxProperties`                             | map bounds                                                                             | ✓                                                                                                                                                                             |
 | `dependentRequired` / `dependentSchemas` / `if`/`then`/`else` | —                                                                                      | ✗ deliberate: conditional shape is undecidable for width inference and hostile to certification; cross-field invariants belong to `expr` contracts in higher profiles (§17.7) |
 | `enum` (numeric)                                              | `enum`                                                                                 | ✓                                                                                                                                                                             |
-| `enum` (string literals)                                      | —                                                                                      | ✗ open question §17.1                                                                                                                                                         |
+| `enum` (string literals)                                      | —                                                                                      | ✗ v0.2 (§17.1) — integer wire form with a declared rendering                                                                                                                  |
 | `const` (fixed value in schema position)                      | `const` declarations; fixed-value field via `[N]` exact forms                          | ≈                                                                                                                                                                             |
 | `oneOf` (discriminated)                                       | `union` (tagged)                                                                       | ✓ stricter — tag is structural                                                                                                                                                |
 | `anyOf` / `allOf` / `not`                                     | —                                                                                      | ✗ deliberate: open-world combinators break the faithful-codegen guarantee (no clean proto/FlatBuffers/DBC mapping)                                                            |
@@ -1802,8 +1985,10 @@ module system with declared-once semantics, and type-checked init values. What
 it refuses is JSON Schema's _validation-logic_ stratum (conditionals,
 combinators, `contains`, unevaluated*) — deliberately, because those constructs
 have no faithful mapping onto proto/FlatBuffers/CAN and defeat static width/size
-guarantees. The honest gaps to track are the four in §17: string enums,
-exclusive bounds, uniqueItems, and recursion.
+guarantees. Of the four gaps this appendix once tracked as open, two are now
+closed by decision — exclusive bounds (§5.5) and recursion (§7.3) — and two are
+planned for v0.2: string enums (§17.1) and `uniqueItems` as an array constraint
+(§17.3).
 
 ### G.3 Other prior art consulted
 
