@@ -428,6 +428,31 @@ impl Loader {
                 "more than one `package` declaration in this file".to_string(),
             ));
         }
+        if let Some((declared, range)) = decls.first()
+            && crate::std_lib::is_reserved_package_name(declared)
+        {
+            // Reported on the declaration rather than on the manifest or the
+            // directory, because that is the one place both paths meet: a
+            // workspace member and single-file mode both arrive here, and the
+            // issue this closes (driftsys/ridl#203) names both.
+            //
+            // The message states only the unreachability, which always holds.
+            // The artifact overwrite that issue reports is a consequence in
+            // package and workspace mode, where the output base is the package
+            // name; in single-file mode the base is the file stem, so it
+            // collides only when that stem is itself `ridl.std`, whatever the
+            // extension. That distinction belongs in the catalogue entry, not
+            // in a message that would then be false for some of the inputs it
+            // greets.
+            self.diagnostics.push(error(
+                DiagCode::TYPL_010,
+                file_id,
+                *range,
+                format!(
+                    "`{declared}` is provided by the compiler, so a package cannot declare it; every package already imports all of `{declared}` implicitly (typl §3.2), which leaves these declarations unreachable under their own name. Rename the package"
+                ),
+            ));
+        }
         if let (Some(expected), Some((declared, range))) = (expected, decls.first())
             && !declared.is_empty()
             && declared != expected
@@ -550,6 +575,108 @@ mod tests {
     }
 
     const PACKAGE_MANIFEST: &str = "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n";
+
+    /// TYPL-010: a workspace member cannot declare a name the compiler
+    /// provides (driftsys/ridl#203). Before this check the member compiled
+    /// clean, its declarations were unreachable because every package already
+    /// imports all of `ridl.std` implicitly, and its generated artifact was
+    /// overwritten by the standard package's own.
+    #[test]
+    fn a_package_declaring_a_reserved_name_is_refused() {
+        const SOURCE: &str = "package ridl.std\ntype MyOwnType: m\n";
+        let dir = TempDir::new("reserved-name");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"ridl.std\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("own.typl", SOURCE);
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(
+            codes(&loaded.diagnostics),
+            vec!["TYPL-010"],
+            "got: {:?}",
+            loaded.diagnostics
+        );
+        let diagnostic = &loaded.diagnostics[0];
+        assert!(
+            diagnostic.message.contains("ridl.std"),
+            "the message names the package: {}",
+            diagnostic.message
+        );
+        // The message states only what holds for every input that draws it.
+        // The artifact collision does not: in single-file mode the output base
+        // is the file stem. Asserting the absence keeps that clause from
+        // returning to the message without the test noticing.
+        assert!(
+            diagnostic.message.contains("unreachable"),
+            "the message states the consequence that always holds: {}",
+            diagnostic.message
+        );
+        for conditional in ["artifact", "overwrit"] {
+            assert!(
+                !diagnostic.message.contains(conditional),
+                "`{conditional}` is true only where the output base is the package name, \
+                 so it belongs in the catalogue entry, not the message: {}",
+                diagnostic.message
+            );
+        }
+        // The declaration is what is pointed at, not the manifest or the
+        // directory: it is the one place a workspace member and single-file
+        // mode both pass through. Both ends are asserted, against the source
+        // itself, so an over-wide span covering the whole file cannot pass.
+        let declaration = SOURCE
+            .lines()
+            .next()
+            .expect("the declaration is the first line");
+        assert_eq!(
+            (
+                usize::from(diagnostic.primary.range.start()),
+                usize::from(diagnostic.primary.range.end()),
+            ),
+            (0, declaration.len()),
+            "reported on `{declaration}` exactly"
+        );
+    }
+
+    /// The same refusal in single-file mode — `ridlc build ridl_std.typl`,
+    /// the second form driftsys/ridl#203 names. Single-file mode is exempt
+    /// from TYPL-002, so nothing else would have caught it.
+    #[test]
+    fn a_single_file_declaring_a_reserved_name_is_refused() {
+        let dir = TempDir::new("reserved-name-single");
+        let file = dir.write("ridl_std.typl", "package ridl.std\ntype MyOwnType: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, &file).expect("single-file mode loads");
+        assert_eq!(
+            codes(&loaded.diagnostics),
+            vec!["TYPL-010"],
+            "got: {:?}",
+            loaded.diagnostics
+        );
+    }
+
+    /// A name that merely starts with `ridl.` is not reserved: the reservation
+    /// is the set of packages the compiler provides, not a namespace policy.
+    #[test]
+    fn only_a_compiler_provided_name_is_reserved() {
+        let dir = TempDir::new("near-reserved");
+        dir.write(
+            "ridl.toml",
+            "[package]\nname = \"ridl.stdlib\"\nversion = \"1.0.0\"\n",
+        );
+        dir.write("own.typl", "package ridl.stdlib\ntype MyOwnType: m\n");
+
+        let mut db = RidlDatabase::default();
+        let loaded = load_workspace(&mut db, dir.path()).expect("the package loads");
+        assert_eq!(
+            loaded.diagnostics,
+            Vec::new(),
+            "`ridl.stdlib` is not a package the compiler provides"
+        );
+    }
 
     /// (a) A two-file package loads, both files parse, and editing one
     /// re-parses only it — asserted by the re-executed query's `database_key`

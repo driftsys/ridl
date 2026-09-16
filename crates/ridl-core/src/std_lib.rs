@@ -12,6 +12,23 @@ use crate::package::{Package, PackageOrigin};
 /// The `ridl.std` source, verbatim from the typl reference Appendix A.
 pub const RIDL_STD_SOURCE: &str = include_str!("../assets/ridl_std.typl");
 
+/// The package name the embedded source declares.
+pub const RIDL_STD_NAME: &str = "ridl.std";
+
+/// Every package name the compiler provides itself, which a user package
+/// therefore cannot declare (TYPL-010).
+///
+/// Derived from what is built in rather than from a reserved-prefix policy:
+/// the list is exactly the set of compiler-provided packages, so a second
+/// built-in joins it here and the diagnostic follows without a rule change.
+/// Nothing else under `ridl.` is reserved.
+pub const RESERVED_PACKAGE_NAMES: &[&str] = &[RIDL_STD_NAME];
+
+/// Whether `name` is a package the compiler provides.
+pub fn is_reserved_package_name(name: &str) -> bool {
+    RESERVED_PACKAGE_NAMES.contains(&name)
+}
+
 /// The virtual path the embedded source is registered under. The `<builtin>`
 /// prefix marks it as compiler-provided, not a filesystem path.
 pub const RIDL_STD_PATH: &str = "<builtin>/ridl_std.typl";
@@ -28,7 +45,7 @@ pub fn std_package(db: &mut RidlDatabase) -> Package {
     let file = InputFile::new(&*db, RIDL_STD_PATH.to_string(), RIDL_STD_SOURCE.to_string());
     let package = Package::new(
         &*db,
-        "ridl.std".to_string(),
+        RIDL_STD_NAME.to_string(),
         vec![file],
         PackageOrigin::Std,
         std::collections::BTreeMap::new(),

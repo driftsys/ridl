@@ -280,6 +280,20 @@ diag_codes! {
         TYPL_009 = "TYPL-009", Error,
             "duplicate definition of the same name in a package";
 
+        /// A package declaring a name the compiler provides itself (typl
+        /// §3.1, §16.1). Error, and not a warning, because such a package can
+        /// never work: `ridl.std` is implicitly imported by every package
+        /// (typl §3.2) rather than resolved through an import, so a user copy
+        /// is unreachable by its own name. In package and workspace mode the
+        /// generated artifact is overwritten by the standard package's too,
+        /// because the output base is the package name; in single-file mode
+        /// the base is the file stem, so that second consequence follows only
+        /// when the stem is itself `ridl.std`, whatever the extension.
+        /// Reported on the `package` declaration, in a workspace member and
+        /// in single-file mode alike.
+        TYPL_010 = "TYPL-010", Error,
+            "package name is reserved for a package the compiler provides";
+
         /// `integer` without a range constraint (typl §16.2). Warning.
         TYPL_101 = "TYPL-101", Warning,
             "`integer` without a range constraint";
