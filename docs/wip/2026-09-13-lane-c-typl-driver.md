@@ -8,6 +8,12 @@ the same time. Archive this file with the lanes plan.
 
 ## Model routing
 
+**Fable is unavailable until 2026-09-19.** Read every "Fable" below as Opus at
+high effort, and every "Opus" as Opus at medium effort; Sonnet is unchanged. The
+escalation on a failed fix loop becomes Opus at high effort. Recorded 2026-09-16
+at Sebastien's direction; the authoritative statement is §4 of
+`2026-09-13-step1-lanes-plan.md`.
+
 - Driver: Opus.
 - C1 E14.1: Fable drafts the disposition table; Sebastien decides.
 - C2 plan refresh: Sonnet checks every file, line and code reference in the plan
@@ -17,6 +23,18 @@ the same time. Archive this file with the lanes plan.
 - C4 Epic 10: Fable for Tasks 3 and 6 and the naming task; Opus for Tasks 1, 7,
   8 and 10; Sonnet for Tasks 2, 4 and 5. Opus for the second-stage review. Move
   an implementer to Fable after one failed fix loop.
+
+## Stages already run
+
+C1, C2 and C3 have merged; **C4 is the only stage left.** C1 closed E14.1 (#318)
+and discharged #245 with no code. C2 refreshed the value-objects plan and was
+followed by #404, which moved the constraint error to
+`ridl_rt::payload::Violation` and closed that plan's Open item 3. C3 closed #244
+and #203, minting TYPL-215, RIDL-413 and TYPL-010.
+
+**C4 is blocked only on decision D** — Open item 4 of
+`docs/wip/typl-value-objects-plan.md`, what a colliding union arm does. It gates
+the #237 half of Task 11 and nothing else.
 
 ## The prompt
 
