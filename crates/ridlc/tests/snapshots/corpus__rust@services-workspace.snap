@@ -4,7 +4,6 @@ expression: compiled.rust
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
 // ===== package fleet.contracts =====
-use ridl_rt::payload::{Rule, Violation};
 #[repr(transparent)]
 pub struct DoorId(pub i64);
 impl Default for DoorId {
@@ -62,7 +61,6 @@ impl Default for DoorFault {
 
 
 // ===== package fleet.legacy =====
-use ridl_rt::payload::{Rule, Violation};
 /// The M1 fleet's door failure set, kept for contracts still on the old wire.
 #[repr(i64)]
 pub enum DoorFault {

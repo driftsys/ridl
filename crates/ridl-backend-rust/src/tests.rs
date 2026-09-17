@@ -340,51 +340,6 @@ fn enumset_derived_form() {
 }
 
 #[test]
-fn a_pure_typl_package_names_the_runtime_violation() {
-    // A package with no interface still reaches ridl-rt, because a named
-    // scalar's constructor returns its Violation.
-    let source = rust_for(vec![speed_decl()]);
-    assert!(
-        source.contains("use ridl_rt::payload::{Rule, Violation};"),
-        "got:\n{source}"
-    );
-    // No generated error type: the library owns this one.
-    assert!(!source.contains("enum ConstraintError"));
-}
-
-#[test]
-fn a_vacuous_named_scalar_does_not_name_the_runtime() {
-    // `Counter` is an integer backing with no min, max, length bound, or
-    // pattern — its constraint is vacuous, so its constructor has nothing to
-    // check and never returns a Violation. Emitting the `use` unconditionally
-    // would draw an unused import here.
-    let source = rust_for(vec![counter_decl()]);
-    assert!(
-        !source.contains("ridl_rt"),
-        "a package of only vacuous types must not name ridl_rt, got:\n{source}"
-    );
-}
-
-#[test]
-fn an_enum_names_the_runtime_violation() {
-    // An enum's constructor rejects an out-of-range discriminant with a
-    // Violation, even though nothing about an enum is a "constraint" in the
-    // TypeDef sense the predicate's other arm tests.
-    let decls = vec![public_decl(
-        "GearPosition",
-        v2::decl::Kind::EnumDef(v2::EnumDef {
-            values: vec![enum_value("PARK", 0), enum_value("DRIVE", 1)],
-            reserved: Vec::new(),
-        }),
-    )];
-    let source = rust_for(decls);
-    assert!(
-        source.contains("use ridl_rt::payload::{Rule, Violation};"),
-        "got:\n{source}"
-    );
-}
-
-#[test]
 fn result_union() {
     let reading = v2::StructDef {
         members: vec![field_member(named_field(
@@ -653,7 +608,6 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("internal_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
-    let rlib = ridl_rt_rlib(dir.path());
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -669,8 +623,6 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
         ])
         .arg("-o")
         .arg(dir.path().join("internal_tuple.rmeta"))
-        .arg("--extern")
-        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1248,7 +1200,13 @@ fn appendix_b_rust_snapshot() {
 }
 
 /// Builds `ridl-rt` as an rlib with plain `rustc`, so a compile proof can
-/// pass `--extern ridl_rt=<path>` for the `use` the generated code emits.
+/// pass `--extern ridl_rt=<path>` for the generated source that names the
+/// runtime.
+///
+/// No compile proof passes `--extern` yet, because no generated code names
+/// `ridl_rt` until the constructors land in Task 3;
+/// [`the_compile_proof_harness_links_ridl_rt`] is what keeps this helper
+/// honest until then.
 ///
 /// One `rustc` call over its `lib.rs` is the whole build: `ridl-rt` is
 /// `no_std` and has no dependency in any feature combination (ADR-0021
@@ -1287,6 +1245,81 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
     rlib
 }
 
+#[test]
+fn the_compile_proof_harness_links_ridl_rt() {
+    // The harness Task 3's compile proofs will use. Source naming the
+    // runtime by its absolute path must compile against the rlib this
+    // helper builds, and must fail without it. Without the second half,
+    // a helper that produced an unusable rlib would go unnoticed until
+    // the proof that needs it was written.
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("names_the_runtime.rs");
+    std::fs::write(
+        &source_path,
+        // The shape the generated constructors will use: the absolute path,
+        // no `use` line, so no name enters the module's namespace.
+        r#"
+pub struct Speed(pub u16);
+
+impl Speed {
+    pub fn new(value: u16) -> Result<Self, ::ridl_rt::payload::Violation> {
+        if value > 300 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        Ok(Self(value))
+    }
+}
+"#,
+    )
+    .expect("the source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+
+    let with_extern = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(dir.path().join("with_extern.rmeta"))
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        with_extern.success(),
+        "source naming ::ridl_rt::payload::Violation must compile against the helper's rlib"
+    );
+
+    // Captured, so the expected failure does not print an error into an
+    // otherwise passing test run.
+    let without_extern = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(dir.path().join("without_extern.rmeta"))
+        .arg(&source_path)
+        .output()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        !without_extern.status.success(),
+        "without --extern the same source must fail, or the proof proves nothing"
+    );
+}
+
 /// The generated Rust for the full Appendix B package compiles with `rustc`.
 /// A minimal prelude stands in for the `ridl.std` types the package imports,
 /// declared in the module path the cross-package references map to. The temp
@@ -1316,7 +1349,6 @@ pub mod ridl {
     let source_path = dir.path().join("appendix_b.rs");
     let meta_path = dir.path().join("appendix_b.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
-    let rlib = ridl_rt_rlib(dir.path());
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1329,8 +1361,6 @@ pub mod ridl {
         ])
         .arg("-o")
         .arg(&meta_path)
-        .arg("--extern")
-        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1390,7 +1420,6 @@ fn constructible_collections_compile() {
     let source_path = dir.path().join("bag.rs");
     let meta_path = dir.path().join("bag.rmeta");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
-    let rlib = ridl_rt_rlib(dir.path());
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -1402,8 +1431,6 @@ fn constructible_collections_compile() {
         ])
         .arg("-o")
         .arg(&meta_path)
-        .arg("--extern")
-        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc runs");
@@ -1797,7 +1824,6 @@ pub mod veh {
     let source_path = dir.path().join("appendix_a.rs");
     let meta_path = dir.path().join("appendix_a.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
-    let rlib = ridl_rt_rlib(dir.path());
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1810,8 +1836,6 @@ pub mod veh {
         ])
         .arg("-o")
         .arg(&meta_path)
-        .arg("--extern")
-        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");

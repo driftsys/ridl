@@ -57,10 +57,6 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     let mut tuples: Vec<InducedTuple> = Vec::new();
 
-    if package_constructs_a_violation(package) {
-        items.push(quote! { use ridl_rt::payload::{Rule, Violation}; });
-    }
-
     for decl in &package.decls {
         items.push(emit_decl(&ctx, decl, &mut tuples));
     }
@@ -97,20 +93,6 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 
     Ok(Generated {
         rust_source: prettyplease::unparse(&file),
-    })
-}
-
-/// True when `package` declares at least one construct whose generated
-/// constructor will return a `ridl_rt::payload::Violation`: a named scalar
-/// whose constraint is not vacuous, an `enum`, or an `enumset` (Tasks 3, 5 and
-/// 8). The `use` line `generate` emits is conditioned on this, so a package
-/// declaring only vacuous types draws no unused import.
-fn package_constructs_a_violation(package: &v2::Package) -> bool {
-    package.decls.iter().any(|decl| match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => !v2::constraint_is_vacuous(td.constraint.as_ref()),
-        Some(v2::decl::Kind::EnumDef(_)) => true,
-        Some(v2::decl::Kind::EnumSetDef(_)) => true,
-        _ => false,
     })
 }
 

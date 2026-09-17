@@ -2,7 +2,6 @@
 source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_for(decls)
 ---
-use ridl_rt::payload::{Rule, Violation};
 #[repr(transparent)]
 pub struct WarningFlags(pub i64);
 impl WarningFlags {

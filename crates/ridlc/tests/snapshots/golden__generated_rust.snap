@@ -2,7 +2,6 @@
 source: crates/ridlc/tests/golden.rs
 expression: output.rust_source
 ---
-use ridl_rt::payload::{Rule, Violation};
 #[repr(transparent)]
 pub struct Speed(pub f64);
 impl Default for Speed {
