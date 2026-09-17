@@ -617,6 +617,20 @@ pub(crate) fn type_path(reference: &str) -> TokenStream {
     }
 }
 
+/// The Rust module-segment spelling of one typl package name segment: `mod`
+/// becomes `r#mod`, `crate` becomes `crate_`, and an ordinary segment is
+/// returned unchanged.
+///
+/// This exists so that the module tree `ridlc` writes for `--emit rust` and
+/// the paths [`type_path`] emits cannot drift apart. Both spell a package
+/// segment through [`ident`], which is the only definition of that spelling.
+/// A tree that writes a segment raw emits `pub mod mod;`, which does not
+/// parse, and a tree that escapes a keyword differently from the reference
+/// emits a module the reference cannot name.
+pub fn module_segment(segment: &str) -> String {
+    ident(segment).to_string()
+}
+
 /// Strips a regex literal's surrounding `/…/` delimiters, leaving the pattern
 /// body. A value without both delimiters is returned unchanged.
 fn strip_regex_delimiters(regex: &str) -> &str {

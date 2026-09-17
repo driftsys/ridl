@@ -2169,9 +2169,15 @@ not of the whole directory, which carries other lanes' working memory.
 
 ## Open
 
-1. **The crate name for the generated `Cargo.toml`** (Task 7). Default proposed:
-   the `ridl.toml` package name, falling back to `ridl_generated`, overridable
-   by a `--crate-name` flag. Confirm before implementing Task 7.
+1. **The crate name for the generated `Cargo.toml` — decided 2026-09-17, not
+   open.** Task 7 implemented it: the crate name is the `ridl.toml` package name
+   with every `.` replaced by `_` (`veh.common` becomes `veh_common`), because a
+   dotted name is not a legal Cargo package name; a `[workspace]` manifest names
+   no package, so it falls back to `ridl_generated`. The `--crate-name` flag was
+   not implemented — nothing needs it yet, and a flag is additive, so it can be
+   added later without breaking the default. Kept here as a numbered item
+   because the proposal was recorded here and a reader of this list would
+   otherwise take it as still open.
 2. **Whether `ridl-diff` classifies a constraint appearing where none existed as
    breaking** (Task 10, Step 1). Verify rather than assume.
 3. **Where the constraint error is defined — answered 2026-09-16, not open.** It
