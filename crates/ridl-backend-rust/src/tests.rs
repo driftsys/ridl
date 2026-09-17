@@ -1318,6 +1318,14 @@ impl Speed {
         !without_extern.status.success(),
         "without --extern the same source must fail, or the proof proves nothing"
     );
+    // And it must fail because `ridl_rt` is not linked, rather than because
+    // the source above has a mistake in it, which would pass this test while
+    // proving nothing about the rlib.
+    let stderr = String::from_utf8_lossy(&without_extern.stderr);
+    assert!(
+        stderr.contains("ridl_rt"),
+        "the failure must name the unlinked crate, got:\n{stderr}"
+    );
 }
 
 /// The generated Rust for the full Appendix B package compiles with `rustc`.
