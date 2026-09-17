@@ -662,9 +662,11 @@ fn run_baseline(path: &Path, out: Option<&Path>) -> ExitCode {
         }
     };
 
-    // An error-bearing run wrote nothing (`ridlc` gates every emit on a clean
-    // compile), so there is nothing to publish and the existing baseline stays
-    // exactly as it was.
+    // An error-bearing run publishes nothing, and the existing baseline stays
+    // exactly as it was. The staging directory is discarded rather than left:
+    // `ridlc` gates every emit on a clean compile except for an RSDL-7xx error,
+    // which writes every artifact and still reports the error (rsdl reference
+    // §13), so a staging directory may hold artifacts here.
     if run.has_error() {
         let _ = std::fs::remove_dir_all(&staging);
         return finish(Ok(run));

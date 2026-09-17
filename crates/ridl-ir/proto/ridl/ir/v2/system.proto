@@ -15,8 +15,10 @@ syntax = "proto3";
 // `.system.binpb` (ADR-0014 decision 4), written by the same `--emit` value
 // that writes the package IR in that encoding.
 //
-// Every fact of rsdl §13 has a field here, and nothing else does. The
-// closure-level facts are stated once rather than per deployment:
+// Every fact of rsdl §13 has a field here except the catalog hash per region,
+// which story E6.17 adds once ridl can compute it (ADR-0022 decision 7), and
+// nothing else does. The closure-level facts are stated once rather than per
+// deployment:
 //
 //   closure     components with their lines, the system's member lines,
 //               producers, the permission list, the region map,

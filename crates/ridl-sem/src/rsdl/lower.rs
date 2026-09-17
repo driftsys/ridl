@@ -1460,6 +1460,32 @@ mod tests {
         assert!(all.depends_on.is_empty());
     }
 
+    /// A `deployment` with no `for` clause is FORM-101, a parse error the rsdl
+    /// reporter never sees, and the parser still parses the body. Its closure
+    /// was never placed, so lowering it would read a placement that is not
+    /// there: the deployment is blocked instead, like any other deployment
+    /// whose placement failed (rsdl §13).
+    #[test]
+    fn a_deployment_with_no_for_clause_is_left_out() {
+        let text = "package veh.topology\n\
+                    component Lane { offers veh.adas.lane }\n\
+                    system Vehicle { Lane }\n\
+                    deployment Good for Vehicle { machine A { Lane } }\n\
+                    deployment Bench { machine B { Lane } }\n";
+        let (checked, lowered) = lower_topology(&[("veh/topology/x.rsdl", text)]);
+        let system = lowered.expect("a parse error in one deployment does not block the closure");
+        let deployments: Vec<&str> = system
+            .deployments
+            .iter()
+            .map(|deployment| deployment.name.as_str())
+            .collect();
+        assert_eq!(deployments, ["Good"]);
+        assert!(
+            checked.placements[1].has_errors,
+            "the unplaced deployment must be blocked"
+        );
+    }
+
     /// rsdl §13: an error in the closure blocks lowering, a workspace with no
     /// `system` lowers nothing, and a warning never blocks — Appendix A lowers
     /// with its two RSDL-409 warnings.

@@ -94,7 +94,18 @@ pub(super) fn place(
         }
         let placed = match (for_system(lookup, deployment, &mut check), closure) {
             (Some(0), Some(closure)) => place_one(lookup, system, deployment, closure, &mut check),
-            _ => Vec::new(),
+            // The closure was not placed in this deployment, so `placements`
+            // does not cover it and the lowering must not read it (rsdl §13):
+            // the deployment is blocked, exactly as a placement error blocks
+            // it. Each case that reaches here is already reported — RSDL-704
+            // for a `for` that names no system, RSDL-601 for a second system,
+            // FORM-101 for a `for` the parser recovered without a reference —
+            // but the last is a parse error, which the rsdl reporter never
+            // sees, so the flag is set here rather than at each report.
+            _ => {
+                check.has_errors = true;
+                Vec::new()
+            }
         };
         placements.push(DeploymentPlacement {
             has_errors: check.has_errors,
