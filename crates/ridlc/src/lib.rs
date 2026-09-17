@@ -832,7 +832,8 @@ fn render_lib_rs(package_names: &[String]) -> String {
                         // shape is not total over names: a package `veh`
                         // declaring a type called `common` alongside a
                         // package `veh.common` would have that type shadowed
-                        // by the module. `__ridl_package` cannot be a typl
+                        // by the module (issue #416; rustc reports E0573, so
+                        // it fails loudly). `__ridl_package` cannot be a typl
                         // package segment, so the private module itself
                         // collides with nothing.
                         out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));

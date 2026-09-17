@@ -1581,8 +1581,9 @@ fn render_lib_rs(package_names: &[String]) -> String {
                         // shape is not total over names: a package `veh`
                         // declaring a type called `common` alongside a
                         // package `veh.common` would have that type shadowed
-                        // by the module. `__ridl_package` cannot be a typl
-                        // package segment, so the private module itself
+                        // by the module (issue #416; rustc reports E0573,
+                        // so it fails loudly). `__ridl_package` cannot be a
+                        // typl package segment, so the private module itself
                         // collides with nothing.
                         out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));
                         out.push_str(&format!("{pad}    mod __ridl_package;\n"));
@@ -1619,7 +1620,10 @@ over the emitted crate root and both carried in the code above.
 
 The one place this shape is not total over names: a package `veh` declaring a
 type called `common`, alongside a package `veh.common`, has that type shadowed
-by the module. The private module's own name cannot collide, because
+by the module, and a reference to it fails with rustc's E0573 rather than
+silently resolving to something else. That is recorded as driftsys/ridl#416,
+which names the three ways it could be closed; it was not treated as blocking
+because it fails loudly. The private module's own name cannot collide, because
 `__ridl_package` is not a possible typl package segment.
 
 The crate name comes from the manifest's package name when one is present, with
