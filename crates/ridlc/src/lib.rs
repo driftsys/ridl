@@ -44,8 +44,8 @@ use ridl_core::{
     materialize_imports, parse_file, parse_manifest, read_lockfile, std_package, write_lockfile,
 };
 use ridl_sem::{
-    CheckedPackage, Resolution, check_package, check_system, resolve_package,
-    unclaimed_backend_keys,
+    CheckedPackage, CheckedSystem, Resolution, check_package, check_system, lower_system,
+    resolve_package, unclaimed_backend_keys,
 };
 use ridl_syntax::ast::{AstNode as _, SourceFile};
 use rowan::TextRange;
@@ -286,6 +286,10 @@ pub struct WorkspaceOutput {
     /// a compiler defect and not a statement about the user's workspace. It is
     /// covered by `ridl-core`'s own asset tests.
     pub std_ir: ridl_ir::v2::Package,
+    /// The lowered rsdl system (rsdl reference §13), or `None` when the
+    /// workspace declares no `system` or an error in its closure blocks the
+    /// lowering. A deployment an RSDL-7xx error blocks is absent from it.
+    pub system: Option<ridl_ir::v2::System>,
     pub diagnostics: Vec<Diagnostic>,
     pub sources: SourceMap,
 }
@@ -308,16 +312,20 @@ pub fn compile_workspace(db: &mut RidlDatabase, entry: &Path) -> std::io::Result
         std,
         checked,
         resolutions,
+        system,
         diagnostics,
         sources,
     } = load_and_check(db, entry)?;
     // `ridl.std` is checked here rather than in `load_and_check` so the command
     // drivers, which never look at its IR, do not pay for the pass.
     let std_ir = check_package(&*db, workspace, std, std).ir;
+    let packages: Vec<&ridl_ir::v2::Package> = checked.iter().map(|package| &package.ir).collect();
+    let system = lower_system(&system, &packages);
     Ok(WorkspaceOutput {
         checked,
         resolutions,
         std_ir,
+        system,
         diagnostics,
         sources,
     })
@@ -349,14 +357,17 @@ pub enum Emit {
     /// does not resolve — a package `veh.common` alongside a type named
     /// `common` in package `veh` — which rustc reports as E0573.
     Rust,
-    /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`.
+    /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`,
+    /// and the lowered system to `<pkg.Name>.system.json`.
     IrJson,
-    /// The lowered IR v2 as prototext, written to `<base>.ir.txtpb`.
+    /// The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the
+    /// lowered system to `<pkg.Name>.system.txtpb`.
     ///
     /// The inspection encoding (ADR-0014 decisions 4 and 9): emittable, but
     /// not a recommended interchange form.
     IrText,
-    /// The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`.
+    /// The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`,
+    /// and the lowered system to `<pkg.Name>.system.binpb`.
     ///
     /// The canonical interchange encoding (ADR-0014 decisions 4 and 9).
     IrBinary,
@@ -443,6 +454,28 @@ impl Emit {
         }
     }
 
+    /// The suffix the lowered rsdl system is written under for this emit, or
+    /// `None` for an emit that writes no system (rsdl reference §13, ADR-0014
+    /// decision 4).
+    ///
+    /// A second table beside [`Emit::ir_dump_suffix`] rather than a widening
+    /// of it: `ridl`'s snapshot surface reads every `.ir.json` file as a
+    /// package and `ridl baseline` publishes only those, so the `.system.`
+    /// infix is what keeps a system out of a baseline. The same wildcard-free
+    /// `match` and the same two lints apply, for the same reason.
+    #[deny(
+        clippy::wildcard_enum_match_arm,
+        clippy::match_wildcard_for_single_variants
+    )]
+    pub const fn system_dump_suffix(self) -> Option<&'static str> {
+        match self {
+            Emit::Rust | Emit::TypeScript | Emit::Proto | Emit::Flatbuffers => None,
+            Emit::IrJson => Some(".system.json"),
+            Emit::IrText => Some(".system.txtpb"),
+            Emit::IrBinary => Some(".system.binpb"),
+        }
+    }
+
     /// Every IR dump emit paired with its artifact suffix, in declaration
     /// order. The variant list comes from `clap`'s derive rather than a
     /// hand-kept array, so an encoding classified in [`Emit::ir_dump_suffix`]
@@ -500,6 +533,14 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
 /// the same terms, before the per-package write loop runs, so it writes no
 /// artifact either ([`crate_file_refusals`]).
 ///
+/// The one exception is an RSDL-7xx error, which blocks only its own deployment
+/// (rsdl reference §13): the build writes every artifact, leaves that
+/// deployment out of the system, and still exits non-zero.
+///
+/// When the workspace declares a `system`, each IR dump emit also writes the
+/// lowered system beside the package IR, named after the system's qualified
+/// name ([`Emit::system_dump_suffix`]).
+///
 /// The artifact base name is the file stem in single-file mode (preserving the
 /// E0 `<input-stem>.rs` contract) and the full dotted package name otherwise, so
 /// a workspace build writing several packages into one directory never has two
@@ -517,6 +558,7 @@ pub fn run_build(
         workspace,
         std,
         checked,
+        system,
         mut diagnostics,
         sources,
         ..
@@ -535,9 +577,12 @@ pub fn run_build(
     // codegen; `build` matches that by skipping every emit — code and IR
     // dumps alike — when any error-severity diagnostic is present, from the
     // compile or from materialization. Warnings and info do not gate.
-    let succeeded = !diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.severity == Severity::Error);
+    //
+    // rsdl reference §13 narrows this for one class of error: an RSDL-7xx error
+    // blocks the lowering of its own deployment only. Every package and the
+    // system's other deployments are sound, so they are written, and the
+    // error still makes the build exit 1.
+    let succeeded = !diagnostics.iter().any(blocks_every_artifact);
     if succeeded {
         std::fs::create_dir_all(out_dir)?;
         let single_file = entry.is_file() && manifest_root_of(entry).is_none();
@@ -651,6 +696,18 @@ pub fn run_build(
                 &package_names,
                 &diagnostics,
             )?;
+        }
+
+        // The lowered system, beside the package IR, for each IR dump emit
+        // (rsdl reference §13). An error in the closure has already stopped
+        // the build above, so `lower_system` is `None` here only when the
+        // workspace declares no `system`.
+        if emits.iter().any(|emit| emit.system_dump_suffix().is_some()) {
+            let packages: Vec<&ridl_ir::v2::Package> =
+                checked.iter().map(|package| &package.ir).collect();
+            if let Some(lowered) = lower_system(&system, &packages) {
+                write_system_emits(out_dir, &lowered, emits, &mut diagnostics)?;
+            }
         }
     }
 
@@ -909,6 +966,13 @@ fn render_lib_rs(package_names: &[String]) -> String {
     out
 }
 
+/// Whether `diagnostic` stops [`run_build`] writing any artifact: every error
+/// except an RSDL-7xx one, which blocks only the lowering of its own
+/// deployment (rsdl reference §13).
+fn blocks_every_artifact(diagnostic: &Diagnostic) -> bool {
+    diagnostic.severity == Severity::Error && !diagnostic.code.as_str().starts_with("RSDL-7")
+}
+
 /// Maps a parser [`SyntaxError`](ridl_syntax::SyntaxError) to a coded
 /// [`Diagnostic`] against `file`. The `ridl fmt` facade uses it to render the
 /// parse errors of a file it refuses to reformat.
@@ -930,6 +994,8 @@ struct Compiled {
     std: Package,
     checked: Vec<CheckedPackage>,
     resolutions: Vec<Resolution>,
+    /// The checked rsdl model; its diagnostics are already in `diagnostics`.
+    system: CheckedSystem,
     diagnostics: Vec<Diagnostic>,
     sources: SourceMap,
 }
@@ -1033,6 +1099,7 @@ fn load_and_check(db: &mut RidlDatabase, entry: &Path) -> std::io::Result<Compil
         std,
         checked,
         resolutions,
+        system,
         diagnostics,
         sources,
     })
@@ -1268,6 +1335,47 @@ fn write_emits(
                     std::fs::write(out_dir.join(format!("{base}.fbs")), &generated.fbs_source)?;
                 }
             }
+        }
+    }
+    Ok(())
+}
+
+/// Writes the lowered system (rsdl reference §13) once for each IR dump in
+/// `emits`, to `<out_dir>/<pkg.Name><suffix>` with the suffix
+/// [`Emit::system_dump_suffix`] names. A system that cannot be rendered in an
+/// encoding is recorded as a detached error diagnostic and no artifact is
+/// written, as [`write_emits`] does for a package.
+fn write_system_emits(
+    out_dir: &Path,
+    system: &ridl_ir::v2::System,
+    emits: &[Emit],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> std::io::Result<()> {
+    for emit in emits {
+        #[deny(
+            clippy::wildcard_enum_match_arm,
+            clippy::match_wildcard_for_single_variants
+        )]
+        let rendered = match emit {
+            Emit::Rust | Emit::TypeScript | Emit::Proto | Emit::Flatbuffers => continue,
+            Emit::IrJson => ridl_ir::v2::system_to_json_pretty(system).map(String::into_bytes),
+            Emit::IrText => ridl_ir::v2::system_to_text_format(system).map(String::into_bytes),
+            Emit::IrBinary => Ok(ridl_ir::v2::system_to_binary(system)),
+        };
+        let suffix = emit
+            .system_dump_suffix()
+            .expect("only IR dump emits write the system");
+        match rendered {
+            Ok(bytes) => std::fs::write(
+                out_dir.join(format!("{}{suffix}", system.qualified_name())),
+                bytes,
+            )?,
+            Err(err) => diagnostics.push(error_diagnostic(
+                "",
+                err.to_string(),
+                FileId::DETACHED,
+                TextRange::default(),
+            )),
         }
     }
     Ok(())

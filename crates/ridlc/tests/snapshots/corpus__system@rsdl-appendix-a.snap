@@ -1,0 +1,1097 @@
+---
+source: crates/ridlc/tests/corpus.rs
+expression: system
+input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
+---
+{
+  "name": "Vehicle",
+  "package": "veh.topology",
+  "labels": [],
+  "attributes": [],
+  "members": [
+    {
+      "component": "veh.topology.Cruise",
+      "attributes": []
+    },
+    {
+      "component": "veh.topology.Lane",
+      "attributes": []
+    },
+    {
+      "component": "veh.topology.Panel",
+      "attributes": []
+    },
+    {
+      "component": "veh.topology.Backend",
+      "attributes": []
+    },
+    {
+      "component": "veh.diag.access",
+      "attributes": []
+    }
+  ],
+  "components": [
+    {
+      "name": "Cruise",
+      "package": "veh.topology",
+      "implicit": false,
+      "external": false,
+      "instances": [
+        "primary",
+        "backup"
+      ],
+      "offers": [
+        {
+          "service": "veh.adas.cruise",
+          "attributes": []
+        }
+      ],
+      "requires": [
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "LaneAssist",
+            "inline": false
+          },
+          "service": "veh.adas.lane",
+          "producer": "veh.topology.Lane",
+          "attributes": []
+        }
+      ],
+      "labels": [
+        "ASIL_B"
+      ],
+      "attributes": []
+    },
+    {
+      "name": "Lane",
+      "package": "veh.topology",
+      "implicit": false,
+      "external": false,
+      "instances": [
+        "Unit"
+      ],
+      "offers": [
+        {
+          "service": "veh.adas.lane",
+          "attributes": []
+        }
+      ],
+      "requires": [],
+      "labels": [],
+      "attributes": []
+    },
+    {
+      "name": "Panel",
+      "package": "veh.topology",
+      "implicit": false,
+      "external": false,
+      "instances": [
+        "Unit"
+      ],
+      "offers": [],
+      "requires": [
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "producer": "veh.topology.Cruise",
+          "attributes": []
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "LaneAssist",
+            "inline": false
+          },
+          "service": "veh.adas.lane",
+          "producer": "veh.topology.Lane",
+          "attributes": []
+        }
+      ],
+      "labels": [],
+      "attributes": []
+    },
+    {
+      "name": "Backend",
+      "package": "veh.topology",
+      "implicit": false,
+      "external": true,
+      "instances": [
+        "Unit"
+      ],
+      "offers": [],
+      "requires": [
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "producer": "veh.topology.Cruise",
+          "attributes": []
+        },
+        {
+          "interface": {
+            "catalog": "veh.diag",
+            "name": "veh.diag.access",
+            "inline": true
+          },
+          "service": "veh.diag.access",
+          "producer": "veh.diag.access",
+          "attributes": []
+        }
+      ],
+      "labels": [],
+      "attributes": []
+    },
+    {
+      "name": "veh.diag.access",
+      "package": "",
+      "implicit": true,
+      "external": false,
+      "instances": [
+        "Unit"
+      ],
+      "offers": [
+        {
+          "service": "veh.diag.access",
+          "attributes": []
+        }
+      ],
+      "requires": [],
+      "labels": [],
+      "attributes": []
+    }
+  ],
+  "producers": [
+    {
+      "service": "veh.adas.cruise",
+      "component": "veh.topology.Cruise",
+      "instances": [
+        "primary",
+        "backup"
+      ],
+      "notYetRealizable": true
+    },
+    {
+      "service": "veh.adas.lane",
+      "component": "veh.topology.Lane",
+      "instances": [
+        "Unit"
+      ],
+      "notYetRealizable": false
+    },
+    {
+      "service": "veh.diag.access",
+      "component": "veh.diag.access",
+      "instances": [
+        "Unit"
+      ],
+      "notYetRealizable": false
+    }
+  ],
+  "grants": [
+    {
+      "component": "veh.topology.Cruise",
+      "external": false,
+      "regions": [
+        "veh.adas"
+      ]
+    },
+    {
+      "component": "veh.topology.Lane",
+      "external": false,
+      "regions": []
+    },
+    {
+      "component": "veh.topology.Panel",
+      "external": false,
+      "regions": [
+        "veh.adas"
+      ]
+    },
+    {
+      "component": "veh.topology.Backend",
+      "external": true,
+      "regions": [
+        "veh.adas",
+        "veh.diag"
+      ]
+    },
+    {
+      "component": "veh.diag.access",
+      "external": false,
+      "regions": []
+    }
+  ],
+  "regions": [
+    {
+      "catalog": "veh.adas",
+      "interfaces": [
+        {
+          "name": "CruiseControl",
+          "inline": false,
+          "number": 1,
+          "provisional": true,
+          "service": "veh.adas.cruise"
+        },
+        {
+          "name": "LaneAssist",
+          "inline": false,
+          "number": 2,
+          "provisional": true,
+          "service": "veh.adas.lane"
+        }
+      ]
+    },
+    {
+      "catalog": "veh.diag",
+      "interfaces": [
+        {
+          "name": "veh.diag.access",
+          "inline": true,
+          "number": 1,
+          "provisional": true,
+          "service": "veh.diag.access"
+        }
+      ]
+    }
+  ],
+  "distributions": [
+    {
+      "name": "Adas",
+      "package": "veh.topology",
+      "members": [
+        {
+          "component": "veh.topology.Cruise",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Lane",
+          "attributes": []
+        },
+        {
+          "component": "veh.diag.access",
+          "attributes": []
+        }
+      ],
+      "dependsOn": [],
+      "labels": [],
+      "attributes": []
+    },
+    {
+      "name": "Hmi",
+      "package": "veh.topology",
+      "members": [
+        {
+          "component": "veh.topology.Panel",
+          "attributes": []
+        }
+      ],
+      "dependsOn": [
+        "veh.topology.Adas"
+      ],
+      "labels": [],
+      "attributes": []
+    }
+  ],
+  "deployments": [
+    {
+      "name": "Bench",
+      "package": "veh.topology",
+      "labels": [],
+      "attributes": [],
+      "machines": [
+        {
+          "name": "DevBox",
+          "external": false,
+          "labels": [],
+          "attributes": []
+        }
+      ],
+      "placements": [
+        {
+          "component": "veh.topology.Cruise",
+          "instance": "primary",
+          "machine": "DevBox",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Cruise",
+          "instance": "backup",
+          "machine": "DevBox",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Lane",
+          "instance": "Unit",
+          "machine": "DevBox",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Panel",
+          "instance": "Unit",
+          "machine": "DevBox",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Backend",
+          "instance": "Unit",
+          "machine": "DevBox",
+          "attributes": []
+        },
+        {
+          "component": "veh.diag.access",
+          "instance": "Unit",
+          "machine": "DevBox",
+          "attributes": []
+        }
+      ],
+      "links": [
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "LaneAssist",
+            "inline": false
+          },
+          "service": "veh.adas.lane",
+          "consumer": {
+            "component": "veh.topology.Cruise",
+            "instance": "primary",
+            "machine": "DevBox"
+          },
+          "producer": {
+            "component": "veh.topology.Lane",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "LaneAssist",
+            "inline": false
+          },
+          "service": "veh.adas.lane",
+          "consumer": {
+            "component": "veh.topology.Cruise",
+            "instance": "backup",
+            "machine": "DevBox"
+          },
+          "producer": {
+            "component": "veh.topology.Lane",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Panel",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "primary",
+            "machine": "DevBox"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Panel",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "backup",
+            "machine": "DevBox"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "LaneAssist",
+            "inline": false
+          },
+          "service": "veh.adas.lane",
+          "consumer": {
+            "component": "veh.topology.Panel",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "producer": {
+            "component": "veh.topology.Lane",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Backend",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "primary",
+            "machine": "DevBox"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Backend",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "backup",
+            "machine": "DevBox"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.diag",
+            "name": "veh.diag.access",
+            "inline": true
+          },
+          "service": "veh.diag.access",
+          "consumer": {
+            "component": "veh.topology.Backend",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "producer": {
+            "component": "veh.diag.access",
+            "instance": "Unit",
+            "machine": "DevBox"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        }
+      ],
+      "routes": [
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 1,
+          "interface": "CruiseControl",
+          "member": "engaged",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "primary",
+              "machine": "DevBox"
+            },
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "backup",
+              "machine": "DevBox"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 2,
+          "interface": "CruiseControl",
+          "member": "target",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "primary",
+              "machine": "DevBox"
+            },
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "backup",
+              "machine": "DevBox"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 3,
+          "interface": "CruiseControl",
+          "member": "setLever",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "primary",
+              "machine": "DevBox"
+            },
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "backup",
+              "machine": "DevBox"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 2,
+          "memberOrdinal": 1,
+          "interface": "LaneAssist",
+          "member": "active",
+          "service": "veh.adas.lane",
+          "producers": [
+            {
+              "component": "veh.topology.Lane",
+              "instance": "Unit",
+              "machine": "DevBox"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.diag",
+          "interfaceNumber": 1,
+          "memberOrdinal": 1,
+          "interface": "veh.diag.access",
+          "member": "readFaults",
+          "service": "veh.diag.access",
+          "producers": [
+            {
+              "component": "veh.diag.access",
+              "instance": "Unit",
+              "machine": "DevBox"
+            }
+          ]
+        }
+      ],
+      "surface": [
+        {
+          "link": {
+            "interface": {
+              "catalog": "veh.adas",
+              "name": "CruiseControl",
+              "inline": false
+            },
+            "service": "veh.adas.cruise",
+            "consumer": {
+              "component": "veh.topology.Backend",
+              "instance": "Unit",
+              "machine": "DevBox"
+            },
+            "producer": {
+              "component": "veh.topology.Cruise",
+              "instance": "primary",
+              "machine": "DevBox"
+            },
+            "crossing": "CROSSING_SAME_MACHINE"
+          },
+          "direction": "SURFACE_DIRECTION_EXTERNAL_CONSUMES"
+        },
+        {
+          "link": {
+            "interface": {
+              "catalog": "veh.adas",
+              "name": "CruiseControl",
+              "inline": false
+            },
+            "service": "veh.adas.cruise",
+            "consumer": {
+              "component": "veh.topology.Backend",
+              "instance": "Unit",
+              "machine": "DevBox"
+            },
+            "producer": {
+              "component": "veh.topology.Cruise",
+              "instance": "backup",
+              "machine": "DevBox"
+            },
+            "crossing": "CROSSING_SAME_MACHINE"
+          },
+          "direction": "SURFACE_DIRECTION_EXTERNAL_CONSUMES"
+        },
+        {
+          "link": {
+            "interface": {
+              "catalog": "veh.diag",
+              "name": "veh.diag.access",
+              "inline": true
+            },
+            "service": "veh.diag.access",
+            "consumer": {
+              "component": "veh.topology.Backend",
+              "instance": "Unit",
+              "machine": "DevBox"
+            },
+            "producer": {
+              "component": "veh.diag.access",
+              "instance": "Unit",
+              "machine": "DevBox"
+            },
+            "crossing": "CROSSING_SAME_MACHINE"
+          },
+          "direction": "SURFACE_DIRECTION_EXTERNAL_CONSUMES"
+        }
+      ],
+      "installations": [
+        {
+          "distribution": "veh.topology.Adas",
+          "machines": [
+            "DevBox"
+          ]
+        },
+        {
+          "distribution": "veh.topology.Hmi",
+          "machines": [
+            "DevBox"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Production",
+      "package": "veh.topology",
+      "labels": [],
+      "attributes": [],
+      "machines": [
+        {
+          "name": "AdasHpc",
+          "external": false,
+          "labels": [
+            "ASIL_B"
+          ],
+          "attributes": []
+        },
+        {
+          "name": "Cockpit",
+          "external": false,
+          "labels": [],
+          "attributes": []
+        },
+        {
+          "name": "Cloud",
+          "external": true,
+          "labels": [],
+          "attributes": []
+        }
+      ],
+      "placements": [
+        {
+          "component": "veh.topology.Cruise",
+          "instance": "primary",
+          "machine": "AdasHpc",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Cruise",
+          "instance": "backup",
+          "machine": "Cockpit",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Lane",
+          "instance": "Unit",
+          "machine": "AdasHpc",
+          "attributes": []
+        },
+        {
+          "component": "veh.topology.Panel",
+          "instance": "Unit",
+          "machine": "Cockpit",
+          "attributes": [
+            {
+              "namespace": "linux",
+              "key": "cpuset",
+              "value": {
+                "list": {
+                  "items": [
+                    {
+                      "scalar": "2"
+                    },
+                    {
+                      "scalar": "3"
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        },
+        {
+          "component": "veh.topology.Backend",
+          "instance": "Unit",
+          "machine": "Cloud",
+          "attributes": []
+        },
+        {
+          "component": "veh.diag.access",
+          "instance": "Unit",
+          "machine": "AdasHpc",
+          "attributes": []
+        }
+      ],
+      "links": [
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "LaneAssist",
+            "inline": false
+          },
+          "service": "veh.adas.lane",
+          "consumer": {
+            "component": "veh.topology.Cruise",
+            "instance": "primary",
+            "machine": "AdasHpc"
+          },
+          "producer": {
+            "component": "veh.topology.Lane",
+            "instance": "Unit",
+            "machine": "AdasHpc"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "LaneAssist",
+            "inline": false
+          },
+          "service": "veh.adas.lane",
+          "consumer": {
+            "component": "veh.topology.Cruise",
+            "instance": "backup",
+            "machine": "Cockpit"
+          },
+          "producer": {
+            "component": "veh.topology.Lane",
+            "instance": "Unit",
+            "machine": "AdasHpc"
+          },
+          "crossing": "CROSSING_DIFFERENT_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Panel",
+            "instance": "Unit",
+            "machine": "Cockpit"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "primary",
+            "machine": "AdasHpc"
+          },
+          "crossing": "CROSSING_DIFFERENT_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Panel",
+            "instance": "Unit",
+            "machine": "Cockpit"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "backup",
+            "machine": "Cockpit"
+          },
+          "crossing": "CROSSING_SAME_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "LaneAssist",
+            "inline": false
+          },
+          "service": "veh.adas.lane",
+          "consumer": {
+            "component": "veh.topology.Panel",
+            "instance": "Unit",
+            "machine": "Cockpit"
+          },
+          "producer": {
+            "component": "veh.topology.Lane",
+            "instance": "Unit",
+            "machine": "AdasHpc"
+          },
+          "crossing": "CROSSING_DIFFERENT_MACHINE"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Backend",
+            "instance": "Unit",
+            "machine": "Cloud"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "primary",
+            "machine": "AdasHpc"
+          },
+          "crossing": "CROSSING_OFF_BOARD"
+        },
+        {
+          "interface": {
+            "catalog": "veh.adas",
+            "name": "CruiseControl",
+            "inline": false
+          },
+          "service": "veh.adas.cruise",
+          "consumer": {
+            "component": "veh.topology.Backend",
+            "instance": "Unit",
+            "machine": "Cloud"
+          },
+          "producer": {
+            "component": "veh.topology.Cruise",
+            "instance": "backup",
+            "machine": "Cockpit"
+          },
+          "crossing": "CROSSING_OFF_BOARD"
+        },
+        {
+          "interface": {
+            "catalog": "veh.diag",
+            "name": "veh.diag.access",
+            "inline": true
+          },
+          "service": "veh.diag.access",
+          "consumer": {
+            "component": "veh.topology.Backend",
+            "instance": "Unit",
+            "machine": "Cloud"
+          },
+          "producer": {
+            "component": "veh.diag.access",
+            "instance": "Unit",
+            "machine": "AdasHpc"
+          },
+          "crossing": "CROSSING_OFF_BOARD"
+        }
+      ],
+      "routes": [
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 1,
+          "interface": "CruiseControl",
+          "member": "engaged",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "primary",
+              "machine": "AdasHpc"
+            },
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "backup",
+              "machine": "Cockpit"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 2,
+          "interface": "CruiseControl",
+          "member": "target",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "primary",
+              "machine": "AdasHpc"
+            },
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "backup",
+              "machine": "Cockpit"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 1,
+          "memberOrdinal": 3,
+          "interface": "CruiseControl",
+          "member": "setLever",
+          "service": "veh.adas.cruise",
+          "producers": [
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "primary",
+              "machine": "AdasHpc"
+            },
+            {
+              "component": "veh.topology.Cruise",
+              "instance": "backup",
+              "machine": "Cockpit"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.adas",
+          "interfaceNumber": 2,
+          "memberOrdinal": 1,
+          "interface": "LaneAssist",
+          "member": "active",
+          "service": "veh.adas.lane",
+          "producers": [
+            {
+              "component": "veh.topology.Lane",
+              "instance": "Unit",
+              "machine": "AdasHpc"
+            }
+          ]
+        },
+        {
+          "catalog": "veh.diag",
+          "interfaceNumber": 1,
+          "memberOrdinal": 1,
+          "interface": "veh.diag.access",
+          "member": "readFaults",
+          "service": "veh.diag.access",
+          "producers": [
+            {
+              "component": "veh.diag.access",
+              "instance": "Unit",
+              "machine": "AdasHpc"
+            }
+          ]
+        }
+      ],
+      "surface": [
+        {
+          "link": {
+            "interface": {
+              "catalog": "veh.adas",
+              "name": "CruiseControl",
+              "inline": false
+            },
+            "service": "veh.adas.cruise",
+            "consumer": {
+              "component": "veh.topology.Backend",
+              "instance": "Unit",
+              "machine": "Cloud"
+            },
+            "producer": {
+              "component": "veh.topology.Cruise",
+              "instance": "primary",
+              "machine": "AdasHpc"
+            },
+            "crossing": "CROSSING_OFF_BOARD"
+          },
+          "direction": "SURFACE_DIRECTION_EXTERNAL_CONSUMES"
+        },
+        {
+          "link": {
+            "interface": {
+              "catalog": "veh.adas",
+              "name": "CruiseControl",
+              "inline": false
+            },
+            "service": "veh.adas.cruise",
+            "consumer": {
+              "component": "veh.topology.Backend",
+              "instance": "Unit",
+              "machine": "Cloud"
+            },
+            "producer": {
+              "component": "veh.topology.Cruise",
+              "instance": "backup",
+              "machine": "Cockpit"
+            },
+            "crossing": "CROSSING_OFF_BOARD"
+          },
+          "direction": "SURFACE_DIRECTION_EXTERNAL_CONSUMES"
+        },
+        {
+          "link": {
+            "interface": {
+              "catalog": "veh.diag",
+              "name": "veh.diag.access",
+              "inline": true
+            },
+            "service": "veh.diag.access",
+            "consumer": {
+              "component": "veh.topology.Backend",
+              "instance": "Unit",
+              "machine": "Cloud"
+            },
+            "producer": {
+              "component": "veh.diag.access",
+              "instance": "Unit",
+              "machine": "AdasHpc"
+            },
+            "crossing": "CROSSING_OFF_BOARD"
+          },
+          "direction": "SURFACE_DIRECTION_EXTERNAL_CONSUMES"
+        }
+      ],
+      "installations": [
+        {
+          "distribution": "veh.topology.Adas",
+          "machines": [
+            "AdasHpc",
+            "Cockpit"
+          ]
+        },
+        {
+          "distribution": "veh.topology.Hmi",
+          "machines": [
+            "Cockpit"
+          ]
+        }
+      ]
+    }
+  ]
+}

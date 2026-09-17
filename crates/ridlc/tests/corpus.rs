@@ -53,7 +53,7 @@
 //!   `rsdl-diag-showcase/NOTES` is the prose one.
 //! - `rsdl-appendix-a/` — the rsdl reference Appendix A, verbatim, as a
 //!   workspace of four packages. It checks with only the warnings the example
-//!   lists.
+//!   lists, and its lowered system is snapshotted as a fifth artifact.
 //!
 //! The malformed programs live in `tests/malformed/` and are driven by
 //! `tests/totality.rs`: they are single files with no manifest, so the corpus
@@ -73,7 +73,9 @@ use ridl_core::diag::{
 };
 use ridl_core::package::{Package, service_catalog};
 use ridl_core::{RidlDatabase, load_workspace, parse_file, std_package};
-use ridl_sem::{check_package, check_system, resolve_package, unclaimed_backend_keys};
+use ridl_sem::{
+    check_package, check_system, lower_system, resolve_package, unclaimed_backend_keys,
+};
 
 /// The four snapshotted artifacts of one compiled corpus entry.
 struct Compiled {
@@ -89,6 +91,10 @@ struct Compiled {
     /// The generated TypeScript of every package in the entry (one section per
     /// package), or a one-line note when the entry has error diagnostics.
     typescript: String,
+    /// The lowered system's IR JSON (rsdl reference §13), for an entry that
+    /// declares a `system` and has no error diagnostic; `None` otherwise, and
+    /// then no system snapshot is taken.
+    system_json: Option<String>,
     /// Every diagnostic as `(code, severity)`, in the same order the rendered
     /// snapshot lists them. The coverage tests read this rather than grepping
     /// the rendered text.
@@ -242,6 +248,18 @@ fn compile_entry(entry: &Path) -> Compiled {
             .join("\n\n");
         (ir, rust, typescript)
     };
+    // The lowered system, read from the same package IR the pipeline built
+    // (rsdl reference §13). An entry with an error diagnostic gets none, for
+    // the reason the IR and code artifacts above get none.
+    let system_json = if has_errors {
+        None
+    } else {
+        let irs: Vec<&ridl_ir::v2::Package> = checked_irs.iter().map(|(_, ir)| ir).collect();
+        lower_system(&system, &irs).map(|lowered| {
+            ridl_ir::v2::system_to_json_pretty(&lowered)
+                .expect("a clean entry's system serializes as IR JSON")
+        })
+    };
 
     // Source order: by file, then by span start, then end, then code — a stable
     // total order independent of how the passes were evaluated. `FileId` is not
@@ -280,6 +298,7 @@ fn compile_entry(entry: &Path) -> Compiled {
         ir_json,
         rust,
         typescript,
+        system_json,
         coded,
     }
 }
@@ -314,6 +333,11 @@ fn corpus_entries_compile_to_reviewed_snapshots() {
             insta::assert_snapshot!("ir", compiled.ir_json);
             insta::assert_snapshot!("rust", compiled.rust);
             insta::assert_snapshot!("typescript", compiled.typescript);
+            // Only an entry that declares a `system` and checks clean has one,
+            // so no placeholder snapshot is written for the others.
+            if let Some(system) = &compiled.system_json {
+                insta::assert_snapshot!("system", system);
+            }
         });
     });
 }

@@ -437,9 +437,9 @@ Options:
       --emit <EMIT>
           Possible values:
           - rust:        Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
-          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
-          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
+          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
+          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
+          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
           - typescript:  Idiomatic TypeScript source, written to `<base>.ts`
           - proto:       The proto3 schema, written to `<base>.proto`
           - flatbuffers: The FlatBuffers schema, written to `<base>.fbs`
@@ -488,6 +488,14 @@ by package path and does not compile without it. The three IR targets —
 records the packages the workspace declares, and `ridl.std` ships with the
 compiler rather than with the workspace ([ADR-0007][adr-0007] decision 15).
 
+When the workspace declares a `system` (rsdl reference §3.1), each of the three
+IR targets also writes the lowered system — the closure, and every deployment
+with its placements, links, routes and surface set (rsdl reference §13) — as
+one more file named after the system's qualified name:
+`veh.topology.Vehicle.system.json` for `system Vehicle` in package
+`veh.topology` under `--emit ir-json`, `.system.txtpb` and `.system.binpb` for
+the other two.
+
 Building a workspace of two packages that name no standard type, with no
 `[imports]`:
 
@@ -513,7 +521,9 @@ out/speed.rs
 
 **Exit codes.** 0 when the build compiles clean and every requested artifact
 is written. 1 when a diagnostic is an error — nothing is written for a
-package that fails to compile:
+package that fails to compile. An RSDL-7xx error is the one exception: it
+blocks only its own deployment (rsdl reference §13), so the build writes every
+artifact, leaves that deployment out of the lowered system, and still exits 1:
 
 ```sh
 ridl build --out-dir out
@@ -1388,9 +1398,9 @@ Options:
 
           Possible values:
           - rust:        Idiomatic Rust source, written to `<base>.rs`
-          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`
-          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`
-          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`
+          - ir-json:     The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`, and the lowered system to `<pkg.Name>.system.json`
+          - ir-text:     The lowered IR v2 as prototext, written to `<base>.ir.txtpb`, and the lowered system to `<pkg.Name>.system.txtpb`
+          - ir-binary:   The lowered IR v2 as protobuf binary, written to `<base>.ir.binpb`, and the lowered system to `<pkg.Name>.system.binpb`
           - typescript:  Idiomatic TypeScript source, written to `<base>.ts`
           - proto:       The proto3 schema, written to `<base>.proto`
           - flatbuffers: The FlatBuffers schema, written to `<base>.fbs`
@@ -1441,7 +1451,7 @@ compiler directly and want its stable, default-free flags.
 | Command | 0 | 1 | 2 |
 | --- | --- | --- | --- |
 | `ridl check` / `ridlc check` | clean (warnings included) | a diagnostic is an error | the workspace cannot be found, or — for `ridl check` only — a `--baseline` problem: absent, wrongly encoded (not `.ir.json`), unreadable, its snapshots nested one level too deep, empty when named explicitly, or a snapshot that fails to parse |
-| `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
+| `ridl build` / `ridlc build` | clean, every requested artifact written | a diagnostic is an error, nothing written — except for an RSDL-7xx error, which leaves only its deployment out of the lowered system | the workspace cannot be found, or (for `ridlc build`) a missing `--out-dir` |
 | `ridl baseline` | clean, snapshot(s) published | a diagnostic is an error, or the publication gate refuses: the replacement under the tombstone rule (RIDL-408), a provisional interface number (RIDL-411), or a published number the fresh snapshot neither carries nor retires (RIDL-412); the existing baseline is left untouched | the workspace cannot be found, the output directory cannot be read or written, or a published `.ir.json` snapshot fails to parse |
 | `ridl test` | every range self-corpus and sampled `require` passed | a self-corpus failure, or a clause raised an evaluation error | the workspace fails to compile, cannot be found, or `--samples 0` |
 | `ridl fmt` | nothing under `--check` would change, or the rewrite succeeded | a file under `--check` would change, or has a parse error | the path does not exist, or a directory the walk reaches is unreadable — named in the message, unlike six of the other eight, which name no path at all |

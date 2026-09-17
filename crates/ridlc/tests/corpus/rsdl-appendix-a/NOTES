@@ -9,5 +9,10 @@ The entry checks with no error. Its diagnostics snapshot records the three
 warnings the example lists: RSDL-409 twice, for `Panel`'s and `Backend`'s
 `requires CruiseControl`, and RSDL-804 once, for `linux.cpuset`, because no
 command driver claims a backend namespace yet (plan decision P-B4). The IR,
-Rust and TypeScript snapshots are the four packages' own artifacts; the system
-facts are lowered in Part B4.
+Rust and TypeScript snapshots are the four packages' own artifacts. The system
+snapshot is the lowered system (rsdl reference §13), as `ridlc build --emit
+ir-json` writes it to `veh.topology.Vehicle.system.json`: the facts the
+reference lists after the example — the closure and its instances, the links of
+`Bench` and `Production` with their crossing kinds, the three `Backend` links in
+each surface set, the grants, and the installation of `Adas` and `Hmi` — are
+all in it. The deployments are in file order, so `Bench` comes first.

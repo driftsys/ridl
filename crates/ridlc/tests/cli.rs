@@ -648,6 +648,194 @@ fn every_ir_dump_emit_writes_the_suffix_the_table_names() {
     }
 }
 
+/// [`ridlc::Emit::system_dump_suffix`] gives every variant its intended
+/// system suffix, by the construction of
+/// [`every_emit_variant_names_its_intended_suffix`]: an IR dump writes the
+/// lowered system under `.system.*`, which the `.ir.*` snapshot recognition
+/// never matches, and a code emit writes none.
+#[test]
+#[deny(
+    clippy::wildcard_enum_match_arm,
+    clippy::match_wildcard_for_single_variants
+)]
+fn every_emit_variant_names_its_intended_system_suffix() {
+    for &emit in <ridlc::Emit as clap::ValueEnum>::value_variants() {
+        let expected = match emit {
+            ridlc::Emit::Rust
+            | ridlc::Emit::TypeScript
+            | ridlc::Emit::Proto
+            | ridlc::Emit::Flatbuffers => None,
+            ridlc::Emit::IrJson => Some(".system.json"),
+            ridlc::Emit::IrText => Some(".system.txtpb"),
+            ridlc::Emit::IrBinary => Some(".system.binpb"),
+        };
+        assert_eq!(
+            emit.system_dump_suffix(),
+            expected,
+            "`{emit:?}` must name the suffix its system artifact is written under"
+        );
+    }
+}
+
+/// The file names directly inside `dir` that contain `.system.`, sorted.
+fn system_artifacts(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .filter(|name| name.contains(".system."))
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+/// `build --emit ir-json,ir-text,ir-binary` on the rsdl reference Appendix A
+/// writes the lowered system beside the package IR in all three encodings,
+/// named after the system's qualified name, and the three carry one system
+/// (rsdl reference §13, ADR-0014 decision 4). A code emit writes no system.
+#[test]
+fn build_ir_emits_write_the_lowered_system() {
+    let out = TempDir::new("system-emits-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "tests/corpus/rsdl-appendix-a".as_ref(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json,ir-text,ir-binary".as_ref(),
+    ]);
+    assert_eq!(
+        code, 0,
+        "Appendix A builds with warnings only, stderr:\n{stderr}"
+    );
+    assert_eq!(
+        system_artifacts(out.path()),
+        [
+            "veh.topology.Vehicle.system.binpb",
+            "veh.topology.Vehicle.system.json",
+            "veh.topology.Vehicle.system.txtpb",
+        ]
+    );
+    assert!(out.path().join("veh.topology.ir.json").is_file());
+
+    let json = std::fs::read_to_string(out.path().join("veh.topology.Vehicle.system.json"))
+        .expect("the JSON artifact is readable");
+    let text = std::fs::read_to_string(out.path().join("veh.topology.Vehicle.system.txtpb"))
+        .expect("the prototext artifact is readable");
+    let binary = std::fs::read(out.path().join("veh.topology.Vehicle.system.binpb"))
+        .expect("the binary artifact is readable");
+    let from_json = ridl_ir::v2::system_from_json(&json).expect("the JSON artifact parses");
+    let from_binary =
+        ridl_ir::v2::system_from_binary(binary.as_slice()).expect("the binary artifact decodes");
+    assert_eq!(from_json, from_binary, "JSON and binary carry one system");
+    assert_eq!(
+        text,
+        ridl_ir::v2::system_to_text_format(&from_json).expect("the system renders as prototext"),
+        "the prototext artifact is what the writer renders for this system"
+    );
+    let deployments: Vec<&str> = from_json
+        .deployments
+        .iter()
+        .map(|deployment| deployment.name.as_str())
+        .collect();
+    // Declarations are in package, then file, then source order, and
+    // `bench.rsdl` sorts before `production.rsdl`.
+    assert_eq!(deployments, ["Bench", "Production"]);
+
+    let rust_out = TempDir::new("system-emits-rust-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        "tests/corpus/rsdl-appendix-a".as_ref(),
+        "--out-dir".as_ref(),
+        rust_out.path().as_os_str(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    assert!(system_artifacts(rust_out.path()).is_empty());
+}
+
+/// A package holding a contract and a topology whose deployment `Bad` leaves
+/// `Panel` unplaced (RSDL-701), or, with `closure` replacing the system line,
+/// a closure error.
+fn placement_workspace(label: &str, system: &str) -> TempDir {
+    let dir = TempDir::new(label);
+    dir.write(
+        "ridl.toml",
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "lane.ridl",
+        "package veh.demo\n\ntype Flag: boolean\n\n\
+         interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    );
+    dir.write(
+        "topology.rsdl",
+        &format!(
+            "package veh.demo\n\n\
+             component Lane {{ offers veh.demo.lane }}\n\
+             component Panel {{ requires LaneAssist }}\n\
+             {system}\n\
+             deployment Good for Vehicle {{ machine A {{ Lane, Panel }} }}\n\
+             deployment Bad for Vehicle {{ machine A {{ Lane }} }}\n"
+        ),
+    );
+    dir
+}
+
+/// rsdl reference §13: an RSDL-7xx error blocks only its own deployment. The
+/// build exits 1 and still writes the package IR and the system without that
+/// deployment.
+#[test]
+fn build_leaves_out_a_deployment_a_placement_error_blocks() {
+    let dir = placement_workspace("system-placement", "system Vehicle { Lane, Panel }");
+    let out = TempDir::new("system-placement-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+    ]);
+    assert_eq!(code, 1, "an error exits 1, stderr:\n{stderr}");
+    assert!(stderr.contains("error[RSDL-701]"), "got:\n{stderr}");
+    assert!(out.path().join("veh.demo.ir.json").is_file());
+    let json = std::fs::read_to_string(out.path().join("veh.demo.Vehicle.system.json"))
+        .expect("the system is written");
+    let system = ridl_ir::v2::system_from_json(&json).expect("the JSON artifact parses");
+    let deployments: Vec<&str> = system
+        .deployments
+        .iter()
+        .map(|deployment| deployment.name.as_str())
+        .collect();
+    assert_eq!(deployments, ["Good"]);
+}
+
+/// rsdl reference §13: an error in the closure blocks every deployment, and
+/// the build writes nothing at all (C1).
+#[test]
+fn build_with_a_closure_error_writes_nothing() {
+    let dir = placement_workspace("system-closure", "system Vehicle { Lane, Lane, Panel }");
+    let out = TempDir::new("system-closure-out");
+    let (code, stderr) = ridlc(&[
+        "build".as_ref(),
+        dir.path().as_os_str(),
+        "--out-dir".as_ref(),
+        out.path().as_os_str(),
+        "--emit".as_ref(),
+        "ir-json".as_ref(),
+    ]);
+    assert_eq!(code, 1, "stderr:\n{stderr}");
+    assert!(stderr.contains("error[RSDL-603]"), "got:\n{stderr}");
+    let written: Vec<_> = std::fs::read_dir(out.path())
+        .map(|entries| entries.flatten().collect())
+        .unwrap_or_default();
+    assert!(written.is_empty(), "nothing is written, got {written:?}");
+}
+
 /// A package whose composite nesting crosses the transcoding decoder's
 /// recursion limit (ADR-0014 decision 12) is legal source. Only prototext
 /// still transcodes (decision 14): `ir-text` reports a detached error
