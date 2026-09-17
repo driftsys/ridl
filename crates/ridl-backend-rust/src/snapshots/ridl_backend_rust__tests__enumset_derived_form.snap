@@ -2,6 +2,7 @@
 source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_for(decls)
 ---
+use ridl_rt::payload::{Rule, Violation};
 #[repr(i64)]
 pub enum Warning {
     LOW_FUEL = 0,

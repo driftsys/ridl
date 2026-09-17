@@ -42,7 +42,7 @@ pub struct GenerateError {
     pub message: String,
 }
 
-/// Generates Rust source and the extern-C header for `package`.
+/// Generates the Rust source for `package`.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking. Every
 /// emitted identifier is produced through `ident`, which escapes Rust
@@ -56,6 +56,10 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 
     let mut items: Vec<TokenStream> = Vec::new();
     let mut tuples: Vec<InducedTuple> = Vec::new();
+
+    if package_constructs_a_violation(package) {
+        items.push(quote! { use ridl_rt::payload::{Rule, Violation}; });
+    }
 
     for decl in &package.decls {
         items.push(emit_decl(&ctx, decl, &mut tuples));
@@ -93,6 +97,20 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 
     Ok(Generated {
         rust_source: prettyplease::unparse(&file),
+    })
+}
+
+/// True when `package` declares at least one construct whose generated
+/// constructor will return a `ridl_rt::payload::Violation`: a named scalar
+/// whose constraint is not vacuous, an `enum`, or an `enumset` (Tasks 3, 5 and
+/// 8). The `use` line `generate` emits is conditioned on this, so a package
+/// declaring only vacuous types draws no unused import.
+fn package_constructs_a_violation(package: &v2::Package) -> bool {
+    package.decls.iter().any(|decl| match &decl.kind {
+        Some(v2::decl::Kind::TypeDef(td)) => !v2::constraint_is_vacuous(td.constraint.as_ref()),
+        Some(v2::decl::Kind::EnumDef(_)) => true,
+        Some(v2::decl::Kind::EnumSetDef(_)) => true,
+        _ => false,
     })
 }
 
@@ -236,8 +254,7 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> Toke
         Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd),
         Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud),
         // Interaction kinds ride `Interface.interactions`, never a package
-        // decl, so none of them reaches this match; interfaces and services are
-        // emitted by the `interact` module.
+        // decl, so none of them reaches this match; nothing emits them today.
         Some(_) | None => return quote! {},
     };
 

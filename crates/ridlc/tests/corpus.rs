@@ -1064,6 +1064,7 @@ fn veh_common_generated_rust_compiles_with_rustc() {
     let source_path = dir.join("veh_common.rs");
     let meta_path = dir.join("veh_common.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(&dir);
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1076,6 +1077,8 @@ fn veh_common_generated_rust_compiles_with_rustc() {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1180,6 +1183,7 @@ fn workspace_two_members_composed_compiles_with_rustc() {
     let source_path = dir.join("composed.rs");
     let meta_path = dir.join("composed.rmeta");
     std::fs::write(&source_path, &source).expect("the composed source is written");
+    let rlib = ridl_rt_rlib(&dir);
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1192,6 +1196,8 @@ fn workspace_two_members_composed_compiles_with_rustc() {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1202,6 +1208,49 @@ fn workspace_two_members_composed_compiles_with_rustc() {
         succeeded,
         "the composed workspace-two-members Rust must compile, source:\n{source}"
     );
+}
+
+/// Builds `ridl-rt` as an rlib with plain `rustc`, so a compile proof can
+/// pass `--extern ridl_rt=<path>` for the `use` the generated code emits.
+///
+/// One `rustc` call over its `lib.rs` is the whole build: `ridl-rt` is
+/// `no_std` and has no dependency in any feature combination (ADR-0021
+/// decision 8), and no feature gates any item this code names. It is built
+/// with the same `rustc` the proof itself spawns; an rlib built by another
+/// toolchain is rejected with E0514, which is what happens if this is
+/// hoisted to a shared location outside the repository.
+///
+/// Edition 2021 is the edition `crates/ridl-rt/Cargo.toml` declares. The
+/// generated code keeps compiling as edition 2024; the two are independent.
+///
+/// This is a copy of the identically named helper in
+/// `crates/ridl-backend-rust/src/tests.rs`; the two must change together.
+fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("ridl-rt")
+        .join("src")
+        .join("lib.rs");
+    let rlib = dir.join("libridl_rt.rlib");
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2021",
+            "--crate-type",
+            "rlib",
+            "--crate-name",
+            "ridl_rt",
+        ])
+        .arg(&source)
+        .arg("-o")
+        .arg(&rlib)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "ridl-rt must build as an rlib for the compile proofs to see it"
+    );
+    rlib
 }
 
 /// Runs `rustc` over `source` as a library, returning whether it exited zero.
@@ -1222,6 +1271,7 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
     let source_path = dir.join(format!("{label}.rs"));
     let meta_path = dir.join(format!("{label}.rmeta"));
     std::fs::write(&source_path, source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(&dir);
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1247,6 +1297,8 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");

@@ -4,6 +4,7 @@ expression: compiled.rust
 input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 ---
 // ===== package veh.common =====
+use ridl_rt::payload::{Rule, Violation};
 /// Vehicle speed over ground
 #[repr(transparent)]
 pub struct Speed(pub f64);
@@ -161,6 +162,7 @@ impl Default for SensorBoundsRange {
 
 
 // ===== package veh.cluster =====
+use ridl_rt::payload::{Rule, Violation};
 #[repr(C)]
 pub struct DoorPayload {
     pub sensorId: i64,

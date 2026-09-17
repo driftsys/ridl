@@ -340,6 +340,51 @@ fn enumset_derived_form() {
 }
 
 #[test]
+fn a_pure_typl_package_names_the_runtime_violation() {
+    // A package with no interface still reaches ridl-rt, because a named
+    // scalar's constructor returns its Violation.
+    let source = rust_for(vec![speed_decl()]);
+    assert!(
+        source.contains("use ridl_rt::payload::{Rule, Violation};"),
+        "got:\n{source}"
+    );
+    // No generated error type: the library owns this one.
+    assert!(!source.contains("enum ConstraintError"));
+}
+
+#[test]
+fn a_vacuous_named_scalar_does_not_name_the_runtime() {
+    // `Counter` is an integer backing with no min, max, length bound, or
+    // pattern — its constraint is vacuous, so its constructor has nothing to
+    // check and never returns a Violation. Emitting the `use` unconditionally
+    // would draw an unused import here.
+    let source = rust_for(vec![counter_decl()]);
+    assert!(
+        !source.contains("ridl_rt"),
+        "a package of only vacuous types must not name ridl_rt, got:\n{source}"
+    );
+}
+
+#[test]
+fn an_enum_names_the_runtime_violation() {
+    // An enum's constructor rejects an out-of-range discriminant with a
+    // Violation, even though nothing about an enum is a "constraint" in the
+    // TypeDef sense the predicate's other arm tests.
+    let decls = vec![public_decl(
+        "GearPosition",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![enum_value("PARK", 0), enum_value("DRIVE", 1)],
+            reserved: Vec::new(),
+        }),
+    )];
+    let source = rust_for(decls);
+    assert!(
+        source.contains("use ridl_rt::payload::{Rule, Violation};"),
+        "got:\n{source}"
+    );
+}
+
+#[test]
 fn result_union() {
     let reading = v2::StructDef {
         members: vec![field_member(named_field(
@@ -608,6 +653,7 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("internal_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -623,6 +669,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
         ])
         .arg("-o")
         .arg(dir.path().join("internal_tuple.rmeta"))
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1199,6 +1247,46 @@ fn appendix_b_rust_snapshot() {
     insta::assert_snapshot!(rust_source);
 }
 
+/// Builds `ridl-rt` as an rlib with plain `rustc`, so a compile proof can
+/// pass `--extern ridl_rt=<path>` for the `use` the generated code emits.
+///
+/// One `rustc` call over its `lib.rs` is the whole build: `ridl-rt` is
+/// `no_std` and has no dependency in any feature combination (ADR-0021
+/// decision 8), and no feature gates any item this code names. It is built
+/// with the same `rustc` the proof itself spawns; an rlib built by another
+/// toolchain is rejected with E0514, which is what happens if this is
+/// hoisted to a shared location outside the repository.
+///
+/// Edition 2021 is the edition `crates/ridl-rt/Cargo.toml` declares. The
+/// generated code keeps compiling as edition 2024; the two are independent.
+fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("ridl-rt")
+        .join("src")
+        .join("lib.rs");
+    let rlib = dir.join("libridl_rt.rlib");
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2021",
+            "--crate-type",
+            "rlib",
+            "--crate-name",
+            "ridl_rt",
+        ])
+        .arg(&source)
+        .arg("-o")
+        .arg(&rlib)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "ridl-rt must build as an rlib for the compile proofs to see it"
+    );
+    rlib
+}
+
 /// The generated Rust for the full Appendix B package compiles with `rustc`.
 /// A minimal prelude stands in for the `ridl.std` types the package imports,
 /// declared in the module path the cross-package references map to. The temp
@@ -1228,6 +1316,7 @@ pub mod ridl {
     let source_path = dir.path().join("appendix_b.rs");
     let meta_path = dir.path().join("appendix_b.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1240,6 +1329,8 @@ pub mod ridl {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1299,6 +1390,7 @@ fn constructible_collections_compile() {
     let source_path = dir.path().join("bag.rs");
     let meta_path = dir.path().join("bag.rmeta");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -1310,6 +1402,8 @@ fn constructible_collections_compile() {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc runs");
@@ -1703,6 +1797,7 @@ pub mod veh {
     let source_path = dir.path().join("appendix_a.rs");
     let meta_path = dir.path().join("appendix_a.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1715,6 +1810,8 @@ pub mod veh {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");

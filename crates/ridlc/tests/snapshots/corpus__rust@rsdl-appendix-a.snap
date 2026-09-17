@@ -7,6 +7,7 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
 
 
 // ===== package veh.common =====
+use ridl_rt::payload::{Rule, Violation};
 #[repr(transparent)]
 pub struct Speed(pub f64);
 impl Default for Speed {
