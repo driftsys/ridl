@@ -526,6 +526,77 @@ fn a_missing_input_exits_two() {
 }
 
 /// `--format json` prints the stable schema and still keys the exit code on
+/// A package whose one deployment places `Panel` on `machine`: a contract and
+/// a topology in one directory.
+fn placed_workspace(dir: &TempDir, root: &str, machine: &str) -> PathBuf {
+    dir.write(
+        &format!("{root}/ridl.toml"),
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        &format!("{root}/lane.ridl"),
+        "package veh.demo\n\ntype Flag: boolean\n\n\
+         interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    );
+    dir.write(
+        &format!("{root}/topology.rsdl"),
+        &format!(
+            "package veh.demo\n\n\
+             component Lane {{ offers veh.demo.lane }}\n\
+             component Panel {{ requires LaneAssist }}\n\
+             system Vehicle {{ Lane, Panel }}\n\
+             deployment Desk for Vehicle {{\n\
+             \x20 machine Top {{ Lane }}\n\
+             \x20 machine {machine} {{ Panel }}\n\
+             }}\n"
+        ),
+    );
+    dir.path().join(root)
+}
+
+/// rsdl reference §14 (roadmap E6.18): moving an instance to another machine
+/// leaves the contracts untouched, so the verdict is `identical` and the exit
+/// code 0, and the move is listed under "placement changed" with no verdict.
+#[test]
+fn a_moved_instance_is_listed_under_placement_changed() {
+    let dir = TempDir::new("placement");
+    let old = placed_workspace(&dir, "old", "Front");
+    let new = placed_workspace(&dir, "new", "Rear");
+    let expected = "identical\n\
+                    placement changed\n\
+                    \x20 Desk/Rear: (absent) -> machine\n\
+                    \x20 Desk/Front: machine -> (removed)\n\
+                    \x20 Desk/veh.demo.Panel.Unit: Front -> Rear\n";
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), old.as_os_str(), new.as_os_str()]);
+    assert_eq!(
+        code, 0,
+        "a placement change has no verdict, stderr:\n{stderr}"
+    );
+    assert_eq!(stdout, expected);
+
+    let (code, stdout, stderr) = ridl(&[
+        "diff".as_ref(),
+        old.as_os_str(),
+        new.as_os_str(),
+        "--format".as_ref(),
+        "json".as_ref(),
+    ]);
+    assert_eq!(code, 0, "stderr:\n{stderr}");
+    let value: serde_json::Value = serde_json::from_str(&stdout).expect("valid JSON");
+    assert_eq!(value["verdict"], "identical");
+    assert_eq!(
+        value["placement_changed"][2],
+        serde_json::json!({
+            "path": "Desk/veh.demo.Panel.Unit",
+            "before": "Front",
+            "after": "Rear"
+        })
+    );
+    assert!(value.get("composition_changed").is_none());
+}
+
 /// the verdict.
 #[test]
 fn format_json_matches_the_schema_and_exit_code() {

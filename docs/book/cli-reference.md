@@ -952,6 +952,35 @@ ridl diff old.ridl breaking.ridl --format json
 }
 ```
 
+**At the system.** When both sides are source whose workspace declares a
+`system`, `ridl diff` also lists the changes to the lowered system that are not
+contract changes, under two headings and with no verdict (rsdl reference §14):
+**placement changed** for a deployment or a machine added or removed, a machine
+made `external`, or an instance moved to another machine; **composition
+changed** for a component added to or removed from the system, an `offers` or
+`requires` line added or removed, `instances` changed, or a component made
+`external`. The verdict and the exit code are the contracts' alone.
+
+Moving `Panel` from machine `Front` to machine `Rear` in deployment `Desk`:
+
+```sh
+ridl diff old new
+```
+
+```text
+identical
+placement changed
+  Desk/Rear: (absent) -> machine
+  Desk/Front: machine -> (removed)
+  Desk/veh.demo.Panel.Unit: Front -> Rear
+```
+
+With `--format json` the headings are the keys `placement_changed` and
+`composition_changed`, each a list of `{"path", "before", "after"}`, present
+only when they hold a change. An `.ir.json` snapshot, or a directory of them,
+carries no system — `ridl baseline` publishes package snapshots only — so a
+diff against `.ridl/baseline/` lists no system change.
+
 `--explain` for one category:
 
 ```sh

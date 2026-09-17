@@ -17,19 +17,23 @@
 //! snapshots at every emission site.
 //!
 //! This module owns the vocabulary ([`Verdict`], [`Category`], [`Change`],
-//! [`DiffReport`]), the set-level comparison ([`diff_sets`]), snapshot loading
-//! ([`load_ir_json`]), and rendering ([`render_text`], [`render_json`]). The
+//! [`DiffReport`]), the set-level comparison ([`diff_sets`], and
+//! [`diff_workspaces`] with the system headings of [`system`]), snapshot
+//! loading ([`load_ir_json`]), and rendering ([`render_text`],
+//! [`render_json`]). The
 //! classification table itself is documented per category by [`explain`], which
 //! `ridl diff --explain` prints.
 
 use std::path::Path;
 
-use ridl_ir::v2::Package;
+use ridl_ir::v2::{Package, System};
 
 mod classify;
+pub mod system;
 mod walk;
 
 pub use classify::{category_from_word, classify, explain};
+pub use system::{SystemChange, SystemHeading, diff_systems};
 
 #[cfg(test)]
 mod tests;
@@ -233,6 +237,10 @@ pub struct Change {
 pub struct DiffReport {
     pub changes: Vec<Change>,
     pub verdict: Verdict,
+    /// The changes to the lowered system, each under its heading and with no
+    /// verdict (rsdl reference §14). They never enter `verdict`. Empty unless
+    /// both sides carry a system ([`diff_workspaces`]).
+    pub system: Vec<SystemChange>,
 }
 
 /// An error loading an `.ir.json` snapshot.
@@ -302,7 +310,11 @@ pub(crate) fn report(changes: Vec<Change>) -> DiffReport {
         .map(|change| change.verdict)
         .max()
         .unwrap_or(Verdict::Identical);
-    DiffReport { changes, verdict }
+    DiffReport {
+        changes,
+        verdict,
+        system: Vec::new(),
+    }
 }
 
 /// Compares two resolved packages. Matched packages share a name; the new
@@ -366,6 +378,24 @@ pub fn diff_sets(old: &[Package], new: &[Package]) -> DiffReport {
         }
     }
     report(changes)
+}
+
+/// Compares two workspaces at the system (rsdl reference §14): the packages by
+/// the ridl categories, exactly as [`diff_sets`] does, and — when both sides
+/// carry a lowered system — the system's placement and composition changes,
+/// which carry no verdict. A system on one side only is not compared: there is
+/// nothing to compare it against.
+pub fn diff_workspaces(
+    old: &[Package],
+    old_system: Option<&System>,
+    new: &[Package],
+    new_system: Option<&System>,
+) -> DiffReport {
+    let mut report = diff_sets(old, new);
+    if let (Some(old_system), Some(new_system)) = (old_system, new_system) {
+        report.system = diff_systems(old_system, new_system);
+    }
+    report
 }
 
 /// Loads an `.ir.json` snapshot written by `ridl build --emit ir-json` —
@@ -507,6 +537,10 @@ impl serde::Serialize for Change {
 /// no [`heading`] is listed first, in report order; then each heading is
 /// printed once, as its own line ending in a colon, followed by the changes
 /// under it, in report order. Headings come in [`CATEGORIES`] order.
+///
+/// After the contract changes come the system headings (rsdl reference §14):
+/// each heading that has a change on its own line, then one indented line per
+/// change under it, in the `path: before -> after` form and with no verdict.
 pub fn render_text(report: &DiffReport) -> String {
     let mut out = String::new();
     out.push_str(verdict_word(report.verdict));
@@ -539,6 +573,27 @@ pub fn render_text(report: &DiffReport) -> String {
             push_change_line(&mut out, change);
         }
     }
+    for heading in [
+        SystemHeading::PlacementChanged,
+        SystemHeading::CompositionChanged,
+    ] {
+        let mut listed = report
+            .system
+            .iter()
+            .filter(|change| change.heading == heading)
+            .peekable();
+        if listed.peek().is_none() {
+            continue;
+        }
+        out.push_str(system::heading_text(heading));
+        out.push('\n');
+        for change in listed {
+            out.push_str("  ");
+            out.push_str(&change.path);
+            push_values(&mut out, change.before.as_ref(), change.after.as_ref());
+            out.push('\n');
+        }
+    }
     out
 }
 
@@ -551,7 +606,14 @@ fn push_change_line(out: &mut String, change: &Change) {
     out.push_str(category_word(change.category));
     out.push(' ');
     out.push_str(&change.path);
-    match (&change.before, &change.after) {
+    push_values(out, change.before.as_ref(), change.after.as_ref());
+    out.push('\n');
+}
+
+/// The rendered `before -> after` tail of one change line, shared by contract
+/// changes and system changes.
+fn push_values(out: &mut String, before: Option<&String>, after: Option<&String>) {
+    match (before, after) {
         (Some(before), Some(after)) => {
             out.push_str(": ");
             out.push_str(before);
@@ -569,7 +631,6 @@ fn push_change_line(out: &mut String, change: &Change) {
         }
         (None, None) => {}
     }
-    out.push('\n');
 }
 
 /// Renders a report as machine-readable JSON with the stable schema
@@ -577,14 +638,39 @@ fn push_change_line(out: &mut String, change: &Change) {
 /// "after"}]}`.
 pub fn render_json(report: &DiffReport) -> String {
     #[derive(serde::Serialize)]
+    struct JsonSystemChange<'a> {
+        path: &'a str,
+        before: Option<&'a str>,
+        after: Option<&'a str>,
+    }
+
+    #[derive(serde::Serialize)]
     struct JsonReport<'a> {
         verdict: Verdict,
         changes: &'a [Change],
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        placement_changed: Vec<JsonSystemChange<'a>>,
+        #[serde(skip_serializing_if = "Vec::is_empty")]
+        composition_changed: Vec<JsonSystemChange<'a>>,
     }
 
+    let under = |heading: SystemHeading| -> Vec<JsonSystemChange<'_>> {
+        report
+            .system
+            .iter()
+            .filter(|change| change.heading == heading)
+            .map(|change| JsonSystemChange {
+                path: &change.path,
+                before: change.before.as_deref(),
+                after: change.after.as_deref(),
+            })
+            .collect()
+    };
     serde_json::to_string_pretty(&JsonReport {
         verdict: report.verdict,
         changes: &report.changes,
+        placement_changed: under(SystemHeading::PlacementChanged),
+        composition_changed: under(SystemHeading::CompositionChanged),
     })
     .expect("a diff report holds only string-representable values, so serialization cannot fail")
 }

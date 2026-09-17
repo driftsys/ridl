@@ -354,16 +354,24 @@ fn run_explain(category: &str) -> ExitCode {
 /// either side, 1 when the change is breaking, 0 when it is compatible or the
 /// two are identical.
 fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
-    let old_packages = match load_diff_side(old) {
-        Ok(packages) => packages,
+    let old_side = match load_diff_side(old) {
+        Ok(side) => side,
         Err(code) => return code,
     };
-    let new_packages = match load_diff_side(new) {
-        Ok(packages) => packages,
+    let new_side = match load_diff_side(new) {
+        Ok(side) => side,
         Err(code) => return code,
     };
 
-    let report = ridl_diff::diff_sets(&old_packages, &new_packages);
+    // The verdict is the contracts' alone: the system's placement and
+    // composition changes are listed under their headings with no verdict
+    // (rsdl reference §14).
+    let report = ridl_diff::diff_workspaces(
+        &old_side.packages,
+        old_side.system.as_ref(),
+        &new_side.packages,
+        new_side.system.as_ref(),
+    );
     // `render_text` already terminates every line, so it prints as is; the JSON
     // rendering has no trailing newline and gets one.
     match format {
@@ -377,7 +385,15 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
     }
 }
 
-/// Loads one side of a diff into a set of resolved packages.
+/// One side of a diff: its resolved packages, and its lowered system when the
+/// side carries one (rsdl reference §13).
+struct DiffSide {
+    packages: Vec<ridl_ir::v2::Package>,
+    system: Option<ridl_ir::v2::System>,
+}
+
+/// Loads one side of a diff into a set of resolved packages and, when the side
+/// carries one, its lowered system.
 ///
 /// Three input forms, in order:
 ///
@@ -407,9 +423,15 @@ fn run_diff(old: &Path, new: &Path, format: DiffFormat) -> ExitCode {
 ///
 /// A read, parse, or compile error renders to stderr and yields exit code 2 —
 /// `ridl diff` never emits a diff report over a snapshot it could not build.
-fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
+///
+/// Only a source input carries a system, the one the compile lowered: a
+/// snapshot is a package snapshot, and `ridl baseline` publishes no system.
+fn load_diff_side(entry: &Path) -> Result<DiffSide, ExitCode> {
     if is_ir_json(entry) {
-        return load_snapshots(&[entry.to_path_buf()], None);
+        return Ok(DiffSide {
+            packages: load_snapshots(&[entry.to_path_buf()], None)?,
+            system: None,
+        });
     }
 
     // The other IR encodings are refused by name, before the source
@@ -427,7 +449,10 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
     if entry.is_dir() {
         let snapshots = snapshot_files(entry)?;
         if !snapshots.is_empty() {
-            return load_snapshots(&snapshots, None);
+            return Ok(DiffSide {
+                packages: load_snapshots(&snapshots, None)?,
+                system: None,
+            });
         }
         // Two directory shapes are described rather than compiled: one
         // holding IR artifacts and no `.ir.json` — a snapshot directory in an
@@ -474,11 +499,14 @@ fn load_diff_side(entry: &Path) -> Result<Vec<ridl_ir::v2::Package>, ExitCode> {
                 eprint!("{}", render(&output.diagnostics, &output.sources));
                 return Err(ExitCode::from(2));
             }
-            Ok(output
-                .checked
-                .into_iter()
-                .map(|checked| checked.ir)
-                .collect())
+            Ok(DiffSide {
+                packages: output
+                    .checked
+                    .into_iter()
+                    .map(|checked| checked.ir)
+                    .collect(),
+                system: output.system,
+            })
         }
         Err(err) => {
             eprintln!("error: {}: {err}", entry.display());
