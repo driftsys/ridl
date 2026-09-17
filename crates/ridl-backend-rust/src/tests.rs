@@ -1938,3 +1938,32 @@ fn a_typl_only_package_may_declare_a_vocabulary_name() {
 // ---------------------------------------------------------------------------
 // `internal` visibility on the interaction layer (ADR-0008 decision 7).
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// The package-segment spelling shared with `ridlc`'s module tree.
+// ---------------------------------------------------------------------------
+
+/// `module_segment` exists so that the module tree `ridlc` writes for
+/// `--emit rust` and the paths `type_path` emits cannot drift apart: a tree
+/// that spells a segment differently from the reference emits a module the
+/// reference cannot name. Nothing pinned that agreement at the definition
+/// site, so a change to either side that kept both internally consistent went
+/// unnoticed here.
+///
+/// The segments are the ones that force a spelling. `is_valid_name_segment`
+/// accepts any lowercase ASCII segment, so `veh.mod`, `veh.type`, `veh.fn`,
+/// `veh.crate`, `veh.self` and `veh.super` are all legal typl package names.
+/// `mod`, `type` and `fn` become raw identifiers; `crate`, `self` and `super`
+/// cannot be raw identifiers at all and take a trailing underscore instead.
+#[test]
+fn module_segment_spells_a_segment_the_way_type_path_does() {
+    for segment in ["mod", "type", "fn", "crate", "self", "super", "speed"] {
+        let rendered = super::type_path(&format!("{segment}.T")).to_string();
+        let expected = format!("crate :: {} :: T", super::module_segment(segment));
+        assert_eq!(
+            rendered, expected,
+            "a cross-package reference into `{segment}` and the module tree's spelling of \
+             `{segment}` must agree, or the crate root emits a module the reference cannot name"
+        );
+    }
+}

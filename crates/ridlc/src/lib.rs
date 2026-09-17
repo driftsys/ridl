@@ -336,6 +336,18 @@ pub enum Emit {
     /// those paths and `Cargo.toml` is what makes the directory a crate at
     /// all. Single-file mode writes neither — it writes only `<stem>.rs`,
     /// the same asymmetry documented on [`Emit::TypeScript`].
+    ///
+    /// Two cases write neither file, and each is a build that writes nothing
+    /// at all rather than a partial crate: a build that draws an
+    /// error-severity diagnostic, from the compile or from a backend
+    /// ([`write_crate_files`]), and a build whose output directory already
+    /// holds a `lib.rs` or a `Cargo.toml` that ridlc did not write
+    /// ([`crate_file_refusals`]).
+    ///
+    /// A crate that is written is not a crate that compiles in every case:
+    /// issue #416 records a legal package naming case whose generated path
+    /// does not resolve — a package `veh.common` alongside a type named
+    /// `common` in package `veh` — which rustc reports as E0573.
     Rust,
     /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`.
     IrJson,
@@ -483,7 +495,10 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
 /// run produced no error-severity diagnostic, whether from the compile or from
 /// remote-import materialization (a manifest, lockfile, or fetch error, MANI-1xx).
 /// An error-bearing build renders its diagnostics and exits non-zero without
-/// writing any artifact (C1).
+/// writing any artifact (C1). A Rust build whose output directory already
+/// holds a `lib.rs` or a `Cargo.toml` that ridlc did not write is refused on
+/// the same terms, before the per-package write loop runs, so it writes no
+/// artifact either ([`crate_file_refusals`]).
 ///
 /// The artifact base name is the file stem in single-file mode (preserving the
 /// E0 `<input-stem>.rs` contract) and the full dotted package name otherwise, so
@@ -527,6 +542,33 @@ pub fn run_build(
         std::fs::create_dir_all(out_dir)?;
         let single_file = entry.is_file() && manifest_root_of(entry).is_none();
         let file_stem = module_name_from_path(&entry.to_string_lossy());
+
+        // Whether this build owes the output directory a crate root and a
+        // manifest: generated Rust names a cross-package reference as
+        // `crate::veh::…` (`ridl_backend_rust::type_path`), so every package
+        // it emits must land inside one crate. Single-file mode keeps writing
+        // only `<stem>.rs`, matching the documented single-file asymmetry on
+        // `Emit::TypeScript`.
+        let writes_crate_files =
+            !single_file && emits.iter().any(|emit| matches!(emit, Emit::Rust));
+
+        // The overwrite gate runs before any write, not after the per-package
+        // loop: a refusal is a build that produced nothing, and a loop that
+        // had already written every `<package>.rs` into a hand-written crate
+        // would contradict that. `lib.rs` and `Cargo.toml` are not
+        // package-scoped names and `--out-dir` is any directory the caller
+        // names, so this is the check that keeps a build from truncating
+        // sources a person wrote.
+        if writes_crate_files {
+            let refusals = crate_file_refusals(out_dir)?;
+            if !refusals.is_empty() {
+                diagnostics.extend(refusals);
+                return Ok(CliRun {
+                    diagnostics,
+                    sources,
+                });
+            }
+        }
 
         // `ridl.std` is deliberately absent from `checked` (it is not a
         // workspace member), so no loop over `checked` ever reaches it. A
@@ -589,16 +631,12 @@ pub fn run_build(
             )?;
         }
 
-        // Generated Rust names a cross-package reference as `crate::veh::…`
-        // (`ridl_backend_rust::type_path`), so every package it emits must
-        // land inside one crate: `<out_dir>/lib.rs` builds the module tree
-        // and `<out_dir>/Cargo.toml` is the manifest that makes it a crate at
-        // all. Single-file mode keeps writing only `<stem>.rs`, matching the
-        // documented single-file asymmetry on `Emit::TypeScript`. `ridl.std`
-        // joins the module tree whenever the build wrote `ridl.std.rs` above
-        // (issue #190), because generated code names those types as
-        // `crate::ridl::std::…` too.
-        if !single_file && emits.iter().any(|emit| matches!(emit, Emit::Rust)) {
+        // `<out_dir>/lib.rs` builds the module tree over the flat per-package
+        // files and `<out_dir>/Cargo.toml` is the manifest that makes the
+        // directory a crate at all. `ridl.std` joins the module tree whenever
+        // the build wrote `ridl.std.rs` above (issue #190), because generated
+        // code names those types as `crate::ridl::std::…` too.
+        if writes_crate_files {
             let mut package_names: Vec<String> = checked
                 .iter()
                 .map(|package| package.ir.name.clone())
@@ -611,7 +649,7 @@ pub fn run_build(
                 out_dir,
                 &crate_name_for(entry),
                 &package_names,
-                &mut diagnostics,
+                &diagnostics,
             )?;
         }
     }
@@ -644,7 +682,7 @@ fn crate_name_for(entry: &Path) -> String {
 }
 
 /// The first line of a generated `Cargo.toml`. A build refuses to overwrite a
-/// `Cargo.toml` that does not begin with it ([`write_crate_files`]).
+/// `Cargo.toml` that does not begin with it ([`crate_file_refusals`]).
 const CARGO_TOML_MARKER: &str = "# Generated by ridlc. Do not edit.";
 
 /// The first line of a generated `lib.rs`, the crate-root counterpart of
@@ -654,9 +692,9 @@ const LIB_RS_MARKER: &str = "// Generated by ridlc. Do not edit.";
 /// Writes `<out_dir>/lib.rs` and `<out_dir>/Cargo.toml` for a Rust emit, or
 /// writes neither.
 ///
-/// Two conditions stop both writes, and each stops both rather than one,
-/// because a crate root without a manifest and a manifest without a crate root
-/// are each worse than neither:
+/// The two files are decided together and refused together, because a crate
+/// root without a manifest and a manifest without a crate root are each worse
+/// than neither. Two conditions stop both writes:
 ///
 /// - **An error-severity diagnostic is present.** [`run_build`] computes its
 ///   emit gate before the per-package write loop, so that gate cannot see a
@@ -665,17 +703,22 @@ const LIB_RS_MARKER: &str = "// Generated by ridlc. Do not edit.";
 ///   module tree is built from every checked package, so it would name a file
 ///   that was never written and the crate would not compile. Re-checking here,
 ///   after the loop, is what sees it.
-/// - **An existing file is not a generated one.** `lib.rs` and `Cargo.toml`
-///   are not package-scoped names and `--out-dir` is any directory the caller
-///   names, including the root of a hand-written crate. `std::fs::write`
-///   truncates, so a build pointed at such a directory would destroy sources
-///   the user wrote. A file that does not begin with its marker is treated as
-///   hand-written and is left exactly as it is.
+/// - **An existing destination is not a generated file.** That check is
+///   [`crate_file_refusals`], which [`run_build`] runs before it writes
+///   anything at all — including the per-package sources — so a refusal is a
+///   build that produced nothing.
+///
+/// The writes themselves are not atomic and are not made so: an I/O failure on
+/// either one is returned as `Err`, which aborts the build with exit code 2,
+/// and a failure on the manifest therefore leaves the crate root written.
+/// Making the pair atomic would need a temporary directory and a rename, which
+/// buys nothing a re-run does not: the next successful build overwrites both,
+/// because both carry the marker that permits it.
 fn write_crate_files(
     out_dir: &Path,
     crate_name: &str,
     package_names: &[String],
-    diagnostics: &mut Vec<Diagnostic>,
+    diagnostics: &[Diagnostic],
 ) -> std::io::Result<()> {
     if diagnostics
         .iter()
@@ -684,52 +727,66 @@ fn write_crate_files(
         return Ok(());
     }
 
-    let lib_path = out_dir.join("lib.rs");
-    let manifest_path = out_dir.join("Cargo.toml");
-    let refusals: Vec<Diagnostic> = [
-        (&lib_path, LIB_RS_MARKER),
-        (&manifest_path, CARGO_TOML_MARKER),
-    ]
-    .into_iter()
-    .filter_map(|(path, marker)| refuse_overwrite(path, marker))
-    .collect();
-    if !refusals.is_empty() {
-        diagnostics.extend(refusals);
-        return Ok(());
-    }
-
-    std::fs::write(&lib_path, render_lib_rs(package_names))?;
-    std::fs::write(&manifest_path, render_cargo_toml(crate_name))?;
+    std::fs::write(out_dir.join("lib.rs"), render_lib_rs(package_names))?;
+    std::fs::write(out_dir.join("Cargo.toml"), render_cargo_toml(crate_name))?;
     Ok(())
+}
+
+/// The overwrite gate for the two crate files: one error diagnostic per
+/// destination that exists and was not written by a previous build, and an
+/// empty vector when both are safe to write.
+///
+/// `lib.rs` and `Cargo.toml` are not package-scoped names and `--out-dir` is
+/// any directory the caller names, including the root of a hand-written crate.
+/// `std::fs::write` truncates, so a build pointed at such a directory would
+/// destroy sources the user wrote. A file that does not begin with its marker
+/// is treated as hand-written and is left exactly as it is.
+///
+/// Both destinations are checked even once the first has refused, so a build
+/// into a hand-written crate reports every file it declined rather than one at
+/// a time.
+fn crate_file_refusals(out_dir: &Path) -> std::io::Result<Vec<Diagnostic>> {
+    let mut refusals = Vec::new();
+    for (path, marker) in [
+        (out_dir.join("lib.rs"), LIB_RS_MARKER),
+        (out_dir.join("Cargo.toml"), CARGO_TOML_MARKER),
+    ] {
+        if let Some(diagnostic) = refuse_overwrite(&path, marker)? {
+            refusals.push(diagnostic);
+        }
+    }
+    Ok(refusals)
 }
 
 /// An error diagnostic when `path` exists and was not written by a previous
 /// build, or `None` when the file is absent or begins with `marker`.
 ///
-/// A file this cannot read is refused too: a build must not truncate a file
-/// whose contents it could not check.
-fn refuse_overwrite(path: &Path, marker: &str) -> Option<Diagnostic> {
+/// A file this cannot read is neither written nor refused: the read error is
+/// returned as the [`std::io::Error`] it is, so [`run_build`] returns `Err`
+/// and the command exits 2 (ADR-0010's exit code for an I/O failure). Turning
+/// it into a diagnostic would exit 1 and would assert something about the
+/// file's first line that was never established — an unreadable file's
+/// contents are unknown, not known to be hand-written.
+fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnostic>> {
     if !path.exists() {
-        return None;
+        return Ok(None);
     }
-    let generated = std::fs::read_to_string(path)
-        .map(|text| text.starts_with(marker))
-        .unwrap_or(false);
-    if generated {
-        return None;
+    if std::fs::read_to_string(path)?.starts_with(marker) {
+        return Ok(None);
     }
-    Some(error_diagnostic(
+    Ok(Some(error_diagnostic(
         "",
         format!(
             "`{}` exists and does not start with `{marker}`, so ridlc did not write it: a file \
              without that first line was not generated by ridlc and could be a hand-written one. \
-             This build wrote neither the crate root nor the generated manifest, and the existing \
-             file is unchanged. Remove it, or build into a different --out-dir",
+             This build wrote nothing at all — no crate root, no generated manifest, and no \
+             package sources — and the existing file is unchanged. Remove it, or build into a \
+             different --out-dir",
             path.display()
         ),
         FileId::DETACHED,
         TextRange::default(),
-    ))
+    )))
 }
 
 /// The generated `Cargo.toml` body: a plain `format!`, not a template — see

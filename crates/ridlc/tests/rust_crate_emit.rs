@@ -2,6 +2,15 @@
 //! docs/wip/typl-value-objects-plan.md): a `Cargo.toml` and `lib.rs` alongside
 //! the per-package `.rs` files, so the flat emitted files resolve at the
 //! `crate::…` paths `ridl_backend_rust::type_path` already generates.
+//!
+//! The property has three exceptions, each tested below rather than assumed
+//! away. A build that draws an error-severity diagnostic writes neither file,
+//! and a build whose output directory already holds a `lib.rs` or a
+//! `Cargo.toml` that ridlc did not write writes nothing at all. Neither is a
+//! crate that fails to compile — both are the absence of one. The third is:
+//! issue #416 records a legal package naming case whose generated path does
+//! not resolve — a package `veh.common` alongside a type named `common` in
+//! package `veh` — which rustc reports as E0573.
 
 use std::path::{Path, PathBuf};
 
@@ -62,6 +71,69 @@ fn path_attribute_targets(lib: &str) -> Vec<String> {
         })
         .filter(|target| target != ".")
         .collect()
+}
+
+/// Every per-package `.rs` file in `dir`, sorted — the crate root itself is
+/// not one. An empty result is what a build that wrote nothing looks like.
+fn emitted_package_sources(dir: &Path) -> Vec<String> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<String> = entries
+        .map(|entry| entry.expect("a directory entry is readable").file_name())
+        .map(|name| name.to_string_lossy().into_owned())
+        .filter(|name| name.ends_with(".rs") && name != "lib.rs")
+        .collect();
+    files.sort();
+    files
+}
+
+/// Writes a two-member workspace into `dir` where one package is the parent of
+/// the other — package `veh` alongside package `veh.common` — and returns the
+/// workspace root.
+///
+/// No corpus fixture has this shape: every package name in every one of them
+/// is exactly two segments, and each fixture declares one package, so no
+/// existing test ever produces a package that is also the parent of another.
+/// That is the one branch `render_lib_rs` builds by hand, the one that loads
+/// `veh`'s own file as a private module and re-exports it.
+///
+/// `veh.common` names a type from `veh`, so the crate root must make
+/// `crate::veh::Speed` resolve as well as `crate::veh::common::Reading`.
+fn write_prefix_package_workspace(dir: &Path) -> PathBuf {
+    let root = dir.join("workspace");
+    std::fs::create_dir_all(root.join("member-veh")).expect("the parent member directory");
+    std::fs::create_dir_all(root.join("member-common")).expect("the child member directory");
+    std::fs::write(
+        root.join("ridl.toml"),
+        "[workspace]\nmembers = [\"member-veh\", \"member-common\"]\n",
+    )
+    .expect("the workspace manifest is written");
+
+    std::fs::write(
+        root.join("member-veh/ridl.toml"),
+        "[package]\nname = \"veh\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the parent manifest is written");
+    std::fs::write(
+        root.join("member-veh/veh.typl"),
+        "package veh\n\n/// Vehicle speed over ground\ntype Speed : km/h [0.0..250.0 step 0.5]\n",
+    )
+    .expect("the parent source is written");
+
+    std::fs::write(
+        root.join("member-common/ridl.toml"),
+        "[package]\nname = \"veh.common\"\nversion = \"1.0.0\"\n",
+    )
+    .expect("the child manifest is written");
+    std::fs::write(
+        root.join("member-common/common.typl"),
+        "package veh.common\n\nimport veh.Speed\n\n/// A reading carrying a speed from the \
+         parent package.\nstruct Reading {\n  speed : Speed\n}\n",
+    )
+    .expect("the child source is written");
+
+    root
 }
 
 /// `run_build` over a multi-package workspace with `&[Emit::Rust]` writes a
@@ -155,13 +227,7 @@ fn every_emitted_file_is_named_exactly_once_in_the_crate_root() {
     let lib = std::fs::read_to_string(out.path().join("lib.rs")).unwrap();
     let targets = path_attribute_targets(&lib);
 
-    let mut emitted: Vec<String> = std::fs::read_dir(out.path())
-        .expect("the output directory is readable")
-        .map(|entry| entry.expect("a directory entry is readable").file_name())
-        .map(|name| name.to_string_lossy().into_owned())
-        .filter(|name| name.ends_with(".rs") && name != "lib.rs")
-        .collect();
-    emitted.sort();
+    let emitted = emitted_package_sources(out.path());
     assert!(
         emitted.len() > 1,
         "the fixture must emit several packages, or this test proves nothing, got: {emitted:?}"
@@ -181,6 +247,73 @@ fn every_emitted_file_is_named_exactly_once_in_the_crate_root() {
             "the crate root names `{target}`, which no build wrote; lib.rs was:\n{lib}"
         );
     }
+}
+
+/// The invariant again, over the one package shape no corpus fixture has: a
+/// package that is also the parent of another (`veh` alongside `veh.common`).
+/// That shape is the only thing that reaches the branch `render_lib_rs` builds
+/// by hand — the private `__ridl_package` module and its `pub use` — so over
+/// the two-segment, one-package-each fixtures every other test uses, deleting
+/// that branch outright changes nothing any assertion can see.
+///
+/// Three things are proved here, because each catches a different way of
+/// breaking the branch. The invariant catches `veh.rs` being dropped from the
+/// tree, which is what deleting the whole branch does. `rustc` catches
+/// `crate::veh::Speed` failing to resolve, which is what deleting the `pub use`
+/// does — the crate root still parses and still names every file. The third is
+/// the module's own visibility: `__ridl_package` is not a path any generated
+/// reference uses, and a `pub` one would put a second public path to every item
+/// in package `veh` into the crate's API, which neither of the other two
+/// notices.
+#[test]
+fn a_package_that_is_also_a_parent_is_named_once_and_re_exported() {
+    let fixture = tempfile::tempdir().expect("temp fixture dir");
+    let entry = write_prefix_package_workspace(fixture.path());
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "expected no error, got: {:?}",
+        run.diagnostics
+    );
+
+    let lib = std::fs::read_to_string(out.path().join("lib.rs")).unwrap();
+    let targets = path_attribute_targets(&lib);
+    let emitted = emitted_package_sources(out.path());
+    assert!(
+        emitted.contains(&"veh.rs".to_string()) && emitted.contains(&"veh.common.rs".to_string()),
+        "the fixture must emit both the parent and the child package, got: {emitted:?}"
+    );
+
+    for file in &emitted {
+        let named = targets.iter().filter(|target| *target == file).count();
+        assert_eq!(
+            named, 1,
+            "`{file}` must be named by exactly one #[path] in the crate root, it is named \
+             {named} times; lib.rs was:\n{lib}"
+        );
+    }
+    for target in &targets {
+        assert!(
+            out.path().join(target).exists(),
+            "the crate root names `{target}`, which no build wrote; lib.rs was:\n{lib}"
+        );
+    }
+
+    assert!(
+        lib.contains("pub use __ridl_package::*;"),
+        "package `veh`'s own items must be re-exported at `crate::veh`, which is the path \
+         `veh.common`'s reference to `Speed` uses; lib.rs was:\n{lib}"
+    );
+    assert!(
+        !lib.contains("pub mod __ridl_package;"),
+        "the module the parent's file is loaded under is an implementation detail and stays \
+         private; lib.rs was:\n{lib}"
+    );
+
+    compile_crate_root(out.path());
 }
 
 /// The emitted manifest is parsed as TOML and asserted as structure, not as a
@@ -203,6 +336,7 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
     #[derive(serde::Deserialize)]
     struct GeneratedPackage {
         name: String,
+        version: String,
         edition: String,
     }
     #[derive(serde::Deserialize)]
@@ -253,6 +387,11 @@ fn the_emitted_manifest_parses_and_carries_the_declared_structure() {
         .unwrap_or_else(|err| panic!("the manifest must parse: {err}\n{text}"));
 
     assert_eq!(manifest.package.name, "veh_common");
+    assert_eq!(
+        manifest.package.version, "0.0.0",
+        "the generated crate is unpublished and says so; a version cargo rejects (`0`, \
+         `0.0.0.0`) is still TOML that parses and Rust that compiles"
+    );
     assert_eq!(
         manifest.package.edition, "2024",
         "the generated code is edition 2024"
@@ -342,7 +481,110 @@ fn a_keyword_package_segment_emits_a_crate_root_that_compiles() {
     compile_crate_root(out.path());
 }
 
-/// A single-segment package name (`app`) is a leaf at depth 0 — the most
+/// The same rule over every segment that forces a spelling, rather than the
+/// single `mod` the test above pins. `mod` alone leaves the crate root's
+/// spelling satisfiable by a function hardcoded to that one keyword, which is
+/// not what `ridl_backend_rust::module_segment` does and not what a package
+/// name may contain: `is_valid_name_segment` accepts any lowercase ASCII
+/// segment, so all five of these are legal typl package names.
+///
+/// The two escapes are different, which is the point of the table. `mod` and
+/// `fn` become raw identifiers. `crate`, `self` and `super` cannot be raw
+/// identifiers at all — `r#crate` is not valid Rust — so they take a trailing
+/// underscore instead. A crate root is compiled for a mangled case as well as
+/// a raw one, because only the mangled path leaves the segment spelled
+/// differently from the package name.
+///
+/// `type` is absent, and only because a build cannot reach the crate root with
+/// it: `ridl_core::manifest`'s `is_valid_name_segment` accepts `veh.type`, but
+/// `type` is a family-reserved word (typl §1.4), so the `package veh.type`
+/// declaration the sources must carry does not parse. Its spelling is pinned
+/// where it can be, in `ridl_backend_rust`'s own
+/// `module_segment_spells_a_segment_the_way_type_path_does`.
+#[test]
+fn every_keyword_package_segment_is_escaped_the_way_a_reference_spells_it() {
+    for (segment, expected, compile) in [
+        ("mod", "pub mod r#mod;", false),
+        ("fn", "pub mod r#fn;", false),
+        ("crate", "pub mod crate_;", true),
+        ("self", "pub mod self_;", true),
+        ("super", "pub mod super_;", false),
+    ] {
+        let fixture = tempfile::tempdir().expect("temp fixture dir");
+        let entry = write_package_fixture(
+            fixture.path(),
+            &format!("veh.{segment}"),
+            &format!("package veh.{segment}\n\ntype Speed : km/h [0.0..250.0 step 0.5]\n"),
+        );
+
+        let out = tempfile::tempdir().expect("temp dir");
+        let run =
+            ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+        assert!(
+            !run.has_error(),
+            "`veh.{segment}` is a legal package name, got: {:?}",
+            run.diagnostics
+        );
+
+        let lib = std::fs::read_to_string(out.path().join("lib.rs")).unwrap();
+        assert!(
+            lib.contains(expected),
+            "`veh.{segment}` must reach the crate root as `{expected}`, \
+             which is how `ridl_backend_rust::type_path` spells it in a reference; lib.rs was:\n\
+             {lib}"
+        );
+        if compile {
+            compile_crate_root(out.path());
+        }
+    }
+}
+
+/// A warning does not stop the crate files. The re-check after the write loop
+/// asks for an error-severity diagnostic specifically, and relaxing it to any
+/// diagnostic at all passes every other test here, because every other fixture
+/// used is warning-free and none of them asserts that its diagnostics are
+/// empty.
+///
+/// The warning is TYPL-103: a `string` with no explicit bounds takes the
+/// `[0..256]` default and says so (typl §4.4). The test asserts the warning is
+/// present before it asserts the files are written, so a fixture that stopped
+/// warning would fail here rather than quietly stop testing the severity.
+#[test]
+fn a_warning_does_not_stop_the_crate_files() {
+    let fixture = tempfile::tempdir().expect("temp fixture dir");
+    let entry = write_package_fixture(
+        fixture.path(),
+        "app",
+        "package app\n\n/// A name with no explicit length bound.\ntype Tag : string\n",
+    );
+
+    let out = tempfile::tempdir().expect("temp dir");
+    let run =
+        ridlc::run_build(&entry, out.path(), &[Emit::Rust], false.into()).expect("build runs");
+    assert!(
+        !run.has_error(),
+        "an unbounded string warns, it does not error, got: {:?}",
+        run.diagnostics
+    );
+    assert!(
+        run.diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.code.as_str() == "TYPL-103"),
+        "the fixture must draw the typl §4.4 default-bound warning, or this test proves \
+         nothing about severity, got: {:?}",
+        run.diagnostics
+    );
+
+    assert!(
+        out.path().join("lib.rs").exists(),
+        "a build that only warns still writes the crate root"
+    );
+    assert!(
+        out.path().join("Cargo.toml").exists(),
+        "a build that only warns still writes the manifest"
+    );
+    compile_crate_root(out.path());
+}
 /// common real shape, and the one every other test misses, because every name
 /// they reach the crate root with is dotted.
 #[test]
@@ -382,7 +624,11 @@ fn a_single_segment_package_emits_a_crate_root_that_compiles() {
 /// the induced struct name `ABC`, and the two tuples have different shapes, so
 /// the backend refuses the package. Nothing upstream draws a diagnostic for
 /// it, which is exactly why the emit gate computed before the write loop
-/// cannot see it.
+/// cannot see it — and the same fixture is built with `&[Emit::IrJson]` first
+/// to establish that. Without that precondition the test asserts only that
+/// *something* failed, which a fixture that started failing at check time
+/// satisfies too, and then it silently becomes a second test of the pre-loop
+/// gate and stops testing the re-check after the loop at all.
 #[test]
 fn a_package_that_fails_rust_generation_writes_no_crate_files() {
     let fixture = tempfile::tempdir().expect("temp fixture dir");
@@ -390,6 +636,16 @@ fn a_package_that_fails_rust_generation_writes_no_crate_files() {
         fixture.path(),
         "app",
         "package app\n\nstruct AB {\n  c : (x: integer)\n}\n\nstruct A {\n  bC : (y: integer)\n}\n",
+    );
+
+    let checked_out = tempfile::tempdir().expect("temp dir for the precondition build");
+    let checked = ridlc::run_build(&entry, checked_out.path(), &[Emit::IrJson], false.into())
+        .expect("the precondition build runs");
+    assert!(
+        !checked.has_error(),
+        "the fixture must check clean and fail only in the Rust backend, or this test is a \
+         second test of the pre-loop emit gate, got: {:?}",
+        checked.diagnostics
     );
 
     let out = tempfile::tempdir().expect("temp dir");
@@ -418,8 +674,12 @@ fn a_package_that_fails_rust_generation_writes_no_crate_files() {
 /// `lib.rs` and `Cargo.toml` are not package-scoped names and `--out-dir` is
 /// any directory the caller names, including the root of a hand-written crate.
 /// `std::fs::write` truncates, so a build must check before it writes: a file
-/// that does not begin with its generated-by marker is left exactly as it is,
-/// and neither file is written.
+/// that does not begin with its generated-by marker is left exactly as it is.
+///
+/// The check runs before the per-package write loop, so a refused build writes
+/// nothing at all — not the other crate file, and not a single `<package>.rs`.
+/// A refusal that ran after the loop would have already scattered the
+/// per-package sources through the hand-written crate it was protecting.
 #[test]
 fn a_hand_written_crate_root_is_refused_and_left_untouched() {
     let out = tempfile::tempdir().expect("temp dir");
@@ -459,10 +719,15 @@ fn a_hand_written_crate_root_is_refused_and_left_untouched() {
         !out.path().join("Cargo.toml").exists(),
         "a refusal on either file writes neither"
     );
+    assert_eq!(
+        emitted_package_sources(out.path()),
+        Vec::<String>::new(),
+        "a refused build writes no package source either: the check runs before the write loop"
+    );
 }
 
-/// The manifest half of the same rule: a hand-written `Cargo.toml` is refused
-/// and no crate root is written next to it.
+/// The manifest half of the same rule: a hand-written `Cargo.toml` is refused,
+/// no crate root is written next to it, and no package source either.
 #[test]
 fn a_hand_written_manifest_is_refused_and_left_untouched() {
     let out = tempfile::tempdir().expect("temp dir");
@@ -490,6 +755,95 @@ fn a_hand_written_manifest_is_refused_and_left_untouched() {
     assert!(
         !out.path().join("lib.rs").exists(),
         "a refusal on either file writes neither"
+    );
+    assert_eq!(
+        emitted_package_sources(out.path()),
+        Vec::<String>::new(),
+        "a refused build writes no package source either: the check runs before the write loop"
+    );
+}
+
+/// The refusal reads the first line, not the whole file. A hand-written
+/// `lib.rs` that merely quotes the marker somewhere in its body — in a comment
+/// explaining the rule, for one — is still hand-written and is still refused.
+/// `starts_with` relaxed to `contains` passes every other test here, because
+/// no other fixture mentions the marker anywhere but on line 1.
+#[test]
+fn a_hand_written_crate_root_quoting_the_marker_is_still_refused() {
+    let out = tempfile::tempdir().expect("temp dir");
+    let hand_written = "//! A crate a person wrote.\n\
+         // ridlc refuses a file that does not open with\n\
+         // `// Generated by ridlc. Do not edit.`, which this one does not.\n\
+         pub fn main_logic() {}\n";
+    std::fs::write(out.path().join("lib.rs"), hand_written).expect("the crate root is written");
+
+    let run = ridlc::run_build(
+        Path::new("tests/corpus/veh-common"),
+        out.path(),
+        &[Emit::Rust],
+        false.into(),
+    )
+    .expect("build runs");
+
+    assert!(
+        run.has_error(),
+        "the marker must be the first line, not merely present, got: {:?}",
+        run.diagnostics
+    );
+    assert_eq!(
+        std::fs::read_to_string(out.path().join("lib.rs")).unwrap(),
+        hand_written,
+        "the hand-written crate root must be byte-identical"
+    );
+    assert!(
+        !out.path().join("Cargo.toml").exists(),
+        "a refusal on either file writes neither"
+    );
+}
+
+/// A destination ridlc cannot read is neither written nor refused: the read
+/// error is returned as the `std::io::Error` it is, so `run_build` returns
+/// `Err` and the command exits 2, which is ADR-0010's exit code for an I/O
+/// failure. A diagnostic would exit 1 and would assert that the file does not
+/// begin with the marker — which, for a file whose bytes could not be read, is
+/// not something the build established.
+#[test]
+fn an_unreadable_crate_root_aborts_the_build_rather_than_drawing_a_diagnostic() {
+    let out = tempfile::tempdir().expect("temp dir");
+    // Not valid UTF-8: a lone continuation byte cannot start a sequence, so
+    // `read_to_string` fails with `InvalidData`.
+    let raw: &[u8] = &[0x80, 0x00, 0xff, 0xfe];
+    std::fs::write(out.path().join("lib.rs"), raw).expect("the unreadable crate root is written");
+
+    let run = ridlc::run_build(
+        Path::new("tests/corpus/veh-common"),
+        out.path(),
+        &[Emit::Rust],
+        false.into(),
+    );
+
+    let err = run
+        .err()
+        .expect("an unreadable destination is an I/O failure, not a diagnostic");
+    assert_eq!(
+        err.kind(),
+        std::io::ErrorKind::InvalidData,
+        "the read error is propagated as itself, got: {err}"
+    );
+
+    assert_eq!(
+        std::fs::read(out.path().join("lib.rs")).unwrap(),
+        raw,
+        "the unreadable file must be byte-identical"
+    );
+    assert!(
+        !out.path().join("Cargo.toml").exists(),
+        "an aborted build writes neither crate file"
+    );
+    assert_eq!(
+        emitted_package_sources(out.path()),
+        Vec::<String>::new(),
+        "an aborted build writes no package source either"
     );
 }
 

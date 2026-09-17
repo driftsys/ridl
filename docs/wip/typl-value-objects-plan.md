@@ -1435,8 +1435,12 @@ engine, and the crate root in step 3 below is already built that way.
 
 - Consumes: the set of package names in `checked` (already available in
   `run_build`).
-- Produces: `<out_dir>/Cargo.toml` and `<out_dir>/lib.rs` whenever `Emit::Rust`
-  is selected in package or workspace mode.
+- Produces: `<out_dir>/Cargo.toml` and `<out_dir>/lib.rs` when `Emit::Rust` is
+  selected in package or workspace mode and the build has something to produce.
+  Two cases produce neither, and each is a build that writes nothing at all
+  rather than a partial crate: a build that draws an error-severity diagnostic,
+  and a build whose output directory already holds a `lib.rs` or a `Cargo.toml`
+  that ridlc did not write.
 
 Single-file mode keeps writing only `<stem>.rs`, matching the existing
 single-file asymmetry documented on `Emit::TypeScript`.
