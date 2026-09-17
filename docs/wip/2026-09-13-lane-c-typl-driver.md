@@ -32,9 +32,10 @@ followed by #404, which moved the constraint error to
 `ridl_rt::payload::Violation` and closed that plan's Open item 3. C3 closed #244
 and #203, minting TYPL-215, RIDL-413 and TYPL-010.
 
-**C4 is blocked only on decision D** — Open item 4 of
-`docs/wip/typl-value-objects-plan.md`, what a colliding union arm does. It gates
-the #237 half of Task 11 and nothing else.
+**C4 is no longer blocked.** Decision D — what a colliding union arm does — was
+taken on 2026-09-17: report a diagnostic under RIDL-149 over both pinned
+transforms, move `camel_case` into `ridl-ir`, no rename. It was the last thing
+gating Task 11's #237 half, and every C4 task is now runnable.
 
 **C4 has its own driver prompt**,
 [`2026-09-16-lane-c-c4-driver.md`](2026-09-16-lane-c-c4-driver.md). Use it

@@ -128,10 +128,14 @@ C2 merged (#396) and G2 holds. Re-check G2 before starting:
 If it does not hold, report and stop.
 
 == Blocked work ==
-Task 11's #237 half waits on decision D — Open item 4 of the plan, what a
-colliding union arm does. A recommendation is drafted there; Sebastien decides.
-The #243 half of Task 11 does NOT wait for it. If C4c starts before the
-decision, do #243 and stop at #237.
+Nothing. Decision D — what a colliding union arm does — was taken on 2026-09-17:
+report a diagnostic, extend RIDL-149 to a union's arms over BOTH pinned
+transforms, move camel_case into ridl-ir, no rename. Task 11 carries the
+reasoning and the implementation steps. Every task in C4 is runnable.
+
+Read decision D's point 3 before writing that check. A check keyed on snake_case
+alone does not close #237: the two transforms are incomparable, and the arm pair
+XY and x_y collides under camel_case only, which is the Rust defect itself.
 
 == Worktree and branches ==
 Work in .claude/worktrees/lane-c-typl. Never enter another lane's worktree:

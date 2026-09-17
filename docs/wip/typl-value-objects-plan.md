@@ -1678,13 +1678,15 @@ chooses a new code instead, this task joins that order and waits its turn.
 
 #### Decision D — what #237 does about a colliding union arm
 
-**Fable drafts this; Sebastien decides. Do not start the #237 half until it is
-decided.** The #243 half needs no decision and may start first.
+**DECIDED 2026-09-17 by Sebastien: report a diagnostic. Extend RIDL-149 to a
+union's arms, keyed on both pinned transforms, and move `camel_case` into
+`ridl-ir` beside `snake_case`. No rename.** The #237 half of this task is
+unblocked; implement what follows. The #243 half never waited on it.
 
-The options are: rename the arm, report a diagnostic, or both.
-
-**Proposed: report a diagnostic, and pin `camel_case` beside `snake_case`. No
-rename.** Four reasons.
+The options were: rename the arm, report a diagnostic, or both. The reasoning
+for the one taken is kept below, because the implementation depends on the third
+point and a reader who skips it will write a check that does not close the
+defect.
 
 1. **Fail-closed is the rule this defect class already has.** RIDL-149 was
    minted for exactly "two names distinct in source projecting to one
@@ -1703,8 +1705,8 @@ rename.** Four reasons.
    — the relationship the proto3 backend's own comment describes (`lib.rs:473`).
 3. **The check cannot key on `snake_case` alone, and this is the part that is
    easy to get wrong.** The two transforms are incomparable: neither collision
-   set contains the other. Three arm pairs, each computed from the two functions
-   as they stand at 86e10d7:
+   set contains the other. Three arm pairs, each computed by running the two
+   functions as they stand on `main` (re-verified 2026-09-17):
 
    | Arms                       | `camel_case`                          | `snake_case`                            |
    | -------------------------- | ------------------------------------- | --------------------------------------- |
@@ -1725,12 +1727,22 @@ rename.** Four reasons.
    emitter. driftsys/ridl#237's own note raises this as the question worth
    settling first.
 
+**What the decision costs, stated because it is a real break.** A package whose
+arms are `XY` and `x_y` is accepted today and will be rejected. It already fails
+the Rust backend with E0428 and both wire backends with a `GenerateError`, and
+nothing is published, so no working consumer breaks.
+
+**Why not "both".** A rename only ever applies to a package the diagnostic
+already rejects, so "both" means downgrading the diagnostic to a warning and
+letting `ridlc` choose the variant names. That is a different decision — fail
+closed, or let the tool name things the contract does not — and it was not the
+one taken.
+
 **Recording it.** ADR-0016 is Accepted, and its consequences already record this
 defect as one the record does not close (the entry ending "Recorded on
-driftsys/ridl#237"). Whichever option is taken is written back there as a short
-amendment: union arms join the checked namespaces, and `camel_case` joins the
-pinned transforms or does not. Write it in Task 10's documentation pull request
-or in this task's; it must not be skipped in both.
+driftsys/ridl#237"). Write the amendment back there: union arms join the checked
+namespaces, and `camel_case` joins the pinned transforms. Do it in Task 10's
+documentation pull request or in this task's; it must not be skipped in both.
 
 #### The #243 half
 
@@ -1823,7 +1835,8 @@ Closes #243."
 
 #### The #237 half
 
-Starts only after decision D. The steps below assume it is taken as proposed.
+Unblocked: decision D was taken on 2026-09-17, as proposed. The steps below
+implement it.
 
 - [ ] **Step 6: Write the failing tests**
 
@@ -1927,10 +1940,12 @@ not of the whole directory, which carries other lanes' working memory.
    item because Task 7's manifest and Tasks 3, 4, 5 and 8 all rest on it, and
    because the design spec still says otherwise — the spec is dated 2026-08-03,
    before `ridl-rt` existed, and Task 10 is where that sentence is corrected.
-4. **What a colliding union arm does** (Task 11, decision D). Proposed: report a
-   diagnostic under RIDL-149 over both pinned transforms, pin `camel_case` into
-   `ridl-ir`, and do not rename. Sebastien decides; the #243 half of Task 11
-   does not wait for it.
+4. **What a colliding union arm does — decided 2026-09-17, not open.** Report a
+   diagnostic: extend RIDL-149 to a union's arms over both pinned transforms,
+   move `camel_case` into `ridl-ir`, no rename. Kept here as a numbered item
+   because Task 11's #237 half rests on it and because ADR-0016's consequences
+   still record the defect as one that record does not close — Task 11 or Task
+   10 writes the amendment. The reasoning is in Task 11 under "Decision D".
 5. **`Violation` implements neither `Display` nor `std::error::Error`**
    (`crates/ridl-rt/src/payload.rs:177`), and `ridl-rt` declares no `std`
    feature. Every generated constructor returns this type, so a consumer writing
