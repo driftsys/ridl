@@ -2045,6 +2045,9 @@ mod vacuous_constraint {
     /// Every constrained field on its own. A fixture setting a pair — `min`
     /// with `max`, or `len_min` with `len_max` — cannot tell a predicate that
     /// reads both from one that reads either, so each bound here is one-sided.
+    /// The paired shapes are pinned separately by
+    /// [`a_bound_pair_set_together_is_non_vacuous`], which a one-sided fixture
+    /// cannot do.
     #[test]
     fn any_single_constrained_field_is_non_vacuous() {
         let cases = [
@@ -2097,5 +2100,30 @@ mod vacuous_constraint {
                 "`{field}` alone must be non-vacuous"
             );
         }
+    }
+
+    /// The two shapes the checker actually emits: a declared range, and the
+    /// typl §4.4 default `[0..256]` every string and bytes type carries.
+    ///
+    /// A one-sided fixture cannot pin these. A predicate reading each bound as
+    /// a pair — `(c.min.is_none() == c.max.is_none())` and the same for the
+    /// length bounds — passes every one-sided case and still reports both
+    /// shapes below as vacuous, which would drop the range check from every
+    /// bounded number and every string.
+    #[test]
+    fn a_bound_pair_set_together_is_non_vacuous() {
+        let ranged = v2::Constraint {
+            min: Some("0.0".to_string()),
+            max: Some("250.0".to_string()),
+            ..constraint()
+        };
+        assert!(!v2::constraint_is_vacuous(Some(&ranged)));
+
+        let default_length = v2::Constraint {
+            len_min: Some(0),
+            len_max: Some(256),
+            ..constraint()
+        };
+        assert!(!v2::constraint_is_vacuous(Some(&default_length)));
     }
 }

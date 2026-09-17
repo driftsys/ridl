@@ -57,9 +57,13 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    `TryFrom` through core's `impl<T, U: Into<T>> TryFrom<U> for T` blanket.
 
 3. **A vacuous constraint means no `TryFrom`.** The constraint is vacuous when
-   `min`, `max`, `len_min`, `len_max`, and `pattern` are all absent — which,
-   because string and bytes always carry a resolved length bound, means exactly:
-   `boolean` backings, and `integer`/`float` with no declared range.
+   `min`, `max`, `len_min`, `len_max`, `pattern`, and `pattern_const` are all
+   absent — which, because string and bytes always carry a resolved length
+   bound, means exactly: `boolean` backings, and `integer`/`float` with no
+   declared range. `pattern_const` is read as well as `pattern` because a
+   pattern constant that did not resolve leaves `pattern` absent while the type
+   still carries a match constraint; that was added by review of the Task 1 pull
+   request (driftsys/ridl#412).
 
    Such a type emits an infallible `const fn new`, `From<Inner> for Type`, and
    `From<Type> for Inner`, and **no** `new_unchecked` (it would duplicate
