@@ -24,7 +24,9 @@ use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 
+mod clauses;
 mod defaults;
+mod descriptors;
 
 /// The generated artifact for one package: Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,7 +44,19 @@ pub struct GenerateError {
     pub message: String,
 }
 
-/// Generates the Rust source for `package`.
+/// Generates the Rust source for `package`: the domain types only, naming no
+/// runtime.
+///
+/// This is the pipeline entry point — `ridl --emit rust` and the compiler
+/// corpus run it — and its output is byte-identical to what it was before the
+/// interaction face was added. The face is emitted by the companion
+/// [`generate_face`], not from here, for two reasons the Lane M plan records
+/// ("Where the face is emitted from"): the corpus interfaces carry contract
+/// clauses the M3 clause translator must refuse, and generated code that names
+/// `::ridl_rt` cannot yet be compiled by the corpus proofs, which pass no
+/// `--extern ridl_rt`. Lane C's Epic 10 Task 3 is where generated code first
+/// names the runtime and the proofs first link it; until then the pipeline
+/// keeps this narrow entry point.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking. Every
 /// emitted identifier is produced through `ident`, which escapes Rust
@@ -53,12 +67,40 @@ pub struct GenerateError {
 /// as a `GenerateError` instead of unformatted output.
 pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
     let ctx = Ctx::new(package);
+    let items = domain_items(&ctx, package)?;
+    render(items)
+}
 
+/// Generates the Rust source for `package`: the domain types [`generate`]
+/// emits, plus the interaction-face descriptors over the `ridl-rt` runtime
+/// crate (Lane M stage M3).
+///
+/// This is the companion entry point of the M3 design's "companion entry
+/// point, not the pipeline" decision. The descriptors it appends name
+/// `::ridl_rt` and carry the translated `require`/`ensure` clause bodies, so it
+/// is the only caller of the clause translator, and the only entry point whose
+/// output links the runtime. The domain types come from the same call because
+/// the checked-in fixture is brought in with a single `include!`: the face
+/// names those types, and the orphan rule needs them local to the test crate
+/// for the hand-written `Payload<ReprC>` implementations.
+///
+/// Total for the same reason [`generate`] is: it returns [`GenerateError`]
+/// rather than panicking, and additionally refuses a contract clause outside
+/// the accepted form and a call the M3 restriction cannot represent.
+pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> {
+    let ctx = Ctx::new(package);
+    let mut items = domain_items(&ctx, package)?;
+    items.extend(descriptors::interface_items(&ctx, package)?);
+    render(items)
+}
+
+/// The domain-type items of `package` — the shared work of both entry points.
+fn domain_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     let mut tuples: Vec<InducedTuple> = Vec::new();
 
     for decl in &package.decls {
-        items.push(emit_decl(&ctx, decl, &mut tuples));
+        items.push(emit_decl(ctx, decl, &mut tuples));
     }
 
     // Tuple types generate a named nested struct each (typl §11). Process the
@@ -83,9 +125,15 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
             continue;
         }
         seen.insert(induced.name.clone(), induced.clone());
-        items.push(emit_tuple_struct(&ctx, &induced, &mut tuples));
+        items.push(emit_tuple_struct(ctx, &induced, &mut tuples));
     }
 
+    Ok(items)
+}
+
+/// Parses the assembled items as a bare `syn::File` (no inner attribute, so an
+/// `include!` of the output stays legal) and formats them with prettyplease.
+fn render(items: Vec<TokenStream>) -> Result<Generated, GenerateError> {
     let tokens = quote! { #(#items)* };
     let file: syn::File = syn::parse2(tokens).map_err(|err| GenerateError {
         message: format!("generated Rust does not parse: {err}"),
@@ -191,7 +239,7 @@ pub(crate) struct Ctx<'a> {
 }
 
 impl<'a> Ctx<'a> {
-    fn new(package: &'a v2::Package) -> Self {
+    pub(crate) fn new(package: &'a v2::Package) -> Self {
         let decls = package
             .decls
             .iter()
@@ -673,7 +721,7 @@ pub(crate) fn backing_scalar(td: &v2::TypeDef) -> ScalarBacking {
 
 /// The backing class of a same-package named scalar type, or `None` when the
 /// reference does not name a scalar `TypeDef` in this package.
-fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<ScalarBacking> {
+pub(crate) fn same_package_scalar_backing(ctx: &Ctx, reference: &str) -> Option<ScalarBacking> {
     match &ctx.lookup(reference)?.kind {
         Some(v2::decl::Kind::TypeDef(td)) => Some(backing_scalar(td)),
         _ => None,

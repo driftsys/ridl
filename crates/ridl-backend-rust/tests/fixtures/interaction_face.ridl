@@ -1,0 +1,61 @@
+// The interaction-face MVP fixture (Lane M stage M3, E11.13,
+// docs/wip/2026-09-16-interaction-face-v0-design.md §7). A single-file, single-
+// catalog package cut down to what a hand-written `repr(C)` payload stand-in
+// can carry in a later task: fixed-width named scalars, one enum, and one
+// struct whose fields are all fixed size. No optional field, no sequence, no
+// map, no union, no string, no bytes.
+//
+// Kept self-contained (no cross-package import), because the compile path this
+// fixture is read through (`ridlc::compile`) wraps one file as a single-file
+// synthetic package.
+
+package face.demo
+
+// ---------- Named scalars (all integer-backed, fixed width) ----------
+
+/// Cabin temperature, in degrees.
+type Temperature : integer [-40..85]
+
+/// A control level.
+type Level : integer [0..100]
+
+/// A window length, in samples.
+type Window : integer [0..100000]
+
+/// An averaged reading.
+type Average : integer [0..1000]
+
+// ---------- Enum ----------
+
+enum Health {
+  OK   = 0
+  WARN = 1
+  FAIL = 2
+}
+
+// ---------- Struct (all fields fixed size) ----------
+
+struct Warning {
+  code   : Level
+  health : Health
+}
+
+// ---------- The interface the round trip runs against ----------
+
+interface Cabin {
+  signal  temperature : Temperature @10ms
+  event   warning      : Warning @[100ms..1s]
+  command setLevel(level: Level) @[..50ms] [
+    require level < 100
+  ]
+  query   average(window: Window): Average @[..200ms] [
+    require window > 0
+    ensure  result >= 0
+  ]
+}
+
+// ---------- A signal-only interface, for the port-bound test in a later task ----------
+
+interface Horn {
+  signal active : Health @10ms
+}
