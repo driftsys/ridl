@@ -1657,24 +1657,23 @@ rewrites, and Task 6 is the larger change.
 
 - Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_field` (`lib.rs:370`),
   `emit_union` (`lib.rs:436`), `camel_case` (`lib.rs:855`)
-- Modify: `crates/ridl-ir/src/name.rs` — the pinned `camel_case`, if decision D
-  below is taken as proposed
+- Modify: `crates/ridl-ir/src/name.rs` — the pinned `camel_case`, which decision
+  D moves here from the Rust backend
 - Modify: `crates/ridl-sem/src/check.rs` — RIDL-149 over a union's arms, beside
   the existing member, parameter and struct-field namespaces
 - Modify: `crates/ridlc/tests/corpus.rs` — the `rustc_accepts` lint list
 - Test: `crates/ridl-backend-rust/src/tests.rs`,
   `crates/ridl-sem/src/check.rs`'s test module, `crates/ridlc/tests/corpus.rs`
 
-**Not a shared file, as proposed.** `crates/ridl-core/src/diag.rs` is in the §6
-shared-file order (S1 and S2 → L4 → C3 → B3) and this task does not touch it,
-because decision D reuses RIDL-149 rather than minting a code. If Sebastien
-chooses a new code instead, this task joins that order and waits its turn.
+**Not a shared file.** `crates/ridl-core/src/diag.rs` is in the §6 shared-file
+order (S1 and S2 → L4 → C3 → B3) and this task does not touch it, because
+decision D reuses RIDL-149 rather than minting a code.
 
 **Interfaces:**
 
 - Consumes: `ridl_ir::name::snake_case`.
-- Produces: `pub fn ridl_ir::name::camel_case(name: &str) -> String` (decision D
-  as proposed), and RIDL-149 over one more namespace.
+- Produces: `pub fn ridl_ir::name::camel_case(name: &str) -> String` (decision
+  D), and RIDL-149 over one more namespace.
 
 #### Decision D — what #237 does about a colliding union arm
 
@@ -1727,10 +1726,32 @@ defect.
    emitter. driftsys/ridl#237's own note raises this as the question worth
    settling first.
 
-**What the decision costs, stated because it is a real break.** A package whose
-arms are `XY` and `x_y` is accepted today and will be rejected. It already fails
-the Rust backend with E0428 and both wire backends with a `GenerateError`, and
-nothing is published, so no working consumer breaks.
+**What the decision costs, stated because it is a real break, and the first
+draft of this paragraph got it wrong.** Two kinds of package become newly
+rejected, and they are not alike — read the table above before reading this.
+
+- **Arms `XY` and `x_y`** collide under `camel_case` only. Today `ridl check`
+  passes them, the Rust backend emits E0428, and **both wire backends accept
+  them**, because `snake_case` gives `xy` and `x_y`, which are distinct. After
+  this change `ridl check` rejects the package. That is the defect being fixed:
+  a check-time refusal replaces a `rustc` failure further down.
+- **Arms `HTTPServer` and `httpServer`** collide under `snake_case` only. Today
+  `ridl check` passes them, **the Rust backend compiles them fine** — the
+  variants are `HTTPServer` and `HttpServer` — and only the wire backends refuse
+  with a `GenerateError`. After this change `ridl check` rejects the package.
+  **This is the genuine new cost**: a package that a Rust-only consumer builds
+  successfully today starts failing at check time, because the contract must
+  hold for every backend rather than the ones a given consumer happens to use.
+
+An earlier draft asserted that the `XY` pair "already fails both wire backends",
+which contradicted this document's own table three paragraphs above. It does
+not. The correction matters because it moves the cost from the pair that is
+already broken everywhere to the pair that is not.
+
+No working consumer breaks either way. `ridlc`, `ridl-ir` and `ridl-core` exist
+on crates.io only as `0.0.0` name reservations with no usable content, and
+`ridl-rt`, whose 0.1.0 release is prepared, generates nothing and holds no
+union.
 
 **Why not "both".** A rename only ever applies to a package the diagnostic
 already rejects, so "both" means downgrading the diagnostic to a warning and
