@@ -246,3 +246,17 @@ provenance. Nothing here is normative — the current references live in
   [the CLI reference](../book/cli-reference.md). Read the design's §1 for the
   identity widths lane A consumed, and the plan as a plan: its twelve tasks are
   the sequence the implementation followed, not a description of the result.
+- **2026-09-15-rsdl-plan.md** — the parse, check and lowering plan for rsdl,
+  lane B of the same coordination (driftsys/ridl#328): the rsdl profile of the
+  grammar, the workspace-level checks, the lowering to the IR's `System`
+  message, `ridl diff` at the system, and the book chapter. The durable records
+  are [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) (the carrier,
+  the build gate and the diff),
+  [ADR-0014's 2026-09-18 amendment](../decisions/ADR-0014-ir-encodings.md) (the
+  system artifact's names), the rsdl reference §13 and §14, and
+  [the rsdl implementation technote](../technotes/rsdl-implementation.md). Its
+  Part B4 Task 9 is the record of the one piece of lane B that is not built —
+  the catalog hash per region, story E6.17, which waits for
+  `ridl_descriptor::hash::catalog_hash` (driftsys/ridl#324). Read the rest as a
+  plan: its tasks are the sequence the implementation followed, not a
+  description of the result.

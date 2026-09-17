@@ -79,7 +79,14 @@ Proposed draft with no implementation. See
   the only one of these that changes shipped code), ADR-0021 (the `ridl-rt` 0.1
   API decisions and the 0.x breaking-change rule; binds every consumer of
   `ridl-rt` — the Rust codegen, the runtimes, and story E14.2; the crate's
-  as-built design record is `docs/design/ridl-rt.md`).
+  as-built design record is `docs/design/ridl-rt.md`), ADR-0022 (the rsdl system
+  in the IR — where the lowered system lives, that it is its own artifact
+  `<pkg.Name>.system.{json,txtpb,binpb}` written by the three IR dump emits,
+  which facts of rsdl §13 the IR states and which it does not, that a build
+  whose only errors are RSDL-7xx writes every artifact and still exits 1, and
+  that `ridl diff`'s system headings carry no verdict; binds the IR every later
+  consumer reads, the `ridl build` contract and `ridl diff`. The as-built
+  implementation record is `docs/technotes/rsdl-implementation.md`).
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

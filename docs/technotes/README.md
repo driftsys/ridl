@@ -13,3 +13,9 @@ it — for decisions that bind downstream work, see
   extension reach a machine: the two release trains and their disjoint tag
   namespaces, where the reported version comes from, the extension's three-tier
   binary resolution, and what the install scripts verify.
+- **rsdl-implementation.md** — rsdl as built by roadmap epic E6: the
+  workspace-level `check_system` query, the model entries that are in no source
+  file (the implicit component, the unit instance), why RSDL-804 is raised by
+  the drivers, the lowering and its gating and orderings, what `ridl build`
+  writes, `ridl diff` at the system, `rsdl` fences in the book, and what is not
+  built yet.
