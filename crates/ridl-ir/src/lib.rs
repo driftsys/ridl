@@ -655,6 +655,34 @@ pub mod v2 {
             None => {}
         }
     }
+
+    /// Whether a constraint leaves a generated constructor nothing to check.
+    ///
+    /// True when no bound and no pattern is present. `step` is excluded on
+    /// purpose: nothing checks a step today, and the design this classifier
+    /// prepares for rounds a value to the nearest step-lattice point rather than
+    /// rejecting it, so a step-only constraint is meant to admit a constructor
+    /// with nothing to check (design spec, Deferred, not yet implemented).
+    ///
+    /// A pattern given by name counts as a pattern: `pattern_const` is read as
+    /// well as `pattern`, because a pattern constant that did not resolve leaves
+    /// `pattern` absent while the type still carries a match constraint.
+    /// `ridl-sem` treats the two fields the same way in its derived-init rule
+    /// (`init.rs`).
+    ///
+    /// Because the checker materializes the typl §4.4 default `[0..256]` into
+    /// `len_min`/`len_max`, every string and bytes type is non-vacuous. In
+    /// practice this reduces to `boolean`, and `integer`/`float` with no declared
+    /// range.
+    pub fn constraint_is_vacuous(constraint: Option<&Constraint>) -> bool {
+        let Some(c) = constraint else { return true };
+        c.min.is_none()
+            && c.max.is_none()
+            && c.len_min.is_none()
+            && c.len_max.is_none()
+            && c.pattern.is_none()
+            && c.pattern_const.is_none()
+    }
 }
 
 pub mod name;
@@ -1975,5 +2003,127 @@ mod v2_round_trip {
                 v2::from_text_format(&text).expect("below the recursion limit, parsing succeeds");
             assert_eq!(package, decoded);
         });
+    }
+}
+
+#[cfg(test)]
+mod vacuous_constraint {
+    use crate::v2;
+
+    /// A constraint with every field absent. Each test sets only the field it
+    /// is about, so no assertion can pass through a neighbouring field.
+    fn constraint() -> v2::Constraint {
+        v2::Constraint {
+            min: None,
+            max: None,
+            step: None,
+            len_min: None,
+            len_max: None,
+            pattern: None,
+            pattern_const: None,
+        }
+    }
+
+    #[test]
+    fn an_absent_or_empty_constraint_is_vacuous() {
+        assert!(v2::constraint_is_vacuous(None));
+        assert!(v2::constraint_is_vacuous(Some(&constraint())));
+    }
+
+    #[test]
+    fn vacuous_constraint_ignores_step() {
+        // A declared step alone leaves a constructor nothing to check: nothing
+        // checks a step today, and the design rounds to the lattice rather
+        // than rejecting (design spec, Deferred, not yet implemented).
+        let stepped = v2::Constraint {
+            step: Some("0.5".to_string()),
+            ..constraint()
+        };
+        assert!(v2::constraint_is_vacuous(Some(&stepped)));
+    }
+
+    /// Every constrained field on its own. A fixture setting a pair — `min`
+    /// with `max`, or `len_min` with `len_max` — cannot tell a predicate that
+    /// reads both from one that reads either, so each bound here is one-sided.
+    /// The paired shapes are pinned separately by
+    /// [`a_bound_pair_set_together_is_non_vacuous`], which a one-sided fixture
+    /// cannot do.
+    #[test]
+    fn any_single_constrained_field_is_non_vacuous() {
+        let cases = [
+            (
+                "min",
+                v2::Constraint {
+                    min: Some("0.0".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "max",
+                v2::Constraint {
+                    max: Some("250.0".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "len_min",
+                v2::Constraint {
+                    len_min: Some(1),
+                    ..constraint()
+                },
+            ),
+            (
+                "len_max",
+                v2::Constraint {
+                    len_max: Some(256),
+                    ..constraint()
+                },
+            ),
+            (
+                "pattern",
+                v2::Constraint {
+                    pattern: Some("^[a-z]+$".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "pattern_const",
+                v2::Constraint {
+                    pattern_const: Some("NAME_PATTERN".to_string()),
+                    ..constraint()
+                },
+            ),
+        ];
+        for (field, case) in cases {
+            assert!(
+                !v2::constraint_is_vacuous(Some(&case)),
+                "`{field}` alone must be non-vacuous"
+            );
+        }
+    }
+
+    /// The two shapes the checker actually emits: a declared range, and the
+    /// typl §4.4 default `[0..256]` every string and bytes type carries.
+    ///
+    /// A one-sided fixture cannot pin these. A predicate reading each bound as
+    /// a pair — `(c.min.is_none() == c.max.is_none())` and the same for the
+    /// length bounds — passes every one-sided case and still reports both
+    /// shapes below as vacuous, which would drop the range check from every
+    /// bounded number and every string.
+    #[test]
+    fn a_bound_pair_set_together_is_non_vacuous() {
+        let ranged = v2::Constraint {
+            min: Some("0.0".to_string()),
+            max: Some("250.0".to_string()),
+            ..constraint()
+        };
+        assert!(!v2::constraint_is_vacuous(Some(&ranged)));
+
+        let default_length = v2::Constraint {
+            len_min: Some(0),
+            len_max: Some(256),
+            ..constraint()
+        };
+        assert!(!v2::constraint_is_vacuous(Some(&default_length)));
     }
 }
