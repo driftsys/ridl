@@ -711,10 +711,23 @@ fn render_lib_rs(package_names: &[String]) -> String {
                         // `segment` is itself a package as well as a
                         // namespace for its children (`veh` alongside
                         // `veh.common`) — the `_` arm above would otherwise
-                        // drop `segment`'s own file. Nest it under its own
-                        // name too, so both are reachable.
+                        // drop `segment`'s own file. It cannot simply be
+                        // nested under its own name: generated code names a
+                        // type in package `veh` as `crate::veh::Speed`, not
+                        // `crate::veh::veh::Speed`, so the file is loaded as
+                        // a private module and re-exported, which puts its
+                        // items at the path the references use.
+                        //
+                        // The private module's name is the one place this
+                        // shape is not total over names: a package `veh`
+                        // declaring a type called `common` alongside a
+                        // package `veh.common` would have that type shadowed
+                        // by the module. `__ridl_package` cannot be a typl
+                        // package segment, so the private module itself
+                        // collides with nothing.
                         out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));
-                        out.push_str(&format!("{pad}    pub mod {segment};\n"));
+                        out.push_str(&format!("{pad}    mod __ridl_package;\n"));
+                        out.push_str(&format!("{pad}    pub use __ridl_package::*;\n"));
                     }
                     render(child, depth + 1, out);
                     out.push_str(&format!("{pad}}}\n"));
@@ -1145,7 +1158,11 @@ mod render_lib_rs_tests {
     /// A package name that is a strict prefix of another (`veh` alongside
     /// `veh.common`) lands in `render_lib_rs`'s non-leaf arm, which — without
     /// the fix — emits an inline `pub mod veh { … }` for the dotted sibling
-    /// and drops `veh`'s own file entirely. Both files must stay reachable.
+    /// and drops `veh`'s own file entirely. Both files must stay reachable,
+    /// and `veh`'s items must sit at `crate::veh`, which is where generated
+    /// code names them. Nesting the file under its own name keeps it
+    /// reachable at `crate::veh::veh` and still fails every reference: this
+    /// test compiles one to say so.
     #[test]
     fn a_package_name_that_is_a_prefix_of_another_keeps_both_files_reachable() {
         let names = ["veh".to_string(), "veh.common".to_string()];
@@ -1158,6 +1175,37 @@ mod render_lib_rs_tests {
         assert!(
             lib.contains("#[path = \"veh.common.rs\"]"),
             "veh.common's file must stay reachable, lib.rs was:\n{lib}"
+        );
+
+        // The proof. `veh.common` names a type from `veh` the way the Rust
+        // backend does, as `crate::veh::…`.
+        let dir = tempfile::tempdir().expect("a temp dir is created");
+        std::fs::write(dir.path().join("veh.rs"), "pub struct Speed(pub f64);\n")
+            .expect("the prefix package is written");
+        std::fs::write(
+            dir.path().join("veh.common.rs"),
+            "pub struct Reading(pub crate::veh::Speed);\n",
+        )
+        .expect("the dotted package is written");
+        std::fs::write(dir.path().join("lib.rs"), &lib).expect("the crate root is written");
+
+        let status = std::process::Command::new("rustc")
+            .args([
+                "--edition",
+                "2024",
+                "--crate-type",
+                "lib",
+                "--emit",
+                "metadata",
+            ])
+            .arg("-o")
+            .arg(dir.path().join("prefix.rmeta"))
+            .arg(dir.path().join("lib.rs"))
+            .status()
+            .expect("rustc must be installed and runnable for this test to be meaningful");
+        assert!(
+            status.success(),
+            "a reference to the prefix package must resolve at crate::veh, lib.rs was:\n{lib}"
         );
     }
 }

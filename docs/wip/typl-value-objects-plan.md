@@ -1514,9 +1514,14 @@ path = "lib.rs"
 
 `ridl-rt` is not optional and carries no feature here: it is `no_std`, has no
 dependency of its own in any feature combination, and the generated constructors
-name `payload::Violation` from it (Task 2). Read the version from
-`crates/ridl-rt/Cargo.toml` at emit time rather than writing a literal, so the
-two cannot drift.
+name `payload::Violation` from it (Task 2). The requirement is written as the
+literal `ridl-rt = "0.1"`, not read from `crates/ridl-rt/Cargo.toml` at emit
+time: `ridlc` is an installed binary with no access to this repository's sources
+when it runs, and it has no build script. A guard test reads that manifest and
+asserts the emitted requirement still matches its major and minor, so the two
+cannot drift apart silently, which is what reading it was for. This plan first
+said to read it; the reason it cannot be read was found while executing this
+task.
 
 Emit `lib.rs` from the package names. Each dotted name becomes a path in a
 nested `mod` tree whose leaf carries `#[path]`, so the emitted file names stay
@@ -1553,7 +1558,36 @@ fn render_lib_rs(package_names: &[String]) -> String {
                     out.push_str(&format!("{pad}pub mod {segment};\n"));
                 }
                 _ => {
+                    // An inline (non-leaf) module's own children would
+                    // otherwise search a subdirectory named after every
+                    // enclosing module (rustc's default module-path
+                    // resolution for a module with no `#[path]`); anchoring
+                    // this module at `.` keeps its children's own `#[path]`
+                    // attributes resolving against the flat output directory.
+                    out.push_str(&format!("{pad}#[path = \".\"]\n"));
                     out.push_str(&format!("{pad}pub mod {segment} {{\n"));
+                    if let Some(file) = &child.file {
+                        // `segment` is itself a package as well as a
+                        // namespace for its children (`veh` alongside
+                        // `veh.common`) — the `_` arm above would otherwise
+                        // drop `segment`'s own file. It cannot simply be
+                        // nested under its own name: generated code names a
+                        // type in package `veh` as `crate::veh::Speed`, not
+                        // `crate::veh::veh::Speed`, so the file is loaded as
+                        // a private module and re-exported, which puts its
+                        // items at the path the references use.
+                        //
+                        // The private module's name is the one place this
+                        // shape is not total over names: a package `veh`
+                        // declaring a type called `common` alongside a
+                        // package `veh.common` would have that type shadowed
+                        // by the module. `__ridl_package` cannot be a typl
+                        // package segment, so the private module itself
+                        // collides with nothing.
+                        out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));
+                        out.push_str(&format!("{pad}    mod __ridl_package;\n"));
+                        out.push_str(&format!("{pad}    pub use __ridl_package::*;\n"));
+                    }
                     render(child, depth + 1, out);
                     out.push_str(&format!("{pad}}}\n"));
                 }
@@ -1567,15 +1601,40 @@ fn render_lib_rs(package_names: &[String]) -> String {
 }
 ```
 
-A package name that is a strict prefix of another (`veh` alongside `veh.common`)
-lands in the `_` arm, which emits an inline `pub mod veh { … }` and drops the
-prefix package's own file. Add a test for that case and emit the file as
-`#[path]` on an inner `mod` if it occurs; `ridl.toml` naming makes it unlikely
-but not impossible.
+**Two corrections this plan first got wrong**, both found by the `rustc` proof
+over the emitted crate root and both carried in the code above.
 
-The crate name comes from the manifest's package name when one is present,
-falling back to `ridl_generated`. See Open item 1 — if a `--crate-name` flag is
-added, it takes precedence over both.
+1. **A non-leaf module needs `#[path = "."]`.** Without it, rustc resolves an
+   inline module's un-annotated children against a subdirectory named after
+   every enclosing module, so no dotted package resolved at all — not only the
+   prefix case.
+2. **A package name that is a strict prefix of another cannot be nested under
+   its own name.** `veh` alongside `veh.common` lands in the `_` arm, and this
+   plan first said to emit `veh`'s file as an inner `pub mod veh`. That leaves
+   its items at `crate::veh::veh`, while generated code names them
+   `crate::veh::Speed`, so every reference to the prefix package fails to
+   resolve. The file is loaded as a private `__ridl_package` module and
+   re-exported instead. `ridl.toml` naming makes the case unlikely but not
+   impossible.
+
+The one place this shape is not total over names: a package `veh` declaring a
+type called `common`, alongside a package `veh.common`, has that type shadowed
+by the module. The private module's own name cannot collide, because
+`__ridl_package` is not a possible typl package segment.
+
+The crate name comes from the manifest's package name when one is present, with
+every `.` replaced by `_`, because a ridl package name is dotted
+(`rsdl.showcase`) and a dot is not legal in a Cargo package name — this plan did
+not say so and the first implementation of it emitted an invalid manifest. A
+`[workspace]` manifest names no package, so it falls back to `ridl_generated`.
+See Open item 1 — if a `--crate-name` flag is added, it takes precedence over
+both.
+
+`ridl.std` is a package in this tree too. `run_build` writes `ridl.std.rs`
+whenever the workspace references it (issue #190), and generated code names
+those types `crate::ridl::std::…`, so the name list is the checked packages plus
+`ridl.std` when that file was written. This plan did not say so either; the
+crate does not compile without it.
 
 - [ ] **Step 4: Run the tests**
 
