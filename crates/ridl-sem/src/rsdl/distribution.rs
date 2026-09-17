@@ -23,6 +23,10 @@ pub struct DistributionFacts {
     /// an external component, and for an implemented one in no distribution
     /// (RSDL-904). A component listed by two keeps the first (RSDL-905).
     pub membership: Vec<Option<usize>>,
+    /// Parallel to `membership`: the member line of the holding distribution
+    /// that lists each component, as an index into
+    /// `DistributionDecl::members`; its backend keys are the line's (rsdl §13).
+    pub member_lines: Vec<Option<usize>>,
     /// The dependency fact (rsdl §13): each pair once, in `(from, to)` order.
     pub dependencies: Vec<DistributionDependency>,
 }
@@ -48,9 +52,10 @@ pub(super) fn distribute(
         return None;
     }
     let mut membership: Vec<Option<usize>> = vec![None; closure.components.len()];
+    let mut member_lines: Vec<Option<usize>> = vec![None; closure.components.len()];
     for (index, distribution) in system.distributions.iter().enumerate() {
         let mut listed = Vec::new();
-        for line in &distribution.members {
+        for (position, line) in distribution.members.iter().enumerate() {
             let reference = &line.reference;
             let Some(target) =
                 member_target(lookup, system, &distribution.package, reference, reporter)
@@ -111,7 +116,10 @@ pub(super) fn distribute(
                         system.distributions[first].name.name
                     ),
                 ),
-                None => membership[component] = Some(index),
+                None => {
+                    membership[component] = Some(index);
+                    member_lines[component] = Some(position);
+                }
             }
         }
     }
@@ -167,6 +175,7 @@ pub(super) fn distribute(
     }
     Some(DistributionFacts {
         membership,
+        member_lines,
         dependencies: dependencies.into_iter().collect(),
     })
 }

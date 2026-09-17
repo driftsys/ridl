@@ -21,7 +21,7 @@ use ridl_ir::v2;
 
 use super::closure::{Closure, ComponentId, InterfaceId};
 use super::placement::{DeploymentPlacement, Placement};
-use super::{BackendKey, CheckedSystem, DeploymentDecl, WrittenValue};
+use super::{BackendKey, CheckedSystem, DeploymentDecl, DistributionDecl, WrittenValue};
 
 /// Lowers `system` to the IR's `System` message, or returns `None` when the
 /// workspace declares no `system` or an error in the closure blocks lowering
@@ -50,7 +50,7 @@ pub fn lower_system(system: &CheckedSystem, packages: &[&v2::Package]) -> Option
         producers: lowering.producers(),
         grants: lowering.grants(),
         regions: lowering.regions(),
-        distributions: Vec::new(),
+        distributions: lowering.distributions(),
         deployments: lowering.deployments(),
     })
 }
@@ -285,7 +285,7 @@ impl<'a> Lowering<'a> {
             links,
             routes,
             surface,
-            installations: Vec::new(),
+            installations: self.installations(decl, placement),
         }
     }
 
@@ -333,6 +333,40 @@ impl<'a> Lowering<'a> {
             ))
         });
         routes
+    }
+
+    /// Distribution installation in one deployment (rsdl §13): per
+    /// distribution, the machines hosting at least one instance of its
+    /// components, in machine declaration order. Empty when the workspace
+    /// declares no distribution.
+    fn installations(
+        &self,
+        decl: &DeploymentDecl,
+        placement: &DeploymentPlacement,
+    ) -> Vec<v2::Installation> {
+        let Some(facts) = &self.closure.distribution_facts else {
+            return Vec::new();
+        };
+        self.system
+            .distributions
+            .iter()
+            .enumerate()
+            .map(|(index, distribution)| {
+                let hosting: BTreeSet<usize> = placement
+                    .placements
+                    .iter()
+                    .filter(|placed| facts.membership[placed.component] == Some(index))
+                    .map(|placed| placed.machine)
+                    .collect();
+                v2::Installation {
+                    distribution: distribution_name(distribution),
+                    machines: hosting
+                        .into_iter()
+                        .map(|machine| decl.machines[machine].name.name.clone())
+                        .collect(),
+                }
+            })
+            .collect()
     }
 
     /// One end of a link: the placed instance and its machine.
@@ -400,6 +434,48 @@ impl<'a> Lowering<'a> {
             .collect()
     }
 
+    /// Every distribution of the workspace with its member lines and its
+    /// dependency (rsdl §3.3, §13). Empty when the workspace declares no
+    /// distribution.
+    fn distributions(&self) -> Vec<v2::Distribution> {
+        let Some(facts) = &self.closure.distribution_facts else {
+            return Vec::new();
+        };
+        self.system
+            .distributions
+            .iter()
+            .enumerate()
+            .map(|(index, decl)| {
+                let members = (0..decl.members.len())
+                    .filter_map(|position| {
+                        let component = (0..self.closure.components.len()).find(|&component| {
+                            facts.membership[component] == Some(index)
+                                && facts.member_lines[component] == Some(position)
+                        })?;
+                        Some(v2::MemberLine {
+                            component: self.component_name(component),
+                            attributes: attributes(&decl.members[position].backend_keys),
+                        })
+                    })
+                    .collect();
+                let depends_on: BTreeSet<String> = facts
+                    .dependencies
+                    .iter()
+                    .filter(|dependency| dependency.from == index)
+                    .map(|dependency| distribution_name(&self.system.distributions[dependency.to]))
+                    .collect();
+                v2::Distribution {
+                    name: decl.name.name.clone(),
+                    package: decl.package.clone(),
+                    members,
+                    depends_on: depends_on.into_iter().collect(),
+                    labels: decl.attrs.labels.clone(),
+                    attributes: attributes(&decl.attrs.backend_keys),
+                }
+            })
+            .collect()
+    }
+
     /// For every closure service, its offering component and that component's
     /// instances; more than one instance is a redundant provider set, marked
     /// not yet realizable (rsdl §7, §13).
@@ -419,6 +495,12 @@ impl<'a> Lowering<'a> {
             })
             .collect()
     }
+}
+
+/// A distribution's qualified name, `pkg.Name`: it equals
+/// `v2::Distribution::qualified_name` of the lowered distribution.
+fn distribution_name(decl: &DistributionDecl) -> String {
+    format!("{}.{}", decl.package, decl.name.name)
 }
 
 /// The placement of each closure instance in one deployment, by (closure
@@ -1255,6 +1337,127 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    /// Appendix A's distributions with their member lines and dependency, and
+    /// their installation in each deployment (rsdl §3.3, §13, the
+    /// "Distributions" item after the example).
+    #[test]
+    fn appendix_a_lowers_its_distributions() {
+        let system = appendix_a();
+        let distributions: Vec<(String, Vec<&str>, Vec<&str>)> = system
+            .distributions
+            .iter()
+            .map(|distribution| {
+                (
+                    distribution.qualified_name(),
+                    distribution
+                        .members
+                        .iter()
+                        .map(|line| line.component.as_str())
+                        .collect(),
+                    names(&distribution.depends_on),
+                )
+            })
+            .collect();
+        assert_eq!(
+            distributions,
+            [
+                (
+                    "veh.topology.Adas".to_string(),
+                    vec![
+                        "veh.topology.Cruise",
+                        "veh.topology.Lane",
+                        "veh.diag.access"
+                    ],
+                    vec![]
+                ),
+                (
+                    "veh.topology.Hmi".to_string(),
+                    vec!["veh.topology.Panel"],
+                    vec!["veh.topology.Adas"]
+                ),
+            ]
+        );
+
+        let installations = |deployment: &v2::Deployment| -> Vec<(String, Vec<String>)> {
+            deployment
+                .installations
+                .iter()
+                .map(|installation| {
+                    (
+                        installation.distribution.clone(),
+                        installation.machines.clone(),
+                    )
+                })
+                .collect()
+        };
+        let row = |distribution: &str, machines: &[&str]| {
+            (
+                distribution.to_string(),
+                machines.iter().map(|machine| machine.to_string()).collect(),
+            )
+        };
+        assert_eq!(
+            installations(&system.deployments[0]),
+            [
+                row("veh.topology.Adas", &["AdasHpc", "Cockpit"]),
+                row("veh.topology.Hmi", &["Cockpit"]),
+            ]
+        );
+        assert_eq!(
+            installations(&system.deployments[1]),
+            [
+                row("veh.topology.Adas", &["DevBox"]),
+                row("veh.topology.Hmi", &["DevBox"]),
+            ]
+        );
+    }
+
+    /// A distribution's member lines keep their source order and their backend
+    /// keys, and its `labels` ride beside its map (rsdl §5, §13); a workspace
+    /// with no distribution lowers no distribution and no installation (rsdl
+    /// §3.3).
+    #[test]
+    fn distribution_lines_keep_their_order_and_backend_keys() {
+        let closure = "package veh.topology\n\
+                       import veh.adas.LaneAssist\n\
+                       component Lane { offers veh.adas.lane }\n\
+                       component Panel { requires LaneAssist }\n\
+                       system Vehicle { Lane, Panel }\n\
+                       deployment Desk for Vehicle { machine Top { Lane, Panel } }\n";
+        let (_, lowered) = lower_topology(&[("veh/topology/x.rsdl", closure)]);
+        let system = lowered.expect("the closure lowers");
+        assert!(system.distributions.is_empty());
+        assert!(system.deployments[0].installations.is_empty());
+
+        let distribution = "package veh.topology\n\
+                            distribution All [ labels = (QM), deb.section = net ] {\n\
+                            \x20 Panel\n\
+                            \x20 Lane [ deb.priority = optional ]\n\
+                            }\n";
+        let (checked, lowered) = lower_topology(&[
+            ("veh/topology/x.rsdl", closure),
+            ("veh/topology/y.rsdl", distribution),
+        ]);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let system = lowered.expect("the closure lowers");
+        let [all] = system.distributions.as_slice() else {
+            panic!("one distribution, got {:?}", system.distributions);
+        };
+        let members: Vec<(&str, usize)> = all
+            .members
+            .iter()
+            .map(|line| (line.component.as_str(), line.attributes.len()))
+            .collect();
+        assert_eq!(
+            members,
+            [("veh.topology.Panel", 0), ("veh.topology.Lane", 1)]
+        );
+        assert_eq!(all.members[1].attributes[0].key, "priority");
+        assert_eq!(all.labels, ["QM"]);
+        assert_eq!(all.attributes[0].namespace, "deb");
+        assert!(all.depends_on.is_empty());
     }
 
     /// rsdl §13: an error in the closure blocks lowering, a workspace with no
