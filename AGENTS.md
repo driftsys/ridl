@@ -12,9 +12,10 @@ under `crates/` — `ridl-syntax`, `ridl-core`, `ridl-sem`, `ridl-ir`, `ridlc`,
 `ridl`, `ridl-lsp`, `ridl-mcp`, `ridl-backend-rust`, `ridl-backend-ts`,
 `ridl-backend-proto`, `ridl-backend-flatbuffers`, `ridl-diff`, `ridl-fmt`, and
 `ridl-rt` — plus `xtask` at the root and the `editors/vscode` extension. The
-typl v0.1 toolchain (epic E1) and the ridl interface layer over it (epic E2) are
-built; the boundary model (epic E3) and `rsdl` are sequenced in the roadmap, and
-`rmdl` stays a Proposed draft with no implementation. See
+typl v0.1 toolchain (epic E1), the ridl interface layer over it (epic E2) and
+rsdl's checks, lowering and `ridl diff` at the system (epic E6) are built; the
+boundary model (epic E3) is sequenced in the roadmap, and `rmdl` stays a
+Proposed draft with no implementation. See
 `docs/technotes/walking-skeleton-architecture.md` for the as-built map.
 
 **Read these before doing anything else in this repo:**
@@ -179,13 +180,14 @@ apart unnoticed — check those two by reading when you touch either file.
   (convention) tier. prim has no autofixable content rules yet — `prim fix` is
   currently identical to `prim fmt` — so a floor-tier finding is repaired by
   hand.
-- **Every `ridl`/`typl` fenced block in `docs/book/` is compiled** by
+- **Every `ridl`/`typl`/`rsdl` fenced block in `docs/book/` is compiled** by
   `crates/ridl/tests/book_examples.rs`, and must draw no diagnostic its fence
   does not name — nor name one it does not draw. A verified block declares its
   own `package` and is a whole file; a fragment is marked `` ```ridl,ignore ``;
   a deliberate diagnostic is marked `` ```ridl,allow=<CODE> ``. Package names
-  are book-wide. Extraction uses `pulldown-cmark` with mdBook's exact option set
-  (`MDBOOK_OPTIONS`), so a fence anywhere mdBook reads one _in that file_ is
+  are book-wide, and the book is one workspace, so it holds exactly one `system`
+  fence (RSDL-601). Extraction uses `pulldown-cmark` with mdBook's exact option
+  set (`MDBOOK_OPTIONS`), so a fence anywhere mdBook reads one _in that file_ is
   verified — do not replace it with pattern matching, and do not widen the
   options. **The one exception is `{{#include}}`**, which the harness does not
   expand: fences inside an included file are not compiled. That is what keeps

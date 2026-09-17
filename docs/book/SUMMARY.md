@@ -3,6 +3,7 @@
 - [Introduction](introduction.md)
 - [Reading guide](reading-guide.md)
 - [Getting started](getting-started.md)
+- [Describing a system](rsdl.md)
 - [CLI reference](cli-reference.md)
 
 # Language reference

@@ -11,8 +11,8 @@
 //!
 //! # The fence convention — read this before adding an example
 //!
-//! A fenced block in `docs/book/` whose info string starts with `ridl` or
-//! `typl` is **verified by default**: the harness stages it as a real source
+//! A fenced block in `docs/book/` whose info string starts with `ridl`, `typl`
+//! or `rsdl` is **verified by default**: the harness stages it as a real source
 //! file and runs `ridl check` over the whole book as one workspace. A verified
 //! block must therefore be a complete, self-contained package file:
 //!
@@ -26,7 +26,8 @@
 //!
 //! Blocks that share a `package` name are staged side by side in that
 //! package's directory, so one block may `import` from another whichever order
-//! they appear in, exactly as a reader's own files would. The flip side: a
+//! they appear in, exactly as a reader's own files would. An `rsdl` block names
+//! the services and interfaces of `ridl` blocks the same way. The flip side: a
 //! package name is a book-wide namespace. Two chapters that both declare
 //! `package veh.demo` are staged into one directory and collide on every
 //! repeated declaration (TYPL-009), so give each chapter its own prefix.
@@ -75,7 +76,7 @@
 //!   package provides, or the block's own package. The compiler resolves the
 //!   *package* and stops, so an unresolved *name* inside a package it found
 //!   draws nothing — the harness checks rather than trusting the gap;
-//! - a language word that is not exactly `ridl` or `typl` — `RIDL`,
+//! - a language word that is not exactly `ridl`, `typl` or `rsdl` — `RIDL`,
 //!   `ridl{.class}` — which mdBook still renders as an example while the
 //!   convention does not recognise it. `ignore` suppresses this, as it
 //!   suppresses everything;
@@ -270,7 +271,7 @@ fn is_example_language(info: &str) -> bool {
         .next()
         .unwrap_or_default()
         .to_ascii_lowercase();
-    word.starts_with("ridl") || word.starts_with("typl")
+    word.starts_with("ridl") || word.starts_with("typl") || word.starts_with("rsdl")
 }
 
 // -------------------------------------------------------------- examples ---
@@ -282,7 +283,7 @@ struct Example {
     origin: String,
     /// 1-based line of the opening fence in that file.
     fence_line: usize,
-    /// `ridl` or `typl` — decides the staged file's extension.
+    /// `ridl`, `typl` or `rsdl` — decides the staged file's extension.
     language: String,
     /// Diagnostic codes this block declares it expects.
     allowed: BTreeSet<String>,
@@ -305,9 +306,11 @@ impl Example {
         })
     }
 
-    /// The names this block declares, as an importer would spell them.
+    /// The names this block declares, as an importer would spell them: the
+    /// typl and ridl declarations, and the rsdl declarations that sit in the
+    /// package's namespace (rsdl reference §3).
     fn declarations(&self) -> Vec<String> {
-        const KINDS: [&str; 7] = [
+        const KINDS: [&str; 11] = [
             "type",
             "const",
             "struct",
@@ -315,6 +318,10 @@ impl Example {
             "enumset",
             "union",
             "interface",
+            "system",
+            "component",
+            "distribution",
+            "deployment",
         ];
         self.body
             .lines()
@@ -453,9 +460,10 @@ fn classify(origin: &str, markdown: &str) -> (Vec<Example>, Vec<String>) {
             ));
             continue;
         }
-        if language != "ridl" && language != "typl" {
+        if language != "ridl" && language != "typl" && language != "rsdl" {
             problems.push(format!(
-                "{locator}: the language word is `{language}`, not exactly `ridl` or `typl`. \
+                "{locator}: the language word is `{language}`, not exactly `ridl`, `typl` or \
+                 `rsdl`. \
                  mdBook still renders this as an example a reader will believe, but the \
                  convention does not recognise it, so nothing would have compiled it. Spell the \
                  language word exactly, or mark the fence `ignore` if it is not an example.",
@@ -777,7 +785,8 @@ fn verify_book(book_root: &Path) -> Result<usize, String> {
     }
     if examples.is_empty() {
         return Err(format!(
-            "no verified `ridl` or `typl` blocks found under {} — the harness would pass \
+            "no verified `ridl`, `typl` or `rsdl` blocks found under {} — the harness would \
+             pass \
              without checking anything. Either the book moved, or every block is marked \
              `ignore`.",
             book_root.display()
@@ -1131,12 +1140,12 @@ fn a_fence_in_any_container_is_verified() {
     }
 }
 
-/// A language word that is not exactly `ridl`/`typl` is refused: mdBook renders
+/// A language word that is not exactly `ridl`/`typl`/`rsdl` is refused: mdBook renders
 /// it as an example a reader believes, while the convention does not recognise
 /// it, so nothing would compile it.
 #[test]
 fn a_near_miss_language_word_is_refused() {
-    for spelling in ["RIDL", "Ridl", "ridl{.class}", "typl-ish"] {
+    for spelling in ["RIDL", "Ridl", "ridl{.class}", "typl-ish", "RSDL"] {
         let book = book_of(
             "near-miss",
             &format!(
@@ -1149,7 +1158,7 @@ fn a_near_miss_language_word_is_refused() {
             Err(report) => report,
         };
         assert!(
-            report.contains("not exactly `ridl` or `typl`"),
+            report.contains("not exactly `ridl`, `typl` or `rsdl`"),
             "{spelling}: the report must name the language word, got:\n{report}"
         );
     }
@@ -1617,6 +1626,57 @@ fn a_typl_fence_is_verified() {
     assert!(
         report.contains("TYPL-104"),
         "the typl block must be compiled, got:\n{report}"
+    );
+}
+
+/// An `rsdl` fence is verified: it is staged as an `.rsdl` file in the one book
+/// workspace, so it names a service a sibling `ridl` fence declares, and its
+/// diagnostics fail the run as a `ridl` fence's do.
+#[test]
+fn an_rsdl_fence_is_verified() {
+    let contract = "```ridl\npackage zz.contract\n\ntype Level : integer [0..7]\n\n\
+                    interface Fan {\n  signal level : Level @[100ms..1s]\n}\n\n\
+                    service zz.contract.fan : Fan\n```\n\n";
+    let clean = book_of(
+        "rsdl-clean",
+        &format!(
+            "{contract}```rsdl\npackage zz.plan\n\ncomponent Blower {{ offers zz.contract.fan }}\n\n\
+             system Plant {{ Blower }}\n```\n"
+        ),
+    );
+    assert_eq!(
+        verify_book(clean.path()).unwrap_or_else(|report| panic!("{report}")),
+        2,
+        "the ridl and the rsdl block are both verified"
+    );
+
+    let broken = book_of(
+        "rsdl-broken",
+        &format!(
+            "{contract}```rsdl\npackage zz.plan\n\ncomponent Blower {{ offers zz.contract.fam }}\n```\n"
+        ),
+    );
+    let report = verify_book(broken.path()).expect_err("a broken rsdl block must be rejected");
+    assert!(
+        report.contains("RSDL-310"),
+        "the rsdl block must be compiled, got:\n{report}"
+    );
+}
+
+/// The book is one workspace, and a workspace declares at most one `system`
+/// (rsdl reference §3.1): a second `system` fence anywhere in the book is
+/// RSDL-601.
+#[test]
+fn a_second_system_fence_is_rejected() {
+    let book = book_of(
+        "rsdl-two-systems",
+        "```rsdl\npackage zz.one\n\nsystem One {}\n```\n\n\
+         ```rsdl\npackage zz.two\n\nsystem Two {}\n```\n",
+    );
+    let report = verify_book(book.path()).expect_err("two systems must be rejected");
+    assert!(
+        report.contains("RSDL-601"),
+        "the second system must draw RSDL-601, got:\n{report}"
     );
 }
 

@@ -169,8 +169,8 @@ All documents are working drafts (typl / ridl / rxdl / rmdl / rsdl at
 v0.1–v0.2). The design is captured; the typl v0.1 preview toolchain (epic E1 —
 compiler, `ridl fmt`, LSP, and VS Code extension) is built over the shared
 grammar and IR, epic E2 added the ridl interface layer over the same grammar and
-IR v2, and the boundary model, rxdl, rmdl, and rsdl are sequenced in the
-roadmap.
+IR v2, epic E6 added rsdl's checks and its lowering to the IR, and the boundary
+model, rxdl and rmdl are sequenced in the roadmap.
 
 **Continuous integration is paused**, so the checks on this repository read as
 failing. The gate itself is unchanged and runs locally: `just verify` is the
