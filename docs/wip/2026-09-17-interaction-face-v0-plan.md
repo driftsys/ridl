@@ -27,7 +27,9 @@ The implementation is deliberately confined to the Rust backend and its tests.
 No `ridl-rt` API or ADR changes are part of M3.
 
 - Modify `crates/ridl-backend-rust/src/lib.rs`: register the two new emitter
-  modules and append their generated items to the existing package output.
+  modules and add the `generate_face` companion entry point that appends their
+  generated items to the existing package output. `generate` itself is
+  unchanged; see "Where the face is emitted from" below.
 - Create `crates/ridl-backend-rust/src/descriptors.rs`: emit package catalog
   data, one `ridl_rt::contract::Interface` implementation per interface, and one
   interaction descriptor per member. It also emits the generated maximum buffer
@@ -170,6 +172,64 @@ rows real. It is not a first instalment of E5 and must not grow into one: a
 clause the form cannot carry is a reason to simplify the fixture, exactly as §2
 says about the payload stand-in. E5.1 replaces the translator with one driven by
 the structured expression tree, and the generated doc comment says so.
+
+### Where the face is emitted from — a companion entry point, not the pipeline
+
+Settled during M3, on delegated authority, after Task 1 found that the
+integration the design sketches cannot leave `just build` green.
+
+Design §7 says `lib.rs` gains "two module declarations and the call that appends
+the new items to what `generate` already returns", and this plan's Task 5 says
+the byte guard "runs `generate` over the fixture". Executing that showed
+`generate` is the shared pipeline entry point, and two of `crates/ridlc`'s tests
+bind what it may emit:
+
+1. `corpus_entries_compile_to_reviewed_snapshots` calls
+   `ridl_backend_rust::generate(ir).expect(...)` over every clean corpus entry.
+   The corpus interfaces carry contract clauses the narrow translator must
+   refuse — `window > 0ms`, `result >= 0.0`, `level < HANDLE_MAX`,
+   `position != GearPosition.PARK || currentSpeed == 0.0`. Refusing them is the
+   translator's whole point, so folding it into `generate` turns every one of
+   those entries into a `GenerateError` and panics the corpus test.
+2. `rustc_accepts` compiles generated corpus output with `rustc` and passes no
+   `--extern`. Emitting `::ridl_rt::…` from `generate` fails it with `E0433`.
+
+The second is not M3's to change. Lane C's Epic 10 Task 3 owns it: its plan
+states "Task 3 is where generated code first names the runtime, and where the
+compile proofs first pass `--extern ridl_rt=<path>`", and it deliberately
+withholds the flag until then so a proof whose generated source wrongly names
+`ridl_rt` is still detected. M3 taking that flag would pre-empt an in-flight
+lane and remove its detector.
+
+**Decision. The face is emitted from a companion entry point. `generate` is left
+byte-identical.**
+
+- `generate(package)` keeps today's contract exactly: the domain types, naming
+  no runtime.
+- `generate_face(package)` emits what `generate` emits plus the descriptor and
+  face items. It is what Task 5's checked-in fixture and byte guard run, and the
+  only caller of the clause translator. The domain types must come from the same
+  call, because the checked-in file is brought in with one `include!`: the face
+  names those types, and the orphan rule needs them local to the test crate for
+  the hand-written `Payload<ReprC>` implementations.
+- The doc comment on both says why there are two, and that the pipeline keeps
+  the narrow one until Lane C's Epic 10 Task 3 lands the runtime naming and the
+  `--extern ridl_rt` proof.
+
+This follows the convention the repository already pinned for exactly this
+situation. ADR-0017 decision 1 gave the proto backend
+`generate_with(package,
+others)` with "`generate(package)` retained as
+`generate_with(package, &[])`", and recorded that later backends inherit the
+API. A companion entry point is also the less committed choice against ADR-0020
+decision 7, which replaces a backend's entry point with
+`generate(CodegenRequest) -> CodegenResponse`: less is wired into a signature
+that record already schedules for replacement.
+
+The cost is that `ridl --emit rust` does not yet emit the face. That is correct
+for this stage rather than a shortfall — ADR-0018 decision 15 makes the face
+phase 2, and nothing in M3 ships a runtime for a pipeline consumer to link
+against.
 
 ### Epic 10 risk
 
@@ -383,9 +443,9 @@ payload verification and the generated face behavior.
       because the generated file and payload implementations are absent.
 - [ ] **Step 3: Generate and check in the fixture output.** Use the backend's
       existing test support, not a new cargo subprocess. When
-      `RIDL_UPDATE_GENERATED=1` is set, write the exact `generate` output to the
-      checked-in file; otherwise compare it byte-for-byte. Keep the generated
-      file free of hand-written edits and inner attributes.
+      `RIDL_UPDATE_GENERATED=1` is set, write the exact `generate_face` output
+      to the checked-in file; otherwise compare it byte-for-byte. Keep the
+      generated file free of hand-written edits and inner attributes.
 - [ ] **Step 4: Run the focused integration test and verify it passes.** Run:
       `cargo test -p ridl-backend-rust --test interaction_face` Expected: PASS,
       including compilation of the included generated code and the round-trip
