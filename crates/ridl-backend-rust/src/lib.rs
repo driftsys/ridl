@@ -42,7 +42,7 @@ pub struct GenerateError {
     pub message: String,
 }
 
-/// Generates Rust source and the extern-C header for `package`.
+/// Generates the Rust source for `package`.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking. Every
 /// emitted identifier is produced through `ident`, which escapes Rust
@@ -236,8 +236,7 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> Toke
         Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd),
         Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud),
         // Interaction kinds ride `Interface.interactions`, never a package
-        // decl, so none of them reaches this match; interfaces and services are
-        // emitted by the `interact` module.
+        // decl, so none of them reaches this match; nothing emits them today.
         Some(_) | None => return quote! {},
     };
 

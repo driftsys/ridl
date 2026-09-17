@@ -62,6 +62,15 @@ type in a per-package vocabulary that driftsys/ridl#241 has since retracted. The
 reasoning is in Task 2 under "Why not a generated type", and it closes Open item
 3 rather than answering it.
 
+**A fourth change followed on 2026-09-17, from review of driftsys/ridl#413.**
+Task 2 first emitted `use ridl_rt::payload::{Rule, Violation};` per package
+module. That is not total: a typl package may legally declare a type named
+`Rule` or `Violation`, and the import collides with it (`rustc` reports
+`E0255`). The generated code now names `::ridl_rt::payload::Violation` by
+absolute path and imports nothing, so no typl name can collide with it. Task 2
+therefore emits nothing; its code blocks and those of Tasks 3, 5 and 8 are
+rewritten below to the absolute path.
+
 **Line references were replaced by symbol names** wherever a symbol exists. The
 line numbers this plan carried had drifted by eleven lines in
 `crates/ridl-backend-rust/src/lib.rs` alone, and a symbol name does not drift.
@@ -316,28 +325,62 @@ today, and the design rounds to the lattice rather than rejecting."
 
 ---
 
-### Task 2: Depend on `ridl-rt` for the constraint error
+### Task 2: The constraint error is `ridl_rt::payload::Violation`
 
 **Model:** Sonnet (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
-**The generated code defines no error type. It uses
-`ridl_rt::payload::Violation`.** This reverses what this plan said before
-2026-09-16, and it closes Open item 3 rather than proposing an answer to it —
-see "Why not a generated type" below.
+**The generated code defines no error type and imports nothing. It names
+`::ridl_rt::payload::Violation` by its absolute path.** This reverses what this
+plan said before 2026-09-16, and it closes Open item 3 rather than proposing an
+answer to it — see "Why not a generated type" below.
+
+**The absolute path, and why there is no `use` line.** This task first emitted
+`use ridl_rt::payload::{Rule, Violation};` at the top of each package module.
+Review of driftsys/ridl#413 found that this is not total. A typl package may
+legally declare a type named `Rule` or a type named `Violation`, and the import
+then collides with the declaration. Reproduced with `rustc`:
+
+```text
+error[E0255]: the name `Violation` is defined multiple times
+`Violation` must be defined only once in the type namespace of this module
+```
+
+So the constructors spell `::ridl_rt::payload::Violation` and
+`::ridl_rt::payload::Rule::Range` instead. The leading `::` matters: it also
+survives a package that declares a type named `ridl_rt`, which a bare
+`ridl_rt::…` path resolves to instead of the crate — `rustc` reports `E0223` for
+a declared type and `E0433` for a module of that name, and accepts the absolute
+path in both cases. No name enters the generated module's namespace, so no typl
+name can collide with it. This is the same totality over names that ADR-0017
+requires of the proto3 projection.
+
+**Task 2 therefore emits nothing.** What it delivers is the decision recorded
+above, two sentences on `generate` and `emit_decl` that the interaction-layer
+retraction had left untrue, and the compile-proof harness that builds `ridl-rt`
+as an rlib. **Task 3 is where generated code first names the runtime**, and
+where the compile proofs first pass `--extern ridl_rt=<path>`. Wiring the
+`--extern` before then would make the argument inert, and an inert `--extern`
+removes a real detector: a proof whose generated source wrongly names `ridl_rt`
+fails today with `E0433`, and would pass silently with the extern wired.
 
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/lib.rs` — the emitted `use` line, so
-  each package module names the type once and the constructors spell it short.
-- Modify: `crates/ridlc/src/lib.rs` — Task 7's generated manifest gains
-  `ridl-rt` as a dependency.
-- Test: `crates/ridl-backend-rust/src/tests.rs`
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — two doc and comment sentences
+  only. No emission changes.
+- Test: `crates/ridl-backend-rust/src/tests.rs` — the `ridl_rt_rlib` helper and
+  the one test that keeps it honest.
+
+Task 7 still gains `ridl-rt` as a dependency of the generated manifest
+(`crates/ridlc/src/lib.rs`); naming the type by absolute path is a dependency
+like any other.
 
 **Interfaces:**
 
-- Consumes: `ridl_rt::payload::Violation` and `ridl_rt::payload::Rule`, which
-  exist today in `crates/ridl-rt/src/payload.rs:177` and `:186`.
-- Produces: no type. Tasks 3, 4, 5 and 8 construct `Violation` values.
+- Consumes: nothing. There is no import to consume — Tasks 3, 5 and 8 name
+  `::ridl_rt::payload::Violation` and `::ridl_rt::payload::Rule` by absolute
+  path. Both exist today in `crates/ridl-rt/src/payload.rs:177` and `:186`.
+- Produces: no type, and no generated source. The `ridl_rt_rlib` test helper,
+  for the compile proofs Tasks 3, 5 and 8 will write.
 
 **What `ridl-rt` already carries**, verified at `origin/main`:
 
@@ -421,75 +464,67 @@ zero-dependency `no_std` crate is the cheapest dependency available. If that is
 ever unwanted, the escape is a `ridl-rt` cargo feature that the generated
 manifest sets, not a second copy of the type.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Correct the two untrue sentences in `lib.rs`**
+
+`generate`'s doc comment said it "generates Rust source and the extern-C header
+for `package`"; ADR-0018 retired the extern-C face and nothing emits a header.
+`emit_decl`'s comment on its catch-all arm said interfaces and services "are
+emitted by the `interact` module"; driftsys/ridl#241 deleted that module. Both
+now read as they are: "Generates the Rust source for `package`." and "nothing
+emits them today."
+
+- [ ] **Step 2: Write the compile-proof harness**
+
+Add `ridl_rt_rlib` to `crates/ridl-backend-rust/src/tests.rs`: one `rustc` call
+over `crates/ridl-rt/src/lib.rs` producing an rlib in the caller's temp dir.
+`ridl-rt` is `no_std` with no dependency in any feature combination (ADR-0021
+decision 8), so one call is the whole build. It must be built by the same
+`rustc` the proof itself spawns; an rlib built by another toolchain is rejected
+with `E0514`.
+
+- [ ] **Step 3: Make the harness non-vacuous**
+
+No compile proof passes `--extern` yet, so the helper would be dead code and a
+helper producing an unusable rlib would go unnoticed until Task 3 needed it. One
+test keeps it honest, and fails if the helper breaks in either direction: it
+writes source naming `::ridl_rt::payload::Violation` and
+`::ridl_rt::payload::Rule::Range` in the shape generated code will use, compiles
+it with `--extern ridl_rt=<the rlib>` and asserts success, then compiles the
+same source with no `--extern` and asserts failure.
 
 ```rust
 #[test]
-fn a_pure_typl_package_names_the_runtime_violation() {
-    // A package with no interface still reaches ridl-rt, because a named
-    // scalar's constructor returns its Violation.
-    let source = rust_for(vec![speed_decl()]);
-    assert!(source.contains("use ridl_rt::payload::{Rule, Violation};"), "got:\n{source}");
-    // No generated error type: the library owns this one.
-    assert!(!source.contains("enum ConstraintError"));
-}
+fn the_compile_proof_harness_links_ridl_rt() { /* … */ }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [ ] **Step 4: Run the gates**
 
-Run:
-`cargo test -p ridl-backend-rust --locked a_pure_typl_package_names_the_runtime`
-Expected: FAIL — nothing emits a `use` of `ridl-rt` today.
+Run: `cargo fmt --all`, then `just test`, then `just lint`. Expected: PASS, with
+no snapshot changed — this task emits nothing, so no generated output moves.
 
-- [ ] **Step 3: Write the implementation**
-
-Emit the `use` at the top of each package module, from `generate` (`lib.rs:54`),
-when the package declares a non-vacuous named scalar, an `enum` or an `enumset`
-— that is, when Tasks 3, 5 or 8 will construct a `Violation`. Emitting it
-unconditionally would draw `unused_imports` on a package that declares only
-vacuous types, and the compile proofs deny lints by name, so nothing would catch
-it.
-
-```rust
-if package_constructs_a_violation(ir) {
-    items.push(quote! { use ridl_rt::payload::{Rule, Violation}; });
-}
-```
-
-`ridl-rt` is a path dependency inside this workspace and a version dependency in
-the generated manifest. Task 7 writes the latter; add it there rather than here,
-and take the version from `crates/ridl-rt/Cargo.toml` rather than writing a
-literal that will drift.
-
-- [ ] **Step 4: Run the test and accept the snapshot**
-
-Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
-Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. Every snapshot
-for a package with a constrained type gains the `use` line.
-
-**The compile proofs need the dependency.** `appendix_b_compiles_with_rustc` and
-the others drive `rustc` directly on a single file with no `--extern`, so
-generated code naming `ridl_rt` will not compile there. Each proof needs
-`ridl-rt` built and passed as `--extern ridl_rt=<path>`, or the proof moves to a
-`trybuild`-style fixture crate. Settle this in this task rather than in Task 3,
-which is the first task whose output actually names the type.
+**The compile proofs stay unwired.** `appendix_b_compiles_with_rustc` and the
+others drive `rustc` directly on a single file with no `--extern`. Nothing they
+compile names `ridl_rt`, so passing one would be inert, and worse: an inert
+`--extern` removes a real detector, because a proof whose generated source
+wrongly names `ridl_rt` fails today with `E0433` and would then pass silently.
+Task 3 wires them when its generated code first needs them.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add crates/
-git commit -m "feat(ridl-backend-rust): return the runtime Violation from constructors
+git commit -m "fix(ridl-backend-rust): name the runtime by absolute path, importing nothing
 
-ridl-rt already defines the constraint violation - payload::Violation, with
-the same type_name and a Rule covering every kind - and error.rs already
-carries it as Contract::InvalidValue, ridl 10.2's INVALID_VALUE. Generating
-a second type per package would give one crate N incompatible error types,
-which is the defect #252 records, and its shape does not depend on the
-contract, so it belongs in the library rather than the generator.
+A typl package may legally declare a type named Rule or Violation, and the
+use line collided with it: rustc reports E0255, the name defined twice in
+the module's type namespace. Generated constructors will spell
+::ridl_rt::payload::Violation instead, which no typl name can collide with,
+including a package that declares a type named ridl_rt.
 
-ADR-0020 decision 6 already makes ridl-rt the dependency of generated Rust.
-The crate is no_std with no dependency in any feature combination, so a
-constrained target pays nothing for it."
+So this task emits nothing. What it leaves is the recorded decision, two
+sentences on generate and emit_decl that the interaction-layer retraction
+had left untrue, and the harness that builds ridl-rt as an rlib for the
+compile proofs."
 ```
 
 ---
@@ -511,10 +546,14 @@ The core change, and the breaking one.
 
 **Interfaces:**
 
-- Consumes: `ridl_ir::v2::constraint_is_vacuous` (Task 1),
-  `ridl_rt::payload::{Violation, Rule}` (Task 2).
+- Consumes: `ridl_ir::v2::constraint_is_vacuous` (Task 1). Nothing from Task 2:
+  there is no import to consume, so the emitted code names
+  `::ridl_rt::payload::Violation` and `::ridl_rt::payload::Rule` by absolute
+  path. This is the first task whose generated code names the runtime, so it is
+  also where the compile proofs first pass `--extern ridl_rt=<path>`, built by
+  Task 2's `ridl_rt_rlib` helper.
 - Produces: for a constrained named scalar `Speed` over `f64`, an emitted
-  `Speed::new(f64) -> Result<Speed, Violation>`,
+  `Speed::new(f64) -> Result<Speed, ::ridl_rt::payload::Violation>`,
   `Speed::new_unchecked(f64) -> Speed` (`pub const`), `Speed::get(self) -> f64`,
   `impl TryFrom<f64> for Speed`, `impl From<Speed> for f64`. Task 4 emits the
   vacuous counterpart; Task 8 adds the pattern branch inside `new`.
@@ -533,7 +572,9 @@ fn constrained_scalar_is_a_value_object() {
         source.contains("pub struct Speed(f64)"),
         "inner field must be private, got:\n{source}"
     );
-    assert!(source.contains("pub fn new(value: f64) -> Result<Self, Violation>"));
+    assert!(source.contains(
+        "pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation>"
+    ));
     assert!(source.contains("pub const fn new_unchecked(value: f64) -> Self"));
     assert!(source.contains("pub const fn get(self) -> f64"));
     assert!(source.contains("impl TryFrom<f64> for Speed"));
@@ -600,7 +641,7 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
 
         impl #name {
             /// Constructs the value, enforcing its typl constraints.
-            #vis fn new(value: #inner) -> Result<Self, Violation> {
+            #vis fn new(value: #inner) -> Result<Self, ::ridl_rt::payload::Violation> {
                 #checks
                 Ok(Self(value))
             }
@@ -618,7 +659,7 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
         }
 
         impl TryFrom<#inner> for #name {
-            type Error = Violation;
+            type Error = ::ridl_rt::payload::Violation;
             fn try_from(value: #inner) -> Result<Self, Self::Error> {
                 Self::new(value)
             }
@@ -649,7 +690,10 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
         let lit = scalar_literal(td, min);
         checks.push(quote! {
             if #value < #lit {
-                return Err(Violation { type_name: #type_name, rule: Rule::Range });
+                return Err(::ridl_rt::payload::Violation {
+                    type_name: #type_name,
+                    rule: ::ridl_rt::payload::Rule::Range,
+                });
             }
         });
     }
@@ -657,7 +701,10 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
         let lit = scalar_literal(td, max);
         checks.push(quote! {
             if #value > #lit {
-                return Err(Violation { type_name: #type_name, rule: Rule::Range });
+                return Err(::ridl_rt::payload::Violation {
+                    type_name: #type_name,
+                    rule: ::ridl_rt::payload::Rule::Range,
+                });
             }
         });
     }
@@ -672,7 +719,10 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             let lit = proc_macro2::Literal::u64_unsuffixed(min);
             checks.push(quote! {
                 if #len < #lit {
-                    return Err(Violation { type_name: #type_name, rule: Rule::Length });
+                    return Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
                 }
             });
         }
@@ -680,7 +730,10 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             let lit = proc_macro2::Literal::u64_unsuffixed(max);
             checks.push(quote! {
                 if #len > #lit {
-                    return Err(Violation { type_name: #type_name, rule: Rule::Length });
+                    return Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
                 }
             });
         }
@@ -898,7 +951,10 @@ latter with Error = Infallible."
 
 **Interfaces:**
 
-- Consumes: `ridl_rt::payload::{Violation, Rule}` (Task 2).
+- Consumes: nothing from Task 2 — there is no import to consume, so the emitted
+  code names `::ridl_rt::payload::Violation` and `::ridl_rt::payload::Rule` by
+  absolute path. A compile proof over this output passes
+  `--extern ridl_rt=<path>`, built by Task 2's `ridl_rt_rlib` helper.
 - Produces: `impl TryFrom<i64> for <Enum>`, `impl From<<Enum>> for i64`, and the
   same pair for each enum set.
 
@@ -910,7 +966,7 @@ fn enum_converts_from_a_raw_discriminant() {
     let source = rust_for(vec![gear_position_decl()]);
     assert!(source.contains("impl TryFrom<i64> for GearPosition"));
     assert!(source.contains("impl From<GearPosition> for i64"));
-    assert!(source.contains("Rule::Variant"));
+    assert!(source.contains("::ridl_rt::payload::Rule::Variant"));
 }
 
 #[test]
@@ -949,11 +1005,14 @@ Append to `emit_enum`'s returned stream:
 
     quote! {
         impl TryFrom<i64> for #name {
-            type Error = Violation;
+            type Error = ::ridl_rt::payload::Violation;
             fn try_from(value: i64) -> Result<Self, Self::Error> {
                 match value {
                     #(#arms,)*
-                    _ => Err(Violation { type_name: #type_name, rule: Rule::Variant }),
+                    _ => Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Variant,
+                    }),
                 }
             }
         }
@@ -979,10 +1038,13 @@ Append to `emit_enum_set`'s returned stream:
         }
 
         impl TryFrom<i64> for #name {
-            type Error = Violation;
+            type Error = ::ridl_rt::payload::Violation;
             fn try_from(value: i64) -> Result<Self, Self::Error> {
                 if value & !Self::DECLARED_MASK != 0 {
-                    return Err(Violation { type_name: #type_name, rule: Rule::Variant });
+                    return Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Variant,
+                    });
                 }
                 Ok(Self(value))
             }
@@ -1567,10 +1629,10 @@ default.
 fn pattern_check_is_feature_gated() {
     let source = rust_for(vec![vin_decl()]);
     assert!(source.contains("#[cfg(feature = \"validate-pattern\")]"));
-    assert!(source.contains("Rule::Pattern"));
+    assert!(source.contains("::ridl_rt::payload::Rule::Pattern"));
     // The length check is not gated - it needs no dependency.
     let gated = source.split("#[cfg(feature = \"validate-pattern\")]").next().unwrap();
-    assert!(gated.contains("Rule::Length"));
+    assert!(gated.contains("::ridl_rt::payload::Rule::Length"));
 }
 ```
 
@@ -1600,7 +1662,10 @@ if let Some(pattern) = c.pattern.as_deref() {
                     regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
                 });
             if !PATTERN.is_match(&#value) {
-                return Err(Violation { type_name: #type_name, rule: Rule::Pattern });
+                return Err(::ridl_rt::payload::Violation {
+                    type_name: #type_name,
+                    rule: ::ridl_rt::payload::Rule::Pattern,
+                });
             }
         }
     });

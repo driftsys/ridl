@@ -169,6 +169,17 @@ and constants emit `const MAX_SPEED: Speed = Speed(250.0)`. Routing both through
 the public `new_unchecked` is what lets the field be genuinely private while
 cross-package `Default` derivation keeps working — no `pub(crate)` compromise.
 
+**Superseded, 2026-09-17.** The paragraph below is kept as written; it is no
+longer the design. The constraint error is `ridl_rt::payload::Violation`, which
+the `ridl-rt` library already defines. The generated code defines no error type
+and imports nothing, because a typl package may legally declare a type named
+`Violation` or `Rule` and an import of those names collides with the
+declaration. It names the type by its absolute path,
+`::ridl_rt::payload::Violation`; the leading `::` covers the remaining case, a
+package that declares a type named `ridl_rt`, which would otherwise shadow the
+first segment of the path. The reasoning is in Task 2 of
+[the plan](./typl-value-objects-plan.md). Task 10 folds this into the section.
+
 `ConstraintError` joins the dependency-free package vocabulary the `interact`
 module already emits beside `Provenance` and `SignalHandle`. It carries the type
 name, the violated constraint, and no allocation. `core::fmt::Display` always;
