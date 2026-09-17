@@ -27,4 +27,4 @@ pub mod ucum;
 
 pub use check::{CheckedPackage, ConstValue, check_package, const_value};
 pub use resolve::{Resolution, Symbol, SymbolKind, resolve_package};
-pub use rsdl::{CheckedSystem, check_system, unclaimed_backend_keys};
+pub use rsdl::{CheckedSystem, check_system, lower_system, unclaimed_backend_keys};

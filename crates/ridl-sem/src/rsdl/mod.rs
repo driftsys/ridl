@@ -18,6 +18,7 @@ mod attrs;
 mod closure;
 mod collect;
 mod distribution;
+mod lower;
 mod placement;
 mod resolve;
 mod target;
@@ -26,6 +27,7 @@ pub use closure::{
     Closure, ClosureComponent, ClosureService, ComponentId, ComponentLines, InterfaceId,
 };
 pub use distribution::{DistributionDependency, DistributionFacts};
+pub use lower::lower_system;
 pub use placement::{DeploymentPlacement, Placement};
 pub use resolve::ResolvedRequire;
 pub use target::{ReferenceTarget, Target, reference_at};
@@ -440,7 +442,7 @@ mod tests {
     use super::*;
 
     /// A package named `name` holding `files` as `(path, text)` pairs.
-    fn package(db: &RidlDatabase, name: &str, files: &[(&str, &str)]) -> Package {
+    pub(super) fn package(db: &RidlDatabase, name: &str, files: &[(&str, &str)]) -> Package {
         let files = files
             .iter()
             .map(|(path, text)| InputFile::new(db, path.to_string(), text.to_string()))
@@ -483,7 +485,7 @@ mod tests {
     }
 
     /// rsdl reference Appendix A, `system.rsdl`, verbatim.
-    const SYSTEM: &str = r#"package veh.topology
+    pub(super) const SYSTEM: &str = r#"package veh.topology
 
 import veh.adas.CruiseControl
 import veh.adas.LaneAssist
@@ -514,7 +516,7 @@ distribution Hmi  [ tier = APPLICATION ] { Panel }
 "#;
 
     /// rsdl reference Appendix A, `production.rsdl`, with the same package.
-    const PRODUCTION: &str = r#"package veh.topology
+    pub(super) const PRODUCTION: &str = r#"package veh.topology
 
 deployment Production for Vehicle {
   machine AdasHpc [ labels = (ASIL_B) ] { Cruise.primary, Lane, veh.diag.access }
@@ -757,7 +759,7 @@ deployment Production for Vehicle {
     }
 
     /// rsdl reference Appendix A, `veh/common/common.typl`.
-    const COMMON: &str = r#"package veh.common
+    pub(super) const COMMON: &str = r#"package veh.common
 
 type Speed: km/h [0.0..250.0 step 0.5]
 type Engaged: boolean
@@ -766,7 +768,7 @@ struct FaultReport { count: integer [0..255] }
 "#;
 
     /// rsdl reference Appendix A, `veh/adas/adas.ridl`.
-    const ADAS: &str = r#"package veh.adas
+    pub(super) const ADAS: &str = r#"package veh.adas
 
 import veh.common.Engaged
 import veh.common.Speed
@@ -787,7 +789,7 @@ service veh.adas.lane   : LaneAssist
 
     /// rsdl reference Appendix A, `veh/diag/diag.ridl`: one inline-shape
     /// service.
-    const DIAG: &str = r#"package veh.diag
+    pub(super) const DIAG: &str = r#"package veh.diag
 
 import veh.common.FaultReport
 
@@ -1278,7 +1280,7 @@ service veh.diag.access {
     }
 
     /// rsdl reference Appendix A, `bench.rsdl`, with the same package.
-    const BENCH: &str = r#"package veh.topology
+    pub(super) const BENCH: &str = r#"package veh.topology
 
 deployment Bench for Vehicle {
   machine DevBox { Cruise, Lane, Panel, veh.diag.access, Backend }
