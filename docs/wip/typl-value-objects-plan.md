@@ -125,51 +125,109 @@ predicate would drift, so it lives in `ridl-ir` beside the generated types.
 - Produces:
   `pub fn ridl_ir::v2::constraint_is_vacuous(c: Option<&v2::Constraint>) -> bool`.
   Returns `true` when `c` is `None`, or when `min`, `max`, `len_min`, `len_max`,
-  and `pattern` are all absent. `step` is deliberately ignored — step is not
-  validated (spec, "Not validated").
+  `pattern`, and `pattern_const` are all absent. `step` is deliberately ignored
+  — step is not validated (spec, "Not validated").
+- Review of the pull request added the `pattern_const` read and the one-sided
+  fixtures.
 
 - [ ] **Step 1: Write the failing test**
 
-Add to the existing test module in `crates/ridl-ir/src/lib.rs`:
+Add a test module of its own in `crates/ridl-ir/src/lib.rs`, beside
+`mod v2_round_trip`, as the Files list above says:
 
 ```rust
-#[test]
-fn vacuous_constraint_ignores_step() {
-    // A declared step alone leaves nothing for a constructor to check:
-    // quantization is normalized, not validated (design spec, Deferred).
-    let stepped = v2::Constraint {
-        min: None,
-        max: None,
-        step: Some("0.5".to_string()),
-        len_min: None,
-        len_max: None,
-        pattern: None,
-        pattern_const: None,
-    };
-    assert!(v2::constraint_is_vacuous(Some(&stepped)));
-    assert!(v2::constraint_is_vacuous(None));
+#[cfg(test)]
+mod vacuous_constraint {
+    use crate::v2;
 
-    let ranged = v2::Constraint {
-        min: Some("0.0".to_string()),
-        max: Some("250.0".to_string()),
-        step: None,
-        len_min: None,
-        len_max: None,
-        pattern: None,
-        pattern_const: None,
-    };
-    assert!(!v2::constraint_is_vacuous(Some(&ranged)));
+    /// A constraint with every field absent. Each test sets only the field it
+    /// is about, so no assertion can pass through a neighbouring field.
+    fn constraint() -> v2::Constraint {
+        v2::Constraint {
+            min: None,
+            max: None,
+            step: None,
+            len_min: None,
+            len_max: None,
+            pattern: None,
+            pattern_const: None,
+        }
+    }
 
-    let bounded = v2::Constraint {
-        min: None,
-        max: None,
-        step: None,
-        len_min: Some(0),
-        len_max: Some(256),
-        pattern: None,
-        pattern_const: None,
-    };
-    assert!(!v2::constraint_is_vacuous(Some(&bounded)));
+    #[test]
+    fn an_absent_or_empty_constraint_is_vacuous() {
+        assert!(v2::constraint_is_vacuous(None));
+        assert!(v2::constraint_is_vacuous(Some(&constraint())));
+    }
+
+    #[test]
+    fn vacuous_constraint_ignores_step() {
+        // A declared step alone leaves a constructor nothing to check: nothing
+        // checks a step today, and the design rounds to the lattice rather
+        // than rejecting (design spec, Deferred, not yet implemented).
+        let stepped = v2::Constraint {
+            step: Some("0.5".to_string()),
+            ..constraint()
+        };
+        assert!(v2::constraint_is_vacuous(Some(&stepped)));
+    }
+
+    /// Every constrained field on its own. A fixture setting a pair — `min`
+    /// with `max`, or `len_min` with `len_max` — cannot tell a predicate that
+    /// reads both from one that reads either, so each bound here is one-sided.
+    #[test]
+    fn any_single_constrained_field_is_non_vacuous() {
+        let cases = [
+            (
+                "min",
+                v2::Constraint {
+                    min: Some("0.0".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "max",
+                v2::Constraint {
+                    max: Some("250.0".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "len_min",
+                v2::Constraint {
+                    len_min: Some(1),
+                    ..constraint()
+                },
+            ),
+            (
+                "len_max",
+                v2::Constraint {
+                    len_max: Some(256),
+                    ..constraint()
+                },
+            ),
+            (
+                "pattern",
+                v2::Constraint {
+                    pattern: Some("^[a-z]+$".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "pattern_const",
+                v2::Constraint {
+                    pattern_const: Some("NAME_PATTERN".to_string()),
+                    ..constraint()
+                },
+            ),
+        ];
+        for (field, case) in cases {
+            assert!(
+                !v2::constraint_is_vacuous(Some(&case)),
+                "`{field}` alone must be non-vacuous"
+            );
+        }
+    }
 }
 ```
 
@@ -186,8 +244,16 @@ In `crates/ridl-ir/src/lib.rs`, inside the `v2` module's hand-written section:
 /// Whether a constraint leaves a generated constructor nothing to check.
 ///
 /// True when no bound and no pattern is present. `step` is excluded on
-/// purpose: quantization is normalized rather than validated, so a step-only
-/// constraint still admits an infallible constructor (design spec, Deferred).
+/// purpose: nothing checks a step today, and the design this classifier
+/// prepares for rounds a value to the nearest step-lattice point rather than
+/// rejecting it, so a step-only constraint is meant to admit a constructor
+/// with nothing to check (design spec, Deferred, not yet implemented).
+///
+/// A pattern given by name counts as a pattern: `pattern_const` is read as
+/// well as `pattern`, because a pattern constant that did not resolve leaves
+/// `pattern` absent while the type still carries a match constraint.
+/// `ridl-sem` treats the two fields the same way in its derived-init rule
+/// (`init.rs`).
 ///
 /// Because the checker materializes the typl §4.4 default `[0..256]` into
 /// `len_min`/`len_max`, every string and bytes type is non-vacuous. In
@@ -200,6 +266,7 @@ pub fn constraint_is_vacuous(constraint: Option<&Constraint>) -> bool {
         && c.len_min.is_none()
         && c.len_max.is_none()
         && c.pattern.is_none()
+        && c.pattern_const.is_none()
 }
 ```
 

@@ -659,8 +659,16 @@ pub mod v2 {
     /// Whether a constraint leaves a generated constructor nothing to check.
     ///
     /// True when no bound and no pattern is present. `step` is excluded on
-    /// purpose: quantization is normalized rather than validated, so a step-only
-    /// constraint still admits an infallible constructor (design spec, Deferred).
+    /// purpose: nothing checks a step today, and the design this classifier
+    /// prepares for rounds a value to the nearest step-lattice point rather than
+    /// rejecting it, so a step-only constraint is meant to admit a constructor
+    /// with nothing to check (design spec, Deferred, not yet implemented).
+    ///
+    /// A pattern given by name counts as a pattern: `pattern_const` is read as
+    /// well as `pattern`, because a pattern constant that did not resolve leaves
+    /// `pattern` absent while the type still carries a match constraint.
+    /// `ridl-sem` treats the two fields the same way in its derived-init rule
+    /// (`init.rs`).
     ///
     /// Because the checker materializes the typl §4.4 default `[0..256]` into
     /// `len_min`/`len_max`, every string and bytes type is non-vacuous. In
@@ -673,6 +681,7 @@ pub mod v2 {
             && c.len_min.is_none()
             && c.len_max.is_none()
             && c.pattern.is_none()
+            && c.pattern_const.is_none()
     }
 }
 
@@ -2001,42 +2010,92 @@ mod v2_round_trip {
 mod vacuous_constraint {
     use crate::v2;
 
+    /// A constraint with every field absent. Each test sets only the field it
+    /// is about, so no assertion can pass through a neighbouring field.
+    fn constraint() -> v2::Constraint {
+        v2::Constraint {
+            min: None,
+            max: None,
+            step: None,
+            len_min: None,
+            len_max: None,
+            pattern: None,
+            pattern_const: None,
+        }
+    }
+
+    #[test]
+    fn an_absent_or_empty_constraint_is_vacuous() {
+        assert!(v2::constraint_is_vacuous(None));
+        assert!(v2::constraint_is_vacuous(Some(&constraint())));
+    }
+
     #[test]
     fn vacuous_constraint_ignores_step() {
-        // A declared step alone leaves nothing for a constructor to check:
-        // quantization is normalized, not validated (design spec, Deferred).
+        // A declared step alone leaves a constructor nothing to check: nothing
+        // checks a step today, and the design rounds to the lattice rather
+        // than rejecting (design spec, Deferred, not yet implemented).
         let stepped = v2::Constraint {
-            min: None,
-            max: None,
             step: Some("0.5".to_string()),
-            len_min: None,
-            len_max: None,
-            pattern: None,
-            pattern_const: None,
+            ..constraint()
         };
         assert!(v2::constraint_is_vacuous(Some(&stepped)));
-        assert!(v2::constraint_is_vacuous(None));
+    }
 
-        let ranged = v2::Constraint {
-            min: Some("0.0".to_string()),
-            max: Some("250.0".to_string()),
-            step: None,
-            len_min: None,
-            len_max: None,
-            pattern: None,
-            pattern_const: None,
-        };
-        assert!(!v2::constraint_is_vacuous(Some(&ranged)));
-
-        let bounded = v2::Constraint {
-            min: None,
-            max: None,
-            step: None,
-            len_min: Some(0),
-            len_max: Some(256),
-            pattern: None,
-            pattern_const: None,
-        };
-        assert!(!v2::constraint_is_vacuous(Some(&bounded)));
+    /// Every constrained field on its own. A fixture setting a pair — `min`
+    /// with `max`, or `len_min` with `len_max` — cannot tell a predicate that
+    /// reads both from one that reads either, so each bound here is one-sided.
+    #[test]
+    fn any_single_constrained_field_is_non_vacuous() {
+        let cases = [
+            (
+                "min",
+                v2::Constraint {
+                    min: Some("0.0".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "max",
+                v2::Constraint {
+                    max: Some("250.0".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "len_min",
+                v2::Constraint {
+                    len_min: Some(1),
+                    ..constraint()
+                },
+            ),
+            (
+                "len_max",
+                v2::Constraint {
+                    len_max: Some(256),
+                    ..constraint()
+                },
+            ),
+            (
+                "pattern",
+                v2::Constraint {
+                    pattern: Some("^[a-z]+$".to_string()),
+                    ..constraint()
+                },
+            ),
+            (
+                "pattern_const",
+                v2::Constraint {
+                    pattern_const: Some("NAME_PATTERN".to_string()),
+                    ..constraint()
+                },
+            ),
+        ];
+        for (field, case) in cases {
+            assert!(
+                !v2::constraint_is_vacuous(Some(&case)),
+                "`{field}` alone must be non-vacuous"
+            );
+        }
     }
 }
