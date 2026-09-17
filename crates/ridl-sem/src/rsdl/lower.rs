@@ -1,8 +1,12 @@
 //! The lowering (rsdl reference §13): the checked system to the IR's `System`
 //! message (`crates/ridl-ir/proto/ridl/ir/v2/system.proto`).
 //!
-//! The lowering runs over the closure once and then once per deployment, and
-//! reads the checked model only.
+//! The lowering runs over the closure once and then once per deployment. It
+//! reads the checked model and the lowered IR of the workspace's packages,
+//! which carries the inputs rsdl does not own (rsdl §13): each interface's
+//! number and provisional flag (`Interface.number`, `Interface.provisional`,
+//! from the package's lock) and each member's ordinal (`Decl.ordinal`, ridl
+//! §11).
 //!
 //! **Gating (rsdl §13).** An error in the closure blocks lowering for every
 //! deployment, so [`lower_system`] returns `None` when
@@ -11,7 +15,7 @@
 //! deployment is left out. A warning never blocks: the facts are produced and
 //! carry the warned condition.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use ridl_ir::v2;
 
@@ -22,13 +26,20 @@ use super::{BackendKey, CheckedSystem, DeploymentDecl, WrittenValue};
 /// Lowers `system` to the IR's `System` message, or returns `None` when the
 /// workspace declares no `system` or an error in the closure blocks lowering
 /// (rsdl §13).
-pub fn lower_system(system: &CheckedSystem) -> Option<v2::System> {
+///
+/// `packages` is the lowered IR of the workspace's packages: every package that
+/// declares an interface a closure service lists must be among them.
+pub fn lower_system(system: &CheckedSystem, packages: &[&v2::Package]) -> Option<v2::System> {
     if system.closure_has_errors {
         return None;
     }
     let closure = system.closure.as_ref()?;
     let decl = system.systems.first()?;
-    let lowering = Lowering { system, closure };
+    let lowering = Lowering {
+        system,
+        closure,
+        packages,
+    };
     Some(v2::System {
         name: decl.name.name.clone(),
         package: decl.package.clone(),
@@ -37,8 +48,8 @@ pub fn lower_system(system: &CheckedSystem) -> Option<v2::System> {
         members: lowering.system_members(),
         components: lowering.components(),
         producers: lowering.producers(),
-        grants: Vec::new(),
-        regions: Vec::new(),
+        grants: lowering.grants(),
+        regions: lowering.regions(),
         distributions: Vec::new(),
         deployments: lowering.deployments(),
     })
@@ -48,9 +59,10 @@ pub fn lower_system(system: &CheckedSystem) -> Option<v2::System> {
 struct Lowering<'a> {
     system: &'a CheckedSystem,
     closure: &'a Closure,
+    packages: &'a [&'a v2::Package],
 }
 
-impl Lowering<'_> {
+impl<'a> Lowering<'a> {
     /// The qualified name of the closure component at `index`: `pkg.Name`,
     /// or the service's dotted name for an implicit component. It equals
     /// `v2::Component::qualified_name` of the lowered component.
@@ -77,6 +89,18 @@ impl Lowering<'_> {
                 inline: true,
             },
         }
+    }
+
+    /// The lowered IR of the interface `interface` names: the shape of that
+    /// name, declared or inline, in the package of its catalog.
+    fn interface_ir(&self, interface: &v2::InterfaceRef) -> &'a v2::Interface {
+        self.packages
+            .iter()
+            .filter(|package| package.name == interface.catalog)
+            .flat_map(|package| package.shapes())
+            .find(|shape| shape.name == interface.name && shape.is_inline() == interface.inline)
+            .map(|shape| shape.interface)
+            .expect("a closure interface is declared by a package the lowering reads")
     }
 
     /// The system's member lines, in source order (rsdl §4, §13).
@@ -180,6 +204,7 @@ impl Lowering<'_> {
     /// §10, §13).
     fn deployment(&self, decl: &DeploymentDecl, placement: &DeploymentPlacement) -> v2::Deployment {
         let at = placed(placement);
+        let routes = self.routes(decl, &at);
         let machines = decl
             .machines
             .iter()
@@ -258,10 +283,56 @@ impl Lowering<'_> {
             machines,
             placements,
             links,
-            routes: Vec::new(),
+            routes,
             surface,
             installations: Vec::new(),
         }
+    }
+
+    /// The routing table of one deployment (rsdl §13): for every member of
+    /// every interface a closure service lists, the key (catalog, interface
+    /// number, member ordinal) and the owning service's producing instances
+    /// with their machines. A `reserved` tombstone is not a member and has no
+    /// route.
+    fn routes(
+        &self,
+        decl: &DeploymentDecl,
+        at: &HashMap<(usize, &str), &Placement>,
+    ) -> Vec<v2::Route> {
+        let mut routes = Vec::new();
+        for (interface, owners) in &self.closure.interface_owners {
+            let service = &owners[0];
+            let offerer = self.closure.services[service].offerers[0];
+            let producers: Vec<v2::Endpoint> = self.closure.components[offerer]
+                .instances
+                .iter()
+                .map(|instance| self.endpoint(decl, at[&(offerer, instance.as_str())]))
+                .collect();
+            let reference = self.interface_ref(interface);
+            let ir = self.interface_ir(&reference);
+            for member in &ir.interactions {
+                if matches!(member.kind, None | Some(v2::decl::Kind::ReservedSlot(_))) {
+                    continue;
+                }
+                routes.push(v2::Route {
+                    catalog: reference.catalog.clone(),
+                    interface_number: ir.number,
+                    member_ordinal: member.ordinal,
+                    interface: reference.name.clone(),
+                    member: member.name.clone(),
+                    service: service.clone(),
+                    producers: producers.clone(),
+                });
+            }
+        }
+        routes.sort_by(|a, b| {
+            (&a.catalog, a.interface_number, a.member_ordinal).cmp(&(
+                &b.catalog,
+                b.interface_number,
+                b.member_ordinal,
+            ))
+        });
+        routes
     }
 
     /// One end of a link: the placed instance and its machine.
@@ -271,6 +342,62 @@ impl Lowering<'_> {
             instance: placement.instance.clone(),
             machine: decl.machines[placement.machine].name.name.clone(),
         }
+    }
+
+    /// The permission list (rsdl §11, §13): per closure component, the catalog
+    /// regions its `requires` lines reach — the catalog of each required
+    /// interface. The write side is read from the producers fact.
+    fn grants(&self) -> Vec<v2::Grant> {
+        self.closure
+            .components
+            .iter()
+            .enumerate()
+            .map(|(index, component)| {
+                let regions: BTreeSet<String> = self
+                    .closure
+                    .requires
+                    .iter()
+                    .filter(|require| require.consumer == index)
+                    .map(|require| self.interface_ref(&require.interface).catalog)
+                    .collect();
+                v2::Grant {
+                    component: self.component_name(index),
+                    external: component.external,
+                    regions: regions.into_iter().collect(),
+                }
+            })
+            .collect()
+    }
+
+    /// The region map (rsdl §11, §13): one region per catalog the closure
+    /// reaches, holding the interfaces of that catalog that closure services
+    /// list, each with its number, provisional flag and owning service.
+    fn regions(&self) -> Vec<v2::Region> {
+        let mut regions: BTreeMap<String, Vec<v2::RegionInterface>> = BTreeMap::new();
+        for (interface, owners) in &self.closure.interface_owners {
+            let reference = self.interface_ref(interface);
+            let ir = self.interface_ir(&reference);
+            regions
+                .entry(reference.catalog)
+                .or_default()
+                .push(v2::RegionInterface {
+                    name: reference.name,
+                    inline: reference.inline,
+                    number: ir.number,
+                    provisional: ir.provisional,
+                    service: owners[0].clone(),
+                });
+        }
+        regions
+            .into_iter()
+            .map(|(catalog, mut interfaces)| {
+                interfaces.sort_by_key(|interface| interface.number);
+                v2::Region {
+                    catalog,
+                    interfaces,
+                }
+            })
+            .collect()
     }
 
     /// For every closure service, its offering component and that component's
@@ -335,6 +462,7 @@ mod tests {
     use ridl_core::std_package;
 
     use super::*;
+    use crate::check_package;
     use crate::rsdl::check_system;
     use crate::rsdl::tests::{ADAS, BENCH, COMMON, DIAG, PRODUCTION, SYSTEM, package};
 
@@ -350,9 +478,28 @@ mod tests {
             package(&db, "veh.diag", &[("veh/diag/diag.ridl", DIAG)]),
             package(&db, "veh.topology", topology),
         ];
-        let ws = Workspace::new(&db, packages, BTreeMap::new());
+        let ws = Workspace::new(&db, packages.clone(), BTreeMap::new());
         let checked = check_system(&db, ws, std);
-        let lowered = lower_system(&checked);
+        let irs: Vec<v2::Package> = packages
+            .iter()
+            .map(|package| {
+                let checked = check_package(&db, ws, *package, std);
+                let errors: Vec<&str> = checked
+                    .diagnostics
+                    .iter()
+                    .filter(|diagnostic| diagnostic.severity == ridl_core::diag::Severity::Error)
+                    .map(|diagnostic| diagnostic.code.as_str())
+                    .collect();
+                assert_eq!(
+                    errors,
+                    Vec::<&str>::new(),
+                    "the contract packages check clean"
+                );
+                checked.ir
+            })
+            .collect();
+        let irs: Vec<&v2::Package> = irs.iter().collect();
+        let lowered = lower_system(&checked, &irs);
         (checked, lowered)
     }
 
@@ -848,6 +995,266 @@ mod tests {
             .map(|deployment| deployment.name.as_str())
             .collect();
         assert_eq!(deployments, ["Good"]);
+    }
+
+    /// A route as `(catalog, interface number, member ordinal, interface,
+    /// member, service, producers)`, each producer as `component.instance@machine`.
+    type RouteRow<'a> = (&'a str, u32, u32, &'a str, &'a str, &'a str, Vec<String>);
+
+    fn route_rows(deployment: &v2::Deployment) -> Vec<RouteRow<'_>> {
+        deployment
+            .routes
+            .iter()
+            .map(|route| {
+                (
+                    route.catalog.as_str(),
+                    route.interface_number,
+                    route.member_ordinal,
+                    route.interface.as_str(),
+                    route.member.as_str(),
+                    route.service.as_str(),
+                    route
+                        .producers
+                        .iter()
+                        .map(|producer| {
+                            format!(
+                                "{}.{}@{}",
+                                producer.component, producer.instance, producer.machine
+                            )
+                        })
+                        .collect(),
+                )
+            })
+            .collect()
+    }
+
+    fn grant_rows(system: &v2::System) -> Vec<(&str, bool, Vec<&str>)> {
+        system
+            .grants
+            .iter()
+            .map(|grant| {
+                (
+                    grant.component.as_str(),
+                    grant.external,
+                    names(&grant.regions),
+                )
+            })
+            .collect()
+    }
+
+    /// A region interface as `(catalog, name, inline, number, provisional,
+    /// service)`. `Region` is destructured: `xtask/tests/shape_walk.rs` counts
+    /// every line that spells a field access to `interfaces`, and this is not a
+    /// read of `Package.interfaces`.
+    fn region_rows(system: &v2::System) -> Vec<(&str, &str, bool, u32, bool, &str)> {
+        system
+            .regions
+            .iter()
+            .flat_map(
+                |v2::Region {
+                     catalog,
+                     interfaces,
+                     ..
+                 }| {
+                    interfaces.iter().map(move |interface| {
+                        (
+                            catalog.as_str(),
+                            interface.name.as_str(),
+                            interface.inline,
+                            interface.number,
+                            interface.provisional,
+                            interface.service.as_str(),
+                        )
+                    })
+                },
+            )
+            .collect()
+    }
+
+    /// Appendix A's routing table in each deployment, its region map and its
+    /// permission list (rsdl §11, §13, the "Grants" item after the example).
+    /// No package has a lock, so every interface number is provisional.
+    #[test]
+    fn appendix_a_lowers_its_routes_regions_and_grants() {
+        let system = appendix_a();
+        let cruise = |primary: &str, backup: &str| {
+            vec![
+                format!("veh.topology.Cruise.primary@{primary}"),
+                format!("veh.topology.Cruise.backup@{backup}"),
+            ]
+        };
+        let one = |instance: &str| vec![instance.to_string()];
+        assert_eq!(
+            route_rows(&system.deployments[0]),
+            [
+                (
+                    "veh.adas",
+                    1,
+                    1,
+                    "CruiseControl",
+                    "engaged",
+                    "veh.adas.cruise",
+                    cruise("AdasHpc", "Cockpit")
+                ),
+                (
+                    "veh.adas",
+                    1,
+                    2,
+                    "CruiseControl",
+                    "target",
+                    "veh.adas.cruise",
+                    cruise("AdasHpc", "Cockpit")
+                ),
+                (
+                    "veh.adas",
+                    1,
+                    3,
+                    "CruiseControl",
+                    "setLever",
+                    "veh.adas.cruise",
+                    cruise("AdasHpc", "Cockpit")
+                ),
+                (
+                    "veh.adas",
+                    2,
+                    1,
+                    "LaneAssist",
+                    "active",
+                    "veh.adas.lane",
+                    one("veh.topology.Lane.Unit@AdasHpc")
+                ),
+                (
+                    "veh.diag",
+                    1,
+                    1,
+                    "veh.diag.access",
+                    "readFaults",
+                    "veh.diag.access",
+                    one("veh.diag.access.Unit@AdasHpc")
+                ),
+            ]
+        );
+        let bench = route_rows(&system.deployments[1]);
+        assert_eq!(bench.len(), 5);
+        assert_eq!(bench[0].6, cruise("DevBox", "DevBox"));
+
+        assert_eq!(
+            region_rows(&system),
+            [
+                (
+                    "veh.adas",
+                    "CruiseControl",
+                    false,
+                    1,
+                    true,
+                    "veh.adas.cruise"
+                ),
+                ("veh.adas", "LaneAssist", false, 2, true, "veh.adas.lane"),
+                (
+                    "veh.diag",
+                    "veh.diag.access",
+                    true,
+                    1,
+                    true,
+                    "veh.diag.access"
+                ),
+            ]
+        );
+
+        assert_eq!(
+            grant_rows(&system),
+            [
+                ("veh.topology.Cruise", false, vec!["veh.adas"]),
+                ("veh.topology.Lane", false, vec![]),
+                ("veh.topology.Panel", false, vec!["veh.adas"]),
+                ("veh.topology.Backend", true, vec!["veh.adas", "veh.diag"]),
+                ("veh.diag.access", false, vec![]),
+            ]
+        );
+    }
+
+    /// rsdl §11: the region an interface reaches is the catalog of the package
+    /// that declares the interface, whichever package declares the owning
+    /// service; the region map holds only the interfaces closure services list;
+    /// a `reserved` tombstone keeps its ordinal and has no route (ridl §11).
+    #[test]
+    fn a_region_is_the_catalog_that_declares_the_interface() {
+        let contracts = "package veh.topology\n\
+                         \n\
+                         import veh.adas.LaneAssist\n\
+                         \n\
+                         type Flag: boolean\n\
+                         \n\
+                         interface Status {\n\
+                         \x20 signal ready: Flag @[100ms..1s]\n\
+                         \x20 reserved legacy\n\
+                         \x20 signal fault: Flag @[100ms..1s]\n\
+                         }\n\
+                         \n\
+                         service veh.topology.hub : Status, LaneAssist\n";
+        let topology = "package veh.topology\n\
+                        component Hub { offers veh.topology.hub }\n\
+                        component Screen { requires Status, requires LaneAssist }\n\
+                        system Vehicle { Hub, Screen }\n\
+                        deployment Desk for Vehicle { machine Top { Hub, Screen } }\n";
+        let (checked, lowered) = lower_topology(&[
+            ("veh/topology/status.ridl", contracts),
+            ("veh/topology/x.rsdl", topology),
+        ]);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let system = lowered.expect("the closure lowers");
+
+        assert_eq!(
+            region_rows(&system),
+            [
+                ("veh.adas", "LaneAssist", false, 2, true, "veh.topology.hub"),
+                ("veh.topology", "Status", false, 1, true, "veh.topology.hub"),
+            ]
+        );
+        assert_eq!(
+            grant_rows(&system),
+            [
+                ("veh.topology.Hub", false, vec![]),
+                (
+                    "veh.topology.Screen",
+                    false,
+                    vec!["veh.adas", "veh.topology"]
+                ),
+            ]
+        );
+        let hub = || vec!["veh.topology.Hub.Unit@Top".to_string()];
+        assert_eq!(
+            route_rows(&system.deployments[0]),
+            [
+                (
+                    "veh.adas",
+                    2,
+                    1,
+                    "LaneAssist",
+                    "active",
+                    "veh.topology.hub",
+                    hub()
+                ),
+                (
+                    "veh.topology",
+                    1,
+                    1,
+                    "Status",
+                    "ready",
+                    "veh.topology.hub",
+                    hub()
+                ),
+                (
+                    "veh.topology",
+                    1,
+                    3,
+                    "Status",
+                    "fault",
+                    "veh.topology.hub",
+                    hub()
+                ),
+            ]
+        );
     }
 
     /// rsdl §13: an error in the closure blocks lowering, a workspace with no
