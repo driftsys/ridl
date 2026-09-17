@@ -6,13 +6,18 @@
 //!
 //! **Gating (rsdl §13).** An error in the closure blocks lowering for every
 //! deployment, so [`lower_system`] returns `None` when
-//! `CheckedSystem::closure_has_errors` is set. A warning never blocks: the
-//! facts are produced and carry the warned condition.
+//! `CheckedSystem::closure_has_errors` is set. An RSDL-7xx error blocks its own
+//! deployment only, which `DeploymentPlacement::has_errors` records: that
+//! deployment is left out. A warning never blocks: the facts are produced and
+//! carry the warned condition.
+
+use std::collections::HashMap;
 
 use ridl_ir::v2;
 
 use super::closure::{Closure, ComponentId, InterfaceId};
-use super::{BackendKey, CheckedSystem, WrittenValue};
+use super::placement::{DeploymentPlacement, Placement};
+use super::{BackendKey, CheckedSystem, DeploymentDecl, WrittenValue};
 
 /// Lowers `system` to the IR's `System` message, or returns `None` when the
 /// workspace declares no `system` or an error in the closure blocks lowering
@@ -35,7 +40,7 @@ pub fn lower_system(system: &CheckedSystem) -> Option<v2::System> {
         grants: Vec::new(),
         regions: Vec::new(),
         distributions: Vec::new(),
-        deployments: Vec::new(),
+        deployments: lowering.deployments(),
     })
 }
 
@@ -158,6 +163,116 @@ impl Lowering<'_> {
             .collect()
     }
 
+    /// Every deployment no RSDL-7xx error blocked, in declaration order (rsdl
+    /// §13).
+    fn deployments(&self) -> Vec<v2::Deployment> {
+        self.system
+            .deployments
+            .iter()
+            .zip(&self.system.placements)
+            .filter(|(_, placement)| !placement.has_errors)
+            .map(|(decl, placement)| self.deployment(decl, placement))
+            .collect()
+    }
+
+    /// One deployment's facts: its machines, the placement of every closure
+    /// instance, the link set with crossing kinds and the surface set (rsdl §9,
+    /// §10, §13).
+    fn deployment(&self, decl: &DeploymentDecl, placement: &DeploymentPlacement) -> v2::Deployment {
+        let at = placed(placement);
+        let machines = decl
+            .machines
+            .iter()
+            .map(|machine| v2::Machine {
+                name: machine.name.name.clone(),
+                external: machine.external,
+                labels: machine.attrs.labels.clone(),
+                attributes: attributes(&machine.attrs.backend_keys),
+            })
+            .collect();
+
+        let mut placements = Vec::new();
+        for (index, component) in self.closure.components.iter().enumerate() {
+            for instance in &component.instances {
+                let placed = at[&(index, instance.as_str())];
+                let line = &decl.machines[placed.machine].members[placed.line];
+                placements.push(v2::Placement {
+                    component: self.component_name(index),
+                    instance: instance.clone(),
+                    machine: decl.machines[placed.machine].name.name.clone(),
+                    attributes: attributes(&line.backend_keys),
+                });
+            }
+        }
+
+        let mut links = Vec::new();
+        let mut surface = Vec::new();
+        for require in &self.closure.requires {
+            let consumer = &self.closure.components[require.consumer];
+            let producer = &self.closure.components[require.producer];
+            // rsdl §10: a link with two external endpoints crosses nothing the
+            // workspace builds and is not lowered; a link with one enters the
+            // surface set, read from the consumer's side (§13).
+            let direction = match (consumer.external, producer.external) {
+                (true, true) => continue,
+                (true, false) => Some(v2::SurfaceDirection::ExternalConsumes),
+                (false, true) => Some(v2::SurfaceDirection::ExternalOffers),
+                (false, false) => None,
+            };
+            for consumer_instance in &consumer.instances {
+                for producer_instance in &producer.instances {
+                    let from = at[&(require.consumer, consumer_instance.as_str())];
+                    let to = at[&(require.producer, producer_instance.as_str())];
+                    let crossing = if from.machine == to.machine {
+                        v2::Crossing::SameMachine
+                    } else if decl.machines[from.machine].external
+                        || decl.machines[to.machine].external
+                    {
+                        v2::Crossing::OffBoard
+                    } else {
+                        v2::Crossing::DifferentMachine
+                    };
+                    let link = v2::Link {
+                        interface: Some(self.interface_ref(&require.interface)),
+                        service: require.service.clone(),
+                        consumer: Some(self.endpoint(decl, from)),
+                        producer: Some(self.endpoint(decl, to)),
+                        crossing: crossing as i32,
+                    };
+                    if let Some(direction) = direction {
+                        surface.push(v2::Surface {
+                            link: Some(link.clone()),
+                            direction: direction as i32,
+                        });
+                    }
+                    links.push(link);
+                }
+            }
+        }
+
+        v2::Deployment {
+            name: decl.name.name.clone(),
+            package: decl.package.clone(),
+            labels: decl.attrs.labels.clone(),
+            attributes: attributes(&decl.attrs.backend_keys),
+            machines,
+            placements,
+            links,
+            routes: Vec::new(),
+            surface,
+            installations: Vec::new(),
+        }
+    }
+
+    /// One end of a link: the placed instance and its machine.
+    fn endpoint(&self, decl: &DeploymentDecl, placement: &Placement) -> v2::Endpoint {
+        v2::Endpoint {
+            component: self.component_name(placement.component),
+            instance: placement.instance.clone(),
+            machine: decl.machines[placement.machine].name.name.clone(),
+        }
+    }
+
     /// For every closure service, its offering component and that component's
     /// instances; more than one instance is a redundant provider set, marked
     /// not yet realizable (rsdl §7, §13).
@@ -177,6 +292,17 @@ impl Lowering<'_> {
             })
             .collect()
     }
+}
+
+/// The placement of each closure instance in one deployment, by (closure
+/// component, instance name). A deployment no RSDL-7xx error blocked places
+/// every instance exactly once (rsdl §9), so every lookup finds one.
+fn placed(placement: &DeploymentPlacement) -> HashMap<(usize, &str), &Placement> {
+    placement
+        .placements
+        .iter()
+        .map(|placed| ((placed.component, placed.instance.as_str()), placed))
+        .collect()
 }
 
 /// Backend keys as declared (rsdl §5): carried, never interpreted.
@@ -460,6 +586,268 @@ mod tests {
             system.components[1].requires[0].attributes,
             [attribute("someip", "reliable", None)]
         );
+    }
+
+    /// The link set of `deployment` as `(consumer instance, producer
+    /// instance, crossing)` rows.
+    fn link_rows(deployment: &v2::Deployment) -> Vec<(String, String, &str)> {
+        deployment
+            .links
+            .iter()
+            .map(|link| {
+                let end = |endpoint: &Option<v2::Endpoint>| {
+                    let endpoint = endpoint.as_ref().expect("a link has two endpoints");
+                    format!("{}.{}", endpoint.component, endpoint.instance)
+                };
+                let crossing = match v2::Crossing::try_from(link.crossing) {
+                    Ok(v2::Crossing::SameMachine) => "same machine",
+                    Ok(v2::Crossing::DifferentMachine) => "different machine",
+                    Ok(v2::Crossing::OffBoard) => "off-board",
+                    Ok(v2::Crossing::Unspecified) | Err(_) => "unspecified",
+                };
+                (end(&link.consumer), end(&link.producer), crossing)
+            })
+            .collect()
+    }
+
+    fn rows(expected: &[(&str, &str, &'static str)]) -> Vec<(String, String, &'static str)> {
+        expected
+            .iter()
+            .map(|(consumer, producer, crossing)| {
+                (consumer.to_string(), producer.to_string(), *crossing)
+            })
+            .collect()
+    }
+
+    /// Appendix A's two deployments: the machines, every instance's placement,
+    /// the link set with its crossing kinds and the surface set (rsdl §9, §10,
+    /// §13, the "Links, Production" and "Links, Bench" items after the
+    /// example).
+    #[test]
+    fn appendix_a_lowers_its_deployments() {
+        let system = appendix_a();
+        let deployments: Vec<&str> = system
+            .deployments
+            .iter()
+            .map(|deployment| deployment.name.as_str())
+            .collect();
+        assert_eq!(deployments, ["Production", "Bench"]);
+        let production = &system.deployments[0];
+        let bench = &system.deployments[1];
+
+        let machines: Vec<(&str, bool, Vec<&str>)> = production
+            .machines
+            .iter()
+            .map(|machine| {
+                (
+                    machine.name.as_str(),
+                    machine.external,
+                    names(&machine.labels),
+                )
+            })
+            .collect();
+        assert_eq!(
+            machines,
+            [
+                ("AdasHpc", false, vec!["ASIL_B"]),
+                ("Cockpit", false, vec![]),
+                ("Cloud", true, vec![]),
+            ]
+        );
+
+        let placements: Vec<(String, &str)> = production
+            .placements
+            .iter()
+            .map(|placement| {
+                (
+                    format!("{}.{}", placement.component, placement.instance),
+                    placement.machine.as_str(),
+                )
+            })
+            .collect();
+        let expected = [
+            ("veh.topology.Cruise.primary", "AdasHpc"),
+            ("veh.topology.Cruise.backup", "Cockpit"),
+            ("veh.topology.Lane.Unit", "AdasHpc"),
+            ("veh.topology.Panel.Unit", "Cockpit"),
+            ("veh.topology.Backend.Unit", "Cloud"),
+            ("veh.diag.access.Unit", "AdasHpc"),
+        ];
+        assert_eq!(
+            placements,
+            expected.map(|(instance, machine)| (instance.to_string(), machine))
+        );
+        let panel = &production.placements[3];
+        assert_eq!(panel.attributes[0].namespace, "linux");
+        assert_eq!(panel.attributes[0].key, "cpuset");
+
+        assert_eq!(
+            link_rows(production),
+            rows(&[
+                (
+                    "veh.topology.Cruise.primary",
+                    "veh.topology.Lane.Unit",
+                    "same machine"
+                ),
+                (
+                    "veh.topology.Cruise.backup",
+                    "veh.topology.Lane.Unit",
+                    "different machine"
+                ),
+                (
+                    "veh.topology.Panel.Unit",
+                    "veh.topology.Cruise.primary",
+                    "different machine"
+                ),
+                (
+                    "veh.topology.Panel.Unit",
+                    "veh.topology.Cruise.backup",
+                    "same machine"
+                ),
+                (
+                    "veh.topology.Panel.Unit",
+                    "veh.topology.Lane.Unit",
+                    "different machine"
+                ),
+                (
+                    "veh.topology.Backend.Unit",
+                    "veh.topology.Cruise.primary",
+                    "off-board"
+                ),
+                (
+                    "veh.topology.Backend.Unit",
+                    "veh.topology.Cruise.backup",
+                    "off-board"
+                ),
+                (
+                    "veh.topology.Backend.Unit",
+                    "veh.diag.access.Unit",
+                    "off-board"
+                ),
+            ])
+        );
+        let link = &production.links[7];
+        let interface = link.interface.as_ref().expect("a link names its interface");
+        assert_eq!(
+            (
+                interface.catalog.as_str(),
+                interface.name.as_str(),
+                interface.inline
+            ),
+            ("veh.diag", "veh.diag.access", true)
+        );
+        assert_eq!(link.service, "veh.diag.access");
+
+        assert!(
+            link_rows(bench)
+                .iter()
+                .all(|(_, _, crossing)| *crossing == "same machine")
+        );
+        for deployment in [production, bench] {
+            let surface: Vec<(String, v2::SurfaceDirection)> = deployment
+                .surface
+                .iter()
+                .map(|entry| {
+                    let link = entry.link.as_ref().expect("a surface entry holds its link");
+                    let consumer = link.consumer.as_ref().expect("a consumer");
+                    let producer = link.producer.as_ref().expect("a producer");
+                    (
+                        format!("{} -> {}", consumer.component, producer.component),
+                        v2::SurfaceDirection::try_from(entry.direction).expect("a known direction"),
+                    )
+                })
+                .collect();
+            let consumes = v2::SurfaceDirection::ExternalConsumes;
+            assert_eq!(
+                surface,
+                [
+                    (
+                        "veh.topology.Backend -> veh.topology.Cruise".to_string(),
+                        consumes
+                    ),
+                    (
+                        "veh.topology.Backend -> veh.topology.Cruise".to_string(),
+                        consumes
+                    ),
+                    (
+                        "veh.topology.Backend -> veh.diag.access".to_string(),
+                        consumes
+                    ),
+                ]
+            );
+        }
+    }
+
+    /// rsdl §10 and §13: a link with two external endpoints is absent, a link
+    /// with an external producer enters the surface set as the external side
+    /// offering, and an instance with no link is still placed.
+    #[test]
+    fn external_endpoints_shape_the_link_and_surface_sets() {
+        let text = "package veh.topology\n\
+                    import veh.adas.LaneAssist\n\
+                    component Lane [ external ] { offers veh.adas.lane }\n\
+                    component Probe [ external ] { requires LaneAssist }\n\
+                    component Panel { requires LaneAssist }\n\
+                    component Idle {}\n\
+                    system Vehicle { Lane, Probe, Panel, Idle }\n\
+                    deployment Bench for Vehicle {\n\
+                    \x20 machine Box { Panel, Idle }\n\
+                    \x20 machine Cloud [ external ] { Lane, Probe }\n\
+                    }\n";
+        let (checked, lowered) = lower_topology(&[("veh/topology/x.rsdl", text)]);
+        assert!(!checked.closure_has_errors, "{:?}", checked.diagnostics);
+        let system = lowered.expect("the closure lowers");
+        let [bench] = system.deployments.as_slice() else {
+            panic!("one deployment, got {:?}", system.deployments);
+        };
+        assert_eq!(
+            link_rows(bench),
+            rows(&[(
+                "veh.topology.Panel.Unit",
+                "veh.topology.Lane.Unit",
+                "off-board"
+            )])
+        );
+        let [surface] = bench.surface.as_slice() else {
+            panic!("one surface entry, got {:?}", bench.surface);
+        };
+        assert_eq!(surface.link.as_ref(), bench.links.first());
+        assert_eq!(
+            surface.direction,
+            v2::SurfaceDirection::ExternalOffers as i32
+        );
+        let idle: Vec<&str> = bench
+            .placements
+            .iter()
+            .filter(|placement| placement.component == "veh.topology.Idle")
+            .map(|placement| placement.machine.as_str())
+            .collect();
+        assert_eq!(idle, ["Box"]);
+    }
+
+    /// rsdl §13: an RSDL-7xx error blocks lowering for its own deployment
+    /// only.
+    #[test]
+    fn a_placement_error_leaves_out_its_own_deployment() {
+        let text = "package veh.topology\n\
+                    component Lane { offers veh.adas.lane }\n\
+                    system Vehicle { Lane }\n\
+                    deployment Good for Vehicle { machine A { Lane } }\n\
+                    deployment Bad for Vehicle { machine A {} }\n";
+        let (checked, lowered) = lower_topology(&[("veh/topology/x.rsdl", text)]);
+        let codes: Vec<&str> = checked
+            .diagnostics
+            .iter()
+            .map(|diagnostic| diagnostic.code.as_str())
+            .collect();
+        assert_eq!(codes, ["RSDL-701"]);
+        let system = lowered.expect("an RSDL-7xx error does not block the closure");
+        let deployments: Vec<&str> = system
+            .deployments
+            .iter()
+            .map(|deployment| deployment.name.as_str())
+            .collect();
+        assert_eq!(deployments, ["Good"]);
     }
 
     /// rsdl §13: an error in the closure blocks lowering, a workspace with no
