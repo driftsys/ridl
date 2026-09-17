@@ -128,6 +128,49 @@ therefore visible at the test call site and cannot silently affect consumers of
 generated code. If the generated face requires broad or numerous allows, the
 emitter is fixed instead of expanding the wrapper.
 
+### Contract clause bodies — a narrow, total translator
+
+Settled during M3, on delegated authority, because neither M1 nor M2 named a
+mechanism for it and the work cannot proceed without one.
+
+The design's §6 says the emitter writes `require` and `ensure` "returning
+`Ok(())` when the query declares no clause and the translated clauses when it
+does". Executing that showed there is nothing to translate from. The IR carries
+a clause as canonical **ridl** text in `Contract.source` — `window > 0ms`,
+`position != GearPosition.PARK || currentSpeed == 0.0` — and not as an
+expression tree; `E5.1` is the story that replaces the text with one. No backend
+translates an expression, and no backend depends on `ridl-sem`, so
+`ridl_sem::expr_eval::parse_contract_expr` is out of reach: a backend consumes
+IR (ADR-0020 decision 7). The text is also not Rust. A named scalar is a
+`#[repr(transparent)]` newtype with no comparison implementations, so
+`speed <= 100` does not compile, and `0ms` and `GearPosition.PARK` are not Rust
+at any layer.
+
+**Decision. The Rust backend gets a clause translator that accepts one
+expression form and refuses every other, and the fixture's clauses stay inside
+that form.**
+
+- The accepted form is `<subject> <comparison> <numeric literal>`, where
+  `<subject>` is the interaction's single declared parameter, or `result` on an
+  `ensure` clause, and `<comparison>` is one of `<`, `<=`, `>`, `>=`, `==`,
+  `!=`. The subject's type must be a named scalar over an integer or a float.
+- It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op> <literal>`
+  for `result`, reaching the newtype's public field. Several clauses of one kind
+  are conjoined: every clause must hold.
+- A command or a query that declares no clause of a kind emits a body of
+  `Ok(())`, as the plan already said.
+- **Any other clause form is refused with a `GenerateError`.** It is never
+  silently dropped and never emitted as `Ok(())`. Dropping a clause would
+  generate a provider that accepts arguments its contract forbids, which is a
+  worse failure than refusing to generate. `generate` is already total over
+  errors this way, so the refusal costs no new mechanism.
+
+This is deliberately the smallest thing that makes the two clause settlement
+rows real. It is not a first instalment of E5 and must not grow into one: a
+clause the form cannot carry is a reason to simplify the fixture, exactly as §2
+says about the payload stand-in. E5.1 replaces the translator with one driven by
+the structured expression tree, and the generated doc comment says so.
+
 ### Epic 10 risk
 
 `crates/ridl-backend-rust/src/lib.rs` is shared with Lane C's Epic 10. The
@@ -144,6 +187,7 @@ design change.
 
 - Modify: `crates/ridl-backend-rust/src/lib.rs`
 - Create: `crates/ridl-backend-rust/src/descriptors.rs`
+- Create: `crates/ridl-backend-rust/src/clauses.rs`
 - Create: `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl`
 - Create: `crates/ridl-backend-rust/tests/descriptor_generation.rs`
 - Create: `crates/ridl-backend-rust/tests/support/ir.rs`
@@ -178,7 +222,12 @@ descriptor shape.
       payload rows for a query and one for every other member. Emit
       `MAX_BUFFER_SIZE` from argument and reply maxima and
       `EVENT_SOURCE_BUFFER_SIZE` from event maxima. Do not emit an inner
-      attribute.
+      attribute. Add `clauses.rs`, the narrow clause translator settled above,
+      and emit `require` and `ensure` bodies from it: `Ok(())` when the
+      interaction declares no clause of that kind, the conjunction of the
+      translated clauses when it does, and a `GenerateError` when a clause is
+      outside the accepted form. Unit-test the translator's accepted form, its
+      conjunction, and its refusal directly.
 - [ ] **Step 4: Run the focused test and verify it passes.** Run:
       `cargo test -p ridl-backend-rust --test descriptor_generation` Expected:
       PASS.
@@ -387,6 +436,9 @@ payload verification and the generated face behavior.
 - E11.7, E11.8, or E11.12 replaces the hand-written `Payload<ReprC>` impls.
 - E16.2 replaces the all-zero `CatalogHash` and the all-`None` `EncodedSizes`
   rows.
+- E5.1 replaces the narrow clause translator of `src/clauses.rs` with one driven
+  by the structured expression tree, and widens the clause forms a contract may
+  use.
 - Lane C's Epic 10 may require a small generated-domain-type and payload
   stand-in touch-up if it lands after M3.
 
