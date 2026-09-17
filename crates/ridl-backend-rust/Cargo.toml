@@ -6,7 +6,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
-minijinja = "2.5.0"
 prettyplease.workspace = true
 proc-macro2.workspace = true
 quote.workspace = true
