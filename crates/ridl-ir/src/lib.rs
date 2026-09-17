@@ -655,6 +655,25 @@ pub mod v2 {
             None => {}
         }
     }
+
+    /// Whether a constraint leaves a generated constructor nothing to check.
+    ///
+    /// True when no bound and no pattern is present. `step` is excluded on
+    /// purpose: quantization is normalized rather than validated, so a step-only
+    /// constraint still admits an infallible constructor (design spec, Deferred).
+    ///
+    /// Because the checker materializes the typl §4.4 default `[0..256]` into
+    /// `len_min`/`len_max`, every string and bytes type is non-vacuous. In
+    /// practice this reduces to `boolean`, and `integer`/`float` with no declared
+    /// range.
+    pub fn constraint_is_vacuous(constraint: Option<&Constraint>) -> bool {
+        let Some(c) = constraint else { return true };
+        c.min.is_none()
+            && c.max.is_none()
+            && c.len_min.is_none()
+            && c.len_max.is_none()
+            && c.pattern.is_none()
+    }
 }
 
 pub mod name;
@@ -1975,5 +1994,49 @@ mod v2_round_trip {
                 v2::from_text_format(&text).expect("below the recursion limit, parsing succeeds");
             assert_eq!(package, decoded);
         });
+    }
+}
+
+#[cfg(test)]
+mod vacuous_constraint {
+    use crate::v2;
+
+    #[test]
+    fn vacuous_constraint_ignores_step() {
+        // A declared step alone leaves nothing for a constructor to check:
+        // quantization is normalized, not validated (design spec, Deferred).
+        let stepped = v2::Constraint {
+            min: None,
+            max: None,
+            step: Some("0.5".to_string()),
+            len_min: None,
+            len_max: None,
+            pattern: None,
+            pattern_const: None,
+        };
+        assert!(v2::constraint_is_vacuous(Some(&stepped)));
+        assert!(v2::constraint_is_vacuous(None));
+
+        let ranged = v2::Constraint {
+            min: Some("0.0".to_string()),
+            max: Some("250.0".to_string()),
+            step: None,
+            len_min: None,
+            len_max: None,
+            pattern: None,
+            pattern_const: None,
+        };
+        assert!(!v2::constraint_is_vacuous(Some(&ranged)));
+
+        let bounded = v2::Constraint {
+            min: None,
+            max: None,
+            step: None,
+            len_min: Some(0),
+            len_max: Some(256),
+            pattern: None,
+            pattern_const: None,
+        };
+        assert!(!v2::constraint_is_vacuous(Some(&bounded)));
     }
 }
