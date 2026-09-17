@@ -348,9 +348,11 @@ error[E0255]: the name `Violation` is defined multiple times
 So the constructors spell `::ridl_rt::payload::Violation` and
 `::ridl_rt::payload::Rule::Range` instead. The leading `::` matters: it also
 survives a package that declares a type named `ridl_rt`, which a bare
-`ridl_rt::…` path would resolve to. No name enters the generated module's
-namespace, so no typl name can collide with it. This is the same totality over
-names that ADR-0017 requires of the proto3 projection.
+`ridl_rt::…` path resolves to instead of the crate — `rustc` reports `E0223` for
+a declared type and `E0433` for a module of that name, and accepts the absolute
+path in both cases. No name enters the generated module's namespace, so no typl
+name can collide with it. This is the same totality over names that ADR-0017
+requires of the proto3 projection.
 
 **Task 2 therefore emits nothing.** What it delivers is the decision recorded
 above, two sentences on `generate` and `emit_decl` that the interaction-layer
