@@ -1,10 +1,11 @@
 //! Generates the IR Rust types from the protobuf schemas at build time.
 //!
-//! The v2 schema (the typl surface plus the ridl interaction layer, ADR-0008
-//! decision 8) is compiled with `protox`, a pure-Rust protobuf front end, so
-//! the build needs no system `protoc` binary (ADR-0006 decision 3). The
-//! resulting descriptor set is used three times, all from the one `protox`
-//! compilation, so no two outputs can disagree: `prost-build` emits the Rust
+//! The v2 schema — `ir.proto`, the typl surface plus the ridl interaction
+//! layer (ADR-0008 decision 8), and `system.proto`, the rsdl system layer
+//! (rsdl reference §13) — is compiled with `protox`, a pure-Rust protobuf
+//! front end, so the build needs no system `protoc` binary (ADR-0006 decision
+//! 3). The resulting descriptor set is used three times, all from the one
+//! `protox` compilation, so no two outputs can disagree: `prost-build` emits the Rust
 //! types; `pbjson-build` generates the canonical protobuf JSON serde impls
 //! for those types (ADR-0014 decision 14); and the set is written to
 //! `OUT_DIR`, where `lib.rs` embeds it as the `prost-reflect` descriptor
@@ -17,7 +18,7 @@ use std::error::Error;
 use prost::Message;
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let protos = ["proto/ridl/ir/v2/ir.proto"];
+    let protos = ["proto/ridl/ir/v2/ir.proto", "proto/ridl/ir/v2/system.proto"];
     let include = "proto";
 
     for proto in protos {

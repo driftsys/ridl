@@ -1,0 +1,364 @@
+syntax = "proto3";
+
+// IR v2 — the rsdl system layer (rsdl language reference §13).
+//
+// One `System` message per workspace: the facts the rsdl lowering derives
+// from the checked system, once for the closure (rsdl §3.1) and once per
+// `deployment` (§3.4). It is its own artifact beside the package IR of
+// `ir.proto`: a package carries contracts, a system carries who produces
+// them, where each copy runs, and every link between a consumer and a
+// producer with its crossing kind. A runtime's descriptor is an emitter over
+// these facts and is specified with the runtime (rsdl §13).
+//
+// The artifact is named after the system's qualified name, `pkg.Name`, with
+// the suffix of its encoding: `<pkg.Name>.system.json`, `.system.txtpb` or
+// `.system.binpb` (ADR-0014 decision 4), written by the same `--emit` value
+// that writes the package IR in that encoding.
+//
+// Every fact of rsdl §13 has a field here, and nothing else does. The
+// closure-level facts are stated once rather than per deployment:
+//
+//   closure     components with their lines, the system's member lines,
+//               producers, the permission list, the region map,
+//               distributions with their dependency
+//   deployment  machines, the placement of every instance, the link set,
+//               the routing table, the surface set, distribution
+//               installation
+//
+// A producer's machines are read from the deployment's placements, not
+// repeated on the producer. The rsdl-owned keys are consumed into the facts
+// they feed (rsdl §5): `instances` and `external` are fields, `tier` and
+// `deprecated` feed checks (RSDL-901, the family lint) and are not lowered.
+//
+// Names. A component is referred to by its qualified name — `pkg.Name` for a
+// declared component, the service's dotted name for the implicit component
+// of a lone service (rsdl §6) — and `Component::qualified_name` in `lib.rs`
+// is the one derivation. A distribution and a system are qualified the same
+// way. A machine name is scoped to its deployment (rsdl §3.5) and is written
+// bare. An interface is referred to by its catalog (the package that
+// declares it, vocabulary V-16), its name — the interface's own name, or the
+// owning service's dotted name for an inline shape (ridl §14.5) — and
+// whether it is inline, because the two names may be spelled the same. None
+// of these names is a wire identity (rsdl §1.3): the routing key is
+// (catalog, interface number, member ordinal), and the interface numbers
+// come from each package's lock through `Interface.number` in `ir.proto`.
+//
+// Field numbering follows `ir.proto`: data fields start at 1; oneof members
+// start at 10.
+package ridl.ir.v2;
+
+// The lowered system: the closure facts, then one `Deployment` per
+// deployment the lowering was not blocked for (rsdl §13, "Errors and
+// warnings").
+message System {
+  // CamelCase name of the `system` declaration (rsdl §3.1).
+  string name = 1;
+  // The package that declares it.
+  string package = 2;
+  // `labels` of the declaration, carried beside the attribute map (rsdl §5).
+  repeated string labels = 3;
+  // The declaration's backend keys, as declared (rsdl §5, §13).
+  repeated Attribute attributes = 4;
+  // The system's member lines in source order, each naming one closure
+  // component (rsdl §4).
+  repeated MemberLine members = 5;
+  // The closure (rsdl §3.1): the listed components and the implicit
+  // components of the listed services, in the order the system lists them.
+  repeated Component components = 6;
+  // For every service in the closure, its offering component and instances
+  // (rsdl §8, §13), in service name order.
+  repeated Producer producers = 7;
+  // The permission list (rsdl §11, §13): one grant per closure component,
+  // in closure order.
+  repeated Grant grants = 8;
+  // The region map (rsdl §13): one region per catalog the closure reaches,
+  // in catalog name order.
+  repeated Region regions = 9;
+  // Every distribution of the workspace, in package, then file, then source
+  // order, with its dependency (rsdl §3.3, §13). Empty when the workspace
+  // declares none.
+  repeated Distribution distributions = 10;
+  // Every deployment `for` the system whose lowering no RSDL-7xx error
+  // blocked, in package, then file, then source order (rsdl §13).
+  repeated Deployment deployments = 11;
+}
+
+// A member line of a `system` or a `distribution` body (rsdl §4): the
+// component it names and the line's backend keys.
+message MemberLine {
+  // The qualified component name.
+  string component = 1;
+  repeated Attribute attributes = 2;
+}
+
+// One component of the closure (rsdl §3.2, §6, §7).
+message Component {
+  // The declared CamelCase name, or the service's dotted name for an
+  // implicit component.
+  string name = 1;
+  // The declaring package; empty for an implicit component, which no
+  // package declares (rsdl §6).
+  string package = 2;
+  // True for the implicit component of a lone service (rsdl §6).
+  bool implicit = 3;
+  // The `external` flag (rsdl §3.2, §9): no implementation in this
+  // workspace.
+  bool external = 4;
+  // The instance names in declaration order, or the one unit instance
+  // `Unit` (rsdl §7).
+  repeated string instances = 5;
+  // The `offers` lines in source order; an implicit component offers its
+  // one service (rsdl §3.2, §6).
+  repeated Offer offers = 6;
+  // The `requires` lines in source order, each resolved over the closure
+  // (rsdl §8).
+  repeated Require requires = 7;
+  // `labels` of the declaration (rsdl §5).
+  repeated string labels = 8;
+  // The declaration's backend keys (rsdl §5).
+  repeated Attribute attributes = 9;
+}
+
+// An `offers` line (rsdl §3.2).
+message Offer {
+  // The service's dotted name.
+  string service = 1;
+  repeated Attribute attributes = 2;
+}
+
+// A `requires` line, resolved over the closure (rsdl §8): the interface it
+// names, the one closure service that lists it, and the one closure
+// component that offers that service. The line is the attribute site of
+// every link derived from it (rsdl §13).
+message Require {
+  InterfaceRef interface = 1;
+  // The owning service's dotted name.
+  string service = 2;
+  // The offering component's qualified name.
+  string producer = 3;
+  repeated Attribute attributes = 4;
+}
+
+// An interface by identity (rsdl §11, vocabulary V-16): the catalog that
+// numbers it and its name in that catalog.
+message InterfaceRef {
+  // The package that declares the interface — for an inline shape, the
+  // package that declares the service.
+  string catalog = 1;
+  // The interface's name, or the owning service's dotted name for an
+  // inline shape (ridl §14.5).
+  string name = 2;
+  // True for the inline shape of a service.
+  bool inline = 3;
+}
+
+// The producer of one closure service (rsdl §8, §13).
+message Producer {
+  string service = 1;
+  // The offering component's qualified name.
+  string component = 2;
+  // Its instances (rsdl §7); the machine each is placed on in a deployment
+  // is in that deployment's `placements`.
+  repeated string instances = 3;
+  // True when the component has more than one instance: a redundant
+  // provider set, which RSDL-409 reports not yet realizable (rsdl §7).
+  bool not_yet_realizable = 4;
+}
+
+// One component's grant (rsdl §11): the catalog regions its `requires`
+// lines reach. The write side is not a second list; it is read from
+// `System.producers` (rsdl §13).
+message Grant {
+  // The component's qualified name.
+  string component = 1;
+  // The component's `external` flag: the grant is derived and lowered, and
+  // enforcing it is outside this runtime (rsdl §11).
+  bool external = 2;
+  // The catalog names, in name order; empty for a component that requires
+  // nothing.
+  repeated string regions = 3;
+}
+
+// One region of the region map (rsdl §13): a catalog the closure reaches.
+message Region {
+  // The catalog's name — its package name (vocabulary V-16).
+  string catalog = 1;
+  // The interfaces of this catalog that closure services list, in interface
+  // number order.
+  repeated RegionInterface interfaces = 2;
+}
+
+// One interface of a region, with the identity the routing key uses.
+message RegionInterface {
+  // The interface's name in the catalog, or the owning service's dotted name
+  // for an inline shape.
+  string name = 1;
+  // True for the inline shape of a service.
+  bool inline = 2;
+  // The interface number from the package's lock (`Interface.number`).
+  uint32 number = 3;
+  // True when the number has no lock entry yet (`Interface.provisional`).
+  bool provisional = 4;
+  // The closure service that lists the interface (rsdl §8).
+  string service = 5;
+}
+
+// A `distribution` declaration with its derived dependency (rsdl §3.3, §13).
+message Distribution {
+  string name = 1;
+  string package = 2;
+  // The member lines in source order.
+  repeated MemberLine members = 3;
+  // The qualified names of the distributions this one depends on, in name
+  // order: `A` depends on `B` when a component in `A` requires an interface
+  // whose owning service a component in `B` offers (rsdl §13). The same in
+  // every deployment.
+  repeated string depends_on = 4;
+  repeated string labels = 5;
+  repeated Attribute attributes = 6;
+}
+
+// One placement of the system (rsdl §3.4, §9, §10, §13).
+message Deployment {
+  string name = 1;
+  string package = 2;
+  repeated string labels = 3;
+  repeated Attribute attributes = 4;
+  // Every machine of the deployment, in declaration order.
+  repeated Machine machines = 5;
+  // Every instance of every closure component, in closure order then
+  // instance order, with the machine it is placed on (rsdl §9) — an
+  // instance with no link included.
+  repeated Placement placements = 6;
+  // The link set (rsdl §8, §10): one link per (consumer instance, producer
+  // instance) of every `requires` line, in `requires` order; a link with
+  // two external endpoints is absent.
+  repeated Link links = 7;
+  // The routing table (rsdl §13), in (catalog, interface number, member
+  // ordinal) order.
+  repeated Route routes = 8;
+  // The surface set (rsdl §13): every link with an external component at
+  // exactly one endpoint, in link order.
+  repeated Surface surface = 9;
+  // Distribution installation (rsdl §13): one entry per distribution, in
+  // `System.distributions` order. Empty when the workspace declares no
+  // distribution.
+  repeated Installation installations = 10;
+}
+
+// A `machine` declaration (rsdl §3.5).
+message Machine {
+  // Unique within its deployment.
+  string name = 1;
+  // True for a machine outside the built system (rsdl §3.5).
+  bool external = 2;
+  repeated string labels = 3;
+  repeated Attribute attributes = 4;
+}
+
+// One instance on one machine (rsdl §9).
+message Placement {
+  // The component's qualified name.
+  string component = 1;
+  string instance = 2;
+  string machine = 3;
+  // The backend keys of the placement line that placed the instance (rsdl
+  // §13).
+  repeated Attribute attributes = 4;
+}
+
+// One end of a link: an instance and the machine it is placed on.
+message Endpoint {
+  // The component's qualified name.
+  string component = 1;
+  string instance = 2;
+  string machine = 3;
+}
+
+// The crossing kind of a link (rsdl §10), derived from the two machines.
+enum Crossing {
+  CROSSING_UNSPECIFIED = 0;
+  // Both instances are on one machine.
+  CROSSING_SAME_MACHINE = 1;
+  // The machines differ and neither is external.
+  CROSSING_DIFFERENT_MACHINE = 2;
+  // The machines differ and at least one is external.
+  CROSSING_OFF_BOARD = 3;
+}
+
+// One link (rsdl §8, §10): a consumer instance reaching a producer instance
+// through a `requires` line. The line's attribute map is on the consumer
+// component's `Require` entry.
+message Link {
+  InterfaceRef interface = 1;
+  // The owning service's dotted name.
+  string service = 2;
+  Endpoint consumer = 3;
+  Endpoint producer = 4;
+  Crossing crossing = 5;
+}
+
+// One entry of the routing table (rsdl §13): the key (catalog, interface
+// number, member ordinal), and the producing instances with their machines.
+message Route {
+  string catalog = 1;
+  uint32 interface_number = 2;
+  // The member's ordinal in the interface body (ridl §11, `Decl.ordinal`).
+  uint32 member_ordinal = 3;
+  // The interface's name in the catalog, beside the key, for a reader.
+  string interface = 4;
+  // The member's name, beside the key, for a reader.
+  string member = 5;
+  // The owning service's dotted name.
+  string service = 6;
+  repeated Endpoint producers = 7;
+}
+
+// Which side of a surface link is external (rsdl §13).
+enum SurfaceDirection {
+  SURFACE_DIRECTION_UNSPECIFIED = 0;
+  // The external component consumes; the producer is in the built system.
+  SURFACE_DIRECTION_EXTERNAL_CONSUMES = 1;
+  // The external component offers; the consumer is in the built system.
+  SURFACE_DIRECTION_EXTERNAL_OFFERS = 2;
+}
+
+// One entry of the surface set (rsdl §13): the link, with the boundary read
+// from the consumer's side.
+message Surface {
+  Link link = 1;
+  SurfaceDirection direction = 2;
+}
+
+// Where one distribution is installed in a deployment (rsdl §13): the
+// machines hosting at least one instance of its components.
+message Installation {
+  // The distribution's qualified name.
+  string distribution = 1;
+  // In machine declaration order.
+  repeated string machines = 2;
+}
+
+// A backend key as declared (rsdl §5): `namespace.key`, a flag or a value,
+// never interpreted by the compiler.
+message Attribute {
+  // `linux` in `linux.cpuset`.
+  string namespace = 1;
+  // `cpuset` in `linux.cpuset`.
+  string key = 2;
+  // Absent for a flag.
+  AttributeValue value = 3;
+}
+
+// An attribute value as written (rsdl §5, Appendix B): the text of exactly
+// one literal or name, or a parenthesised list.
+message AttributeValue {
+  oneof kind {
+    string scalar = 10;
+    AttributeList list = 11;
+  }
+}
+
+message AttributeList {
+  repeated AttributeValue items = 1;
+}

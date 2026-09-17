@@ -50,23 +50,38 @@ pub mod v2 {
             .expect("the embedded descriptor set decodes: build.rs wrote it from the schema compilation that generated these types")
         });
 
+    /// The descriptor of one root message of the compiled schema, by its
+    /// full name.
+    fn descriptor(name: &str) -> prost_reflect::MessageDescriptor {
+        DESCRIPTOR_POOL
+            .get_message_by_name(name)
+            .unwrap_or_else(|| panic!("{name} is declared by the compiled schema"))
+    }
+
     /// The `Package` message descriptor — the entry point of the prototext
     /// encoder and decoder, the one reflection path left in this module.
     pub(crate) fn package_descriptor() -> prost_reflect::MessageDescriptor {
-        DESCRIPTOR_POOL
-            .get_message_by_name("ridl.ir.v2.Package")
-            .expect("ridl.ir.v2.Package is declared by the compiled schema")
+        descriptor("ridl.ir.v2.Package")
     }
 
-    /// Rebuilds a package as a `DynamicMessage` over the descriptor pool —
-    /// the step `prost-reflect` needs before rendering a text encoding.
+    /// The `System` message descriptor (`system.proto`), the prototext entry
+    /// point of the rsdl system layer.
+    pub(crate) fn system_descriptor() -> prost_reflect::MessageDescriptor {
+        descriptor("ridl.ir.v2.System")
+    }
+
+    /// Rebuilds a message as a `DynamicMessage` over its descriptor — the
+    /// step `prost-reflect` needs before rendering a text encoding.
     /// Transcoding goes through the wire encoding, whose decoder enforces
     /// prost's fixed recursion limit, so a package whose composite nesting
     /// crosses that limit fails here — an input-dependent failure, not
     /// schema drift (ADR-0014 decision 12).
-    fn transcode(package: &Package) -> Result<prost_reflect::DynamicMessage, prost::DecodeError> {
-        let mut dynamic = prost_reflect::DynamicMessage::new(package_descriptor());
-        dynamic.transcode_from(package)?;
+    fn transcode<M: prost::Message>(
+        descriptor: prost_reflect::MessageDescriptor,
+        message: &M,
+    ) -> Result<prost_reflect::DynamicMessage, prost::DecodeError> {
+        let mut dynamic = prost_reflect::DynamicMessage::new(descriptor);
+        dynamic.transcode_from(message)?;
         Ok(dynamic)
     }
 
@@ -155,9 +170,23 @@ pub mod v2 {
     /// produces one, but the value is data, not schema, so the failure is
     /// returned rather than panicked on.
     pub fn to_json_pretty(package: &Package) -> Result<String, SerializeError> {
+        render_json(package)
+    }
+
+    /// Renders a lowered system (`system.proto`, rsdl reference §13) as
+    /// pretty-printed canonical protobuf JSON — the `<pkg.Name>.system.json`
+    /// artifact, under the rules of [`to_json_pretty`].
+    pub fn system_to_json_pretty(system: &System) -> Result<String, SerializeError> {
+        render_json(system)
+    }
+
+    /// The one JSON writer behind [`to_json_pretty`] and
+    /// [`system_to_json_pretty`]: the pbjson-generated `Serialize` impl of
+    /// the message, pretty-printed.
+    fn render_json<M: serde::Serialize>(message: &M) -> Result<String, SerializeError> {
         let mut buf = Vec::new();
         let mut serializer = serde_json::Serializer::pretty(&mut buf);
-        serde::Serialize::serialize(package, &mut serializer).map_err(SerializeError::Json)?;
+        serde::Serialize::serialize(message, &mut serializer).map_err(SerializeError::Json)?;
         Ok(String::from_utf8(buf).expect("serde_json emits UTF-8"))
     }
 
@@ -241,6 +270,22 @@ pub mod v2 {
     ///   no such thread — see the branch below — and the cap alone guards
     ///   the parse.
     pub fn from_json(text: &str) -> Result<Package, serde_json::Error> {
+        read_json(text)
+    }
+
+    /// Reads a lowered system from canonical protobuf JSON — the inverse of
+    /// [`system_to_json_pretty`], under the rules and guards of
+    /// [`from_json`].
+    pub fn system_from_json(text: &str) -> Result<System, serde_json::Error> {
+        read_json(text)
+    }
+
+    /// The one JSON reader behind [`from_json`] and [`system_from_json`]:
+    /// the nesting cap, then the parse on its own stack.
+    fn read_json<M>(text: &str) -> Result<M, serde_json::Error>
+    where
+        M: serde::de::DeserializeOwned + Send,
+    {
         if max_json_nesting(text) > MAX_JSON_NESTING {
             return Err(<serde_json::Error as serde::de::Error>::custom(format!(
                 "the input nests deeper than {MAX_JSON_NESTING} JSON levels, the ceiling this \
@@ -276,12 +321,12 @@ pub mod v2 {
     /// carries it differs. `serde_json`'s own recursion limit is disabled
     /// here, so the caller must have applied the `MAX_JSON_NESTING` cap
     /// first.
-    fn parse_json(text: &str) -> Result<Package, serde_json::Error> {
+    fn parse_json<M: serde::de::DeserializeOwned>(text: &str) -> Result<M, serde_json::Error> {
         let mut deserializer = serde_json::Deserializer::from_str(text);
         deserializer.disable_recursion_limit();
-        let package: Package = serde::Deserialize::deserialize(&mut deserializer)?;
+        let message: M = serde::Deserialize::deserialize(&mut deserializer)?;
         deserializer.end()?;
-        Ok(package)
+        Ok(message)
     }
 
     /// Renders a package in the protobuf text format — the inspection
@@ -298,7 +343,23 @@ pub mod v2 {
     /// panicked on. JSON lost this failure mode when it moved off the
     /// transcode (decision 14); prototext keeps it.
     pub fn to_text_format(package: &Package) -> Result<String, SerializeError> {
-        let dynamic = transcode(package).map_err(SerializeError::Text)?;
+        render_text(package_descriptor(), package)
+    }
+
+    /// Renders a lowered system in the protobuf text format — the
+    /// `<pkg.Name>.system.txtpb` artifact, under the rules of
+    /// [`to_text_format`].
+    pub fn system_to_text_format(system: &System) -> Result<String, SerializeError> {
+        render_text(system_descriptor(), system)
+    }
+
+    /// The one prototext writer behind [`to_text_format`] and
+    /// [`system_to_text_format`].
+    fn render_text<M: prost::Message>(
+        descriptor: prost_reflect::MessageDescriptor,
+        message: &M,
+    ) -> Result<String, SerializeError> {
+        let dynamic = transcode(descriptor, message).map_err(SerializeError::Text)?;
         Ok(dynamic.to_text_format_with_options(
             &prost_reflect::text_format::FormatOptions::new()
                 .pretty(true)
@@ -369,7 +430,23 @@ pub mod v2 {
     /// mapped into the error return, not expected on (ADR-0014 decision 12).
     #[cfg(test)]
     pub(crate) fn from_text_format(text: &str) -> Result<Package, TextFormatError> {
-        let dynamic = prost_reflect::DynamicMessage::parse_text_format(package_descriptor(), text)
+        parse_text(package_descriptor(), text)
+    }
+
+    /// Reads a lowered system from the protobuf text format — the inverse of
+    /// [`system_to_text_format`], test-only for the reason
+    /// [`from_text_format`] states.
+    #[cfg(test)]
+    pub(crate) fn system_from_text_format(text: &str) -> Result<System, TextFormatError> {
+        parse_text(system_descriptor(), text)
+    }
+
+    #[cfg(test)]
+    fn parse_text<M: prost::Message + Default>(
+        descriptor: prost_reflect::MessageDescriptor,
+        text: &str,
+    ) -> Result<M, TextFormatError> {
+        let dynamic = prost_reflect::DynamicMessage::parse_text_format(descriptor, text)
             .map_err(TextFormatError::Parse)?;
         dynamic.transcode_to().map_err(TextFormatError::Transcode)
     }
@@ -386,6 +463,54 @@ pub mod v2 {
     /// of [`to_binary`].
     pub fn from_binary(bytes: &[u8]) -> Result<Package, prost::DecodeError> {
         prost::Message::decode(bytes)
+    }
+
+    /// Encodes a lowered system in the protobuf binary wire format — the
+    /// `<pkg.Name>.system.binpb` artifact (ADR-0014 decision 9).
+    pub fn system_to_binary(system: &System) -> Vec<u8> {
+        prost::Message::encode_to_vec(system)
+    }
+
+    /// Decodes a lowered system from the protobuf binary wire format — the
+    /// inverse of [`system_to_binary`].
+    pub fn system_from_binary(bytes: &[u8]) -> Result<System, prost::DecodeError> {
+        prost::Message::decode(bytes)
+    }
+
+    /// `pkg.Name` — how a system, a component or a distribution is referred
+    /// to across the system layer (`system.proto`); a name with no package,
+    /// the implicit component of a lone service (rsdl §6), is its own
+    /// qualified name.
+    fn qualified(package: &str, name: &str) -> String {
+        if package.is_empty() {
+            name.to_string()
+        } else {
+            format!("{package}.{name}")
+        }
+    }
+
+    impl System {
+        /// The system's qualified name, `pkg.Name` — the base name of its
+        /// artifacts.
+        pub fn qualified_name(&self) -> String {
+            qualified(&self.package, &self.name)
+        }
+    }
+
+    impl Component {
+        /// The name every reference to this component uses: `pkg.Name` for a
+        /// declared component, the service's dotted name for an implicit one.
+        pub fn qualified_name(&self) -> String {
+            qualified(&self.package, &self.name)
+        }
+    }
+
+    impl Distribution {
+        /// The name `Distribution.depends_on` and `Installation.distribution`
+        /// use.
+        pub fn qualified_name(&self) -> String {
+            qualified(&self.package, &self.name)
+        }
     }
 
     /// One interface shape of a package (ridl §14.0): a declared `interface`,
@@ -2125,5 +2250,248 @@ mod vacuous_constraint {
             ..constraint()
         };
         assert!(!v2::constraint_is_vacuous(Some(&default_length)));
+    }
+}
+
+#[cfg(test)]
+mod system_round_trip {
+    use crate::v2;
+
+    fn attribute(namespace: &str, key: &str, value: Option<v2::AttributeValue>) -> v2::Attribute {
+        v2::Attribute {
+            namespace: namespace.to_string(),
+            key: key.to_string(),
+            value,
+        }
+    }
+
+    fn scalar(text: &str) -> v2::AttributeValue {
+        v2::AttributeValue {
+            kind: Some(v2::attribute_value::Kind::Scalar(text.to_string())),
+        }
+    }
+
+    fn list(items: Vec<v2::AttributeValue>) -> v2::AttributeValue {
+        v2::AttributeValue {
+            kind: Some(v2::attribute_value::Kind::List(v2::AttributeList { items })),
+        }
+    }
+
+    fn interface(catalog: &str, name: &str, inline: bool) -> Option<v2::InterfaceRef> {
+        Some(v2::InterfaceRef {
+            catalog: catalog.to_string(),
+            name: name.to_string(),
+            inline,
+        })
+    }
+
+    fn endpoint(component: &str, instance: &str, machine: &str) -> v2::Endpoint {
+        v2::Endpoint {
+            component: component.to_string(),
+            instance: instance.to_string(),
+            machine: machine.to_string(),
+        }
+    }
+
+    /// A reduced rsdl reference Appendix A: `Cruise` with two instances
+    /// offering `veh.adas.cruise` and requiring `LaneAssist`, the implicit
+    /// component of `veh.diag.access`, one distribution and one deployment.
+    /// Every message of `system.proto` appears at least once, with every
+    /// scalar set to a value other than its default — a flag and a nested-list
+    /// attribute value included — so a round trip that drops a field is
+    /// caught.
+    fn fixture() -> v2::System {
+        let link = v2::Link {
+            interface: interface("veh.diag", "veh.diag.access", true),
+            service: "veh.diag.access".to_string(),
+            consumer: Some(endpoint("veh.topology.Backend", "Unit", "Cloud")),
+            producer: Some(endpoint("veh.diag.access", "Unit", "AdasHpc")),
+            crossing: v2::Crossing::OffBoard as i32,
+        };
+        v2::System {
+            name: "Vehicle".to_string(),
+            package: "veh.topology".to_string(),
+            labels: vec!["ASIL_B".to_string()],
+            attributes: vec![attribute("rust", "crate", Some(scalar("\"vehicle\"")))],
+            members: vec![
+                v2::MemberLine {
+                    component: "veh.topology.Cruise".to_string(),
+                    attributes: vec![attribute("linux", "pinned", None)],
+                },
+                v2::MemberLine {
+                    component: "veh.diag.access".to_string(),
+                    attributes: vec![],
+                },
+            ],
+            components: vec![
+                v2::Component {
+                    name: "Cruise".to_string(),
+                    package: "veh.topology".to_string(),
+                    implicit: false,
+                    external: true,
+                    instances: vec!["primary".to_string(), "backup".to_string()],
+                    offers: vec![v2::Offer {
+                        service: "veh.adas.cruise".to_string(),
+                        attributes: vec![attribute("someip", "serviceId", Some(scalar("4097")))],
+                    }],
+                    requires: vec![v2::Require {
+                        interface: interface("veh.adas", "LaneAssist", false),
+                        service: "veh.adas.lane".to_string(),
+                        producer: "veh.topology.Lane".to_string(),
+                        attributes: vec![attribute(
+                            "linux",
+                            "cpuset",
+                            Some(list(vec![scalar("2"), list(vec![scalar("3")])])),
+                        )],
+                    }],
+                    labels: vec!["ASIL_B".to_string()],
+                    attributes: vec![attribute("rust", "crate", None)],
+                },
+                v2::Component {
+                    name: "veh.diag.access".to_string(),
+                    package: String::new(),
+                    implicit: true,
+                    external: false,
+                    instances: vec!["Unit".to_string()],
+                    offers: vec![v2::Offer {
+                        service: "veh.diag.access".to_string(),
+                        attributes: vec![],
+                    }],
+                    requires: vec![],
+                    labels: vec![],
+                    attributes: vec![],
+                },
+            ],
+            producers: vec![v2::Producer {
+                service: "veh.adas.cruise".to_string(),
+                component: "veh.topology.Cruise".to_string(),
+                instances: vec!["primary".to_string(), "backup".to_string()],
+                not_yet_realizable: true,
+            }],
+            grants: vec![v2::Grant {
+                component: "veh.topology.Backend".to_string(),
+                external: true,
+                regions: vec!["veh.adas".to_string(), "veh.diag".to_string()],
+            }],
+            regions: vec![v2::Region {
+                catalog: "veh.diag".to_string(),
+                interfaces: vec![v2::RegionInterface {
+                    name: "veh.diag.access".to_string(),
+                    inline: true,
+                    number: 2,
+                    provisional: true,
+                    service: "veh.diag.access".to_string(),
+                }],
+            }],
+            distributions: vec![v2::Distribution {
+                name: "Adas".to_string(),
+                package: "veh.topology".to_string(),
+                members: vec![v2::MemberLine {
+                    component: "veh.topology.Cruise".to_string(),
+                    attributes: vec![],
+                }],
+                depends_on: vec!["veh.topology.Base".to_string()],
+                labels: vec!["PLATFORM_BUNDLE".to_string()],
+                attributes: vec![attribute("deb", "section", Some(scalar("net")))],
+            }],
+            deployments: vec![v2::Deployment {
+                name: "Production".to_string(),
+                package: "veh.topology".to_string(),
+                labels: vec!["FLEET".to_string()],
+                attributes: vec![attribute("ota", "channel", Some(scalar("stable")))],
+                machines: vec![v2::Machine {
+                    name: "Cloud".to_string(),
+                    external: true,
+                    labels: vec!["OFF_BOARD".to_string()],
+                    attributes: vec![attribute("net", "zone", Some(scalar("wan")))],
+                }],
+                placements: vec![v2::Placement {
+                    component: "veh.topology.Cruise".to_string(),
+                    instance: "backup".to_string(),
+                    machine: "Cockpit".to_string(),
+                    attributes: vec![attribute("linux", "cpuset", Some(list(vec![])))],
+                }],
+                links: vec![link.clone()],
+                routes: vec![v2::Route {
+                    catalog: "veh.adas".to_string(),
+                    interface_number: 2,
+                    member_ordinal: 1,
+                    interface: "LaneAssist".to_string(),
+                    member: "active".to_string(),
+                    service: "veh.adas.lane".to_string(),
+                    producers: vec![endpoint("veh.topology.Lane", "Unit", "AdasHpc")],
+                }],
+                surface: vec![v2::Surface {
+                    link: Some(link),
+                    direction: v2::SurfaceDirection::ExternalConsumes as i32,
+                }],
+                installations: vec![v2::Installation {
+                    distribution: "veh.topology.Adas".to_string(),
+                    machines: vec!["AdasHpc".to_string(), "Cockpit".to_string()],
+                }],
+            }],
+        }
+    }
+
+    #[test]
+    fn system_binary_round_trip_preserves_system() {
+        let system = fixture();
+        let decoded = v2::system_from_binary(v2::system_to_binary(&system).as_slice())
+            .expect("decode must succeed");
+        assert_eq!(system, decoded);
+    }
+
+    /// The canonical JSON of the system artifact re-reads through the same
+    /// strict pbjson-generated impl the package uses (ADR-0014 decisions 11
+    /// and 14): unknown fields rejected, enums by name, the nested attribute
+    /// list intact.
+    #[test]
+    fn system_json_round_trip_preserves_system() {
+        let system = fixture();
+        let json = v2::system_to_json_pretty(&system).expect("the fixture serializes as JSON");
+        assert!(
+            json.contains("\"crossing\": \"CROSSING_OFF_BOARD\""),
+            "enums render by name, got:\n{json}"
+        );
+        assert!(
+            json.contains("\"notYetRealizable\": true"),
+            "fields render in lowerCamelCase, got:\n{json}"
+        );
+        assert_eq!(
+            system,
+            v2::system_from_json(&json).expect("the JSON parses")
+        );
+        assert!(
+            v2::system_from_json(&json.replacen("\"name\"", "\"nam\"", 1)).is_err(),
+            "an unknown field is rejected"
+        );
+    }
+
+    #[test]
+    fn system_text_format_round_trip_preserves_system() {
+        let system = fixture();
+        let text = v2::system_to_text_format(&system).expect("the fixture serializes as prototext");
+        assert!(
+            text.starts_with("name:"),
+            "fields print in schema index order, got: {text}"
+        );
+        assert_eq!(
+            system,
+            v2::system_from_text_format(&text).expect("prototext parsing must succeed")
+        );
+    }
+
+    /// `pkg.Name` for a declared name; the implicit component of a lone
+    /// service, which no package declares, is its own qualified name.
+    #[test]
+    fn qualified_names_follow_the_one_derivation() {
+        let system = fixture();
+        assert_eq!(system.qualified_name(), "veh.topology.Vehicle");
+        assert_eq!(system.components[0].qualified_name(), "veh.topology.Cruise");
+        assert_eq!(system.components[1].qualified_name(), "veh.diag.access");
+        assert_eq!(
+            system.distributions[0].qualified_name(),
+            "veh.topology.Adas"
+        );
     }
 }
