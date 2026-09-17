@@ -21,3 +21,6 @@ rowan.workspace = true
 # The `glob` feature drives the full-pipeline corpus runner (tests/corpus.rs,
 # E1.18); `json` rides in from the workspace default.
 insta = { workspace = true, features = ["glob"] }
+serde.workspace = true
+tempfile = "3.15.0"
+toml.workspace = true

@@ -232,6 +232,11 @@ fn build_emit_typescript_writes_the_backend_module() {
         !out.path().join("veh.common.rs").exists(),
         "typescript alone writes no Rust file"
     );
+    assert!(
+        !out.path().join("Cargo.toml").exists() && !out.path().join("lib.rs").exists(),
+        "the crate root and the manifest belong to the Rust emit alone: a TypeScript build \
+         writes neither"
+    );
 }
 
 /// `build --emit proto` writes `<pkg-name>.proto` holding the proto3 backend's
@@ -859,8 +864,16 @@ fn frozen_build_without_lockfile_writes_nothing() {
         "the missing lockfile entry must render MANI-103, got:\n{stderr}"
     );
     assert!(
-        !out.path().join("veh.common.rs").exists(),
-        "a manifest/lockfile error must write no Rust artifact"
+        std::fs::read_dir(out.path())
+            .expect("the output directory is readable")
+            .next()
+            .is_none(),
+        "a manifest/lockfile error must write nothing at all, which is what C1 states — not \
+         merely no Rust source: the output directory was {:?}",
+        std::fs::read_dir(out.path())
+            .expect("the output directory is readable")
+            .map(|entry| entry.expect("a directory entry is readable").file_name())
+            .collect::<Vec<_>>()
     );
     assert!(
         !dir.path().join("pkg").join("ridl.lock").exists(),

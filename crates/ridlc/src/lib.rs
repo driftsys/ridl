@@ -40,8 +40,8 @@ use ridl_core::diag::{
 };
 use ridl_core::package::{Package, PackageOrigin, Workspace, service_catalog};
 use ridl_core::{
-    Cache, Frozen, LoadedWorkspace, RidlDatabase, load_workspace, materialize_imports, parse_file,
-    read_lockfile, std_package, write_lockfile,
+    Cache, Frozen, LoadedWorkspace, ManifestKind, RidlDatabase, load_workspace,
+    materialize_imports, parse_file, parse_manifest, read_lockfile, std_package, write_lockfile,
 };
 use ridl_sem::{
     CheckedPackage, Resolution, check_package, check_system, resolve_package,
@@ -327,6 +327,27 @@ pub fn compile_workspace(db: &mut RidlDatabase, entry: &Path) -> std::io::Result
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum Emit {
     /// Idiomatic Rust source, written to `<base>.rs`.
+    ///
+    /// In package and workspace mode a build also writes `lib.rs` and
+    /// `Cargo.toml` into the output directory, once per build rather than once
+    /// per package: generated code names a cross-package reference as
+    /// `crate::veh::…`, so the flat per-package files only resolve from inside
+    /// one crate. `lib.rs` is the module tree that makes them reachable at
+    /// those paths and `Cargo.toml` is what makes the directory a crate at
+    /// all. Single-file mode writes neither — it writes only `<stem>.rs`,
+    /// the same asymmetry documented on [`Emit::TypeScript`].
+    ///
+    /// Two cases write neither file, and each is a build that writes nothing
+    /// at all rather than a partial crate: a build that draws an
+    /// error-severity diagnostic, from the compile or from a backend
+    /// ([`write_crate_files`]), and a build whose output directory already
+    /// holds a `lib.rs` or a `Cargo.toml` that ridlc did not write
+    /// ([`crate_file_refusals`]).
+    ///
+    /// A crate that is written is not a crate that compiles in every case:
+    /// issue #416 records a legal package naming case whose generated path
+    /// does not resolve — a package `veh.common` alongside a type named
+    /// `common` in package `veh` — which rustc reports as E0573.
     Rust,
     /// The lowered IR v2 as exact-decimal JSON, written to `<base>.ir.json`.
     IrJson,
@@ -474,7 +495,10 @@ pub fn run_check(entry: &Path, frozen: Frozen) -> std::io::Result<CliRun> {
 /// run produced no error-severity diagnostic, whether from the compile or from
 /// remote-import materialization (a manifest, lockfile, or fetch error, MANI-1xx).
 /// An error-bearing build renders its diagnostics and exits non-zero without
-/// writing any artifact (C1).
+/// writing any artifact (C1). A Rust build whose output directory already
+/// holds a `lib.rs` or a `Cargo.toml` that ridlc did not write is refused on
+/// the same terms, before the per-package write loop runs, so it writes no
+/// artifact either ([`crate_file_refusals`]).
 ///
 /// The artifact base name is the file stem in single-file mode (preserving the
 /// E0 `<input-stem>.rs` contract) and the full dotted package name otherwise, so
@@ -518,6 +542,33 @@ pub fn run_build(
         std::fs::create_dir_all(out_dir)?;
         let single_file = entry.is_file() && manifest_root_of(entry).is_none();
         let file_stem = module_name_from_path(&entry.to_string_lossy());
+
+        // Whether this build owes the output directory a crate root and a
+        // manifest: generated Rust names a cross-package reference as
+        // `crate::veh::…` (`ridl_backend_rust::type_path`), so every package
+        // it emits must land inside one crate. Single-file mode keeps writing
+        // only `<stem>.rs`, matching the documented single-file asymmetry on
+        // `Emit::TypeScript`.
+        let writes_crate_files =
+            !single_file && emits.iter().any(|emit| matches!(emit, Emit::Rust));
+
+        // The overwrite gate runs before any write, not after the per-package
+        // loop: a refusal is a build that produced nothing, and a loop that
+        // had already written every `<package>.rs` into a hand-written crate
+        // would contradict that. `lib.rs` and `Cargo.toml` are not
+        // package-scoped names and `--out-dir` is any directory the caller
+        // names, so this is the check that keeps a build from truncating
+        // sources a person wrote.
+        if writes_crate_files {
+            let refusals = crate_file_refusals(out_dir)?;
+            if !refusals.is_empty() {
+                diagnostics.extend(refusals);
+                return Ok(CliRun {
+                    diagnostics,
+                    sources,
+                });
+            }
+        }
 
         // `ridl.std` is deliberately absent from `checked` (it is not a
         // workspace member), so no loop over `checked` ever reaches it. A
@@ -579,12 +630,283 @@ pub fn run_build(
                 &mut diagnostics,
             )?;
         }
+
+        // `<out_dir>/lib.rs` builds the module tree over the flat per-package
+        // files and `<out_dir>/Cargo.toml` is the manifest that makes the
+        // directory a crate at all. `ridl.std` joins the module tree whenever
+        // the build wrote `ridl.std.rs` above (issue #190), because generated
+        // code names those types as `crate::ridl::std::…` too.
+        if writes_crate_files {
+            let mut package_names: Vec<String> = checked
+                .iter()
+                .map(|package| package.ir.name.clone())
+                .collect();
+            if std_ir.is_some() {
+                package_names.push("ridl.std".to_string());
+            }
+
+            write_crate_files(
+                out_dir,
+                &crate_name_for(entry),
+                &package_names,
+                &diagnostics,
+            )?;
+        }
     }
 
     Ok(CliRun {
         diagnostics,
         sources,
     })
+}
+
+/// The crate name for the generated `Cargo.toml`: the loaded manifest's
+/// `[package]` name with every `.` replaced by `_`, since a dotted ridl
+/// package name (`veh.common`) is not a legal Cargo package name. A
+/// `[workspace]` manifest names no package, so it falls back to
+/// `ridl_generated`; single-file mode never reaches this function (`run_build`
+/// gates the call on `!single_file`).
+fn crate_name_for(entry: &Path) -> String {
+    let fallback = "ridl_generated".to_string();
+    let Some(root) = manifest_root_of(entry) else {
+        return fallback;
+    };
+    let Ok(text) = std::fs::read_to_string(root.join("ridl.toml")) else {
+        return fallback;
+    };
+    let (manifest, _) = parse_manifest(FileId::DETACHED, &text);
+    match manifest.map(|manifest| manifest.kind) {
+        Some(ManifestKind::Package { name, .. }) => name.replace('.', "_"),
+        _ => fallback,
+    }
+}
+
+/// The first line of a generated `Cargo.toml`. A build refuses to overwrite a
+/// `Cargo.toml` that does not begin with it ([`crate_file_refusals`]).
+const CARGO_TOML_MARKER: &str = "# Generated by ridlc. Do not edit.";
+
+/// The first line of a generated `lib.rs`, the crate-root counterpart of
+/// [`CARGO_TOML_MARKER`].
+const LIB_RS_MARKER: &str = "// Generated by ridlc. Do not edit.";
+
+/// Writes `<out_dir>/lib.rs` and `<out_dir>/Cargo.toml` for a Rust emit, or
+/// writes neither.
+///
+/// The two files are decided together and refused together, because a crate
+/// root without a manifest and a manifest without a crate root are each worse
+/// than neither. Two conditions stop both writes:
+///
+/// - **An error-severity diagnostic is present.** [`run_build`] computes its
+///   emit gate before the per-package write loop, so that gate cannot see a
+///   package whose Rust generation failed inside the loop: `write_emits`
+///   records the failure as a diagnostic and skips that package's `.rs`. The
+///   module tree is built from every checked package, so it would name a file
+///   that was never written and the crate would not compile. Re-checking here,
+///   after the loop, is what sees it.
+/// - **An existing destination is not a generated file.** That check is
+///   [`crate_file_refusals`], which [`run_build`] runs before it writes
+///   anything at all — including the per-package sources — so a refusal is a
+///   build that produced nothing.
+///
+/// The writes themselves are not atomic and are not made so: an I/O failure on
+/// either one is returned as `Err`, which aborts the build with exit code 2,
+/// and a failure on the manifest therefore leaves the crate root written.
+/// Making the pair atomic would need a temporary directory and a rename, which
+/// buys nothing a re-run does not: the next successful build overwrites both,
+/// because both carry the marker that permits it.
+fn write_crate_files(
+    out_dir: &Path,
+    crate_name: &str,
+    package_names: &[String],
+    diagnostics: &[Diagnostic],
+) -> std::io::Result<()> {
+    if diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.severity == Severity::Error)
+    {
+        return Ok(());
+    }
+
+    std::fs::write(out_dir.join("lib.rs"), render_lib_rs(package_names))?;
+    std::fs::write(out_dir.join("Cargo.toml"), render_cargo_toml(crate_name))?;
+    Ok(())
+}
+
+/// The overwrite gate for the two crate files: one error diagnostic per
+/// destination that exists and was not written by a previous build, and an
+/// empty vector when both are safe to write.
+///
+/// `lib.rs` and `Cargo.toml` are not package-scoped names and `--out-dir` is
+/// any directory the caller names, including the root of a hand-written crate.
+/// `std::fs::write` truncates, so a build pointed at such a directory would
+/// destroy sources the user wrote. A file that does not begin with its marker
+/// is treated as hand-written and is left exactly as it is.
+///
+/// Both destinations are checked even once the first has refused, so a build
+/// into a hand-written crate reports every file it declined rather than one at
+/// a time.
+fn crate_file_refusals(out_dir: &Path) -> std::io::Result<Vec<Diagnostic>> {
+    let mut refusals = Vec::new();
+    for (path, marker) in [
+        (out_dir.join("lib.rs"), LIB_RS_MARKER),
+        (out_dir.join("Cargo.toml"), CARGO_TOML_MARKER),
+    ] {
+        if let Some(diagnostic) = refuse_overwrite(&path, marker)? {
+            refusals.push(diagnostic);
+        }
+    }
+    Ok(refusals)
+}
+
+/// An error diagnostic when `path` exists and was not written by a previous
+/// build, or `None` when the file is absent or begins with `marker`.
+///
+/// A file this cannot read is neither written nor refused: the read error is
+/// returned as the [`std::io::Error`] it is, so [`run_build`] returns `Err`
+/// and the command exits 2 (ADR-0010's exit code for an I/O failure). Turning
+/// it into a diagnostic would exit 1 and would assert something about the
+/// file's first line that was never established — an unreadable file's
+/// contents are unknown, not known to be hand-written.
+fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnostic>> {
+    if !path.exists() {
+        return Ok(None);
+    }
+    if std::fs::read_to_string(path)?.starts_with(marker) {
+        return Ok(None);
+    }
+    Ok(Some(error_diagnostic(
+        "",
+        format!(
+            "`{}` exists and does not start with `{marker}`, so ridlc did not write it: a file \
+             without that first line was not generated by ridlc and could be a hand-written one. \
+             This build wrote nothing at all — no crate root, no generated manifest, and no \
+             package sources — and the existing file is unchanged. Remove it, or build into a \
+             different --out-dir",
+            path.display()
+        ),
+        FileId::DETACHED,
+        TextRange::default(),
+    )))
+}
+
+/// The generated `Cargo.toml` body: a plain `format!`, not a template — see
+/// Task 7's rationale for why no templating engine is warranted for two short
+/// strings. `ridl-rt` is not optional and carries no feature: it is `no_std`,
+/// has no dependency of its own in any feature combination, and the generated
+/// constructors will name `::ridl_rt::payload::Violation` from it once Task 3
+/// lands. The `ridl-rt = "0.1"` requirement is a literal, not read from
+/// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
+/// access to this repository's sources at run time; a guard test
+/// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.
+fn render_cargo_toml(crate_name: &str) -> String {
+    format!(
+        r#"{CARGO_TOML_MARKER}
+[package]
+name = "{crate_name}"
+version = "0.0.0"
+edition = "2024"
+
+[features]
+default = ["validate-pattern", "std"]
+# Enforce `match` patterns in generated constructors. Disable on a target
+# that cannot carry the regex dependency; range and length checks are
+# unaffected.
+validate-pattern = ["dep:regex"]
+std = []
+
+[dependencies]
+ridl-rt = "0.1"
+regex = {{ version = "1", optional = true }}
+
+[lib]
+path = "lib.rs"
+"#
+    )
+}
+
+/// Builds the module tree that makes the flat emitted files reachable at the
+/// `crate::…` paths generated code already uses.
+///
+/// `veh.common` and `veh.adas` produce one `veh` module containing two leaves,
+/// each pointing at its flat file. The output is deterministic because the
+/// tree is a `BTreeMap` keyed per segment, so the order `package_names`
+/// arrives in cannot change a byte of it.
+///
+/// Each segment is spelled through
+/// [`module_segment`](ridl_backend_rust::module_segment), which is the same
+/// spelling `ridl_backend_rust::type_path` gives a segment of a cross-package
+/// reference: a package segment that is a Rust keyword (`veh.mod` is a legal
+/// typl package name) must be escaped identically on both surfaces, or the
+/// crate either does not parse or does not resolve.
+fn render_lib_rs(package_names: &[String]) -> String {
+    #[derive(Default)]
+    struct Node {
+        children: std::collections::BTreeMap<String, Node>,
+        file: Option<String>,
+    }
+
+    let mut root = Node::default();
+    for name in package_names {
+        let mut node = &mut root;
+        for segment in name.split('.') {
+            node = node
+                .children
+                .entry(ridl_backend_rust::module_segment(segment))
+                .or_default();
+        }
+        node.file = Some(format!("{name}.rs"));
+    }
+
+    fn render(node: &Node, depth: usize, out: &mut String) {
+        let pad = "    ".repeat(depth);
+        for (segment, child) in &node.children {
+            match &child.file {
+                Some(file) if child.children.is_empty() => {
+                    out.push_str(&format!("{pad}#[path = \"{file}\"]\n"));
+                    out.push_str(&format!("{pad}pub mod {segment};\n"));
+                }
+                _ => {
+                    // An inline (non-leaf) module's own children would
+                    // otherwise search a subdirectory named after every
+                    // enclosing module (rustc's default module-path
+                    // resolution for a module with no `#[path]`); anchoring
+                    // this module at `.` keeps its children's own `#[path]`
+                    // attributes resolving against the flat output directory.
+                    out.push_str(&format!("{pad}#[path = \".\"]\n"));
+                    out.push_str(&format!("{pad}pub mod {segment} {{\n"));
+                    if let Some(file) = &child.file {
+                        // `segment` is itself a package as well as a
+                        // namespace for its children (`veh` alongside
+                        // `veh.common`) — the `_` arm above would otherwise
+                        // drop `segment`'s own file. It cannot simply be
+                        // nested under its own name: generated code names a
+                        // type in package `veh` as `crate::veh::Speed`, not
+                        // `crate::veh::veh::Speed`, so the file is loaded as
+                        // a private module and re-exported, which puts its
+                        // items at the path the references use.
+                        //
+                        // The private module's name is the one place this
+                        // shape is not total over names: a package `veh`
+                        // declaring a type called `common` alongside a
+                        // package `veh.common` would have that type shadowed
+                        // by the module (issue #416; rustc reports E0573, so
+                        // it fails loudly). `__ridl_package` cannot be a typl
+                        // package segment, so the private module itself
+                        // collides with nothing.
+                        out.push_str(&format!("{pad}    #[path = \"{file}\"]\n"));
+                        out.push_str(&format!("{pad}    mod __ridl_package;\n"));
+                        out.push_str(&format!("{pad}    pub use __ridl_package::*;\n"));
+                    }
+                    render(child, depth + 1, out);
+                    out.push_str(&format!("{pad}}}\n"));
+                }
+            }
+        }
+    }
+
+    let mut out = format!("{LIB_RS_MARKER}\n\n");
+    render(&root, 0, &mut out);
+    out
 }
 
 /// Maps a parser [`SyntaxError`](ridl_syntax::SyntaxError) to a coded
@@ -994,5 +1316,64 @@ fn detached_warning(message: String) -> Diagnostic {
         },
         labels: Vec::new(),
         fixits: Vec::new(),
+    }
+}
+
+#[cfg(test)]
+mod render_lib_rs_tests {
+    use super::render_lib_rs;
+
+    /// A package name that is a strict prefix of another (`veh` alongside
+    /// `veh.common`) lands in `render_lib_rs`'s non-leaf arm, which — without
+    /// the fix — emits an inline `pub mod veh { … }` for the dotted sibling
+    /// and drops `veh`'s own file entirely. Both files must stay reachable,
+    /// and `veh`'s items must sit at `crate::veh`, which is where generated
+    /// code names them. Nesting the file under its own name keeps it
+    /// reachable at `crate::veh::veh` and still fails every reference: this
+    /// test compiles one to say so.
+    #[test]
+    fn a_package_name_that_is_a_prefix_of_another_keeps_both_files_reachable() {
+        let names = ["veh".to_string(), "veh.common".to_string()];
+        let lib = render_lib_rs(&names);
+
+        assert!(
+            lib.contains("#[path = \"veh.rs\"]"),
+            "veh's own file must stay reachable, lib.rs was:\n{lib}"
+        );
+        assert!(
+            lib.contains("#[path = \"veh.common.rs\"]"),
+            "veh.common's file must stay reachable, lib.rs was:\n{lib}"
+        );
+
+        // The proof. `veh.common` names a type from `veh` the way the Rust
+        // backend does, as `crate::veh::…`.
+        let dir = tempfile::tempdir().expect("a temp dir is created");
+        std::fs::write(dir.path().join("veh.rs"), "pub struct Speed(pub f64);\n")
+            .expect("the prefix package is written");
+        std::fs::write(
+            dir.path().join("veh.common.rs"),
+            "pub struct Reading(pub crate::veh::Speed);\n",
+        )
+        .expect("the dotted package is written");
+        std::fs::write(dir.path().join("lib.rs"), &lib).expect("the crate root is written");
+
+        let status = std::process::Command::new("rustc")
+            .args([
+                "--edition",
+                "2024",
+                "--crate-type",
+                "lib",
+                "--emit",
+                "metadata",
+            ])
+            .arg("-o")
+            .arg(dir.path().join("prefix.rmeta"))
+            .arg(dir.path().join("lib.rs"))
+            .status()
+            .expect("rustc must be installed and runnable for this test to be meaningful");
+        assert!(
+            status.success(),
+            "a reference to the prefix package must resolve at crate::veh, lib.rs was:\n{lib}"
+        );
     }
 }
