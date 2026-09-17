@@ -1242,6 +1242,14 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
         status.success(),
         "ridl-rt must build as an rlib for the compile proofs to see it"
     );
+    // An rlib is an `ar` archive. Asserting the magic distinguishes a real
+    // rlib from a metadata-only file under the same name, which a proof using
+    // `--emit metadata` would accept while nothing that links could.
+    let head = std::fs::read(&rlib).expect("the rlib is readable");
+    assert!(
+        head.starts_with(b"!<arch>\n"),
+        "the helper must produce an rlib archive, not metadata under an rlib name"
+    );
     rlib
 }
 
@@ -1297,6 +1305,12 @@ impl Speed {
         with_extern.success(),
         "source naming ::ridl_rt::payload::Violation must compile against the helper's rlib"
     );
+    // Where it was asked to put it. Without this, a run with no `-o` would
+    // also exit zero, writing its output into the package directory instead.
+    assert!(
+        dir.path().join("with_extern.rmeta").exists(),
+        "the proof's output must land in its own temp directory"
+    );
 
     // Captured, so the expected failure does not print an error into an
     // otherwise passing test run.
@@ -1320,12 +1334,32 @@ impl Speed {
     );
     // And it must fail because `ridl_rt` is not linked, rather than because
     // the source above has a mistake in it, which would pass this test while
-    // proving nothing about the rlib.
+    // proving nothing about the rlib. The check is on the error code, not on
+    // the crate name: `rustc` echoes the offending source line into its
+    // diagnostic, so `ridl_rt` appears in stderr for any error whose span
+    // falls on that line.
     let stderr = String::from_utf8_lossy(&without_extern.stderr);
     assert!(
-        stderr.contains("ridl_rt"),
-        "the failure must name the unlinked crate, got:\n{stderr}"
+        stderr.contains("E0433"),
+        "the failure must be the unresolved crate, got:\n{stderr}"
     );
+}
+
+#[test]
+fn the_harness_rlib_belongs_to_its_caller() {
+    // Two callers must get two files, each under the directory it passed.
+    // `cargo test` runs the compile proofs in parallel threads, so a helper
+    // writing to one shared path would have two `rustc` processes writing one
+    // file while a third read it.
+    let first = tempfile::tempdir().expect("a temp dir is created");
+    let second = tempfile::tempdir().expect("a temp dir is created");
+    let first_rlib = ridl_rt_rlib(first.path());
+    let second_rlib = ridl_rt_rlib(second.path());
+
+    assert_ne!(first_rlib, second_rlib);
+    assert!(first_rlib.starts_with(first.path()));
+    assert!(second_rlib.starts_with(second.path()));
+    assert!(first_rlib.exists() && second_rlib.exists());
 }
 
 /// The generated Rust for the full Appendix B package compiles with `rustc`.
