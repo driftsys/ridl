@@ -787,20 +787,36 @@ fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
 
 #[test]
 fn round_trip_foreign_interface_number_settles_unknown_interaction() {
+    use ridl_rt::contract::Interaction;
+    use ridl_rt::encoding::ReprC;
+    use ridl_rt::payload::Ref;
+
     // `dispatch`'s first branch checks `claim.iface != Cabin::NUMBER` before
-    // it ever looks at the ordinal (the doc comment on `next_event` in the
-    // generated file gives the reason: ordinals restart at 1 in each
-    // interface). `round_trip_unrecognized_ordinal_settles_unknown_interaction`
-    // above sends to `Cabin`'s own correct interface number and only proves
-    // the fallback-ordinal arm; this sends to `Horn`'s interface number
-    // (2, not Cabin's 1) with an ordinal (1) that is legal for Cabin itself,
-    // so only the interface-number branch can be what settles it.
+    // it ever looks at the ordinal. To pin that branch specifically, the
+    // ordinal carried here must be one Cabin's own match arms recognize —
+    // `setLevel`'s ordinal, with a well-formed `Level` argument that also
+    // passes `setLevel`'s `require` clause — so that if the interface-number
+    // branch were removed, dispatch would instead decode the argument, pass
+    // `require`, call the provider, and settle `Ok(&[])`: a different
+    // observable outcome from the `UnknownInteraction` this test asserts.
+    // (An unrecognized ordinal would not do this: Cabin's dispatch falls to
+    // its own ordinal fallback arm regardless of the interface-number check,
+    // so that claim would settle `UnknownInteraction` either way — see
+    // `round_trip_unrecognized_ordinal_settles_unknown_interaction` above,
+    // which pins that fallback arm instead.)
     let mut port = Loopback::new("face.demo");
+    let level = generated::Level(50);
+    let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+        .expect("encode")
+        .bytes()
+        .len();
+    let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
     let correlation = port
         .command(
             <generated::Horn as ridl_rt::contract::Interface>::NUMBER,
-            ridl_rt::contract::Ordinal(1),
-            &[],
+            ordinal,
+            &encode_buf[..len],
         )
         .expect("send");
 
