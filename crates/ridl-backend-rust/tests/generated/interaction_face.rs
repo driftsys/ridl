@@ -395,7 +395,11 @@ impl ::ridl_rt::contract::Command for CabinSetLevel {
     type Args = Level;
     ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
     fn require(args: &Self::Args) -> ::core::result::Result<(), ()> {
-        if args.0 < 100 { Ok(()) } else { Err(()) }
+        if args.0 < 100 {
+            ::core::result::Result::Ok(())
+        } else {
+            ::core::result::Result::Err(())
+        }
     }
 }
 pub struct CabinAverage;
@@ -408,14 +412,22 @@ impl ::ridl_rt::contract::Query for CabinAverage {
     type Reply = Average;
     ///Evaluates the `require` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
     fn require(args: &Self::Args) -> ::core::result::Result<(), ()> {
-        if args.0 > 0 { Ok(()) } else { Err(()) }
+        if args.0 > 0 {
+            ::core::result::Result::Ok(())
+        } else {
+            ::core::result::Result::Err(())
+        }
     }
     ///Evaluates the `ensure` clauses. This translation covers one clause form — `<subject> <comparison> <numeric literal>` — and E5.1 replaces it with one driven by the structured expression tree.
     fn ensure(
         _args: &Self::Args,
         reply: &Self::Reply,
     ) -> ::core::result::Result<(), ()> {
-        if reply.0 >= 0 { Ok(()) } else { Err(()) }
+        if reply.0 >= 0 {
+            ::core::result::Result::Ok(())
+        } else {
+            ::core::result::Result::Err(())
+        }
     }
 }
 /**Descriptor for interface `Horn`.

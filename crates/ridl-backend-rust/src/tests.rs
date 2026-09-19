@@ -215,7 +215,8 @@ fn constrained_scalar_is_a_value_object() {
     assert!(source.contains("impl ::core::convert::From<Speed> for f64"));
     // The infallible inbound conversion must never appear on a constrained type.
     assert!(
-        !source.contains("impl ::core::convert::From<f64> for Speed"),
+        !source.contains("impl ::core::convert::From<f64> for Speed")
+            && !source.contains("impl From<f64> for Speed"),
         "From<Inner> reintroduces unchecked construction"
     );
 }
@@ -463,11 +464,11 @@ fn a_deprecated_scalar_allows_deprecated_on_its_impls() {
         deprecated: Some("use Velocity".to_string()),
         ..speed_decl()
     }]);
-    // The inherent impl and the two trait impls; the `Default` impl is
-    // `defaults.rs`'s and predates the value objects.
-    assert_eq!(
-        source.matches("#[allow(deprecated)]").count(),
-        3,
+    // The inherent impl and the two trait impls. This is a lower bound, not an
+    // exact total: `defaults.rs` emits a `Default` impl that still draws the
+    // lint, and closing that gap must not fail this test.
+    assert!(
+        source.matches("#[allow(deprecated)]").count() >= 3,
         "each generated impl of a deprecated type allows the lint, got:\n{source}"
     );
     let plain = rust_for(vec![speed_decl()]);

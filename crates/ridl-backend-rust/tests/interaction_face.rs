@@ -1047,8 +1047,10 @@ fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
 
 // ---------------------------------------------------------------------------
 // The generated constructor (typl value objects, Task 3), run rather than read.
-// The constructor's text is also snapshotted, but a snapshot passes with a
-// deleted check as soon as `cargo insta test --accept` runs; these four fail.
+// The constructor's text is also checked, but only by comparison against a
+// regenerable fixture: `cargo insta test --accept` does not touch this file,
+// and `RIDL_UPDATE_GENERATED=1` rewrites it wholesale. Either way a text check
+// states what the constructor says, and these four state what it does.
 // `Level` is declared `integer [0..100]` in tests/fixtures/interaction_face.ridl.
 // ---------------------------------------------------------------------------
 

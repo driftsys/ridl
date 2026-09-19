@@ -81,8 +81,14 @@ pub(crate) fn translate(
     }
 
     let expr = match predicates.into_iter().reduce(|a, b| quote! { #a && #b }) {
-        None => quote! { Ok(()) },
-        Some(conjunction) => quote! { if #conjunction { Ok(()) } else { Err(()) } },
+        None => quote! { ::core::result::Result::Ok(()) },
+        Some(conjunction) => quote! {
+            if #conjunction {
+                ::core::result::Result::Ok(())
+            } else {
+                ::core::result::Result::Err(())
+            }
+        },
     };
 
     Ok(ClauseBody {
@@ -361,7 +367,10 @@ mod tests {
             translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
         assert!(body.uses_args);
         assert!(!body.uses_reply);
-        assert_eq!(dense(&body.expr), "ifargs.0<100{Ok(())}else{Err(())}");
+        assert_eq!(
+            dense(&body.expr),
+            "ifargs.0<100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+        );
     }
 
     /// Pins `Comparison::Le`'s emitted operator: `<=`, not `<` or any other
@@ -376,7 +385,10 @@ mod tests {
 
         let body =
             translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
-        assert_eq!(dense(&body.expr), "ifargs.0<=100{Ok(())}else{Err(())}");
+        assert_eq!(
+            dense(&body.expr),
+            "ifargs.0<=100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+        );
     }
 
     /// Pins `Comparison::Eq`'s emitted operator: `==`, not `!=` or any other
@@ -392,7 +404,10 @@ mod tests {
 
         let body =
             translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
-        assert_eq!(dense(&body.expr), "ifargs.0==100{Ok(())}else{Err(())}");
+        assert_eq!(
+            dense(&body.expr),
+            "ifargs.0==100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+        );
     }
 
     /// Pins `Comparison::Ne`'s emitted operator: `!=`, not `==` or any other
@@ -408,7 +423,10 @@ mod tests {
 
         let body =
             translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
-        assert_eq!(dense(&body.expr), "ifargs.0!=100{Ok(())}else{Err(())}");
+        assert_eq!(
+            dense(&body.expr),
+            "ifargs.0!=100{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+        );
     }
 
     #[test]
@@ -423,7 +441,10 @@ mod tests {
         assert!(body.uses_reply);
         assert!(!body.uses_args);
         // Rate is float-backed, so the literal is a float.
-        assert_eq!(dense(&body.expr), "ifreply.0>=0.0{Ok(())}else{Err(())}");
+        assert_eq!(
+            dense(&body.expr),
+            "ifreply.0>=0.0{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
+        );
     }
 
     #[test]
@@ -440,7 +461,7 @@ mod tests {
             translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
         assert_eq!(
             dense(&body.expr),
-            "ifargs.0<100&&args.0>=0{Ok(())}else{Err(())}"
+            "ifargs.0<100&&args.0>=0{::core::result::Result::Ok(())}else{::core::result::Result::Err(())}"
         );
     }
 
@@ -456,7 +477,7 @@ mod tests {
             translate(&ctx, &contracts, ClauseKind::Ensure, &params, Some("Level")).expect("empty");
         assert!(!body.uses_args);
         assert!(!body.uses_reply);
-        assert_eq!(dense(&body.expr), "Ok(())");
+        assert_eq!(dense(&body.expr), "::core::result::Result::Ok(())");
     }
 
     #[test]

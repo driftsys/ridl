@@ -225,7 +225,7 @@ fn the_pipeline_generate_stays_clean_of_the_face() {
             is_constructor_path,
             "the pipeline generate must name no runtime path outside the constructors, \
              found `{}`",
-            &rest[..rest.len().min(48)],
+            rest.chars().take(48).collect::<String>(),
         );
     }
     assert!(
