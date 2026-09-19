@@ -573,6 +573,69 @@ fn round_trip_failing_require_settles_precondition_failed() {
 }
 
 #[test]
+fn round_trip_client_set_level_short_circuits_on_failing_require() {
+    // 100 is a legal `Level` value ([0, 100] inclusive) but fails the
+    // command's own `require level < 100` clause. Unlike
+    // `round_trip_failing_require_settles_precondition_failed` above, this
+    // sends through the generated `Client::set_level` itself, which is
+    // `send()`'s own short circuit (face.rs), not `dispatch`'s: nothing must
+    // reach the port.
+    let mut port = Loopback::new("face.demo");
+    let result = {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.set_level(generated::Level(100))
+    };
+    assert_eq!(
+        result,
+        Err(ridl_rt::port::SendError::Contract(
+            ridl_rt::error::Contract::PreconditionFailed
+        )),
+        "a failing require is reported before anything is sent",
+    );
+
+    // Nothing was sent: an otherwise-empty port has no claim for dispatch to
+    // find.
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(
+        settled, 0,
+        "nothing was sent to the port, so dispatch settles nothing"
+    );
+    assert!(provider.set_level_calls.is_empty());
+}
+
+#[test]
+fn round_trip_client_average_short_circuits_on_failing_require() {
+    // 0 is a legal `Window` value ([0, 100000] inclusive) but fails the
+    // query's own `require window > 0` clause. Sent through the generated
+    // `Client::average` itself, so this pins `send()`'s own short circuit
+    // (face.rs), not `dispatch`'s.
+    let mut port = Loopback::new("face.demo");
+    let result = {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.average(generated::Window(0))
+    };
+    assert_eq!(
+        result,
+        Err(ridl_rt::port::SendError::Contract(
+            ridl_rt::error::Contract::PreconditionFailed
+        )),
+        "a failing require is reported before anything is sent",
+    );
+
+    // Nothing was sent: an otherwise-empty port has no claim for dispatch to
+    // find.
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(
+        settled, 0,
+        "nothing was sent to the port, so dispatch settles nothing"
+    );
+}
+
+#[test]
 fn round_trip_failing_ensure_settles_contract_broken() {
     let mut port = Loopback::new("face.demo");
     let correlation = {
@@ -711,6 +774,43 @@ fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
     assert!(
         provider.set_level_calls.is_empty(),
         "the provider must not be called for an unrecognized ordinal"
+    );
+
+    let outcome = port.ack(correlation).expect("settled");
+    assert_eq!(
+        outcome,
+        Err(ridl_rt::error::CallError::Contract(
+            ridl_rt::error::Contract::UnknownInteraction
+        )),
+    );
+}
+
+#[test]
+fn round_trip_foreign_interface_number_settles_unknown_interaction() {
+    // `dispatch`'s first branch checks `claim.iface != Cabin::NUMBER` before
+    // it ever looks at the ordinal (the doc comment on `next_event` in the
+    // generated file gives the reason: ordinals restart at 1 in each
+    // interface). `round_trip_unrecognized_ordinal_settles_unknown_interaction`
+    // above sends to `Cabin`'s own correct interface number and only proves
+    // the fallback-ordinal arm; this sends to `Horn`'s interface number
+    // (2, not Cabin's 1) with an ordinal (1) that is legal for Cabin itself,
+    // so only the interface-number branch can be what settles it.
+    let mut port = Loopback::new("face.demo");
+    let correlation = port
+        .command(
+            <generated::Horn as ridl_rt::contract::Interface>::NUMBER,
+            ridl_rt::contract::Ordinal(1),
+            &[],
+        )
+        .expect("send");
+
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1, "an outcome was still settled");
+    assert!(
+        provider.set_level_calls.is_empty(),
+        "the provider must not be called for a foreign interface number"
     );
 
     let outcome = port.ack(correlation).expect("settled");
