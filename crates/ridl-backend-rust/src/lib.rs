@@ -27,6 +27,7 @@ use std::collections::{HashMap, HashSet};
 mod clauses;
 mod defaults;
 mod descriptors;
+mod face;
 
 /// The generated artifact for one package: Rust source.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +92,7 @@ pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> 
     let ctx = Ctx::new(package);
     let mut items = domain_items(&ctx, package)?;
     items.extend(descriptors::interface_items(&ctx, package)?);
+    items.extend(face::interface_items(package)?);
     render(items)
 }
 

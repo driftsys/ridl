@@ -431,7 +431,7 @@ fn clause_doc(kind: &str) -> String {
     )
 }
 
-fn is_interaction(decl: &v2::Decl) -> bool {
+pub(crate) fn is_interaction(decl: &v2::Decl) -> bool {
     matches!(
         decl.kind,
         Some(
@@ -447,7 +447,10 @@ fn is_interaction(decl: &v2::Decl) -> bool {
 /// The single declared parameter's named type. M3 emits no induced argument
 /// struct, so a call with any other parameter shape is refused (a recorded
 /// follow-up).
-fn single_param_type<'a>(params: &'a [v2::Param], member: &str) -> Result<&'a str, GenerateError> {
+pub(crate) fn single_param_type<'a>(
+    params: &'a [v2::Param],
+    member: &str,
+) -> Result<&'a str, GenerateError> {
     let [param] = params else {
         return Err(GenerateError {
             message: format!(
@@ -466,7 +469,10 @@ fn single_param_type<'a>(params: &'a [v2::Param], member: &str) -> Result<&'a st
 
 /// A query's reply named type. M3 replies with one declared type, so an inline
 /// fallible or non-named return is refused.
-fn query_reply_type<'a>(query: &'a v2::QueryDef, member: &str) -> Result<&'a str, GenerateError> {
+pub(crate) fn query_reply_type<'a>(
+    query: &'a v2::QueryDef,
+    member: &str,
+) -> Result<&'a str, GenerateError> {
     match query.return_type.as_ref().and_then(|ret| ret.kind.as_ref()) {
         Some(v2::return_type::Kind::Value(field)) => match field.kind.as_ref() {
             Some(v2::field_type::Kind::Named(name)) => Ok(name),
