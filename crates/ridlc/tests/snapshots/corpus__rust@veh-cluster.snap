@@ -5,55 +5,316 @@ input_file: crates/ridlc/tests/corpus/veh-cluster/ridl.toml
 ---
 // ===== package veh.common =====
 /// Vehicle speed over ground
+///
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Speed(pub f64);
+pub struct Speed(f64);
+impl Speed {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 250.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<f64> for Speed {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Speed> for f64 {
+    fn from(value: Speed) -> Self {
+        value.0
+    }
+}
 impl Default for Speed {
     fn default() -> Self {
-        Speed(0.0)
+        Speed::new_unchecked(0.0)
     }
 }
 /// Coolant / ambient temperature
+///
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Temperature(pub f64);
+pub struct Temperature(f64);
+impl Temperature {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < -40.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Temperature",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 125.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Temperature",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<f64> for Temperature {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Temperature> for f64 {
+    fn from(value: Temperature) -> Self {
+        value.0
+    }
+}
 impl Default for Temperature {
     fn default() -> Self {
-        Temperature(0.0)
+        Temperature::new_unchecked(0.0)
     }
 }
 /// Engine crankshaft speed
+///
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct RPM(pub f64);
+pub struct RPM(f64);
+impl RPM {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "RPM",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 8000.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "RPM",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<f64> for RPM {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<RPM> for f64 {
+    fn from(value: RPM) -> Self {
+        value.0
+    }
+}
 impl Default for RPM {
     fn default() -> Self {
-        RPM(0.0)
+        RPM::new_unchecked(0.0)
     }
 }
 /// Normalised ratio
+///
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Ratio(pub f64);
+pub struct Ratio(f64);
+impl Ratio {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Ratio",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 100.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Ratio",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<f64> for Ratio {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Ratio> for f64 {
+    fn from(value: Ratio) -> Self {
+        value.0
+    }
+}
 impl Default for Ratio {
     fn default() -> Self {
-        Ratio(0.0)
+        Ratio::new_unchecked(0.0)
     }
 }
 #[repr(transparent)]
-pub struct Counter(pub i64);
+pub struct Counter(i64);
+impl Counter {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Counter",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 65535 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Counter",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: i64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<i64> for Counter {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Counter> for i64 {
+    fn from(value: Counter) -> Self {
+        value.0
+    }
+}
 impl Default for Counter {
     fn default() -> Self {
-        Counter(0)
+        Counter::new_unchecked(0)
     }
 }
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Gain(pub f64);
+pub struct Gain(f64);
+impl Gain {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Gain",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 1.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Gain",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<f64> for Gain {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Gain> for f64 {
+    fn from(value: Gain) -> Self {
+        value.0
+    }
+}
 impl Default for Gain {
     fn default() -> Self {
-        Gain(0.0)
+        Gain::new_unchecked(0.0)
     }
 }
-pub const MAX_SPEED: Speed = Speed(250.0);
-pub const SPEED_LIMIT_EU: Speed = Speed(130.0);
+pub const MAX_SPEED: Speed = Speed::new_unchecked(250.0);
+pub const SPEED_LIMIT_EU: Speed = Speed::new_unchecked(130.0);
 pub const MAX_GEAR: i64 = 6;
-pub const IDLE_RPM: RPM = RPM(800.0);
+pub const IDLE_RPM: RPM = RPM::new_unchecked(800.0);
 #[repr(i64)]
 pub enum GearPosition {
     PARK = 0,
@@ -215,10 +476,52 @@ impl Default for FaultPage {
 /// cross-package counterpart is impossible by construction: a foreign
 /// `internal` name never resolves (typl §3.3).
 #[repr(transparent)]
-pub(crate) struct RawTickCount(pub(crate) i64);
+pub(crate) struct RawTickCount(i64);
+impl RawTickCount {
+    /// Constructs the value, enforcing its typl constraints.
+    pub(crate) fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "RawTickCount",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 65535 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "RawTickCount",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub(crate) const fn new_unchecked(value: i64) -> Self {
+        Self(value)
+    }
+    pub(crate) const fn get(self) -> i64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<i64> for RawTickCount {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<RawTickCount> for i64 {
+    fn from(value: RawTickCount) -> Self {
+        value.0
+    }
+}
 impl Default for RawTickCount {
     fn default() -> Self {
-        RawTickCount(0)
+        RawTickCount::new_unchecked(0)
     }
 }
 /// The window of raw tick counts a wheel diagnostic covers.
@@ -236,10 +539,52 @@ impl Default for RawWheelSpan {
     }
 }
 #[repr(transparent)]
-pub struct FanLevel(pub i64);
+pub struct FanLevel(i64);
+impl FanLevel {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "FanLevel",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 7 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "FanLevel",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: i64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<i64> for FanLevel {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<FanLevel> for i64 {
+    fn from(value: FanLevel) -> Self {
+        value.0
+    }
+}
 impl Default for FanLevel {
     fn default() -> Self {
-        FanLevel(0)
+        FanLevel::new_unchecked(0)
     }
 }
 #[repr(C)]
@@ -283,17 +628,62 @@ impl Default for HvacError {
 /// A declared constant, so a contract clause can reference one. The guaranteed
 /// expression subset admits constants (ridl §13) and nothing in the corpus
 /// exercised that until these members were added.
-pub const MAX_FAN: FanLevel = FanLevel(7);
+pub const MAX_FAN: FanLevel = FanLevel::new_unchecked(7);
 /// The ceiling a fan request is clamped to.
-pub const FAN_CEILING: FanLevel = FanLevel(7);
+pub const FAN_CEILING: FanLevel = FanLevel::new_unchecked(7);
 /// The same ceiling, one hop further along the chain.
-pub const FAN_LIMIT: FanLevel = FanLevel(7);
+pub const FAN_LIMIT: FanLevel = FanLevel::new_unchecked(7);
 /// The label a cabin fan reports itself under.
 #[repr(transparent)]
-pub struct FanTag(pub String);
+pub struct FanTag(String);
+impl FanTag {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: String,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if (value.chars().count() as u64) < 1 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "FanTag",
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        if (value.chars().count() as u64) > 32 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "FanTag",
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: String) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> &str {
+        &self.0
+    }
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<String> for FanTag {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: String) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<FanTag> for String {
+    fn from(value: FanTag) -> Self {
+        value.0
+    }
+}
 impl Default for FanTag {
     fn default() -> Self {
-        FanTag("unset".to_string())
+        FanTag::new_unchecked("unset".to_string())
     }
 }
 /// The cabin fan's label.

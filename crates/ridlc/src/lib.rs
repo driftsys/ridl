@@ -849,9 +849,9 @@ fn refuse_overwrite(path: &Path, marker: &str) -> std::io::Result<Option<Diagnos
 /// The generated `Cargo.toml` body: a plain `format!`, not a template — see
 /// Task 7's rationale for why no templating engine is warranted for two short
 /// strings. `ridl-rt` is not optional and carries no feature: it is `no_std`,
-/// has no dependency of its own in any feature combination, and the generated
-/// constructors will name `::ridl_rt::payload::Violation` from it once Task 3
-/// lands. The `ridl-rt = "0.1"` requirement is a literal, not read from
+/// has no dependency of its own in any feature combination, and every generated
+/// named scalar's constructor names `::ridl_rt::payload::Violation` from it.
+/// The `ridl-rt = "0.1"` requirement is a literal, not read from
 /// `crates/ridl-rt/Cargo.toml`, because `ridlc` is an installed binary with no
 /// access to this repository's sources at run time; a guard test
 /// (`crates/ridlc/tests/`) keeps the two from drifting apart silently.

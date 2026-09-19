@@ -52,7 +52,7 @@ fn type_def_default(name: &str, td: &v2::TypeDef) -> Option<TokenStream> {
     }
     let inner = scalar_default_value(backing_scalar(td), init.value.as_deref())?;
     let name_id = ident(name);
-    Some(quote! { #name_id(#inner) })
+    Some(quote! { #name_id::new_unchecked(#inner) })
 }
 
 /// The inner value of a newtype default for a scalar backing. A derivable
@@ -180,7 +180,7 @@ fn named_default(ctx: &Ctx, reference: &str, slot: &Slot) -> Option<TokenStream>
                 let path = type_path(reference);
                 if let Some(declared) = slot.declared_init {
                     let inner = scalar_default_value(backing_scalar(td), Some(declared))?;
-                    Some(quote! { #path(#inner) })
+                    Some(quote! { #path::new_unchecked(#inner) })
                 } else {
                     Some(quote! { #path::default() })
                 }

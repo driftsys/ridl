@@ -5,24 +5,151 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
 // ===== package fleet.contracts =====
 #[repr(transparent)]
-pub struct DoorId(pub i64);
+pub struct DoorId(i64);
+impl DoorId {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "DoorId",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 7 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "DoorId",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: i64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<i64> for DoorId {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<DoorId> for i64 {
+    fn from(value: DoorId) -> Self {
+        value.0
+    }
+}
 impl Default for DoorId {
     fn default() -> Self {
-        DoorId(0)
+        DoorId::new_unchecked(0)
     }
 }
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Percent(pub f64);
+pub struct Percent(f64);
+impl Percent {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Percent",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 100.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Percent",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<f64> for Percent {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Percent> for f64 {
+    fn from(value: Percent) -> Self {
+        value.0
+    }
+}
 impl Default for Percent {
     fn default() -> Self {
-        Percent(0.0)
+        Percent::new_unchecked(0.0)
     }
 }
 #[repr(transparent)]
-pub struct Odometer(pub i64);
+pub struct Odometer(i64);
+impl Odometer {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Odometer",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 4294967295 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Odometer",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: i64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<i64> for Odometer {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Odometer> for i64 {
+    fn from(value: Odometer) -> Self {
+        value.0
+    }
+}
 impl Default for Odometer {
     fn default() -> Self {
-        Odometer(0)
+        Odometer::new_unchecked(0)
     }
 }
 #[repr(i64)]
