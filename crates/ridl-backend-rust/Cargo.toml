@@ -16,3 +16,22 @@ syn.workspace = true
 [dev-dependencies]
 insta.workspace = true
 tempfile = "3.15.0"
+# The source-to-IR compile path for the descriptor tests
+# (tests/support/ir.rs uses `ridlc::compile`). ridlc depends on this crate as
+# a normal dependency, so this is a dev-dependency cycle back to the crate
+# under test. Cargo supports it: a dev-dependency is not part of the graph
+# used to build this crate as a library, only of the graph used to build its
+# own test binaries, so the `ridlc` this pulls in links against the ordinary
+# (non-test) build of this crate.
+ridlc = { path = "../ridlc" }
+# `ridl_core` is not reached only through `ridlc`: the compile helper names
+# nothing from it today, but it is added alongside `ridlc` to match the
+# sibling proto backend's documented dev-dependency set for the same
+# source-to-IR path, so a later descriptor test that constructs a
+# `RidlDatabase` itself has the crate available.
+ridl-core = { path = "../ridl-core" }
+# The generated interaction face names `::ridl_rt` (Lane M stage M3). The
+# backend itself emits text that links `ridl-rt` and does not link it, so this
+# is a dev-dependency only: the integration tests that compile the checked-in
+# generated face, and the disposable loopback ports, need it.
+ridl-rt = { path = "../ridl-rt" }
