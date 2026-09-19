@@ -50,10 +50,12 @@ fixture the Rust backend's round-trip test compiles. Every generated signature
 quoted in this note is copied from
 `crates/ridl-backend-rust/tests/generated/interaction_face.rs`, which the
 backend regenerates and compares byte for byte on every test run. Signatures are
-abbreviated for reading: the fully qualified paths the emitter writes are cut
-down, and a struct is shown with its module in front of it, which is how it is
-referred to rather than how it is declared. The declarations below are the
-fixture's, with its comments removed.
+abbreviated for reading rather than copied character for character: the fully
+qualified paths the emitter writes are cut down, a `where` clause may be inlined
+into the generic parameter list, a struct is shown with its module in front of
+it and without its fields, and a method body is summarised where the point is
+the shape rather than the code. Read the generated file itself for the exact
+text. The declarations below are the fixture's, with its comments removed.
 
 ```ridl
 package face.demo
@@ -667,11 +669,12 @@ a runtime that offers only some of them still serves the interfaces that fit.
 
 ## The ports that did not appear
 
-Four of `port.rs`'s traits have not been mentioned, which is itself informative.
+Four of `port.rs`'s traits have had no step of their own, which is itself
+informative.
 
-**`Clock`** — `fn now() -> Timestamp`. A runtime has one and stamps envelopes
-from it. No port method takes the current time, and generated code never calls
-`Clock`.
+**`Clock`** — `fn now(&self) -> Timestamp`. A runtime has one and stamps
+envelopes from it. No port method takes the current time, and generated code
+never calls `Clock`.
 
 **`FixedReader`** — the consumer side of `fixed`, the provisioned constants of
 ridl §8. The emitter writes a `fixed` member's descriptor but no method for it,

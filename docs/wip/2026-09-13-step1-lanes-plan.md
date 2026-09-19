@@ -232,12 +232,12 @@ in-process-only MVP of it before either, so the team has a face to write
 against. It can do that because the face binds the **ports** of `ridl-rt`, which
 shipped with E11.0, and E11.1 and E11.9 sit below those ports.
 
-| Stage | Work                                                                                                                            | Model                                                            | Starts when |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------- |
-| M1    | The spec: `docs/wip/2026-09-16-interaction-face-v0-design.md` — scope, payload encoding, numbering, the placeholders, the shape | Opus                                                             | landed      |
-| M2    | Implementation plan from the approved spec                                                                                      | Opus                                                             | M1 merged   |
-| M3    | The emitter's `descriptors.rs` and `face.rs`, the example package, the round trip                                               | Opus for `Client`/`Provider`/`dispatch`; Sonnet for the plumbing | M2 merged   |
-| M4    | Progressive documentation of the `ridl-rt` traits, written against what M3 generates                                            | Opus                                                             | M3 merged   |
+| Stage | Work                                                                                                                                | Model                                                            | Starts when |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | ----------- |
+| M1    | The spec: `docs/archive/2026-09-16-interaction-face-v0-design.md` — scope, payload encoding, numbering, the placeholders, the shape | Opus                                                             | landed      |
+| M2    | Implementation plan from the approved spec                                                                                          | Opus                                                             | M1 merged   |
+| M3    | The emitter's `descriptors.rs` and `face.rs`, the example package, the round trip                                                   | Opus for `Client`/`Provider`/`dispatch`; Sonnet for the plumbing | M2 merged   |
+| M4    | Progressive documentation of the `ridl-rt` traits, written against what M3 generates                                                | Opus                                                             | M3 merged   |
 
 **No gate.** The lane's one hard dependency, `ridl-rt` 0.1.0 (E11.0), is merged,
 and the IR numbering it needs landed with L4. It waits on nothing and blocks

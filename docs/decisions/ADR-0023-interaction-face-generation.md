@@ -88,16 +88,17 @@ never stated.
    face behind the frame specification and the transport, and nothing in E11.13
    ships a runtime for a pipeline consumer to link against.
 
-3. **A `Provider` method takes its argument by reference, not by value.** The M1
-   design's settled example signatures —
-   `fn set_target(&mut self, desired:
-   Speed);` and
-   `fn average_speed(&mut self, window: Duration) -> Speed;` — cannot be
-   implemented as written: `dispatch` must still hold the arguments when it
-   evaluates a query's `ensure` clause after the provider method returns (the
-   clause translator of decision 1 emits `args.0` for exactly this), and a
-   by-value parameter would have moved them — the generated payload types
-   implement neither `Copy` nor `Clone`. This decision **supersedes** the M1
+3. **A `Provider` method takes its argument by reference, not by value.** A
+   query cannot be implemented as the M1 design's settled example writes it
+   (`fn average_speed(&mut self, window: Duration) -> Speed;`, by value):
+   `dispatch` must still hold the arguments when it evaluates a query's `ensure`
+   clause after the provider method returns (the clause translator of decision 1
+   emits `args.0` for exactly this), and a by-value parameter would have moved
+   them — the generated payload types implement neither `Copy` nor `Clone`. A
+   command has no such constraint — in the generated dispatch the provider call
+   is the last use of the decoded argument, so by value would compile — but it
+   takes its argument by reference too, so that one rule describes the whole
+   trait rather than one method of it. This decision **supersedes** the M1
    design §6 example signatures' parameter shape only; the design's separate
    argument that a command returns nothing and a query returns its declared
    reply (because `Rejected`, the example's return type, is not a `ridl-rt` type
