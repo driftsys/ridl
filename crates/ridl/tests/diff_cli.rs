@@ -573,7 +573,6 @@ fn a_deployment_with_no_for_clause_exits_two_not_panics() {
     );
 }
 
-/// `--format json` prints the stable schema and still keys the exit code on
 /// A package whose one deployment places `Panel` on `machine`: a contract and
 /// a topology in one directory.
 fn placed_workspace(dir: &TempDir, root: &str, machine: &str) -> PathBuf {
@@ -645,6 +644,7 @@ fn a_moved_instance_is_listed_under_placement_changed() {
     assert!(value.get("composition_changed").is_none());
 }
 
+/// `--format json` prints the stable schema and still keys the exit code on
 /// the verdict.
 #[test]
 fn format_json_matches_the_schema_and_exit_code() {
