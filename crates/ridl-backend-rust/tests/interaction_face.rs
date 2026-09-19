@@ -650,3 +650,89 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
     assert_eq!(settled, 1);
     assert_eq!(provider.set_level_calls, vec![1]);
 }
+
+// ---------------------------------------------------------------------------
+// RA-19's compiled proof (design §6): a minimal port, not a bound.
+// ---------------------------------------------------------------------------
+
+/// A port that implements only `Attached` and `SignalReader` — no `Caller`,
+/// no `EventSource`, no `EventSink`, no `Handler`.
+///
+/// A trait bound is a lower bound, so a port type that implements more traits
+/// than a bound requires satisfies it anyway. Constructing the signal-only
+/// `horn` interface's `Client` from `Loopback`, which implements every port
+/// trait, would prove nothing: that construction compiles whether or not the
+/// emitter added a `Caller` or `EventSource` bound the interface does not
+/// need. Design §6 states the property the other way round: the claim is
+/// shown by a minimal port implementing `SignalReader` and its `Attached`
+/// supertrait and nothing else, which must construct the client. Had the
+/// emitter written a wider bound than the interface needs, this port would
+/// not satisfy it and `generated::horn::Client::new(&mut port)` below would
+/// fail to compile.
+struct MinimalSignalOnlyPort {
+    catalog: ridl_rt::contract::CatalogRef,
+}
+
+impl MinimalSignalOnlyPort {
+    fn new(package_name: &'static str) -> Self {
+        MinimalSignalOnlyPort {
+            catalog: ridl_rt::contract::CatalogRef {
+                name: package_name,
+                hash: ridl_rt::contract::CatalogHash([0u8; 32]),
+            },
+        }
+    }
+}
+
+impl ridl_rt::port::Attached for MinimalSignalOnlyPort {
+    fn catalog(&self) -> &ridl_rt::contract::CatalogRef {
+        &self.catalog
+    }
+}
+
+impl ridl_rt::port::SignalReader for MinimalSignalOnlyPort {
+    fn read(
+        &self,
+        _iface: InterfaceNo,
+        _ord: Ordinal,
+        _out: &mut [u8],
+    ) -> Result<ridl_rt::port::RawSample, ridl_rt::port::ReadError> {
+        Ok(ridl_rt::port::RawSample {
+            provenance: Provenance::Init,
+            freshness: ridl_rt::sample::Freshness::Unbounded,
+            envelope: ridl_rt::sample::Envelope {
+                stamp: ridl_rt::sample::Timestamp(0),
+                seq: 0,
+            },
+            len: 0,
+        })
+    }
+}
+
+/// RA-19's compiled proof, in the direction design §6 gives: the minimal
+/// `SignalReader`-and-`Attached`-only port constructs the signal-only `horn`
+/// interface's `Client`, and calling `active()` uses it, rather than only
+/// type-checking the construction. See `MinimalSignalOnlyPort`'s doc comment
+/// for why this port, and not the full `Loopback`, is what proves the bound
+/// is exact.
+///
+/// The zero-length `RawSample` `MinimalSignalOnlyPort::read` returns is too
+/// short for `Health`'s 8-byte encoding, so `active()`'s own structure check
+/// reports it as corrupt — the same client-side path
+/// `the_client_reads_a_signal_through_the_signal_reader_port` in
+/// `face_generation.rs` pins as `Detection::Corrupt`. The assertion below
+/// confirms the call completed through that path, not that the port served
+/// real data, which is outside this test's purpose.
+#[test]
+fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
+    let mut port = MinimalSignalOnlyPort::new("face.demo");
+    let client = generated::horn::Client::new(&mut port);
+    let sample = client.active().expect("read");
+    assert_eq!(
+        sample.provenance,
+        Provenance::Invalid(ridl_rt::sample::Cause::Detected(
+            ridl_rt::sample::Detection::Corrupt
+        )),
+        "a zero-length sample is too short for Health's 8-byte encoding",
+    );
+}
