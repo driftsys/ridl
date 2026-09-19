@@ -361,6 +361,53 @@ mod tests {
         assert_eq!(dense(&body.expr), "ifargs.0<100{Ok(())}else{Err(())}");
     }
 
+    /// Pins `Comparison::Le`'s emitted operator: `<=`, not `<` or any other
+    /// token. Before this test, `<=` appeared in no test and no fixture, so a
+    /// mutation emitting `<` for `Comparison::Le` passed the whole suite.
+    #[test]
+    fn a_le_comparison_emits_the_le_operator() {
+        let package = scalar_package();
+        let ctx = Ctx::new(&package);
+        let params = [param("level", "Level")];
+        let contracts = [clause(v2::ContractKind::Require, "level <= 100")];
+
+        let body =
+            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
+        assert_eq!(dense(&body.expr), "ifargs.0<=100{Ok(())}else{Err(())}");
+    }
+
+    /// Pins `Comparison::Eq`'s emitted operator: `==`, not `!=` or any other
+    /// token. Before this test, `==` appeared in no test and no fixture, so a
+    /// mutation swapping `Comparison::Eq` and `Comparison::Ne` passed the whole
+    /// suite.
+    #[test]
+    fn an_eq_comparison_emits_the_eq_operator() {
+        let package = scalar_package();
+        let ctx = Ctx::new(&package);
+        let params = [param("level", "Level")];
+        let contracts = [clause(v2::ContractKind::Require, "level == 100")];
+
+        let body =
+            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
+        assert_eq!(dense(&body.expr), "ifargs.0==100{Ok(())}else{Err(())}");
+    }
+
+    /// Pins `Comparison::Ne`'s emitted operator: `!=`, not `==` or any other
+    /// token. Before this test, `!=` appeared in no test and no fixture, so a
+    /// mutation swapping `Comparison::Eq` and `Comparison::Ne` passed the whole
+    /// suite.
+    #[test]
+    fn a_ne_comparison_emits_the_ne_operator() {
+        let package = scalar_package();
+        let ctx = Ctx::new(&package);
+        let params = [param("level", "Level")];
+        let contracts = [clause(v2::ContractKind::Require, "level != 100")];
+
+        let body =
+            translate(&ctx, &contracts, ClauseKind::Require, &params, None).expect("accepted");
+        assert_eq!(dense(&body.expr), "ifargs.0!=100{Ok(())}else{Err(())}");
+    }
+
     #[test]
     fn a_float_backed_result_clause_emits_a_float_literal() {
         let package = scalar_package();

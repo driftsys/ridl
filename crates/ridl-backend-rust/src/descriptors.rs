@@ -507,6 +507,69 @@ mod tests {
     use crate::generate_face;
     use ridl_ir::v2;
 
+    /// `max_size_const` must compute the maximum of its inputs, not their sum,
+    /// minimum, first, or last — design §6 requires `MAX_BUFFER_SIZE` and
+    /// `EVENT_SOURCE_BUFFER_SIZE` to be the maximum over the relevant
+    /// `<T as Payload<ReprC>>::MAX_SIZE` values.
+    ///
+    /// `max_size_const` emits a const-evaluable block, not a literal number, so
+    /// asserting on the emitted token text cannot distinguish "compute the
+    /// maximum" from "compute the sum": both reductions are expressed by
+    /// different token text for the same loop body, and the loop body's token
+    /// text does not, by itself, say what number the loop computes. Splicing
+    /// the emitted block into a real `const` and compiling and running it is
+    /// what makes the actual computed number observable. `[3, 9, 1]` was
+    /// chosen so the maximum (9), the sum (13), the minimum (1), the first (3)
+    /// and the last (1) are all pairwise distinct.
+    #[test]
+    fn max_size_const_computes_the_maximum_not_a_different_reduction() {
+        use proc_macro2::Literal;
+        use quote::quote;
+
+        let sizes: Vec<super::TokenStream> = [3usize, 9usize, 1usize]
+            .into_iter()
+            .map(|n| {
+                let literal = Literal::usize_unsuffixed(n);
+                quote! { #literal }
+            })
+            .collect();
+        let computed = super::max_size_const(&sizes);
+
+        let source = quote! {
+            const COMPUTED: usize = #computed;
+            fn main() {
+                println!("{COMPUTED}");
+            }
+        }
+        .to_string();
+
+        let dir = tempfile::tempdir().expect("a temp dir is created");
+        let source_path = dir.path().join("max_size_const.rs");
+        std::fs::write(&source_path, &source).expect("the generated source is written");
+        let binary_path = dir.path().join("max_size_const_bin");
+        let status = std::process::Command::new("rustc")
+            .args(["--edition", "2024", "--crate-type", "bin"])
+            .arg("-o")
+            .arg(&binary_path)
+            .arg(&source_path)
+            .status()
+            .expect("rustc must be installed and runnable for this test to be meaningful");
+        assert!(status.success(), "generated source must compile:\n{source}");
+
+        let output = std::process::Command::new(&binary_path)
+            .output()
+            .expect("the compiled binary runs");
+        let printed = String::from_utf8(output.stdout)
+            .expect("stdout is utf8")
+            .trim()
+            .to_string();
+
+        assert_eq!(
+            printed, "9",
+            "max_size_const over [3, 9, 1] must compute the maximum (9); got {printed}"
+        );
+    }
+
     /// The fixture declares no `fixed` interaction, so the `Fixed` descriptor
     /// path is covered here over hand-built IR (design §7, plan Task 1).
     #[test]
