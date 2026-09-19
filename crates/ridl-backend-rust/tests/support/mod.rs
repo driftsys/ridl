@@ -6,4 +6,5 @@
 //! with `mod support;` from an individual integration test target, such as
 //! `tests/interaction_face.rs`.
 
+pub mod ir;
 pub mod loopback;

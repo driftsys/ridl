@@ -6,6 +6,14 @@
 //! generated face that Task 5 adds. A test name containing `support` isolates
 //! this task's tests: `cargo test -p ridl-backend-rust --test interaction_face
 //! support`.
+//!
+//! Task 5 brings in the checked-in generated face of `tests/generated/`, adds
+//! the hand-written `Payload<ReprC>` implementations the fixture's types need
+//! to compile (design §2 — a throwaway stand-in; E11.7/E11.8/E11.12 replace
+//! it), and runs the round trip: a signal publish and read, an event raise and
+//! receive, a command's acknowledgment, a query's reply, a failing `require`,
+//! a failing `ensure`, the settlement count when one claim's settlement fails
+//! and a later one succeeds, and dispatch's short-buffer behavior.
 
 mod support;
 
@@ -147,4 +155,498 @@ fn support_clock_is_hand_driven_not_wall_clock() {
         before.0 + 1_000,
         "advance moves the hand-driven clock by exactly the given amount"
     );
+}
+
+// ---------------------------------------------------------------------------
+// Task 5: the checked-in generated face, the hand-written payloads, and the
+// round trip.
+// ---------------------------------------------------------------------------
+
+/// The checked-in output of `generate_face` over `tests/fixtures/interaction_face.ridl`.
+/// It is `include!`d, never hand-edited; the regeneration guard below compares
+/// it byte-for-byte against a fresh `generate_face` call. Lint allows live on
+/// this wrapper module, as outer attributes, because the generated file itself
+/// carries no inner attribute (design §7): an inner attribute inside an
+/// `include!`d file is a hard error.
+#[allow(
+    dead_code,
+    reason = "not every generated item is named from this file's own tests; \
+              the byte-equality guard is what pins the emitter's output"
+)]
+#[allow(
+    clippy::derivable_impls,
+    reason = "the domain-type Default emission (crate::defaults, predating M3) writes a manual \
+              impl rather than #[derive(Default)]; this is the first place that output is \
+              compiled in-tree, so it is the first place this lint sees it. Fixing the emitter \
+              is outside Lane M stage M3's scope: it is baseline domain-type emission every \
+              backend consumer shares, not face- or descriptor-specific."
+)]
+#[allow(
+    clippy::upper_case_acronyms,
+    reason = "an enum variant keeps its typl SCREAMING_SNAKE spelling by design \
+              (crate::emit_enum's own doc comment), predating M3; this file is the first place \
+              that spelling is compiled in-tree"
+)]
+mod generated {
+    include!("generated/interaction_face.rs");
+}
+
+/// Hand-written `Payload<ReprC>` implementations for the fixture's restricted
+/// fixed-size scalar, enum, and struct types (design §2). This is a throwaway
+/// stand-in with no schema and no dependency: E11.7, E11.8, or E11.12 replaces
+/// it with a generated codec. The wire layout is 8 little-endian bytes per
+/// `i64`-backed scalar or enum, and a struct's fields back to back in
+/// declaration order.
+mod payloads {
+    use ridl_rt::encoding::ReprC;
+    use ridl_rt::payload::{
+        EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError, Violation,
+    };
+
+    use super::generated::{Average, Health, Level, Temperature, Warning, Window};
+
+    /// A named scalar backed by `i64`, with its declared closed range
+    /// (typl §5.5: both bounds inclusive) checked by `verify`.
+    macro_rules! scalar_payload {
+        ($ty:ty, $name:literal, $min:expr, $max:expr) => {
+            impl Payload<ReprC> for $ty {
+                const MAX_SIZE: usize = 8;
+                type View<'a> = &'a [u8];
+
+                fn encode<'o>(
+                    &self,
+                    out: &'o mut [u8],
+                ) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+                    if out.len() < 8 {
+                        return Err(EncodeError::Capacity {
+                            needed: 8,
+                            available: out.len(),
+                        });
+                    }
+                    out[..8].copy_from_slice(&self.0.to_le_bytes());
+                    let bytes = &out[..8];
+                    Ok(Encoded { bytes, view: bytes })
+                }
+
+                fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+                    if buf.len() != 8 {
+                        return Err(VerifyError::Structure(Malformed::OutOfBounds));
+                    }
+                    let value = i64::from_le_bytes(buf.try_into().expect("checked length"));
+                    if !($min..=$max).contains(&value) {
+                        return Err(VerifyError::Contract(Violation {
+                            type_name: $name,
+                            rule: Rule::Range,
+                        }));
+                    }
+                    Ok(buf)
+                }
+
+                fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+                    let bytes = r.bytes();
+                    Self(i64::from_le_bytes(
+                        bytes.try_into().expect("verified length"),
+                    ))
+                }
+            }
+        };
+    }
+
+    scalar_payload!(Temperature, "Temperature", -40, 85);
+    scalar_payload!(Level, "Level", 0, 100);
+    scalar_payload!(Window, "Window", 0, 100_000);
+    scalar_payload!(Average, "Average", 0, 1000);
+
+    fn health_discriminant(value: &Health) -> i64 {
+        match value {
+            Health::OK => 0,
+            Health::WARN => 1,
+            Health::FAIL => 2,
+        }
+    }
+
+    fn health_from_discriminant(value: i64) -> Health {
+        match value {
+            0 => Health::OK,
+            1 => Health::WARN,
+            _ => Health::FAIL,
+        }
+    }
+
+    impl Payload<ReprC> for Health {
+        const MAX_SIZE: usize = 8;
+        type View<'a> = &'a [u8];
+
+        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+            if out.len() < 8 {
+                return Err(EncodeError::Capacity {
+                    needed: 8,
+                    available: out.len(),
+                });
+            }
+            out[..8].copy_from_slice(&health_discriminant(self).to_le_bytes());
+            let bytes = &out[..8];
+            Ok(Encoded { bytes, view: bytes })
+        }
+
+        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+            if buf.len() != 8 {
+                return Err(VerifyError::Structure(Malformed::OutOfBounds));
+            }
+            let value = i64::from_le_bytes(buf.try_into().expect("checked length"));
+            if !(0..=2).contains(&value) {
+                return Err(VerifyError::Contract(Violation {
+                    type_name: "Health",
+                    rule: Rule::Variant,
+                }));
+            }
+            Ok(buf)
+        }
+
+        fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+            let bytes = r.bytes();
+            health_from_discriminant(i64::from_le_bytes(
+                bytes.try_into().expect("verified length"),
+            ))
+        }
+    }
+
+    impl Payload<ReprC> for Warning {
+        const MAX_SIZE: usize = 16;
+        type View<'a> = &'a [u8];
+
+        fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, &'o [u8]>, EncodeError> {
+            if out.len() < 16 {
+                return Err(EncodeError::Capacity {
+                    needed: 16,
+                    available: out.len(),
+                });
+            }
+            out[..8].copy_from_slice(&self.code.0.to_le_bytes());
+            out[8..16].copy_from_slice(&health_discriminant(&self.health).to_le_bytes());
+            let bytes = &out[..16];
+            Ok(Encoded { bytes, view: bytes })
+        }
+
+        fn verify(buf: &[u8]) -> Result<&[u8], VerifyError> {
+            if buf.len() != 16 {
+                return Err(VerifyError::Structure(Malformed::OutOfBounds));
+            }
+            // Each field's own check, so a violation names the field's own
+            // type — `Level` or `Health` — not `Warning` (`Violation` names
+            // "the typl type whose constraint failed").
+            Level::verify(&buf[..8])?;
+            Health::verify(&buf[8..16])?;
+            Ok(buf)
+        }
+
+        fn decode(r: Ref<'_, Self, ReprC>) -> Self {
+            let bytes = r.bytes();
+            let code = Level(i64::from_le_bytes(
+                bytes[..8].try_into().expect("verified length"),
+            ));
+            let health = health_from_discriminant(i64::from_le_bytes(
+                bytes[8..16].try_into().expect("verified length"),
+            ));
+            Warning { code, health }
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn an_out_of_range_level_verifies_as_a_contract_violation() {
+            let mut buf = [0u8; 8];
+            buf.copy_from_slice(&150i64.to_le_bytes());
+            let error = <Level as Payload<ReprC>>::verify(&buf).expect_err("150 is out of range");
+            assert!(matches!(
+                error,
+                VerifyError::Contract(Violation {
+                    type_name: "Level",
+                    rule: Rule::Range,
+                })
+            ));
+        }
+
+        #[test]
+        fn malformed_bytes_verify_as_a_structure_error() {
+            let short = [0u8; 3];
+            let error =
+                <Level as Payload<ReprC>>::verify(&short).expect_err("too short to be a Level");
+            assert!(matches!(
+                error,
+                VerifyError::Structure(Malformed::OutOfBounds)
+            ));
+        }
+    }
+}
+
+/// A `Provider` whose `average` reply is test-controlled, so a test can make
+/// it return a value that breaks the query's `ensure` clause.
+struct TestProvider {
+    set_level_calls: Vec<i64>,
+    next_average: i64,
+}
+
+impl TestProvider {
+    fn new(next_average: i64) -> Self {
+        TestProvider {
+            set_level_calls: Vec::new(),
+            next_average,
+        }
+    }
+}
+
+impl generated::cabin::Provider for TestProvider {
+    fn set_level(&mut self, level: &generated::Level) {
+        self.set_level_calls.push(level.0);
+    }
+
+    fn average(&mut self, _window: &generated::Window) -> generated::Average {
+        generated::Average(self.next_average)
+    }
+}
+
+/// Regenerates the fixture through `generate_face`, using the crate's own
+/// compile helper rather than a new cargo subprocess, and compares it
+/// byte-for-byte against the checked-in file. `RIDL_UPDATE_GENERATED=1`
+/// writes the fresh output instead of comparing.
+#[test]
+fn generated_interaction_face_matches_the_emitter() {
+    let package = support::ir::compile_fixture("interaction_face.ridl");
+    let face = ridl_backend_rust::generate_face(&package)
+        .expect("generate_face")
+        .rust_source;
+
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/generated/interaction_face.rs");
+
+    if std::env::var_os("RIDL_UPDATE_GENERATED").is_some() {
+        std::fs::write(&path, &face)
+            .unwrap_or_else(|error| panic!("write {}: {error}", path.display()));
+        return;
+    }
+
+    let checked_in = std::fs::read_to_string(&path)
+        .unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
+    assert_eq!(
+        face, checked_in,
+        "generated interaction_face.rs is stale; regenerate it with \
+         RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --test interaction_face"
+    );
+}
+
+#[test]
+fn round_trip_signal_publish_and_read() {
+    let mut port = Loopback::new("face.demo");
+    {
+        let mut publisher = generated::cabin::Publisher::new(&mut port);
+        publisher
+            .temperature(generated::Temperature(21))
+            .expect("set");
+        publisher.commit();
+    }
+
+    let client = generated::cabin::Client::new(&mut port);
+    let sample = client.temperature().expect("read");
+    assert_eq!(sample.value.0, 21);
+    assert_eq!(sample.provenance, Provenance::Live);
+}
+
+#[test]
+fn round_trip_event_raise_and_receive() {
+    let mut port = Loopback::new("face.demo");
+    {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.subscribe_warning().expect("subscribe");
+    }
+    {
+        let mut publisher = generated::cabin::Publisher::new(&mut port);
+        publisher
+            .warning(generated::Warning {
+                code: generated::Level(5),
+                health: generated::Health::WARN,
+            })
+            .expect("raise");
+    }
+
+    let mut client = generated::cabin::Client::new(&mut port);
+    let event = client
+        .next_event()
+        .expect("next_event")
+        .expect("an occurrence is waiting");
+    match event {
+        generated::cabin::Event::Warning(occurrence) => {
+            let warning = occurrence.payload.expect("payload verifies");
+            assert_eq!(warning.code.0, 5);
+            assert!(matches!(warning.health, generated::Health::WARN));
+        }
+    }
+}
+
+#[test]
+fn round_trip_command_is_acknowledged() {
+    let mut port = Loopback::new("face.demo");
+    let correlation = {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.set_level(generated::Level(42)).expect("send")
+    };
+
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1);
+    assert_eq!(provider.set_level_calls, vec![42]);
+
+    let mut client = generated::cabin::Client::new(&mut port);
+    assert_eq!(client.ack(correlation), Some(Ok(())));
+}
+
+#[test]
+fn round_trip_query_reply_is_delivered() {
+    let mut port = Loopback::new("face.demo");
+    let correlation = {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.average(generated::Window(10)).expect("send")
+    };
+
+    let mut provider = TestProvider::new(7);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1);
+
+    let mut client = generated::cabin::Client::new(&mut port);
+    let reply = client
+        .average_reply(correlation)
+        .expect("reply read")
+        .expect("reply is known")
+        .expect("no call error");
+    assert_eq!(reply.0, 7);
+}
+
+#[test]
+fn round_trip_failing_require_settles_precondition_failed() {
+    use ridl_rt::contract::Interaction;
+    use ridl_rt::encoding::ReprC;
+    use ridl_rt::payload::Ref;
+
+    let mut port = Loopback::new("face.demo");
+
+    // 100 is a legal `Level` value ([0, 100] inclusive) but fails the
+    // command's own `require level < 100` clause. The generated `Client`
+    // evaluates `require` itself before sending (face.rs's `send`), so
+    // sending through the raw port bypasses that and exercises `dispatch`'s
+    // own check instead.
+    let level = generated::Level(100);
+    let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+        .expect("encode")
+        .bytes()
+        .len();
+    let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
+    let correlation = port
+        .command(
+            <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
+            ordinal,
+            &encode_buf[..len],
+        )
+        .expect("send");
+
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1, "an outcome was still settled");
+    assert!(
+        provider.set_level_calls.is_empty(),
+        "the provider must not be called when require fails"
+    );
+
+    let outcome = port.ack(correlation).expect("settled");
+    assert_eq!(
+        outcome,
+        Err(ridl_rt::error::CallError::Contract(
+            ridl_rt::error::Contract::PreconditionFailed
+        )),
+    );
+}
+
+#[test]
+fn round_trip_failing_ensure_settles_contract_broken() {
+    let mut port = Loopback::new("face.demo");
+    let correlation = {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.average(generated::Window(1)).expect("send")
+    };
+
+    // The provider misbehaves: it returns a reply whose declared
+    // `ensure result >= 0` clause is false. `Average`'s own declared range
+    // [0, 1000] would never let a legally constructed value violate this —
+    // Rust's newtype does not enforce it at construction — so this proves
+    // `dispatch` checks `ensure` independently of the reply type's own range.
+    let mut provider = TestProvider::new(-1);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1, "an outcome was still settled");
+
+    let mut client = generated::cabin::Client::new(&mut port);
+    let reply = client
+        .average_reply(correlation)
+        .expect("reply read")
+        .expect("reply is known");
+    assert!(matches!(
+        reply,
+        Err(ridl_rt::error::CallError::Contract(
+            ridl_rt::error::Contract::ContractBroken
+        ))
+    ));
+}
+
+#[test]
+fn round_trip_dispatch_counts_only_accepted_settlements() {
+    let mut port = Loopback::new("face.demo");
+    {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.set_level(generated::Level(1)).expect("send first");
+        client.set_level(generated::Level(2)).expect("send second");
+    }
+    port.fail_next_settle();
+
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+
+    assert_eq!(
+        settled, 1,
+        "the first claim's settlement fails and is not counted; the second succeeds and is"
+    );
+    // The provider still runs for both claims: `dispatch` settles a command
+    // before calling the provider, unconditionally of whether the handler
+    // accepted that settlement.
+    assert_eq!(provider.set_level_calls, vec![1, 2]);
+}
+
+#[test]
+fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
+    let mut port = Loopback::new("face.demo");
+    {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.set_level(generated::Level(1)).expect("send");
+    }
+
+    let mut provider = TestProvider::new(0);
+
+    // Too small: dispatch must return 0 and must not consume the claim.
+    let mut short = [0u8; 1];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut short);
+    assert_eq!(settled, 0, "a short buffer settles nothing");
+    assert!(provider.set_level_calls.is_empty());
+
+    // Retrying with a correctly sized buffer still finds the claim the short
+    // buffer left untouched.
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1);
+    assert_eq!(provider.set_level_calls, vec![1]);
 }
