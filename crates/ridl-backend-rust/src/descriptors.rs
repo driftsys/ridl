@@ -1,5 +1,6 @@
 //! The generated interaction-face descriptor layer (Lane M stage M3, Task 1,
-//! docs/wip/2026-09-16-interaction-face-v0-design.md §6).
+//! `docs/design/interaction-face.md`; the approved design is
+//! `docs/archive/2026-09-16-interaction-face-v0-design.md` §6).
 //!
 //! For each named interface in a package this module emits, over the
 //! `ridl-rt` runtime crate named by its absolute path (`::ridl_rt::…`):

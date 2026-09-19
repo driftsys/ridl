@@ -1,5 +1,6 @@
 //! The interaction-face round trip (Lane M stage M3, Tasks 4 and 5,
-//! docs/wip/2026-09-16-interaction-face-v0-design.md §7).
+//! `docs/design/interaction-face.md`; the approved design is
+//! `docs/archive/2026-09-16-interaction-face-v0-design.md` §7).
 //!
 //! Task 4 exercises the disposable loopback ports of `tests/support/loopback.rs`
 //! directly, against `ridl-rt`'s trait contracts, ahead of the checked-in

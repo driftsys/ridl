@@ -31,11 +31,14 @@ and nothing about the runtime.
 the vocabulary and the port traits, and it contains no implementation of them
 (ADR-0020 decision 6). Everything in this note that describes delivery, timing,
 ordering or staleness is describing what the specification requires of a
-runtime, not behaviour you can observe by running this repository's tests. The
-only implementation of the ports in the tree is a disposable in-process test
-double at `crates/ridl-backend-rust/tests/support/loopback.rs`, which holds
-every value in a map on one thread and whose clock is a counter the test
-advances by hand. Story E11.9 builds the first real runtime.
+runtime, not behaviour you can observe by running this repository's tests. Every
+implementation of the ports in the tree is a test double: the in-process
+`Loopback` at `crates/ridl-backend-rust/tests/support/loopback.rs` that the
+examples below run against, which holds every value in a map on one thread and
+whose clock is a counter the test advances by hand; `MinimalSignalOnlyPort` in
+`crates/ridl-backend-rust/tests/interaction_face.rs`; and `Stub` and `Memory`
+inside `ridl-rt`'s own `tests/ports.rs` and `examples/read_sample.rs`. Story
+E11.9 builds the first real runtime.
 
 The section [What is provisional](#what-is-provisional) lists every placeholder
 the examples below stand on. Read it before you build on any of this.
@@ -46,8 +49,11 @@ This is `crates/ridl-backend-rust/tests/fixtures/interaction_face.ridl`, the
 fixture the Rust backend's round-trip test compiles. Every generated signature
 quoted in this note is copied from
 `crates/ridl-backend-rust/tests/generated/interaction_face.rs`, which the
-backend regenerates and compares byte for byte on every test run. The
-declarations below are the fixture's, with its comments removed.
+backend regenerates and compares byte for byte on every test run. Signatures are
+abbreviated for reading: the fully qualified paths the emitter writes are cut
+down, and a struct is shown with its module in front of it, which is how it is
+referred to rather than how it is declared. The declarations below are the
+fixture's, with its comments removed.
 
 ```ridl
 package face.demo
@@ -179,7 +185,8 @@ both as constants; you never write an ordinal by hand.
 that a port serves exactly one catalog — so the interface numbers and ordinals
 its methods take are scoped by that catalog, and a number from another catalog
 means nothing to it. Every port trait in the module has `Attached` as a
-supertrait.
+supertrait except `Clock`, which answers a question about the runtime rather
+than about a member.
 
 ### What the generated method does with all that
 
@@ -284,8 +291,11 @@ do not depend on a cargo feature, so a runtime can name an encoding without
 linking a codec for it.
 
 **A payload type implements `Payload<E>` once per encoding it supports.** So one
-generated type can carry several codecs, and the generated face is generic over
-`T: Payload<E>` — it never sees a field, a tag or a layout.
+generated type can carry several codecs. The generated face reaches a payload
+only through `Payload` and `Ref` — it calls `Ref::encode`, `Ref::verify` and
+`Ref::decode`, and never sees a field, a tag or a layout. The face's own generic
+parameter is the port, not the payload; a payload type is concrete at each call
+site.
 
 **`Ref` is a proof, not a pointer.** This is the part worth knowing:
 
@@ -605,7 +615,7 @@ carries the reply.
 
 ## Step 7 — the descriptors, and why the bounds are exact
 
-One trait has been in every example without being introduced: `Cabin` itself.
+One thing has been in every example without being introduced: `Cabin` itself.
 The backend emits a zero-sized marker type per interface and per interaction,
 carrying constants.
 
@@ -657,7 +667,7 @@ a runtime that offers only some of them still serves the interfaces that fit.
 
 ## The ports that did not appear
 
-Five traits in `port.rs` have not been mentioned, which is itself informative.
+Four of `port.rs`'s traits have not been mentioned, which is itself informative.
 
 **`Clock`** — `fn now() -> Timestamp`. A runtime has one and stamps envelopes
 from it. No port method takes the current time, and generated code never calls

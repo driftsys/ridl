@@ -12,11 +12,12 @@ Epic 10 (the entry-point split), and any later language backend that follows
 this precedent (ADR-0020 decision 7).
 
 Written from lane M's stage M3, on delegated authority — the approved design,
-[the interaction-face design record](../design/interaction-face.md) §11 in its
-working form, did not name these mechanisms, and implementation could not
-proceed without them. Sebastien delegated the decisions for the session; each is
-recorded with its reasoning so it can be read and overturned. The as-built
-architecture these decisions produced is
+now
+[`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md),
+did not name these mechanisms, and implementation could not proceed without
+them. Sebastien delegated the decisions for the session; each is recorded with
+its reasoning so it can be read and overturned. The as-built architecture these
+decisions produced is
 [the interaction-face design record](../design/interaction-face.md); this record
 is the reasoning behind the choices that had more than one defensible answer.
 
@@ -88,7 +89,10 @@ never stated.
    ships a runtime for a pipeline consumer to link against.
 
 3. **A `Provider` method takes its argument by reference, not by value.** The M1
-   design's example signatures (`fn set_gear(&mut self, g: Gear)`) cannot be
+   design's settled example signatures —
+   `fn set_target(&mut self, desired:
+   Speed);` and
+   `fn average_speed(&mut self, window: Duration) -> Speed;` — cannot be
    implemented as written: `dispatch` must still hold the arguments when it
    evaluates a query's `ensure` clause after the provider method returns (the
    clause translator of decision 1 emits `args.0` for exactly this), and a

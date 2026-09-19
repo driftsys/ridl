@@ -18,7 +18,7 @@ binds against, and the
 
 ## Scope and the two entry points
 
-`crates/ridl-backend-rust` gained two new modules and one new public function:
+`crates/ridl-backend-rust` gained three new modules and one new public function:
 
 - `src/descriptors.rs` — one `ridl_rt::contract::Interface` implementation per
   named interface, one `Interaction` implementation per member, and the
@@ -301,10 +301,10 @@ module, and the byte-equality guard).
 
 `crates/ridl-backend-rust/src/lib.rs` is shared with Lane C's Epic 10, which
 reshapes the domain-type emission this face's generated code names as argument
-and return types. The expected order was Epic 10's Task 4 before E11.13; when
-that does not hold, the cost is a touch-up pass to the checked-in fixture and
-the hand-written `Payload<ReprC>` implementations, accepted as rework rather
-than a blocker.
+and return types. The expected order was Epic 10's Task 3 and Task 6 before
+E11.13; when that does not hold, the cost is a touch-up pass to the checked-in
+fixture and the hand-written `Payload<ReprC>` implementations, accepted as
+rework rather than a blocker.
 
 ## What is provisional
 

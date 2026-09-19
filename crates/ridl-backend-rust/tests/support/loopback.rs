@@ -1,6 +1,7 @@
 //! A disposable, in-process implementation of the `ridl-rt` port traits, for
 //! this crate's tests only (Lane M stage M3, Task 4,
-//! docs/wip/2026-09-16-interaction-face-v0-design.md §5).
+//! `docs/design/interaction-face.md`; the approved design is
+//! `docs/archive/2026-09-16-interaction-face-v0-design.md` §5).
 //!
 //! This is not a runtime and carries no runtime or transport claim. It holds
 //! every value in memory, in one process, on one thread; its clock is a
