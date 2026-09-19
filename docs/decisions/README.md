@@ -147,6 +147,18 @@
   change. Binds every consumer of `ridl-rt`: the Rust codegen, the two runtimes,
   and the ridl reference finalization pass (story E14.2).
 
+- **ADR-0022 — The rsdl system in the IR.** Where the lowered rsdl system lives
+  and what carries it: a `System` message in `system.proto`, its own artifact
+  beside the package IR, named `<pkg.Name>.system.{json,txtpb,binpb}` and
+  written by the three IR dump emits. Also which facts of rsdl §13 the IR states
+  and which it does not (`tier` and `deprecated` are not lowered; producers are
+  stated once for the closure; a `reserved` tombstone has no route; the catalog
+  hash is not carried until story E6.17), that `ridl build` writes every
+  artifact when the only errors are RSDL-7xx and still exits 1, and that
+  `ridl diff` lists system changes under two headings with no verdict and only
+  when both sides are source trees. Binds the IR every later consumer reads, the
+  `ridl build` contract, and `ridl diff`.
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.

@@ -58,10 +58,10 @@ declarations.
 | **ridl** | system interactions — `signal`, `event`, `command`, `query`, `fixed`     | built                     |
 | **rxdl** | domain spellings — `present`, `notify`, `measure`, `detect`, `actuate`  | specified, not built      |
 | **rmdl** | behaviour — functions and reactive models                                | specified, not built      |
-| **rsdl** | architecture — components, wiring, deployment                            | specified, not built      |
+| **rsdl** | architecture — components, wiring, deployment                            | built                     |
 
-This chapter covers typl and ridl only, because those are the two you can run
-today. Where it mentions the other three, it is describing a plan.
+This chapter covers typl and ridl; [Describing a system](rsdl.md) covers rsdl.
+Where this chapter mentions rxdl or rmdl, it is describing a plan.
 
 ## Building the toolchain
 
@@ -873,8 +873,8 @@ commas are required, the one place the family's separators are not optional:
 the list has no closing token, so it ends where the next declaration begins.
 The last form declares an inline shape for a one-off contract not worth a
 reusable interface. A service declaration says nothing about how the contract
-is realized on the wire — that is a deployment question, and rsdl's, when rsdl
-exists.
+is realized on the wire — that is a deployment question, and rsdl's (see
+[Describing a system](rsdl.md)).
 
 Composing interfaces is how a recurring interaction set — a diagnostics block,
 a heartbeat — is reused without duplication: each composed interface keeps its

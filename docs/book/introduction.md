@@ -21,13 +21,17 @@ interaction families (ADR-0012).
 
 ## What is built
 
-Two layers of the family have a working toolchain in this repository:
+Three layers of the family have a working toolchain in this repository:
 
 - **typl** — the vocabulary layer (epic E1): compiler, `ridl fmt`, an LSP
   server, and a VS Code extension.
 - **ridl** — the interface layer over it (epic E2): the five interaction kinds,
   timing annotations, contracts, interfaces and services, a TypeScript code
   generator beside the Rust one, and `ridl diff`.
+- **rsdl** — the architecture layer (epic E6): components, the system,
+  distributions and deployments, checked against the rsdl reference and lowered
+  to the IR beside the package IR, and `ridl diff` at the system. See
+  [Describing a system](rsdl.md).
 
 **`ridl-rt`** (epic E11 story E11.0) is the `no_std` runtime library a
 generated ridl package will link and a runtime will implement: identity, time
@@ -38,14 +42,13 @@ second process, and no payload codec (FlatBuffers, proto3, `repr(C)`) is
 built.
 
 `ridl build --emit` writes Rust source, TypeScript source, a proto3 schema, a
-FlatBuffers schema, or the IR as JSON.
+FlatBuffers schema, or the IR as JSON, with the lowered rsdl system beside it.
 
-**rxdl, rmdl, and rsdl are specified but not built.** Their language references
-are complete enough to design against, but no compiler accepts them and nothing
-in this book describes them as usable. rsdl is sequenced in the roadmap's step
-1; rmdl is parked, with no implementation scheduled; rxdl keeps only its
-unrestricted profile, narrowed to types, interfaces and wiring, scheduled in
-step 2.
+**rxdl and rmdl are specified but not built.** Their language references are
+complete enough to design against, but no compiler accepts them and nothing in
+this book describes them as usable. rmdl is parked, with no implementation
+scheduled; rxdl keeps only its unrestricted profile, narrowed to types,
+interfaces and wiring, scheduled in step 2.
 
 **There is no runtime.** The transport bindings, the delivery semantics, and the
 provider-side contract enforcement are all specified and none of them are
@@ -88,7 +91,7 @@ Browse them on GitHub:
 
 ## Status
 
-All specifications are working drafts: typl, rxdl, rmdl, rsdl and the
-expr-core specification at v0.1.0, ridl at v0.2.0. The toolchain has no
+All specifications are working drafts: typl, rxdl, rmdl and the expr-core
+specification at v0.1.0, ridl and rsdl at v0.2.0. The toolchain has no
 published release — build it from a clone, as
 [Getting started](getting-started.md) describes.

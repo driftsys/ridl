@@ -11,8 +11,9 @@
 //!
 //! rsdl §13 blocks lowering for one deployment on an RSDL-7xx error and for
 //! every deployment on any other. [`DeploymentPlacement::has_errors`] records
-//! the first kind per deployment; `CheckedSystem::closure_has_errors` records
-//! the second.
+//! the first kind per deployment, and also a deployment whose closure was
+//! never placed even though no RSDL-7xx error was raised for it;
+//! `CheckedSystem::closure_has_errors` records the second.
 
 use std::collections::HashMap;
 
@@ -25,7 +26,9 @@ use super::{CheckedSystem, DeploymentDecl, ReferenceForm, Reporter, Site};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeploymentPlacement {
     /// Whether an RSDL-7xx error was raised for this deployment (rsdl §13): its
-    /// lowering is blocked, and no other deployment's is.
+    /// lowering is blocked, and no other deployment's is. Also set when the
+    /// closure was never placed in this deployment, even though no RSDL-7xx
+    /// error was raised for it.
     pub has_errors: bool,
     /// Every placement the machine lines make, in line order; an instance
     /// placed twice keeps its first placement (RSDL-706). Empty when the
@@ -94,7 +97,18 @@ pub(super) fn place(
         }
         let placed = match (for_system(lookup, deployment, &mut check), closure) {
             (Some(0), Some(closure)) => place_one(lookup, system, deployment, closure, &mut check),
-            _ => Vec::new(),
+            // The closure was not placed in this deployment, so `placements`
+            // does not cover it and the lowering must not read it (rsdl §13):
+            // the deployment is blocked, exactly as a placement error blocks
+            // it. Each case that reaches here is already reported — RSDL-704
+            // for a `for` that names no system, RSDL-601 for a second system,
+            // FORM-101 for a `for` the parser recovered without a reference —
+            // but the last is a parse error, which the rsdl reporter never
+            // sees, so the flag is set here rather than at each report.
+            _ => {
+                check.has_errors = true;
+                Vec::new()
+            }
         };
         placements.push(DeploymentPlacement {
             has_errors: check.has_errors,

@@ -7,8 +7,8 @@ family overview
 ([`docs/specification/ridl-family-overview.md`](https://github.com/driftsys/ridl/blob/main/docs/specification/ridl-family-overview.md))
 is the map that ties them together.
 
-Only typl and ridl have a toolchain. A path below that ends in rxdl, rmdl or
-rsdl ends in a specification you can design against but cannot compile — see
+typl, ridl and rsdl have a toolchain. A path below that ends in rxdl or rmdl
+ends in a specification you can design against but cannot compile — see
 [what is built](introduction.md#what-is-built).
 
 - **Data architect** — [typl](reference/typl.md), end to end. It stands
@@ -24,7 +24,7 @@ rsdl ends in a specification you can design against but cannot compile — see
 - **Control / algorithm engineer** — typl §1–§10, ridl §3/§9, then
   [rmdl](reference/rmdl.md) (specified, not built).
 - **Integrator / architect** — everything above at survey depth, then
-  [rsdl](reference/rsdl.md) (specified, not built).
+  [rsdl](reference/rsdl.md), with [Describing a system](rsdl.md).
 - **Auditor / safety assessor** — the family overview's shared doctrines, then
   typl's keyword registry and evolution model, ridl's error strata and services,
   and the diagnostics table of each reference.

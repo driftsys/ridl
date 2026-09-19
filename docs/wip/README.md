@@ -134,8 +134,12 @@ design note, from the archive.
   change a shared file when; each lane's own spec decides the design. The
   coordination issue is #328. Lane A (`ridl-rt` 0.1.0) landed; its own
   design/plan pair is archived — see
-  [`../archive/README.md`](../archive/README.md). The state of the other three
-  lanes is on #328.
+  [`../archive/README.md`](../archive/README.md). Lane B (rsdl) landed except
+  for story E6.17, the catalog hash per region; its plan
+  (`2026-09-15-rsdl-plan.md`) is archived too, and its durable records are
+  [ADR-0022](../decisions/ADR-0022-rsdl-system-in-the-ir.md) and
+  [the rsdl implementation technote](../technotes/rsdl-implementation.md). The
+  state of the other two lanes is on #328.
 - **2026-09-16-lane-c-c4-driver.md** — the driver prompt for lane C's last
   stage, C4 (Epic 10). Its own file because C4 is the largest stage of the four
   lanes — ten live tasks, one pull request each — so it runs as four sessions

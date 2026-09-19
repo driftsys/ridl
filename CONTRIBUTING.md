@@ -56,12 +56,12 @@ repairs the new release wants in the same commit.
 
 ## Writing examples in the book
 
-Every fenced block in `docs/book/` whose info string starts with `ridl` or
-`typl` is **compiled by `crates/ridl/tests/book_examples.rs`**, which runs under
-`cargo test --workspace`. A verified block must be a complete, self-contained
-package file — it declares its own `package`, and blocks sharing a package name
-are staged side by side, so one can `import` from another regardless of which
-comes first in the book.
+Every fenced block in `docs/book/` whose info string starts with `ridl`, `typl`
+or `rsdl` is **compiled by `crates/ridl/tests/book_examples.rs`**, which runs
+under `cargo test --workspace`. A verified block must be a complete,
+self-contained package file — it declares its own `package`, and blocks sharing
+a package name are staged side by side, so one can `import` from another
+regardless of which comes first in the book.
 
 Mark a block that is deliberately not compilable — a fragment quoted out of its
 file, a counter-example, a shape the language rejects — with `ignore`:
@@ -98,15 +98,23 @@ The harness is fail-closed. Each of these is an error rather than a silent skip:
   package provides, or the block's own package. The compiler resolves the
   package and stops — an unresolved _name_ inside a package it found draws no
   diagnostic — so the harness checks it rather than trusting the gap;
-- a language word that is not exactly `ridl` or `typl` — `RIDL`, `ridl{.class}`
-  — which mdBook still renders as an example a reader believes, while the
-  convention does not recognise it;
+- a language word that is not exactly `ridl`, `typl` or `rsdl` — `RIDL`,
+  `ridl{.class}` — which mdBook still renders as an example a reader believes,
+  while the convention does not recognise it;
 - a book with no verified blocks at all.
 
 A package name is a **book-wide** namespace, not a per-chapter one. Two chapters
 that both declare `package veh.demo` are staged into one directory and collide
 (`TYPL-009`) on every declaration they repeat, so give each chapter its own
 package prefix.
+
+The whole book is staged as **one workspace**, so an `rsdl` block names the
+services and interfaces of `ridl` blocks in any chapter, and the book holds
+**exactly one `system` fence**: a workspace declares at most one `system`, and a
+second is RSDL-601. Every other `rsdl` fence declares components, distributions
+or deployments, or is marked `rsdl,ignore`. The same rule makes the book's
+closure complete: every deployment in the book places every instance of the
+book's system.
 
 `ignore` suppresses every one of those objections. If the harness refuses a
 block you did not mean as an example, that is the answer.

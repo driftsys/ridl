@@ -112,6 +112,9 @@ pub struct ClosureComponent {
     pub external: bool,
     /// The services it offers, in line order.
     pub offers: Vec<String>,
+    /// The system member line that lists it, as an index into
+    /// `SystemDecl::members`; its backend keys are the line's (rsdl §13).
+    pub line: usize,
     /// Where a diagnostic about the component points: the declared name, or
     /// the system member line of an implicit component.
     pub site: Site,
@@ -648,7 +651,7 @@ pub(super) fn closure(
         );
     }
     let mut closure = Closure::default();
-    for line in &first.members {
+    for (position, line) in first.members.iter().enumerate() {
         let reference = &line.reference;
         let Some(target) = member_target(lookup, system, &first.package, reference, reporter)
         else {
@@ -666,6 +669,7 @@ pub(super) fn closure(
                     instances: instance_names(component),
                     external: component.external,
                     offers: lines[decl].offers.iter().flatten().cloned().collect(),
+                    line: position,
                     site: component.name.site,
                 }
             }
@@ -677,6 +681,7 @@ pub(super) fn closure(
                 instances: vec![UNIT_INSTANCE.to_string()],
                 external: false,
                 offers: vec![service],
+                line: position,
                 site: reference.site,
             },
             MemberTarget::Instance(..) | MemberTarget::Unknown => {

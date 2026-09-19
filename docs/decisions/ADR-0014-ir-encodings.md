@@ -85,6 +85,14 @@ set already exists: `protox::compile` returns a `FileDescriptorSet` in
    which is the existing repository precedent: `c-header` writes `.h`,
    `typescript` writes `.ts`.
 
+   **Amendment (2026-09-18) — the system artifact.** When the workspace declares
+   an rsdl `system`, each of the three flag values also writes the lowered
+   system (`ridl.ir.v2.System`, `system.proto`; rsdl reference §13) in the same
+   encoding, named after the system's qualified name: `<pkg.Name>.system.json`,
+   `<pkg.Name>.system.txtpb`, `<pkg.Name>.system.binpb`. The `.system.` infix
+   keeps the artifact out of the `.ir.json` snapshot detection above: a system
+   is not a package.
+
 5. **`ridl diff` and `ridl check --baseline` stay JSON-only.** Baselines remain
    `.ir.json`. A committed baseline must be reviewable in a pull request, which
    binary is not.
