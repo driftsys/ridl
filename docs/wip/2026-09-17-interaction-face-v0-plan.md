@@ -90,10 +90,13 @@ the five protocol outcomes. It must not manufacture a `Contract::InvalidValue`:
 and the caller did not send an invalid value. The generated branch calls
 `unreachable!` with the type name, needed size, and available size. This
 preserves the distinction between a provider-side implementation defect and
-`Transport::Corrupt` or a contract error. The dispatch test uses a deliberately
-bad test payload implementation to prove the branch is explicit; the normal
-round trip proves the generated constants make the branch unreachable for legal
-values.
+`Transport::Corrupt` or a contract error. A source-text assertion in
+`dispatch_generation.rs` proves the branch is explicit — the generated code
+names the type, the needed size, and the available size and calls `unreachable!`
+rather than falling through; the normal round trip proves the generated
+constants make the branch unreachable for legal values. A runtime proof that
+drives the branch itself is not implemented; see "Follow-ups recorded, not
+implemented".
 
 The hand-written `Payload<ReprC>::verify` implementations return
 `VerifyError::Contract(Violation { type_name, rule })` for constraint failures,
@@ -135,10 +138,13 @@ emitter is fixed instead of expanding the wrapper.
 Settled during M3, on delegated authority, because neither M1 nor M2 named a
 mechanism for it and the work cannot proceed without one.
 
-The design's §6 says the emitter writes `require` and `ensure` "returning
-`Ok(())` when the query declares no clause and the translated clauses when it
-does". Executing that showed there is nothing to translate from. The IR carries
-a clause as canonical **ridl** text in `Contract.source` — `window > 0ms`,
+Design §6 says the emitter writes `ensure` for every query, "returning `Ok(())`
+when the query declares no `ensure` clause and the translated clauses when it
+does"; it says nothing about `require`'s body. This plan's own Task 2 states the
+analogous no-clause rule for `require`: "`require`/`ensure` implementations
+returning `Ok(())` when no clause exists". Executing that showed there is
+nothing to translate from. The IR carries a clause as canonical **ridl** text in
+`Contract.source` — `window > 0ms`,
 `position != GearPosition.PARK || currentSpeed == 0.0` — and not as an
 expression tree; `E5.1` is the story that replaces the text with one. No backend
 translates an expression, and no backend depends on `ridl-sem`, so
@@ -553,6 +559,18 @@ payload verification and the generated face behavior.
   wrapper module, with a `reason` on each, rather than changing the domain-type
   emitter from this lane. Whether the emitter should avoid them is a question
   for the lane that owns `crate::defaults`.
+- A runtime proof of the `EncodeError::Capacity` to `unreachable!` branch in
+  `dispatch`: a `Payload<ReprC>` implementation whose `MAX_SIZE` understates
+  what it actually encodes, driving `dispatch` into that branch.
+  `Cabin::MAX_BUFFER_SIZE` is computed from the same concrete
+  `Payload::MAX_SIZE` constants that every other round-trip test in
+  `interaction_face.rs` depends on, so an implementation that lies about
+  `MAX_SIZE` for `Level`, `Window`, or `Average` would also shrink or corrupt
+  the buffer those other tests share, and a value-conditional lie inside the
+  same trait implementation would race under the test binary's default parallel
+  execution. Driving this branch cleanly needs either a dedicated interface or
+  type not shared with the other round-trip tests, or a way to substitute a
+  `Payload` implementation per test; neither exists yet.
 
 ## Self-review against the approved spec
 
