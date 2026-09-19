@@ -75,9 +75,10 @@ identity through `Package::shapes()`, the walk that sees an inline shape;
 - an error in the closure blocks every deployment, so the function returns
   `None` when `CheckedSystem::closure_has_errors` is set;
 - an RSDL-7xx error blocks its own deployment only, which
-  `DeploymentPlacement::has_errors` records: that deployment is left out of
-  `System.deployments`, and the IR carries no marker for it — the diagnostic is
-  the record;
+  `DeploymentPlacement::has_errors` records, as does a deployment whose closure
+  was never placed with no RSDL-7xx error raised for it: that deployment is left
+  out of `System.deployments`, and the IR carries no marker for it — the
+  diagnostic is the record;
 - a warning never blocks;
 - a workspace that declares no `system` lowers nothing, which is also `None`.
 

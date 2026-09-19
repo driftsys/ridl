@@ -525,6 +525,54 @@ fn a_missing_input_exits_two() {
     assert_eq!(code, 2, "a missing input exits 2, stderr:\n{stderr}");
 }
 
+/// An rsdl workspace whose `deployment` has no `for` clause used to panic
+/// `ridl diff`: `compile_workspace` lowers the system unconditionally, before
+/// `load_diff_side`'s error check runs, while `ridlc build` cannot reach the
+/// same lowering because FORM-101 blocks every artifact
+/// (`crates/ridlc/src/lib.rs:973`). The missing `for` clause is a parse error
+/// the parser still recovers from, so the deployment's closure is never
+/// placed; the fix blocks that deployment's lowering the same way an
+/// RSDL-7xx error does, instead of lowering a placement that is not there.
+#[test]
+fn a_deployment_with_no_for_clause_exits_two_not_panics() {
+    let dir = TempDir::new("no-for");
+    dir.write(
+        "ws/ridl.toml",
+        "[package]\nname = \"veh.demo\"\nversion = \"1.0.0\"\n",
+    );
+    dir.write(
+        "ws/lane.ridl",
+        "package veh.demo\n\ntype Flag: boolean\n\n\
+         interface LaneAssist {\n  signal active: Flag @[100ms..1s]\n}\n\n\
+         service veh.demo.lane : LaneAssist\n",
+    );
+    dir.write(
+        "ws/topology.rsdl",
+        "package veh.demo\n\n\
+         component Lane { offers veh.demo.lane }\n\
+         component Panel { requires LaneAssist }\n\
+         system Vehicle { Lane, Panel }\n\
+         deployment Desk {\n\
+         \x20 machine Top { Lane }\n\
+         \x20 machine Front { Panel }\n\
+         }\n",
+    );
+    let root = dir.path().join("ws");
+    let new = dir.write("new.ridl", BASE);
+
+    let (code, stdout, stderr) = ridl(&["diff".as_ref(), root.as_os_str(), new.as_os_str()]);
+
+    assert_eq!(
+        code, 2,
+        "the missing `for` clause is a compile error, not a panic:\n{stderr}"
+    );
+    assert!(stdout.is_empty(), "no report over a failed side:\n{stdout}");
+    assert!(
+        stderr.contains("error[FORM-101]"),
+        "the missing `for` clause is reported:\n{stderr}"
+    );
+}
+
 /// `--format json` prints the stable schema and still keys the exit code on
 /// A package whose one deployment places `Panel` on `machine`: a contract and
 /// a topology in one directory.

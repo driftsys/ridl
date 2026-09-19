@@ -267,6 +267,39 @@ const LOCK_HEADER: &str = "# interfaces.lock — written by ridl lock; do not ed
 /// is not lowered, so the number is not reused.
 const LOCK_WITHOUT_LIGHTS: &str = "next 3\nVehicleStatus 2\n";
 
+/// `VehicleStatus` behind a service, so an rsdl `component` can `offer` it.
+const SERVICE_SOURCE: &str = "package veh.cluster
+type DoorState: integer [0..1]
+interface VehicleStatus {
+  event doorOpened: DoorState @[100ms..1s]
+}
+service veh.cluster.status : VehicleStatus
+";
+
+/// Two components, fully placed: `Cluster` offers `veh.cluster.status`,
+/// `Panel` requires `VehicleStatus`, and both are placed on a machine of
+/// `Desk` (rsdl reference §9).
+const PLACED_TOPOLOGY: &str = "package veh.cluster
+component Cluster { offers veh.cluster.status }
+component Panel { requires VehicleStatus }
+system Vehicle { Cluster, Panel }
+deployment Desk for Vehicle {
+  machine Top { Cluster }
+  machine Front { Panel }
+}
+";
+
+/// `PLACED_TOPOLOGY` with `Panel`'s machine line removed: `Panel.Unit` is
+/// placed on no machine of `Desk`, RSDL-701 (rsdl reference §9).
+const UNPLACED_TOPOLOGY: &str = "package veh.cluster
+component Cluster { offers veh.cluster.status }
+component Panel { requires VehicleStatus }
+system Vehicle { Cluster, Panel }
+deployment Desk for Vehicle {
+  machine Top { Cluster }
+}
+";
+
 /// The published snapshot of `veh.cluster` under `<root>/.ridl/baseline`.
 fn snapshot(root: &Path) -> PathBuf {
     root.join(".ridl")
@@ -356,6 +389,53 @@ fn a_refused_publication_leaves_the_baseline_byte_identical() {
         !staging.exists(),
         "a refused publication removes the staging directory it built, not just the files it \
          declines to move: {}",
+        staging.display(),
+    );
+}
+
+/// P-B8 made the staging cleanup on an RSDL-7xx-only run load-bearing: such a
+/// run writes every artifact (ADR-0022) — including the package staging
+/// otherwise holds nothing to publish over — so `run_baseline` must still
+/// publish nothing and discard the staging directory, exactly as a refused
+/// publication does above.
+#[test]
+fn baseline_discards_staging_on_an_rsdl_error() {
+    let dir = TempDir::new("rsdl-staging");
+    dir.write("ridl.toml", MANIFEST);
+    dir.write("cluster.ridl", SERVICE_SOURCE);
+    dir.write("topology.rsdl", PLACED_TOPOLOGY);
+    let root = dir.path().to_path_buf();
+    let (code, _, stderr) = ridl(&["lock".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the fixture's lock is allocated: {stderr}");
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+    assert_eq!(code, 0, "the first baseline is written: {stderr}");
+
+    let snapshot = root
+        .join(".ridl")
+        .join("baseline")
+        .join("veh.cluster.ir.json");
+    let before = std::fs::read(&snapshot).expect("the published snapshot is readable");
+
+    dir.write("topology.rsdl", UNPLACED_TOPOLOGY);
+    let (code, _, stderr) = ridl(&["baseline".as_ref(), root.as_os_str()]);
+
+    assert_eq!(
+        code, 1,
+        "an RSDL-7xx error is a negative answer, not a tool failure:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("RSDL-701"),
+        "the placement error is reported:\n{stderr}"
+    );
+    let after = std::fs::read(&snapshot).expect("the published snapshot survives the error");
+    assert_eq!(
+        before, after,
+        "an RSDL-7xx-only run publishes nothing, even though it writes every artifact",
+    );
+    let staging = root.join(".ridl").join(".baseline.staging");
+    assert!(
+        !staging.exists(),
+        "the staging directory the RSDL-7xx run wrote into is discarded, not left: {}",
         staging.display(),
     );
 }

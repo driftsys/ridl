@@ -1472,6 +1472,15 @@ mod tests {
                     system Vehicle { Lane }\n\
                     deployment Good for Vehicle { machine A { Lane } }\n\
                     deployment Bench { machine B { Lane } }\n";
+        let parse_codes: Vec<&str> = ridl_syntax::parse(text, ridl_syntax::Profile::Rsdl)
+            .errors()
+            .iter()
+            .map(|error| error.code)
+            .collect();
+        assert!(
+            parse_codes.contains(&"FORM-101"),
+            "the missing `for` clause draws FORM-101, got {parse_codes:?}"
+        );
         let (checked, lowered) = lower_topology(&[("veh/topology/x.rsdl", text)]);
         let system = lowered.expect("a parse error in one deployment does not block the closure");
         let deployments: Vec<&str> = system
@@ -1480,9 +1489,24 @@ mod tests {
             .map(|deployment| deployment.name.as_str())
             .collect();
         assert_eq!(deployments, ["Good"]);
+        let bench = checked
+            .deployments
+            .iter()
+            .zip(&checked.placements)
+            .find(|(deployment, _)| deployment.name.name == "Bench")
+            .map(|(_, placement)| placement)
+            .expect("the workspace declares a Bench deployment");
+        assert!(bench.has_errors, "the unplaced deployment must be blocked");
+        let good = checked
+            .deployments
+            .iter()
+            .zip(&checked.placements)
+            .find(|(deployment, _)| deployment.name.name == "Good")
+            .map(|(_, placement)| placement)
+            .expect("the workspace declares a Good deployment");
         assert!(
-            checked.placements[1].has_errors,
-            "the unplaced deployment must be blocked"
+            !good.has_errors,
+            "the placed deployment must not be blocked"
         );
     }
 

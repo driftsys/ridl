@@ -11,8 +11,9 @@
 //!
 //! rsdl §13 blocks lowering for one deployment on an RSDL-7xx error and for
 //! every deployment on any other. [`DeploymentPlacement::has_errors`] records
-//! the first kind per deployment; `CheckedSystem::closure_has_errors` records
-//! the second.
+//! the first kind per deployment, and also a deployment whose closure was
+//! never placed even though no RSDL-7xx error was raised for it;
+//! `CheckedSystem::closure_has_errors` records the second.
 
 use std::collections::HashMap;
 
@@ -25,7 +26,9 @@ use super::{CheckedSystem, DeploymentDecl, ReferenceForm, Reporter, Site};
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct DeploymentPlacement {
     /// Whether an RSDL-7xx error was raised for this deployment (rsdl §13): its
-    /// lowering is blocked, and no other deployment's is.
+    /// lowering is blocked, and no other deployment's is. Also set when the
+    /// closure was never placed in this deployment, even though no RSDL-7xx
+    /// error was raised for it.
     pub has_errors: bool,
     /// Every placement the machine lines make, in line order; an instance
     /// placed twice keeps its first placement (RSDL-706). Empty when the
