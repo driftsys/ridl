@@ -201,16 +201,21 @@ fn constrained_scalar_is_a_value_object() {
         source.contains("pub struct Speed(f64)"),
         "inner field must be private, got:\n{source}"
     );
-    assert!(
-        source.contains("pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation>")
-    );
+    // The plan's Task 3 spells `Result`, `TryFrom` and `From` unqualified.
+    // The generated code names them by absolute path instead, because a
+    // package may declare a type of the same name in the same module
+    // (`prelude_names_declared_by_the_package_compile`); these assertions
+    // follow the generated code, not the plan's text. The signature is
+    // checked in two parts because prettyplease wraps it at its own width.
+    assert!(source.contains("pub fn new("));
+    assert!(source.contains(") -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {"));
     assert!(source.contains("pub const fn new_unchecked(value: f64) -> Self"));
     assert!(source.contains("pub const fn get(self) -> f64"));
-    assert!(source.contains("impl TryFrom<f64> for Speed"));
-    assert!(source.contains("impl From<Speed> for f64"));
+    assert!(source.contains("impl ::core::convert::TryFrom<f64> for Speed"));
+    assert!(source.contains("impl ::core::convert::From<Speed> for f64"));
     // The infallible inbound conversion must never appear on a constrained type.
     assert!(
-        !source.contains("impl From<f64> for Speed"),
+        !source.contains("impl ::core::convert::From<f64> for Speed"),
         "From<Inner> reintroduces unchecked construction"
     );
 }
@@ -230,6 +235,324 @@ fn constant_of_a_constrained_type_uses_new_unchecked() {
     ];
     let source = rust_for(decls);
     assert!(source.contains("Speed::new_unchecked(250.0)"));
+}
+
+/// A string- or bytes-backed named scalar with a length bound and no range.
+/// A type whose minimum length is positive has no derivable init (typl §5.8).
+fn bounded_text_type(prim: v2::PrimitiveType, len_min: u64, len_max: u64) -> v2::decl::Kind {
+    v2::decl::Kind::TypeDef(v2::TypeDef {
+        backing: Some(v2::Backing {
+            kind: Some(v2::backing::Kind::Primitive(prim as i32)),
+        }),
+        constraint: Some(v2::Constraint {
+            len_min: Some(len_min),
+            len_max: Some(len_max),
+            ..constraint(None, None, None)
+        }),
+        declared_init: None,
+        init: Some(if len_min == 0 {
+            init_value(true, Some(""))
+        } else {
+            init_value(false, None)
+        }),
+        width: None,
+    })
+}
+
+/// A float named scalar with a range and no `step`.
+fn ratio_decl() -> v2::Decl {
+    public_decl(
+        "Ratio",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Float as i32,
+                )),
+            }),
+            constraint: Some(constraint(Some("0.0"), Some("1.0"), None)),
+            declared_init: None,
+            init: Some(init_value(true, Some("0.0"))),
+            width: None,
+        }),
+    )
+}
+
+/// The constraint branches `named_scalar_backings` does not reach: a string
+/// length bound, a bytes length bound, and a range without a `step`.
+#[test]
+fn constrained_scalar_backings() {
+    let decls = vec![
+        public_decl("Name", bounded_text_type(v2::PrimitiveType::String, 1, 64)),
+        public_decl("Digest", bounded_text_type(v2::PrimitiveType::Bytes, 0, 32)),
+        ratio_decl(),
+    ];
+    insta::assert_snapshot!(rust_for(decls));
+}
+
+#[test]
+fn a_string_length_bound_counts_characters() {
+    let source = rust_for(vec![public_decl(
+        "Name",
+        bounded_text_type(v2::PrimitiveType::String, 1, 64),
+    )]);
+    for check in [
+        "if (value.chars().count() as u64) < 1 {",
+        "if (value.chars().count() as u64) > 64 {",
+        "rule: ::ridl_rt::payload::Rule::Length,",
+    ] {
+        assert!(source.contains(check), "expected `{check}` in:\n{source}");
+    }
+}
+
+#[test]
+fn a_bytes_length_bound_counts_bytes() {
+    let source = rust_for(vec![public_decl(
+        "Digest",
+        bounded_text_type(v2::PrimitiveType::Bytes, 4, 32),
+    )]);
+    for check in [
+        "if (value.len() as u64) < 4 {",
+        "if (value.len() as u64) > 32 {",
+    ] {
+        assert!(source.contains(check), "expected `{check}` in:\n{source}");
+    }
+}
+
+/// `[0..256]` is the default length bound of string and bytes (typl §4.4,
+/// §4.5), so a minimum of 0 is the common case. `(… as u64) < 0` is never
+/// true and draws rustc's `unused_comparisons` warning in the consumer's
+/// build, so the branch is not emitted.
+#[test]
+fn a_zero_length_minimum_emits_no_check() {
+    for (name, prim) in [
+        ("Text", v2::PrimitiveType::String),
+        ("Blob", v2::PrimitiveType::Bytes),
+    ] {
+        let source = rust_for(vec![public_decl(name, bounded_text_type(prim, 0, 256))]);
+        assert!(
+            !source.contains("< 0"),
+            "a zero minimum must emit no comparison, got:\n{source}"
+        );
+        assert!(
+            source.contains("> 256"),
+            "the maximum is still checked, got:\n{source}"
+        );
+    }
+}
+
+/// A `min` or `max` on a non-numeric backing is not something `ridl-sem`
+/// produces, but the IR is an artifact other tools write (ADR-0014), so the
+/// backend ignores the two rather than rendering a numeric comparison against
+/// a `String`.
+#[test]
+fn a_range_on_a_non_numeric_backing_emits_no_range_check() {
+    let source = rust_for(vec![public_decl(
+        "Handle",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(1),
+                len_max: Some(8),
+                ..constraint(Some("0"), Some("10"), None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )]);
+    assert!(
+        !source.contains("Rule::Range")
+            && !source.contains("if value <")
+            && !source.contains("if value >"),
+        "a range on a string backing must emit no range check, got:\n{source}"
+    );
+    assert!(
+        source.contains("Rule::Length"),
+        "the length bound is still checked, got:\n{source}"
+    );
+}
+
+#[test]
+fn a_range_without_a_step_names_nothing_unchecked() {
+    let source = rust_for(vec![ratio_decl()]);
+    assert!(
+        !source.contains("is not checked by `new`"),
+        "a constraint with no step and no pattern has nothing unchecked to name, got:\n{source}"
+    );
+    assert!(
+        source.contains("if value > 1.0 {"),
+        "the range is still checked, got:\n{source}"
+    );
+}
+
+/// The pattern check is not emitted until a later task, so a type carrying a
+/// `match` constraint names that on itself (design, "Not validated, and
+/// documented as such"). A pattern given by name is read as well as one given
+/// literally: a pattern constant that did not resolve leaves `pattern` absent
+/// while the type still carries a match constraint.
+#[test]
+fn an_unchecked_pattern_is_named_on_the_type() {
+    let with_pattern = |pattern: Option<&str>, pattern_const: Option<&str>| {
+        rust_for(vec![public_decl(
+            "Handle",
+            v2::decl::Kind::TypeDef(v2::TypeDef {
+                backing: Some(v2::Backing {
+                    kind: Some(v2::backing::Kind::Primitive(
+                        v2::PrimitiveType::String as i32,
+                    )),
+                }),
+                constraint: Some(v2::Constraint {
+                    len_min: Some(3),
+                    len_max: Some(8),
+                    pattern: pattern.map(str::to_string),
+                    pattern_const: pattern_const.map(str::to_string),
+                    ..constraint(None, None, None)
+                }),
+                declared_init: None,
+                init: Some(init_value(false, None)),
+                width: None,
+            }),
+        )])
+    };
+    for source in [
+        with_pattern(Some("/[a-z]+/"), None),
+        with_pattern(None, Some("HANDLE_PATTERN")),
+    ] {
+        assert!(
+            source.contains("/// The `match` pattern is not checked by `new`."),
+            "an unchecked pattern must be named on the type, got:\n{source}"
+        );
+    }
+    let source = with_pattern(None, None);
+    assert!(
+        !source.contains("is not checked by `new`"),
+        "a length bound alone leaves nothing unchecked to name, got:\n{source}"
+    );
+    // A `step` and a pattern together are both named.
+    let source = rust_for(vec![public_decl(
+        "Stepped",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Float as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                pattern: Some("/x/".to_string()),
+                ..constraint(Some("0.0"), Some("1.0"), Some("0.5"))
+            }),
+            declared_init: None,
+            init: Some(init_value(true, Some("0.0"))),
+            width: None,
+        }),
+    )]);
+    assert!(source.contains("/// Quantization (`step`) is not checked by `new`."));
+    assert!(source.contains("/// The `match` pattern is not checked by `new`."));
+}
+
+/// A deprecated declaration's own impl blocks use the deprecated type, which
+/// would draw the `deprecated` lint in the consumer's build about code the
+/// consumer did not write.
+#[test]
+fn a_deprecated_scalar_allows_deprecated_on_its_impls() {
+    let source = rust_for(vec![v2::Decl {
+        deprecated: Some("use Velocity".to_string()),
+        ..speed_decl()
+    }]);
+    // The inherent impl and the two trait impls; the `Default` impl is
+    // `defaults.rs`'s and predates the value objects.
+    assert_eq!(
+        source.matches("#[allow(deprecated)]").count(),
+        3,
+        "each generated impl of a deprecated type allows the lint, got:\n{source}"
+    );
+    let plain = rust_for(vec![speed_decl()]);
+    assert!(
+        !plain.contains("allow(deprecated)"),
+        "a type that is not deprecated allows nothing, got:\n{plain}"
+    );
+}
+
+#[test]
+fn a_boolean_constant_uses_new_unchecked() {
+    let decls = vec![
+        public_decl(
+            "Flag",
+            primitive_type(
+                v2::PrimitiveType::Boolean,
+                init_value(true, Some("false")),
+                None,
+            ),
+        ),
+        public_decl(
+            "ENABLED",
+            v2::decl::Kind::ConstDef(v2::ConstDef {
+                type_ref: Some("Flag".to_string()),
+                value: "true".to_string(),
+                regex: None,
+            }),
+        ),
+    ];
+    let source = rust_for(decls);
+    assert!(
+        source.contains("pub const ENABLED: Flag = Flag::new_unchecked(true);"),
+        "a boolean constant constructs through new_unchecked, got:\n{source}"
+    );
+}
+
+/// A typl type name is CamelCase (typl §15.1) and `ridl-sem` reserves no
+/// identifier, so a package may declare `type Result`, `type Ok`, `type Err`,
+/// `type TryFrom` or `type From`. Each is a struct in the same module as the
+/// generated constructors, where it shadows the prelude name; the constructors
+/// must therefore name the five by absolute path. A `rustc` run is the proof:
+/// with `pub struct Result(i64);` in scope, an unqualified `Result<Self, _>`
+/// fails with E0107.
+#[test]
+fn prelude_names_declared_by_the_package_compile() {
+    let mut decls: Vec<v2::Decl> = ["Result", "Ok", "Err", "TryFrom", "From"]
+        .into_iter()
+        .map(|name| {
+            public_decl(
+                name,
+                primitive_type(
+                    v2::PrimitiveType::Integer,
+                    init_value(true, Some("0")),
+                    Some(v2::type_def::Width::IntWidth(v2::IntWidth::I32 as i32)),
+                ),
+            )
+        })
+        .collect();
+    decls.push(speed_decl());
+    let rust_source = rust_for(decls);
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("prelude_names.rs");
+    std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(dir.path().join("prelude_names.rmeta"))
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "a package declaring the prelude's names must compile, source:\n{rust_source}"
+    );
 }
 
 #[test]

@@ -1,0 +1,146 @@
+---
+source: crates/ridl-backend-rust/src/tests.rs
+expression: rust_for(decls)
+---
+#[repr(transparent)]
+pub struct Name(String);
+impl Name {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: String,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if (value.chars().count() as u64) < 1 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Name",
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        if (value.chars().count() as u64) > 64 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Name",
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: String) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> &str {
+        &self.0
+    }
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<String> for Name {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: String) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Name> for String {
+    fn from(value: Name) -> Self {
+        value.0
+    }
+}
+#[repr(transparent)]
+pub struct Digest(Vec<u8>);
+impl Digest {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: Vec<u8>,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if (value.len() as u64) > 32 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Digest",
+                rule: ::ridl_rt::payload::Rule::Length,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> &[u8] {
+        &self.0
+    }
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<Vec<u8>> for Digest {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: Vec<u8>) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Digest> for Vec<u8> {
+    fn from(value: Digest) -> Self {
+        value.0
+    }
+}
+impl Default for Digest {
+    fn default() -> Self {
+        Digest::new_unchecked(Vec::new())
+    }
+}
+#[repr(transparent)]
+pub struct Ratio(f64);
+impl Ratio {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Ratio",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 1.0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "Ratio",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl ::core::convert::TryFrom<f64> for Ratio {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl ::core::convert::From<Ratio> for f64 {
+    fn from(value: Ratio) -> Self {
+        value.0
+    }
+}
+impl Default for Ratio {
+    fn default() -> Self {
+        Ratio::new_unchecked(0.0)
+    }
+}

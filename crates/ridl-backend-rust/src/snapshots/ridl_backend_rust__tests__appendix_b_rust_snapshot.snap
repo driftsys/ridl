@@ -9,20 +9,22 @@ expression: rust_source
 pub struct Speed(f64);
 impl Speed {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Speed",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 250.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Speed",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -36,13 +38,13 @@ impl Speed {
         self.0
     }
 }
-impl TryFrom<f64> for Speed {
+impl ::core::convert::TryFrom<f64> for Speed {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> Result<Self, Self::Error> {
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Speed> for f64 {
+impl ::core::convert::From<Speed> for f64 {
     fn from(value: Speed) -> Self {
         value.0
     }
@@ -59,20 +61,22 @@ impl Default for Speed {
 pub struct Temperature(f64);
 impl Temperature {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < -40.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Temperature",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 125.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Temperature",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -86,13 +90,13 @@ impl Temperature {
         self.0
     }
 }
-impl TryFrom<f64> for Temperature {
+impl ::core::convert::TryFrom<f64> for Temperature {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> Result<Self, Self::Error> {
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Temperature> for f64 {
+impl ::core::convert::From<Temperature> for f64 {
     fn from(value: Temperature) -> Self {
         value.0
     }
@@ -109,20 +113,22 @@ impl Default for Temperature {
 pub struct RPM(f64);
 impl RPM {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "RPM",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 8000.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "RPM",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -136,13 +142,13 @@ impl RPM {
         self.0
     }
 }
-impl TryFrom<f64> for RPM {
+impl ::core::convert::TryFrom<f64> for RPM {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> Result<Self, Self::Error> {
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<RPM> for f64 {
+impl ::core::convert::From<RPM> for f64 {
     fn from(value: RPM) -> Self {
         value.0
     }
@@ -159,20 +165,22 @@ impl Default for RPM {
 pub struct Ratio(f64);
 impl Ratio {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Ratio",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 100.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Ratio",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -186,13 +194,13 @@ impl Ratio {
         self.0
     }
 }
-impl TryFrom<f64> for Ratio {
+impl ::core::convert::TryFrom<f64> for Ratio {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> Result<Self, Self::Error> {
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Ratio> for f64 {
+impl ::core::convert::From<Ratio> for f64 {
     fn from(value: Ratio) -> Self {
         value.0
     }
@@ -206,8 +214,10 @@ impl Default for Ratio {
 pub struct Counter(i64);
 impl Counter {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
-        Ok(Self(value))
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -221,13 +231,13 @@ impl Counter {
         self.0
     }
 }
-impl TryFrom<i64> for Counter {
+impl ::core::convert::TryFrom<i64> for Counter {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Counter> for i64 {
+impl ::core::convert::From<Counter> for i64 {
     fn from(value: Counter) -> Self {
         value.0
     }
@@ -242,20 +252,22 @@ impl Default for Counter {
 pub struct Gain(f64);
 impl Gain {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Gain",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 1.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Gain",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -269,13 +281,13 @@ impl Gain {
         self.0
     }
 }
-impl TryFrom<f64> for Gain {
+impl ::core::convert::TryFrom<f64> for Gain {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> Result<Self, Self::Error> {
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Gain> for f64 {
+impl ::core::convert::From<Gain> for f64 {
     fn from(value: Gain) -> Self {
         value.0
     }

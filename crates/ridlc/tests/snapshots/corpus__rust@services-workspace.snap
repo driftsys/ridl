@@ -8,20 +8,22 @@ input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 pub struct DoorId(i64);
 impl DoorId {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "DoorId",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 7 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "DoorId",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -35,13 +37,13 @@ impl DoorId {
         self.0
     }
 }
-impl TryFrom<i64> for DoorId {
+impl ::core::convert::TryFrom<i64> for DoorId {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<DoorId> for i64 {
+impl ::core::convert::From<DoorId> for i64 {
     fn from(value: DoorId) -> Self {
         value.0
     }
@@ -56,20 +58,22 @@ impl Default for DoorId {
 pub struct Percent(f64);
 impl Percent {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Percent",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 100.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Percent",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -83,13 +87,13 @@ impl Percent {
         self.0
     }
 }
-impl TryFrom<f64> for Percent {
+impl ::core::convert::TryFrom<f64> for Percent {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> Result<Self, Self::Error> {
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Percent> for f64 {
+impl ::core::convert::From<Percent> for f64 {
     fn from(value: Percent) -> Self {
         value.0
     }
@@ -103,20 +107,22 @@ impl Default for Percent {
 pub struct Odometer(i64);
 impl Odometer {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Odometer",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 4294967295 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Odometer",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -130,13 +136,13 @@ impl Odometer {
         self.0
     }
 }
-impl TryFrom<i64> for Odometer {
+impl ::core::convert::TryFrom<i64> for Odometer {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Odometer> for i64 {
+impl ::core::convert::From<Odometer> for i64 {
     fn from(value: Odometer) -> Self {
         value.0
     }

@@ -47,8 +47,8 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    reserves `unsafe` for that.
 
 2. **Conversions are fallible inbound, infallible outbound.**
-   `TryFrom<Inner> for Type` validates; `From<Type> for Inner` extracts. `new`
-   delegates to `TryFrom` and remains as the discoverable form, the way
+   `TryFrom<Inner> for Type` validates; `From<Type> for Inner` extracts.
+   `TryFrom` delegates to `new`, which remains as the discoverable form, the way
    `NonZeroU32` ships both. Coherence permits `impl From<Speed> for f64` because
    the local type appears as the trait parameter (RFC 2451).
 

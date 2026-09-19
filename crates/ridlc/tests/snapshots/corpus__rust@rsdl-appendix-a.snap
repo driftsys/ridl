@@ -12,20 +12,22 @@ input_file: crates/ridlc/tests/corpus/rsdl-appendix-a/ridl.toml
 pub struct Speed(f64);
 impl Speed {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: f64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Speed",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 250.0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Speed",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -39,13 +41,13 @@ impl Speed {
         self.0
     }
 }
-impl TryFrom<f64> for Speed {
+impl ::core::convert::TryFrom<f64> for Speed {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: f64) -> Result<Self, Self::Error> {
+    fn try_from(value: f64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Speed> for f64 {
+impl ::core::convert::From<Speed> for f64 {
     fn from(value: Speed) -> Self {
         value.0
     }
@@ -59,8 +61,10 @@ impl Default for Speed {
 pub struct Engaged(bool);
 impl Engaged {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: bool) -> Result<Self, ::ridl_rt::payload::Violation> {
-        Ok(Self(value))
+    pub fn new(
+        value: bool,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -74,13 +78,13 @@ impl Engaged {
         self.0
     }
 }
-impl TryFrom<bool> for Engaged {
+impl ::core::convert::TryFrom<bool> for Engaged {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: bool) -> Result<Self, Self::Error> {
+    fn try_from(value: bool) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Engaged> for bool {
+impl ::core::convert::From<Engaged> for bool {
     fn from(value: Engaged) -> Self {
         value.0
     }

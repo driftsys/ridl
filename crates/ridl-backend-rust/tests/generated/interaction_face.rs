@@ -3,20 +3,22 @@
 pub struct Temperature(i64);
 impl Temperature {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < -40 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Temperature",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 85 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Temperature",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -30,13 +32,13 @@ impl Temperature {
         self.0
     }
 }
-impl TryFrom<i64> for Temperature {
+impl ::core::convert::TryFrom<i64> for Temperature {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Temperature> for i64 {
+impl ::core::convert::From<Temperature> for i64 {
     fn from(value: Temperature) -> Self {
         value.0
     }
@@ -51,20 +53,22 @@ impl Default for Temperature {
 pub struct Level(i64);
 impl Level {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Level",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 100 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Level",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -78,13 +82,13 @@ impl Level {
         self.0
     }
 }
-impl TryFrom<i64> for Level {
+impl ::core::convert::TryFrom<i64> for Level {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Level> for i64 {
+impl ::core::convert::From<Level> for i64 {
     fn from(value: Level) -> Self {
         value.0
     }
@@ -99,20 +103,22 @@ impl Default for Level {
 pub struct Window(i64);
 impl Window {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Window",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 100000 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Window",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -126,13 +132,13 @@ impl Window {
         self.0
     }
 }
-impl TryFrom<i64> for Window {
+impl ::core::convert::TryFrom<i64> for Window {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Window> for i64 {
+impl ::core::convert::From<Window> for i64 {
     fn from(value: Window) -> Self {
         value.0
     }
@@ -147,20 +153,22 @@ impl Default for Window {
 pub struct Average(i64);
 impl Average {
     /// Constructs the value, enforcing its typl constraints.
-    pub fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
+    pub fn new(
+        value: i64,
+    ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
         if value < 0 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Average",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
         if value > 1000 {
-            return Err(::ridl_rt::payload::Violation {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                 type_name: "Average",
                 rule: ::ridl_rt::payload::Rule::Range,
             });
         }
-        Ok(Self(value))
+        ::core::result::Result::Ok(Self(value))
     }
     /// Constructs the value without checking its constraints.
     ///
@@ -174,13 +182,13 @@ impl Average {
         self.0
     }
 }
-impl TryFrom<i64> for Average {
+impl ::core::convert::TryFrom<i64> for Average {
     type Error = ::ridl_rt::payload::Violation;
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
         Self::new(value)
     }
 }
-impl From<Average> for i64 {
+impl ::core::convert::From<Average> for i64 {
     fn from(value: Average) -> Self {
         value.0
     }

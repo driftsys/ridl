@@ -1044,3 +1044,69 @@ fn ra19_a_minimal_signal_only_port_constructs_the_signal_only_client() {
         "a zero-length sample is too short for Health's 8-byte encoding",
     );
 }
+
+// ---------------------------------------------------------------------------
+// The generated constructor (typl value objects, Task 3), run rather than read.
+// The constructor's text is also snapshotted, but a snapshot passes with a
+// deleted check as soon as `cargo insta test --accept` runs; these four fail.
+// `Level` is declared `integer [0..100]` in tests/fixtures/interaction_face.ridl.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn generated_new_refuses_a_value_above_the_range() {
+    use ridl_rt::payload::{Rule, Violation};
+    assert_eq!(
+        generated::Level::new(200).err(),
+        Some(Violation {
+            type_name: "Level",
+            rule: Rule::Range,
+        })
+    );
+}
+
+#[test]
+fn generated_new_refuses_a_value_below_the_range() {
+    use ridl_rt::payload::{Rule, Violation};
+    assert_eq!(
+        generated::Level::new(-1).err(),
+        Some(Violation {
+            type_name: "Level",
+            rule: Rule::Range,
+        })
+    );
+}
+
+#[test]
+fn generated_new_accepts_a_value_in_the_range() {
+    let Ok(level) = generated::Level::new(50) else {
+        panic!("50 is inside [0, 100]");
+    };
+    assert_eq!(level.get(), 50);
+    // Both bounds are inclusive (typl §5.5).
+    assert_eq!(
+        generated::Level::new(0).ok().map(generated::Level::get),
+        Some(0)
+    );
+    assert_eq!(
+        generated::Level::new(100).ok().map(generated::Level::get),
+        Some(100)
+    );
+}
+
+#[test]
+fn generated_try_from_delegates_to_new() {
+    use ridl_rt::payload::{Rule, Violation};
+    assert_eq!(
+        generated::Level::try_from(200).err(),
+        Some(Violation {
+            type_name: "Level",
+            rule: Rule::Range,
+        })
+    );
+    assert_eq!(
+        generated::Level::try_from(50)
+            .ok()
+            .map(generated::Level::get),
+        Some(50)
+    );
+}
