@@ -278,7 +278,16 @@ fn client(
             "Takes the next occurrence of any subscribed event of interface \
              `{iface_name}`, routed to its variant by ordinal. `Ok(None)` when \
              none is waiting. One method serves every event, because the \
-             payload type is not known until the occurrence's ordinal is read."
+             payload type is not known until the occurrence's ordinal is \
+             read.\n\nThe interface number is checked before the ordinal, \
+             for the reason `dispatch` checks it: a port is attached to a \
+             whole catalog, ordinals restart at 1 in each interface, and an \
+             occurrence of a sibling interface at the same ordinal would \
+             otherwise be decoded as this interface's payload. Such an \
+             occurrence is reported as `Contract::UnknownInteraction`; \
+             `EventSource::next` has already consumed it, so this face cannot \
+             hand it back to the interface it belongs to. Subscribe on a port \
+             this interface owns."
         );
         methods.push(quote! {
             #[doc = #doc]
@@ -292,6 +301,13 @@ fn client(
                 let Some(occurrence) = self.port.next(&mut buf)? else {
                     return Ok(None);
                 };
+                if occurrence.iface
+                    != <super::#iface as ::ridl_rt::contract::Interface>::NUMBER
+                {
+                    return Err(::ridl_rt::port::ReadError::Contract(
+                        ::ridl_rt::error::Contract::UnknownInteraction,
+                    ));
+                }
                 match occurrence.ord {
                     #(#arms,)*
                     _ => Err(::ridl_rt::port::ReadError::Contract(
@@ -648,19 +664,29 @@ fn dispatch(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]
         let method = &member.method;
         let descriptor = &member.descriptor;
         let decode = decode_args(call.arg_type);
+        let arg = &call.arg;
         quote! {
             #ordinal => {
                 let decoded = #decode;
                 match decoded {
-                    Err(error) => Err(error),
-                    Ok(args) => {
-                        match <#descriptor as ::ridl_rt::contract::Command>::require(&args) {
-                            Err(()) => Err(::ridl_rt::error::CallError::Contract(
-                                ::ridl_rt::error::Contract::PreconditionFailed,
-                            )),
+                    Err(error) => h.settle(claim.id, Err(error)),
+                    Ok(#arg) => {
+                        match <#descriptor as ::ridl_rt::contract::Command>::require(&#arg) {
+                            Err(()) => h.settle(
+                                claim.id,
+                                Err(::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::PreconditionFailed,
+                                )),
+                            ),
                             Ok(()) => {
-                                p.#method(&args);
-                                Ok(0usize)
+                                // A command's acknowledgment is a delivery
+                                // acknowledgment, not a completion one (ridl
+                                // §6.1), so the claim is settled once the
+                                // arguments and `require` pass and before the
+                                // application's method runs (`Handler`).
+                                let accepted = h.settle(claim.id, Ok(&[]));
+                                p.#method(&#arg);
+                                accepted
                             }
                         }
                     }
@@ -681,26 +707,36 @@ fn dispatch(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]
             quote! { buf },
             "the dispatch buffer",
         );
+        let arg = &call.arg;
         quote! {
             #ordinal => {
                 let decoded = #decode;
                 match decoded {
-                    Err(error) => Err(error),
-                    Ok(args) => {
-                        match <#descriptor as ::ridl_rt::contract::Query>::require(&args) {
-                            Err(()) => Err(::ridl_rt::error::CallError::Contract(
-                                ::ridl_rt::error::Contract::PreconditionFailed,
-                            )),
+                    Err(error) => h.settle(claim.id, Err(error)),
+                    Ok(#arg) => {
+                        match <#descriptor as ::ridl_rt::contract::Query>::require(&#arg) {
+                            Err(()) => h.settle(
+                                claim.id,
+                                Err(::ridl_rt::error::CallError::Contract(
+                                    ::ridl_rt::error::Contract::PreconditionFailed,
+                                )),
+                            ),
                             Ok(()) => {
-                                let reply = p.#method(&args);
+                                let reply = p.#method(&#arg);
                                 match <#descriptor as ::ridl_rt::contract::Query>::ensure(
-                                    &args,
+                                    &#arg,
                                     &reply,
                                 ) {
-                                    Err(()) => Err(::ridl_rt::error::CallError::Contract(
-                                        ::ridl_rt::error::Contract::ContractBroken,
-                                    )),
-                                    Ok(()) => Ok(#encode),
+                                    Err(()) => h.settle(
+                                        claim.id,
+                                        Err(::ridl_rt::error::CallError::Contract(
+                                            ::ridl_rt::error::Contract::ContractBroken,
+                                        )),
+                                    ),
+                                    Ok(()) => {
+                                        let len = #encode;
+                                        h.settle(claim.id, Ok(&buf[..len]))
+                                    }
                                 }
                             }
                         }
@@ -724,7 +760,12 @@ fn dispatch(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]
          `Contract::UnknownInteraction`. A claim is counted only once \
          `Handler::settle` has accepted it; a `SettleError` is left to the \
          handler, which already owns that claim's settlement, and the pass \
-         continues with the next claim."
+         continues with the next claim.\n\nA command is settled `Ok(&[])` \
+         once its arguments and its `require` clauses pass and **before** the \
+         application's method runs, because a command's acknowledgment is a \
+         delivery acknowledgment and not a completion one (ridl §6.1, and \
+         `Handler`'s own contract). A query is settled after the application \
+         returns, because its settlement carries the reply."
     );
 
     quote! {
@@ -742,23 +783,24 @@ fn dispatch(iface: &Ident, iface_name: &str, commands: &[Call], queries: &[Call]
                 let Ok(Some(claim)) = h.next_claim(buf) else {
                     return settled;
                 };
-                let outcome: ::core::result::Result<usize, ::ridl_rt::error::CallError> =
-                    if claim.iface != #number {
+                let settlement = if claim.iface != #number {
+                    h.settle(
+                        claim.id,
                         Err(::ridl_rt::error::CallError::Contract(
                             ::ridl_rt::error::Contract::UnknownInteraction,
-                        ))
-                    } else {
-                        match claim.ord {
-                            #(#command_arms)*
-                            #(#query_arms)*
-                            _ => Err(::ridl_rt::error::CallError::Contract(
+                        )),
+                    )
+                } else {
+                    match claim.ord {
+                        #(#command_arms)*
+                        #(#query_arms)*
+                        _ => h.settle(
+                            claim.id,
+                            Err(::ridl_rt::error::CallError::Contract(
                                 ::ridl_rt::error::Contract::UnknownInteraction,
                             )),
-                        }
-                    };
-                let settlement = match outcome {
-                    Ok(len) => h.settle(claim.id, Ok(&buf[..len])),
-                    Err(error) => h.settle(claim.id, Err(error)),
+                        ),
+                    }
                 };
                 if settlement.is_ok() {
                     settled += 1;

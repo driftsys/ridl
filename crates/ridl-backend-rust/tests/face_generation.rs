@@ -37,6 +37,19 @@ fn module(source: &str, name: &str) -> String {
     rest[..end].to_string()
 }
 
+/// The slice of `source` from `from` up to `to`, so an assertion about one
+/// generated method is not satisfied by another method's body.
+fn between(source: &str, from: &str, to: &str) -> String {
+    let start = source
+        .find(from)
+        .unwrap_or_else(|| panic!("generated source has no `{from}`"));
+    let rest = &source[start..];
+    let end = rest
+        .find(to)
+        .unwrap_or_else(|| panic!("generated source has no `{to}` after `{from}`"));
+    rest[..end].to_string()
+}
+
 fn face() -> String {
     let package = ir::compile_fixture("interaction_face.ridl");
     generate_face(&package).expect("generate_face").rust_source
@@ -101,6 +114,10 @@ fn a_signal_only_interface_gets_a_client_bound_only_by_signal_reader() {
         "no EventSink bound on a signal-only publisher",
     );
     assert!(
+        d.contains("pubstructPublisher<'a,W:::ridl_rt::port::SignalWriter>"),
+        "a signal-only interface still gets a publisher, bound by SignalWriter alone",
+    );
+    assert!(
         !d.contains("Handler"),
         "a signal-only interface gets no dispatch",
     );
@@ -119,7 +136,7 @@ fn the_client_reads_a_signal_through_the_signal_reader_port() {
         "signal accessor returns a Sample of the declared payload",
     );
     assert!(
-        d.contains("self.port.read("),
+        d.contains("self.port.read(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(1u32),&mutbuf,)"),
         "the accessor calls SignalReader::read"
     );
     assert!(
@@ -151,7 +168,7 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
         "one subscribe method per event",
     );
     assert!(
-        d.contains("self.port.subscribe("),
+        d.contains("self.port.subscribe(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,&[::ridl_rt::contract::Ordinal(2u32)],)"),
         "subscribe calls EventSource::subscribe"
     );
     assert!(
@@ -162,6 +179,22 @@ fn the_client_subscribes_and_polls_events_through_the_event_source_port() {
     assert!(
         d.contains("Warning(::ridl_rt::sample::Occurrence<super::Warning>),"),
         "one variant per event, carrying the declared payload",
+    );
+    assert!(
+        d.contains("::ridl_rt::contract::Ordinal(2u32)=>{Ok(Some(Event::Warning("),
+        "the poll routes the event's ordinal to its variant",
+    );
+    // The interface number is checked first: ordinals restart at 1 in each
+    // interface, and a port is attached to a whole catalog, so an occurrence
+    // of a sibling interface would otherwise be decoded as this interface's
+    // payload.
+    assert!(
+        d.contains(
+            "ifoccurrence.iface!=<super::Cabinas::ridl_rt::contract::Interface>::NUMBER{\
+             returnErr(::ridl_rt::port::ReadError::Contract(\
+             ::ridl_rt::error::Contract::UnknownInteraction,),);}"
+        ),
+        "the poll checks the interface number before the ordinal",
     );
 }
 
@@ -174,19 +207,24 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
         "the command method returns a correlation",
     );
     assert!(
-        d.contains("self.port.command("),
+        d.contains("self.port.command(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(3u32),&buf[..len],)"),
         "the command calls Caller::command"
     );
+    // Scoped to the client's own method body: `dispatch` evaluates the same
+    // clause, so an unscoped assertion would be satisfied by the provider
+    // side and would not see a consumer that skipped it.
+    let send_command = between(&d, "pubfnset_level(&mutself", "pubfnaverage(&mutself");
     assert!(
-        d.contains("<super::CabinSetLevelas::ridl_rt::contract::Command>::require(&level)"),
-        "the consumer evaluates require before sending",
+        send_command
+            .contains("<super::CabinSetLevelas::ridl_rt::contract::Command>::require(&level)"),
+        "the consumer evaluates the command's require, through the Command trait",
     );
     assert!(
         d.contains("pubfnaverage(&mutself,window:super::Window,)->::core::result::Result<::ridl_rt::port::Correlation,"),
         "the query method returns a correlation",
     );
     assert!(
-        d.contains("self.port.query("),
+        d.contains("self.port.query(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(4u32),&buf[..len],)"),
         "the query calls Caller::query"
     );
     assert!(
@@ -196,6 +234,23 @@ fn the_client_sends_a_command_and_a_query_through_the_caller_port() {
     assert!(
         d.contains("self.port.reply("),
         "the reply method calls Caller::reply"
+    );
+    let send_query = between(&d, "pubfnaverage(&mutself", "pubfnaverage_reply");
+    assert!(
+        send_query.contains("<super::CabinAverageas::ridl_rt::contract::Query>::require(&window)"),
+        "the consumer evaluates the query's require, through the Query trait",
+    );
+
+    // The reply's own check failures map to the two call errors, in the same
+    // split the dispatch side uses.
+    let reply = between(&d, "pubfnaverage_reply", "pubfnack");
+    assert!(
+        reply.contains("::ridl_rt::error::Contract::InvalidValue(violation)"),
+        "a reply that breaks a typl constraint is an InvalidValue contract error",
+    );
+    assert!(
+        reply.contains("::ridl_rt::error::Transport::Corrupt"),
+        "malformed reply bytes are a transport corruption",
     );
     assert!(
         d.contains("self.port.ack("),
@@ -218,7 +273,7 @@ fn the_publisher_writes_signals_and_raises_events() {
         "one publish method per signal",
     );
     assert!(
-        d.contains("self.port.set("),
+        d.contains("self.port.set(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(1u32),&buf[..len],)"),
         "publishing calls SignalWriter::set"
     );
     assert!(
@@ -226,7 +281,7 @@ fn the_publisher_writes_signals_and_raises_events() {
         "one invalidate method per signal",
     );
     assert!(
-        d.contains("self.port.invalidate("),
+        d.contains("self.port.invalidate(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(1u32),)"),
         "invalidate calls SignalWriter::invalidate"
     );
     assert!(
@@ -234,7 +289,7 @@ fn the_publisher_writes_signals_and_raises_events() {
         "one raise method per event",
     );
     assert!(
-        d.contains("self.port.raise("),
+        d.contains("self.port.raise(<super::Cabinas::ridl_rt::contract::Interface>::NUMBER,::ridl_rt::contract::Ordinal(2u32),&buf[..len],)"),
         "raising calls EventSink::raise"
     );
     assert!(d.contains("pubfncommit(&mutself)"), "the publisher commits");
