@@ -231,6 +231,50 @@ for this stage rather than a shortfall — ADR-0018 decision 15 makes the face
 phase 2, and nothing in M3 ships a runtime for a pipeline consumer to link
 against.
 
+### The `Provider` argument is taken by reference
+
+Settled during M3, on delegated authority, because the design note's §6 cannot
+be implemented as literally written.
+
+§6's paragraph "The `Provider` method signatures, settled here" argues about the
+**return** type: `Rejected` is not a type `ridl-rt` has, and a command has no
+failure the application reports, so a command returns nothing and a query
+returns its declared reply. That argument is kept exactly. The by-value
+parameters in the paragraph's two example signatures were incidental to it and
+were never reasoned about.
+
+By value does not work. §6's own settlement table requires `dispatch` to call a
+query's `ensure` **after** the provider returns, and the M3 clause translator
+emits `args.0 <op> <literal>` for a clause over a parameter, so `dispatch` must
+still hold the arguments at that point. A provider that took them by value would
+have moved them, and the generated payload types implement neither `Copy` nor
+`Clone`.
+
+**Decision. A `Provider` method takes its argument by reference:
+`fn set_target(&mut self, desired: &Speed);` and
+`fn average_speed(&mut self, window: &Duration) -> Speed;`.** The return types
+are what §6 settled. §6's example signatures are superseded on the parameter
+only, and gardening reconciles the note.
+
+### The consumer-side call reports `SendError`, not `CallError`
+
+Settled during M3, on delegated authority, because §6 left it open.
+
+§6 fixes the `Client` shape — one method per consumer-side interaction, a query
+returning a `Correlation` polled by a separate `*_reply` method — but never
+names the error type a client method returns. The `CallError` vocabulary in §6
+belongs to the settlement table, which is the provider side: it is what
+`dispatch` settles, not what a caller's send returns.
+
+**Decision. A consumer-side call returns `Result<Correlation, SendError>`.**
+`SendError` is what the `Caller` port itself returns and it already carries
+`Contract`, so a failed client-side `require` is reported as
+`SendError::Contract(Contract::PreconditionFailed)` with no lossy mapping
+between two error types. Mapping it into `CallError` would invent a conversion
+no port performs.
+
+This closes a gap rather than overriding a decision.
+
 ### Epic 10 risk
 
 `crates/ridl-backend-rust/src/lib.rs` is shared with Lane C's Epic 10. The
@@ -501,6 +545,14 @@ payload verification and the generated face behavior.
   use.
 - Lane C's Epic 10 may require a small generated-domain-type and payload
   stand-in touch-up if it lands after M3.
+- The generated domain types draw two clippy lints when they are compiled in
+  this repository for the first time: `derivable_impls` on the `Default`
+  emission of `crate::defaults`, and `upper_case_acronyms` on an enum variant
+  that keeps its typl SCREAMING_SNAKE spelling. Both predate M3 and neither
+  comes from the face or the descriptors. M3 allows them on the handwritten
+  wrapper module, with a `reason` on each, rather than changing the domain-type
+  emitter from this lane. Whether the emitter should avoid them is a question
+  for the lane that owns `crate::defaults`.
 
 ## Self-review against the approved spec
 
