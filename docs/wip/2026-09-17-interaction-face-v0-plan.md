@@ -59,12 +59,14 @@ payload plumbing without increasing the MVP's round-trip evidence. This decision
 keeps the fixture within the spec's fixed-size scalar, enum, and struct
 stand-in.
 
-The fixture intentionally gives the remaining three settlement rows no dedicated
-tests. The required `require` and `ensure` rows are tested because they exercise
-generated contract clauses; unknown routing, malformed bytes, and invalid
-payload verification belong to the runtime/codec tests and are covered by the
-`ridl-rt` contracts. The dispatch unit tests still assert the explicit
-`Capacity` and `SettleError` decisions below.
+The plan originally left the remaining three settlement rows without dedicated
+tests: the `require` and `ensure` rows were tested because they exercise
+generated contract clauses, while unknown routing, malformed bytes, and invalid
+payload verification were left to the runtime/codec tests, covered by the
+`ridl-rt` contracts. That scope was later revisited: every row of the settlement
+table now has a runtime test through `dispatch`, in
+`crates/ridl-backend-rust/tests/interaction_face.rs`. The dispatch unit tests
+still assert the explicit `Capacity` and `SettleError` decisions below.
 
 Multi-parameter calls and induced argument structs are a recorded follow-up, not
 M3 work. M3 emits no induced argument type. Every command and query in the
@@ -579,10 +581,11 @@ payload verification and the generated face behavior.
   lint rule, Epic 10 risk, roadmap/tracking context, and alternatives are
   covered by the task and decision sections above.
 - The seven M2 deferrals are settled: capacity is an internal invariant failure;
-  settlement counts successful claims only; the fixture omits `fixed`; the
-  remaining three settlement rows have no dedicated tests; multi-parameter calls
-  are a follow-up; lint allows live on the outer include wrapper and the emitter
-  emits no inner attribute; Epic 10 is an accepted rework risk.
+  settlement counts successful claims only; the fixture omits `fixed`; every row
+  of the settlement table now has a runtime test through `dispatch`;
+  multi-parameter calls are a follow-up; lint allows live on the outer include
+  wrapper and the emitter emits no inner attribute; Epic 10 is an accepted
+  rework risk.
 - Every implementation task starts with a failing test, names files, names an
   implementer model, and requires `just build` before its commit.
 - No task changes ADR-0018, ADR-0020, or the approved M1 design.
