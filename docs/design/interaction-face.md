@@ -24,15 +24,18 @@ binds against, and the
   named interface, one `Interaction` implementation per member, and the
   generated buffer-size constants.
 - `src/face.rs` — `Client`, `Publisher`, `Provider` and `dispatch`.
-- `src/clauses.rs` — the contract-clause translator both of the above call.
+- `src/clauses.rs` — the contract-clause translator. Only `src/descriptors.rs`
+  calls it, when it emits a `Command`'s or a `Query`'s `require` and `ensure`
+  bodies. `src/face.rs` names those generated methods from the `dispatch` body
+  it writes, but does not translate a clause itself.
 
 `generate(package)` — the existing pipeline entry point `ridl --emit rust` calls
 — keeps its pre-E11.13 output exactly: the domain types, naming no runtime.
 `generate_face(package)` is a companion entry point that emits what `generate`
 emits, plus the descriptor and face items. It is the only caller of the clause
 translator, and the only entry point whose output names `::ridl_rt::…`.
-**`ridl --emit rust` does not yet emit the face** — the CLI
-(`crates/ridlc/src/main.rs`) still calls `generate`, not `generate_face` — which
+**`ridl --emit rust` does not yet emit the face** — the pipeline
+(`crates/ridlc/src/lib.rs`) still calls `generate`, not `generate_face` — which
 is correct for this story rather than a shortfall: ADR-0018 decision 15 makes
 the face phase 2, and nothing in E11.13 ships a runtime for a pipeline consumer
 to link against. Why a companion entry point rather than folding the face into
@@ -77,14 +80,19 @@ the emitter.
   all-zero-hash catalog with the same name would collide.
 - Every `PayloadInfo.max_size` field
   (`EncodedSizes { proto3, flatbuffers,
-  repr_c }`) is `None`. This matches
-  `ridl-rt`'s own documented reading — `None` means "the toolchain cannot size
-  the payload for that encoding", which covers both an encoding that cannot
-  carry the payload and one whose size the toolchain cannot yet derive; the MVP
-  genuinely cannot derive any of the three. `dispatch` never reads these fields
-  — it sizes buffers from `<T as Payload<ReprC>>::MAX_SIZE` directly — so the
-  absent sizes cost the face nothing and cost a future catalog consumer
-  everything, which is the right way round for a placeholder.
+  repr_c }`) is `None`. `ridl-rt`'s own
+  reading of `None` is the broad one — "no size is available here", never "this
+  payload cannot be encoded this way" (`crates/ridl-rt/src/contract.rs`) — and
+  the MVP genuinely cannot derive any of the three sizes, so the emitted `None`
+  is honest under it. The doc comment the emitter writes into every generated
+  file (`crates/ridl-backend-rust/src/descriptors.rs`) still says that `ridl-rt`
+  states the other, narrower reading and that E16.2 reconciles the two. That
+  note is stale: the `ridl-rt` doc-comment change it refers to has landed.
+  Dropping it is a change to the emitter and to the checked-in fixture the
+  byte-equality guard compares against, so it is not made here. `dispatch` never
+  reads these fields — it sizes buffers from `<T as Payload<ReprC>>::MAX_SIZE`
+  directly — so the absent sizes cost the face nothing and cost a future catalog
+  consumer everything, which is the right way round for a placeholder.
 
 ## The contract-clause translator
 
@@ -212,8 +220,11 @@ binary's parallel execution.
 accepted, not the number of claims taken.** A `SettleError` is left to the
 handler — which already owns that claim's settlement — and is not turned into a
 different `CallError`; `dispatch` continues to the next claim regardless.
-`tests/dispatch_generation.rs` injects one settlement failure followed by one
-successful claim and asserts the returned count is `1`.
+`tests/interaction_face.rs`'s
+`round_trip_dispatch_counts_only_accepted_settlements` injects one settlement
+failure followed by one successful claim and asserts the counts are `0` then
+`1`. It is a runtime test through `dispatch`, not a source-text assertion;
+`tests/dispatch_generation.rs` holds only the latter.
 
 ## The payload stand-in and the test-only ports
 

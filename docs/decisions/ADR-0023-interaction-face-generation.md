@@ -113,14 +113,14 @@ never stated.
 
 ## Alternatives considered
 
-| Alternative                                                                             | Why not                                                                                                                                                                                                        |
-| --------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Silently drop a clause the translator cannot express                                    | Generates a provider that accepts arguments its own contract forbids — a worse failure than refusing to generate. See decision 1.                                                                              |
-| Wait for E5.1's expression-tree translator before generating any clause body            | Blocks the whole MVP on an unscheduled story; the design's settlement rows for `PreconditionFailed`/`ContractBroken` would stay unreachable in the interim.                                                    |
-| Fold the face's items into `generate` itself                                            | Breaks `corpus_entries_compile_to_reviewed_snapshots` (the translator refuses clauses the corpus already carries) and `rustc_accepts` (which compiles `generate`'s output with no `--extern`). See decision 2. |
-| Take the `--extern ridl_rt` flag in the pipeline proof now, ahead of Epic 10 Task 3     | Pre-empts an in-flight lane's own task and removes the detector that task's proof exists to provide.                                                                                                           |
-| A `Provider` method takes its argument by value, as the M1 design's example showed      | Does not compile: `dispatch` reads the argument again after the provider returns, and the generated payload types are neither `Copy` nor `Clone`. See decision 3.                                              |
-| Map a client-side `require` failure into `CallError`, reusing the settlement vocabulary | Invents a conversion no port performs; `SendError` is what `Caller` itself already returns and already carries `Contract`. See decision 4.                                                                     |
+| Alternative                                                                             | Why not                                                                                                                                                                                                                                         |
+| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Silently drop a clause the translator cannot express                                    | Generates a provider that accepts arguments its own contract forbids — a worse failure than refusing to generate. See decision 1.                                                                                                               |
+| Wait for E5.1's expression-tree translator before generating any clause body            | Blocks the whole MVP on an unscheduled story; the design's settlement rows for `PreconditionFailed`/`ContractBroken` would stay unreachable in the interim.                                                                                     |
+| Fold the face's items into `generate` itself                                            | Breaks `corpus_entries_compile_to_reviewed_snapshots` (the translator refuses clauses the corpus already carries) and `veh_cluster_generated_rust_compiles_with_rustc` (which compiles `generate`'s output with no `--extern`). See decision 2. |
+| Take the `--extern ridl_rt` flag in the pipeline proof now, ahead of Epic 10 Task 3     | Pre-empts an in-flight lane's own task and removes the detector that task's proof exists to provide.                                                                                                                                            |
+| A `Provider` method takes its argument by value, as the M1 design's example showed      | Does not compile: `dispatch` reads the argument again after the provider returns, and the generated payload types are neither `Copy` nor `Clone`. See decision 3.                                                                               |
+| Map a client-side `require` failure into `CallError`, reusing the settlement vocabulary | Invents a conversion no port performs; `SendError` is what `Caller` itself already returns and already carries `Contract`. See decision 4.                                                                                                      |
 
 ## Consequences
 
@@ -172,4 +172,6 @@ never stated.
 - `crates/ridl-backend-rust/src/clauses.rs`, `src/face.rs`, `src/lib.rs` — the
   translator, the face, and the two entry points as built
 - `crates/ridlc` tests `corpus_entries_compile_to_reviewed_snapshots` and
-  `rustc_accepts` — the two tests decision 2's reasoning cites
+  `veh_cluster_generated_rust_compiles_with_rustc` — the two tests decision 2's
+  reasoning cites. The second compiles `generate`'s output through the shared
+  `rustc_accepts` helper, which passes no `--extern` flag
