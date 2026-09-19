@@ -204,9 +204,12 @@ fn the_pipeline_generate_stays_clean_of_the_face() {
     let face = generate_face(&package).expect("generate_face").rust_source;
 
     assert_ne!(plain, face, "the two entry points must differ");
+    // A named scalar's constructor names `::ridl_rt::payload::Violation`
+    // (typl value objects, Task 3); every other runtime path is the face's.
+    let without_constructors = dense(&plain).replace("::ridl_rt::payload::", "");
     assert!(
-        !dense(&plain).contains("ridl_rt"),
-        "the pipeline generate must name no runtime path",
+        !without_constructors.contains("ridl_rt"),
+        "the pipeline generate must name no runtime path outside the constructors",
     );
     assert!(
         !plain.contains("impl ::ridl_rt::contract::Interface"),

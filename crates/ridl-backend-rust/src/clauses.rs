@@ -12,8 +12,11 @@
 //!   The subject's type must be a named scalar over an integer or a float.
 //!
 //! It emits `args.0 <op> <literal>` for a parameter and `reply.0 <op>
-//! <literal>` for `result`, reaching the newtype's public field, with the
-//! literal in the subject's Rust numeric type. Several clauses of one kind are
+//! <literal>` for `result`, with the literal in the subject's Rust numeric
+//! type. The newtype's field is private, and the read is still legal: the
+//! subject is always a same-package named scalar, and the clause is emitted
+//! inside the interface's `pub mod`, a child of the module that declares the
+//! type, where a private field is visible. Several clauses of one kind are
 //! conjoined with `&&`. Any other clause form is refused with a
 //! [`GenerateError`] rather than dropped: a dropped clause would generate a
 //! provider that accepts arguments its own contract forbids.

@@ -5,19 +5,103 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 ---
 // ===== package veh.common =====
 /// Vehicle speed over ground
+///
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Speed(pub f64);
+pub struct Speed(f64);
+impl Speed {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 250.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl TryFrom<f64> for Speed {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Speed> for f64 {
+    fn from(value: Speed) -> Self {
+        value.0
+    }
+}
 impl Default for Speed {
     fn default() -> Self {
-        Speed(0.0)
+        Speed::new_unchecked(0.0)
     }
 }
 /// Coolant temperature
+///
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Temperature(pub f64);
+pub struct Temperature(f64);
+impl Temperature {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+        if value < -40.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Temperature",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 125.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Temperature",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl TryFrom<f64> for Temperature {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Temperature> for f64 {
+    fn from(value: Temperature) -> Self {
+        value.0
+    }
+}
 impl Default for Temperature {
     fn default() -> Self {
-        Temperature(0.0)
+        Temperature::new_unchecked(0.0)
     }
 }
 

@@ -3,26 +3,124 @@ source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_for(decls)
 ---
 /// Vehicle speed over ground
+///
+/// Quantization (`step`) is not checked by `new`.
 #[deprecated(note = "use Velocity")]
 #[repr(transparent)]
-pub struct Speed(pub f64);
+pub struct Speed(f64);
+impl Speed {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 250.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl TryFrom<f64> for Speed {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Speed> for f64 {
+    fn from(value: Speed) -> Self {
+        value.0
+    }
+}
 impl Default for Speed {
     fn default() -> Self {
-        Speed(0.0)
+        Speed::new_unchecked(0.0)
     }
 }
 #[deprecated]
 #[repr(transparent)]
-pub struct OldFlag(pub bool);
+pub struct OldFlag(bool);
+impl OldFlag {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: bool) -> Result<Self, ::ridl_rt::payload::Violation> {
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: bool) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> bool {
+        self.0
+    }
+}
+impl TryFrom<bool> for OldFlag {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: bool) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<OldFlag> for bool {
+    fn from(value: OldFlag) -> Self {
+        value.0
+    }
+}
 impl Default for OldFlag {
     fn default() -> Self {
-        OldFlag(false)
+        OldFlag::new_unchecked(false)
     }
 }
 #[repr(transparent)]
-pub(crate) struct RawTicks(pub(crate) i64);
+pub(crate) struct RawTicks(i64);
+impl RawTicks {
+    /// Constructs the value, enforcing its typl constraints.
+    pub(crate) fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub(crate) const fn new_unchecked(value: i64) -> Self {
+        Self(value)
+    }
+    pub(crate) const fn get(self) -> i64 {
+        self.0
+    }
+}
+impl TryFrom<i64> for RawTicks {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<RawTicks> for i64 {
+    fn from(value: RawTicks) -> Self {
+        value.0
+    }
+}
 impl Default for RawTicks {
     fn default() -> Self {
-        RawTicks(0)
+        RawTicks::new_unchecked(0)
     }
 }

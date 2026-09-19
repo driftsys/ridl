@@ -21,6 +21,7 @@ use ridl_rt::contract::{InterfaceNo, Ordinal};
 use ridl_rt::port::{Caller, Clock, EventSink, EventSource, Handler, SignalReader, SignalWriter};
 use ridl_rt::sample::{Duration, Provenance};
 
+use generated::Inner;
 use support::loopback::Loopback;
 
 const IFACE: InterfaceNo = InterfaceNo(1);
@@ -189,6 +190,31 @@ fn support_clock_is_hand_driven_not_wall_clock() {
 )]
 mod generated {
     include!("generated/interaction_face.rs");
+
+    /// Reads an `i64`-backed scalar through a shared reference.
+    ///
+    /// The generated `get(self)` takes the value by move, and the generated
+    /// type carries no `Copy` derive until Task 6 of the typl value objects
+    /// plan lands, so a `Payload::encode(&self)` or a `Provider` method that
+    /// receives `&Level` cannot call it. This module is the type's defining
+    /// module, where the private field is visible, which is why the bridge
+    /// lives here. Task 6 replaces every `inner()` call with `get()` and
+    /// removes this trait.
+    pub trait Inner {
+        fn inner(&self) -> i64;
+    }
+
+    macro_rules! inner_i64 {
+        ($($ty:ident),* $(,)?) => {
+            $(impl Inner for $ty {
+                fn inner(&self) -> i64 {
+                    self.0
+                }
+            })*
+        };
+    }
+
+    inner_i64!(Temperature, Level, Window, Average);
 }
 
 /// Hand-written `Payload<ReprC>` implementations for the fixture's restricted
@@ -203,7 +229,7 @@ mod payloads {
         EncodeError, Encoded, Malformed, Payload, Ref, Rule, VerifyError, Violation,
     };
 
-    use super::generated::{Average, Health, Level, Temperature, Warning, Window};
+    use super::generated::{Average, Health, Inner, Level, Temperature, Warning, Window};
 
     /// A named scalar backed by `i64`, with its declared closed range
     /// (typl §5.5: both bounds inclusive) checked by `verify`.
@@ -223,7 +249,7 @@ mod payloads {
                             available: out.len(),
                         });
                     }
-                    out[..8].copy_from_slice(&self.0.to_le_bytes());
+                    out[..8].copy_from_slice(&self.inner().to_le_bytes());
                     let bytes = &out[..8];
                     Ok(Encoded { bytes, view: bytes })
                 }
@@ -244,7 +270,7 @@ mod payloads {
 
                 fn decode(r: Ref<'_, Self, ReprC>) -> Self {
                     let bytes = r.bytes();
-                    Self(i64::from_le_bytes(
+                    Self::new_unchecked(i64::from_le_bytes(
                         bytes.try_into().expect("verified length"),
                     ))
                 }
@@ -322,7 +348,7 @@ mod payloads {
                     available: out.len(),
                 });
             }
-            out[..8].copy_from_slice(&self.code.0.to_le_bytes());
+            out[..8].copy_from_slice(&self.code.inner().to_le_bytes());
             out[8..16].copy_from_slice(&health_discriminant(&self.health).to_le_bytes());
             let bytes = &out[..16];
             Ok(Encoded { bytes, view: bytes })
@@ -342,7 +368,7 @@ mod payloads {
 
         fn decode(r: Ref<'_, Self, ReprC>) -> Self {
             let bytes = r.bytes();
-            let code = Level(i64::from_le_bytes(
+            let code = Level::new_unchecked(i64::from_le_bytes(
                 bytes[..8].try_into().expect("verified length"),
             ));
             let health = health_from_discriminant(i64::from_le_bytes(
@@ -401,11 +427,11 @@ impl TestProvider {
 
 impl generated::cabin::Provider for TestProvider {
     fn set_level(&mut self, level: &generated::Level) {
-        self.set_level_calls.push(level.0);
+        self.set_level_calls.push(level.inner());
     }
 
     fn average(&mut self, _window: &generated::Window) -> generated::Average {
-        generated::Average(self.next_average)
+        generated::Average::new_unchecked(self.next_average)
     }
 }
 
@@ -444,14 +470,14 @@ fn round_trip_signal_publish_and_read() {
     {
         let mut publisher = generated::cabin::Publisher::new(&mut port);
         publisher
-            .temperature(generated::Temperature(21))
+            .temperature(generated::Temperature::new_unchecked(21))
             .expect("set");
         publisher.commit();
     }
 
     let client = generated::cabin::Client::new(&mut port);
     let sample = client.temperature().expect("read");
-    assert_eq!(sample.value.0, 21);
+    assert_eq!(sample.value.get(), 21);
     assert_eq!(sample.provenance, Provenance::Live);
 }
 
@@ -466,7 +492,7 @@ fn round_trip_event_raise_and_receive() {
         let mut publisher = generated::cabin::Publisher::new(&mut port);
         publisher
             .warning(generated::Warning {
-                code: generated::Level(5),
+                code: generated::Level::new_unchecked(5),
                 health: generated::Health::WARN,
             })
             .expect("raise");
@@ -480,7 +506,7 @@ fn round_trip_event_raise_and_receive() {
     match event {
         generated::cabin::Event::Warning(occurrence) => {
             let warning = occurrence.payload.expect("payload verifies");
-            assert_eq!(warning.code.0, 5);
+            assert_eq!(warning.code.get(), 5);
             assert!(matches!(warning.health, generated::Health::WARN));
         }
     }
@@ -491,7 +517,9 @@ fn round_trip_command_is_acknowledged() {
     let mut port = Loopback::new("face.demo");
     let correlation = {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.set_level(generated::Level(42)).expect("send")
+        client
+            .set_level(generated::Level::new_unchecked(42))
+            .expect("send")
     };
 
     let mut provider = TestProvider::new(0);
@@ -509,7 +537,9 @@ fn round_trip_query_reply_is_delivered() {
     let mut port = Loopback::new("face.demo");
     let correlation = {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.average(generated::Window(10)).expect("send")
+        client
+            .average(generated::Window::new_unchecked(10))
+            .expect("send")
     };
 
     let mut provider = TestProvider::new(7);
@@ -523,7 +553,7 @@ fn round_trip_query_reply_is_delivered() {
         .expect("reply read")
         .expect("reply is known")
         .expect("no call error");
-    assert_eq!(reply.0, 7);
+    assert_eq!(reply.get(), 7);
 }
 
 #[test]
@@ -539,7 +569,7 @@ fn round_trip_failing_require_settles_precondition_failed() {
     // evaluates `require` itself before sending (face.rs's `send`), so
     // sending through the raw port bypasses that and exercises `dispatch`'s
     // own check instead.
-    let level = generated::Level(100);
+    let level = generated::Level::new_unchecked(100);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
         .expect("encode")
@@ -583,7 +613,7 @@ fn round_trip_client_set_level_short_circuits_on_failing_require() {
     let mut port = Loopback::new("face.demo");
     let result = {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.set_level(generated::Level(100))
+        client.set_level(generated::Level::new_unchecked(100))
     };
     assert_eq!(
         result,
@@ -614,7 +644,7 @@ fn round_trip_client_average_short_circuits_on_failing_require() {
     let mut port = Loopback::new("face.demo");
     let result = {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.average(generated::Window(0))
+        client.average(generated::Window::new_unchecked(0))
     };
     assert_eq!(
         result,
@@ -640,7 +670,9 @@ fn round_trip_failing_ensure_settles_contract_broken() {
     let mut port = Loopback::new("face.demo");
     let correlation = {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.average(generated::Window(1)).expect("send")
+        client
+            .average(generated::Window::new_unchecked(1))
+            .expect("send")
     };
 
     // The provider misbehaves: it returns a reply whose declared
@@ -681,7 +713,9 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
     let mut port = Loopback::new("face.demo");
     let first = {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.set_level(generated::Level(1)).expect("send first")
+        client
+            .set_level(generated::Level::new_unchecked(1))
+            .expect("send first")
     };
     port.fail_next_settle();
 
@@ -700,7 +734,9 @@ fn round_trip_dispatch_counts_only_accepted_settlements() {
 
     let second = {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.set_level(generated::Level(2)).expect("send second")
+        client
+            .set_level(generated::Level::new_unchecked(2))
+            .expect("send second")
     };
     let settled_second = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
     assert_eq!(
@@ -727,7 +763,9 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
     let mut port = Loopback::new("face.demo");
     {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.set_level(generated::Level(1)).expect("send");
+        client
+            .set_level(generated::Level::new_unchecked(1))
+            .expect("send");
     }
 
     let mut provider = TestProvider::new(0);
@@ -805,7 +843,7 @@ fn round_trip_foreign_interface_number_settles_unknown_interaction() {
     // `round_trip_unrecognized_ordinal_settles_unknown_interaction` above,
     // which pins that fallback arm instead.)
     let mut port = Loopback::new("face.demo");
-    let level = generated::Level(50);
+    let level = generated::Level::new_unchecked(50);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
         .expect("encode")
@@ -880,12 +918,12 @@ fn round_trip_out_of_range_argument_settles_invalid_value() {
     use ridl_rt::encoding::ReprC;
     use ridl_rt::payload::Ref;
 
-    // 200 is out of `Level`'s declared range [0, 100], but Rust's newtype
-    // does not enforce that at construction, so this value encodes to a
-    // well-formed 8-byte `ReprC` payload and fails `verify`'s range check
-    // rather than its length check.
+    // 200 is out of `Level`'s declared range [0, 100]. `new` would refuse
+    // it; `new_unchecked` does not, so this value encodes to a well-formed
+    // 8-byte `ReprC` payload and fails `verify`'s range check rather than
+    // its length check.
     let mut port = Loopback::new("face.demo");
-    let level = generated::Level(200);
+    let level = generated::Level::new_unchecked(200);
     let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
     let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
         .expect("encode")

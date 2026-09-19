@@ -194,6 +194,45 @@ fn named_scalar_backings() {
 }
 
 #[test]
+fn constrained_scalar_is_a_value_object() {
+    let source = rust_for(vec![speed_decl()]);
+    // The field is private: no `pub` inside the tuple struct.
+    assert!(
+        source.contains("pub struct Speed(f64)"),
+        "inner field must be private, got:\n{source}"
+    );
+    assert!(
+        source.contains("pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation>")
+    );
+    assert!(source.contains("pub const fn new_unchecked(value: f64) -> Self"));
+    assert!(source.contains("pub const fn get(self) -> f64"));
+    assert!(source.contains("impl TryFrom<f64> for Speed"));
+    assert!(source.contains("impl From<Speed> for f64"));
+    // The infallible inbound conversion must never appear on a constrained type.
+    assert!(
+        !source.contains("impl From<f64> for Speed"),
+        "From<Inner> reintroduces unchecked construction"
+    );
+}
+
+#[test]
+fn constant_of_a_constrained_type_uses_new_unchecked() {
+    let decls = vec![
+        speed_decl(),
+        public_decl(
+            "MAX_SPEED",
+            v2::decl::Kind::ConstDef(v2::ConstDef {
+                type_ref: Some("Speed".to_string()),
+                value: "250.0".to_string(),
+                regex: None,
+            }),
+        ),
+    ];
+    let source = rust_for(decls);
+    assert!(source.contains("Speed::new_unchecked(250.0)"));
+}
+
+#[test]
 fn constants_all_forms() {
     let decls = vec![
         speed_decl(),
@@ -608,6 +647,7 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("internal_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -623,6 +663,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
         ])
         .arg("-o")
         .arg(dir.path().join("internal_tuple.rmeta"))
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -756,7 +798,7 @@ fn derivable_scalar_gets_default_with_derived_value() {
         "a derivable scalar must get a Default impl, got:\n{source}"
     );
     assert!(
-        source.contains("Warm(10.0)"),
+        source.contains("Warm::new_unchecked(10.0)"),
         "the derived init must be the range minimum 10.0, got:\n{source}"
     );
 }
@@ -1203,10 +1245,10 @@ fn appendix_b_rust_snapshot() {
 /// pass `--extern ridl_rt=<path>` for the generated source that names the
 /// runtime.
 ///
-/// No compile proof passes `--extern` yet, because no generated code names
-/// `ridl_rt` until the constructors land in Task 3;
-/// [`the_compile_proof_harness_links_ridl_rt`] is what keeps this helper
-/// honest until then.
+/// Every generated named scalar names `::ridl_rt::payload::Violation` from its
+/// `new`, so every compile proof over generated code passes `--extern`;
+/// [`the_compile_proof_harness_links_ridl_rt`] checks the helper on its own,
+/// with a source that has no other way to fail.
 ///
 /// One `rustc` call over its `lib.rs` is the whole build: `ridl-rt` is
 /// `no_std` and has no dependency in any feature combination (ADR-0021
@@ -1255,17 +1297,17 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
 
 #[test]
 fn the_compile_proof_harness_links_ridl_rt() {
-    // The harness Task 3's compile proofs will use. Source naming the
-    // runtime by its absolute path must compile against the rlib this
-    // helper builds, and must fail without it. Without the second half,
-    // a helper that produced an unusable rlib would go unnoticed until
-    // the proof that needs it was written.
+    // The harness the compile proofs use. Source naming the runtime by its
+    // absolute path must compile against the rlib this helper builds, and
+    // must fail without it. Without the second half, a helper that produced
+    // an unusable rlib would only be noticed through a proof failing for a
+    // reason that says nothing about the generated code.
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("names_the_runtime.rs");
     std::fs::write(
         &source_path,
-        // The shape the generated constructors will use: the absolute path,
-        // no `use` line, so no name enters the module's namespace.
+        // The shape the generated constructors use: the absolute path, no
+        // `use` line, so no name enters the module's namespace.
         r#"
 pub struct Speed(pub u16);
 
@@ -1391,6 +1433,7 @@ pub mod ridl {
     let source_path = dir.path().join("appendix_b.rs");
     let meta_path = dir.path().join("appendix_b.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1403,6 +1446,8 @@ pub mod ridl {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1462,6 +1507,7 @@ fn constructible_collections_compile() {
     let source_path = dir.path().join("bag.rs");
     let meta_path = dir.path().join("bag.rmeta");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -1473,6 +1519,8 @@ fn constructible_collections_compile() {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc runs");
@@ -1602,7 +1650,8 @@ fn cross_package_declared_init_omits_the_default() {
 }
 
 /// I2: the same-package equivalent CAN be wrapped: the backend knows
-/// `GearIndex`'s integer backing, so the declared init 1 wraps to `GearIndex(1)`.
+/// `GearIndex`'s integer backing, so the declared init 1 wraps to
+/// `GearIndex::new_unchecked(1)`.
 #[test]
 fn same_package_declared_init_gets_the_correct_default() {
     let gear_index = public_decl(
@@ -1636,8 +1685,8 @@ fn same_package_declared_init_gets_the_correct_default() {
         "the same-package equivalent gets a Default, got:\n{source}"
     );
     assert!(
-        source.contains("GearIndex(1)"),
-        "the declared init 1 must wrap to GearIndex(1), got:\n{source}"
+        source.contains("GearIndex::new_unchecked(1)"),
+        "the declared init 1 must wrap to GearIndex::new_unchecked(1), got:\n{source}"
     );
 }
 

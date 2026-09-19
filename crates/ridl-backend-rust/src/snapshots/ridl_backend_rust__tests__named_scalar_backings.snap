@@ -3,38 +3,198 @@ source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_for(decls)
 ---
 /// Vehicle speed over ground
+///
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Speed(pub f64);
+pub struct Speed(f64);
+impl Speed {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 250.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
+    }
+}
+impl TryFrom<f64> for Speed {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Speed> for f64 {
+    fn from(value: Speed) -> Self {
+        value.0
+    }
+}
 impl Default for Speed {
     fn default() -> Self {
-        Speed(0.0)
+        Speed::new_unchecked(0.0)
     }
 }
 #[repr(transparent)]
-pub struct Counter(pub i64);
+pub struct Counter(i64);
+impl Counter {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: i64) -> Result<Self, ::ridl_rt::payload::Violation> {
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: i64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+impl TryFrom<i64> for Counter {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Counter> for i64 {
+    fn from(value: Counter) -> Self {
+        value.0
+    }
+}
 impl Default for Counter {
     fn default() -> Self {
-        Counter(0)
+        Counter::new_unchecked(0)
     }
 }
 #[repr(transparent)]
-pub struct Enabled(pub bool);
+pub struct Enabled(bool);
+impl Enabled {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: bool) -> Result<Self, ::ridl_rt::payload::Violation> {
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: bool) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> bool {
+        self.0
+    }
+}
+impl TryFrom<bool> for Enabled {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: bool) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Enabled> for bool {
+    fn from(value: Enabled) -> Self {
+        value.0
+    }
+}
 impl Default for Enabled {
     fn default() -> Self {
-        Enabled(false)
+        Enabled::new_unchecked(false)
     }
 }
 #[repr(transparent)]
-pub struct Label(pub String);
+pub struct Label(String);
+impl Label {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: String) -> Result<Self, ::ridl_rt::payload::Violation> {
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: String) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> &str {
+        &self.0
+    }
+    pub fn into_inner(self) -> String {
+        self.0
+    }
+}
+impl TryFrom<String> for Label {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Label> for String {
+    fn from(value: Label) -> Self {
+        value.0
+    }
+}
 impl Default for Label {
     fn default() -> Self {
-        Label(String::new())
+        Label::new_unchecked(String::new())
     }
 }
 #[repr(transparent)]
-pub struct Blob(pub Vec<u8>);
+pub struct Blob(Vec<u8>);
+impl Blob {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: Vec<u8>) -> Result<Self, ::ridl_rt::payload::Violation> {
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: Vec<u8>) -> Self {
+        Self(value)
+    }
+    pub fn get(&self) -> &[u8] {
+        &self.0
+    }
+    pub fn into_inner(self) -> Vec<u8> {
+        self.0
+    }
+}
+impl TryFrom<Vec<u8>> for Blob {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Blob> for Vec<u8> {
+    fn from(value: Blob) -> Self {
+        value.0
+    }
+}
 impl Default for Blob {
     fn default() -> Self {
-        Blob(Vec::new())
+        Blob::new_unchecked(Vec::new())
     }
 }

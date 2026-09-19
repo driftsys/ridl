@@ -2,11 +2,52 @@
 source: crates/ridlc/tests/golden.rs
 expression: output.rust_source
 ---
+/// Quantization (`step`) is not checked by `new`.
 #[repr(transparent)]
-pub struct Speed(pub f64);
-impl Default for Speed {
-    fn default() -> Self {
-        Speed(0.0)
+pub struct Speed(f64);
+impl Speed {
+    /// Constructs the value, enforcing its typl constraints.
+    pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation> {
+        if value < 0.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        if value > 250.0 {
+            return Err(::ridl_rt::payload::Violation {
+                type_name: "Speed",
+                rule: ::ridl_rt::payload::Rule::Range,
+            });
+        }
+        Ok(Self(value))
+    }
+    /// Constructs the value without checking its constraints.
+    ///
+    /// Safe: nothing here relies on the invariant for memory
+    /// soundness. Use it only for a value already known to satisfy
+    /// the contract.
+    pub const fn new_unchecked(value: f64) -> Self {
+        Self(value)
+    }
+    pub const fn get(self) -> f64 {
+        self.0
     }
 }
-pub const MAX_SPEED: Speed = Speed(250.0);
+impl TryFrom<f64> for Speed {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: f64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+impl From<Speed> for f64 {
+    fn from(value: Speed) -> Self {
+        value.0
+    }
+}
+impl Default for Speed {
+    fn default() -> Self {
+        Speed::new_unchecked(0.0)
+    }
+}
+pub const MAX_SPEED: Speed = Speed::new_unchecked(250.0);

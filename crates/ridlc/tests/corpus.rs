@@ -77,6 +77,8 @@ use ridl_sem::{
     check_package, check_system, lower_system, resolve_package, unclaimed_backend_keys,
 };
 
+mod support;
+
 /// The four snapshotted artifacts of one compiled corpus entry.
 struct Compiled {
     /// The rendered diagnostics, or a placeholder when the entry compiles
@@ -1088,6 +1090,7 @@ fn veh_common_generated_rust_compiles_with_rustc() {
     let source_path = dir.join("veh_common.rs");
     let meta_path = dir.join("veh_common.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = support::ridl_rt_rlib(&dir);
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1100,6 +1103,8 @@ fn veh_common_generated_rust_compiles_with_rustc() {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1204,6 +1209,7 @@ fn workspace_two_members_composed_compiles_with_rustc() {
     let source_path = dir.join("composed.rs");
     let meta_path = dir.join("composed.rmeta");
     std::fs::write(&source_path, &source).expect("the composed source is written");
+    let rlib = support::ridl_rt_rlib(&dir);
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1216,6 +1222,8 @@ fn workspace_two_members_composed_compiles_with_rustc() {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1246,6 +1254,7 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
     let source_path = dir.join(format!("{label}.rs"));
     let meta_path = dir.join(format!("{label}.rmeta"));
     std::fs::write(&source_path, source).expect("the generated source is written");
+    let rlib = support::ridl_rt_rlib(&dir);
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -1271,6 +1280,8 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -1315,7 +1326,7 @@ fn veh_cluster_generated_rust_compiles_with_rustc() {
     // something if the corpus's vocabulary is actually in the source it sees —
     // a named scalar, a constant, an enum, and a cross-package reference.
     for marker in [
-        "pub struct Speed(pub f64);",
+        "pub struct Speed(f64);",
         "pub const MAX_SPEED: Speed",
         "pub enum GearPosition",
         "crate::veh::common::",
@@ -1891,7 +1902,7 @@ fn const_chains_lower_as_values_not_names() {
         (
             "Rust",
             &compiled.rust,
-            "pub const FAN_LIMIT: FanLevel = FanLevel(7);",
+            "pub const FAN_LIMIT: FanLevel = FanLevel::new_unchecked(7);",
         ),
         (
             "Rust",
@@ -1921,7 +1932,11 @@ fn const_chains_lower_as_values_not_names() {
     // source doc comment quoting the old wrong output rides into the generated
     // one.
     for (backend, source, leaked) in [
-        ("Rust", &compiled.rust, "= FanLevel(FAN_CEILING);"),
+        (
+            "Rust",
+            &compiled.rust,
+            "= FanLevel::new_unchecked(FAN_CEILING);",
+        ),
         ("Rust", &compiled.rust, "= \"FAN_TAG\";"),
         ("TypeScript", &compiled.typescript, "= FAN_CEILING;"),
         ("TypeScript", &compiled.typescript, "= 'FAN_TAG' as const;"),
