@@ -159,6 +159,22 @@
   when both sides are source trees. Binds the IR every later consumer reads, the
   `ridl build` contract, and `ridl diff`.
 
+- **ADR-0023 — The generated interaction face: entry point, clause translator,
+  and call signatures.** Four decisions taken while implementing story E11.13,
+  the in-process MVP of the face ADR-0018 decision 15 restores: the Rust
+  backend's contract-clause translator accepts one expression form and refuses
+  every other with a `GenerateError`, never dropping a clause silently; the face
+  is emitted from a companion entry point, `generate_face`, while `generate`
+  stays exactly what it emitted before this story, following the precedent
+  ADR-0017 decision 1 set; a `Provider` method takes its argument by reference,
+  superseding the M1 design's by-value example, which cannot compile; and a
+  consumer-side call returns `Result<Correlation, SendError>`, closing a gap
+  that design left open. Binds every later story that extends the Rust backend's
+  interaction face, until superseded: E5.1, Epic 10, and any later language
+  backend that follows this precedent. The as-built face this record's decisions
+  produced is
+  [the interaction-face design record](../design/interaction-face.md).
+
 ADR-0001 and ADR-0003 are not present in this repository; ADR-0003 ("the family
 decision") is noted as not-yet-written in the family overview, and ADR-0012
 constrains it to four family members rather than five.

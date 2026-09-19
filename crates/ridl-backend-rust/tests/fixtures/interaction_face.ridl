@@ -1,5 +1,6 @@
 // The interaction-face MVP fixture (Lane M stage M3, E11.13,
-// docs/wip/2026-09-16-interaction-face-v0-design.md §7). A single-file, single-
+// docs/design/interaction-face.md; the approved design is
+// docs/archive/2026-09-16-interaction-face-v0-design.md §7). A single-file, single-
 // catalog package cut down to what a hand-written `repr(C)` payload stand-in
 // can carry in a later task: fixed-width named scalars, one enum, and one
 // struct whose fields are all fixed size. No optional field, no sequence, no

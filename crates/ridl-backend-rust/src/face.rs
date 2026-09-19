@@ -1,5 +1,6 @@
 //! The generated interaction face (Lane M stage M3, Tasks 2 and 3,
-//! docs/wip/2026-09-16-interaction-face-v0-design.md §6).
+//! `docs/design/interaction-face.md`; the approved design is
+//! `docs/archive/2026-09-16-interaction-face-v0-design.md` §6).
 //!
 //! For each named interface this module emits one `pub mod`, named after the
 //! interface, holding what the design note's §8 calls the face:
