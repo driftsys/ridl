@@ -605,22 +605,54 @@ fn round_trip_failing_ensure_settles_contract_broken() {
 
 #[test]
 fn round_trip_dispatch_counts_only_accepted_settlements() {
+    // Sending and dispatching one claim at a time, instead of queuing both
+    // commands ahead of a single `dispatch` call, makes each call's own
+    // returned count unambiguous: with one success and one failure queued
+    // together, the aggregate is 1 whichever way `dispatch` decides what
+    // counts as accepted, so an aggregate-only assertion cannot tell a
+    // correct count from one that counts the wrong polarity. Splitting the
+    // calls means the first call's count is pinned to 0 (its only claim's
+    // settlement fails) and the second call's count is pinned to 1 (its only
+    // claim's settlement succeeds), which a polarity flip in `dispatch`'s
+    // counting condition cannot pass unnoticed.
     let mut port = Loopback::new("face.demo");
-    {
+    let first = {
         let mut client = generated::cabin::Client::new(&mut port);
-        client.set_level(generated::Level(1)).expect("send first");
-        client.set_level(generated::Level(2)).expect("send second");
-    }
+        client.set_level(generated::Level(1)).expect("send first")
+    };
     port.fail_next_settle();
 
     let mut provider = TestProvider::new(0);
     let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
-    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
-
+    let settled_first = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
     assert_eq!(
-        settled, 1,
-        "the first claim's settlement fails and is not counted; the second succeeds and is"
+        settled_first, 0,
+        "the first claim's settlement fails and dispatch does not count it"
     );
+    assert_eq!(
+        port.ack(first),
+        None,
+        "a failed settle records no outcome for the first claim's correlation"
+    );
+
+    let second = {
+        let mut client = generated::cabin::Client::new(&mut port);
+        client.set_level(generated::Level(2)).expect("send second")
+    };
+    let settled_second = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(
+        settled_second, 1,
+        "the second claim's settlement succeeds and dispatch counts it"
+    );
+    assert_eq!(
+        port.ack(second),
+        Some(Ok(())),
+        "the successful settlement is observable as accepted through ack"
+    );
+
+    // The original claim's shape: exactly one of the two settlements is
+    // counted, across both dispatch calls.
+    assert_eq!(settled_first + settled_second, 1);
     // The provider still runs for both claims: `dispatch` settles a command
     // before calling the provider, unconditionally of whether the handler
     // accepted that settlement.
@@ -649,6 +681,128 @@ fn round_trip_short_caller_buffer_returns_zero_without_consuming_a_claim() {
     let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
     assert_eq!(settled, 1);
     assert_eq!(provider.set_level_calls, vec![1]);
+}
+
+// ---------------------------------------------------------------------------
+// Design §6's settlement table: the three rows with no prior runtime proof.
+// Each test sends raw bytes through the loopback port, bypassing the
+// generated `Client`, so the claim `dispatch` receives has exactly the shape
+// the row names.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn round_trip_unrecognized_ordinal_settles_unknown_interaction() {
+    // Ordinal 99 names no member of `Cabin`, so `dispatch`'s match on
+    // `claim.ord` falls to its fallback arm regardless of the argument
+    // bytes, which is why an empty argument slice is enough here.
+    let mut port = Loopback::new("face.demo");
+    let correlation = port
+        .command(
+            <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
+            ridl_rt::contract::Ordinal(99),
+            &[],
+        )
+        .expect("send");
+
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1, "an outcome was still settled");
+    assert!(
+        provider.set_level_calls.is_empty(),
+        "the provider must not be called for an unrecognized ordinal"
+    );
+
+    let outcome = port.ack(correlation).expect("settled");
+    assert_eq!(
+        outcome,
+        Err(ridl_rt::error::CallError::Contract(
+            ridl_rt::error::Contract::UnknownInteraction
+        )),
+    );
+}
+
+#[test]
+fn round_trip_malformed_argument_bytes_settle_transport_corrupt() {
+    use ridl_rt::contract::Interaction;
+
+    // `Level`'s `ReprC` encoding is exactly 8 bytes (`Payload::verify` in
+    // `tests/interaction_face.rs`'s own `payloads` module); 3 bytes fail
+    // that length check before the value is ever read, so this exercises
+    // `VerifyError::Structure`, not `VerifyError::Contract`.
+    let mut port = Loopback::new("face.demo");
+    let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
+    let correlation = port
+        .command(
+            <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
+            ordinal,
+            &[1, 2, 3],
+        )
+        .expect("send");
+
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1, "an outcome was still settled");
+    assert!(
+        provider.set_level_calls.is_empty(),
+        "the provider must not be called when the argument bytes fail to verify"
+    );
+
+    let outcome = port.ack(correlation).expect("settled");
+    assert_eq!(
+        outcome,
+        Err(ridl_rt::error::CallError::Transport(
+            ridl_rt::error::Transport::Corrupt
+        )),
+    );
+}
+
+#[test]
+fn round_trip_out_of_range_argument_settles_invalid_value() {
+    use ridl_rt::contract::Interaction;
+    use ridl_rt::encoding::ReprC;
+    use ridl_rt::payload::Ref;
+
+    // 200 is out of `Level`'s declared range [0, 100], but Rust's newtype
+    // does not enforce that at construction, so this value encodes to a
+    // well-formed 8-byte `ReprC` payload and fails `verify`'s range check
+    // rather than its length check.
+    let mut port = Loopback::new("face.demo");
+    let level = generated::Level(200);
+    let mut encode_buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let len = Ref::<generated::Level, ReprC>::encode(&level, &mut encode_buf)
+        .expect("encode")
+        .bytes()
+        .len();
+    let ordinal = <generated::CabinSetLevel as Interaction>::MEMBER.ordinal;
+    let correlation = port
+        .command(
+            <generated::Cabin as ridl_rt::contract::Interface>::NUMBER,
+            ordinal,
+            &encode_buf[..len],
+        )
+        .expect("send");
+
+    let mut provider = TestProvider::new(0);
+    let mut buf = [0u8; generated::Cabin::MAX_BUFFER_SIZE];
+    let settled = generated::cabin::dispatch(&mut port, &mut provider, &mut buf);
+    assert_eq!(settled, 1, "an outcome was still settled");
+    assert!(
+        provider.set_level_calls.is_empty(),
+        "the provider must not be called when the argument value breaks its typl constraints"
+    );
+
+    let outcome = port.ack(correlation).expect("settled");
+    assert_eq!(
+        outcome,
+        Err(ridl_rt::error::CallError::Contract(
+            ridl_rt::error::Contract::InvalidValue(ridl_rt::payload::Violation {
+                type_name: "Level",
+                rule: ridl_rt::payload::Rule::Range,
+            })
+        )),
+    );
 }
 
 // ---------------------------------------------------------------------------
