@@ -15,6 +15,36 @@
 //! item by its full path, for example `ridl_rt::sample::Sample`, and imports
 //! none, because several names here — `Duration`, `Handler`, `Kind` — are also
 //! names in `core` or in application code.
+//!
+//! # Where to start
+//!
+//! Most of this crate is called by generated code, not by an application. An
+//! application implements one generated `Provider` trait and calls generated
+//! `Client` and `Publisher` methods; those methods call the ports here. So the
+//! shortest path in is to read one interaction kind at a time, from the
+//! generated side:
+//!
+//! | To do this                       | The generated face gives you | Over this port                                |
+//! | -------------------------------- | ---------------------------- | --------------------------------------------- |
+//! | Read a signal                    | `Client::<name>`             | [`port::SignalReader`], returning [`sample::Sample`] |
+//! | Publish a signal                 | `Publisher::<name>`, `commit` | [`port::SignalWriter`]                        |
+//! | Receive an event                 | `Client::subscribe_<name>`, `Client::next_event` | [`port::EventSource`]     |
+//! | Raise an event                   | `Publisher::<name>`          | [`port::EventSink`]                           |
+//! | Call a command or a query        | `Client::<name>`, returning a [`port::Correlation`] | [`port::Caller`]       |
+//! | Serve a command or a query       | `Provider`, driven by the generated `dispatch` | [`port::Handler`]           |
+//! | Read a provisioned constant      | nothing yet — call the port  | [`port::FixedReader`]                         |
+//!
+//! `docs/technotes/ridl-rt-by-example.md` in this repository walks that table
+//! from top to bottom against concrete generated code, introducing each type
+//! at the point where the generated code first needs it. The library's own
+//! as-built description is `docs/design/ridl-rt.md`.
+//!
+//! Two properties hold everywhere and are worth knowing before reading any
+//! individual item. **No port method waits** — every one returns immediately,
+//! and a call's outcome is retrieved separately through a
+//! [`port::Correlation`]. And **no port names a payload type** — ports carry
+//! interface numbers, ordinals and bytes, and the generated binding is what
+//! encodes and decodes, through [`payload::Ref`].
 
 #![no_std]
 #![forbid(unsafe_code)]

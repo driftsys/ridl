@@ -246,6 +246,22 @@ provenance. Nothing here is normative — the current references live in
   [the CLI reference](../book/cli-reference.md). Read the design's §1 for the
   identity widths lane A consumed, and the plan as a plan: its twelve tasks are
   the sequence the implementation followed, not a description of the result.
+- **2026-09-15-lane-m-driver.md**, **2026-09-16-interaction-face-v0-design.md**
+  and **2026-09-17-interaction-face-v0-plan.md** — the driver, design and plan
+  for lane M: the MVP of the generated interaction face, story E11.13, built
+  deliberately out of ADR-0018 decision 15's sequence so the team has a face to
+  write against ahead of the frame specification (E11.1) and the transport
+  (E11.9). The durable records are
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) (the
+  contract-clause translator, the `generate_face` entry-point split, and the
+  `Provider`/`Client` call signatures settled during the lane's implementation
+  stage) and [the interaction-face design record](../design/interaction-face.md)
+  (the face's architecture as built, and every placeholder it carries with the
+  story that replaces it). Read the design note's §11 and the plan's "Settled M2
+  decisions" section as the reasoning trail behind ADR-0023, not as a second
+  description of the as-built face: two of the plan's own settled decisions (the
+  clause translator and the entry-point split) were found necessary only once
+  implementation started, after the design was approved.
 - **2026-09-15-rsdl-plan.md** — the parse, check and lowering plan for rsdl,
   lane B of the same coordination (driftsys/ridl#328): the rsdl profile of the
   grammar, the workspace-level checks, the lowering to the IR's `System`

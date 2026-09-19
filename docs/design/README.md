@@ -12,3 +12,9 @@ choices, see [`../decisions/`](../decisions/).
   the identity types, the interaction descriptors, the payload proof type, the
   ports, and the error module. The decisions behind its choices are
   [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md).
+- **interaction-face.md** — the generated `Client`/`Publisher`/`Provider`/
+  `dispatch` face over `ridl-rt`, story E11.13's in-process MVP: the two emitter
+  entry points, the descriptors, the clause translator, the settlement table,
+  and every placeholder the story carries with the story that replaces it. The
+  decisions behind its choices are
+  [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md).

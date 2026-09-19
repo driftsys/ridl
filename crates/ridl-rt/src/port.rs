@@ -12,6 +12,12 @@
 //! [`ScannableSignals`] and [`CoherentSignals`] are extensions. They describe
 //! mechanisms some runtimes have, not interaction semantics every runtime must
 //! present, so a runtime may omit them.
+//!
+//! Each trait below names the generated method it backs, so a reader who
+//! arrived from generated code can find the port under it. The crate-level
+//! documentation has the whole table, and
+//! `docs/technotes/ridl-rt-by-example.md` in this repository walks it against
+//! concrete generated code.
 
 use crate::contract::{CatalogRef, InterfaceNo, Ordinal};
 use crate::error::{CallError, Contract};
@@ -30,6 +36,14 @@ pub trait Clock {
 }
 
 /// Signals, consumer side.
+///
+/// A generated `Client` has one method per signal over this port. It reads
+/// into a stack buffer sized from the payload's
+/// [`MAX_SIZE`](crate::payload::Payload::MAX_SIZE), checks the bytes, and
+/// returns a [`Sample`](crate::sample::Sample). Bytes that fail their check
+/// are not an error there: the sample carries the channel's init value and a
+/// provenance of [`Invalid`](crate::sample::Provenance::Invalid), so the
+/// [`ReadError`] here reports the read itself.
 pub trait SignalReader: Attached {
     /// Copies the signal's current value into the front of `out` and returns
     /// its provenance, its freshness and its envelope. The runtime resolves
@@ -65,6 +79,11 @@ pub struct RawSample {
 /// own. `commit` publishes every staged change, with one generation
 /// increment and one timestamp per interface, taken from the runtime's
 /// [`Clock`].
+///
+/// A generated `Publisher` has one method per signal over `set`, plus an
+/// `invalidate_<name>` and a `commit`. The staging split is why a provider
+/// that updates several signals of one interface and then commits produces one
+/// coherent publication rather than several.
 pub trait SignalWriter: Attached {
     /// Stages a new value.
     fn set(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), WriteError>;
@@ -82,6 +101,12 @@ pub trait SignalWriter: Attached {
 }
 
 /// Events, consumer side.
+///
+/// A generated `Client` has a `subscribe_<name>` per event, but a single
+/// `next_event` for the whole interface, because [`next`](EventSource::next)
+/// returns the next occurrence of anything subscribed and the payload type is
+/// not known until its ordinal has been read. The generated method routes on
+/// that ordinal into an enum with one variant per event.
 pub trait EventSource: Attached {
     /// Starts delivery of the listed events.
     fn subscribe(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), SubscribeError>;
@@ -111,6 +136,10 @@ pub struct RawOccurrence {
 }
 
 /// Events, provider side.
+///
+/// A generated `Publisher` has one method per event over this port. Unlike a
+/// signal, an occurrence is not staged and there is no `commit`: there is no
+/// coherent set to assemble.
 pub trait EventSink: Attached {
     /// Raises one occurrence.
     fn raise(&mut self, iface: InterfaceNo, ord: Ordinal, bytes: &[u8]) -> Result<(), RaiseError>;
@@ -120,6 +149,14 @@ pub trait EventSink: Attached {
 ///
 /// A command and a query are separate methods, because their outcomes differ
 /// (ridl §6, §7).
+///
+/// A generated `Client` has one method per command and query over this port,
+/// each returning a [`Correlation`] rather than an outcome, because nothing
+/// here waits. The outcome is retrieved separately: [`ack`](Caller::ack) for a
+/// command, a generated `<name>_reply` over [`reply`](Caller::reply) for a
+/// query. A `require` clause is evaluated before sending, so a failing
+/// precondition costs no round trip and is reported as
+/// [`SendError::Contract`].
 pub trait Caller: Attached {
     /// Sends a command and returns the correlation of its outcome.
     fn command(
@@ -188,6 +225,13 @@ pub struct Correlation(pub u64);
 /// `Ok(&[])` after the arguments and `require` pass, before application code
 /// runs. For a query, it settles with the reply bytes or the outcome the
 /// caller sees.
+///
+/// An application implements neither this trait nor a claim loop. It
+/// implements the generated `Provider` trait and calls the generated
+/// `dispatch`, which makes one pass over the claims already waiting, routes
+/// each by ordinal, decodes, evaluates `require`, calls the provider,
+/// evaluates a query's `ensure`, settles, and returns how many settlements
+/// this port accepted.
 pub trait Handler: Attached {
     /// Starts presenting calls to the listed members.
     fn serve(&mut self, iface: InterfaceNo, ords: &[Ordinal]) -> Result<(), ServeError>;
@@ -231,6 +275,13 @@ pub struct Claim {
 pub struct ClaimId(pub u64);
 
 /// `fixed`, consumer side (ridl §8).
+///
+/// The generated face carries no method over this port in this version: a
+/// `fixed` is provisioned rather than interacted with, so the emitter writes
+/// its descriptor and nothing else, and an application that needs a
+/// provisioned value calls [`read_fixed`](FixedReader::read_fixed) itself.
+/// There is no provider side either — a provisioned constant is supplied to
+/// the runtime, not published by application code.
 pub trait FixedReader: Attached {
     /// Copies the provisioned value into the front of `out` and returns its
     /// length.

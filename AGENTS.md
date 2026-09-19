@@ -86,7 +86,15 @@ Proposed draft with no implementation. See
   whose only errors are RSDL-7xx writes every artifact and still exits 1, and
   that `ridl diff`'s system headings carry no verdict; binds the IR every later
   consumer reads, the `ridl build` contract and `ridl diff`. The as-built
-  implementation record is `docs/technotes/rsdl-implementation.md`).
+  implementation record is `docs/technotes/rsdl-implementation.md`), ADR-0023
+  (the generated interaction face's entry point, clause translator, and call
+  signatures — the Rust backend's `generate_face` companion entry point over the
+  unchanged pipeline `generate`, a narrow contract-clause translator that
+  refuses every clause form it does not accept, a `Provider` method taking its
+  argument by reference, and a consumer-side call returning
+  `Result<Correlation, SendError>`; binds every later story that extends the
+  Rust backend's interaction face. The as-built design record is
+  `docs/design/interaction-face.md`).
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust
   runtime and codegen; step 2, TypeScript and the codegen plugin system), the

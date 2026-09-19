@@ -398,14 +398,18 @@ E11.9.
 | E11.1 | The frame specification — a logical frame with one binding per encoding; ordinal, kind, envelope, provenance, correlation | one document a second implementation could be written from                                                  | M    |
 | E11.9 | `ridl-transport-ws` — the WebSocket transport crate, plus the in-process loopback runtime for tests                       | a contract reaches a second process over the transport, and the loopback runs the same tests with no socket | M    |
 
-**E11.13 is a new identifier**, the next free one in Epic 11. It is the MVP of
-the generated interaction face, taken deliberately out of sequence: ADR-0018
-decision 15 places the face after E11.1 and E11.9, and this story runs before
-both so the team has a face to write against. It is in-process only, and it
-carries three explicit placeholders that later stories retire — a hand-written
-payload implementation (E11.7, E11.8 or E11.12), test-only ports (E11.9), and a
-zero catalog hash (E16.2). Its design is
-[`docs/wip/2026-09-16-interaction-face-v0-design.md`](wip/2026-09-16-interaction-face-v0-design.md).
+**E11.13 landed in driftsys/ridl#418.** It is the MVP of the generated
+interaction face, taken deliberately out of sequence: ADR-0018 decision 15
+places the face after E11.1 and E11.9, and this story ran before both so the
+team has a face to write against. It is in-process only, and it carries four
+explicit placeholders that later stories retire — a hand-written payload
+implementation (E11.7, E11.8 or E11.12), test-only ports (E11.9), a zero catalog
+hash and all-absent encoded sizes (E16.2), and a narrow contract-clause
+translator (E5.1). The as-built record is
+[the interaction-face design record](design/interaction-face.md) and
+[ADR-0023](decisions/ADR-0023-interaction-face-generation.md); its reasoning
+trail is archived at
+[`2026-09-16-interaction-face-v0-design.md`](archive/2026-09-16-interaction-face-v0-design.md).
 
 | ID     | Story                                                                                                                                                                                                                                   | Done when                                                                                                        | Size |
 | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ---- |
