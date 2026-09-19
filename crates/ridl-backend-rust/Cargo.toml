@@ -30,3 +30,8 @@ ridlc = { path = "../ridlc" }
 # source-to-IR path, so a later descriptor test that constructs a
 # `RidlDatabase` itself has the crate available.
 ridl-core = { path = "../ridl-core" }
+# The generated interaction face names `::ridl_rt` (Lane M stage M3). The
+# backend itself emits text that links `ridl-rt` and does not link it, so this
+# is a dev-dependency only: the integration tests that compile the checked-in
+# generated face, and the disposable loopback ports, need it.
+ridl-rt = { path = "../ridl-rt" }
