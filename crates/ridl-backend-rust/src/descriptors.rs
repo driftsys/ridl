@@ -518,15 +518,17 @@ mod tests {
     /// different token text for the same loop body, and the loop body's token
     /// text does not, by itself, say what number the loop computes. Splicing
     /// the emitted block into a real `const` and compiling and running it is
-    /// what makes the actual computed number observable. `[3, 9, 1]` was
-    /// chosen so the maximum (9), the sum (13), the minimum (1), the first (3)
-    /// and the last (1) are all pairwise distinct.
+    /// what makes the actual computed number observable. `[3, 9, 1, 5]` was
+    /// chosen so the maximum (9), the sum (18), the minimum (1), the first (3)
+    /// and the last (5) are all pairwise distinct — three elements cannot do
+    /// this: with only a first, a middle and a last position, one boundary
+    /// position is always either the overall minimum or the overall maximum.
     #[test]
     fn max_size_const_computes_the_maximum_not_a_different_reduction() {
         use proc_macro2::Literal;
         use quote::quote;
 
-        let sizes: Vec<super::TokenStream> = [3usize, 9usize, 1usize]
+        let sizes: Vec<super::TokenStream> = [3usize, 9usize, 1usize, 5usize]
             .into_iter()
             .map(|n| {
                 let literal = Literal::usize_unsuffixed(n);
@@ -566,7 +568,7 @@ mod tests {
 
         assert_eq!(
             printed, "9",
-            "max_size_const over [3, 9, 1] must compute the maximum (9); got {printed}"
+            "max_size_const over [3, 9, 1, 5] must compute the maximum (9); got {printed}"
         );
     }
 
