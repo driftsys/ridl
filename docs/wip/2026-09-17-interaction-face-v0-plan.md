@@ -573,6 +573,14 @@ payload verification and the generated face behavior.
   execution. Driving this branch cleanly needs either a dedicated interface or
   type not shared with the other round-trip tests, or a way to substitute a
   `Payload` implementation per test; neither exists yet.
+- A behavioural test of the command-settled-before / query-settled-after
+  ordering that design §6 states. No behavioural test can observe this ordering
+  today, because neither `Handler::settle` nor the provider call in
+  `tests/support/loopback.rs`'s loopback harness has a side effect through which
+  reordering the two would change final state; the ordering rests entirely on an
+  exact-text assertion in `dispatch_generation.rs`. This is a limitation of the
+  test double, not a defect in this change. E11.9's real in-process runtime is
+  what would make the ordering observable.
 
 ## Self-review against the approved spec
 
