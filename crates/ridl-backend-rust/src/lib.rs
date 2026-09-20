@@ -26,6 +26,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use ridl_ir::name::{camel_case, snake_case};
+use ridl_ir::projection::flatbuffers as fb_projection;
 use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -108,6 +109,14 @@ pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> 
 }
 
 /// The domain-type items of `package` — the shared work of both entry points.
+///
+/// This does not call [`check_flatbuffers_bounds`] (see its own doc for why):
+/// wiring the FlatBuffers refusal into every `generate` call ahead of a codec
+/// that does not exist yet would refuse a package this backend already
+/// generates today whenever it carries a same-package cycle or a reference
+/// this backend cannot resolve — neither of which needs a FlatBuffers bound
+/// unless K5's codec is actually emitted for it. K5 calls the check itself,
+/// once it has a `Payload<FlatBuffers>` implementation to withhold.
 fn domain_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     let mut tuples: Vec<InducedTuple> = Vec::new();
@@ -142,6 +151,176 @@ fn domain_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, Ge
     }
 
     Ok(items)
+}
+
+// ---------------------------------------------------------------------------
+// The FlatBuffers size bound's refusal (design note D-7, stage K4).
+// ---------------------------------------------------------------------------
+
+/// Refuses a package that carries a struct or a union with no finite
+/// FlatBuffers bound (design note D-7 of
+/// `docs/wip/2026-09-20-flatbuffers-codec-design.md`).
+///
+/// The bound itself is [`fb_projection::max_size`], the one implementation
+/// design note D-6 names; this function only maps its `None` onto a
+/// [`GenerateError`]. K4 emits no generated code — `MAX_SIZE` and the
+/// `Payload<FlatBuffers>` implementations are K5's — so this is totality over
+/// the IR handed in directly rather than a case typl source reaches: typl
+/// makes every array and map bound mandatory, defaults a bare `string` or
+/// `bytes` to `[0..256]` (TYPL-103, driftsys/ridl#459), and TYPL-206 rejects a
+/// composite that reaches itself.
+///
+/// **The unbounded member is whatever `fb_projection::max_size` can name, and
+/// no more.** It answers `Option<u64>`, not a reason, so a refusal here names
+/// the declaration, never a specific field — widening the shared projection's
+/// API to carry a reason belongs to whichever stage needs it, not this one.
+///
+/// **Nothing in `generate` or `generate_face` calls this yet.** K5 does, once
+/// it has a `Payload<FlatBuffers>` implementation to withhold for the type
+/// this refuses. Wiring it into `domain_items` ahead of that would refuse a
+/// package this backend already generates today whenever a struct or a union
+/// reaches something this function cannot judge — see
+/// [`decl_resolves_locally`] for exactly what that is and why two of this
+/// crate's own existing tests depend on the backend tolerating it. Exposed as
+/// `pub` for that reason: K5 calls it from `codec.rs`, a sibling module, and
+/// it takes `&v2::Package` rather than the crate-private [`Ctx`] so the
+/// signature stays public without leaking a private type into it.
+pub fn check_flatbuffers_bounds(package: &v2::Package) -> Result<(), GenerateError> {
+    let ctx = Ctx::new(package);
+    for decl in &package.decls {
+        if !fb_projection::mints_root_table(decl) {
+            continue;
+        }
+        let mut visiting = HashSet::new();
+        if !decl_resolves_locally(&ctx, &decl.name, &mut visiting) {
+            continue;
+        }
+        let packages = fb_projection::Packages {
+            package,
+            others: &[],
+        };
+        if fb_projection::max_size(packages, decl).is_none() {
+            return Err(GenerateError {
+                message: format!(
+                    "{name} has no finite FlatBuffers bound: it carries a bare `string` or \
+                     `bytes` with no length constraint, an array or map count that overflows, \
+                     or a composite that reaches itself — the FlatBuffers payload codec \
+                     (roadmap story E11.7) cannot size a buffer for it",
+                    name = decl.name
+                ),
+            });
+        }
+    }
+    Ok(())
+}
+
+/// Whether [`check_flatbuffers_bounds`] can judge `reference`'s bound from
+/// this package alone — every named type [`fb_projection::max_size`] would
+/// have to resolve to size it stays inside the package `ctx` indexes, and the
+/// walk never revisits a declaration already on its own path.
+///
+/// Three things answer `false`, "cannot judge, leave it alone", rather than
+/// letting `fb_projection::max_size` answer for them:
+///
+/// - **a cross-package (dotted) or unknown reference.** `ridl-backend-rust`
+///   generates one package at a time and resolves no cross-package reference
+///   itself — [`Ctx::lookup`] answers `None` for one by design, the same as
+///   every other same-package-only pass in this backend
+///   (`derives::type_ref_eligibility`, `defaults`). Handed `others: &[]`,
+///   `fb_projection::max_size` cannot tell "this reference does not resolve
+///   here" from "this type has no finite bound" — both answer `None` (its own
+///   doc, "a reference that does not resolve in `packages`"). This backend
+///   already generates a struct across such a reference — the corpus's
+///   `ClimateReport` (`crates/ridlc/tests/corpus/veh-cluster/cluster/
+///   services.ridl`, `cabin`/`setpoint` typed by the imported
+///   `veh.common.Temperature`) is one — and nothing here may take that away.
+/// - **a same-package composite that reaches itself.** typl rejects one
+///   (TYPL-206), so it is IR handed in directly the same as the case above,
+///   and this backend already has a considered answer for it that is not
+///   refusal: `recursive_struct_default_terminates` and
+///   `a_cyclic_struct_takes_no_conditional_derives` both pin that a cyclic
+///   struct's *domain type* still generates — Default derivation and the
+///   conditional-derive walk both guard the same cycle and degrade to the
+///   conservative answer rather than erroring. `visiting` gives this walk the
+///   same guard, and answering `true` for the revisit — "nothing further to
+///   resolve on a path already being walked" — would let
+///   `fb_projection::max_size` run and refuse the whole package over exactly
+///   the cycle those two tests hold open; `false` leaves the package alone,
+///   consistent with them, until K5 has a codec to withhold instead.
+/// - **a `Stream` field position.** ridl §12.3 keeps a stream at an
+///   interaction position; it never reaches a struct or tuple field in
+///   checked IR, `max_size` charges nothing for it, and
+///   `a_stream_field_takes_no_conditional_derives` is this backend's existing
+///   test that a struct carrying one still generates.
+fn decl_resolves_locally(ctx: &Ctx, reference: &str, visiting: &mut HashSet<String>) -> bool {
+    if reference.contains('.') {
+        return false;
+    }
+    let Some(decl) = ctx.lookup(reference) else {
+        return false;
+    };
+    if !visiting.insert(reference.to_string()) {
+        // On the path already being walked: a cycle, left for
+        // `check_flatbuffers_bounds` to leave alone (see the doc above).
+        return false;
+    }
+    let resolves = match &decl.kind {
+        Some(v2::decl::Kind::StructDef(def)) => {
+            def.members.iter().all(|member| match &member.member {
+                Some(v2::struct_member::Member::Field(field)) => field
+                    .r#type
+                    .as_ref()
+                    .is_some_and(|ty| field_type_resolves_locally(ctx, ty, visiting)),
+                _ => true,
+            })
+        }
+        Some(v2::decl::Kind::UnionDef(def)) => def
+            .arms
+            .iter()
+            .all(|arm| decl_resolves_locally(ctx, &arm.type_ref, visiting)),
+        _ => true,
+    };
+    visiting.remove(reference);
+    resolves
+}
+
+/// One type position's contribution to [`decl_resolves_locally`], over the
+/// same [`v2::FieldType`] shape `fb_projection::max_size` walks to size it.
+fn field_type_resolves_locally(
+    ctx: &Ctx,
+    ty: &v2::FieldType,
+    visiting: &mut HashSet<String>,
+) -> bool {
+    match &ty.kind {
+        Some(v2::field_type::Kind::Named(reference)) => {
+            decl_resolves_locally(ctx, reference, visiting)
+        }
+        Some(v2::field_type::Kind::Primitive(_)) | Some(v2::field_type::Kind::InlineScalar(_)) => {
+            true
+        }
+        Some(v2::field_type::Kind::Tuple(tuple)) => tuple.fields.iter().all(|field| {
+            field
+                .r#type
+                .as_ref()
+                .is_some_and(|ty| field_type_resolves_locally(ctx, ty, visiting))
+        }),
+        Some(v2::field_type::Kind::Array(array)) => array
+            .element
+            .as_deref()
+            .is_some_and(|element| field_type_resolves_locally(ctx, element, visiting)),
+        Some(v2::field_type::Kind::Map(map)) => {
+            map.key
+                .as_deref()
+                .is_some_and(|key| field_type_resolves_locally(ctx, key, visiting))
+                && map
+                    .value
+                    .as_deref()
+                    .is_some_and(|value| field_type_resolves_locally(ctx, value, visiting))
+        }
+        // A stream: see `decl_resolves_locally`'s third bullet.
+        Some(v2::field_type::Kind::Stream(_)) => false,
+        None => true,
+    }
 }
 
 /// Parses the assembled items as a bare `syn::File` (no inner attribute, so an

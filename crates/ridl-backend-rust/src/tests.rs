@@ -2,7 +2,7 @@
 //! Default derivation behaviour (the leaf-recursion rule), and the C header
 //! snapshot.
 
-use super::{Generated, generate};
+use super::{Generated, check_flatbuffers_bounds, generate};
 use ridl_ir::v2;
 
 // ---------------------------------------------------------------------------
@@ -4082,5 +4082,145 @@ fn the_derive_attribute_sits_under_the_doc_comment() {
     assert!(
         derive_at < repr_at,
         "the derive must precede the repr, got:\n{source}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The FlatBuffers size bound's refusal (design note D-7, stage K4).
+//
+// `check_flatbuffers_bounds` is not called from `generate` or `generate_face`
+// yet (see its own doc) — these tests call it directly over hand-built IR,
+// which is what stage K4's own `Done when` asks for.
+// ---------------------------------------------------------------------------
+
+/// A struct whose only field is a bounded named scalar sizes to a finite
+/// buffer: this is the shape the corpus proves after driftsys/ridl#459, and
+/// the refusal must not fire on it.
+#[test]
+fn flatbuffers_bound_accepts_a_bounded_struct() {
+    let holder = v2::StructDef {
+        members: vec![field_member(named_field(
+            "speed",
+            1,
+            "Speed",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![
+            speed_decl(),
+            public_decl("Holder", v2::decl::Kind::StructDef(holder)),
+        ],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a struct with only bounded fields must not be refused"
+    );
+}
+
+/// A bare `string` map key with no length bound has no finite FlatBuffers
+/// size — [`ridl_ir::projection::flatbuffers::max_size`]'s own doc lists it
+/// first among the `None` cases, and
+/// `ridl_ir::projection::flatbuffers::tests::a_bare_string_map_key_has_no_bound`
+/// pins the fact this test pins the refusal over. typl never hands the
+/// compiler one: §4.4–§4.5 default a bare `string` or `bytes` at a map key to
+/// `[0..256]` (TYPL-103, driftsys/ridl#459), so this is IR built directly,
+/// the same as every other fixture in this module that documents "the
+/// checker rejects this, but the backend must not trust that gate".
+#[test]
+fn flatbuffers_bound_refuses_a_bare_string_map_key() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "byId",
+            1,
+            v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::String as i32,
+                    )),
+                })),
+                value: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::Boolean as i32,
+                    )),
+                })),
+                min: 0,
+                max: 8,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("a bare string map key has no bound");
+    assert!(
+        err.message.contains("Holder"),
+        "the refusal must name the declaration, got: {}",
+        err.message
+    );
+}
+
+/// A struct that reaches a cross-package reference is left alone: this
+/// backend resolves no cross-package reference itself
+/// (`struct_with_a_cross_package_field_drops_conditional_derives` already
+/// pins that `generate` still emits one), so `fb_projection::max_size` cannot
+/// tell "unresolved here" from "unbounded", and `decl_resolves_locally`
+/// answers `false` rather than letting it guess.
+#[test]
+fn flatbuffers_bound_leaves_a_cross_package_reference_alone() {
+    let holder = v2::StructDef {
+        members: vec![field_member(named_field(
+            "speed",
+            1,
+            "veh.other.Speed",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a cross-package reference must not be refused: this backend cannot judge it"
+    );
+}
+
+/// A same-package struct that reaches itself is left alone, the same as a
+/// cross-package reference: `recursive_struct_default_terminates` and
+/// `a_cyclic_struct_takes_no_conditional_derives` already pin that `generate`
+/// still emits `S`'s domain type over exactly this shape, and this refusal
+/// must not take that away before K5 has a codec to withhold instead.
+#[test]
+fn flatbuffers_bound_leaves_a_cycle_alone() {
+    let recursive = v2::StructDef {
+        members: vec![field_member(named_field(
+            "next",
+            1,
+            "S",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![public_decl("S", v2::decl::Kind::StructDef(recursive))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a same-package cycle must not be refused before K5 has a codec to withhold"
     );
 }
