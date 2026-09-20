@@ -148,6 +148,14 @@ design note, from the archive.
   decision with a risk the file names, not an evidence-driven one. It carries
   the model routing Sebastien set on 2026-09-16 and three rules C3 paid to
   learn. Archive it with the lanes plan.
+- **2026-09-20-flatbuffers-codec-design.md** — the design note for roadmap story
+  E11.7, the FlatBuffers payload codec: twelve proposed decisions over where the
+  `Payload<FlatBuffers>` implementations are emitted, how `encode` builds a
+  back-to-front format into a caller's slice, where the typl constraint check
+  runs so `decode` stays infallible, who owns the `MAX_SIZE` computation Epic 16
+  also needs, and how the generated face stops being bound to `ReprC`. **A
+  proposal.** It decides nothing until the disposition comment on its pull
+  request, and the plan follows that comment. Roadmap: E11.7.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a
