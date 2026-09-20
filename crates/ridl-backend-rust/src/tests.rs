@@ -3447,16 +3447,298 @@ fn a_collection_field_keeps_eq_and_loses_copy() {
     assert_eq!(derived, ["Debug", "Clone", "PartialEq", "Eq", "Hash"]);
 }
 
+/// A reserved tombstone emits no field (typl §7.4), so it constrains nothing.
+///
+/// The fixture is integer-only on purpose. `struct_with_optional_and_reserved`
+/// also holds a tombstone, but it holds a `String` leaf and an `f64` leaf as
+/// well, so its struct already meets to no conditional derive and a tombstone
+/// that contributed `Eligibility::NONE` would change nothing there. Here the
+/// fields alone permit `Copy`, `Eq` and `Hash`, so the tombstone is the only
+/// thing that could take them away.
+#[test]
+fn a_reserved_tombstone_does_not_constrain_the_derives() {
+    let ledger = public_decl(
+        "Ledger",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![
+                field_member(named_field(
+                    "count",
+                    1,
+                    "Counter",
+                    false,
+                    init_value(true, None),
+                )),
+                reserved_member(2, "legacyChecksum"),
+                field_member(named_field(
+                    "total",
+                    3,
+                    "Counter",
+                    false,
+                    init_value(true, None),
+                )),
+            ],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), ledger]);
+    let derived = derives_of(&source, "pub struct Ledger {");
+    assert_always_derived(&derived, "Ledger");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"],
+        "a reserved tombstone must not take a conditional derive away"
+    );
+}
+
+/// A map field at the given key and value type, holding up to 32 entries.
+fn map_field(name: &str, key: &str, value: &str) -> v2::Field {
+    let named = |type_ref: &str| {
+        Some(Box::new(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Named(type_ref.to_string())),
+        }))
+    };
+    v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: named(key),
+                value: named(value),
+                min: 0,
+                max: 32,
+            }))),
+        }),
+        ..named_field(name, 1, "", false, init_value(true, None))
+    }
+}
+
+/// A map emits `Vec<(K, V)>`, which is not `Copy` however `Copy` its halves
+/// are. The fixture's key and value are both integer-backed, so the leaves
+/// alone would permit `Copy`; the map position is what refuses it.
+#[test]
+fn a_map_field_loses_copy() {
+    let table = public_decl(
+        "Table",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(map_field("meta", "Counter", "Counter"))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), table]);
+    assert!(
+        source.contains("Vec<(Counter, Counter)>"),
+        "the map must emit the Vec form this test reasons about, got:\n{source}"
+    );
+    let derived = derives_of(&source, "pub struct Table {");
+    assert_always_derived(&derived, "Table");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq", "Eq", "Hash"],
+        "a map field must lose Copy and keep the equality pair"
+    );
+}
+
+/// A map whose value reaches a float loses `Eq` and `Hash`: `f64` has neither,
+/// and `Vec<(K, V)>` has them only when both halves do. The key is
+/// integer-backed, so the float reaches the struct through the value half
+/// alone.
+#[test]
+fn a_map_whose_value_reaches_a_float_loses_eq() {
+    let table = public_decl(
+        "Table",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(map_field("meta", "Counter", "Speed"))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), counter_decl(), table]);
+    let derived = derives_of(&source, "pub struct Table {");
+    assert_always_derived(&derived, "Table");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "a map whose value reaches a float must lose Eq and Hash"
+    );
+}
+
+/// A cyclic IR takes no conditional derive.
+///
+/// A cycle is TYPL-206 upstream, but this pass does not trust that gate: on a
+/// repeat visit it returns `Eligibility::NONE` rather than recursing forever.
+/// [`recursive_struct_default_terminates`] pins that the recursion terminates;
+/// this pins what it terminates *with*, which a guard returning
+/// `Eligibility::ALL` would also satisfy.
+#[test]
+fn a_cyclic_struct_takes_no_conditional_derives() {
+    let recursive = v2::StructDef {
+        members: vec![field_member(named_field(
+            "next",
+            1,
+            "S",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let source = rust_for(vec![public_decl("S", v2::decl::Kind::StructDef(recursive))]);
+    let derived = derives_of(&source, "pub struct S {");
+    assert_always_derived(&derived, "S");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "a cycle must refuse every conditional derive"
+    );
+}
+
+/// A `Stream` position refuses every conditional derive.
+///
+/// A stream is an interaction-position type (ridl §12.3) and never reaches a
+/// struct field in checked IR. The fixture is built by hand to exercise the
+/// backend's totality over an IR it did not lower itself: the field emits
+/// `()`, and the conservative answer is what the arm returns.
+#[test]
+fn a_stream_field_takes_no_conditional_derives() {
+    let feed = public_decl(
+        "Feed",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(shaped_field(
+                "items",
+                1,
+                v2::field_type::Kind::Stream(v2::StreamType {
+                    element: Some(v2::stream_type::Element::Primitive(
+                        v2::PrimitiveType::String as i32,
+                    )),
+                }),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![feed]);
+    let derived = derives_of(&source, "pub struct Feed {");
+    assert_always_derived(&derived, "Feed");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "a stream position must refuse every conditional derive"
+    );
+}
+
+/// An `Unspecified` field primitive refuses every conditional derive.
+///
+/// This is the field-primitive path only. An `Unspecified` *backing* never
+/// reaches it: `backing_scalar` maps an absent or unspecified primitive
+/// backing to [`ScalarBacking::Bytes`], so such a type emits `Vec<u8>` and is
+/// `Eq` and `Hash` without being `Copy` — which is what
+/// [`string_backed_scalar_is_not_copy`] already covers for the other
+/// allocating backing.
+///
+/// [`ScalarBacking::Bytes`]: super::ScalarBacking::Bytes
+#[test]
+fn an_unspecified_field_primitive_takes_no_conditional_derives() {
+    let hole = public_decl(
+        "Hole",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(shaped_field(
+                "nothing",
+                1,
+                v2::field_type::Kind::Primitive(v2::PrimitiveType::Unspecified as i32),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![hole]);
+    let derived = derives_of(&source, "pub struct Hole {");
+    assert_always_derived(&derived, "Hole");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "an Unspecified field primitive must refuse every conditional derive"
+    );
+}
+
+/// A **fixed** array refuses `Copy` too, and that is a policy rather than a
+/// soundness rule: `[Counter; 4]` is `Copy` in Rust, so deriving it would
+/// compile. The backend refuses it anyway, so that `Copy` never depends on the
+/// array bounds being equal — a rule no reader of the generated crate could
+/// predict from the declaration.
+///
+/// [`a_collection_field_keeps_eq_and_loses_copy`] covers the bounded form,
+/// where `Vec<T>` makes the refusal a soundness rule instead.
+#[test]
+fn a_fixed_array_field_loses_copy_by_policy() {
+    let readings = public_decl(
+        "Readings",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(array_field("counts", "Counter", 4, 4))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), readings]);
+    assert!(
+        source.contains("[Counter; 4]"),
+        "the array must emit the fixed form this test reasons about, got:\n{source}"
+    );
+    let derived = derives_of(&source, "pub struct Readings {");
+    assert_always_derived(&derived, "Readings");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq", "Eq", "Hash"],
+        "a fixed array must lose Copy even though [T; N] would permit it"
+    );
+}
+
 /// `Default` is never derived (design decision 8): it comes from the typl init
 /// value through `defaults.rs`, which may be a declared `= 0.5` that
 /// `#[derive(Default)]` would silently replace with the backing's zero.
+///
+/// The fixture covers every declaration kind that receives a derive attribute
+/// — `type`, `struct`, `enum`, `enum set` and `union` — not just the scalars.
+/// `defaults.rs` emits an `impl Default` for several of them, so a rule that
+/// derived `Default` on the composites while sparing the scalars would be an
+/// easy thing to write and would otherwise go unnoticed here.
 #[test]
 fn default_is_never_derived() {
-    let source = rust_for(vec![speed_decl(), counter_decl(), features_decl()]);
+    let tally = public_decl(
+        "Tally",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(named_field(
+                "count",
+                1,
+                "Counter",
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let outcome = public_decl(
+        "Outcome",
+        v2::decl::Kind::UnionDef(v2::UnionDef {
+            arms: vec![v2::UnionArm {
+                name: "ok".to_string(),
+                ordinal: 1,
+                type_ref: "Tally".to_string(),
+                doc: String::new(),
+            }],
+            is_result: false,
+            reserved: Vec::new(),
+        }),
+    );
+    let source = rust_for(vec![
+        speed_decl(),
+        counter_decl(),
+        features_decl(),
+        gear_position_decl(),
+        tally,
+        outcome,
+    ]);
     for header in [
         "pub struct Speed(f64);",
         "pub struct Counter(i64);",
         "pub struct Features(i64);",
+        "pub enum GearPosition {",
+        "pub struct Tally {",
+        "pub enum Outcome {",
     ] {
         let derived = derives_of(&source, header);
         assert!(
@@ -3466,40 +3748,76 @@ fn default_is_never_derived() {
     }
     // The positive companion: the Default the backend does emit is an impl
     // built from the init value, not a derive.
-    assert!(
-        source.contains("impl Default for Speed"),
-        "the init-value Default is still emitted, got:\n{source}"
-    );
+    for emitted in [
+        "impl Default for Speed",
+        "impl Default for GearPosition",
+        "impl Default for Tally",
+    ] {
+        assert!(
+            source.contains(emitted),
+            "the init-value Default is still emitted (`{emitted}`), got:\n{source}"
+        );
+    }
 }
 
 /// An induced tuple struct carries its own derive attribute. It has to: the
 /// struct that holds it derives `Debug`, `Clone` and `PartialEq`
 /// unconditionally, and those derives do not compile unless the tuple struct
 /// has them too.
+///
+/// The fixture is deliberately heterogeneous, and the tuple's answer is
+/// deliberately different from its holder's. The tuple is an integer and a
+/// float, so it is `Copy` and not `Eq` — neither `Eligibility::ALL` nor
+/// `Eligibility::NONE`, so a `tuple_derive_attr` that ignored the eligibility
+/// computation and returned a fixed answer could not pass. The holder adds a
+/// `String`-backed field, so it is neither `Copy` nor `Eq`, and the two
+/// attributes cannot be each other's.
 #[test]
 fn an_induced_tuple_struct_carries_its_derives() {
     let range = v2::Field {
         r#type: Some(v2::FieldType {
             optional: false,
             kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
-                fields: vec![tuple_field("min", "Counter"), tuple_field("max", "Counter")],
+                fields: vec![tuple_field("min", "Counter"), tuple_field("max", "Speed")],
             })),
         }),
         ..named_field("range", 1, "", false, init_value(true, None))
     };
+    let label = public_decl(
+        "Label",
+        primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
+    );
     let bounds = public_decl(
         "Bounds",
         v2::decl::Kind::StructDef(v2::StructDef {
-            members: vec![field_member(range)],
+            members: vec![
+                field_member(range),
+                field_member(named_field(
+                    "name",
+                    2,
+                    "Label",
+                    false,
+                    init_value(true, None),
+                )),
+            ],
             fixed_layout: false,
         }),
     );
-    let source = rust_for(vec![counter_decl(), bounds]);
+    let source = rust_for(vec![speed_decl(), counter_decl(), label, bounds]);
     let tuple = derives_of(&source, "pub struct BoundsRange {");
     assert_always_derived(&tuple, "BoundsRange");
-    assert_eq!(tuple, ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]);
+    assert_eq!(
+        tuple,
+        ["Debug", "Clone", "Copy", "PartialEq"],
+        "the tuple's own closure is an integer and a float: Copy, not Eq"
+    );
     let outer = derives_of(&source, "pub struct Bounds {");
-    assert_eq!(outer, ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]);
+    assert_always_derived(&outer, "Bounds");
+    assert_eq!(
+        outer,
+        ["Debug", "Clone", "PartialEq"],
+        "the holder reaches a String as well as a float, so it takes neither"
+    );
 }
 
 /// An enum set is `Copy`, and that is what lets a struct field holding one be
