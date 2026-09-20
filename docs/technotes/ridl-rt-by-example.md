@@ -38,7 +38,7 @@ examples below run against, which holds every value in a map on one thread and
 whose clock is a counter the test advances by hand; `MinimalSignalOnlyPort` in
 `crates/ridl-backend-rust/tests/interaction_face.rs`; and `Stub` and `Memory`
 inside `ridl-rt`'s own `tests/ports.rs` and `examples/read_sample.rs`. Story
-E11.9 builds the first real runtime.
+E11.15 builds the first real runtime.
 
 The section [What is provisional](#what-is-provisional) lists every placeholder
 the examples below stand on. Read it before you build on any of this.

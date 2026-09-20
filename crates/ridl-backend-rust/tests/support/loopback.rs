@@ -6,8 +6,8 @@
 //! This is not a runtime and carries no runtime or transport claim. It holds
 //! every value in memory, in one process, on one thread; its clock is a
 //! counter the test advances by hand, never wall-clock time; and it has no
-//! IO. Story E11.9 replaces it with the real in-process runtime
-//! (`ridl-loopback`, ADR-0020 decision 6), and the person landing E11.9
+//! IO. Story E11.15 replaces it with the real in-process runtime
+//! (`ridl-loopback`, ADR-0020 decision 6), and the person landing E11.15
 //! should read this module out rather than build on it.
 //!
 //! It implements exactly the ports the generated face needs to run:

@@ -148,6 +148,12 @@ design note, from the archive.
   decision with a risk the file names, not an evidence-driven one. It carries
   the model routing Sebastien set on 2026-09-16 and three rules C3 paid to
   learn. Archive it with the lanes plan.
+- **2026-09-20-lane-k-driver.md** — the driver prompt for lane K, the
+  FlatBuffers payload codec (story E11.7). Its stage K0 filed the two rows the
+  codec work surfaced, E11.14 (the face and the codec reach `ridl build`) and
+  E11.15 (`ridl-loopback`, split out of E11.9 so it does not wait on the frame
+  specification). Stage K1 writes the codec's design note, which takes twelve
+  named decisions, and then its plan. The stages after K1 come from that plan.
 - **typl-value-objects-design.md** and **typl-value-objects-plan.md** — typl
   §1.1 promises validators across every backend and neither language backend
   emits one. Design plus a ten-task plan; amends ADR-0013 rather than minting a

@@ -10,8 +10,9 @@ driftsys/ridl#308 and #309, the proof type that keeps decoding safe with no
 `unsafe`, the cargo features, the exhaustiveness split of the error enums, and
 the release and versioning policy. It binds every consumer of `ridl-rt`: the
 Rust codegen (roadmap epic E11's later stories), the two runtimes
-(`ridl-loopback`, `ridl-transport-ws`, story E11.9), and the ridl reference
-finalization pass (story E14.2).
+(`ridl-loopback`, story E11.15 since the split of 2026-09-20; and
+`ridl-transport-ws`, story E11.9), and the ridl reference finalization pass
+(story E14.2).
 
 Written from lane A of the 2026-09-13 step-1 coordination (driftsys/ridl#328),
 which built `crates/ridl-rt`. The reasoning trail, including the "Alternatives
@@ -298,6 +299,10 @@ trusted with no `unsafe` and no second verification pass.
     `SignalWriter::commit`, removing the property a signal read is specified to
     have, that a read does not block on a publication. Story E11.9 builds the
     first runtime to this shape, and its roadmap row states that obligation.
+    **Since 2026-09-20 that story is E11.15** (driftsys/ridl#445): E11.9 was
+    split, its loopback half became E11.15, and the `Done when` clause this
+    paragraph points at moved to E11.15's row unchanged. E11.9 keeps
+    `ridl-transport-ws`, which builds no runtime.
 
 ## Alternatives considered
 
@@ -380,7 +385,7 @@ trusted with no `unsafe` and no second verification pass.
 | [ADR-0006](ADR-0006-walking-skeleton-execution.md) decision 1                        | a 2026-09-14 amendment records that `ridl-rt` is the one workspace crate on edition 2021, tested as both editions under this record's decision 10                                                                                                                                                                                |
 | [ADR-0009](ADR-0009-toolchain-and-gate-parity.md) decision 4                         | a 2026-09-14 amendment records that `cargo fmt --all`'s style edition now follows each crate's own edition rather than one workspace-wide value, because `ridl-rt` is edition 2021 and every other crate is edition 2024                                                                                                         |
 | [the `ridl-rt` design record](../design/ridl-rt.md), "The ports"                     | two paragraphs record the forwarding impls of decision 11 and the handle model of decision 12                                                                                                                                                                                                                                    |
-| [the roadmap](../ROADMAP.md), story E11.9                                            | its `Done when` gains the handle model of decision 12: the loopback exposes one handle per port role, its reader handle is `Sync`, and it offers the aggregate the generated face is built over                                                                                                                                  |
+| [the roadmap](../ROADMAP.md), story E11.9, then E11.15                               | its `Done when` gains the handle model of decision 12: the loopback exposes one handle per port role, its reader handle is `Sync`, and it offers the aggregate the generated face is built over. E11.9 was split on 2026-09-20 (driftsys/ridl#445) and that clause moved to story E11.15's row unchanged                         |
 
 ## References
 
