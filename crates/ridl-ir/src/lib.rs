@@ -811,6 +811,7 @@ pub mod v2 {
 }
 
 pub mod name;
+pub mod projection;
 
 #[cfg(test)]
 mod v2_round_trip {
