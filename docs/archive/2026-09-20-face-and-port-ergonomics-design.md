@@ -1,8 +1,12 @@
 # The generated face and the ports — six decisions before E11.9
 
-Status: working note, 2026-09-20, drafted for decision. Nothing here is
-ratified; each decision below is taken when the maintainer says so, and the
-records named in §5 change then. Read after
+**Status: settled and archived, 2026-09-20.** Every decision below was taken
+that day — D-1 to D-6 as proposed, and D-3 amended the same day so that a
+runtime may also offer an aggregate handle covering the port set one interface's
+face needs. All of them are implemented, and every record named in §5 has been
+changed; the table there says where each one landed. This note is kept as the
+reasoning behind those records, not as a statement of the current design — read
+the records for that. Read after
 [the `ridl-rt` design record](../design/ridl-rt.md),
 [the interaction-face design record](../design/interaction-face.md),
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) and
@@ -225,7 +229,15 @@ on:
    sizing rule waits for them.
 3. **`Box<P>` forwarding** (D-2, deferred).
 
-## 5. Records this note changes when ratified
+## 5. Records this note changed
+
+Every row below is discharged. The decisions were recorded in
+[#432](https://github.com/driftsys/ridl/pull/432), the forwarding impls built in
+[#438](https://github.com/driftsys/ridl/pull/438), and the face change made in
+[#439](https://github.com/driftsys/ridl/pull/439). Two records the table does
+not name were found to carry the superseded shape and were rewritten with the
+face: `docs/design/interaction-face.md`, which the table does name, and
+`docs/technotes/ridl-rt-by-example.md`, which it does not.
 
 | Record                                        | Change                                                                                                                                                          |
 | --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
