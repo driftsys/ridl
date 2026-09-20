@@ -22,6 +22,7 @@
 
 use std::collections::{BTreeSet, HashMap};
 
+use ridl_ir::projection::flatbuffers as projection;
 use ridl_ir::v2;
 
 #[cfg(test)]
@@ -37,6 +38,19 @@ pub struct Generated {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerateError {
     pub message: String,
+}
+
+/// A projection fact that could not be derived becomes this backend's own
+/// error, message unchanged. `ridl_ir::projection::flatbuffers` refuses
+/// exactly what this backend used to refuse itself — an ordinal of 0, a tuple
+/// wider than a FlatBuffers id — and it says so in the same words, so moving
+/// the derivation there changed no diagnostic a caller sees.
+impl From<projection::ProjectionError> for GenerateError {
+    fn from(error: projection::ProjectionError) -> Self {
+        Self {
+            message: error.message,
+        }
+    }
 }
 
 /// Generates the FlatBuffers schema for `package`, resolving foreign
@@ -347,7 +361,8 @@ fn emit_union(
     }
     out.push_str(&format!("\nunion {union_name} {{ {} }}\n", arms.join(", ")));
     out.push_str(&format!(
-        "\ntable {name} {{\n  value: {union_name} (id: 1);\n}}\n"
+        "\ntable {name} {{\n  value: {union_name} (id: {});\n}}\n",
+        projection::UNION_WRAPPER_VALUE_ID
     ));
     Ok(())
 }
@@ -457,11 +472,30 @@ fn emit_struct(
     includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
     let mut fields = Namespace::fields(name);
+    let layout = projection::struct_table(name, def)?;
+    let members: Vec<&v2::struct_member::Member> = def
+        .members
+        .iter()
+        .filter_map(|member| member.member.as_ref())
+        .collect();
+    // One slot per member, in the same order: `struct_table` walks the same
+    // list and skips the same empty members. Checked rather than assumed,
+    // because `zip` truncates silently and would emit a short table if the
+    // two ever stopped agreeing.
+    if layout.slots.len() != members.len() {
+        return Err(GenerateError {
+            message: format!(
+                "`{name}` carries {} struct members but the projection gives {} slots.",
+                members.len(),
+                layout.slots.len()
+            ),
+        });
+    }
     out.push_str(&format!("\ntable {name} {{\n"));
-    for member in &def.members {
-        match &member.member {
-            Some(v2::struct_member::Member::Field(field)) => {
-                let id = member_id(name, field.ordinal)?;
+    for (slot, member) in layout.slots.iter().zip(members) {
+        let id = slot.id;
+        match member {
+            v2::struct_member::Member::Field(field) => {
                 let field_name = ridl_ir::name::snake_case(&field.name);
                 fields.claim(
                     &field_name,
@@ -482,8 +516,7 @@ fn emit_struct(
                     id,
                 );
             }
-            Some(v2::struct_member::Member::Reserved(reserved)) => {
-                let id = member_id(name, reserved.ordinal)?;
+            v2::struct_member::Member::Reserved(reserved) => {
                 let placeholder = format!("reserved_{}", reserved.ordinal);
                 fields.claim(
                     &placeholder,
@@ -494,7 +527,6 @@ fn emit_struct(
                 )?;
                 out.push_str(&format!("  {placeholder}: ubyte (id: {id}, deprecated);\n"));
             }
-            None => {}
         }
     }
     out.push_str("}\n");
@@ -526,20 +558,6 @@ fn push_field(
     out.push_str(&format!(
         "  {field_name}: {type_text}{default_clause} (id: {id});\n"
     ));
-}
-
-/// The FlatBuffers `id` for one struct member: the typl ordinal minus one.
-/// Refused rather than subtracted with a wrapping or panicking underflow if
-/// the IR ever carries ordinal 0 — an ordinal typl itself never assigns
-/// (typl §7.4), so this is defensive against malformed IR, not a case
-/// reachable through the compiler.
-fn member_id(owner: &str, ordinal: u32) -> Result<u32, GenerateError> {
-    ordinal.checked_sub(1).ok_or_else(|| GenerateError {
-        message: format!(
-            "`{owner}` carries a struct member with ordinal 0, which FlatBuffers ids cannot \
-             represent — typl ordinals start at 1 (typl §7.4)."
-        ),
-    })
 }
 
 /// The FlatBuffers type at one field position — tier 1's typl surface: a
@@ -770,14 +788,11 @@ fn named_field_type(
             false,
             None,
         )),
-        Some(v2::decl::Kind::EnumDef(def)) => {
-            let zero_declared = def.values.iter().any(|value| value.value == 0);
-            Ok((
-                qualified_type_name(decl, foreign_package, includes),
-                !zero_declared,
-                None,
-            ))
-        }
+        Some(v2::decl::Kind::EnumDef(def)) => Ok((
+            qualified_type_name(decl, foreign_package, includes),
+            projection::enum_field_needs_null_default(def),
+            None,
+        )),
         Some(v2::decl::Kind::EnumSetDef(esd)) => {
             let (scalar, comment) = enum_set_field_type(esd);
             Ok((scalar, false, comment))
@@ -976,7 +991,14 @@ fn emit_box_table(
     comment: Option<String>,
 ) {
     out.push_str(&format!("\ntable {name} {{\n"));
-    push_field(out, "value", type_text, needs_null_default, comment, 0);
+    push_field(
+        out,
+        "value",
+        type_text,
+        needs_null_default,
+        comment,
+        projection::UNION_ARM_BOX_VALUE_ID,
+    );
     out.push_str("}\n");
 }
 
@@ -993,13 +1015,18 @@ fn emit_tuple_table(
     induced: &mut Vec<Induced>,
     includes: &mut BTreeSet<String>,
 ) -> Result<(), GenerateError> {
+    let layout = projection::tuple_table(name, tuple)?;
     out.push_str(&format!("\ntable {name} {{\n"));
-    for (index, field) in tuple.fields.iter().enumerate() {
-        let position = index + 1;
+    for (slot, field) in layout.slots.iter().zip(tuple.fields.iter()) {
+        let id = slot.id;
+        // The 1-based position the generated field name carries is the slot's
+        // own, taken from the layout rather than recomputed from the id.
+        let projection::SlotSource::TupleField { position } = slot.source else {
+            return Err(GenerateError {
+                message: format!("{name} was given a slot that is not a tuple field."),
+            });
+        };
         let field_name = format!("field_{position}");
-        let id = u32::try_from(index).map_err(|_| GenerateError {
-            message: format!("{name} has more tuple fields than a FlatBuffers id can carry."),
-        })?;
         let ty = field.r#type.as_ref().ok_or_else(|| GenerateError {
             message: format!("{name}.{field_name} carries no type in the IR."),
         })?;
@@ -1053,7 +1080,14 @@ fn emit_entry_table(
         induced,
         includes,
     )?;
-    push_field(out, "key", &key_text, key_needs_null, key_comment, 0);
+    push_field(
+        out,
+        "key",
+        &key_text,
+        key_needs_null,
+        key_comment,
+        projection::MAP_ENTRY_KEY_ID,
+    );
     let (value_text, value_needs_null, value_comment) = resolve_field_type(
         packages,
         name,
@@ -1069,7 +1103,7 @@ fn emit_entry_table(
         &value_text,
         value_needs_null,
         value_comment,
-        1,
+        projection::MAP_ENTRY_VALUE_ID,
     );
     out.push_str("}\n");
     Ok(())

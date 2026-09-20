@@ -1,5 +1,9 @@
-use crate::{generate, generate_with};
+use std::collections::HashMap;
+
+use ridl_ir::projection::flatbuffers as projection;
 use ridl_ir::v2;
+
+use crate::{generate, generate_with};
 
 // `compile_with_planus` and `compile_with_planus_and_siblings` live in
 // `tests/support/mod.rs`, loaded here by path so the unit tests and
@@ -1374,4 +1378,735 @@ fn a_local_struct_reference_names_the_bare_declared_table() {
         generated.fbs_source
     );
     compile_with_planus("veh.common.fbs", &generated.fbs_source);
+}
+
+// ---------------------------------------------------------------------
+// The drift test (E11.7, design note D-1 and D-10)
+// ---------------------------------------------------------------------
+//
+// The `.fbs` schema this backend emits and the codec `ridl-backend-rust`
+// emits have to agree byte for byte on ADR-0019's projection. They share no
+// emission code, so what they share is `ridl_ir::projection::flatbuffers`,
+// and this is the test that fails when one of them walks away from it: the
+// facts that module exports are compared against the schema text this
+// backend actually wrote.
+//
+// **What it can and cannot catch today.** This backend now derives its ids
+// from the facts, so perturbing a *fact* moves both sides together and the
+// comparison stays quiet — what fails then is the hand-written assertions
+// elsewhere in this file. What the comparison does catch is the emitter
+// walking away from the facts: `slot.id + 1` in `emit_struct` turns these
+// tests red while thirty others stay green. The comparison becomes
+// two-sided when `ridl-backend-rust` emits the codec from the same facts in
+// stage K5; until then the union-arm discriminant is the one fact both
+// sides derive independently, because the `.fbs` emitter writes no explicit
+// member values.
+//
+// That is also what makes driftsys/ridl#302 visible. The target numbers a
+// union's arms by position while the IR numbers them by `UnionArm.ordinal`,
+// which a tombstone keeps occupied. The two agree until an arm is retired
+// ahead of a live one, and [`a_retired_arm_drifts_the_union_discriminant`]
+// pins that disagreement with the arm named in it. E11.7 does not close
+// #302 — the fix is explicit member values in the schema, and #302 records
+// that `planus` 1.3.0 rejects that form — so the test asserts the drift is
+// *detected* rather than asserting it is gone.
+
+/// One table field, as the emitted schema spells it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EmittedField {
+    name: String,
+    id: u32,
+    /// Whether the field carries the explicit `= null` default ADR-0019
+    /// decision 6 puts on an enum with no zero member.
+    null_default: bool,
+}
+
+/// The emitted schema, read back as the three things the facts can be
+/// compared against: each table's fields in the order they were written,
+/// each union's member names in the order they were written, and the
+/// `= null` marker on each field.
+#[derive(Debug, Default)]
+struct Schema {
+    tables: HashMap<String, Vec<EmittedField>>,
+    unions: HashMap<String, Vec<String>>,
+}
+
+/// Reads back what [`generate_with`] wrote. This is deliberately a reader
+/// over the emitted text rather than a second call into the emitter's own
+/// helpers: a drift test that asked the emitter what it meant to write could
+/// not see the emitter writing something else.
+///
+/// Every parse that could quietly drop something panics instead. A reader
+/// that silently skips a line it does not understand reports agreement on a
+/// schema it never looked at.
+fn read_back(fbs_source: &str) -> Schema {
+    let mut schema = Schema::default();
+    let mut open_table: Option<(String, Vec<EmittedField>)> = None;
+    let mut in_enum = false;
+    for line in fbs_source.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty()
+            || trimmed.starts_with("//")
+            || trimmed.starts_with("namespace ")
+            || trimmed.starts_with("include ")
+        {
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("union ") {
+            let (name, body) = rest.split_once('{').expect("a union line carries a body");
+            let body = body.trim_end_matches('}').trim();
+            let members = if body.is_empty() {
+                // Every arm retired: `emit_union` writes an empty body.
+                Vec::new()
+            } else {
+                body.split(',')
+                    .map(|member| {
+                        // Every arm is emitted in the alias form `member: Type`
+                        // ([`emit_union`]). One that is not would shift every
+                        // later member's implicit discriminant, so it is a panic
+                        // rather than a member this reader drops.
+                        let (member, _) = member
+                            .split_once(':')
+                            .unwrap_or_else(|| panic!("union member `{member}` carries no alias"));
+                        member.trim().to_string()
+                    })
+                    .collect()
+            };
+            schema.unions.insert(name.trim().to_string(), members);
+            continue;
+        }
+        if trimmed.starts_with("enum ") {
+            // An enum declaration carries no field slot, so it is not part of
+            // what the facts fix. It is recognised rather than skipped by
+            // falling through, so that an unrecognised line can be refused.
+            in_enum = true;
+            continue;
+        }
+        if in_enum {
+            in_enum = trimmed != "}";
+            continue;
+        }
+        if let Some(rest) = trimmed.strip_prefix("table ") {
+            let name = rest.trim_end_matches('{').trim().to_string();
+            open_table = Some((name, Vec::new()));
+            continue;
+        }
+        if trimmed == "}" {
+            if let Some((name, fields)) = open_table.take() {
+                schema.tables.insert(name, fields);
+            }
+            continue;
+        }
+        let Some((_, fields)) = open_table.as_mut() else {
+            panic!("`{trimmed}` is not a line this reader knows how to read");
+        };
+        {
+            let (name, rest) = trimmed
+                .split_once(':')
+                .unwrap_or_else(|| panic!("table line `{trimmed}` is not a field"));
+            let (before_id, id_clause) = rest
+                .split_once("(id: ")
+                .unwrap_or_else(|| panic!("field line `{trimmed}` carries no id"));
+            let id: u32 = id_clause
+                .split([',', ')'])
+                .next()
+                .expect("an id clause carries a number")
+                .trim()
+                .parse()
+                .expect("an id is a number");
+            fields.push(EmittedField {
+                name: name.trim().to_string(),
+                id,
+                null_default: before_id.contains("= null"),
+            });
+        }
+    }
+    schema
+}
+
+/// The fields a [`projection::TableLayout`] says a table has, spelled the way
+/// the emitter spells them.
+fn expected_fields(layout: &projection::TableLayout, null_default: &[bool]) -> Vec<EmittedField> {
+    layout
+        .slots
+        .iter()
+        .zip(null_default.iter().copied().chain(std::iter::repeat(false)))
+        .map(|(slot, null_default)| EmittedField {
+            name: match &slot.source {
+                projection::SlotSource::Field { name, .. } => ridl_ir::name::snake_case(name),
+                projection::SlotSource::Retired { ordinal } => format!("reserved_{ordinal}"),
+                projection::SlotSource::TupleField { position } => format!("field_{position}"),
+                projection::SlotSource::Key => "key".to_string(),
+                projection::SlotSource::Value | projection::SlotSource::Wrapped => {
+                    "value".to_string()
+                }
+            },
+            id: slot.id,
+            null_default,
+        })
+        .collect()
+}
+
+/// Every way the emitted schema and the shared facts disagree, one line each.
+/// An empty result is agreement.
+///
+/// The walk is total over the emitted schema, not only over the declarations:
+/// a map's entry table, a tuple's positional table and a union arm's box are
+/// generated rather than declared, and each of them takes its ids from the
+/// facts too. They are recognised by the field names the emitter gives them,
+/// which is the only handle a reader over the text has.
+fn drift(package: &v2::Package, others: &[&v2::Package]) -> Vec<String> {
+    let generated = generate_with(package, others).expect("generate");
+    let schema = read_back(&generated.fbs_source);
+    let mut findings = Vec::new();
+    let mut declared: Vec<String> = Vec::new();
+
+    for decl in &package.decls {
+        match &decl.kind {
+            Some(v2::decl::Kind::StructDef(def)) => {
+                declared.push(decl.name.clone());
+                let layout = projection::struct_table(&decl.name, def).expect("layout");
+                // ADR-0019 decision 6: a field typed by an enum that declares
+                // no zero member carries `= null`. That is a fact the codec
+                // reads too (design note D-9), so the schema is checked
+                // against it here rather than only against the ids.
+                let nulls: Vec<bool> = def
+                    .members
+                    .iter()
+                    .filter_map(|member| member.member.as_ref())
+                    .map(|member| match member {
+                        v2::struct_member::Member::Field(field) => {
+                            enum_behind(package, others, field.r#type.as_ref())
+                                .is_some_and(projection::enum_field_needs_null_default)
+                        }
+                        v2::struct_member::Member::Reserved(_) => false,
+                    })
+                    .collect();
+                let expected = expected_fields(&layout, &nulls);
+                match schema.tables.get(&decl.name) {
+                    Some(emitted) if *emitted == expected => {}
+                    Some(emitted) => findings.push(format!(
+                        "table `{}`: the schema has {emitted:?}, the facts say {expected:?}",
+                        decl.name
+                    )),
+                    None => findings.push(format!("struct `{}` emitted no table", decl.name)),
+                }
+            }
+            Some(v2::decl::Kind::UnionDef(def)) => {
+                declared.push(decl.name.clone());
+                // The wrapper table: one value field, at the id ADR-0019
+                // decision 1 leaves free after the implicit discriminant.
+                let expected = expected_fields(&projection::union_wrapper_table(), &[]);
+                match schema.tables.get(&decl.name) {
+                    Some(emitted) if *emitted == expected => {}
+                    other => findings.push(format!(
+                        "the wrapper table of union `{}` is {other:?}, the facts say {expected:?}",
+                        decl.name
+                    )),
+                }
+
+                let union_name = format!("{}Union", decl.name);
+                let Some(members) = schema.unions.get(&union_name) else {
+                    findings.push(format!("union `{}` emitted no declaration", decl.name));
+                    continue;
+                };
+                for arm in &def.arms {
+                    let member = ridl_ir::name::snake_case(&arm.name);
+                    match members.iter().position(|emitted| *emitted == member) {
+                        // The target numbers a union's members from 1 in the
+                        // order they are declared, NONE taking 0.
+                        Some(position) => {
+                            let implicit = u32::try_from(position + 1).expect("a small position");
+                            let discriminant = projection::union_arm_discriminant(arm);
+                            if implicit != discriminant {
+                                findings.push(format!(
+                                    "arm `{}` of union `{}`: the schema numbers it {implicit}, \
+                                     the facts say {discriminant}",
+                                    arm.name, decl.name
+                                ));
+                            }
+                        }
+                        None => findings.push(format!(
+                            "arm `{}` of union `{}` is not in the emitted declaration",
+                            arm.name, decl.name
+                        )),
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+
+    // Every remaining table is one the walk induced — a map's entry table, a
+    // tuple's positional table, a union arm's box. None of them is a
+    // declaration, so there is no name to look them up by that does not
+    // duplicate the emitter's own naming rule. What is compared instead is
+    // the multiset of layouts: the facts say which generated tables a package
+    // owes and what shape each one has, and the schema either has that
+    // collection or it does not.
+    //
+    // Classifying the emitted tables by the field names they happen to carry
+    // would not do. It derives the expectation from the emission, so a table
+    // that lost a field is simply compared against a shorter expectation —
+    // `TelemetryBounds` emitted as a one-field tuple matches a one-field
+    // tuple, and an emptied box matches a zero-field tuple.
+    let mut owed = induced_layouts(package, others);
+    let mut emitted_generated: Vec<Vec<(String, u32)>> = schema
+        .tables
+        .iter()
+        .filter(|(name, _)| !declared.contains(name))
+        .map(|(_, fields)| {
+            fields
+                .iter()
+                .map(|field| (field.name.clone(), field.id))
+                .collect()
+        })
+        .collect();
+    let mut owed_shapes: Vec<Vec<(String, u32)>> = owed
+        .drain(..)
+        .map(|layout| {
+            expected_fields(&layout, &[])
+                .iter()
+                .map(|field| (field.name.clone(), field.id))
+                .collect()
+        })
+        .collect();
+    owed_shapes.sort();
+    emitted_generated.sort();
+    if owed_shapes != emitted_generated {
+        findings.push(format!(
+            "the generated tables are {emitted_generated:?}, the facts owe {owed_shapes:?}"
+        ));
+    }
+
+    findings.sort();
+    findings
+}
+
+/// The layout of every table the projection generates for `package` — one per
+/// map, one per tuple, one per union arm that is not itself a table — derived
+/// from the IR, never from what was emitted.
+///
+/// The walk follows the same paths `emit_structs` does: a struct's fields, a
+/// tuple's fields, a map's key and value, an array's element, and a union's
+/// arms. It collects layouts rather than names, because a generated table's
+/// name is the emitter's to choose and this module fixes only its slots.
+fn induced_layouts(package: &v2::Package, others: &[&v2::Package]) -> Vec<projection::TableLayout> {
+    let mut layouts = Vec::new();
+    for decl in &package.decls {
+        match &decl.kind {
+            Some(v2::decl::Kind::StructDef(def)) => {
+                for member in &def.members {
+                    if let Some(v2::struct_member::Member::Field(field)) = &member.member {
+                        collect_induced(field.r#type.as_ref(), &mut layouts);
+                    }
+                }
+            }
+            Some(v2::decl::Kind::UnionDef(def)) => {
+                for arm in &def.arms {
+                    // ADR-0019 decision 2: an arm that is not a table of its
+                    // own is isolated in a box. A struct or a union arm is a
+                    // table already.
+                    let boxed = match resolve_kind(package, others, &arm.type_ref) {
+                        Some(v2::decl::Kind::StructDef(_) | v2::decl::Kind::UnionDef(_)) => false,
+                        Some(_) => true,
+                        None => continue,
+                    };
+                    if boxed {
+                        layouts.push(projection::union_arm_box_table());
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    layouts
+}
+
+/// Adds the table `ty` induces, and the tables anything nested inside it
+/// induces.
+fn collect_induced(ty: Option<&v2::FieldType>, layouts: &mut Vec<projection::TableLayout>) {
+    let Some(kind) = ty.and_then(|ty| ty.kind.as_ref()) else {
+        return;
+    };
+    match kind {
+        v2::field_type::Kind::Array(array) => {
+            collect_induced(array.element.as_deref(), layouts);
+        }
+        v2::field_type::Kind::Map(map) => {
+            layouts.push(projection::map_entry_table());
+            collect_induced(map.key.as_deref(), layouts);
+            collect_induced(map.value.as_deref(), layouts);
+        }
+        v2::field_type::Kind::Tuple(tuple) => {
+            layouts.push(projection::tuple_table("", tuple).expect("layout"));
+            for field in &tuple.fields {
+                collect_induced(field.r#type.as_ref(), layouts);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The kind of the declaration `reference` names, local or foreign.
+fn resolve_kind(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    reference: &str,
+) -> Option<v2::decl::Kind> {
+    let (home, name) = match reference.rsplit_once('.') {
+        Some((referenced, name)) => (
+            *others
+                .iter()
+                .find(|candidate| candidate.name == referenced)?,
+            name,
+        ),
+        None => (package, reference),
+    };
+    home.decls
+        .iter()
+        .find(|decl| decl.name == name)?
+        .kind
+        .clone()
+}
+
+/// The enum declaration behind a field's type, if its type is a reference to
+/// one — local or foreign. Anything else answers `None`, because only an
+/// enum reference can call for `= null`.
+fn enum_behind<'p>(
+    package: &'p v2::Package,
+    others: &'p [&'p v2::Package],
+    ty: Option<&v2::FieldType>,
+) -> Option<&'p v2::EnumDef> {
+    let Some(v2::field_type::Kind::Named(reference)) = ty?.kind.as_ref() else {
+        return None;
+    };
+    let (home, name) = match reference.rsplit_once('.') {
+        Some((referenced, name)) => (
+            others
+                .iter()
+                .copied()
+                .find(|candidate| candidate.name == referenced)?,
+            name,
+        ),
+        None => (package, reference.as_str()),
+    };
+    match &home.decls.iter().find(|decl| decl.name == name)?.kind {
+        Some(v2::decl::Kind::EnumDef(def)) => Some(def),
+        _ => None,
+    }
+}
+
+/// The cruise-control fixture, compiled through the real source-to-IR path —
+/// the same fixture `tests/corpus.rs` snapshots, read here for its IR rather
+/// than its text.
+fn cruise_package() -> v2::Package {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-backend-proto/tests/fixtures/cruise.ridl");
+    let text = std::fs::read_to_string(&path).expect("read the fixture");
+    let output = ridlc::compile(&path.display().to_string(), &text);
+    assert!(
+        output.diagnostics.is_empty(),
+        "the fixture compiles clean, got: {:?}",
+        output.diagnostics
+    );
+    output.package
+}
+
+/// The cross-package fixture `tests/corpus.rs` also emits, read here for its
+/// IR: the one corpus entry where a reference crosses a package, and so the
+/// one where the facts have to be derived against `others` too.
+fn cross_package_fixture() -> (v2::Package, v2::Package) {
+    let mut db = ridl_core::RidlDatabase::default();
+    let entry = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ridl-backend-proto/tests/fixtures/cross-package");
+    let output = ridlc::compile_workspace(&mut db, &entry).expect("load the fixture");
+    assert!(
+        output.diagnostics.is_empty(),
+        "the fixture compiles clean, got: {:?}",
+        output.diagnostics
+    );
+    let find = |name: &str| {
+        output
+            .checked
+            .iter()
+            .find(|checked| checked.ir.name == name)
+            .unwrap_or_else(|| panic!("the fixture declares {name}"))
+            .ir
+            .clone()
+    };
+    (find("proto.parts"), find("proto.vehicle"))
+}
+
+#[test]
+fn the_corpus_schema_and_the_shared_facts_agree() {
+    let package = cruise_package();
+
+    assert_eq!(drift(&package, &[]), Vec::<String>::new());
+}
+
+#[test]
+fn the_cross_package_schema_and_the_shared_facts_agree() {
+    let (parts, vehicle) = cross_package_fixture();
+
+    assert_eq!(drift(&parts, &[]), Vec::<String>::new());
+    assert_eq!(drift(&vehicle, &[&parts]), Vec::<String>::new());
+}
+
+#[test]
+fn the_corpus_exercises_every_generated_table_shape() {
+    // The induced tables are the half of the projection no declaration names,
+    // so the check over them is worth only as much as the fixture's coverage
+    // of them. `veh.cruise` has a map entry table, a tuple table and a union
+    // arm box; this pins that, so a later edit to the fixture cannot quietly
+    // take the coverage away.
+    let generated = generate(&cruise_package()).expect("generate");
+    let schema = read_back(&generated.fbs_source);
+
+    for expected in [
+        "TelemetryByIdEntry",
+        "TelemetryBounds",
+        "CommandDisengageBox",
+    ] {
+        assert!(
+            schema.tables.contains_key(expected),
+            "the fixture no longer emits `{expected}`:\n{}",
+            generated.fbs_source
+        );
+    }
+}
+
+#[test]
+fn a_schema_that_disagrees_is_reported() {
+    // The comparison has to produce a finding when the two sides differ, or
+    // the green result on the fixtures means nothing. Perturbing a fact would
+    // move the emitter with it — this backend derives its ids from the facts
+    // now — so what is perturbed here is the IR the facts are read from,
+    // against a schema generated before the perturbation.
+    let package = cruise_package();
+    let mut moved = package.clone();
+    for decl in &mut moved.decls {
+        if let Some(v2::decl::Kind::StructDef(def)) = &mut decl.kind {
+            for member in &mut def.members {
+                if let Some(v2::struct_member::Member::Field(field)) = &mut member.member {
+                    field.ordinal += 10;
+                }
+            }
+        }
+    }
+
+    let schema = read_back(&generate(&package).expect("generate").fbs_source);
+    let mut disagreed = 0;
+    for decl in &moved.decls {
+        if let Some(v2::decl::Kind::StructDef(def)) = &decl.kind
+            && def
+                .members
+                .iter()
+                .any(|member| matches!(member.member, Some(v2::struct_member::Member::Field(_))))
+        {
+            let layout = projection::struct_table(&decl.name, def).expect("layout");
+            let emitted = schema.tables.get(&decl.name).expect("a table");
+            assert_ne!(
+                *emitted,
+                expected_fields(&layout, &[]),
+                "the perturbation must be visible in `{}`",
+                decl.name
+            );
+            disagreed += 1;
+        }
+    }
+    assert!(disagreed > 0, "the fixture must carry a struct with fields");
+
+    // And the same perturbation, run through `drift` itself: the emitter
+    // reads the moved facts, so the schema moves with them and there is no
+    // drift — which is the property the refactor bought.
+    assert_eq!(drift(&moved, &[]), Vec::<String>::new());
+}
+
+#[test]
+fn an_emitter_that_leaves_the_facts_is_reported() {
+    // The failing direction the fixtures cannot show: a schema whose union
+    // wrapper does not hold its value where the facts put it. The schema is
+    // built by hand rather than by perturbing the emitter, because the
+    // emitter cannot be perturbed from a test.
+    let hand_written =
+        "namespace veh.cruise;\n\ntable Command {\n  value: CommandUnion (id: 0);\n}\n";
+    let schema = read_back(hand_written);
+
+    assert_eq!(
+        schema.tables.get("Command").expect("a table"),
+        &vec![EmittedField {
+            name: "value".to_string(),
+            id: 0,
+            null_default: false,
+        }]
+    );
+    assert_ne!(
+        schema.tables.get("Command").expect("a table"),
+        &expected_fields(&projection::union_wrapper_table(), &[]),
+        "a wrapper at id 0 must not compare equal to the facts, which put it at {}",
+        projection::UNION_WRAPPER_VALUE_ID
+    );
+}
+
+#[test]
+fn the_null_default_is_compared_on_a_fixture_that_carries_one() {
+    // ADR-0019 decision 6 is a fact the codec reads too (design note D-9), so
+    // the drift walk compares it. Neither corpus fixture exercises it —
+    // `cruise.ridl` has no struct field typed by an enum at all, and
+    // `EngageState` declares `OFF = 0` anyway — so the comparison would be
+    // vacuous without this package. Removing the `= null` emission turns this
+    // test red and leaves the corpus ones green, which is why it exists.
+    let package = v2::Package {
+        name: "veh.cruise".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Gear".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![
+                        v2::EnumValue {
+                            name: "FIRST".to_string(),
+                            value: 1,
+                            ..Default::default()
+                        },
+                        v2::EnumValue {
+                            name: "SECOND".to_string(),
+                            value: 2,
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Drivetrain".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("gear", 1, named_type("Gear"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.fbs_source.contains("gear: Gear = null (id: 0);"),
+        "the fixture exists to carry a `= null`; got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        read_back(&generated.fbs_source)
+            .tables
+            .get("Drivetrain")
+            .expect("a table")[0]
+            .null_default,
+        "the reader must see the `= null` it is about to compare"
+    );
+
+    assert_eq!(drift(&package, &[]), Vec::<String>::new());
+}
+
+#[test]
+fn a_retired_arm_drifts_the_union_discriminant() {
+    // driftsys/ridl#302, made visible rather than fixed. `reserved override`
+    // in the cruise fixture retires an arm *after* the live ones, so its
+    // ordinals and the schema's implicit numbering still agree. Retire one
+    // ahead of a live arm and they do not.
+    let package = v2::Package {
+        name: "veh.cruise".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Setpoint".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("desired", 1, float64_type())],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Command".to_string(),
+                kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+                    arms: vec![v2::UnionArm {
+                        name: "engage".to_string(),
+                        // The first arm was retired, so this one is second.
+                        ordinal: 2,
+                        type_ref: "Setpoint".to_string(),
+                        ..Default::default()
+                    }],
+                    reserved: vec![v2::Reserved {
+                        ordinal: 1,
+                        name: Some("legacyEngage".to_string()),
+                        ..Default::default()
+                    }],
+                    is_result: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let findings = drift(&package, &[]);
+
+    assert_eq!(
+        findings,
+        vec![
+            "arm `engage` of union `Command`: the schema numbers it 1, the facts say 2".to_string()
+        ],
+        "#302 is open, and this is the test that names it"
+    );
+}
+
+#[test]
+fn the_corpus_fixtures_map_key_is_bounded() {
+    // `Telemetry.byId` is the one corpus member whose key is a `string`, and
+    // a string with no length bound is the one shape `max_size` cannot
+    // charge. It used to be unbounded: a bare `string` map key took neither
+    // the TYPL-208 refusal that keeps one out of a field position nor
+    // TYPL-103's `[0..256]` default, so the IR carried no bound at all
+    // (driftsys/ridl#457, fixed in driftsys/ridl#459). This pins that the
+    // corpus is bounded, so the refusal K4 adds is what design note D-7 says
+    // it is — totality over the IR, not a case a typl author meets.
+    let package = cruise_package();
+    let telemetry = package
+        .decls
+        .iter()
+        .find(|decl| decl.name == "Telemetry")
+        .expect("the fixture declares it");
+
+    assert!(projection::mints_root_table(telemetry));
+    assert!(
+        projection::max_size(
+            projection::Packages {
+                package: &package,
+                others: &[]
+            },
+            telemetry
+        )
+        .is_some()
+    );
+}
+
+#[test]
+fn a_corpus_type_with_no_unbounded_member_is_bounded() {
+    let package = cruise_package();
+    let setpoint = package
+        .decls
+        .iter()
+        .find(|decl| decl.name == "Setpoint")
+        .expect("the fixture declares it");
+
+    assert!(
+        projection::max_size(
+            projection::Packages {
+                package: &package,
+                others: &[]
+            },
+            setpoint
+        )
+        .is_some()
+    );
 }
