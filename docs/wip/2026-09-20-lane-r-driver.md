@@ -4,6 +4,9 @@ Status: driver prompt, 2026-09-20. One lane, three stages, each a fresh session.
 Set the `THIS SESSION RUNS` line below before starting a session, and do only
 that stage.
 
+Where this document and an ADR disagree, the ADR wins. This document summarizes;
+it does not decide.
+
 ---
 
 You drive lane R: the generated face and port ergonomics that
