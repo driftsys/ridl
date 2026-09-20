@@ -156,12 +156,14 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    `Ord` requires `Eq`, so a float-backed scalar receives `PartialOrd` alone
    while an integer-backed one receives both.
 
-   Eligibility uses the recursion `defaults.rs` already implements: leaf
-   recursion and the C1b cycle guard. It reads **no** `derivable` flag.
-   `InitValue.derivable` governs `Default` derivation and plays no part in
-   derive eligibility, so there is no one-level flag here to trust or re-check.
-   An earlier draft of this decision said there was; that sentence was carried
-   over from `defaults.rs` and never described this code.
+   Eligibility mirrors the recursion `defaults.rs` implements — leaf recursion
+   and a C1b cycle guard — rather than using it. `defaults.rs` guards through
+   `Ctx::visiting`; the derive pass carries its own set, created per call, and
+   never touches `Ctx`. It reads **no** `derivable` flag. `InitValue.derivable`
+   governs `Default` derivation and plays no part in derive eligibility, so
+   there is no one-level flag here to trust or re-check. An earlier draft of
+   this decision said there was; that sentence was carried over from
+   `defaults.rs` and never described this code.
 
    **Cross-package references are handled conservatively.** `defaults.rs` can be
    optimistic — it emits `path::default()` and lets rustc verify. A derive

@@ -3561,6 +3561,39 @@ fn a_map_whose_value_reaches_a_float_loses_eq() {
     );
 }
 
+/// A map whose **key** reaches a float loses `Eq` and `Hash`, for the same
+/// reason the value half does. This is the mirror of
+/// [`a_map_whose_value_reaches_a_float_loses_eq`], and it is a separate test
+/// because both halves of `eq: key.eq && value.eq` need pinning: with only
+/// the value case covered, dropping `key.eq` passes the whole suite.
+///
+/// The shape is reachable from a typl source. `Checker::lower_map_key`
+/// accepts a bare primitive key under TYPL-209, so a float key lowers with no
+/// diagnostic, and deriving `Eq` on the resulting `Vec<(f64, Counter)>` would
+/// not compile.
+#[test]
+fn a_map_whose_key_reaches_a_float_loses_eq() {
+    let table = public_decl(
+        "KeyTable",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(map_field("meta", "Speed", "Counter"))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), counter_decl(), table]);
+    assert!(
+        source.contains("Vec<(Speed, Counter)>"),
+        "the fixture must emit the map shape it reasons about, got:\n{source}"
+    );
+    let derived = derives_of(&source, "pub struct KeyTable {");
+    assert_always_derived(&derived, "KeyTable");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "PartialEq"],
+        "a map whose key reaches a float must lose Eq and Hash"
+    );
+}
+
 /// A cyclic IR takes no conditional derive.
 ///
 /// A cycle is TYPL-206 upstream, but this pass does not trust that gate: on a
@@ -3626,8 +3659,8 @@ fn a_stream_field_takes_no_conditional_derives() {
 /// An `Unspecified` field primitive refuses every conditional derive.
 ///
 /// This is the field-primitive path only. An `Unspecified` *backing* never
-/// reaches it: `backing_scalar` maps an absent or unspecified primitive
-/// backing to [`ScalarBacking::Bytes`], so such a type emits `Vec<u8>` and is
+/// reaches it: `backing_scalar` maps an unspecified primitive backing to
+/// [`ScalarBacking::Bytes`], so such a type emits `Vec<u8>` and is
 /// `Eq` and `Hash` without being `Copy` — which is what
 /// [`string_backed_scalar_is_not_copy`] already covers for the other
 /// allocating backing.

@@ -1589,8 +1589,12 @@ test fail, reverting, and watching it pass:
   the code produced. The mutation
   `Eligibility { copy: key.copy && value.copy, eq: true }` is unsound twice
   over: `Copy` on a `Vec<(K, V)>`, and `Eq`/`Hash` on a map whose value reaches
-  `f64`. No compile proof caught it, because the only compiled map fixture is
-  cross-package and its conditional derives are already disabled.
+  `f64`. No compile proof caught it. The reason is not that the compiled map
+  fixtures are cross-package — `constructible_collections_compile` holds a
+  same-package map and is a real `rustc` proof. It is that every compiled map
+  fixture has its conditional derives disabled already, by an array field or a
+  float leaf elsewhere in the same struct, so the map arm's answer cannot change
+  their output.
 - `a_cyclic_struct_takes_no_conditional_derives` — the cycle guard's return
   value. `recursive_struct_default_terminates` predates this task and pins only
   that the recursion terminates, which a guard returning `Eligibility::ALL` also

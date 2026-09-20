@@ -37,8 +37,10 @@
 //!    `()` in a field position it should never reach.
 //! 4. An `Unspecified` field primitive, which also emits `()`. An
 //!    `Unspecified` *backing* is not this position: [`backing_scalar`] maps an
-//!    absent or unspecified primitive backing to [`ScalarBacking::Bytes`], so
-//!    such a type emits `Vec<u8>` and is `Eq` and `Hash` without being `Copy`.
+//!    unspecified primitive backing to [`ScalarBacking::Bytes`], so such a
+//!    type emits `Vec<u8>` and is `Eq` and `Hash` without being `Copy`. An
+//!    *absent* backing is different again, and maps to `Float` — see
+//!    [`scalar_eligibility`], which this note previously contradicted.
 //!
 //! `Default` is never derived (design decision 8). [`defaults`] builds it from
 //! the typl init value, which may be a declared `= 0.5`; `#[derive(Default)]`
