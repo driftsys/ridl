@@ -2118,6 +2118,18 @@ the emitted crate itself with cargo or under a cargo feature flag; the proof
 above is what exercises the feature-gated code, not a build of Task 7's emitted
 crate.
 
+A compile proof is not enough on its own, because two ways of getting the
+emitted check wrong still type-check. Inverting `if !PATTERN.is_match(…)`
+compiles, and so does leaving the pattern's `/` delimiters in place — that is a
+valid regex source which simply never matches, so every `new` would reject every
+value. Both leave every string assertion in the file green. A second proof,
+`the_generated_pattern_check_runs`, compiles the gated block as a program and
+runs it: the stand-in's `Regex::new` refuses a delimiter-carrying pattern and
+its `is_match` compares for equality, so a matching value must be accepted and a
+non-matching value of the same length must be refused with `Rule::Pattern`. This
+follows the precedent `the_generated_conversions_run` set for the enum and
+enum-set conversions.
+
 - [x] **Step 5: Commit**
 
 ```bash

@@ -233,6 +233,32 @@ fn bytes_pattern_decl() -> v2::Decl {
     )
 }
 
+/// A `string`-backed type whose pattern is a literal the stand-in `regex`
+/// can decide, with `len_min` and `len_max` both 3 so a matching and a
+/// non-matching value are the same length and the length checks cannot be
+/// what separates them. Used by the executed proof of the pattern check.
+fn literal_pattern_decl() -> v2::Decl {
+    public_decl(
+        "Code",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(3),
+                len_max: Some(3),
+                pattern: Some("/ABC/".to_string()),
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )
+}
+
 fn counter_decl() -> v2::Decl {
     public_decl(
         "Counter",
@@ -634,8 +660,14 @@ fn a_literal_pattern_is_named_as_feature_gated() {
         !source.contains("The `match` pattern is not checked by `new`."),
         "a literal pattern is checked by `new` under the feature, got:\n{source}"
     );
+    // The assertion names the doc line itself. A bare `contains`
+    // ("validate-pattern") is satisfied by the `#[cfg(feature =
+    // "validate-pattern")]` attribute in the constructor body, so deleting
+    // the doc line entirely would leave it green.
     assert!(
-        source.contains("validate-pattern"),
+        source.contains(
+            "/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature."
+        ),
         "the type must name the condition its pattern guarantee depends on, got:\n{source}"
     );
 }
@@ -666,7 +698,11 @@ fn a_step_and_a_literal_pattern_are_both_named() {
     )]);
     assert!(source.contains("/// Quantization (`step`) is not checked by `new`."));
     assert!(!source.contains("The `match` pattern is not checked by `new`."));
-    assert!(source.contains("validate-pattern"));
+    // The doc line itself, not the `cfg` attribute that also carries the
+    // feature name.
+    assert!(source.contains(
+        "/// The `match` pattern is checked by `new` only when the crate is built with the `validate-pattern` feature."
+    ));
 }
 
 /// The pattern check is emitted only under `validate-pattern`; the range and
@@ -679,13 +715,22 @@ fn pattern_check_is_feature_gated() {
     // Both crate paths are absolute, so an interface named `Std` or `Regex`
     // cannot shadow them from the module the constructor lives in.
     assert!(source.contains("::std::sync::LazyLock"));
-    assert!(source.contains("::regex::Regex::new"));
-    // The length check is not gated - it needs no dependency.
-    let gated = source
+    // The regex source is the pattern with its `/` delimiters stripped. The
+    // IR stores them (`ridl-sem` keeps the literal as written), and emitting
+    // them would compile into a regex that never matches, so every `new`
+    // would reject every value. Asserting only on `Regex::new` leaves that
+    // undetected, so the argument is pinned too.
+    assert!(
+        source.contains(r#"::regex::Regex::new("[A-HJ-NPR-Z0-9]{17}")"#),
+        "the emitted regex source must have its delimiters stripped, got:\n{source}"
+    );
+    // The length check is not gated - it needs no dependency. This is the
+    // text before the first gate, so the name says ungated, not gated.
+    let ungated = source
         .split("#[cfg(feature = \"validate-pattern\")]")
         .next()
         .unwrap();
-    assert!(gated.contains("::ridl_rt::payload::Rule::Length"));
+    assert!(ungated.contains("::ridl_rt::payload::Rule::Length"));
 }
 
 /// No test elsewhere in this repository compiles the `#[cfg(feature =
@@ -735,6 +780,89 @@ fn pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in() {
     assert!(
         status.success(),
         "the validate-pattern block must compile against the regex stand-in, source:\n{source}"
+    );
+}
+
+/// The pattern check is compiled **and run**, with the feature enabled.
+///
+/// `pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in`
+/// stops at `--emit metadata`, so it type-checks the gated block and never
+/// evaluates it. Two things the emitter can get wrong survive that: the
+/// polarity of the test (`if !PATTERN.is_match(…)` inverted to
+/// `if PATTERN.is_match(…)` still type-checks), and the stripping of the
+/// pattern's `/` delimiters (emitting `"/ABC/"` is a valid regex source that
+/// simply never matches, so every `new` would reject every value). Both leave
+/// every string assertion in this file green, so only an executed assertion
+/// catches them.
+///
+/// The stand-in's `Regex::new` refuses a delimiter-carrying pattern and its
+/// `is_match` compares for equality, so `Code::new("ABC")` must be accepted
+/// and `Code::new("XYZ")` must be refused with `Rule::Pattern`. Both values
+/// are three characters, which is exactly the declared length bound, so the
+/// length checks cannot be what decides either case.
+#[test]
+fn the_generated_pattern_check_runs() {
+    let source = format!(
+        "{}\n{}",
+        rust_for(vec![literal_pattern_decl()]),
+        r#"
+fn main() {
+    // The matching value. If the emitted test were inverted, this would be
+    // refused; if the delimiters were left on the pattern, the stand-in's
+    // `new` would return `Err` and the `expect` in the generated code would
+    // panic before this line.
+    match Code::new(String::from("ABC")) {
+        Ok(c) => assert_eq!(c.get(), "ABC"),
+        Err(v) => panic!("ABC matches the pattern, got {:?}", v.rule),
+    }
+    // The non-matching value, the same length as the matching one, so the
+    // length bounds cannot be what refuses it.
+    match Code::new(String::from("XYZ")) {
+        Err(v) => assert_eq!(v.rule, ::ridl_rt::payload::Rule::Pattern),
+        Ok(_) => panic!("XYZ does not match the pattern"),
+    }
+    // A value outside the length bound is still refused on length, which
+    // proves the ungated checks survive with the feature enabled.
+    match Code::new(String::from("ABCD")) {
+        Err(v) => assert_eq!(v.rule, ::ridl_rt::payload::Rule::Length),
+        Ok(_) => panic!("ABCD is outside the declared length bound"),
+    }
+}
+"#
+    );
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("pattern_run.rs");
+    let bin_path = dir.path().join("pattern_run");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+    let ridl_rt = ridl_rt_rlib(dir.path());
+    let regex = regex_stub_rlib(dir.path());
+
+    let status = std::process::Command::new("rustc")
+        .args(["--edition", "2024", "--crate-type", "bin"])
+        .arg("-o")
+        .arg(&bin_path)
+        .arg("--cfg")
+        .arg(r#"feature="validate-pattern""#)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", ridl_rt.display()))
+        .arg("--extern")
+        .arg(format!("regex={}", regex.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the gated pattern check must compile as a program, source:\n{source}"
+    );
+
+    let run = std::process::Command::new(&bin_path)
+        .output()
+        .expect("the compiled program runs");
+    assert!(
+        run.status.success(),
+        "the generated pattern check must behave as declared, stderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
     );
 }
 
@@ -2100,18 +2228,31 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
 /// would let that regression compile here while still failing to link against
 /// the real `regex`, silently losing the proof this test exists to be.
 const REGEX_STAND_IN_SOURCE: &str = r#"
-pub struct Regex;
+pub struct Regex {
+    pattern: String,
+}
 
 #[derive(Debug)]
 pub struct Error;
 
 impl Regex {
-    pub fn new(_pattern: &str) -> Result<Regex, Error> {
-        Ok(Regex)
+    /// Refuses a pattern that still carries its `/` delimiters. The real
+    /// engine would accept `"/ABC/"` as a regex matching a literal slash,
+    /// which is why an executed proof needs this refusal to notice that the
+    /// emitter stopped stripping them.
+    pub fn new(pattern: &str) -> Result<Regex, Error> {
+        if pattern.starts_with('/') || pattern.ends_with('/') {
+            return Err(Error);
+        }
+        Ok(Regex { pattern: pattern.to_string() })
     }
 
-    pub fn is_match(&self, _text: &str) -> bool {
-        true
+    /// Matches when the text equals the pattern. This is not a regex engine
+    /// and does not pretend to be one: it is the smallest predicate that
+    /// distinguishes a match from a non-match, which is all an executed
+    /// proof of the constructor's polarity needs.
+    pub fn is_match(&self, text: &str) -> bool {
+        text == self.pattern
     }
 }
 "#;
