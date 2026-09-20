@@ -336,10 +336,11 @@ pub fn mints_root_table(decl: &v2::Decl) -> bool {
 ///
 /// `None` is returned when the bound is not finite or cannot be derived:
 ///
-/// - a `string` or a `bytes` with no length bound — which the IR does carry
-///   for a named scalar and an inline scalar (typl §4.4–§4.5 default it to
-///   `[0..256]` with TYPL-103), but **not** for a bare `string` map key, where
-///   the checker admits the primitive with no constraint at all (TYPL-209);
+/// - a `string` or a `bytes` with no length bound. The IR handed over by the
+///   compiler always carries one — typl §4.4–§4.5 default it to `[0..256]`
+///   with TYPL-103, at a map key position as much as anywhere else
+///   (driftsys/ridl#459) — so this is totality over IR handed in directly,
+///   the same as the cases below it;
 /// - a reference that does not resolve in `packages`, or a declaration kind
 ///   this projection does not carry;
 /// - a composite that reaches itself, directly or transitively — TYPL-206
@@ -625,9 +626,11 @@ impl<'a> Sizer<'a> {
                         Some(Charge::inline_only(8))
                     }
                     // A bare `string` or `bytes` carries no length bound at
-                    // all. typl §15.3 keeps one out of a field position
-                    // (TYPL-208), but TYPL-209 admits a bare `string` map key,
-                    // and that one has no bound to charge.
+                    // all, and there is nothing to charge without one. The
+                    // compiler never hands one over: typl §15.3 keeps it out
+                    // of a field position (TYPL-208), and a map key gets
+                    // §4.4–§4.5's `[0..256]` default as an inline scalar
+                    // (driftsys/ridl#459).
                     _ => None,
                 }
             }

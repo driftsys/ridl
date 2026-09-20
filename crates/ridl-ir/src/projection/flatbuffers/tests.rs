@@ -487,9 +487,11 @@ fn a_foreign_reference_is_followed_into_the_package_that_declares_it() {
 
 #[test]
 fn a_bare_string_map_key_has_no_bound() {
-    // TYPL-208 keeps a bare `string` out of a field position, but TYPL-209
-    // admits one as a map key with no constraint at all, so this reaches the
-    // projection from real typl source — the cruise fixture's `byId` is one.
+    // Not reachable from typl source — §15.3 refuses a bare `string` at a
+    // field position (TYPL-208) and a map key takes §4.4–§4.5's `[0..256]`
+    // default (driftsys/ridl#459) — but IR handed in directly can carry it,
+    // and a string with no length is the one shape there is nothing to
+    // charge for.
     let pkg = package(
         "veh.cruise",
         vec![holder_of(v2::FieldType {

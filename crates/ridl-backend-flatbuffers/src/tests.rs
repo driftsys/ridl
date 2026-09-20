@@ -2061,12 +2061,15 @@ fn a_retired_arm_drifts_the_union_discriminant() {
 }
 
 #[test]
-fn the_corpus_fixture_carries_an_unbounded_map_key() {
-    // `byId : [string : Speed; 0..8]` — TYPL-208 keeps a bare `string` out of
-    // a field position, but TYPL-209 admits one as a map key with no
-    // constraint, so `max_size` has nothing to charge. Recorded on
-    // driftsys/ridl#457, and the refusal K4 adds would meet it on this
-    // fixture.
+fn the_corpus_fixtures_map_key_is_bounded() {
+    // `Telemetry.byId` is the one corpus member whose key is a `string`, and
+    // a string with no length bound is the one shape `max_size` cannot
+    // charge. It used to be unbounded: a bare `string` map key took neither
+    // the TYPL-208 refusal that keeps one out of a field position nor
+    // TYPL-103's `[0..256]` default, so the IR carried no bound at all
+    // (driftsys/ridl#457, fixed in driftsys/ridl#459). This pins that the
+    // corpus is bounded, so the refusal K4 adds is what design note D-7 says
+    // it is — totality over the IR, not a case a typl author meets.
     let package = cruise_package();
     let telemetry = package
         .decls
@@ -2075,15 +2078,15 @@ fn the_corpus_fixture_carries_an_unbounded_map_key() {
         .expect("the fixture declares it");
 
     assert!(projection::mints_root_table(telemetry));
-    assert_eq!(
+    assert!(
         projection::max_size(
             projection::Packages {
                 package: &package,
                 others: &[]
             },
             telemetry
-        ),
-        None
+        )
+        .is_some()
     );
 }
 
