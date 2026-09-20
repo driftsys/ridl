@@ -22,7 +22,12 @@ pub trait Payload<E: Encoding>: Sized {
     /// accessor over the bytes, or a parsed value.
     type View<'a>;
 
-    /// Writes `self` into the front of `out`.
+    /// Writes `self` into `out` and returns the bytes written.
+    ///
+    /// The bytes are a subslice of `out`, not necessarily a prefix of it: an
+    /// encoding whose builder works backwards — FlatBuffers does — fills `out`
+    /// from its end. A caller reads [`Encoded::bytes`] and passes it on rather
+    /// than assuming where in `out` it sits.
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>;
 
     /// Checks the structure of `buf` and the typl constraints of the value it
@@ -38,7 +43,7 @@ pub trait Payload<E: Encoding>: Sized {
 /// data, not a proof.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Encoded<'a, V> {
-    /// The encoded bytes, a prefix of the output buffer.
+    /// The encoded bytes, a subslice of the output buffer.
     pub bytes: &'a [u8],
     /// The view of those bytes.
     pub view: V,
@@ -133,7 +138,17 @@ impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
 pub enum EncodeError {
     /// The output buffer is shorter than the encoding.
     Capacity {
-        /// The bytes the encoding needs.
+        /// The bytes the encoding needs: a lower bound, not always the whole
+        /// requirement.
+        ///
+        /// An encoder that knows its size before it writes reports the whole
+        /// encoding. One that builds incrementally — the FlatBuffers encoder
+        /// does, because a child's size is known only once it is written —
+        /// reports what it needed at the point it gave up, which is at least
+        /// `available + 1` and at most the whole encoding. Either way a
+        /// caller that grows the buffer to `needed` has made progress, and
+        /// one that wants a buffer that always suffices uses
+        /// [`Payload::MAX_SIZE`].
         needed: usize,
         /// The bytes the output buffer has.
         available: usize,

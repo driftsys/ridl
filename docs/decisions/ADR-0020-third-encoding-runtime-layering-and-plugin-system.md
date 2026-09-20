@@ -184,17 +184,26 @@ as its public contract.
    `encoding`. Errors local to one module, such as a port's read error or a
    payload's verify error, stay beside the traits that return them.
 
+   **Amendment (2026-09-20) — a seventh module, under a feature.** Story E11.7's
+   stage K3 adds `flatbuffers`, gated by the feature of the same name: the
+   reading and writing a generated `Payload<FlatBuffers>` implementation shares,
+   which belongs in the library rather than in every generated package. The six
+   above remain the crate's unconditional module list, and a build with default
+   features off still sees exactly them. The ceiling this decision sets is
+   unspent: the module takes no dependency, so the FlatBuffers runtime remains
+   permitted and unused.
+
 6. **The runtimes live outside `ridl-rt`.** The note's RA-03 fixes the
    dependency graph as emitter output → `ridl-rt` ← runtime and nothing else, so
    each runtime is its own crate or package.
 
-   | Crate or package                           | Holds                                                                                              | Depends on                                      |
-   | ------------------------------------------ | -------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-   | `ridl-rt`                                  | the library of decision 5                                                                          | the FlatBuffers runtime, only under its feature |
-   | `ridl-loopback`                            | the in-process reference runtime — every port over a queue and a map, and no IO                    | `ridl-rt`                                       |
-   | `ridl-transport-ws`                        | the ports over a WebSocket, proto3-framed; the default of the getting-started path                 | `ridl-rt` and a WebSocket crate                 |
-   | the TypeScript runtime package (name open) | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec | nothing outside itself                          |
-   | the TypeScript WebSocket package           | the same binding for Deno and the browser                                                          | the runtime package                             |
+   | Crate or package                           | Holds                                                                                              | Depends on                                                                                                                                                                                                                              |
+   | ------------------------------------------ | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `ridl-rt`                                  | the library of decision 5                                                                          | the FlatBuffers runtime, only under its feature — permitted, and not taken: since 2026-09-20 (story E11.7, stage K3) the `flatbuffers` feature gates the crate's own helpers and `ridl-rt` has no dependency in any feature combination |
+   | `ridl-loopback`                            | the in-process reference runtime — every port over a queue and a map, and no IO                    | `ridl-rt`                                                                                                                                                                                                                               |
+   | `ridl-transport-ws`                        | the ports over a WebSocket, proto3-framed; the default of the getting-started path                 | `ridl-rt` and a WebSocket crate                                                                                                                                                                                                         |
+   | the TypeScript runtime package (name open) | the port interfaces spelled in TypeScript, and the loader that instantiates a package's wasm codec | nothing outside itself                                                                                                                                                                                                                  |
+   | the TypeScript WebSocket package           | the same binding for Deno and the browser                                                          | the runtime package                                                                                                                                                                                                                     |
 
    Generated Rust links `ridl-rt`, generated TypeScript imports the runtime
    package, and neither ever names a transport.

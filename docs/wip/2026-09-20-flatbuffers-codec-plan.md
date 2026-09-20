@@ -146,6 +146,34 @@ change to ADR-0021 decision 7, `crates/ridl-rt/src/payload.rs` and the `ridl-rt`
 design record; it is the one part of this task that is not additive, and
 ADR-0021 decision 10 makes it a 0.x minor, not a break to avoid.
 
+**The proof mechanism, settled 2026-09-20 in stage K3:
+`--cfg
+feature="flatbuffers"` on the existing bare-rustc helpers.** Both helpers
+— `crates/ridlc/tests/support/mod.rs` and its twin in
+`crates/ridl-backend-rust/src/tests.rs` — now pass one `--cfg` argument per
+encoding feature when they build `ridl-rt` as an rlib, and their doc comments
+record why. K5 and E11.14 inherit this and need change nothing. Three reasons it
+won over a cargo build of an emitted crate with path dependencies. It is one
+argument on a `rustc` call that already exists, against the alternative's
+generated manifest, target directory and cargo run per proof. The repository
+already uses exactly this mechanism for the _generated_ crate's own features —
+`pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in` passes
+`--cfg feature="validate-pattern"` — so K3 extends an established path rather
+than opening a second one. And the cargo route's apparent advantage, that it
+builds a package the way a consumer does, is not real: a consumer builds against
+a `ridl-rt` release from crates.io, which D-12's release-coupling bullet says
+cannot carry this feature's contents until one is cut, so a path-dependency
+build proves something a consumer never does. All three encoding features are
+enabled rather than only `flatbuffers`, so that E11.8 and E11.12 inherit a
+working proof without editing either helper again.
+
+**What this mechanism does not prove**, so that K5 and E11.14 do not read more
+into it than it carries: it shows that generated code compiles against
+`ridl-rt`'s _source_ with the feature on. It says nothing about the emitted
+`Cargo.toml` — whether it names `ridl-rt` with the right feature, and whether
+the version it names exists on crates.io. That is E11.14's manifest work and the
+release coupling of D-12, and neither is testable by a `rustc` call.
+
 **Done when:** the helpers exist under the feature, `just compat-check` passes,
 `just wasm-check` passes, the proof mechanism is chosen and demonstrated on one
 throwaway example, and `Encoded.bytes`'s three records agree.

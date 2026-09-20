@@ -106,6 +106,12 @@ test:
     set -euo pipefail
     if [ -f Cargo.toml ]; then
         cargo test --workspace --locked
+        # The workspace build resolves `ridl-rt` with default features, so the
+        # encoding features gate code it never compiles: the helpers a
+        # generated codec calls, and their tests. `just compat-check` builds
+        # them, but only at rust-version 1.83 and only against the packaged
+        # crate, so without this line a break in them reaches CI green.
+        cargo test -p ridl-rt --all-features --locked
     else
         echo "test: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
@@ -142,6 +148,12 @@ wasm-check:
             -p ridl-backend-rust -p ridl-backend-ts \
             -p ridl-rt \
             --no-default-features
+        # And once more with the encoding features on. ADR-0020 decision 2
+        # makes the generated Rust compiled to wasm32 the codec a TypeScript
+        # consumer loads, so the helpers that codec calls must build for
+        # wasm32 too — which the line above, with the features off, does not
+        # show.
+        cargo check --target wasm32-unknown-unknown -p ridl-rt --all-features
     else
         echo "wasm-check: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi
@@ -283,6 +295,9 @@ lint:
     set -euo pipefail
     if [ -f Cargo.toml ]; then
         cargo clippy --workspace --all-targets -- -D warnings
+        # As in `just test`: the workspace resolves `ridl-rt` with default
+        # features, so its feature-gated modules are otherwise never linted.
+        cargo clippy -p ridl-rt --all-features --all-targets -- -D warnings
     else
         echo "lint: no Rust workspace yet — see docs/ROADMAP.md (epic E0)."
     fi

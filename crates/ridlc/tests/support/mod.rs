@@ -14,9 +14,20 @@ use std::path::{Path, PathBuf};
 ///
 /// One `rustc` call over its `lib.rs` is the whole build: `ridl-rt` is
 /// `no_std` and has no dependency in any feature combination (ADR-0021
-/// decision 8), and no feature gates any item the generated code names. It is
-/// built with the same `rustc` the proof itself spawns; an rlib built by
-/// another toolchain is rejected with E0514.
+/// decision 8). It is built with the same `rustc` the proof itself spawns; an
+/// rlib built by another toolchain is rejected with E0514.
+///
+/// **The three encoding features are enabled here**, which is the proof
+/// mechanism E11.7 stage K3 settled. A generated `Payload<E>` implementation
+/// names items that a feature gates — `ridl_rt::flatbuffers` is the first —
+/// and this rlib is what every compile proof links, so a proof over generated
+/// codec code does not compile against a bare build. One `--cfg` argument per
+/// encoding is the whole mechanism; the alternative considered was a cargo
+/// build of an emitted crate with path dependencies, which costs a manifest,
+/// a target directory and a cargo run per proof and still does not build what
+/// a consumer outside this repository builds. Enabling all three rather than
+/// only `flatbuffers` is so that E11.8 and E11.12 inherit a working proof
+/// without editing this helper again.
 ///
 /// Edition 2021 is the edition `crates/ridl-rt/Cargo.toml` declares. The
 /// generated code keeps compiling as edition 2024; the two are independent.
@@ -36,6 +47,12 @@ pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
             "--crate-name",
             "ridl_rt",
         ])
+        .arg("--cfg")
+        .arg(r#"feature="flatbuffers""#)
+        .arg("--cfg")
+        .arg(r#"feature="proto3""#)
+        .arg("--cfg")
+        .arg(r#"feature="repr-c""#)
         .arg(&source)
         .arg("-o")
         .arg(&rlib)
