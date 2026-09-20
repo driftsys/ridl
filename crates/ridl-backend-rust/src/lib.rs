@@ -395,10 +395,11 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     }
 }
 
-/// The range and length checks for one constraint, as statements that return
-/// early with a `Violation`. Only the branches the constraint carries are
-/// emitted, so a string with a length bound and no range gets only the length
-/// check. The pattern check is not emitted here.
+/// The range, length and pattern checks for one constraint, as statements
+/// that return early with a `Violation`. Only the branches the constraint
+/// carries are emitted, so a string with a length bound and no range gets
+/// only the length check. The pattern check is emitted last and is the only
+/// one behind a feature gate.
 ///
 /// A `min` or `max` is a numeric bound (typl §5.5), so a range check is
 /// emitted only for a float or integer backing; on any other backing the two
@@ -490,10 +491,16 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
         // A `match` pattern is checked against text, and `regex::Regex`
         // matches `&str`. Only a `String` backing has a value that coerces
         // to `&str` (`newtype_inner`); a bytes backing carries `Vec<u8>`,
-        // against which `Regex::is_match` does not type-check. typl allows a
-        // literal `pattern` on a bytes-backed type (it draws only the
-        // TYPL-115 note, not an error), so that case must fall through with
-        // no pattern branch rather than emit code that does not compile.
+        // against which `Regex::is_match` does not type-check.
+        //
+        // No typl source reaches this: the reference gives bytes no `match`
+        // (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for
+        // that backing, so the pattern never enters the IR. The guard is
+        // totality over the IR rather than over the surface, on the same
+        // footing as the `is_float` guard above — `lower_len_scalar` always
+        // leaves `min` and `max` absent, so that one is unreachable from a
+        // typl source too, and is pinned by its own test. A backend reads
+        // the IR, which need not have come from this checker.
         //
         // The pattern needs a regex engine, which `core` has none of. The
         // range and length checks above are not gated; only this one is, so

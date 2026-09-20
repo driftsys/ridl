@@ -2026,10 +2026,12 @@ fn pattern_check_is_feature_gated() {
 ```
 
 `vin_decl` is a `string` type carrying `len_min == len_max == 17` and a
-`pattern`; build it with the existing `primitive_type` helper. Its `len_min` has
-to stay positive for the last assertion to mean anything: a `len_min` of 0 emits
-no branch at all (Task 3, correction 2), so a fixture defaulting to 0 would
-leave that assertion resting on the `len_max` branch alone.
+`pattern`. Build the `TypeDef` inline: the `primitive_type` helper hardcodes
+`constraint: None` and takes no constraint argument, so it cannot carry either
+the length bound or the pattern. Its `len_min` has to stay positive for the last
+assertion to mean anything: a `len_min` of 0 emits no branch at all (Task 3,
+correction 2), so a fixture defaulting to 0 would leave that assertion resting
+on the `len_max` branch alone.
 
 - [x] **Step 2: Run the test to verify it fails**
 
@@ -2047,10 +2049,12 @@ if backing_scalar(td) == ScalarBacking::String
     // A `match` pattern is checked against text, and `regex::Regex`
     // matches `&str`. Only a `String` backing has a value that coerces
     // to `&str` (`newtype_inner`); a bytes backing carries `Vec<u8>`,
-    // against which `Regex::is_match` does not type-check. typl allows a
-    // literal `pattern` on a bytes-backed type (it draws only the
-    // TYPL-115 note, not an error), so that case must fall through with
-    // no pattern branch rather than emit code that does not compile.
+    // against which `Regex::is_match` does not type-check.
+    //
+    // No typl source reaches this: the reference gives bytes no `match`
+    // (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for
+    // that backing. The guard is totality over the IR rather than over
+    // the surface, like the `is_float` guard above.
     //
     // The pattern needs a regex engine, which `core` has none of. The
     // range and length checks above are not gated; only this one is, so a
@@ -2081,14 +2085,26 @@ if backing_scalar(td) == ScalarBacking::String
 
 The pattern branch carries a backing guard, mirroring the `is_float` guard
 already in the same function for `min`/`max`: it fires only for
-`ScalarBacking::String`. Without it, a bytes-backed type carrying a literal
-`pattern` (legal in typl — it draws only the TYPL-115 note, not an error) gets
-`PATTERN.is_match(&value)` where `value` is a `Vec<u8>`, which does not
-type-check against `regex::Regex::is_match` (`&str`). No `rustc` compile proof
-in this repository drives `--cfg feature="validate-pattern"`, so no test
-compiled the block that missing guard produced, and it was found and corrected
-by review, in a later commit than the one that first landed this task. Step 4
-below covers both the guard and a proof that actually compiles the gated block.
+`ScalarBacking::String`. Without it, an IR carrying a literal `pattern` on a
+bytes backing would get `PATTERN.is_match(&value)` where `value` is a `Vec<u8>`,
+which does not type-check against `regex::Regex::is_match` (`&str`).
+
+**That IR does not come from a typl source.** The reference gives bytes no
+`match` (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for that
+backing, so a `match` written on a bytes type is dropped before lowering and the
+constraint reaches the backend as `{len_min, len_max}` alone. An earlier draft
+of this task justified the guard by claiming typl permits the form; it does not,
+and the TYPL-115 note such a source draws is about its missing init value, not
+its pattern. The guard is kept on the same footing as the `is_float` guard
+beside it, which is also unreachable from a typl source — `lower_len_scalar`
+always leaves `min` and `max` absent — and is pinned by its own test. A backend
+reads the IR, which need not have come from this checker.
+
+No `rustc` compile proof in this repository drove
+`--cfg
+feature="validate-pattern"` before this task, so no test compiled the
+block a missing guard would produce. Step 4 below covers both the guard and the
+proofs that now compile and run the gated block.
 
 Emit a doc line on the type naming that the pattern is enforced only under the
 feature, so the guarantee is not silently variable. That line replaces one

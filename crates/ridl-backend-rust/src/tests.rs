@@ -206,11 +206,20 @@ fn vin_decl() -> v2::Decl {
 }
 
 /// A `bytes`-backed type carrying a positive length bound and a literal
-/// pattern. typl allows a `match` pattern on a bytes backing (it draws only
-/// the TYPL-115 note, not an error), but `newtype_inner` gives such a type a
-/// `Vec<u8>`, against which `regex::Regex::is_match` (which takes `&str`)
-/// does not type-check. `constraint_checks` must therefore emit no pattern
-/// branch for this fixture, while still emitting its length checks.
+/// pattern.
+///
+/// **No typl source produces this.** The reference gives bytes no `match`
+/// (§4.5, §5.4), and `lower_scalar` passes `allow_pattern: false` for that
+/// backing, so a `match` written on a bytes type is dropped and the IR
+/// carries `{len_min, len_max}` and nothing else. The fixture is built by
+/// hand to exercise the backend's totality over an IR it did not lower
+/// itself, which is the same thing `a_range_on_a_non_numeric_backing_emits_no_range_check`
+/// does for `min`/`max` — `lower_len_scalar` always leaves those absent too.
+///
+/// What it pins: `newtype_inner` gives such a type a `Vec<u8>`, against which
+/// `regex::Regex::is_match` (which takes `&str`) does not type-check, so
+/// `constraint_checks` must emit no pattern branch while still emitting its
+/// length checks.
 fn bytes_pattern_decl() -> v2::Decl {
     public_decl(
         "Sig",
@@ -894,6 +903,13 @@ fn bytes_backed_pattern_emits_no_pattern_check() {
 /// guarantee it does not implement: since `constraint_checks` emits no
 /// pattern branch for this backing, the type must carry the plain "not
 /// checked" line instead.
+///
+/// This is about an IR the backend did not lower, not about a typl source.
+/// A bytes type written with a `match` reaches the backend with no pattern
+/// at all, so `unchecked_doc` emits no line for it whatsoever; see
+/// [`bytes_pattern_decl`]. The behaviour pinned here is that a pattern
+/// arriving on a backing the check cannot cover is described accurately
+/// rather than advertised as gated.
 #[test]
 fn bytes_backed_pattern_is_named_as_unchecked_not_feature_gated() {
     let source = rust_for(vec![bytes_pattern_decl()]);
@@ -2220,13 +2236,16 @@ fn ridl_rt_rlib(dir: &std::path::Path) -> std::path::PathBuf {
 /// block to type-check: a `Regex` with a fallible `new` and an `is_match`.
 ///
 /// `is_match` takes `&str` and nothing more general (not `&[u8]`, not an
-/// `AsRef<str>` bound), on purpose: the emitted code calls it as
-/// `PATTERN.is_match(&value)`, and if the backing guard `constraint_checks`
-/// applies before choosing to emit this branch (a `String` backing only) were
-/// ever removed, `value` for a bytes-backed type would be a `Vec<u8>`, which
-/// does not coerce to `&str`. An `is_match` that accepted anything broader
-/// would let that regression compile here while still failing to link against
-/// the real `regex`, silently losing the proof this test exists to be.
+/// `AsRef<str>` bound), so the proof pins the emitted call's argument type
+/// rather than accepting whatever the generator produces. Passing the value
+/// by move instead of by reference, for instance, fails here.
+///
+/// It does **not** guard the backing guard in `constraint_checks`. Doing that
+/// would need a compile proof over a bytes fixture with the feature on, and
+/// no proof here feeds one: both proofs use a `String`-backed fixture, since
+/// a bytes fixture emits no gated block to compile. Removing the backing
+/// guard is caught by `bytes_backed_pattern_emits_no_pattern_check`, which
+/// reads the generated text, not by anything that compiles it.
 const REGEX_STAND_IN_SOURCE: &str = r#"
 pub struct Regex {
     pattern: String,
