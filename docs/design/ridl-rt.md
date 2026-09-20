@@ -218,7 +218,7 @@ pub trait Payload<E: Encoding>: Sized {
     fn decode(r: Ref<'_, Self, E>) -> Self;
 }
 
-pub struct Encoded<'a, V> { pub bytes: &'a [u8], pub view: V } // data, not a proof
+pub struct Encoded<'a, V> { pub bytes: &'a [u8], pub view: V } // data, not a proof; bytes is a subslice of out
 
 pub struct Ref<'a, T: Payload<E>, E: Encoding> { /* private fields */ }
 impl<'a, T: Payload<E>, E: Encoding> Ref<'a, T, E> {
@@ -260,10 +260,25 @@ owned parsed value — and has no `Copy` bound, because a parsed value holding a
 
 The crate root carries `#![no_std]` and `#![forbid(unsafe_code)]`, with no
 `extern crate alloc`. The three features `flatbuffers`, `proto3` and `repr-c`
-are declared and empty in 0.1 — the crate has no dependency in any feature
+name the payload encodings, and the crate has no dependency in any feature
 combination — decided in ADR-0021 decision 8. `just wasm-check` covers
 `-p ridl-rt`, because a package's generated Rust links this crate and is
 compiled to `wasm32` (ADR-0020 decisions 6 and 7).
+
+**Since 2026-09-20 (story E11.7, stage K3) `flatbuffers` is no longer empty.**
+It gates the `flatbuffers` module: the byte-order reads, the vtable walk, and
+the tail builder that a generated `Payload<FlatBuffers>` implementation calls.
+The module decides no layout — which slot a field takes, its offset in the table
+and the table's size are the projection's facts, handed to the builder — which
+is what keeps `Payload::MAX_SIZE` and the encoder from disagreeing. It still
+takes no dependency: the FlatBuffers runtime crate ADR-0020 decision 5 permits
+under this feature is not used. `proto3` and `repr-c` remain empty.
+
+Because the workspace resolves this crate with default features, `just test`,
+`just lint` and `just wasm-check` each carry a second invocation with
+`--all-features` for `-p ridl-rt`; without them the feature-gated modules are
+compiled only by `just compat-check`, at rust-version 1.83 and against the
+packaged crate.
 
 ## The ports
 

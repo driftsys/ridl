@@ -152,6 +152,22 @@ trusted with no `unsafe` and no second verification pass.
    payload can implement; adding a fourth is a decision recorded in an ADR,
    never an `impl` in a downstream crate.
 
+   **Amended 2026-09-20 (story E11.7, stage K3): `Encoded.bytes` is a subslice
+   of the output buffer, not a prefix of it.** `Payload::encode` is handed one
+   `&mut [u8]` and no allocator, and a FlatBuffers buffer is built back to front
+   — the root offset is written last and sits at the low end of the finished
+   buffer — so the encoder fills the slice from its end and the finished buffer
+   ends where the slice ends. The alternative was one `copy_within` per encode
+   to restore the prefix, a memmove of up to `MAX_SIZE` bytes on the path that
+   exists to avoid copies. No signature changes: `Encoded` already carries
+   `bytes: &[u8]`, and every consumer in the tree reads `Ref::bytes()` and
+   passes it on. Under decision 10 this is a 0.x minor, because the documented
+   contract narrowed for a caller that assumed the bytes started at `out[0]`.
+   The port methods of `port::*`, which copy a stored payload "into the front of
+   `out`", are a different contract and are unchanged: a FlatBuffers buffer is
+   position-independent, so a runtime may place one anywhere in the caller's
+   slice.
+
 8. **The three cargo features are declared and carry no dependency in 0.1.**
    `flatbuffers`, `proto3` and `repr-c` exist so a runtime can name every
    encoding without linking a codec, and the crate has no dependency in any
@@ -159,6 +175,17 @@ trusted with no `unsafe` and no second verification pass.
    obligation it brings — every final binary that enables the feature must
    provide a global allocator, because the `flatbuffers` crate uses `alloc` even
    without `std` — arrive with story E11.7 as an additive change.
+
+   **Amended 2026-09-20 (story E11.7, stage K3): the dependency did not arrive,
+   and the sentence above is what changed.** E11.7's design note takes D-12
+   without one: the `flatbuffers` feature now gates the crate's own reading and
+   writing helpers, written here, and `ridl-rt` still has no dependency in any
+   feature combination. So the allocator obligation this paragraph anticipated
+   does not exist — the helpers allocate nothing, and a generated package over
+   types that own neither a `String` nor a `Vec` is `no_std` with no allocator.
+   The FlatBuffers runtime crate that ADR-0020 decision 5 permits under this
+   feature stays permitted and unused; a later story that takes it would restore
+   this paragraph's obligation with it.
 
 9. **`Contract` and `CallError` stay exhaustive; every other error enum stays
    `#[non_exhaustive]`.** `Contract`'s variants are ridl §10.2's fixed
