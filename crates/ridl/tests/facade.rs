@@ -249,9 +249,10 @@ fn fmt_on_a_missing_path_exits_two() {
 /// uid 0 and `CAP_DAC_OVERRIDE` both bypass the permission bits, so a test
 /// that makes a directory unreadable has nothing to assert there. This probes
 /// the property directly instead of reading the uid, so it is right for the
-/// capability case as well as for root. A probe that cannot be set up at all
-/// reports `true`, so a broken temp directory fails the test rather than
-/// silently skipping it.
+/// capability case as well as for root. A setup step that fails reports `true`
+/// where it can return at all, and `TempDir::new` panics outright; either way a
+/// temp directory the probe cannot use fails the test rather than silently
+/// skipping it.
 #[cfg(unix)]
 fn mode_000_denies_reads() -> bool {
     use std::os::unix::fs::PermissionsExt;
