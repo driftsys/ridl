@@ -38,10 +38,10 @@ run now. This is the plan's one external blocker and it is not inside lane K's
 control; if Task 4 is still unstarted when Task 3 lands, say so rather than
 starting Task 4 of this plan against a surface that is about to change.
 
-**Epic 10 Task 6 merged as 8e5a552** (driftsys/ridl#443), after being told about
-D-4's `check` while it was still open. Task 5 reads what it actually landed
-rather than assuming either way: if `check` is there, Task 5 calls it; if it is
-not, Task 5 adds it.
+**Epic 10 Task 6 merged as 8e5a552** (driftsys/ridl#443) after being told about
+D-4's `check` while it was still open, and **it did not land one**: `fn check`
+appears nowhere in `crates/ridl-backend-rust/src/lib.rs` or in the generated
+fixture. Task 5 adds it. Whether it is public stays Epic 10's call.
 
 ## Task 1 — the shared projection facts and the size bound
 
@@ -152,25 +152,27 @@ throwaway example, and `Encoded.bytes`'s three records agree.
 
 ## Task 3 — `MAX_SIZE`, and the refusal of D-7
 
-**Implements:** D-7 (with its addition). **Stage:** K4.
+**Implements:** D-7's refusal only. **Stage:** K4.
+
+**`MAX_SIZE` is emitted by Task 4, not here.** `MAX_SIZE` is an associated const
+of `Payload<FlatBuffers>` (`crates/ridl-rt/src/payload.rs`), so a stage emitting
+it before Task 4 writes that impl would have to emit an associated const of an
+impl that does not exist, or an impl with its other members stubbed, which
+`generate` may not emit. Of the two ways out, this plan takes the second: **K4
+keeps only the refusal**, which has no such dependency, and the constant travels
+with the impl in K5. No inherent `FLATBUFFERS_MAX_SIZE` is invented.
 
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/lib.rs` (emit the constant; return the
-  `GenerateError`).
+- Modify: `crates/ridl-backend-rust/src/lib.rs` (call `max_size` of Task 1;
+  return the `GenerateError` when it is `None`).
 - Test: `crates/ridl-backend-rust/src/tests.rs`.
 
-**Interfaces:** consumes `max_size` of Task 1; produces the generated
-`const MAX_SIZE: usize` and one new `GenerateError` variant.
+**Interfaces:** consumes `max_size` of Task 1; produces one new `GenerateError`
+variant. It emits no generated code.
 
-**Must not break:** the face's `MAX_BUFFER_SIZE`, which stays the
-const-evaluable maximum over these literals rather than becoming a runtime
-computation.
-
-The emitter writes `max_size` of Task 1 into the generated
-`const MAX_SIZE: usize` as a literal with a comment naming the rule that
-produced it, never a const-evaluable expression over the field types. The face's
-`MAX_BUFFER_SIZE` stays the const-evaluable maximum over those literals.
+**Must not break:** `generate`'s output for every corpus fixture — this stage
+adds a refusal path and nothing else, so no snapshot may move.
 
 When the bound is `None`, the emitter writes no `Payload<FlatBuffers>`
 implementation for that type and returns a `GenerateError` naming the type and
@@ -195,13 +197,25 @@ source.
 
 - Create: `crates/ridl-backend-rust/src/codec.rs`.
 - Modify: `crates/ridl-backend-rust/src/lib.rs` (declare the module, call it
-  from `generate`); the emitted `Cargo.toml` to declare `ridl-rt` with the
-  `flatbuffers` feature.
+  from `generate`); **`crates/ridlc/src/lib.rs`**, which is where the emitted
+  `Cargo.toml` is rendered — the `ridl-rt = "0.1"` requirement is a literal
+  there and its own comment says it is read from nowhere. It is **a lanes plan
+  §6 shared file**, and E16.5 (`--emit catalog`) changes it too, so this stage
+  checks for an in-flight change to it before branching and says on
+  driftsys/ridl#328 when it lands, the way the other shared files are handled.
 - Test: `crates/ridl-backend-rust/src/tests.rs`, plus a round-trip test under
   `crates/ridl-backend-rust/tests/`.
 
 **Interfaces:** consumes Task 1's facts and Task 2's helpers; produces
-`Payload<FlatBuffers>` per payload type in `generate`'s output.
+`Payload<FlatBuffers>` per payload type in `generate`'s output, **including its
+`MAX_SIZE`**, written as a literal with a comment naming the rule that produced
+it, never a const-evaluable expression over the field types. The face's
+`MAX_BUFFER_SIZE` stays the const-evaluable maximum over those literals.
+
+**This stage is where the codec reaches `ridl build`.** `ridlc::run_build` calls
+`generate`, and D-1 as amended puts the impls in `generate`'s output, so
+`ridl build --emit rust` carries the codec the moment this lands. See **What the
+D-1 amendment moved out of E11.14**, below.
 
 **Must not break:** `generate`'s existing output for every corpus fixture except
 the added module — the domain types, the descriptors and the snapshots under
@@ -234,9 +248,15 @@ merged as 8e5a552 (driftsys/ridl#443) — read what it landed before assuming
 **Files:**
 
 - Modify: `crates/ridl-backend-rust/src/codec.rs` (call `check` from `verify`);
-  and, only if Task 6 did not land it, the emitter that writes `new` — today
-  `crates/ridl-backend-rust/src/lib.rs`.
+  `crates/ridl-backend-rust/src/lib.rs`, the emitter that writes `new`, which is
+  where `check` joins it.
 - Test: `crates/ridl-backend-rust/src/tests.rs`.
+
+**8e5a552 landed no `check`.** `fn check` appears nowhere in
+`crates/ridl-backend-rust/src/lib.rs` or the generated fixture, so **this stage
+adds it** — the conditional is settled, and a session running K6 should not
+spend time deciding which branch it is in. Whether it is public is still Epic
+10's call.
 
 **Must not break:** `new`'s own signature and behaviour, and `decode`'s
 infallibility — the whole point of putting the check in `verify` is that
@@ -262,12 +282,21 @@ borrow.
 **Files:**
 
 - Modify: `crates/ridl-backend-rust/src/face.rs` (the `Wire` alias, and every
-  site naming `ReprC`);
+  site in it naming `ReprC`); **`crates/ridl-backend-rust/src/descriptors.rs`**,
+  which is the other site — it computes `MAX_BUFFER_SIZE` and
+  `EVENT_SOURCE_BUFFER_SIZE` over `<T as Payload<ReprC>>::MAX_SIZE`, which is
+  what D-11 and the note's K-5 both name;
   `crates/ridl-backend-rust/tests/generated/interaction_face.rs` (regenerated
   with `RIDL_UPDATE_GENERATED=1`);
-  `crates/ridl-backend-rust/tests/face_generation.rs` (the source-text
-  assertions); `crates/ridl-backend-rust/tests/support/loopback.rs` (the
-  hand-written `Payload<ReprC>` implementations are deleted);
+  `crates/ridl-backend-rust/tests/face_generation.rs` and
+  `crates/ridl-backend-rust/tests/descriptor_generation.rs` (the source-text
+  assertions, the second moving with `descriptors.rs`);
+  **`crates/ridl-backend-rust/tests/interaction_face.rs`**, which is where the
+  hand-written implementations actually live — its `mod payloads` holds the
+  `Payload<ReprC>` impls and the `scalar_payload!` macro, and the same file
+  still carries the `Inner` bridge trait and `inner_i64!` that the value-objects
+  plan expected Epic 10 Task 6 to remove and 8e5a552 did not; this stage deletes
+  both. `tests/support/loopback.rs` holds none of them;
   `docs/design/interaction-face.md` (the provisional row retires).
 - Test: the existing round-trip tests in
   `crates/ridl-backend-rust/tests/interaction_face.rs`, now over the generated
@@ -307,14 +336,32 @@ and #448 is closed by a check or by an amendment naming E16.2.
 
 **Files:**
 
-- Test: a conformance suite under `crates/ridl-backend-flatbuffers/tests/` or
-  `crates/ridl-backend-rust/tests/`, whichever holds the `planus` dependency —
-  `planus-translation` is already a **test-only** dependency of
-  `ridl-backend-flatbuffers` and its Cargo.toml says it must stay there, so the
-  suite goes where that rule allows rather than where it reads best.
+- Test: a conformance suite in **`crates/ridl-backend-rust/tests/`**, because it
+  exercises the Rust codec.
+
+**The mechanism does not exist in the tree yet, and this stage builds it.**
+`planus-translation` is a **schema compiler**: `compile_with_planus` in
+`crates/ridl-backend-flatbuffers/tests/support/mod.rs` calls
+`planus_translation::translate_files` to check that an emitted `.fbs` parses,
+which is ADR-0017's totality check. It reads and writes no buffer, so it cannot
+by itself witness a round trip. A round trip — bytes this codec writes are read
+by planus, and bytes planus writes are accepted by this codec — needs, as
+**dev-dependencies**: planus's code generator, to turn the emitted `.fbs` into
+Rust inside the test, and planus's runtime crate, to read and write buffers with
+it.
+
+**That is a dependency decision D-8 did not take.** D-8 chose round-trip over
+byte equality; it did not choose what performs the round trip. This stage names
+the two crates and their versions, adds them as dev-dependencies of
+`ridl-backend-rust` only, and records the addition — or, if that is refused,
+says what replaces it. It is the one stage in this plan that adds a dependency,
+so it does not slip in unremarked.
+
 - Modify: `justfile` (the fixture package joins `wasm-check`);
   `docs/wip/2026-09-13-catalog-descriptor-plan.md` Task 7 (calls the bound of
-  D-6).
+  D-6); **`docs/ROADMAP.md`**, E11.14's row, which over-claims what remains to
+  that story once the codec reaches `ridl build` through Task 4 — a lanes plan
+  §6 shared file, so check for an in-flight change and say on driftsys/ridl#328.
 
 **Must not break:** `planus-translation` staying test-only. It is the validity
 oracle, and making it a normal dependency would put a third-party FlatBuffers
@@ -340,12 +387,29 @@ second implementation of it.
 described, `just wasm-check` covers the fixture, and no record of §5 still
 describes the old shape.
 
+## What the D-1 amendment moved out of E11.14
+
+The note's D-12 and this plan both said E11.7 "does not make `ridl build` emit
+the codec — that is E11.14". **The D-1 amendment made that false.** `ridlc`
+calls `generate`, and the amendment puts the `Payload<FlatBuffers>` impls in
+`generate`'s output, so `ridl build --emit rust` carries the codec the moment
+Task 4 lands. Nothing else moves: E11.14 keeps the descriptors, the face and the
+manifest's encoding feature, none of which `generate` emits today.
+
+E11.14's roadmap row still describes `--emit rust` as writing "the descriptors,
+the face and a codec's `Payload` implementations", which over-claims what
+remains to E11.14 once Task 4 lands. **Correcting that row is Task 7's records
+item**, not this plan's pull request: `docs/ROADMAP.md` is a lanes plan §6
+shared file, and amending it here would touch a shared file for a change whose
+own stage has not run. Task 7 makes the edit with the rest of §5's records, and
+says on driftsys/ridl#328 when it does.
+
 ## Out of scope
 
 E11.7 emits no frame (E11.1), no transport (E11.9), no proto3 (E11.8), no
-`repr(C)` layout (E11.12) and no TypeScript. It does not make `ridl build` emit
-the codec — that is E11.14 — and it does not remove `#[repr(C)]` from the domain
-structs, which ADR-0020 decision 3 gives to E11.12.
+`repr(C)` layout (E11.12) and no TypeScript. It does not remove `#[repr(C)]`
+from the domain structs, which ADR-0020 decision 3 gives to E11.12. It no longer
+claims to keep the codec out of `ridl build` — see the section above.
 
 ## Trace
 

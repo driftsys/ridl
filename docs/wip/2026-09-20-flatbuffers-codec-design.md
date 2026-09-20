@@ -370,9 +370,17 @@ exercised by the face's round trip.
   toolchain pin.
 - **Out of scope.** E11.7 emits no frame (E11.1), no transport (E11.9), no
   proto3 (E11.8), no `repr(C)` layout (E11.12) and no TypeScript. It does not
-  make `ridl build` emit the codec — that is the row K0 adds as E11.14 — and it
-  does not remove `#[repr(C)]` from the domain structs, which ADR-0020 decision
-  3 gives to E11.12.
+  remove `#[repr(C)]` from the domain structs, which ADR-0020 decision 3 gives
+  to E11.12.
+- **Corrected 2026-09-20, after the disposition.** This bullet said E11.7 "does
+  not make `ridl build` emit the codec — that is the row K0 adds as E11.14".
+  **The D-1 amendment made that false**: `ridlc` calls `generate`, and the
+  amendment puts the `Payload<FlatBuffers>` impls in `generate`'s output, so
+  `ridl build --emit rust` carries the codec as soon as the emitter stage lands.
+  E11.14 keeps the descriptors, the face and the manifest's encoding feature,
+  none of which `generate` emits today. The plan's "What the D-1 amendment moved
+  out of E11.14" states it, and E11.14's roadmap row is corrected by the plan's
+  last task rather than here.
 
 ## 3. What this note does not decide
 
