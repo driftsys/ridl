@@ -148,6 +148,22 @@ design note, from the archive.
   decision with a risk the file names, not an evidence-driven one. It carries
   the model routing Sebastien set on 2026-09-16 and three rules C3 paid to
   learn. Archive it with the lanes plan.
+- **2026-09-20-flatbuffers-codec-design.md** — the design note for roadmap story
+  E11.7, the FlatBuffers payload codec: twelve proposed decisions over where the
+  `Payload<FlatBuffers>` implementations are emitted, how `encode` builds a
+  back-to-front format into a caller's slice, where the typl constraint check
+  runs so `decode` stays infallible, who owns the `MAX_SIZE` computation Epic 16
+  also needs, and how the generated face stops being bound to `ReprC`. Disposed
+  of on 2026-09-20 in the comment on its pull request: six decisions as
+  proposed, four with an addition, and D-1 and D-6 amended to put the shared
+  projection facts outside any backend. Roadmap: E11.7.
+- **2026-09-20-flatbuffers-codec-plan.md** — the seven-task implementation plan
+  that follows that disposition. Task 1 puts the shared projection facts and the
+  size bound outside any backend; Task 2 fills the `ridl-rt` `flatbuffers`
+  feature and settles how a rustc proof compiles feature-gated output; Tasks 4
+  to 7 emit the codec into `generate`'s output, move the face onto `Wire` and
+  make conformance a round trip through `planus`. **Its code stages wait on Epic
+  10 Task 4, which has no session.** Roadmap: E11.7.
 - **2026-09-20-lane-k-driver.md** — the driver prompt for lane K, the
   FlatBuffers payload codec (story E11.7). Its stage K0 filed the two rows the
   codec work surfaced, E11.14 (the face and the codec reach `ridl build`) and
