@@ -102,16 +102,21 @@ invocation in a `build.rs` is a build-time dependency on a C++ toolchain, and
 the note must say whether that is accepted. `planus-translation` is already a
 workspace dev-dependency, as the schema validity oracle for
 `ridl-backend-flatbuffers`'s tests — the note must not confuse an oracle in this
-repository's tests with a dependency of emitted code.
+repository's tests with a dependency of emitted code. ADR-0020 decision 6's
+crate table already says `ridl-rt` depends on "the FlatBuffers runtime, only
+under its feature", so an option that needs no such runtime must say how it
+reconciles with that row.
 
 **K-2. What the `ridl-rt` `flatbuffers` feature enables.** Today it enables
 nothing, and the crate has no dependency in any feature combination
-(`crates/ridl-rt/Cargo.toml`). If shared codec machinery belongs in `ridl-rt`,
-say exactly what, and check it against the three things that bind that crate:
-`no_std`, the `wasm32` build with `--no-default-features` (`just wasm-check`),
-and the edition 2021 build at rust-version 1.83 (`just compat-check`, ADR-0021
-decision 10). A new public item in `ridl-rt` is an ADR-0021 decision, not an
-implementation detail.
+(`crates/ridl-rt/Cargo.toml`), while ADR-0020 decision 6 states that the crate
+depends on the FlatBuffers runtime under that feature. The ADR wins, so the
+question is not whether there is a dependency but what it is, what public
+surface it adds, and what the feature turns on. Say exactly what, and check it
+against the three things that bind that crate: `no_std`, the `wasm32` build with
+`--no-default-features` (`just wasm-check`), and the edition 2021 build at
+rust-version 1.83 (`just compat-check`, ADR-0021 decision 10). A new public item
+in `ridl-rt` is an ADR-0021 decision, not an implementation detail.
 
 **K-3. What `Payload::<FlatBuffers>::View<'a>` is.** An accessor over the
 buffer, or the bytes. ADR-0020 decision 2 chose FlatBuffers at the codec-in-wasm

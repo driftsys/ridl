@@ -241,8 +241,9 @@ argument for it in the command case.
 - Negative — added 2026-09-20: both amendments change the emitted face, so every
   consumer written against the E11.13 shape is edited once. The MVP is
   in-process and its only consumers are this backend's own tests and the
-  checked-in fixture, which is why the change is taken now rather than after
-  E11.9 builds the first runtime against it.
+  checked-in fixture, which is why the change is taken now rather than after the
+  first runtime is built against it. That runtime was story E11.9 when this was
+  written and is story E11.15 since the split of 2026-09-20 (driftsys/ridl#445).
 - Neutral: decisions 3 and 4 are signature choices with no behavioural
   alternative once decision 1's translator and decision 2's clause-holding
   `dispatch` are fixed; they are recorded here because the M1 design's example
