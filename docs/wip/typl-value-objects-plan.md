@@ -71,6 +71,35 @@ absolute path and imports nothing, so no typl name can collide with it. Task 2
 therefore emits nothing; its code blocks and those of Tasks 3, 5 and 8 are
 rewritten below to the absolute path.
 
+**A fifth change followed on 2026-09-20, from Task 3 landing in
+driftsys/ridl#420.** That pull request took two decisions about the emitted code
+that this plan had not absorbed, and Tasks 4, 5 and 8 inherit both, so executing
+any of them against the text as written would either fail to compile or be
+repaired by reintroducing the defect #420 removed. Both decisions and their
+reasons are recorded at the top of Task 3. The corrections made here:
+
+- **Task 3** is recorded as landed, its steps are ticked, and its Step 1
+  assertions and `quote!` bodies are rewritten to the code that is on `main`.
+- **Task 4** Step 1 and Step 3 name `::core::convert::From` and
+  `::core::convert::TryFrom`, and Step 3 says where the vacuous branch goes,
+  which Task 3's quoted function no longer shows.
+- **Task 5** Step 1 and both Step 3 blocks name `::core::convert::TryFrom`,
+  `::core::convert::From`, `::core::result::Result`,
+  `::core::result::Result::Ok` and `::core::result::Result::Err`. Two stale line
+  references into `lib.rs` were replaced by the symbol names.
+- **Tasks 4 and 5** also record a third thing driftsys/ridl#420 settled that
+  they inherit: a deprecated declaration's impl blocks carry
+  `#[allow(deprecated)]`. Emitting those tasks' impl blocks without it would put
+  back the consumer warnings that pull request removed.
+- **Task 8** names `::core::result::Result::Err`, and settles the two crate
+  paths in the emitted pattern block as `::std::sync::LazyLock` and
+  `::regex::Regex`, with the reason and the rustc check recorded in the task.
+  The `validate-pattern` default is unchanged: the design spec wins over
+  driftsys/ridl#253, which Task 8 already says to reconcile in a comment on that
+  issue.
+- **The design spec's decision 4** no longer says `min`/`max` and
+  `len_min`/`len_max` are checked unconditionally, and states the two guards.
+
 **Line references were replaced by symbol names** wherever a symbol exists. The
 line numbers this plan carried had drifted by eleven lines in
 `crates/ridl-backend-rust/src/lib.rs` alone, and a symbol name does not drift.
@@ -535,10 +564,31 @@ compile proofs."
 
 The core change, and the breaking one.
 
+**Landed in driftsys/ridl#420**, merged as `ddcbe85`. The task body below was
+corrected on 2026-09-20 to the code that landed, because two decisions taken
+during that pull request's review are not the code this task first described,
+and Tasks 4, 5 and 8 inherit both:
+
+1. **The generated code names the prelude absolutely.** A typl type name is
+   CamelCase (typl §15.1) and `ridl-sem` reserves no identifier, so a package
+   may legally declare `type Result`, `type Ok`, `type Err`, `type From` or
+   `type TryFrom`, and that declaration shadows the prelude in the module the
+   generated constructors share with it. The emitter writes
+   `::core::convert::From`, `::core::convert::TryFrom`,
+   `::core::result::Result`, `::core::result::Result::Ok` and
+   `::core::result::Result::Err`. This is the same totality argument that put
+   `::ridl_rt::payload::Violation` on an absolute path.
+2. **A check rustc can fold to a constant is not emitted.** A length minimum of
+   0 — the typl §4.4 and §4.5 default lower bound of string and bytes — emits no
+   branch, because `(… as u64) < 0` draws rustc's `unused_comparisons` warning
+   in the consumer's build. The maximum range check is skipped on the same
+   grounds when an integer bound equals `i64::MAX`, which is the newtype
+   backing's own maximum. Read the comments at those two branches in
+   `constraint_checks` rather than this summary.
+
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_type_def`
-  (`lib.rs:255`), `emit_const` (`lib.rs:272`)
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_type_def`, `emit_const`
 - Modify: `crates/ridl-backend-rust/src/defaults.rs` — the two tuple-struct
   construction sites, `Some(quote! { #name_id(#inner) })` (`defaults.rs:55`) and
   `Some(quote! { #path(#inner) })` (`defaults.rs:183`)
@@ -549,19 +599,21 @@ The core change, and the breaking one.
 - Consumes: `ridl_ir::v2::constraint_is_vacuous` (Task 1). Nothing from Task 2:
   there is no import to consume, so the emitted code names
   `::ridl_rt::payload::Violation` and `::ridl_rt::payload::Rule` by absolute
-  path. This is the first task whose generated code names the runtime, so it is
-  also where the compile proofs first pass `--extern ridl_rt=<path>`, built by
-  Task 2's `ridl_rt_rlib` helper.
+  path, and the prelude names it uses by absolute path for the same reason. This
+  is the first task whose generated code names the runtime, so it is also where
+  the compile proofs first pass `--extern ridl_rt=<path>`, built by Task 2's
+  `ridl_rt_rlib` helper.
 - Produces: for a constrained named scalar `Speed` over `f64`, an emitted
-  `Speed::new(f64) -> Result<Speed, ::ridl_rt::payload::Violation>`,
+  `Speed::new(f64) -> ::core::result::Result<Speed, ::ridl_rt::payload::Violation>`,
   `Speed::new_unchecked(f64) -> Speed` (`pub const`), `Speed::get(self) -> f64`,
-  `impl TryFrom<f64> for Speed`, `impl From<Speed> for f64`. Task 4 emits the
-  vacuous counterpart; Task 8 adds the pattern branch inside `new`.
+  `impl ::core::convert::TryFrom<f64> for Speed`,
+  `impl ::core::convert::From<Speed> for f64`. Task 4 emits the vacuous
+  counterpart; Task 8 adds the pattern branch inside `new`.
 
 Both call sites that construct a newtype by tuple syntax must move to
 `new_unchecked`, which is why it is `const`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
@@ -572,16 +624,20 @@ fn constrained_scalar_is_a_value_object() {
         source.contains("pub struct Speed(f64)"),
         "inner field must be private, got:\n{source}"
     );
-    assert!(source.contains(
-        "pub fn new(value: f64) -> Result<Self, ::ridl_rt::payload::Violation>"
-    ));
+    // The generated code names `Result`, `TryFrom` and `From` by absolute
+    // path, because a package may declare a type of the same name in the same
+    // module; these assertions follow the generated code. The signature is
+    // checked in two parts because prettyplease wraps it at its own width.
+    assert!(source.contains("pub fn new("));
+    assert!(source.contains(") -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {"));
     assert!(source.contains("pub const fn new_unchecked(value: f64) -> Self"));
     assert!(source.contains("pub const fn get(self) -> f64"));
-    assert!(source.contains("impl TryFrom<f64> for Speed"));
-    assert!(source.contains("impl From<Speed> for f64"));
+    assert!(source.contains("impl ::core::convert::TryFrom<f64> for Speed"));
+    assert!(source.contains("impl ::core::convert::From<Speed> for f64"));
     // The infallible inbound conversion must never appear on a constrained type.
     assert!(
-        !source.contains("impl From<f64> for Speed"),
+        !source.contains("impl ::core::convert::From<f64> for Speed")
+            && !source.contains("impl From<f64> for Speed"),
         "From<Inner> reintroduces unchecked construction"
     );
 }
@@ -604,46 +660,83 @@ fn constant_of_a_constrained_type_uses_new_unchecked() {
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run:
 `cargo test -p ridl-backend-rust --locked constrained_scalar_is_a_value_object constant_of_a_constrained_type`
 Expected: FAIL — the first on `inner field must be private`, the second on the
 missing `new_unchecked` call.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 In `emit_type_def`, replace the body so the field is private and the impl block
-is emitted. `newtype_inner(td)` already yields the backing type.
+is emitted. `newtype_inner(td)` already yields the backing type. The block below
+is `emit_type_def` as it stands on `main` after driftsys/ridl#420, quoted whole
+so the prelude spellings and the `#[allow(deprecated)]` placement can be read
+off it directly. Task 4 adds the `constraint_is_vacuous` branch to the top of
+this function; it is not here because it had not landed when this was written.
 
 ```rust
 /// A named scalar becomes a `#[repr(transparent)]` newtype with a private
 /// inner value (typl §5.7). Construction goes through `new`, which enforces
 /// the typl constraints, or `new_unchecked`, which does not.
+///
+/// `Violation` and `Rule` are named by absolute path and nothing is imported:
+/// a typl package may declare a type named `Violation` or `Rule`, and a `use`
+/// of either would collide with that declaration. The leading `::` covers a
+/// package that declares a type named `ridl_rt`. The prelude names the
+/// constructors use — `Result`, `Ok`, `Err`, `TryFrom`, `From` — are absolute
+/// for the same reason: a type name is CamelCase (typl §15.1) and `ridl-sem`
+/// reserves no identifier, so a package may declare `type Result`, and that
+/// struct would shadow the prelude's in the module the constructors share
+/// with it.
+///
+/// A deprecated declaration's impl blocks carry `#[allow(deprecated)]`, with
+/// one exception: the `Default` impl `defaults::decl_default_expr` emits
+/// carries no allow, because `emit_decl` attaches it outside this function.
+/// Each covered impl block uses the deprecated type, and without the allow
+/// the consumer's build draws the `deprecated` lint on code the consumer did
+/// not write.
 fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
-    let attrs = decl_attrs(decl);
+    let doc = doc_attrs(&decl.doc);
+    let unchecked = unchecked_doc(td);
+    // A blank doc line keeps the unchecked note out of the declaration's own
+    // doc paragraph.
+    let separator = if decl.doc.is_empty() || unchecked.is_empty() {
+        quote! {}
+    } else {
+        quote! { #[doc = ""] }
+    };
+    let deprecated = deprecated_attr(decl.deprecated.as_deref());
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
     let vis = vis_tokens(decl.visibility);
     let type_name = decl.name.as_str();
-
-    if ridl_ir::v2::constraint_is_vacuous(td.constraint.as_ref()) {
-        return emit_vacuous_type_def(decl, td); // Task 4
-    }
 
     let checks = constraint_checks(td, type_name, quote! { value });
     let getter = scalar_getter(td, vis.clone(), inner.clone());
 
     quote! {
-        #attrs
+        #doc
+        #separator
+        #unchecked
+        #deprecated
         #[repr(transparent)]
         #vis struct #name(#inner);
 
+        #allow_deprecated
         impl #name {
             /// Constructs the value, enforcing its typl constraints.
-            #vis fn new(value: #inner) -> Result<Self, ::ridl_rt::payload::Violation> {
+            #vis fn new(
+                value: #inner,
+            ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
                 #checks
-                Ok(Self(value))
+                ::core::result::Result::Ok(Self(value))
             }
 
             /// Constructs the value without checking its constraints.
@@ -658,14 +751,16 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
             #getter
         }
 
-        impl TryFrom<#inner> for #name {
+        #allow_deprecated
+        impl ::core::convert::TryFrom<#inner> for #name {
             type Error = ::ridl_rt::payload::Violation;
-            fn try_from(value: #inner) -> Result<Self, Self::Error> {
+            fn try_from(value: #inner) -> ::core::result::Result<Self, Self::Error> {
                 Self::new(value)
             }
         }
 
-        impl From<#name> for #inner {
+        #allow_deprecated
+        impl ::core::convert::From<#name> for #inner {
             fn from(value: #name) -> Self {
                 value.0
             }
@@ -678,48 +773,77 @@ Add the two helpers. `constraint_checks` emits only the branches the constraint
 carries, so an unbounded-but-length-bounded string gets only the length check:
 
 ```rust
-/// The range and length checks for one constraint. The pattern check is added
-/// by Task 8 behind the `validate-pattern` feature.
+/// The range and length checks for one constraint, as statements that return
+/// early with a `Violation`. Only the branches the constraint carries are
+/// emitted, so a string with a length bound and no range gets only the length
+/// check. The pattern check is not emitted here.
+///
+/// A `min` or `max` is a numeric bound (typl §5.5), so a range check is
+/// emitted only for a float or integer backing; on any other backing the two
+/// are ignored rather than rendered as a literal of the wrong type.
 fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> TokenStream {
     let Some(c) = td.constraint.as_ref() else {
         return quote! {};
     };
     let mut checks = Vec::new();
 
-    if let Some(min) = c.min.as_deref() {
-        let lit = scalar_literal(td, min);
-        checks.push(quote! {
-            if #value < #lit {
-                return Err(::ridl_rt::payload::Violation {
-                    type_name: #type_name,
-                    rule: ::ridl_rt::payload::Rule::Range,
-                });
-            }
-        });
-    }
-    if let Some(max) = c.max.as_deref() {
-        let lit = scalar_literal(td, max);
-        checks.push(quote! {
-            if #value > #lit {
-                return Err(::ridl_rt::payload::Violation {
-                    type_name: #type_name,
-                    rule: ::ridl_rt::payload::Rule::Range,
-                });
-            }
-        });
+    let is_float = match backing_scalar(td) {
+        ScalarBacking::Float => Some(true),
+        ScalarBacking::Integer => Some(false),
+        ScalarBacking::Boolean | ScalarBacking::String | ScalarBacking::Bytes => None,
+    };
+    if let Some(is_float) = is_float {
+        if let Some(min) = c.min.as_deref() {
+            let lit = numeric_tokens(min, is_float);
+            checks.push(quote! {
+                if #value < #lit {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Range,
+                    });
+                }
+            });
+        }
+        // The newtype backing an integer is always `i64` (`newtype_inner`), so
+        // a declared maximum at `i64::MAX` (9223372036854775807) makes
+        // `value > 9223372036854775807` never true: rustc draws its
+        // `unused_comparisons` warning on it in the consumer's build. The
+        // branch is emitted only when the maximum is below the inner type's
+        // maximum.
+        let checked_max = c
+            .max
+            .as_deref()
+            .filter(|max| is_float || max.parse::<i64>() != Ok(i64::MAX));
+        if let Some(max) = checked_max {
+            let lit = numeric_tokens(max, is_float);
+            checks.push(quote! {
+                if #value > #lit {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Range,
+                    });
+                }
+            });
+        }
     }
     // Length is in characters for string (typl §5.3) and bytes for bytes
-    // (§5.4), which is why the two use different expressions.
+    // (§5.4), which is why the two use different expressions. The cast is
+    // parenthesized because `as u64 < 8` does not parse: after a cast type,
+    // `<` opens a generic-argument list.
     if c.len_min.is_some() || c.len_max.is_some() {
         let len = match backing_scalar(td) {
-            ScalarBacking::String => quote! { #value.chars().count() as u64 },
-            _ => quote! { #value.len() as u64 },
+            ScalarBacking::String => quote! { (#value.chars().count() as u64) },
+            _ => quote! { (#value.len() as u64) },
         };
-        if let Some(min) = c.len_min {
+        // A minimum of 0 is the default length bound of string and bytes
+        // (typl §4.4, §4.5), and `(… as u64) < 0` is never true: rustc draws
+        // its `unused_comparisons` warning on it in the consumer's build. The
+        // branch is emitted only for a positive minimum.
+        if let Some(min) = c.len_min.filter(|min| *min > 0) {
             let lit = proc_macro2::Literal::u64_unsuffixed(min);
             checks.push(quote! {
                 if #len < #lit {
-                    return Err(::ridl_rt::payload::Violation {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                         type_name: #type_name,
                         rule: ::ridl_rt::payload::Rule::Length,
                     });
@@ -730,7 +854,7 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             let lit = proc_macro2::Literal::u64_unsuffixed(max);
             checks.push(quote! {
                 if #len > #lit {
-                    return Err(::ridl_rt::payload::Violation {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                         type_name: #type_name,
                         rule: ::ridl_rt::payload::Rule::Length,
                     });
@@ -744,8 +868,8 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
 /// The accessor. A `Copy` backing returns by value from a `const fn`; `String`
 /// and `Vec<u8>` borrow, and gain `into_inner` for the owned form.
 ///
-/// `backing_scalar` is total — it returns `ScalarBacking`, not an `Option`
-/// (`lib.rs:645`), and maps a unit backing and an absent backing to `Float`.
+/// `backing_scalar` is total: it maps a unit backing and an absent backing to
+/// `Float`, so every named scalar gets exactly one of the three forms.
 fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> TokenStream {
     match backing_scalar(td) {
         ScalarBacking::String => quote! {
@@ -763,21 +887,29 @@ fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> Toke
 }
 ```
 
-Extend `decl_attrs` so a named scalar whose constraint carries a `step` gains a
-doc line naming what `new` does not check, rather than staying silent (spec,
-"Not validated"):
+Add `unchecked_doc` and call it from `emit_type_def`, so a named scalar whose
+constraint carries a `step`, or a `match` pattern the constructor does not yet
+check, gains a doc line naming what `new` does not check, rather than staying
+silent (spec, "Not validated"):
 
 ```rust
-/// The gaps a generated constructor does not close, named on the type itself.
+/// The gaps a generated constructor does not close, named on the type itself
+/// rather than left silent: a `step` is not checked by `new`, and neither is
+/// a `match` pattern until the pattern check lands. `pattern_const` is read as
+/// well as `pattern`, because a pattern constant that did not resolve leaves
+/// `pattern` absent while the type still carries a match constraint.
 fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
     let Some(c) = td.constraint.as_ref() else {
         return quote! {};
     };
-    if c.step.is_none() {
-        return quote! {};
+    let mut lines = Vec::new();
+    if c.step.is_some() {
+        lines.push(" Quantization (`step`) is not checked by `new`.");
     }
-    let line = " Quantization (`step`) is not checked by `new`.";
-    quote! { #[doc = #line] }
+    if c.pattern.is_some() || c.pattern_const.is_some() {
+        lines.push(" The `match` pattern is not checked by `new`.");
+    }
+    quote! { #(#[doc = #lines])* }
 }
 ```
 
@@ -794,7 +926,7 @@ Some(quote! { #path::new_unchecked(#inner) })
 In `emit_const`, change the three `#type_name(#value)` forms to
 `#type_name::new_unchecked(#value)`.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked && cargo test -p ridl --locked`
@@ -806,7 +938,7 @@ first two pass no `-D` flag at all and assert only `status.success()`, and the
 third denies two lints by name. So a naming lint does not fail any of them; Task
 11 is where that matters.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/ridl-backend-rust/
@@ -826,6 +958,11 @@ BREAKING CHANGE: generated code no longer exposes the inner field. Read it
 with get() or From, and construct with new() or new_unchecked()."
 ```
 
+That commit is the first of the five on driftsys/ridl#420. The other four came
+from review of that pull request and carry the two corrections recorded at the
+top of this task, the tests that pin them, and the records those corrections
+made stale.
+
 ---
 
 ### Task 4: Vacuous named scalars — infallible construction
@@ -844,6 +981,27 @@ with get() or From, and construct with new() or new_unchecked()."
   `fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream`,
   called from `emit_type_def` (Task 3).
 
+**The prelude is named absolutely here too.** Task 3's correction 1 binds this
+task: `From` is emitted as `::core::convert::From`, and the assertion that no
+manual `TryFrom` appears is written against `::core::convert::TryFrom` as well
+as the unqualified spelling, so it cannot pass by matching the wrong text.
+
+**A deprecated declaration's impl blocks carry `#[allow(deprecated)]`.** This is
+the third thing driftsys/ridl#420 settled and this task inherits: each emitted
+impl block names the deprecated type, and without the allow the consumer's build
+draws the `deprecated` lint on code the consumer did not write. `emit_type_def`
+binds it as
+
+```rust
+let allow_deprecated = if decl.deprecated.is_some() {
+    quote! { #[allow(deprecated)] }
+} else {
+    quote! {}
+};
+```
+
+and prefixes each impl block with `#allow_deprecated`. Do the same here.
+
 - [ ] **Step 1: Write the failing test**
 
 ```rust
@@ -855,15 +1013,18 @@ fn vacuous_scalar_constructs_infallibly() {
     )];
     let source = rust_for(decls);
     assert!(source.contains("pub const fn new(value: bool) -> Self"));
-    assert!(source.contains("impl From<bool> for Enabled"));
-    assert!(source.contains("impl From<Enabled> for bool"));
+    assert!(source.contains("impl ::core::convert::From<bool> for Enabled"));
+    assert!(source.contains("impl ::core::convert::From<Enabled> for bool"));
     // No escape hatch is emitted: `new` already is one.
     assert!(
         !source.contains("Enabled::new_unchecked") && !source.contains("fn new_unchecked(value: bool)"),
         "new_unchecked would duplicate new on a vacuous type"
     );
     // And no manual TryFrom, which would collide with core's blanket impl.
-    assert!(!source.contains("impl TryFrom<bool> for Enabled"));
+    assert!(
+        !source.contains("impl ::core::convert::TryFrom<bool> for Enabled")
+            && !source.contains("impl TryFrom<bool> for Enabled")
+    );
 }
 ```
 
@@ -876,6 +1037,18 @@ takes the constrained path.
 
 - [ ] **Step 3: Write the implementation**
 
+Add the branch at the top of `emit_type_def`, before it computes the checks and
+the getter. Task 3's quoted copy of that function does not show it, because it
+had not landed when Task 3 was executed:
+
+```rust
+if ridl_ir::v2::constraint_is_vacuous(td.constraint.as_ref()) {
+    return emit_vacuous_type_def(decl, td);
+}
+```
+
+Then add the function itself:
+
 ```rust
 /// A named scalar whose constraint checks nothing: `boolean`, and `integer` or
 /// `float` with no declared range.
@@ -885,6 +1058,10 @@ takes the constrained path.
 /// for T` then supplies `TryFrom<Inner>` with `Error = Infallible`, so generic
 /// consumer code calling `try_from` compiles against both kinds of scalar.
 /// `new_unchecked` is deliberately absent: `new` already is the unchecked path.
+///
+/// `From` is named by absolute path for the reason Task 3 records: a typl
+/// package may declare `type From`, and that declaration shadows the prelude
+/// in the module the generated impl shares with it.
 fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
@@ -906,11 +1083,11 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
             #getter
         }
 
-        impl From<#inner> for #name {
+        impl ::core::convert::From<#inner> for #name {
             fn from(value: #inner) -> Self { Self(value) }
         }
 
-        impl From<#name> for #inner {
+        impl ::core::convert::From<#name> for #inner {
             fn from(value: #name) -> Self { value.0 }
         }
     }
@@ -945,8 +1122,7 @@ latter with Error = Infallible."
 
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_enum` (`lib.rs:389`),
-  `emit_enum_set` (`lib.rs:413`)
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_enum`, `emit_enum_set`
 - Test: `crates/ridl-backend-rust/src/tests.rs`
 
 **Interfaces:**
@@ -955,8 +1131,32 @@ latter with Error = Infallible."
   code names `::ridl_rt::payload::Violation` and `::ridl_rt::payload::Rule` by
   absolute path. A compile proof over this output passes
   `--extern ridl_rt=<path>`, built by Task 2's `ridl_rt_rlib` helper.
-- Produces: `impl TryFrom<i64> for <Enum>`, `impl From<<Enum>> for i64`, and the
-  same pair for each enum set.
+- Produces: `impl ::core::convert::TryFrom<i64> for <Enum>`,
+  `impl ::core::convert::From<<Enum>> for i64`, and the same pair for each enum
+  set.
+
+**The prelude is named absolutely here too.** Task 3's correction 1 binds this
+task: `TryFrom`, `From`, `Result`, `Ok` and `Err` are emitted as
+`::core::convert::TryFrom`, `::core::convert::From`, `::core::result::Result`,
+`::core::result::Result::Ok` and `::core::result::Result::Err`, because a typl
+package may declare a type of any of those names in the module these impl blocks
+share with it.
+
+**A deprecated declaration's impl blocks carry `#[allow(deprecated)]`.** This is
+the third thing driftsys/ridl#420 settled and this task inherits: each emitted
+impl block names the deprecated type, and without the allow the consumer's build
+draws the `deprecated` lint on code the consumer did not write. `emit_type_def`
+binds it as
+
+```rust
+let allow_deprecated = if decl.deprecated.is_some() {
+    quote! { #[allow(deprecated)] }
+} else {
+    quote! {}
+};
+```
+
+and prefixes each impl block with `#allow_deprecated`. Do the same here.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -964,15 +1164,15 @@ latter with Error = Infallible."
 #[test]
 fn enum_converts_from_a_raw_discriminant() {
     let source = rust_for(vec![gear_position_decl()]);
-    assert!(source.contains("impl TryFrom<i64> for GearPosition"));
-    assert!(source.contains("impl From<GearPosition> for i64"));
+    assert!(source.contains("impl ::core::convert::TryFrom<i64> for GearPosition"));
+    assert!(source.contains("impl ::core::convert::From<GearPosition> for i64"));
     assert!(source.contains("::ridl_rt::payload::Rule::Variant"));
 }
 
 #[test]
 fn enum_set_rejects_bits_outside_the_declared_mask() {
     let source = rust_for(vec![features_decl()]);
-    assert!(source.contains("impl TryFrom<i64> for Features"));
+    assert!(source.contains("impl ::core::convert::TryFrom<i64> for Features"));
     assert!(source.contains("const DECLARED_MASK: i64"));
 }
 ```
@@ -999,17 +1199,17 @@ Append to `emit_enum`'s returned stream:
     let arms = ed.values.iter().map(|value| {
         let vname = ident(&value.name);
         let disc = int_tokens(value.value);
-        quote! { #disc => Ok(Self::#vname) }
+        quote! { #disc => ::core::result::Result::Ok(Self::#vname) }
     });
     let type_name = decl.name.as_str();
 
     quote! {
-        impl TryFrom<i64> for #name {
+        impl ::core::convert::TryFrom<i64> for #name {
             type Error = ::ridl_rt::payload::Violation;
-            fn try_from(value: i64) -> Result<Self, Self::Error> {
+            fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
                 match value {
                     #(#arms,)*
-                    _ => Err(::ridl_rt::payload::Violation {
+                    _ => ::core::result::Result::Err(::ridl_rt::payload::Violation {
                         type_name: #type_name,
                         rule: ::ridl_rt::payload::Rule::Variant,
                     }),
@@ -1017,7 +1217,7 @@ Append to `emit_enum`'s returned stream:
             }
         }
 
-        impl From<#name> for i64 {
+        impl ::core::convert::From<#name> for i64 {
             fn from(value: #name) -> Self { value as i64 }
         }
     }
@@ -1037,27 +1237,27 @@ Append to `emit_enum_set`'s returned stream:
             #vis const DECLARED_MASK: i64 = #mask_lit;
         }
 
-        impl TryFrom<i64> for #name {
+        impl ::core::convert::TryFrom<i64> for #name {
             type Error = ::ridl_rt::payload::Violation;
-            fn try_from(value: i64) -> Result<Self, Self::Error> {
+            fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
                 if value & !Self::DECLARED_MASK != 0 {
-                    return Err(::ridl_rt::payload::Violation {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                         type_name: #type_name,
                         rule: ::ridl_rt::payload::Rule::Variant,
                     });
                 }
-                Ok(Self(value))
+                ::core::result::Result::Ok(Self(value))
             }
         }
 
-        impl From<#name> for i64 {
+        impl ::core::convert::From<#name> for i64 {
             fn from(value: #name) -> Self { value.0 }
         }
     }
 ```
 
 Note the enum set's inner field is already emitted as `#vis i64` —
-`#vis struct #name(#vis i64);` at `lib.rs:427` — change it to a private `i64`
+`#vis struct #name(#vis i64);` in `emit_enum_set` — change it to a private `i64`
 for consistency with Task 3, and add `#vis const fn get(self) -> i64 { self.0 }`
 to its impl block.
 
@@ -1684,6 +1884,28 @@ is authoritative where the two disagree (see the `Spec:` line above). Reconcile
 the issue text in a comment when the task lands rather than changing the
 default.
 
+**Every path in the emitted block is absolute**, including `::std::sync` and
+`::regex::Regex`. Task 3's correction 1 covers the prelude; this task has to
+settle the two crate paths as well, and the answer is the same for the same
+reason. The generated code for one package is one module, and `face.rs` emits
+one `pub mod` per named interface, spelled `snake_case(<interface name>)` — so
+an interface named `Std` puts a module named `std` in the module the
+constructors live in, and an interface named `Regex` puts one named `regex`
+there. A module item shadows the extern prelude for code in the same module, so
+the unqualified `std::sync::LazyLock` then resolves to that interface's face
+module and rustc reports `E0433`. A leading `::` is the extern crate
+unconditionally, so it cannot be shadowed by any declaration. Confirmed with
+rustc on 2026-09-20: a module holding both `pub mod std` and a
+`std::sync::LazyLock` static fails to resolve, and the same module with
+`::std::sync::LazyLock` compiles.
+
+The crate-root package module tree is not the reason. `ridl.std` becomes
+`pub mod ridl { pub mod std { … } }`, and a package that is also a namespace has
+its own code loaded into a private `__ridl_package` module
+(`ridlc::render_lib_rs`), so no generated package module ever has a sibling
+named `std` from the tree alone. The face module is what makes the collision
+reachable.
+
 **Interfaces:**
 
 - Consumes: `constraint_checks` (Task 3), the manifest feature (Task 7).
@@ -1697,6 +1919,10 @@ fn pattern_check_is_feature_gated() {
     let source = rust_for(vec![vin_decl()]);
     assert!(source.contains("#[cfg(feature = \"validate-pattern\")]"));
     assert!(source.contains("::ridl_rt::payload::Rule::Pattern"));
+    // Both crate paths are absolute, so an interface named `Std` or `Regex`
+    // cannot shadow them from the module the constructor lives in.
+    assert!(source.contains("::std::sync::LazyLock"));
+    assert!(source.contains("::regex::Regex::new"));
     // The length check is not gated - it needs no dependency.
     let gated = source.split("#[cfg(feature = \"validate-pattern\")]").next().unwrap();
     assert!(gated.contains("::ridl_rt::payload::Rule::Length"));
@@ -1704,7 +1930,10 @@ fn pattern_check_is_feature_gated() {
 ```
 
 `vin_decl` is a `string` type carrying `len_min == len_max == 17` and a
-`pattern`; build it with the existing `primitive_type` helper.
+`pattern`; build it with the existing `primitive_type` helper. Its `len_min` has
+to stay positive for the last assertion to mean anything: a `len_min` of 0 emits
+no branch at all (Task 3, correction 2), so a fixture defaulting to 0 would
+leave that assertion resting on the `len_max` branch alone.
 
 - [ ] **Step 2: Run the test to verify it fails**
 
@@ -1718,18 +1947,23 @@ Append to `constraint_checks`, after the length checks:
 ```rust
 if let Some(pattern) = c.pattern.as_deref() {
     // The pattern needs a regex engine, which `core` has none of. The
-    // range and length checks above stay unconditional; only this one is
-    // gated, so a `--no-default-features` build still validates bounds.
+    // range and length checks above are not gated; only this one is, so a
+    // `--no-default-features` build still validates the bounds it emits.
+    //
+    // `::std` and `::regex` are absolute for the reason the prelude names
+    // are: the face module of an interface named `Std` or `Regex` is a
+    // module of that name in this same module, and it would shadow the
+    // extern crate.
     let source = strip_regex_delimiters(pattern);
     checks.push(quote! {
         #[cfg(feature = "validate-pattern")]
         {
-            static PATTERN: std::sync::LazyLock<regex::Regex> =
-                std::sync::LazyLock::new(|| {
-                    regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
+            static PATTERN: ::std::sync::LazyLock<::regex::Regex> =
+                ::std::sync::LazyLock::new(|| {
+                    ::regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
                 });
             if !PATTERN.is_match(&#value) {
-                return Err(::ridl_rt::payload::Violation {
+                return ::core::result::Result::Err(::ridl_rt::payload::Violation {
                     type_name: #type_name,
                     rule: ::ridl_rt::payload::Rule::Pattern,
                 });
@@ -1739,8 +1973,13 @@ if let Some(pattern) = c.pattern.as_deref() {
 }
 ```
 
-Also emit a doc line on the type naming that the pattern is enforced only under
-the feature, so the guarantee is not silently variable.
+Emit a doc line on the type naming that the pattern is enforced only under the
+feature, so the guarantee is not silently variable. That line replaces one
+rather than joining it: `unchecked_doc` (Task 3) emits " The `match` pattern is
+not checked by `new`." whenever the constraint carries a `pattern` or a
+`pattern_const`, and the `pattern` half of that becomes untrue here. An
+unresolved `pattern_const` keeps the existing line, because no check is emitted
+for it.
 
 - [ ] **Step 4: Run the tests**
 
