@@ -659,9 +659,9 @@ fn resolve_field_type(
 /// The proto3 scalars a map key may take: any integral or string type, never
 /// a floating-point type, `bytes`, or a message/enum name (the proto3
 /// language guide, "Maps"). typl admits a broader set at a map key position
-/// (typl §12.2, TYPL-209 — any primitive, or a named string type), so a key
-/// this backend resolves to a scalar outside this set is refused rather than
-/// emitted as a `map<...>` `protoc` rejects.
+/// (typl §12.2, TYPL-209 — any primitive, an inline constrained scalar, or a
+/// named string type), so a key this backend resolves to a scalar outside
+/// this set is refused rather than emitted as a `map<...>` `protoc` rejects.
 const PROTO_MAP_KEY_SCALARS: [&str; 7] = [
     "bool", "int64", "uint32", "uint64", "sint32", "sint64", "string",
 ];
@@ -675,6 +675,11 @@ fn map_key_text(
 ) -> Result<String, GenerateError> {
     let text = match key.kind.as_ref() {
         Some(v2::field_type::Kind::Primitive(primitive)) => proto_primitive(*primitive).to_string(),
+        // A key written with a length bound, and a bare `string`/`bytes` key,
+        // which carries typl's `[0..256]` default (typl §4.4–§4.5). The bound
+        // is constraint information, which proto3 cannot carry, so it
+        // projects to the backing scalar like any other inline scalar.
+        Some(v2::field_type::Kind::InlineScalar(td)) => proto_scalar(td).to_string(),
         Some(v2::field_type::Kind::Named(reference)) => {
             named_field_type(packages, owner, field_name, reference, imports)?.0
         }
