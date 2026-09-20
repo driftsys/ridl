@@ -433,11 +433,7 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> To
 /// The prelude names are absolute for the reason [`emit_type_def`] records: a
 /// typl package may declare `type From`, and that declaration shadows the
 /// prelude in the module the generated impl shares with it.
-fn emit_vacuous_type_def(
-    decl: &v2::Decl,
-    td: &v2::TypeDef,
-    derived: &TokenStream,
-) -> TokenStream {
+fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
     let doc = doc_attrs(&decl.doc);
