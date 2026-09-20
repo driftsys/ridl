@@ -17,6 +17,7 @@ use crate::{
 };
 use proc_macro2::TokenStream;
 use quote::quote;
+use ridl_ir::name::snake_case;
 use ridl_ir::v2;
 
 /// The right-hand side of `fn default() -> Self` for a top-level declaration,
@@ -84,7 +85,9 @@ fn struct_default(ctx: &Ctx, name: &str, sd: &v2::StructDef) -> Option<TokenStre
     for member in &sd.members {
         if let Some(v2::struct_member::Member::Field(field)) = &member.member {
             let ft = field.r#type.as_ref()?;
-            let fname = ident(&field.name);
+            // The same projection `emit_field` applies, or the initializer
+            // names a field the struct does not have (ADR-0016 decision 2).
+            let fname = ident(&snake_case(&field.name));
             let hint = format!("{}{}", camel_case(name), camel_case(&field.name));
             let init = field.init.as_ref();
             let slot = Slot {

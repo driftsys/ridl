@@ -1240,7 +1240,9 @@ fn workspace_two_members_composed_compiles_with_rustc() {
 /// The assertion is on the **exit status**, not on empty stderr: the generated
 /// code is valid but carries non-fatal lints (`non_camel_case_types` on a
 /// screaming-case enum variant, dead code on an unused internal type), which
-/// are warnings, not errors.
+/// are warnings, not errors. Three lints are denied by name, so that they do
+/// fail the run: `private-interfaces` and `private-bounds` (issue #161) and
+/// `non_snake_case` (issue #243).
 fn rustc_accepts(label: &str, source: &str) -> bool {
     let dir = std::env::temp_dir().join(format!(
         "ridlc_corpus_{label}_{}_{}",
@@ -1277,6 +1279,15 @@ fn rustc_accepts(label: &str, source: &str) -> bool {
             "private-interfaces",
             "-D",
             "private-bounds",
+            // The regression guard for issue #243. A struct field name
+            // reached generated Rust verbatim, so a multi-word typl field
+            // drew `non_snake_case` at every consumer, and a plain
+            // exit-status check accepts a warning. The field name now goes
+            // through `ridl_ir::name::snake_case`, and denying the lint by
+            // name is what keeps it there. `non_camel_case_types`, which a
+            // screaming-case enum variant draws by design, stays undenied.
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(&meta_path)

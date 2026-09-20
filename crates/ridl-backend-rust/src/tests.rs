@@ -1120,6 +1120,36 @@ fn struct_with_optional_and_reserved() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
+/// One struct with one named field, for the name-projection tests.
+fn struct_with_field(name: &str, field_name: &str, type_ref: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(named_field(
+                field_name,
+                1,
+                type_ref,
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        }),
+    )
+}
+
+/// typl §15.1 makes field names camelCase, so an untransformed name draws
+/// `non_snake_case` at every consumer of the generated module. The field name
+/// goes through the pinned transform (ADR-0016 decisions 1 and 2).
+#[test]
+fn a_struct_field_name_is_projected_to_snake_case() {
+    let source = rust_for(vec![
+        speed_decl(),
+        struct_with_field("Reading", "sensorId", "Speed"),
+    ]);
+    assert!(source.contains("pub sensor_id:"), "got:\n{source}");
+    assert!(!source.contains("pub sensorId:"), "got:\n{source}");
+}
+
 #[test]
 fn enum_with_discriminants() {
     let decls = vec![public_decl(
@@ -1581,6 +1611,13 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     // rather than with a blanket `-D warnings`, matching `rustc_accepts` in
     // `crates/ridlc/tests/corpus.rs`: the generated code carries by-design
     // naming and dead-code lints that say nothing about visibility.
+    //
+    // `non_snake_case` is denied beside them, as the regression guard for
+    // issue #243: a field name that reaches generated Rust verbatim draws it
+    // at every consumer, and no compile proof failed on it because a warning
+    // does not fail one. An enum variant keeps its typl `SCREAMING_SNAKE`
+    // spelling and draws `non_camel_case_types`, a different lint, which
+    // stays undenied.
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("internal_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
@@ -1597,6 +1634,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
             "private-interfaces",
             "-D",
             "private-bounds",
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(dir.path().join("internal_tuple.rmeta"))
@@ -2470,6 +2509,12 @@ pub mod ridl {
     std::fs::write(&source_path, &source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
 
+    // `non_snake_case` is denied as the regression guard for issue #243: a
+    // field name that reached generated Rust verbatim drew it at every
+    // consumer, and this proof asserted only on the exit status, which a
+    // warning does not change. An enum variant keeps its typl
+    // `SCREAMING_SNAKE` spelling and draws `non_camel_case_types`, a
+    // different lint, which stays undenied.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -2478,6 +2523,8 @@ pub mod ridl {
             "lib",
             "--emit",
             "metadata",
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -2489,7 +2536,8 @@ pub mod ridl {
 
     assert!(
         status.success(),
-        "generated Rust for Appendix B must compile, source:\n{source}"
+        "generated Rust for Appendix B must compile under `-D non_snake_case`, \
+         source:\n{source}"
     );
 }
 
@@ -2627,6 +2675,8 @@ fn constructible_collections_compile() {
     let meta_path = dir.path().join("bag.rmeta");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
+    // `-D non_snake_case` is the regression guard for issue #243 — see
+    // `appendix_b_compiles_with_rustc`.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -2635,6 +2685,8 @@ fn constructible_collections_compile() {
             "lib",
             "--emit",
             "metadata",
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -2645,7 +2697,8 @@ fn constructible_collections_compile() {
         .expect("rustc runs");
     assert!(
         status.success(),
-        "the collection default forms must compile, source:\n{rust_source}"
+        "the collection default forms must compile under `-D non_snake_case`, \
+         source:\n{rust_source}"
     );
 }
 

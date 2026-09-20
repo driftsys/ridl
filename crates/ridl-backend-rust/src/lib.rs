@@ -25,6 +25,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use ridl_ir::name::snake_case;
 use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -706,13 +707,18 @@ fn emit_struct(
     }
 }
 
+/// One struct field. The name is projected through the pinned transform
+/// (ADR-0016 decisions 1 and 2): a typl field name is camelCase (typl §15.1)
+/// and reaching generated Rust verbatim draws `non_snake_case` at every
+/// consumer. The `hint` below keeps `camel_case`, because it builds the type
+/// name of an induced tuple struct rather than a field name.
 fn emit_field(
     parent: &str,
     visibility: i32,
     field: &v2::Field,
     tuples: &mut Vec<InducedTuple>,
 ) -> TokenStream {
-    let field_name = ident(&field.name);
+    let field_name = ident(&snake_case(&field.name));
     let attrs = field_attrs(field);
     let hint = format!("{}{}", camel_case(parent), camel_case(&field.name));
     let ty = field
