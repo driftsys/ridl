@@ -73,10 +73,12 @@ rewritten below to the absolute path.
 
 **A fifth change followed on 2026-09-20, from Task 3 landing in
 driftsys/ridl#420.** That pull request took two decisions about the emitted code
-that this plan had not absorbed, and Tasks 4, 5 and 8 inherit both, so executing
-any of them against the text as written would either fail to compile or be
-repaired by reintroducing the defect #420 removed. Both decisions and their
-reasons are recorded at the top of Task 3. The corrections made here:
+that this plan had not absorbed. Tasks 4, 5 and 8 all inherit the first, and
+Task 8 also inherits the second — Tasks 4 and 5 emit no range or length check,
+so there is nothing there for the second to guard. Executing any of the three
+against the text as written would either fail to compile or be repaired by
+reintroducing the defect #420 removed. Both decisions and their reasons are
+recorded at the top of Task 3. The corrections made here:
 
 - **Task 3** is recorded as landed, its steps are ticked, and its Step 1
   assertions and `quote!` bodies are rewritten to the code that is on `main`.
@@ -85,8 +87,8 @@ reasons are recorded at the top of Task 3. The corrections made here:
   which Task 3's quoted function no longer shows.
 - **Task 5** Step 1 and both Step 3 blocks name `::core::convert::TryFrom`,
   `::core::convert::From`, `::core::result::Result`,
-  `::core::result::Result::Ok` and `::core::result::Result::Err`. Two stale line
-  references into `lib.rs` were replaced by the symbol names.
+  `::core::result::Result::Ok` and `::core::result::Result::Err`. Three stale
+  line references into `lib.rs` were replaced by the symbol names.
 - **Tasks 4 and 5** also record a third thing driftsys/ridl#420 settled that
   they inherit: a deprecated declaration's impl blocks carry
   `#[allow(deprecated)]`. Emitting those tasks' impl blocks without it would put
@@ -94,11 +96,13 @@ reasons are recorded at the top of Task 3. The corrections made here:
 - **Task 8** names `::core::result::Result::Err`, and settles the two crate
   paths in the emitted pattern block as `::std::sync::LazyLock` and
   `::regex::Regex`, with the reason and the rustc check recorded in the task.
-  The `validate-pattern` default is unchanged: the design spec wins over
-  driftsys/ridl#253, which Task 8 already says to reconcile in a comment on that
-  issue.
+  The `validate-pattern` default is unchanged: the design spec is authoritative
+  over driftsys/ridl#253, which Task 8 already says to reconcile in a comment on
+  that issue.
 - **The design spec's decision 4** no longer says `min`/`max` and
-  `len_min`/`len_max` are checked unconditionally, and states the two guards.
+  `len_min`/`len_max` are checked unconditionally. It states the two guards, and
+  a third skip that predates them: a range check is emitted only for a float or
+  an integer backing, because `min` and `max` are numeric bounds.
 
 **Line references were replaced by symbol names** wherever a symbol exists. The
 line numbers this plan carried had drifted by eleven lines in
@@ -930,13 +934,22 @@ In `emit_const`, change the three `#type_name(#value)` forms to
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked && cargo test -p ridl --locked`
-Expected: PASS, including the three `rustc` compile proofs in `tests.rs` —
-`appendix_b_compiles_with_rustc`, `constructible_collections_compile`, and
-`a_tuple_under_an_internal_declaration_is_package_private`. Those are the real
-check that the emitted code is valid Rust. None of them fails on a warning: the
-first two pass no `-D` flag at all and assert only `status.success()`, and the
-third denies two lints by name. So a naming lint does not fail any of them; Task
-11 is where that matters.
+Expected: PASS, including the `rustc` compile proofs in `tests.rs`. Those are
+the real check that the emitted code is valid Rust. Three of them bear on this
+task directly — `appendix_b_compiles_with_rustc`,
+`constructible_collections_compile`, and
+`a_tuple_under_an_internal_declaration_is_package_private`. None of those three
+fails on a warning: the first two pass no `-D` flag at all and assert only
+`status.success()`, and the third denies two lints by name. So a naming lint
+does not fail any of them; Task 11 is where that matters.
+
+driftsys/ridl#420 added a fourth,
+`prelude_names_declared_by_the_package_compile`, which compiles a package
+declaring `Result`, `Ok`, `Err`, `From` and `TryFrom` as its own types; it is
+what pins correction 1. `tests.rs` carries two more,
+`the_compile_proof_harness_links_ridl_rt` and `appendix_a_compiles_with_rustc`,
+so the file now holds six in total and the count in this step is no longer
+three.
 
 - [x] **Step 5: Commit**
 
@@ -1066,6 +1079,11 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
     let attrs = decl_attrs(decl);
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
     let vis = vis_tokens(decl.visibility);
     let getter = scalar_getter(td, vis.clone(), inner.clone());
 
@@ -1076,6 +1094,7 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
         #[repr(transparent)]
         #vis struct #name(#inner);
 
+        #allow_deprecated
         impl #name {
             /// Constructs the value. This type declares no constraint, so
             /// construction cannot fail.
@@ -1083,10 +1102,12 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
             #getter
         }
 
+        #allow_deprecated
         impl ::core::convert::From<#inner> for #name {
             fn from(value: #inner) -> Self { Self(value) }
         }
 
+        #allow_deprecated
         impl ::core::convert::From<#name> for #inner {
             fn from(value: #name) -> Self { value.0 }
         }
@@ -1098,9 +1119,13 @@ fn emit_vacuous_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. The
-`named_scalar_backings` snapshot (`tests.rs:172`) now shows `Enabled` and
-`Counter` on the vacuous path and `Label`/`Blob` on the constrained path, since
-both carry the defaulted length bound.
+`named_scalar_backings` snapshot (`tests.rs:172`) then shows `Counter`,
+`Enabled`, `Label` and `Blob` on the vacuous path and only `Speed` on the
+constrained path. All four are built with the `primitive_type` helper, which
+sets `constraint: None`, and `constraint_is_vacuous(None)` is `true`. That is a
+property of this hand-built fixture rather than of the language: the checker
+materializes the typl §4.4 default length bound, so a string or bytes type
+reaching the backend through the compiler is never vacuous.
 
 - [ ] **Step 5: Commit**
 
@@ -1202,8 +1227,14 @@ Append to `emit_enum`'s returned stream:
         quote! { #disc => ::core::result::Result::Ok(Self::#vname) }
     });
     let type_name = decl.name.as_str();
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
 
     quote! {
+        #allow_deprecated
         impl ::core::convert::TryFrom<i64> for #name {
             type Error = ::ridl_rt::payload::Violation;
             fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
@@ -1217,6 +1248,7 @@ Append to `emit_enum`'s returned stream:
             }
         }
 
+        #allow_deprecated
         impl ::core::convert::From<#name> for i64 {
             fn from(value: #name) -> Self { value as i64 }
         }
@@ -1229,14 +1261,21 @@ Append to `emit_enum_set`'s returned stream:
     let mask = esd.bits.iter().fold(0i64, |acc, bit| acc | (1i64 << bit.value));
     let mask_lit = int_tokens(mask);
     let type_name = decl.name.as_str();
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
 
     quote! {
+        #allow_deprecated
         impl #name {
             /// The union of every declared bit. A value carrying any other
             /// bit is not a member of this set (typl §9).
             #vis const DECLARED_MASK: i64 = #mask_lit;
         }
 
+        #allow_deprecated
         impl ::core::convert::TryFrom<i64> for #name {
             type Error = ::ridl_rt::payload::Violation;
             fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
@@ -1250,6 +1289,7 @@ Append to `emit_enum_set`'s returned stream:
             }
         }
 
+        #allow_deprecated
         impl ::core::convert::From<#name> for i64 {
             fn from(value: #name) -> Self { value.0 }
         }
@@ -1903,8 +1943,17 @@ The crate-root package module tree is not the reason. `ridl.std` becomes
 `pub mod ridl { pub mod std { … } }`, and a package that is also a namespace has
 its own code loaded into a private `__ridl_package` module
 (`ridlc::render_lib_rs`), so no generated package module ever has a sibling
-named `std` from the tree alone. The face module is what makes the collision
-reachable.
+named `std` from the tree alone. The face module is what puts one there.
+
+Today that face module reaches no output of `ridl build`: `ridlc` calls
+`generate`, and the face is emitted only by the companion entry point
+`generate_face` (ADR-0023), whose callers are the backend's own tests and the
+checked-in fixture
+`crates/ridl-backend-rust/tests/generated/interaction_face.rs`. That fixture
+does hold face modules and named-scalar constructors in one module, and ADR-0023
+makes `generate_face` the entry point every later interaction-face story
+extends. So the absolute paths are taken as a totality argument about a shipped
+entry point, not as a repair of a defect a `ridl build` can produce today.
 
 **Interfaces:**
 
@@ -1995,9 +2044,9 @@ features.
 git add crates/ridl-backend-rust/
 git commit -m "feat(ridl-backend-rust): check match patterns under validate-pattern
 
-Range and length checks stay unconditional, so a --no-default-features
-build still validates bounds. Only the pattern check needs a regex engine,
-which core does not have."
+The range and length checks are not gated, so a --no-default-features
+build still validates the bounds it emits. Only the pattern check needs a
+regex engine, which core does not have."
 ```
 
 ---

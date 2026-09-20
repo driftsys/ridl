@@ -87,7 +87,13 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    — emits no branch, because a `u64` length is never below 0. A `max` on an
    integer backing emits no branch when it equals `i64::MAX`, because the
    generated newtype always backs an integer with `i64`, so no value can exceed
-   it. Neither guard drops a check that could ever reject a value.
+   it. Neither of those two drops a comparison that could ever be false.
+
+   A third skip predates them and is not a fold-to-constant guard: `min` and
+   `max` are numeric bounds (§5.5), so the Rust emitter emits a range check only
+   for a float or an integer backing. On a `boolean`, `string` or `bytes`
+   backing it ignores both rather than rendering a literal of the wrong type. A
+   length bound on the same type is still checked.
 
    This is why codegen must emit a manifest: `regex` cannot be an optional
    dependency of a bare `.rs` file, and a `#[cfg(feature = "std")]` gate would
