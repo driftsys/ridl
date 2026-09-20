@@ -546,6 +546,28 @@ doc-path-check:
         fi
         return 0
     }
+    # A git call that ignores an inherited git environment.
+    #
+    # This recipe runs from inside a git hook: the pre-push hook invokes `just
+    # verify`, and a hook exports GIT_DIR. Under that environment `git -C <dir>`
+    # changes directory but still reads and writes the repository GIT_DIR names,
+    # so the fixture below would build its repository in this one's index rather
+    # than its own. Clearing the inherited variables makes every call here act
+    # on the directory it is given.
+    git_at() {
+        env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_OBJECT_DIRECTORY \
+            -u GIT_COMMON_DIR -u GIT_NAMESPACE git -C "$@"
+    }
+    # The tracked files of the repository at $1, under the pathspecs after it.
+    #
+    # core.quotePath is on by default, and it spells a path holding a byte
+    # outside ASCII as "na\303\257ve.md" — a name that opens no file, which the
+    # read check in extract_paths would turn into a gate failure over a file
+    # that exists. One definition, so the fixture below drives the same call
+    # the real scan does and dropping the setting fails here.
+    list_files() {
+        git_at "$1" -c core.quotePath=false ls-files "${@:2}"
+    }
     work="$(mktemp -d)"
     trap 'rm -rf "$work"' EXIT
     # The extraction half. Each line pins one rule: a path in prose, in an
@@ -612,20 +634,29 @@ doc-path-check:
         cat "$report" >&2
         exit 1
     fi
+    # A tracked path holding a byte outside ASCII must come back in a spelling
+    # that opens. The name is built from its two bytes so that this file stays
+    # ASCII, and the repository needs no commit, because git lists the index.
+    quoting="$work/quoting"
+    mkdir -p "$quoting"
+    git_at "$quoting" -c init.defaultBranch=main init -q
+    printf 'no path is cited here\n' > "$quoting/na$(printf '\303\257')ve.md"
+    git_at "$quoting" add -A
+    if ! list_files "$quoting" | scan_paths "$quoting" 2>"$report"; then
+        echo "doc-path-check: the scan could not read a tracked path holding a byte outside ASCII:" >&2
+        cat "$report" >&2
+        exit 1
+    fi
     # Each skipped pathspec is asserted to match tracked files, so a typo that
     # makes one of them inert fails here rather than widening the scan without
     # reporting it.
     for skipped in "$skip_archive" "$skip_wip"; do
-        if [ -z "$(git ls-files "$skipped")" ]; then
+        if [ -z "$(git_at . ls-files "$skipped")" ]; then
             echo "doc-path-check: the skipped tree '$skipped' matches no tracked file; correct the pathspec, or drop the exclusion if that tree is gone." >&2
             exit 1
         fi
     done
-    # core.quotePath is on by default, and it spells a path holding a byte
-    # outside ASCII as "na\303\257ve.md" — a name that opens no file. The read
-    # check in extract_paths would then fail the gate over a file that exists,
-    # so the listing is taken with the quoting off.
-    if ! files="$(git -c core.quotePath=false ls-files ":!$skip_archive" ":!$skip_wip")"; then
+    if ! files="$(list_files . ":!$skip_archive" ":!$skip_wip")"; then
         echo "doc-path-check: git ls-files failed; the file list cannot be trusted." >&2
         exit 1
     fi
