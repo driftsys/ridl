@@ -2228,6 +2228,48 @@ git commit -m "docs(typl): record validating constructors in ADR-0013 and typl 5
 
 **Model:** Fable (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
+**Landed 2026-09-20, in two commits on `feat/typl-value-objects-task11`.** Both
+halves went in as written, with five additions the steps below do not name:
+
+1. **The struct's `Default` initializer moved with the field.**
+   `defaults::struct_default` named the field with `ident(&field.name)`, so
+   projecting only `emit_field` would have emitted an initializer for a field
+   the struct no longer has. A tuple's fields are deliberately **not**
+   projected: no check covers a tuple field's name, so transforming it would
+   create a collision path RIDL-149 does not close, and that is a separate piece
+   of work.
+2. **RIDL-149's message names the transform that collided.**
+   `Checker::colliding_projected_name` hardcoded "a target whose namespace is
+   snake_case", which a `camel_case`-only collision — decision D's `XY` and
+   `x_y` row — makes false. It now takes a `Collision` value
+   (`Snake`/`Camel`/`Both`) and names the projection that actually collided,
+   naming both for a pair that collides under both. The member, parameter and
+   struct-field callers pass `Collision::Snake` and their behaviour is
+   unchanged; their message gains the word `snake_case` and nothing else, which
+   is the whole of the `ridl-diag-showcase` snapshot churn.
+3. **An arm name repeated verbatim is held out of the projection maps**, the way
+   RIDL-413 and TYPL-215 hold one out for parameters and struct fields: the
+   transform did nothing there, so RIDL-149's message would describe one that
+   did. An exact duplicate union arm draws nothing today and still draws
+   nothing, and minting its own code was out of this task's scope.
+4. **The catalogue entry and ridl §16.4's row were updated**, because both
+   stated RIDL-149's scope as three namespaces under one transform.
+   `crates/ridl-core/src/diag.rs` is in the §6 shared-file order and this task
+   touches it after all, for the doc comment and the one-line summary only — no
+   code is minted.
+5. **A residual was recorded in ADR-0016's consequences.**
+   `crates/ridl-backend-rust/src/face.rs` holds a third, private `snake_case`
+   that is not the pinned one. It names the generated face's modules and
+   methods, and it is outside this task as the arm transform was outside E9.7.
+
+Snapshot churn was what the steps predict: `corpus__rust@veh-cluster.snap` (four
+field names) and `corpus__diagnostics@ridl-diag-showcase.snap` (the one word
+added to RIDL-149's message). The proto3, FlatBuffers and TypeScript snapshots
+did not move. One stale artifact was left alone:
+`crates/ridl-backend-rust/src/snapshots/ridl_backend_rust__tests__appendix_a_rust_snapshot.snap`
+is an orphan — no test writes it — and it still shows the pre-change field
+names.
+
 Clears driftsys/ridl#243 (a struct field name is emitted verbatim, so generated
 Rust draws `non_snake_case`) and driftsys/ridl#237 (union arm names collide
 under `camel_case`, emitting two variants of one name). Both moved into Epic 10
@@ -2240,7 +2282,7 @@ instead of twice.
 Read
 [ADR-0016](../decisions/ADR-0016-schema-projection-and-the-name-transform.md)
 decisions 1 to 5 before starting. The pinned transform is
-`ridl_ir::name::snake_case` (`crates/ridl-ir/src/name.rs:24`); the Rust backend
+`ridl_ir::name::snake_case`, in `crates/ridl-ir/src/name.rs`; the Rust backend
 is already a dependent of `ridl-ir`, so neither half needs a new transform
 written.
 
@@ -2249,8 +2291,8 @@ rewrites, and Task 6 is the larger change.
 
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_field` (`lib.rs:370`),
-  `emit_union` (`lib.rs:436`), `camel_case` (`lib.rs:855`)
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_field`, `emit_union`,
+  `camel_case`
 - Modify: `crates/ridl-ir/src/name.rs` — the pinned `camel_case`, which decision
   D moves here from the Rust backend
 - Modify: `crates/ridl-sem/src/check.rs` — RIDL-149 over a union's arms, beside
@@ -2287,15 +2329,16 @@ defect.
    rename. A rename invents an identifier the contract does not state, and the
    suffix it picks would move as arms are added, so a generated API would change
    under a change ADR-0016 decision 6 calls compatible.
-2. **Two backends already refuse it, less helpfully.** The proto3 backend
-   (`crates/ridl-backend-proto/src/lib.rs:496`) and the FlatBuffers backend
-   (`crates/ridl-backend-flatbuffers/src/lib.rs:344`) both project an arm name
-   through `ridl_ir::name::snake_case` and claim it in a symbol table that
-   errors on a second claim. So a colliding package is already unbuildable for
-   two of the four backends, as a `GenerateError` at generate time. A check in
-   `ridl-sem` moves the refusal to `ridl check`, where it names the two arms in
-   the source, and makes the backends' refusal unreachable for a checked package
-   — the relationship the proto3 backend's own comment describes (`lib.rs:473`).
+2. **Two backends already refuse it, less helpfully.** The proto3 backend's
+   `emit_union` (`crates/ridl-backend-proto/src/lib.rs`) and the FlatBuffers
+   backend's `emit_union` (`crates/ridl-backend-flatbuffers/src/lib.rs`) both
+   project an arm name through `ridl_ir::name::snake_case` and claim it in a
+   symbol table that errors on a second claim. So a colliding package is already
+   unbuildable for two of the four backends, as a `GenerateError` at generate
+   time. A check in `ridl-sem` moves the refusal to `ridl check`, where it names
+   the two arms in the source, and makes the backends' refusal unreachable for a
+   checked package — the relationship the doc comment on the proto3 backend's
+   `emit_union` describes.
 3. **The check cannot key on `snake_case` alone, and this is the part that is
    easy to get wrong.** The two transforms are incomparable: neither collision
    set contains the other. Three arm pairs, each computed by running the two
@@ -2361,7 +2404,7 @@ documentation pull request or in this task's; it must not be skipped in both.
 
 #### The #243 half
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
@@ -2377,16 +2420,16 @@ fn a_struct_field_name_is_projected_to_snake_case() {
 `struct_with_field(name, field_name, type_ref)` is the fixture builder Task 6
 adds; this task runs after Task 6, so it is present.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cargo test -p ridl-backend-rust --locked a_struct_field_name_is_projected`
 Expected: FAIL — `emit_field` renders `ident(&field.name)` with no transform, so
 the emitted field is `pub sensorId`. The same string is visible in the committed
 snapshots today: grep `crates/ridl-backend-rust/src/snapshots/` for `sensorId`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
-In `emit_field` (`lib.rs:370`), render the name through the pinned transform:
+In `emit_field`, render the name through the pinned transform:
 
 ```rust
 let field_name = ident(&ridl_ir::name::snake_case(&field.name));
@@ -2397,19 +2440,20 @@ The `hint` on the next line, which names an induced tuple struct, keeps
 
 Nothing needs minting: ADR-0016 decision 4 held struct fields out of RIDL-149
 "until E9.8 extends both the transform and this check to them in the commit that
-starts projecting them", and E9.8 did extend the check —
-`crates/ridl-sem/src/check.rs:5837`, "RIDL-149 over struct fields (ADR-0016
-decision 4)". So the collision hazard is closed before this change lands, which
-is the order that decision asked for, reached from the other side.
+starts projecting them", and E9.8 did extend the check — see the "RIDL-149 over
+struct fields (ADR-0016 decision 4)" test section in
+`crates/ridl-sem/src/check.rs`. So the collision hazard is closed before this
+change lands, which is the order that decision asked for, reached from the other
+side.
 
 Then add the regression guard. No `rustc` compile proof fails on a warning
 today, which is why this defect never failed a test, and the four differ in how
-they reach that. `appendix_b_compiles_with_rustc`
-(`crates/ridl-backend-rust/src/tests.rs:1232`) and
-`constructible_collections_compile` (`tests.rs:1302`) pass no `-D` flag at all
-and assert only `status.success()`.
-`a_tuple_under_an_internal_declaration_is_package_private` (`tests.rs:611`) and
-`rustc_accepts` in `crates/ridlc/tests/corpus.rs:1208` each deny two lints by
+they reach that. `appendix_b_compiles_with_rustc` and
+`constructible_collections_compile`, both in
+`crates/ridl-backend-rust/src/tests.rs`, pass no `-D` flag at all and assert
+only `status.success()`.
+`a_tuple_under_an_internal_declaration_is_package_private`, in the same file,
+and `rustc_accepts` in `crates/ridlc/tests/corpus.rs` each deny two lints by
 name, `private-interfaces` and `private-bounds`, and nothing else. Add
 `-D non_snake_case` to all four — for the first two that means adding a deny
 flag where there was none. Check first that no other generated item draws it —
@@ -2419,7 +2463,7 @@ an enum variant keeps its typl `SCREAMING_SNAKE` spelling and draws
 The TypeScript backend is not touched: camelCase is idiomatic there, and
 driftsys/ridl#243 says so.
 
-- [ ] **Step 4: Run the tests and accept the snapshots**
+- [x] **Step 4: Run the tests and accept the snapshots**
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test --workspace --locked` Expected: PASS. Every snapshot with a
@@ -2427,7 +2471,7 @@ multi-word field changes, in this crate and in the `ridlc` corpus. The proto3
 and FlatBuffers snapshots do not change — they already project through
 `snake_case`, so their output is the same before and after.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/
@@ -2453,7 +2497,7 @@ Closes #243."
 Unblocked: decision D was taken on 2026-09-17, as proposed. The steps below
 implement it.
 
-- [ ] **Step 6: Write the failing tests**
+- [x] **Step 6: Write the failing tests**
 
 In `crates/ridl-ir/src/name.rs`, for the moved transform:
 
@@ -2469,43 +2513,41 @@ fn the_two_transforms_are_incomparable() {
 }
 ```
 
-In `crates/ridl-sem/src/check.rs`'s test module, beside the struct-field cases
-at `check.rs:5837`, one case per row of decision D's table: arms `foo_bar` and
-`fooBar` draw RIDL-149, arms `XY` and `x_y` draw RIDL-149, arms `HTTPServer` and
-`httpServer` draw RIDL-149, and a union whose arms collide under neither draws
-nothing.
+In `crates/ridl-sem/src/check.rs`'s test module, beside the struct-field cases,
+one case per row of decision D's table: arms `foo_bar` and `fooBar` draw
+RIDL-149, arms `XY` and `x_y` draw RIDL-149, arms `HTTPServer` and `httpServer`
+draw RIDL-149, and a union whose arms collide under neither draws nothing.
 
-- [ ] **Step 7: Run the tests to verify they fail**
+- [x] **Step 7: Run the tests to verify they fail**
 
 Run: `cargo test -p ridl-ir --locked the_two_transforms_are_incomparable` and
 `cargo test -p ridl-sem --locked union_arm` Expected: FAIL — `camel_case` is not
 in `ridl-ir`, and no check covers a union's arms.
 
-- [ ] **Step 8: Write the implementation**
+- [x] **Step 8: Write the implementation**
 
-Move `camel_case` from `crates/ridl-backend-rust/src/lib.rs:855` to
+Move `camel_case` from `crates/ridl-backend-rust/src/lib.rs` to
 `crates/ridl-ir/src/name.rs` as a `pub fn`, with a doc comment that says what
 `snake_case`'s says: the transform is not injective, and a package whose names
 collide under it is rejected by RIDL-149. Delete the backend copy and have
 `emit_union` and the induced-tuple `hint` call the pinned one. The behaviour
 does not change, so no snapshot moves in this step.
 
-Then extend the RIDL-149 check. `Checker::colliding_projected_name`
-(`check.rs:3306`) is already written as "two names in one scope that collide
-after the pinned name transform" and is already shared by the member and
-parameter checks; add a union's arms as a fourth namespace, keyed on both
-transforms — a package is rejected when either collides. A reserved arm is
-skipped, matching `emit_union`.
+Then extend the RIDL-149 check. `Checker::colliding_projected_name` is already
+written as "two names in one scope that collide after the pinned name transform"
+and is already shared by the member and parameter checks; add a union's arms as
+a fourth namespace, keyed on both transforms — a package is rejected when either
+collides. A reserved arm is skipped, matching `emit_union`.
 
-- [ ] **Step 9: Run the tests**
+- [x] **Step 9: Run the tests**
 
 Run:
 `cargo test -p ridl-ir -p ridl-sem -p ridl-backend-rust --locked && cargo clippy --workspace --all-targets -- -D warnings`
-Expected: PASS. Add the new diagnostic to the corpus expectation table
-(`crates/ridlc/tests/corpus.rs:983` lists RIDL-149 already) if a corpus fixture
-exercises it.
+Expected: PASS. Add the new diagnostic to the corpus expectation table in
+`crates/ridlc/tests/corpus.rs`, which lists RIDL-149 already, if a corpus
+fixture exercises it.
 
-- [ ] **Step 10: Commit**
+- [x] **Step 10: Commit**
 
 ```bash
 git add crates/
