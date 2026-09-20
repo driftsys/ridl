@@ -621,7 +621,11 @@ doc-path-check:
             exit 1
         fi
     done
-    if ! files="$(git ls-files ":!$skip_archive" ":!$skip_wip")"; then
+    # core.quotePath is on by default, and it spells a path holding a byte
+    # outside ASCII as "na\303\257ve.md" — a name that opens no file. The read
+    # check in extract_paths would then fail the gate over a file that exists,
+    # so the listing is taken with the quoting off.
+    if ! files="$(git -c core.quotePath=false ls-files ":!$skip_archive" ":!$skip_wip")"; then
         echo "doc-path-check: git ls-files failed; the file list cannot be trusted." >&2
         exit 1
     fi
