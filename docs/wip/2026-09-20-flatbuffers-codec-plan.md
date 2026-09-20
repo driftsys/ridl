@@ -150,7 +150,7 @@ ADR-0021 decision 10 makes it a 0.x minor, not a break to avoid.
 `just wasm-check` passes, the proof mechanism is chosen and demonstrated on one
 throwaway example, and `Encoded.bytes`'s three records agree.
 
-## Task 3 — `MAX_SIZE`, and the refusal of D-7
+## Task 3 — the refusal of D-7
 
 **Implements:** D-7's refusal only. **Stage:** K4.
 
@@ -357,7 +357,14 @@ the two crates and their versions, adds them as dev-dependencies of
 says what replaces it. It is the one stage in this plan that adds a dependency,
 so it does not slip in unremarked.
 
-- Modify: `justfile` (the fixture package joins `wasm-check`);
+- Modify: `justfile` — **which package joins `wasm-check` is a choice this task
+  records**, the way Task 1 records its home. The recipe runs
+  `cargo check --target wasm32-unknown-unknown` over a fixed `-p` list of
+  workspace packages with `--no-default-features`, and the generated fixture is
+  `include!`d rather than a package, so it cannot simply "join" the list. The
+  two shapes: an example crate under `crates/` that holds the generated fixture
+  and goes on the `-p` list, or a test that runs the same `cargo check` over the
+  emitted crate through Task 2's proof mechanism. Name the one taken and why;
   `docs/wip/2026-09-13-catalog-descriptor-plan.md` Task 7 (calls the bound of
   D-6); **`docs/ROADMAP.md`**, E11.14's row, which over-claims what remains to
   that story once the codec reaches `ridl build` through Task 4 — a lanes plan
