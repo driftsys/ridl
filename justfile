@@ -445,6 +445,78 @@ link-check:
     fi
     echo "link-check: every relative Markdown link resolves."
 
+# Check that every `docs/…` path named in a tracked file resolves.
+#
+# `link-check` covers Markdown links. This covers the other way a document gets
+# cited: a bare repository-relative path, written in prose, in an inline code
+# span, or in a source comment. `link-check` sees none of those — it reads
+# `.md` files only, and it strips inline code spans before it looks for links.
+#
+# The hole this closes is gardening. Moving a spec from `docs/wip/` to
+# `docs/archive/` leaves every `//!` header comment that cited it pointing at a
+# path that no longer exists, and nothing reported it: six such paths broke that
+# way in driftsys/ridl#419, in `.rs`, `.ridl` and `.md` files, and every gate
+# passed.
+#
+# Two trees are skipped, for the same reason in both: a `docs/…` path in them
+# records what was true when it was written, not a claim about the tree now.
+#   docs/archive/ — an archived plan says "Move: docs/wip/X to docs/archive/".
+#                   Rewriting that would falsify the record it is kept for.
+#   docs/wip/     — a live plan lists the files it is going to create, which do
+#                   not exist yet by definition.
+#
+# One known false positive, with no mechanism to suppress it because it has not
+# happened yet: another repository's `docs/…` path, written as a bare path
+# rather than inside a URL, is reported as broken. Write it as a URL and this
+# recipe leaves it alone, because a URL puts a `/` in front of it.
+doc-path-check:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    # A path must start at the beginning of a line or after a character that
+    # cannot be part of one. `/` is such a character, so a `docs/…` path inside
+    # a URL does not match and no URL stripping is needed — the sample below
+    # pins that.
+    extract_paths() {
+        grep -oE '(^|[^A-Za-z0-9._/-])docs/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.[A-Za-z0-9]{1,6}' "$1" \
+            | sed -E 's#^[^d]*##' \
+            | sort -u || true
+    }
+    sample="$(mktemp)"
+    trap 'rm -f "$sample"' EXIT
+    # The sample's paths are assembled from $d rather than written out, so this
+    # file does not itself contain the `docs/…` strings the scan below looks
+    # for. Written literally, every one of them would be reported as broken.
+    d=docs
+    printf '%s\n' \
+        "$d/plain.md named in prose" \
+        "an inline code span \`$d/span.md\` link-check would strip" \
+        "//! $d/comment.md §6)." \
+        "with line references $d/lines.md:77,285" \
+        "a foreign URL https://example.com/$d/url.md is not ours" \
+        "a Markdown link [a]($d/link.md)" \
+        "not a word boundary: x$d/notaword.md" \
+        "nested $d/sub/dir/nested.md" > "$sample"
+    expected="$d/comment.md $d/lines.md $d/link.md $d/plain.md $d/span.md $d/sub/dir/nested.md "
+    if [ "$(extract_paths "$sample" | tr '\n' ' ')" != "$expected" ]; then
+        echo "doc-path-check: the extractor no longer gives the expected paths on the built-in sample:" >&2
+        extract_paths "$sample" >&2
+        exit 1
+    fi
+    broken=0
+    while IFS= read -r file; do
+        while IFS= read -r target; do
+            [ -z "$target" ] && continue
+            [ -e "$target" ] && continue
+            echo "doc-path-check: $file -> $target" >&2
+            broken=$((broken+1))
+        done < <(extract_paths "$file")
+    done < <(git ls-files ':!docs/archive/' ':!docs/wip/')
+    if [ "$broken" -ne 0 ]; then
+        echo "doc-path-check: $broken docs/ path(s) above do not resolve." >&2
+        exit 1
+    fi
+    echo "doc-path-check: every docs/ path named outside docs/archive/ and docs/wip/ resolves."
+
 # Check that CI still invokes every recipe the local gate is made of.
 #
 # The other half of gate parity. CI runs these recipes rather than its own copy
@@ -706,7 +778,7 @@ install-check:
 # The four members that need no compilation run first, so a wrong toolchain, an
 # unwired CI job, a formatting regression, or an unparseable SUMMARY.md all
 # report before a compile starts rather than after a full compile and test run.
-build: toolchain-check gate-parity install-check fmt-check book-check link-check compile test lint wasm-check compat-check check
+build: toolchain-check gate-parity install-check fmt-check book-check link-check doc-path-check compile test lint wasm-check compat-check check
 
 # Serve the mdBook docs locally with live reload (build output: ./book).
 book:

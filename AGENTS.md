@@ -132,6 +132,11 @@ member; rsdl is the apex.
     just link-check      every relative Markdown link resolves, over every
                          tracked .md — book-check cannot do this, because
                          mdBook exits 0 on an unresolved relative link
+    just doc-path-check  every docs/ path named in a tracked file resolves —
+                         the bare paths link-check cannot see, in prose, in an
+                         inline code span, and in a source comment. Skips
+                         docs/archive/ and docs/wip/, where such a path records
+                         what was true when it was written
     just compile         compile the Rust workspace (--locked)
     just test            run the Rust workspace test suite (--locked)
     just lint            cargo clippy --workspace --all-targets -- -D warnings
@@ -141,8 +146,9 @@ member; rsdl is the apex.
                          and as edition 2024 with the rust-toolchain.toml pin,
                          and check its LICENSE (ADR-0021 decision 10)
     just build           toolchain-check + gate-parity + install-check +
-                         fmt-check + book-check + link-check + compile + test +
-                         lint + wasm-check + compat-check + check — the full
+                         fmt-check + book-check + link-check + doc-path-check +
+                         compile + test + lint + wasm-check + compat-check +
+                         check — the full
                          local gate: every member ADR-0008 decision 11 names,
                          plus the four CI checks ADR-0009 brought back to this
                          side

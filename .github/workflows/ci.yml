@@ -104,6 +104,7 @@ jobs:
           "$HOME/.local/bin/mdbook" --version
       - run: just book-check
       - run: just link-check
+      - run: just doc-path-check
 
   rust:
     name: rust
