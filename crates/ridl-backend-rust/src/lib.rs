@@ -83,8 +83,8 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// `::ridl_rt` and carry the translated `require`/`ensure` clause bodies, so it
 /// is the only caller of the clause translator, and the only entry point whose
 /// output names the runtime outside the domain types' own constructors and
-/// conversions. The domain
-/// types come from the same call because the checked-in fixture is brought in
+/// conversions. The domain types come from the same call because the
+/// checked-in fixture is brought in
 /// with a single `include!`: the face names those types, and the orphan rule
 /// needs them local to the test crate for the hand-written `Payload<ReprC>`
 /// implementations.
@@ -734,23 +734,31 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
     // reading, not a rule the reference states. typl §9 fixes a bit's
     // identity as its declared position and infers the width from the highest
     // one; it says nothing about what an undeclared bit means. The reading is
-    // in tension with `ridl-diff`, which classifies an enum value appended
-    // above every live and retired number as compatible
-    // (`crates/ridl-diff/src/classify.rs`): a producer that appends a bit on
-    // that advice sends a value an older consumer's `TryFrom` then refuses
-    // whole, rather than ignoring the bit it does not know. Whether an enum
-    // set is closed or open on the wire is recorded as an open question
-    // rather than settled here, because settling it changes `ridl-diff` as
-    // well as this backend.
+    // in tension with `ridl-diff`, whose `EnumSetDef` arm classifies an
+    // appended bit as compatible outright — it calls `appended_slot` with an
+    // empty retired set, so an enum set has no retired half the way an enum's
+    // values do (`crates/ridl-diff/src/classify.rs`). A producer that appends
+    // a bit on that advice sends a value an older consumer's `TryFrom` then
+    // refuses whole, rather than ignoring the bit it does not know. Whether
+    // an enum set is closed or open on the wire is recorded as an open
+    // question rather than settled here, because settling it changes that arm
+    // of `ridl-diff` as well as this backend.
     //
     // A bit outside the int64 domain contributes nothing to the mask rather
     // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside
     // 0..=63 and still carries the bit into the IR — its range guard covers
     // the width it derives, not the value it stores — so this fold can be
     // handed one. `1i64 << 64` panics in a debug build, and codegen is total:
-    // every failure is a `GenerateError` value, never a panic. The emitted
-    // bit constants are not exposed this way, because their shift is emitted
-    // as source text for rustc to evaluate rather than folded here.
+    // every failure is a `GenerateError` value, never a panic.
+    //
+    // The filter covers the fold alone, and that is all it is for. The bit
+    // constants still emit `#name(1 << 64)` as source text, which rustc
+    // rejects under its deny-by-default `arithmetic_overflow`, and the mask
+    // then omits a bit the type publishes as a constant. Both are reachable
+    // only on a package the checker has already failed with TYPL-111, so no
+    // build that produces usable output reaches either. The filter keeps the
+    // compiler from panicking; it does not make such a package emit sound
+    // code.
     let mask = esd
         .bits
         .iter()

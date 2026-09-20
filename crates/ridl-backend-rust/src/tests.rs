@@ -908,9 +908,17 @@ fn a_deprecated_enum_and_enum_set_allow_deprecated_on_their_impls() {
 #[test]
 fn an_internal_enum_set_keeps_its_visibility_on_every_generated_item() {
     // The mask and the accessor carry the declaration's visibility, as the
-    // bit constants do. Emitting either as a literal `pub` would put a public
-    // item on a `pub(crate)` type, which is the `private_interfaces` class of
-    // defect that driftsys/ridl#161 added `-D private-interfaces` for.
+    // bit constants do.
+    //
+    // No lint catches a literal `pub` here. An associated item's effective
+    // visibility is capped by the impl's self type, so `pub const` inside an
+    // inherent impl of a `pub(crate)` type is accepted in silence — checked
+    // with rustc under `-D private-interfaces -D private-bounds`, which exits
+    // 0. `private_interfaces` fires on a public field or signature that
+    // exposes a private type, which is the driftsys/ridl#161 shape and not
+    // this one. This assertion is the only thing that observes the
+    // visibility, so do not weaken it on the assumption that the corpus
+    // proof's lint flags would catch a regression.
     let source = rust_for(vec![v2::Decl {
         visibility: v2::Visibility::Internal as i32,
         ..features_decl()

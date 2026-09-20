@@ -1145,12 +1145,23 @@ latter with Error = Infallible."
 
 **Model:** Sonnet (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
-**Landed** in driftsys/ridl#433. The blocks below are the code that is on
-`main`, not the code this task was first written with: review corrected the mask
-fold, which panicked in a debug build on a bit position `ridl-sem` reports
-TYPL-111 for and still carries into the IR, and merged the enum set's two impl
-blocks so `#[allow(deprecated)]` covers the bit constants. Both corrections and
-their reasons are in the pull request.
+**Landed** in driftsys/ridl#433. Review corrected the mask fold, which panicked
+in a debug build on a bit position `ridl-sem` reports TYPL-111 for and still
+carries into the IR, and merged the enum set's two impl blocks so
+`#[allow(deprecated)]` covers the bit constants. Both corrections and their
+reasons are in the pull request.
+
+**The blocks below are a summary of what landed, not a transcript of it.** They
+were brought in line with the shipped behaviour so that replaying this task does
+not reintroduce either defect, but they are shorter than the source: the
+comments are paraphrased, and `crates/ridl-backend-rust/src/lib.rs` carries
+reasoning that has no counterpart here — the whole `ridl-diff` paragraph on
+whether an enum set is closed or open on the wire, and the impl-merge rationale,
+which is a rustdoc comment on `emit_enum_set` rather than a comment inside
+`quote!`. Step 1 below is likewise the test as first written; the landed test
+also asserts the arm mapping, `7 => ::core::result::Result::Ok(Self::REVERSE)`,
+which is what makes the discriminant gap in the fixture mean anything. **Read
+the source, not this, before changing any of it.**
 
 **Files:**
 
@@ -1265,7 +1276,10 @@ Append to `emit_enum`'s returned stream:
     }
 ```
 
-Append to `emit_enum_set`'s returned stream:
+**Replace** `emit_enum_set`'s inherent impl block with the following, and append
+the two trait impls. This is a replacement, not an addition: the function
+already emits an `impl #name` holding the bit constants, and appending a second
+block that defines them again is a duplicate definition (E0201).
 
 ```rust
     // A bit outside the int64 domain contributes nothing. `ridl-sem` reports
