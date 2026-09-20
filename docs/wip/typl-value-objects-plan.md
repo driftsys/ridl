@@ -1378,7 +1378,7 @@ get()."
 
 - Create: `crates/ridl-backend-rust/src/derives.rs`
 - Modify: `crates/ridl-backend-rust/src/lib.rs` (declare the module; call it
-  from `emit_decl`)
+  from `emit_decl` and from `emit_tuple_struct`)
 - Test: `crates/ridl-backend-rust/src/tests.rs`
 
 `derives.rs` is its own file because the eligibility recursion is the same shape
@@ -1389,302 +1389,164 @@ and size as `defaults.rs`, which is already separate for the same reason.
 - Consumes: the `Ctx` type in `lib.rs`, `backing_scalar`, `ScalarBacking`.
 - Produces:
   `pub(crate) fn derives::derive_attr(ctx: &Ctx, decl: &v2::Decl) -> TokenStream`
-  returning the `#[derive(...)]` attribute for one declaration.
+  returning the `#[derive(...)]` attribute for one declaration, and
+  `pub(crate) fn derives::tuple_derive_attr(ctx: &Ctx, tuple: &v2::TupleType) -> TokenStream`
+  for one induced tuple struct.
 
-- [ ] **Step 1: Write the failing test**
+**This section is the record of what landed**, not the pre-implementation
+sketch. The four places the sketch was wrong are marked below, each with the
+reason.
 
-```rust
-#[test]
-fn float_backed_scalar_derives_partial_ord_but_not_ord() {
-    let source = rust_for(vec![speed_decl()]);
-    // Ord requires Eq, and f64 is neither.
-    assert!(source.contains("#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]"));
-    assert!(!source.contains("Eq, Hash"));
-}
+- [x] **Step 1: Write the failing test**
 
-#[test]
-fn integer_backed_scalar_derives_the_full_ordering_set() {
-    let source = rust_for(vec![counter_decl()]);
-    assert!(source.contains("#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]"));
-}
-
-#[test]
-fn string_backed_scalar_is_not_copy() {
-    let decls = vec![public_decl(
-        "Label",
-        primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
-    )];
-    let source = rust_for(decls);
-    assert!(source.contains("#[derive(Debug, Clone, PartialEq, Eq, Hash)]"));
-    assert!(!source.contains("Copy"));
-}
-
-#[test]
-fn struct_with_a_float_field_is_not_eq() {
-    // A float anywhere in the transitive closure removes Eq and Hash.
-    let decls = vec![speed_decl(), struct_with_field("Telemetry", "speed", "Speed")];
-    let source = rust_for(decls);
-    let telemetry = source
-        .split("pub struct Telemetry")
-        .next()
-        .expect("the struct is emitted");
-    assert!(!telemetry.ends_with("Eq, Hash)]\n"));
-}
-
-#[test]
-fn struct_with_a_cross_package_field_drops_conditional_derives() {
-    // The referenced package is not in this IR, so Copy and Eq cannot be
-    // proven and must not be asserted.
-    let decls = vec![struct_with_field("Telemetry", "speed", "veh.other.Speed")];
-    let source = rust_for(decls);
-    assert!(source.contains("#[derive(Debug, Clone, PartialEq)]"));
-}
-```
-
-Add a `struct_with_field(name, field_name, type_ref)` fixture builder beside the
-existing ones if absent.
-
-- [ ] **Step 2: Run the tests to verify they fail**
-
-Run: `cargo test -p ridl-backend-rust --locked derives` Expected: FAIL — no
-`#[derive]` is emitted on the typl surface at all.
-
-- [ ] **Step 3: Write the implementation**
-
-Create `crates/ridl-backend-rust/src/derives.rs`:
+The sketch's assertions were written as whole-attribute substring matches, for
+example
+`source.contains("#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]")`.
+prettyplease decides the spacing and may wrap a long trait list over several
+lines, and a negative `!source.contains("Eq, Hash")` passes for many reasons
+that have nothing to do with the type under test. What landed instead is a
+helper that reads the trait list belonging to one named item:
 
 ```rust
-//! Derive eligibility for the typl surface.
-//!
-//! `Debug`, `Clone`, and `PartialEq` are sound on every generated type: every
-//! backing has them and every generated type receives them, so the recursion
-//! cannot fail. The rest are conditional and need the transitive closure:
-//!
-//! - `Copy` — every leaf must be `f64`, `i64`, or `bool`.
-//! - `Eq`, `Hash` — no `f64` anywhere, including unit-backed types, since a
-//!   unit backing implies float (typl §5.1).
-//! - `PartialOrd`/`Ord` — named scalars over a numeric backing only. Ordering
-//!   a struct's fields lexicographically, or a union's arms by declaration
-//!   order, is not a property typl states.
-//!
-//! **Cross-package references are handled conservatively.** `defaults.rs` can
-//! be optimistic — it emits `path::default()` and lets rustc verify. A derive
-//! cannot: `#[derive(Copy)]` on a struct whose cross-package field is not
-//! `Copy` is a hard error in the consumer's build. So an unresolvable
-//! reference disables every conditional derive.
-//!
-//! The recursion mirrors `defaults.rs`: leaf recursion with a cycle guard, and
-//! a composite reference re-checked rather than trusted.
-
-use crate::{Ctx, ScalarBacking, backing_scalar};
-use proc_macro2::TokenStream;
-use quote::quote;
-use ridl_ir::v2;
-use std::collections::HashSet;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Eligibility {
-    pub(crate) copy: bool,
-    pub(crate) eq: bool,
-}
-
-impl Eligibility {
-    const NONE: Self = Self { copy: false, eq: false };
-    const ALL: Self = Self { copy: true, eq: true };
-
-    fn meet(self, other: Self) -> Self {
-        Self { copy: self.copy && other.copy, eq: self.eq && other.eq }
-    }
-}
-
-pub(crate) fn derive_attr(ctx: &Ctx, decl: &v2::Decl) -> TokenStream {
-    let mut seen = HashSet::new();
-    let e = decl_eligibility(ctx, decl, &mut seen);
-    let ordered = numeric_named_scalar(decl);
-
-    let mut traits = vec![quote! { Debug }, quote! { Clone }];
-    if e.copy {
-        traits.push(quote! { Copy });
-    }
-    traits.push(quote! { PartialEq });
-    if e.eq {
-        traits.push(quote! { Eq });
-        traits.push(quote! { Hash });
-    }
-    if ordered {
-        traits.push(quote! { PartialOrd });
-        if e.eq {
-            traits.push(quote! { Ord });
-        }
-    }
-    quote! { #[derive(#(#traits),*)] }
-}
-
-/// True for a `type` declaration over an integer or float backing. A unit
-/// backing implies float (typl §5.1), so it qualifies for `PartialOrd`.
-fn numeric_named_scalar(decl: &v2::Decl) -> bool {
-    let Some(v2::decl::Kind::TypeDef(td)) = &decl.kind else {
-        return false;
-    };
-    matches!(
-        backing_scalar(td),
-        ScalarBacking::Float | ScalarBacking::Integer
-    )
-}
-
-fn decl_eligibility(ctx: &Ctx, decl: &v2::Decl, seen: &mut HashSet<String>) -> Eligibility {
-    if !seen.insert(decl.name.clone()) {
-        // A cyclic IR: refuse the conditional derives rather than recurse
-        // forever (the C1b guard in `defaults.rs`).
-        return Eligibility::NONE;
-    }
-    let result = match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => scalar_eligibility(td),
-        Some(v2::decl::Kind::EnumDef(_)) => Eligibility::ALL,
-        Some(v2::decl::Kind::EnumSetDef(_)) => Eligibility::ALL,
-        Some(v2::decl::Kind::StructDef(sd)) => sd
-            .members
-            .iter()
-            .filter_map(|m| match &m.member {
-                Some(v2::struct_member::Member::Field(field)) => Some(field),
-                _ => None,
-            })
-            .fold(Eligibility::ALL, |acc, f| acc.meet(field_eligibility(ctx, f, seen))),
-        Some(v2::decl::Kind::UnionDef(ud)) => ud
-            .arms
-            .iter()
-            .fold(Eligibility::ALL, |acc, arm| {
-                acc.meet(type_ref_eligibility(ctx, &arm.type_ref, seen))
-            }),
-        _ => Eligibility::NONE,
-    };
-    seen.remove(&decl.name);
-    result
-}
-
-fn scalar_eligibility(td: &v2::TypeDef) -> Eligibility {
-    match backing_scalar(td) {
-        // A unit backing implies float, so it lands here too, as does an
-        // absent backing: `backing_scalar` is total and maps both to `Float`.
-        ScalarBacking::Float => Eligibility { copy: true, eq: false },
-        ScalarBacking::Integer | ScalarBacking::Boolean => Eligibility::ALL,
-        ScalarBacking::String | ScalarBacking::Bytes => {
-            Eligibility { copy: false, eq: true }
-        }
-    }
-}
+fn derives_of(source: &str, header: &str) -> Vec<String>;
 ```
 
-Two IR shapes to note, because the obvious spelling does not compile. A
-`v2::StructDef` holds `repeated StructMember members`, not `fields`, and each
-`StructMember` is a `oneof { Field field; Reserved reserved; }` — which is why
-the fold above filters. `defaults.rs` already walks it that way
-(`defaults.rs:84`). And a `v2::Field`'s type is `field.r#type`, raw-identifier
-escaped because `type` is a Rust keyword; there is no `field_type` member.
+It finds `header` (for example `pub struct Telemetry {`), scans backwards to the
+nearest `#[derive(`, and **asserts that the text between that attribute and the
+header holds nothing but further attributes and doc comments**. Without that
+guard the helper silently reports the previous item's derive for an item that
+carries none, which is the failure mode every negative assertion here has to
+rule out. Each negative assertion has a positive companion:
+`assert_always_derived` pins `Debug`, `Clone` and `PartialEq` on the same item,
+and `a_struct_takes_no_ordering` asserts the numeric named scalar in the same
+package does take `PartialOrd` and `Ord` before asserting the struct does not.
 
-```rust
-/// One field's contribution. An `Option<T>` keeps `T`'s eligibility — both
-/// `Copy` and `Eq` pass through it. A collection is never `Copy` because
-/// `Vec` is not, but keeps `Eq` when its element does.
-fn field_eligibility(ctx: &Ctx, field: &v2::Field, seen: &mut HashSet<String>) -> Eligibility {
-    let Some(ft) = field.r#type.as_ref() else {
-        return Eligibility::NONE;
-    };
-    let base = match &ft.kind {
-        Some(v2::field_type::Kind::InlineScalar(td)) => scalar_eligibility(td),
-        Some(v2::field_type::Kind::Named(name)) => type_ref_eligibility(ctx, name, seen),
-        Some(v2::field_type::Kind::Primitive(p)) => primitive_eligibility(*p),
-        Some(v2::field_type::Kind::Array(a)) => {
-            let inner = a
-                .element
-                .as_deref()
-                .map(|e| field_type_eligibility(ctx, e, seen))
-                .unwrap_or(Eligibility::NONE);
-            Eligibility { copy: false, eq: inner.eq }
-        }
-        Some(v2::field_type::Kind::Map(m)) => {
-            let key = m
-                .key
-                .as_deref()
-                .map(|k| field_type_eligibility(ctx, k, seen))
-                .unwrap_or(Eligibility::NONE);
-            let value = m
-                .value
-                .as_deref()
-                .map(|v| field_type_eligibility(ctx, v, seen))
-                .unwrap_or(Eligibility::NONE);
-            Eligibility { copy: false, eq: key.eq && value.eq }
-        }
-        Some(v2::field_type::Kind::Tuple(t)) => t
-            .fields
-            .iter()
-            .fold(Eligibility::ALL, |acc, f| {
-                // A `TupleField` is not a `Field`: it carries `name` and
-                // `r#type` only, so it goes through the FieldType-taking twin.
-                let inner = f
-                    .r#type
-                    .as_ref()
-                    .map(|ft| field_type_eligibility(ctx, ft, seen))
-                    .unwrap_or(Eligibility::NONE);
-                acc.meet(inner)
-            }),
-        _ => Eligibility::NONE,
-    };
-    base
-}
+The sketch's `struct_with_a_float_field_is_not_eq` was replaced outright. It
+read `source.split("pub struct Telemetry").next()` — the text **before** the
+struct — and then `ends_with("Eq, Hash)]\n")`, which discriminates nothing.
 
-/// A named reference. A same-package name recurses; a dotted or unknown one
-/// cannot be proven and therefore disables every conditional derive.
-fn type_ref_eligibility(ctx: &Ctx, reference: &str, seen: &mut HashSet<String>) -> Eligibility {
-    match ctx.lookup(reference) {
-        Some(decl) => decl_eligibility(ctx, decl, seen),
-        None => Eligibility::NONE,
-    }
-}
+The tests that landed, all in `crates/ridl-backend-rust/src/tests.rs` under the
+"Derives" heading:
 
-fn primitive_eligibility(p: i32) -> Eligibility {
-    match v2::PrimitiveType::try_from(p) {
-        Ok(v2::PrimitiveType::Float) => Eligibility { copy: true, eq: false },
-        Ok(v2::PrimitiveType::Integer) | Ok(v2::PrimitiveType::Boolean) => Eligibility::ALL,
-        Ok(v2::PrimitiveType::String) | Ok(v2::PrimitiveType::Bytes) => {
-            Eligibility { copy: false, eq: true }
-        }
-        _ => Eligibility::NONE,
-    }
-}
+- `float_backed_scalar_derives_partial_ord_but_not_ord`
+- `integer_backed_scalar_derives_the_full_ordering_set`
+- `string_backed_scalar_is_not_copy`
+- `struct_with_a_float_field_is_not_eq`
+- `struct_over_integers_only_is_eq_and_hash`
+- `a_struct_takes_no_ordering`
+- `a_union_takes_no_ordering`
+- `a_union_arm_reaching_a_float_loses_eq`
+- `struct_with_a_cross_package_field_drops_conditional_derives`
+- `a_collection_field_keeps_eq_and_loses_copy`
+- `default_is_never_derived`
+- `an_induced_tuple_struct_carries_its_derives`
+- `an_enum_set_in_a_struct_field_is_readable_through_a_shared_reference`
+- `the_derive_attribute_sits_under_the_doc_comment`
+
+**The enum set is the reason this task matters beyond tidiness.**
+driftsys/ridl#433 made an enum set's inner value private with a `get(self)` that
+takes `self` by value, so an enum set held in a struct field could not be read
+through a shared reference: rustc reports E0507. #433 declined to fix it and
+recorded it as this task's. The proof is a `rustc` run over
+`warnings.flags.get()` behind a `&Warnings`, not a string assertion — the string
+says `Copy` is in the list, the compile says the list is enough.
+
+- [x] **Step 2: Run the tests to verify they fail**
+
+Run: `cargo test -p ridl-backend-rust --locked --lib derive` Result: FAIL — no
+`#[derive]` was emitted on the typl surface at all, so `derives_of` panicked on
+every fixture.
+
+- [x] **Step 3: Write the implementation**
+
+`crates/ridl-backend-rust/src/derives.rs` holds the recursion. Its shape is the
+sketch's, with these differences:
+
+1. `Eligibility` is private to the module and carries four constants — `NONE`,
+   `ALL`, `COPY_ONLY` (a float) and `EQ_ONLY` (a `String` or `Vec<u8>`) — rather
+   than spelling each `Eligibility { copy: …, eq: … }` literal at its use site.
+2. `field_eligibility` does nothing but unwrap the `Field` envelope and delegate
+   to `field_type_eligibility`, because nothing on the envelope changes the
+   answer. `optional` is not read either: the emitted Rust is `Option<T>`, and
+   `Option` keeps both `Copy` and `Eq` from `T`.
+3. An array contributes `copy: false` in both of its emitted forms. A fixed
+   array is `[T; N]` and would be `Copy` when `T` is, but a `Copy` that depends
+   on the array bounds being equal is a rule no reader of the generated crate
+   could predict, and the conservative answer is sound for both.
+
+**Induced tuple structs were missing from the sketch, and they are not
+optional.** A tuple generates a named struct of its own (`emit_tuple_struct`),
+and the struct that holds it derives `Debug`, `Clone` and `PartialEq`
+unconditionally — none of which compiles unless the tuple struct carries them
+too. `tuple_derive_attr` computes the tuple's own eligibility; a tuple is
+anonymous, so it is never a named scalar and takes no ordering.
+
+**Where the attribute goes.** The sketch said to prepend it in `emit_decl`. That
+renders it **above** the declaration's doc comment, because `emit_type_def` and
+`decl_attrs` already emit the doc comment, the "unchecked" note and
+`#[deprecated]` inside their own token stream. What landed instead hands the
+computed attribute to each emitter, which places it after the doc comment and
+before `#[deprecated]` and `#[repr(…)]`:
+
+```text
+/// Vehicle speed over ground
+///
+/// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[deprecated(note = "use Velocity")]
+#[repr(transparent)]
+pub struct Speed(f64);
 ```
 
-Add `field_type_eligibility(ctx, ft, seen)` as the `FieldType`-taking twin of
-`field_eligibility`; they differ only in unwrapping the `Field` envelope, so
-factor the `match` into it and have `field_eligibility` delegate.
+That costs a `derived: &TokenStream` parameter on `emit_type_def`,
+`emit_struct`, `emit_enum`, `emit_enum_set`, `emit_union` and `decl_attrs`.
+`emit_const` passes an empty stream: a constant is a value, not a type, and has
+nothing to derive on. `#[derive]` on a `#[deprecated]` type draws no lint — the
+derived impls are `#[automatically_derived]`.
 
-The `v2::field_type::Kind` variants at 86e10d7 are `Named(String)`,
-`Primitive(i32)`, `InlineScalar(TypeDef)`, `Tuple(TupleType)`,
-`Array(ArrayType)`, `Map(MapType)` and `Stream(StreamType)`
-(`crates/ridl-ir/proto/ridl/ir/v2/ir.proto:355`). `Stream` falls to the
-`_ => Eligibility::NONE` arm. `ArrayType::element`, `MapType::key` and
-`MapType::value` are each a single boxed `FieldType`, so `.as_deref()` yields
-`Option<&FieldType>`. Re-read the proto before writing this anyway: a mismatch
-surfaces as a compile error rather than silently, but reading is faster.
+**`Default` is never derived** (design decision 8). There is no branch in `attr`
+that can emit it, and `default_is_never_derived` pins that while asserting the
+init-value `impl Default` is still emitted.
 
-In `lib.rs`: add `mod derives;` beside `mod defaults;` and prepend the attribute
-in `emit_decl` so every emitted item carries it. No visibility change is needed
-— `pub(crate) struct Ctx<'a>` (`lib.rs:183`) and `pub(crate) fn lookup`
-(`lib.rs:208`) are already `pub(crate)`, and `defaults.rs` already uses
-`crate::Ctx`.
+- [x] **Step 4: Run the tests**
 
-- [ ] **Step 4: Run the tests**
-
-Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
-Then:
-`cargo test -p ridl-backend-rust --locked && cargo clippy -p ridl-backend-rust --all-targets -- -D warnings`
-Expected: PASS. The `rustc` compile proofs are the real check that no unsound
-derive was emitted — an ineligible `#[derive(Copy)]` fails there.
-
-- [ ] **Step 5: Commit**
+`cargo insta` is not always installed; `INSTA_UPDATE=always` does the same job.
 
 ```bash
-git add crates/ridl-backend-rust/
+cargo fmt --all
+INSTA_UPDATE=always cargo test -p ridl-backend-rust --locked
+RIDL_UPDATE_GENERATED=1 cargo test -p ridl-backend-rust --locked --test interaction_face
+INSTA_UPDATE=always cargo test -p ridlc --locked --test corpus
+INSTA_UPDATE=always cargo test -p ridlc --locked --test golden
+cargo test --workspace --locked --no-fail-fast
+just lint
+just check
+```
+
+Every regenerated snapshot changed by added `#[derive(…)]` lines and nothing
+else: 51 lines over 14 files in `crates/ridl-backend-rust/src/snapshots/`, 6
+lines in `crates/ridl-backend-rust/tests/generated/interaction_face.rs`, and 63
+lines over 6 files in `crates/ridlc/tests/snapshots/`.
+
+**Two hand-written preludes in the compile proofs needed the three unconditional
+derives.** `appendix_a_compiles_with_rustc` and `appendix_b_compiles_with_rustc`
+stand in for `ridl.std` and `veh.common` with plain structs. A generated struct
+holding a cross-package field still derives `Debug`, `Clone` and `PartialEq`,
+and those three reach the field's type, so the stand-ins now carry them. The
+conditional derives are deliberately left off the stand-ins: a cross-package
+reference disables them on the importing side, so the proof could not observe
+them.
+
+The `rustc` compile proofs are the real check that no unsound derive was
+emitted. Each behaviour was also verified by mutation — `Copy` unconditional,
+`Eq` unconditional, an unresolvable reference treated as eligible, `PartialOrd`
+on a struct, an enum set not `Copy`, and no derive on an induced tuple struct —
+and every one was caught by a named test as well as by a compile proof.
+
+- [x] **Step 5: Commit**
+
+```bash
+git add crates/ridl-backend-rust/ crates/ridlc/tests/snapshots/
 git commit -m "feat(ridl-backend-rust): derive the sound traits on the typl surface
 
 Debug, Clone, and PartialEq on every type; Copy, Eq, and Hash where the
