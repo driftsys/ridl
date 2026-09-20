@@ -412,10 +412,47 @@ fn rename_over_more_than_one_package_exits_two() {
     assert_eq!(stdout, "renamed Legacy Zone 2\n");
 }
 
+/// Whether `chmod 0o555` actually denies this process a write.
+///
+/// uid 0 and `CAP_DAC_OVERRIDE` both bypass the permission bits, so a test
+/// that makes a directory read-only has nothing to assert there. This probes
+/// the property directly instead of reading the uid, so it is right for the
+/// capability case as well as for root. A probe that cannot be set up at all
+/// reports `true`, so a broken temp directory fails the test rather than
+/// silently skipping it.
+fn mode_555_denies_writes() -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = TempDir::new("perm-probe");
+    let sub = dir.path().join("sub");
+    if std::fs::create_dir_all(&sub).is_err() {
+        return true;
+    }
+    if std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o555)).is_err() {
+        return true;
+    }
+    let denied = std::fs::write(sub.join("probe"), b"x").is_err();
+    let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
+    denied
+}
+
 /// §5 exit 2: an I/O failure writing the file.
+///
+/// The test is a no-op where `chmod` does not restrict the running process —
+/// uid 0, or any process holding `CAP_DAC_OVERRIDE` — because the write it
+/// expects to fail succeeds and the assertions would be vacuous
+/// (driftsys/ridl#430).
 #[test]
 fn an_unwritable_lock_file_exits_two() {
     use std::os::unix::fs::PermissionsExt;
+
+    if !mode_555_denies_writes() {
+        eprintln!(
+            "skipped: chmod 0o555 does not deny this process a write, so the \
+             lock file is writable (driftsys/ridl#430)"
+        );
+        return;
+    }
 
     // Restores the directory's permissions on scope exit, panic or not, so a
     // failed assertion never leaves a read-only directory behind for the

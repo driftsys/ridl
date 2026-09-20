@@ -244,16 +244,55 @@ fn fmt_on_a_missing_path_exits_two() {
     );
 }
 
+/// Whether `chmod 000` actually denies this process a directory read.
+///
+/// uid 0 and `CAP_DAC_OVERRIDE` both bypass the permission bits, so a test
+/// that makes a directory unreadable has nothing to assert there. This probes
+/// the property directly instead of reading the uid, so it is right for the
+/// capability case as well as for root. A probe that cannot be set up at all
+/// reports `true`, so a broken temp directory fails the test rather than
+/// silently skipping it.
+#[cfg(unix)]
+fn mode_000_denies_reads() -> bool {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = TempDir::new("perm-probe");
+    let sub = dir.path().join("sub");
+    if std::fs::create_dir_all(&sub).is_err() {
+        return true;
+    }
+    if std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o000)).is_err() {
+        return true;
+    }
+    let denied = std::fs::read_dir(&sub).is_err();
+    let _ = std::fs::set_permissions(&sub, std::fs::Permissions::from_mode(0o755));
+    denied
+}
+
 /// `ridl fmt --check` does not treat an unreadable directory reached mid-walk
 /// as zero files (driftsys/ridl#194). Before the fix, `chmod 000` on a
 /// subdirectory made a would-reformat tree exit 0 with no output on either
 /// stream — the defect that matters, because it is what let a permissions
 /// change flip `ridl fmt --check` from failing the CI gate to passing it
 /// silently.
+///
+/// The test is a no-op where `chmod` does not restrict the running process —
+/// uid 0, or any process holding `CAP_DAC_OVERRIDE` — because there is no
+/// unreadable directory to reach and the assertions would be vacuous
+/// (driftsys/ridl#430). The precondition is probed rather than inferred from
+/// the uid, so the skip covers the capability case too.
 #[cfg(unix)]
 #[test]
 fn fmt_on_an_unreadable_subdirectory_exits_two() {
     use std::os::unix::fs::PermissionsExt;
+
+    if !mode_000_denies_reads() {
+        eprintln!(
+            "skipped: chmod 000 does not deny this process a read, so there is \
+             no unreadable directory to test (driftsys/ridl#430)"
+        );
+        return;
+    }
 
     // Restores the subdirectory's permissions on scope exit, panic or not, so
     // a failed assertion below never leaves an unreadable directory behind for
