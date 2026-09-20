@@ -2228,16 +2228,34 @@ git commit -m "docs(typl): record validating constructors in ADR-0013 and typl 5
 
 **Model:** Fable (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
-**Landed 2026-09-20, in two commits on `feat/typl-value-objects-task11`.** Both
-halves went in as written, with five additions the steps below do not name:
+**Landed 2026-09-20 on `feat/typl-value-objects-task11`.** Both halves went in
+as written, with five additions the steps below do not name:
 
-1. **The struct's `Default` initializer moved with the field.**
-   `defaults::struct_default` named the field with `ident(&field.name)`, so
-   projecting only `emit_field` would have emitted an initializer for a field
-   the struct no longer has. A tuple's fields are deliberately **not**
-   projected: no check covers a tuple field's name, so transforming it would
-   create a collision path RIDL-149 does not close, and that is a separate piece
-   of work.
+1. **Three more sites project the field name.** The steps name `emit_field`
+   alone, but the same name is written in three other places, and projecting one
+   without the others is a compile error rather than a wrong name.
+   `defaults::struct_default` names the field in the `Default` initializer, so
+   projecting only `emit_field` emits an initializer for a field the struct no
+   longer has (E0560). A tuple's fields are the same name class — typl §15.1
+   makes a tuple field name camelCase exactly as it makes a struct field name
+   one — so `emit_tuple_struct` and `defaults::tuple_default_expr` project it
+   too.
+
+   The first draft deferred the tuple half on the reasoning that transforming it
+   would create a collision path RIDL-149 does not close. That reasoning is
+   wrong and is recorded here because it was acted on: two tuple field names
+   that project to one Rust name give `pub a: A, pub a: B`, which rustc rejects
+   with E0124. The failure is loud, not silent, and it already exists for two
+   _identical_ tuple field names, which `ridlc check` accepts today. So the
+   transform adds no silent failure mode. The unchecked namespace is real and is
+   driftsys/ridl#449; it is follow-up work, not a reason to leave the field
+   names unprojected. Sebastien decided the tuple half on 2026-09-20.
+
+   The tuple half is guarded by `a_tuple_field_name_is_projected_to_snake_case`
+   alone. Reverting both tuple sites was checked by mutation: no `rustc` compile
+   proof fails, because no corpus or golden fixture carries a multi-word tuple
+   field name. That is unlike the struct half, which
+   `appendix_a_compiles_with_rustc` also guards.
 2. **RIDL-149's message names the transform that collided.**
    `Checker::colliding_projected_name` hardcoded "a target whose namespace is
    snake_case", which a `camel_case`-only collision — decision D's `XY` and
@@ -2265,10 +2283,11 @@ halves went in as written, with five additions the steps below do not name:
 Snapshot churn was what the steps predict: `corpus__rust@veh-cluster.snap` (four
 field names) and `corpus__diagnostics@ridl-diag-showcase.snap` (the one word
 added to RIDL-149's message). The proto3, FlatBuffers and TypeScript snapshots
-did not move. One stale artifact was left alone:
-`crates/ridl-backend-rust/src/snapshots/ridl_backend_rust__tests__appendix_a_rust_snapshot.snap`
-is an orphan — no test writes it — and it still shows the pre-change field
-names.
+did not move. The tuple half moved no snapshot at all, for the reason the
+mutation check gives: no fixture carries a multi-word tuple field name. One
+stale artifact was deleted rather than left alone:
+`ridl_backend_rust__tests__appendix_a_rust_snapshot.snap` was an orphan — no
+test read or wrote it, and it still showed pre-change field names.
 
 Clears driftsys/ridl#243 (a struct field name is emitted verbatim, so generated
 Rust draws `non_snake_case`) and driftsys/ridl#237 (union arm names collide
@@ -2291,8 +2310,10 @@ rewrites, and Task 6 is the larger change.
 
 **Files:**
 
-- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_field`, `emit_union`,
-  `camel_case`
+- Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_field`,
+  `emit_tuple_struct`, `emit_union`, `camel_case`
+- Modify: `crates/ridl-backend-rust/src/defaults.rs` — `struct_default`,
+  `tuple_default_expr`, which name the same fields in the `Default` bodies
 - Modify: `crates/ridl-ir/src/name.rs` — the pinned `camel_case`, which decision
   D moves here from the Rust backend
 - Modify: `crates/ridl-sem/src/check.rs` — RIDL-149 over a union's arms, beside

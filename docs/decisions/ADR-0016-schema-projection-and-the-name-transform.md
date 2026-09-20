@@ -335,6 +335,17 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   the exact-duplicate rule for a union's arms, the sibling of TYPL-215 for
   struct fields and RIDL-413 for parameters. It remains open, on
   driftsys/ridl#452.
+- **Negative — a tuple field name is projected through the pinned transform but
+  is in no checked namespace.** typl §15.1 makes a tuple field name camelCase
+  exactly as it makes a struct field name one, and the Rust backend writes it as
+  a Rust field name, so decision 1 applies to it and the 2026-09-20 change
+  projects it (`emit_tuple_struct` and `defaults::tuple_default_expr`). RIDL-149
+  does not cover it: `(minSpeed : Speed, min_speed : Speed)` passes
+  `ridlc check` and emits one struct with two fields named `min_speed`, which
+  rustc rejects with E0124. The failure is a refusal rather than wrong output,
+  and the same namespace already admitted two _identical_ tuple field names
+  before the transform, so projecting adds no silent failure mode. Extending
+  RIDL-149 to a tuple's fields is recorded on driftsys/ridl#449.
 - **Negative — a third transform, `crates/ridl-backend-rust/src/face.rs`'s
   private `snake_case`, is still not the pinned one.** It names the generated
   face's modules and methods, is outside this record's scope as the arm
