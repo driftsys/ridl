@@ -22,7 +22,12 @@ pub trait Payload<E: Encoding>: Sized {
     /// accessor over the bytes, or a parsed value.
     type View<'a>;
 
-    /// Writes `self` into the front of `out`.
+    /// Writes `self` into `out` and returns the bytes written.
+    ///
+    /// The bytes are a subslice of `out`, not necessarily a prefix of it: an
+    /// encoding whose builder works backwards — FlatBuffers does — fills `out`
+    /// from its end. A caller reads [`Encoded::bytes`] and passes it on rather
+    /// than assuming where in `out` it sits.
     fn encode<'o>(&self, out: &'o mut [u8]) -> Result<Encoded<'o, Self::View<'o>>, EncodeError>;
 
     /// Checks the structure of `buf` and the typl constraints of the value it
@@ -38,7 +43,7 @@ pub trait Payload<E: Encoding>: Sized {
 /// data, not a proof.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Encoded<'a, V> {
-    /// The encoded bytes, a prefix of the output buffer.
+    /// The encoded bytes, a subslice of the output buffer.
     pub bytes: &'a [u8],
     /// The view of those bytes.
     pub view: V,

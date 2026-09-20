@@ -8,8 +8,11 @@
 //! generated code calls those traits without naming the runtime.
 //!
 //! The crate is `no_std`, allocates nothing, contains no `unsafe` code, and has
-//! no dependency. The cargo features `flatbuffers`, `proto3` and `repr-c` are
-//! declared and enable nothing in this version.
+//! no dependency in any feature combination. The cargo features `flatbuffers`,
+//! `proto3` and `repr-c` name the payload encodings. `flatbuffers` enables the
+//! [`flatbuffers`] module, the reading and writing a generated
+//! `Payload<FlatBuffers>` implementation shares; `proto3` and `repr-c` enable
+//! nothing in this version.
 //!
 //! Every public item lives in one of six modules. Generated code names each
 //! item by its full path, for example `ridl_rt::sample::Sample`, and imports
@@ -73,6 +76,8 @@
 pub mod contract;
 pub mod encoding;
 pub mod error;
+#[cfg(feature = "flatbuffers")]
+pub mod flatbuffers;
 pub mod payload;
 pub mod port;
 pub mod sample;
