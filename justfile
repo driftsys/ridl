@@ -485,8 +485,9 @@ doc-path-check:
     #!/usr/bin/env bash
     set -euo pipefail
     # C collation, so the order `sort -u` gives is the same on every machine the
-    # sample's expected string is compared against, and so a file holding bytes
-    # that are not valid UTF-8 does not make grep give up on it.
+    # sample's expected string is compared against. Under a UTF-8 locale an
+    # uppercase segment sorts among the lowercase ones instead of before them,
+    # and the sample below would fail on a machine that has one.
     export LC_ALL=C
     # Every `docs/…` string below is assembled from $d rather than written out,
     # because this file is itself scanned: a literal one that resolves nowhere
@@ -501,9 +502,11 @@ doc-path-check:
     # written with a leading `../` is excluded by that same rule and is
     # therefore never checked. The sample below pins both.
     path_re="(^|[^A-Za-z0-9._/-])$d/[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*\.[A-Za-z0-9]+"
-    # `-I` skips a binary file rather than matching bytes inside it. The
-    # extension is unbounded: capping its length would truncate a long one
-    # rather than skip it, and report a string that is in no file.
+    # `-I` states that a binary file is skipped rather than leaving that to
+    # whichever grep is installed; no tracked file is binary today, so it pins
+    # the behaviour rather than changing it. The extension is unbounded:
+    # capping its length would truncate a long one rather than skip it, and
+    # report a string that is in no file.
     extract_paths() {
         local matches status=0
         matches="$(grep -IoE "$path_re" "$1")" || status=$?
@@ -528,7 +531,7 @@ doc-path-check:
             fi
             if [ -n "$targets" ]; then
                 while IFS= read -r target; do
-                    if [ ! -e "$root/$target" ]; then
+                    if [ -n "$target" ] && [ ! -e "$root/$target" ]; then
                         echo "doc-path-check: $file -> $target" >&2
                         broken=$((broken + 1))
                     fi
@@ -576,28 +579,41 @@ doc-path-check:
         exit 1
     fi
     # The enforcement half. A scan that prints its findings and still returns 0
-    # is the shape this fixture exists to catch, so the status is asserted as
-    # well as the report.
+    # is the shape this fixture exists to catch, so the status, every report
+    # line and the count in the summary are all asserted. One of the two files
+    # cites two paths that do not exist, behind one that does, so a scan that
+    # stops at the first breakage in a file fails here as well.
     root="$work/fixture"
     mkdir -p "$root/$d/design" "$root/src"
-    : > "$root/$d/design/present.md"
-    printf '%s\n' "//! $d/design/present.md" "//! $d/design/gone.md" > "$root/src/a.rs"
-    printf '%s\n' "// $d/design/also-gone.md" > "$root/src/b.ridl"
+    : > "$root/$d/design/aa-present.md"
+    printf '%s\n' "//! $d/design/aa-present.md" "//! $d/design/bb-gone.md" \
+        "//! $d/design/cc-gone.md" > "$root/src/a.rs"
+    printf '%s\n' "// $d/design/dd-gone.md" > "$root/src/b.ridl"
     report="$work/report"
     if printf '%s\n' src/a.rs src/b.ridl | scan_paths "$root" 2>"$report"; then
-        echo "doc-path-check: the scan returned 0 over a fixture citing two paths that do not exist:" >&2
+        echo "doc-path-check: the scan returned 0 over a fixture citing three paths that do not exist:" >&2
         cat "$report" >&2
         exit 1
     fi
-    if [ "$(grep -c -- '->' "$report" || true)" -ne 2 ] \
-        || ! grep -q -- "src/a.rs -> $d/design/gone.md" "$report" \
-        || ! grep -q -- "src/b.ridl -> $d/design/also-gone.md" "$report"; then
-        echo "doc-path-check: the scan no longer reports exactly the two broken paths in its fixture:" >&2
+    if [ "$(grep -c -- '->' "$report" || true)" -ne 3 ] \
+        || ! grep -q -- "src/a.rs -> $d/design/bb-gone.md" "$report" \
+        || ! grep -q -- "src/a.rs -> $d/design/cc-gone.md" "$report" \
+        || ! grep -q -- "src/b.ridl -> $d/design/dd-gone.md" "$report" \
+        || ! grep -q -- '^doc-path-check: 3 docs/ file path' "$report"; then
+        echo "doc-path-check: the scan no longer reports exactly the three broken paths in its fixture:" >&2
         cat "$report" >&2
         exit 1
     fi
-    # The two skipped trees are asserted to match tracked files, so a typo in
-    # either pathspec fails closed rather than silently widening the scan.
+    # A file the list names but grep cannot open fails the scan rather than
+    # being passed over: grep's exit 2 is an error, not an empty result.
+    if printf '%s\n' src/not-there.rs | scan_paths "$root" 2>"$report"; then
+        echo "doc-path-check: the scan returned 0 over a file it could not read:" >&2
+        cat "$report" >&2
+        exit 1
+    fi
+    # Each skipped pathspec is asserted to match tracked files, so a typo that
+    # makes one of them inert fails here rather than widening the scan in
+    # silence.
     for skipped in "$skip_archive" "$skip_wip"; do
         if [ -z "$(git ls-files "$skipped")" ]; then
             echo "doc-path-check: the skipped tree '$skipped' matches no tracked file." >&2
@@ -613,6 +629,15 @@ doc-path-check:
         echo "doc-path-check: git ls-files gave $tracked files, which is too few to be the tree." >&2
         exit 1
     fi
+    # And the list that invocation produced holds neither tree. Asserting the
+    # two pathspecs one at a time above does not cover naming one of them twice
+    # in the call itself, which leaves the other tree in the scan.
+    for skipped in "$skip_archive" "$skip_wip"; do
+        if printf '%s\n' "$files" | grep -q "^$skipped"; then
+            echo "doc-path-check: the file list still holds files under '$skipped'." >&2
+            exit 1
+        fi
+    done
     printf '%s\n' "$files" | scan_paths .
     echo "doc-path-check: every docs/ file path named outside $skip_archive and $skip_wip resolves, over $tracked tracked files."
 
