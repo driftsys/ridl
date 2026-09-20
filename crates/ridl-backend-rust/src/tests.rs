@@ -205,6 +205,34 @@ fn vin_decl() -> v2::Decl {
     )
 }
 
+/// A `bytes`-backed type carrying a positive length bound and a literal
+/// pattern. typl allows a `match` pattern on a bytes backing (it draws only
+/// the TYPL-115 note, not an error), but `newtype_inner` gives such a type a
+/// `Vec<u8>`, against which `regex::Regex::is_match` (which takes `&str`)
+/// does not type-check. `constraint_checks` must therefore emit no pattern
+/// branch for this fixture, while still emitting its length checks.
+fn bytes_pattern_decl() -> v2::Decl {
+    public_decl(
+        "Sig",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Bytes as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(1),
+                len_max: Some(8),
+                pattern: Some("/^[A-Z]+$/".to_string()),
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )
+}
+
 fn counter_decl() -> v2::Decl {
     public_decl(
         "Counter",
@@ -613,7 +641,10 @@ fn a_literal_pattern_is_named_as_feature_gated() {
 }
 
 /// A `step` and a literal pattern together are both named: the step is never
-/// checked, and the pattern is checked only under `validate-pattern`.
+/// checked, and the pattern is checked only under `validate-pattern`. The
+/// `unchecked_doc` check for `step` reads no backing, so it is unconditional;
+/// the backing here is `String` so the pattern's own guard (a check is
+/// emitted only for a `String` backing) also applies.
 #[test]
 fn a_step_and_a_literal_pattern_are_both_named() {
     let source = rust_for(vec![public_decl(
@@ -621,12 +652,12 @@ fn a_step_and_a_literal_pattern_are_both_named() {
         v2::decl::Kind::TypeDef(v2::TypeDef {
             backing: Some(v2::Backing {
                 kind: Some(v2::backing::Kind::Primitive(
-                    v2::PrimitiveType::Float as i32,
+                    v2::PrimitiveType::String as i32,
                 )),
             }),
             constraint: Some(v2::Constraint {
                 pattern: Some("/x/".to_string()),
-                ..constraint(Some("0.0"), Some("1.0"), Some("0.5"))
+                ..constraint(None, None, Some("0.5"))
             }),
             declared_init: None,
             init: Some(init_value(true, Some("0.0"))),
@@ -655,6 +686,47 @@ fn pattern_check_is_feature_gated() {
         .next()
         .unwrap();
     assert!(gated.contains("::ridl_rt::payload::Rule::Length"));
+}
+
+/// A literal pattern on a `bytes` backing emits no pattern check at all: a
+/// `Vec<u8>` value does not type-check against `regex::Regex::is_match`
+/// (`&str`). The length checks are unaffected.
+#[test]
+fn bytes_backed_pattern_emits_no_pattern_check() {
+    let source = rust_for(vec![bytes_pattern_decl()]);
+    assert!(
+        !source.contains("::ridl_rt::payload::Rule::Pattern"),
+        "a bytes backing must emit no pattern check, got:\n{source}"
+    );
+    assert!(
+        !source.contains("#[cfg(feature = \"validate-pattern\")]"),
+        "a bytes backing must emit no feature-gated block, got:\n{source}"
+    );
+    assert!(
+        !source.contains("::regex::"),
+        "a bytes backing must name no regex engine, got:\n{source}"
+    );
+    assert!(
+        source.contains("::ridl_rt::payload::Rule::Length"),
+        "the length bound is still checked, got:\n{source}"
+    );
+}
+
+/// The doc for a bytes-backed pattern must not claim the feature-gated
+/// guarantee it does not implement: since `constraint_checks` emits no
+/// pattern branch for this backing, the type must carry the plain "not
+/// checked" line instead.
+#[test]
+fn bytes_backed_pattern_is_named_as_unchecked_not_feature_gated() {
+    let source = rust_for(vec![bytes_pattern_decl()]);
+    assert!(
+        source.contains(" The `match` pattern is not checked by `new`."),
+        "a bytes-backed pattern must be named plainly unchecked, got:\n{source}"
+    );
+    assert!(
+        !source.contains("validate-pattern"),
+        "a bytes-backed pattern must not name the feature it is not gated on, got:\n{source}"
+    );
 }
 
 /// A deprecated declaration's own impl blocks use the deprecated type, which
