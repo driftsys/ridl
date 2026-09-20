@@ -2,7 +2,7 @@
 //! Default derivation behaviour (the leaf-recursion rule), and the C header
 //! snapshot.
 
-use super::{Generated, generate};
+use super::{Generated, check_flatbuffers_bounds, generate};
 use ridl_ir::v2;
 
 // ---------------------------------------------------------------------------
@@ -4082,5 +4082,392 @@ fn the_derive_attribute_sits_under_the_doc_comment() {
     assert!(
         derive_at < repr_at,
         "the derive must precede the repr, got:\n{source}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The FlatBuffers size bound's refusal (design note D-7, stage K4).
+//
+// `check_flatbuffers_bounds` is not called from `generate` or `generate_face`
+// yet (see its own doc) — these tests call it directly over hand-built IR,
+// which is what stage K4's own `Done when` asks for.
+// ---------------------------------------------------------------------------
+
+/// A struct whose only field is a bounded named scalar sizes to a finite
+/// buffer: this is the shape the corpus proves after driftsys/ridl#459, and
+/// the refusal must not fire on it.
+#[test]
+fn flatbuffers_bound_accepts_a_bounded_struct() {
+    let holder = v2::StructDef {
+        members: vec![field_member(named_field(
+            "speed",
+            1,
+            "Speed",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![
+            speed_decl(),
+            public_decl("Holder", v2::decl::Kind::StructDef(holder)),
+        ],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a struct with only bounded fields must not be refused"
+    );
+}
+
+/// A bare `string` map key with no length bound has no finite FlatBuffers
+/// size — [`ridl_ir::projection::flatbuffers::max_size`]'s own doc lists it
+/// first among the `None` cases, and
+/// `ridl_ir::projection::flatbuffers::tests::a_bare_string_map_key_has_no_bound`
+/// pins the fact this test pins the refusal over. typl never hands the
+/// compiler one: §4.4–§4.5 default a bare `string` or `bytes` at a map key to
+/// `[0..256]` (TYPL-103, driftsys/ridl#459), so this is IR built directly,
+/// the same as every other fixture in this module that documents "the
+/// checker rejects this, but the backend must not trust that gate".
+#[test]
+fn flatbuffers_bound_refuses_a_bare_string_map_key() {
+    let holder = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "byId",
+            1,
+            v2::field_type::Kind::Map(Box::new(v2::MapType {
+                key: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::String as i32,
+                    )),
+                })),
+                value: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::Boolean as i32,
+                    )),
+                })),
+                min: 0,
+                max: 8,
+            })),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("a bare string map key has no bound");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.byId` has no finite FlatBuffers bound",
+        "the refusal must name the package, the declaration, and the member"
+    );
+}
+
+/// The unbounded member is named even when a sibling member is one this
+/// backend cannot judge: the cross-package exemption is per-member, not
+/// per-declaration, so it must not swallow a genuine refusal over another
+/// member of the same struct.
+#[test]
+fn flatbuffers_bound_names_the_unbounded_member_beside_an_exempt_one() {
+    let holder = v2::StructDef {
+        members: vec![
+            field_member(shaped_field(
+                "byId",
+                1,
+                v2::field_type::Kind::Map(Box::new(v2::MapType {
+                    key: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::String as i32,
+                        )),
+                    })),
+                    value: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::Boolean as i32,
+                        )),
+                    })),
+                    min: 0,
+                    max: 8,
+                })),
+            )),
+            field_member(named_field(
+                "speed",
+                2,
+                "veh.other.Speed",
+                false,
+                init_value(true, None),
+            )),
+        ],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg)
+        .expect_err("the unbounded member must still be refused beside an exempt one");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.byId` has no finite FlatBuffers bound",
+        "the cross-package field must not exempt the whole declaration"
+    );
+}
+
+/// The reverse order: the exempt member comes first in declaration order,
+/// which must not short-circuit the walk before the unbounded member is
+/// reached.
+#[test]
+fn flatbuffers_bound_names_the_unbounded_member_after_an_exempt_one() {
+    let holder = v2::StructDef {
+        members: vec![
+            field_member(named_field(
+                "speed",
+                1,
+                "veh.other.Speed",
+                false,
+                init_value(true, None),
+            )),
+            field_member(shaped_field(
+                "byId",
+                2,
+                v2::field_type::Kind::Map(Box::new(v2::MapType {
+                    key: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::String as i32,
+                        )),
+                    })),
+                    value: Some(Box::new(v2::FieldType {
+                        optional: false,
+                        kind: Some(v2::field_type::Kind::Primitive(
+                            v2::PrimitiveType::Boolean as i32,
+                        )),
+                    })),
+                    min: 0,
+                    max: 8,
+                })),
+            )),
+        ],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg)
+        .expect_err("the unbounded member must still be refused after an exempt one");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder.byId` has no finite FlatBuffers bound",
+        "declaration order must not change the attribution"
+    );
+}
+
+/// A union arm that is individually unbounded is named the same way a
+/// struct field is.
+#[test]
+fn flatbuffers_bound_names_the_unbounded_union_arm() {
+    // `Reading` is a named scalar (a `TypeDef`), not a struct or a union, so
+    // `fb_projection::mints_root_table` is false for it and the outer walk
+    // in `check_flatbuffers_bounds` never checks it on its own — only the
+    // union arm that names it does, through `probe_union_arm`. That is what
+    // this test needs to isolate: an arm whose own reference is unbounded,
+    // with nothing else in the package that would independently refuse it
+    // first.
+    let bad_arm = v2::UnionArm {
+        name: "reading".to_string(),
+        ordinal: 1,
+        type_ref: "Reading".to_string(),
+        doc: String::new(),
+    };
+    let union_def = v2::UnionDef {
+        arms: vec![bad_arm],
+        is_result: false,
+        reserved: Vec::new(),
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![
+            public_decl(
+                "Reading",
+                primitive_type(v2::PrimitiveType::String, init_value(false, None), None),
+            ),
+            public_decl("Outcome", v2::decl::Kind::UnionDef(union_def)),
+        ],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("an unbounded union arm has no bound");
+    assert_eq!(
+        err.message, "`veh.cruise.Outcome.reading` has no finite FlatBuffers bound",
+        "the refusal must name the union's arm"
+    );
+}
+
+/// A same-package cycle is left alone even beside an unrelated bounded
+/// member: the cycle exemption is per-member, and it must not stop the walk
+/// from checking the rest of the struct's own fields (there are none of
+/// concern here, so this pins that the walk does not error over the cycle
+/// alone).
+///
+/// **This does not pin the cycle exemption beside an *unbounded* member** —
+/// a struct carrying both a cyclic field and a bare unbounded `string` field
+/// is not covered by any test in this module. A probe confirms
+/// `unbounded_member` refuses over the unbounded field correctly (the cycle
+/// still answers `false` from `member_resolves_locally` and is skipped, the
+/// unbounded field is still probed on its own), but that path is untested;
+/// see design note §4a.
+#[test]
+fn flatbuffers_bound_leaves_a_cycle_alone_beside_a_bounded_member() {
+    let recursive = v2::StructDef {
+        members: vec![
+            field_member(named_field("next", 1, "S", false, init_value(true, None))),
+            field_member(named_field(
+                "speed",
+                2,
+                "Speed",
+                false,
+                init_value(true, None),
+            )),
+        ],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![
+            speed_decl(),
+            public_decl("S", v2::decl::Kind::StructDef(recursive)),
+        ],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a cycle beside a bounded member must not be refused"
+    );
+}
+
+/// A `Stream` field position is left alone, the same as an unresolved
+/// reference: it never reaches a struct field in checked IR, and
+/// `fb_projection::max_size` charges nothing for it, so a probe would answer
+/// `None` for a case this backend does not consider a bound failure.
+#[test]
+fn flatbuffers_bound_leaves_a_stream_field_alone() {
+    let feed = v2::StructDef {
+        members: vec![field_member(shaped_field(
+            "items",
+            1,
+            v2::field_type::Kind::Stream(v2::StreamType {
+                element: Some(v2::stream_type::Element::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![public_decl("Feed", v2::decl::Kind::StructDef(feed))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a Stream field position must not be refused"
+    );
+}
+
+/// When every individual member is bounded but their sum exceeds
+/// `fb_projection::MAX_ENCODABLE`, the refusal names the declaration alone:
+/// there is no single member to attribute an aggregate overflow to.
+#[test]
+fn flatbuffers_bound_names_the_declaration_when_the_cause_is_aggregate() {
+    fn huge_integer_array(name: &str, ordinal: u32) -> v2::StructMember {
+        field_member(shaped_field(
+            name,
+            ordinal,
+            v2::field_type::Kind::Array(Box::new(v2::ArrayType {
+                element: Some(Box::new(v2::FieldType {
+                    optional: false,
+                    kind: Some(v2::field_type::Kind::Primitive(
+                        v2::PrimitiveType::Integer as i32,
+                    )),
+                })),
+                min: 0,
+                max: 300_000_000,
+            })),
+        ))
+    }
+    // Each array alone charges roughly 2.4 GB, well under
+    // `fb_projection::MAX_ENCODABLE` (`u32::MAX`, ~4.29 GB); the two together
+    // charge roughly 4.8 GB, over it.
+    let holder = v2::StructDef {
+        members: vec![huge_integer_array("a", 1), huge_integer_array("b", 2)],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.cruise",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    let err = check_flatbuffers_bounds(&pkg).expect_err("the summed size exceeds MAX_ENCODABLE");
+    assert_eq!(
+        err.message, "`veh.cruise.Holder` has no finite FlatBuffers bound",
+        "an aggregate cause must name the declaration alone, with no member"
+    );
+}
+
+/// A struct that reaches a cross-package reference is left alone: this
+/// backend resolves no cross-package reference itself
+/// (`struct_with_a_cross_package_field_drops_conditional_derives` already
+/// pins that `generate` still emits one), so `fb_projection::max_size` cannot
+/// tell "unresolved here" from "unbounded", and `decl_resolves_locally`
+/// answers `false` rather than letting it guess.
+#[test]
+fn flatbuffers_bound_leaves_a_cross_package_reference_alone() {
+    let holder = v2::StructDef {
+        members: vec![field_member(named_field(
+            "speed",
+            1,
+            "veh.other.Speed",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![public_decl("Holder", v2::decl::Kind::StructDef(holder))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a cross-package reference must not be refused: this backend cannot judge it"
+    );
+}
+
+/// A same-package struct that reaches itself is left alone, the same as a
+/// cross-package reference: `recursive_struct_default_terminates` and
+/// `a_cyclic_struct_takes_no_conditional_derives` already pin that `generate`
+/// still emits `S`'s domain type over exactly this shape, and this refusal
+/// must not take that away before K5 has a codec to withhold instead.
+#[test]
+fn flatbuffers_bound_leaves_a_cycle_alone() {
+    let recursive = v2::StructDef {
+        members: vec![field_member(named_field(
+            "next",
+            1,
+            "S",
+            false,
+            init_value(true, None),
+        ))],
+        fixed_layout: false,
+    };
+    let pkg = package(
+        "veh.common",
+        vec![public_decl("S", v2::decl::Kind::StructDef(recursive))],
+    );
+    assert_eq!(
+        check_flatbuffers_bounds(&pkg),
+        Ok(()),
+        "a same-package cycle must not be refused before K5 has a codec to withhold"
     );
 }

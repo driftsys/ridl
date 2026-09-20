@@ -220,7 +220,10 @@ the padding and vtable slack the projection charges.
 
 If the bound of D-6 is `None`, the emitter writes no `Payload<FlatBuffers>`
 implementation for that type and returns a `GenerateError` naming the type and
-the member that is unbounded.
+the member that is unbounded. **§4a records stage K4's implementation of this
+refusal**: the function exists (`check_flatbuffers_bounds`) and names the
+member, but nothing calls it yet — K5 does, once it has a per-type
+implementation to withhold.
 
 **Taken with an addition, 2026-09-20.** typl makes every array and map bound
 mandatory, defaults a `string` and a `bytes` to `[0..256]` when unspecified
@@ -411,6 +414,125 @@ exercised by the face's round trip.
    default to `[0..256]` (TYPL-103), and recursion is an error (TYPL-206). D-7's
    diagnostic is totality over the IR, tested but not loud, and the plan's first
    task needs no fixture work to settle it.
+
+## 4a. Stage K4, 2026-09-20: D-7's refusal exists, uncalled, and names its member
+
+Stage K4 (plan Task 3) added D-7's refusal —
+`ridl_backend_rust::check_flatbuffers_bounds`, in
+`crates/ridl-backend-rust/src/lib.rs` — as a function nothing in the pipeline
+calls yet. It does not implement D-7 in the sense of the compiler refusing
+anything today; it is the refusal, ready for K5 to call once K5 has something to
+withhold. The review round of 2026-09-20 corrected two things this addition
+first got wrong, recorded here in place of what it said before.
+
+**The ground for not wiring it in is per-type, not "this breaks existing
+tests."** D-7's own text is "the emitter writes no `Payload<FlatBuffers>`
+implementation _for that type_" — a per-type withholding, not a per-package
+refusal. Before K5 there is no per-type `Payload<FlatBuffers>` implementation to
+withhold, so `generate`/`generate_face` (which emit only domain types) have no
+correct call site for this function at all, independent of what wiring it in
+anyway would break. Gating all of `domain_items` — the shape the plan's Task 3
+text and this note's first draft both took — would be a wholesale package
+refusal D-7 does not authorise, since it would withhold every type's domain code
+over one type's unbounded codec.
+
+**The first draft's measurement was wrong, and its two named tests were never
+the failures.** It said wiring `check_flatbuffers_bounds(package)?` into
+`domain_items` breaks eight of this crate's own tests, naming
+`recursive_struct_default_terminates`,
+`a_cyclic_struct_takes_no_conditional_derives`, a cross-package case, and a
+`Stream` case. Measured directly (`cargo test -p ridl-backend-rust --locked`
+with the check wired in), the count is **five**, and **none** of the four named
+tests is among them — those four pass, because the function's own cross-package,
+cycle, and `Stream` guards already shield exactly the shapes they build. The
+five that do fail — `struct_with_optional_and_reserved`,
+`an_unspecified_field_primitive_takes_no_conditional_derives`,
+`an_induced_tuple_struct_carries_its_derives`,
+`a_tuple_under_an_internal_declaration_is_package_private`,
+`leaf_recursion_denies_default_through_a_composite_field` — are unrelated
+hand-built fixtures in `src/tests.rs` that carry a `string` with no `len_max`
+incidentally, not on purpose: they predate this stage and were never written
+with a FlatBuffers bound in mind. `cargo test -p ridlc --locked` passes in full
+with the check wired in, so the corpus claim ("`ClimateReport` already depends
+on generating across a cross-package reference") was also not what made the
+wiring fail — it is true as a fact about the corpus, but it was not the failure
+the wiring produced. Repairing those five fixtures' bounds is K5's, when it
+wires the check in per type.
+
+**The cross-package and cycle guards are per-member, not per-declaration.** The
+first draft's guard answered for the whole declaration: if any member's type
+reached an unresolved reference or a cycle, the _entire_ declaration was left
+alone, silently, even when a different member of the same declaration was
+genuinely unbounded — a struct with both a bare `string` map key and one foreign
+field returned `Ok(())`, which is the silent omission ADR-0016 decision 6 and
+ADR-0017 decision 4 forbid. The guard is now scoped to the one member being
+examined: a member this backend cannot judge is exempted, and every other member
+of the same declaration is still probed on its own — `unbounded_member` in
+`crates/ridl-backend-rust/src/lib.rs`, pinned by two tests in `src/tests.rs`
+over the two declaration orders (the exempt member first, and the exempt member
+last).
+
+**The refusal names the member, not only the declaration.** D-7's own text asks
+for "the type and the member that is unbounded", and this needed no change to
+`ridl_ir::projection::flatbuffers::max_size`'s API: a synthetic one-member
+`v2::Decl` in the same package, handed to the existing public `max_size`,
+charges exactly that member the way the real declaration's own computation would
+— `struct_table_bound` sums each member's `field_charge` independently, and
+`union_wrapper_bound` takes the largest of its arms' `union_arm_bound` — so
+probing one member in isolation reproduces its share of the real bound with
+nothing else able to answer `None` in its place (`probe_struct_field`,
+`probe_union_arm`). Only the aggregate causes — the summed size overflows `u64`,
+or exceeds `MAX_ENCODABLE` while every member is individually bounded — have no
+single member to name, and the refusal falls back to the declaration alone for
+exactly those
+(`flatbuffers_bound_names_the_declaration_when_the_cause_is_aggregate`).
+
+**Consequence for K5.** K5 calls `check_flatbuffers_bounds` once per type, as it
+is about to emit that type's `Payload<FlatBuffers>` implementation, not once for
+the whole package ahead of every other emit. It inherits the per-member
+cross-package and cycle exemptions as built here, and repairs the five test
+fixtures named above when it wires the check into the live pipeline.
+
+**Two gaps carried forward from the 2026-09-20 review's second pass, for K5 to
+close.**
+
+1. **The exemption is per-member but still whole-member: an anonymous composite
+   can still hide an unbounded leaf beside an unjudgeable one.** A struct field
+   typed `map<veh.other.Speed, string>` — a cross-package (unjudgeable) key and
+   a bare unbounded `string` value in the same map — returns `Ok(())`.
+   `member_resolves_locally` answers `false` for the whole field the moment it
+   reaches the unresolved key, so the member is exempted in full and the
+   unbounded value inside the same map rides along unexamined;
+   `unbounded_member` never gets to probe the value on its own, because probing
+   happens per struct field or per union arm, not per leaf inside an array, a
+   map, or a tuple. A _named_ local declaration does not have this hole: a local
+   struct with one cross-package field and one unbounded field is still refused,
+   because each is a separate member of the enclosing struct and each is probed
+   independently — the gap is specific to an anonymous composite carrying both
+   kinds of leaf inline. Verified directly (`check_flatbuffers_bounds` over the
+   fixture above answers `Ok(())`). K5 closes this when it wires the check per
+   type; until then, a struct or a union with an anonymous composite member is
+   not fully covered by this refusal.
+2. **`Attribution::Declaration` is reached for more than aggregate overflow.**
+   Its own doc comment said the cause is aggregate — the summed size overflows
+   `u64`, or the total exceeds `MAX_ENCODABLE` — but two other causes land on
+   the same variant and the same declaration-only message, and neither is
+   disambiguated: a member with no `r#type` at all (skipped by
+   `unbounded_member` rather than attributed, the same as a reserved tombstone),
+   and a `fb_projection::struct_table` layout error over the _whole_ declaration
+   — two fields sharing one ordinal, for example — that only shows up across
+   members and that no single-field probe can reproduce. The doc comment on
+   `Attribution::Declaration` is corrected to say so; the message
+   `check_flatbuffers_bounds` writes for this variant still does not distinguish
+   the three causes, which is K5's to do if a reader needs to.
+
+**A third gap, noted rather than tested.** A same-package cycle beside a
+genuinely unbounded member (a cyclic field and a bare unbounded `string` field
+in one struct) is not covered by any test in this module —
+`flatbuffers_bound_leaves_a_cycle_alone_beside_a_bounded_member` pins a cycle
+beside a _bounded_ member only. A probe confirms the untested path refuses
+correctly, naming the unbounded field, but the coverage gap is real and is left
+for K5 to close alongside the two above.
 
 ## 5. Records this changes, if the disposition takes it
 

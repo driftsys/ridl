@@ -26,6 +26,7 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use ridl_ir::name::{camel_case, snake_case};
+use ridl_ir::projection::flatbuffers as fb_projection;
 use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -108,6 +109,14 @@ pub fn generate_face(package: &v2::Package) -> Result<Generated, GenerateError> 
 }
 
 /// The domain-type items of `package` — the shared work of both entry points.
+///
+/// This does not call [`check_flatbuffers_bounds`] (see its own doc for why):
+/// wiring the FlatBuffers refusal into every `generate` call ahead of a codec
+/// that does not exist yet would refuse a package this backend already
+/// generates today whenever it carries a same-package cycle or a reference
+/// this backend cannot resolve — neither of which needs a FlatBuffers bound
+/// unless K5's codec is actually emitted for it. K5 calls the check itself,
+/// once it has a `Payload<FlatBuffers>` implementation to withhold.
 fn domain_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, GenerateError> {
     let mut items: Vec<TokenStream> = Vec::new();
     let mut tuples: Vec<InducedTuple> = Vec::new();
@@ -142,6 +151,313 @@ fn domain_items(ctx: &Ctx, package: &v2::Package) -> Result<Vec<TokenStream>, Ge
     }
 
     Ok(items)
+}
+
+// ---------------------------------------------------------------------------
+// The FlatBuffers size bound's refusal (design note D-7, stage K4).
+// ---------------------------------------------------------------------------
+
+/// Refuses a struct or a union with no finite FlatBuffers bound (design note
+/// D-7 of `docs/wip/2026-09-20-flatbuffers-codec-design.md`; see that note's
+/// §4a for the ground this function rests on).
+///
+/// **Not called from `generate` or `generate_face`.** D-7's refusal is
+/// per-type — the emitter withholds a `Payload<FlatBuffers>` implementation
+/// *for that type*, not for the package — and before K5 there is no per-type
+/// implementation to withhold, so there is no correct call site for this yet.
+/// K5 calls it once, per type, as it is about to emit that type's codec.
+/// `#[allow(dead_code)]` marks that honestly rather than reaching for `pub`
+/// to silence it: `pub` would hide the same fact by putting the function on
+/// this crate's public API, which K5 (a sibling module, `codec.rs`) does not
+/// need.
+///
+/// Attributes the refusal to one member where [`unbounded_member`] can name
+/// one, and to the declaration alone when the cause is aggregate (the summed
+/// size overflows `u64`, or exceeds `fb_projection::MAX_ENCODABLE`).
+#[allow(dead_code)]
+pub(crate) fn check_flatbuffers_bounds(package: &v2::Package) -> Result<(), GenerateError> {
+    let ctx = Ctx::new(package);
+    let packages = fb_projection::Packages {
+        package,
+        others: &[],
+    };
+    for decl in &package.decls {
+        if !fb_projection::mints_root_table(decl) {
+            continue;
+        }
+        if fb_projection::max_size(packages, decl).is_some() {
+            continue;
+        }
+        match unbounded_member(&ctx, package, decl) {
+            Attribution::Member(member) => {
+                return Err(GenerateError {
+                    message: format!(
+                        "`{pkg}.{decl}.{member}` has no finite FlatBuffers bound",
+                        pkg = package.name,
+                        decl = decl.name
+                    ),
+                });
+            }
+            Attribution::Declaration => {
+                return Err(GenerateError {
+                    message: format!(
+                        "`{pkg}.{decl}` has no finite FlatBuffers bound",
+                        pkg = package.name,
+                        decl = decl.name
+                    ),
+                });
+            }
+            // A member this backend cannot judge — an unresolved
+            // cross-package reference or a same-package cycle — accounts for
+            // the `None`, and every member this function could check is
+            // individually bounded. Leave `decl` alone.
+            Attribution::Exempt => {}
+        }
+    }
+    Ok(())
+}
+
+/// What [`check_flatbuffers_bounds`] found when `decl`'s own
+/// [`fb_projection::max_size`] answered `None`.
+enum Attribution {
+    /// One member (a struct field's name, or a union arm's name) is
+    /// individually unbounded — probed by [`probe_struct_field`] or
+    /// [`probe_union_arm`], each of which charges exactly that member the way
+    /// [`fb_projection::max_size`] itself would.
+    Member(String),
+    /// No single member probes `None`, and none was skipped for being
+    /// something this backend cannot judge. **Not only the aggregate case**
+    /// (the summed size overflows `u64`, or the total exceeds
+    /// `fb_projection::MAX_ENCODABLE` while every member is individually
+    /// bounded) reaches this variant — two other causes do too, and neither
+    /// is named by a probe: a member with no `r#type` at all
+    /// (`unbounded_member` skips it rather than attributing it, the same as a
+    /// reserved tombstone), and a `fb_projection::struct_table` layout error
+    /// over the *whole* declaration (for example two fields sharing one
+    /// ordinal) that only shows up across members and that no single-field
+    /// probe can reproduce. See design note §4a, "`Attribution::Declaration`
+    /// is reached for more than aggregate overflow", for the gap this
+    /// leaves: none of the three causes is disambiguated in the message
+    /// `check_flatbuffers_bounds` writes for this variant.
+    Declaration,
+    /// Every member that could be judged is individually bounded, and at
+    /// least one could not be judged — a cross-package reference this
+    /// backend does not resolve, or a same-package cycle. `decl`'s own
+    /// `None` is explained by that member, not by an unbounded shape.
+    Exempt,
+}
+
+/// Attributes `decl`'s unbounded [`fb_projection::max_size`] to one member,
+/// to the declaration as a whole, or exempts it — see [`Attribution`].
+///
+/// Each member is judged on its own: [`member_resolves_locally`] decides
+/// whether this backend can resolve everything the member's type reaches
+/// (see its own doc for the two things it treats as unjudgeable rather than
+/// unbounded), and a member it can judge is probed independently by
+/// [`probe_struct_field`] or [`probe_union_arm`] — never by trusting one
+/// member's unboundedness to explain another's. A struct with both a bare
+/// unbounded `string` map key and an unrelated cross-package field is
+/// refused over the first and exempted from nothing on account of the
+/// second.
+fn unbounded_member(ctx: &Ctx, package: &v2::Package, decl: &v2::Decl) -> Attribution {
+    let mut any_exempt = false;
+    match &decl.kind {
+        Some(v2::decl::Kind::StructDef(def)) => {
+            for member in &def.members {
+                let Some(v2::struct_member::Member::Field(field)) = &member.member else {
+                    // A reserved tombstone emits no field and charges one
+                    // slack byte only (typl §7.4); it is never the cause.
+                    continue;
+                };
+                let Some(ty) = field.r#type.as_ref() else {
+                    continue;
+                };
+                if !member_resolves_locally(ctx, ty) {
+                    any_exempt = true;
+                    continue;
+                }
+                if probe_struct_field(package, field).is_none() {
+                    return Attribution::Member(field.name.clone());
+                }
+            }
+        }
+        Some(v2::decl::Kind::UnionDef(def)) => {
+            for arm in &def.arms {
+                if !decl_resolves_locally(ctx, &arm.type_ref, &mut HashSet::new()) {
+                    any_exempt = true;
+                    continue;
+                }
+                if probe_union_arm(package, arm).is_none() {
+                    return Attribution::Member(arm.name.clone());
+                }
+            }
+        }
+        _ => {}
+    }
+    if any_exempt {
+        Attribution::Exempt
+    } else {
+        Attribution::Declaration
+    }
+}
+
+/// The bound of `field` alone, charged the way
+/// [`fb_projection::max_size`] would charge it as one member of a struct:
+/// `fb_projection::struct_table_bound` sums each member's own
+/// `field_charge` independently and propagates the first `None`, so wrapping
+/// `field` in a struct of its own reproduces exactly the charge it
+/// contributes to `decl`'s real bound, with nothing else able to make the
+/// probe answer `None` in its place.
+fn probe_struct_field(package: &v2::Package, field: &v2::Field) -> Option<u64> {
+    let probe = v2::Decl {
+        kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![v2::StructMember {
+                member: Some(v2::struct_member::Member::Field(field.clone())),
+            }],
+            fixed_layout: false,
+        })),
+        ..Default::default()
+    };
+    let packages = fb_projection::Packages {
+        package,
+        others: &[],
+    };
+    fb_projection::max_size(packages, &probe)
+}
+
+/// The bound of `arm` alone, on the same footing as [`probe_struct_field`]:
+/// `fb_projection::union_wrapper_bound` takes the largest of its arms'
+/// `union_arm_bound`, so a union of exactly this one arm charges precisely
+/// what it contributes to `decl`'s real bound.
+fn probe_union_arm(package: &v2::Package, arm: &v2::UnionArm) -> Option<u64> {
+    let probe = v2::Decl {
+        kind: Some(v2::decl::Kind::UnionDef(v2::UnionDef {
+            arms: vec![arm.clone()],
+            is_result: false,
+            reserved: Vec::new(),
+        })),
+        ..Default::default()
+    };
+    let packages = fb_projection::Packages {
+        package,
+        others: &[],
+    };
+    fb_projection::max_size(packages, &probe)
+}
+
+/// Whether every named type reachable from `ty` resolves inside the package
+/// `ctx` indexes — the same shape [`fb_projection::max_size`] would have to
+/// resolve to size it.
+///
+/// Two things answer `false`, "this backend cannot judge this member,
+/// exempt it", rather than letting a probe answer for them — both scoped to
+/// the one member being checked, never to the whole declaration, so a
+/// sibling member with a genuine bound problem is still caught:
+///
+/// - **a cross-package (dotted) or unknown reference.** `ridl-backend-rust`
+///   generates one package at a time and resolves no cross-package reference
+///   itself — [`Ctx::lookup`] answers `None` for one by design, the same as
+///   every other same-package-only pass in this backend
+///   (`derives::type_ref_eligibility`, `defaults`). Handed `others: &[]`,
+///   `fb_projection::max_size` cannot tell "this reference does not resolve
+///   here" from "this member has no finite bound" — both answer `None` (its
+///   own doc, "a reference that does not resolve in `packages`"). This
+///   backend already generates a struct across such a reference — the
+///   corpus's `ClimateReport`
+///   (`crates/ridlc/tests/corpus/veh-cluster/cluster/services.ridl`,
+///   `cabin`/`setpoint` typed by the imported `veh.common.Temperature`) is
+///   one.
+/// - **a same-package composite that reaches itself.** typl rejects one
+///   (TYPL-206), so it is IR handed in directly the same as the case above.
+///   This backend already has a considered answer for a cyclic struct that
+///   is not refusal: `recursive_struct_default_terminates` and
+///   `a_cyclic_struct_takes_no_conditional_derives` both pin that a cyclic
+///   struct's *domain type* still generates, because Default derivation and
+///   the conditional-derive walk both guard the same cycle and degrade to
+///   the conservative answer rather than erroring.
+///
+/// A third case is exempted the same way: **a `Stream` field position.**
+/// ridl §12.3 keeps a stream at an interaction position; it never reaches a
+/// struct or tuple field in checked IR, `fb_projection::max_size` charges
+/// nothing for it, and `flatbuffers_bound_leaves_a_stream_field_alone` pins
+/// that this function exempts a member typed by one rather than treating the
+/// `None` `field_charge` gives it as a genuine bound failure.
+fn member_resolves_locally(ctx: &Ctx, ty: &v2::FieldType) -> bool {
+    field_type_resolves_locally(ctx, ty, &mut HashSet::new())
+}
+
+/// Whether `reference` and everything its own shape reaches resolves inside
+/// the package `ctx` indexes. See [`member_resolves_locally`] for the two
+/// cases this answers `false` for, and why each is scoped to one member.
+fn decl_resolves_locally(ctx: &Ctx, reference: &str, visiting: &mut HashSet<String>) -> bool {
+    let Some(decl) = ctx.lookup(reference) else {
+        return false;
+    };
+    if !visiting.insert(reference.to_string()) {
+        // On the path already being walked: a cycle. Left for
+        // `unbounded_member` to exempt this one member over (see the doc
+        // above).
+        return false;
+    }
+    let resolves = match &decl.kind {
+        Some(v2::decl::Kind::StructDef(def)) => {
+            def.members.iter().all(|member| match &member.member {
+                Some(v2::struct_member::Member::Field(field)) => field
+                    .r#type
+                    .as_ref()
+                    .is_some_and(|ty| field_type_resolves_locally(ctx, ty, visiting)),
+                _ => true,
+            })
+        }
+        Some(v2::decl::Kind::UnionDef(def)) => def
+            .arms
+            .iter()
+            .all(|arm| decl_resolves_locally(ctx, &arm.type_ref, visiting)),
+        _ => true,
+    };
+    visiting.remove(reference);
+    resolves
+}
+
+/// One type position's contribution to [`decl_resolves_locally`], over the
+/// same [`v2::FieldType`] shape `fb_projection::max_size` walks to size it.
+/// A `Stream` is exempted explicitly — see [`member_resolves_locally`]'s
+/// third bullet — rather than falling through to the `None` arm, which is
+/// reserved for a `FieldType` this walk genuinely does not recognize.
+fn field_type_resolves_locally(
+    ctx: &Ctx,
+    ty: &v2::FieldType,
+    visiting: &mut HashSet<String>,
+) -> bool {
+    match &ty.kind {
+        Some(v2::field_type::Kind::Named(reference)) => {
+            decl_resolves_locally(ctx, reference, visiting)
+        }
+        Some(v2::field_type::Kind::Primitive(_)) | Some(v2::field_type::Kind::InlineScalar(_)) => {
+            true
+        }
+        Some(v2::field_type::Kind::Tuple(tuple)) => tuple.fields.iter().all(|field| {
+            field
+                .r#type
+                .as_ref()
+                .is_some_and(|ty| field_type_resolves_locally(ctx, ty, visiting))
+        }),
+        Some(v2::field_type::Kind::Array(array)) => array
+            .element
+            .as_deref()
+            .is_some_and(|element| field_type_resolves_locally(ctx, element, visiting)),
+        Some(v2::field_type::Kind::Map(map)) => {
+            map.key
+                .as_deref()
+                .is_some_and(|key| field_type_resolves_locally(ctx, key, visiting))
+                && map
+                    .value
+                    .as_deref()
+                    .is_some_and(|value| field_type_resolves_locally(ctx, value, visiting))
+        }
+        Some(v2::field_type::Kind::Stream(_)) => false,
+        None => true,
+    }
 }
 
 /// Parses the assembled items as a bare `syn::File` (no inner attribute, so an
