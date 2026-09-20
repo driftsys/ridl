@@ -3,7 +3,8 @@
 The Rust backend's generated `Client`/`Publisher`/`Provider`/`dispatch` face
 over `ridl-rt`, as built by roadmap story E11.13. ADR-0018 decision 15 restores
 this face as the runtime layer's "phase 2", sequenced after the frame
-specification (E11.1) and the transport and loopback runtime (E11.9). E11.13 is
+specification (E11.1) and the transport and loopback runtime (E11.9, whose
+loopback half became E11.15 when that story was split on 2026-09-20). E11.13 is
 a deliberate exception to that sequence: an in-process-only MVP, built ahead of
 both so the team has a face to write against. It generates, for one example
 package, the consumer and provider faces of one interface, proves them with an
@@ -38,9 +39,10 @@ translator, and the only entry point whose output names `::ridl_rt::…`.
 (`crates/ridlc/src/lib.rs`) still calls `generate`, not `generate_face` — which
 is correct for this story rather than a shortfall: ADR-0018 decision 15 makes
 the face phase 2, and nothing in E11.13 ships a runtime for a pipeline consumer
-to link against. Why a companion entry point rather than folding the face into
-`generate` is [ADR-0023](../decisions/ADR-0023-interaction-face-generation.md)
-decision 2.
+to link against. Closing that gap is story E11.14 (driftsys/ridl#444), which
+also gives the emitted `Cargo.toml` the encoding feature the codec needs. Why a
+companion entry point rather than folding the face into `generate` is
+[ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 2.
 
 ## The descriptors
 
@@ -227,7 +229,7 @@ its settlement carries the reply. **This ordering is pinned only by an
 exact-text assertion** in `tests/dispatch_generation.rs`; no behavioural test
 exercises it, because neither `Handler::settle` nor a provider call in the
 test-only loopback of the next section has an observable side effect a
-reordering would change. E11.9's real runtime is what would make the ordering
+reordering would change. E11.15's real runtime is what would make the ordering
 observable — this is a limitation of the test double, not a defect in the
 generated code.
 
@@ -271,13 +273,13 @@ implementation is explicitly marked throwaway in its own module documentation
 and deleted when E11.12 lands.
 
 **The ports are a disposable, test-only loopback**, not a runtime. `ridl-rt`
-ships no runtime; the first real one is E11.9's in-process loopback (ADR-0020
+ships no runtime; the first real one is E11.15's in-process loopback (ADR-0020
 decision 6). `tests/support/loopback.rs` implements exactly `Attached`, `Clock`,
 `SignalReader`, `SignalWriter`, `EventSource`, `EventSink`, `Caller`, `Handler`
 and `FixedReader` over in-memory queues and a hand-advanced counter clock — no
 I/O, no thread, no real time — and deliberately implements neither
 `ScannableSignals` nor `CoherentSignals` (both are optional extensions a runtime
-may omit). Its own module documentation names E11.9 as its replacement.
+may omit). Its own module documentation names E11.15 as its replacement.
 
 ## The fixture and the round trip
 
@@ -338,19 +340,20 @@ rework rather than a blocker.
 
 ## What is provisional
 
-| Placeholder                                                                                    | Replaced by                               |
-| ---------------------------------------------------------------------------------------------- | ----------------------------------------- |
-| The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                    |
-| The test-only loopback ports (`tests/support/loopback.rs`)                                     | E11.9                                     |
-| The zero `CatalogHash`                                                                         | E16.2 (driftsys/ridl#378)                 |
-| The all-`None` `EncodedSizes` columns                                                          | E16.2                                     |
-| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                      |
-| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                |
-| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | E11.9 (makes it behaviourally observable) |
+| Placeholder                                                                                    | Replaced by                                |
+| ---------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| The hand-written `Payload<ReprC>` implementations                                              | E11.7, E11.8 or E11.12                     |
+| The test-only loopback ports (`tests/support/loopback.rs`)                                     | E11.15                                     |
+| The zero `CatalogHash`                                                                         | E16.2 (driftsys/ridl#378)                  |
+| The all-`None` `EncodedSizes` columns                                                          | E16.2                                      |
+| The narrow contract-clause translator (`src/clauses.rs`)                                       | E5.1                                       |
+| One declared parameter per call, no induced argument struct                                    | a recorded follow-up story                 |
+| The command-settled-before / query-settled-after ordering, pinned only by exact-text assertion | E11.15 (makes it behaviourally observable) |
 
 `ridl --emit rust` emitting the face itself is not on this list as a defect:
 ADR-0018 decision 15 places that behind the frame specification and the
-transport, and nothing in E11.13 changes that gate.
+transport, and nothing in E11.13 changes that gate. It is story E11.14
+(driftsys/ridl#444), which takes the same gate with it.
 
 ## Trace
 
@@ -365,7 +368,7 @@ transport, and nothing in E11.13 changes that gate.
   generation decisions specific to this face
 - Depends on: `crates/ridl-rt` 0.1.0 (E11.0, landed); the IR's provisional
   interface numbering (the lock design's L4, driftsys/ridl#391)
-- Replaced later by: E11.7, E11.8 or E11.12 (the payload stand-in), E11.9 (the
+- Replaced later by: E11.7, E11.8 or E11.12 (the payload stand-in), E11.15 (the
   test-only ports), E16.2 (the catalog hash and the encoded sizes), E5.1 (the
   clause translator)
 - Reasoning trail (archived):

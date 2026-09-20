@@ -421,7 +421,7 @@ supertrait, so a single-threaded `no_std` runtime whose handles use `Cell` or
 compile-time assertion, `fn assert_sync<T: Sync>()` applied to a reader handle.
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 12
 records the reasoning and the alternative it rejects, one runtime struct behind
-a mutex. No runtime exists in this workspace yet; story E11.9 builds the first
+a mutex. No runtime exists in this workspace yet; story E11.15 builds the first
 one to this shape.
 
 ## The `error` module and the port errors
@@ -455,8 +455,8 @@ calls it in 0.1); `Family` (the IR carries no family field yet); `ServiceId`
 (dropped, ADR-0021 decision 1); `Encoding::FORMAT` (the frame specification's
 wire tag values, added with story E11.1); `Access` (the trust constant the Rust
 codegen generates once the rsdl lowering exists); the three payload codecs
-(stories E11.7, E11.8 and E11.12); the runtimes `ridl-loopback` and
-`ridl-transport-ws` (story E11.9); and the engine. `Family` returns as a
+(stories E11.7, E11.8 and E11.12); the runtimes `ridl-loopback` (story E11.15)
+and `ridl-transport-ws` (story E11.9); and the engine. `Family` returns as a
 `Member` field, which is a breaking change (ADR-0021 decision 10); streams have
 no story yet.
 
