@@ -276,7 +276,7 @@ error[FORM-102]: command parameter must be a named type or a stream
 32 │   command takeMap(table: [Level : Sample; 0..8]) @[..50ms]
    │                          ^^^^^^^^^^^^^^^^^^^^^^
 
-error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_http_response` under the name transform, so a target whose namespace is snake_case would carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 decision 3)
+error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_http_response` under the snake_case name transform, so a target whose namespace is snake_case would carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 decision 3)
    ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:13:10
    │
 12 │   signal parseHTTPResponse : Ratio @[100ms..1s]
@@ -284,7 +284,7 @@ error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_
 13 │   signal parseHttpResponse : Ratio @[100ms..1s]
    │          ^^^^^^^^^^^^^^^^^
 
-error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_http_response` under the name transform, so a target whose namespace is snake_case would carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 decision 3)
+error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_http_response` under the snake_case name transform, so a target whose namespace is snake_case would carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 decision 3)
    ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:23:10
    │
 22 │   signal parseHTTPResponse : Ratio @[100ms..1s]
@@ -292,7 +292,7 @@ error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_
 23 │   signal parseHttpResponse : Ratio @[100ms..1s]
    │          ^^^^^^^^^^^^^^^^^
 
-error[RIDL-149]: `vin_number` and `vinNumber` both become `vin_number` under the name transform, so a target whose namespace is snake_case would carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 decision 3)
+error[RIDL-149]: `vin_number` and `vinNumber` both become `vin_number` under the snake_case name transform, so a target whose namespace is snake_case would carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 decision 3)
    ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:29:36
    │
 29 │   command setIt(vinNumber : Ratio, vin_number : Ratio) @[..500ms]
@@ -300,7 +300,7 @@ error[RIDL-149]: `vin_number` and `vinNumber` both become `vin_number` under the
    │                 │                   
    │                 `vinNumber` becomes `vin_number` here
 
-error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_http_response` under the name transform, so a target whose namespace is snake_case would carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 decision 3)
+error[RIDL-149]: `parseHttpResponse` and `parseHTTPResponse` both become `parse_http_response` under the snake_case name transform, so a target whose namespace is snake_case would carry one identifier twice. Rename one of them (ridl §11, §16.4; ADR-0016 decision 3)
    ┌─ tests/corpus/ridl-diag-showcase/main/projection.ridl:39:3
    │
 38 │   parseHTTPResponse : Ratio

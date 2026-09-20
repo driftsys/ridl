@@ -1120,6 +1120,51 @@ fn struct_with_optional_and_reserved() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
+/// One struct with one named field, for the name-projection tests.
+fn struct_with_field(name: &str, field_name: &str, type_ref: &str) -> v2::Decl {
+    public_decl(
+        name,
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(named_field(
+                field_name,
+                1,
+                type_ref,
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        }),
+    )
+}
+
+/// typl §15.1 makes field names camelCase, so an untransformed name draws
+/// `non_snake_case` at every consumer of the generated module. The field name
+/// goes through the pinned transform (ADR-0016 decisions 1 and 2).
+///
+/// Two sites project the name, and the assertions discriminate them: the
+/// struct declaration in `emit_field`, and the `Default` initializer in
+/// `struct_default`. Projecting one and not the other is worse than
+/// projecting neither — the initializer would name a field the struct does
+/// not have, which is E0560 — so the negative assertion is that the written
+/// name appears nowhere at all, rather than that one particular line is
+/// absent.
+#[test]
+fn a_struct_field_name_is_projected_to_snake_case() {
+    let source = rust_for(vec![
+        speed_decl(),
+        struct_with_field("Reading", "sensorId", "Speed"),
+    ]);
+    assert!(source.contains("pub sensor_id:"), "got:\n{source}");
+    assert!(
+        source.contains("sensor_id: Speed::default()"),
+        "the `Default` initializer must name the projected field, got:\n{source}"
+    );
+    assert!(
+        !source.contains("sensorId"),
+        "the written name must reach no generated site, got:\n{source}"
+    );
+}
+
 #[test]
 fn enum_with_discriminants() {
     let decls = vec![public_decl(
@@ -1400,6 +1445,44 @@ fn tuple_field_generates_named_struct() {
     insta::assert_snapshot!(rust_for(decls));
 }
 
+/// A tuple field name is camelCase in typl exactly as a struct field name is
+/// (typl §15.1), and the struct a tuple generates carries it as a Rust field
+/// name, so it goes through the same pinned transform (ADR-0016 decisions 1
+/// and 2).
+///
+/// Two sites project it, and the assertions discriminate them: the generated
+/// struct in `emit_tuple_struct`, and the `Default` initializer in
+/// `tuple_default_expr`. Projecting one and not the other is E0560, so the
+/// negative assertion is that the written name reaches no generated site.
+///
+/// Two tuple field names distinct in typl can still project to one Rust field
+/// name. That is unchecked, and rustc rejects the result with E0124 —
+/// driftsys/ridl#449.
+#[test]
+fn a_tuple_field_name_is_projected_to_snake_case() {
+    let bounds = shaped_field("range", 1, tuple_of(&[("minSpeed", "Speed")]));
+    let decls = vec![
+        speed_decl(),
+        public_decl(
+            "SensorBounds",
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(bounds)],
+                fixed_layout: false,
+            }),
+        ),
+    ];
+    let source = rust_for(decls);
+    assert!(source.contains("pub min_speed:"), "got:\n{source}");
+    assert!(
+        source.contains("min_speed: Speed::default()"),
+        "the `Default` initializer must name the projected field, got:\n{source}"
+    );
+    assert!(
+        !source.contains("minSpeed"),
+        "the written name must reach no generated site, got:\n{source}"
+    );
+}
+
 /// A struct field whose type is `kind`, at `ordinal`.
 fn shaped_field(name: &str, ordinal: u32, kind: v2::field_type::Kind) -> v2::Field {
     v2::Field {
@@ -1581,6 +1664,15 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
     // rather than with a blanket `-D warnings`, matching `rustc_accepts` in
     // `crates/ridlc/tests/corpus.rs`: the generated code carries by-design
     // naming and dead-code lints that say nothing about visibility.
+    //
+    // `non_snake_case` is denied beside them so that a field name reaching
+    // generated Rust verbatim fails this run rather than warning in it. It is
+    // inert on this fixture, whose every field name is a single word: the
+    // proof that guards issue #243 is `appendix_a_compiles_with_rustc`, whose
+    // IR carries `sensorId` and `isOpen`. The deny here is what makes this
+    // proof stay a proof if a multi-word field name is ever added to the
+    // fixture. An enum variant keeps its typl `SCREAMING_SNAKE` spelling and
+    // draws `non_camel_case_types`, a different lint, which stays undenied.
     let dir = tempfile::tempdir().expect("a temp dir is created");
     let source_path = dir.path().join("internal_tuple.rs");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
@@ -1597,6 +1689,8 @@ fn a_tuple_under_an_internal_declaration_is_package_private() {
             "private-interfaces",
             "-D",
             "private-bounds",
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(dir.path().join("internal_tuple.rmeta"))
@@ -2470,6 +2564,15 @@ pub mod ridl {
     std::fs::write(&source_path, &source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
 
+    // `non_snake_case` is denied so that a field name reaching generated Rust
+    // verbatim fails this run rather than warning in it — the assertion below
+    // is on the exit status, which a warning does not change. It is inert on
+    // Appendix B, whose every field name is a single word; the proof that
+    // guards issue #243 is `appendix_a_compiles_with_rustc`. The deny here is
+    // what makes this proof stay a proof if a multi-word field name is ever
+    // added to the fixture. An enum variant keeps its typl `SCREAMING_SNAKE`
+    // spelling and draws `non_camel_case_types`, a different lint, which
+    // stays undenied.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -2478,6 +2581,8 @@ pub mod ridl {
             "lib",
             "--emit",
             "metadata",
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -2489,7 +2594,8 @@ pub mod ridl {
 
     assert!(
         status.success(),
-        "generated Rust for Appendix B must compile, source:\n{source}"
+        "generated Rust for Appendix B must compile under `-D non_snake_case`, \
+         source:\n{source}"
     );
 }
 
@@ -2627,6 +2733,11 @@ fn constructible_collections_compile() {
     let meta_path = dir.path().join("bag.rmeta");
     std::fs::write(&source_path, &rust_source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
+    // `-D non_snake_case` is inert on this fixture, whose every field name is
+    // a single word. It is denied for the same reason as in
+    // `appendix_b_compiles_with_rustc`: to keep this proof a proof if a
+    // multi-word field name is ever added. Issue #243 is guarded by
+    // `appendix_a_compiles_with_rustc`.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -2635,6 +2746,8 @@ fn constructible_collections_compile() {
             "lib",
             "--emit",
             "metadata",
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -2645,7 +2758,8 @@ fn constructible_collections_compile() {
         .expect("rustc runs");
     assert!(
         status.success(),
-        "the collection default forms must compile, source:\n{rust_source}"
+        "the collection default forms must compile under `-D non_snake_case`, \
+         source:\n{rust_source}"
     );
 }
 
@@ -3049,6 +3163,12 @@ pub mod veh {
     std::fs::write(&source_path, &source).expect("the generated source is written");
     let rlib = ridl_rt_rlib(dir.path());
 
+    // `non_snake_case` is denied by name, and this is the proof that guards
+    // issue #243: the Appendix A IR carries the field names `sensorId` and
+    // `isOpen`, so a field name reaching generated Rust verbatim fails this
+    // run. The assertion is otherwise on the exit status, which a warning
+    // does not change. `non_camel_case_types`, which a screaming-case enum
+    // variant draws by design, stays undenied.
     let status = std::process::Command::new("rustc")
         .args([
             "--edition",
@@ -3057,6 +3177,8 @@ pub mod veh {
             "lib",
             "--emit",
             "metadata",
+            "-D",
+            "non_snake_case",
         ])
         .arg("-o")
         .arg(&meta_path)
@@ -3068,7 +3190,8 @@ pub mod veh {
 
     assert!(
         status.success(),
-        "generated Rust for Appendix A must compile, source:\n{source}"
+        "generated Rust for Appendix A must compile under `-D non_snake_case`, \
+         source:\n{source}"
     );
 }
 

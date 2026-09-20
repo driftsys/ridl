@@ -32,7 +32,7 @@ use ridl_core::db::{InputFile, profile_of_path};
 use ridl_core::diag::{DiagCode, Diagnostic, FileId, Label, Severity, SourceMap, Span};
 use ridl_core::interface_lock::{self, InterfaceLock, LockEntry, LockKey};
 use ridl_core::package::{Package, Workspace, package_of};
-use ridl_ir::name::snake_case;
+use ridl_ir::name::{camel_case, snake_case};
 use ridl_ir::v2;
 use ridl_syntax::ast::{self, AstNode, Definition, HasDocComments, HasModifiers, HasName};
 use ridl_syntax::{Profile, SyntaxKind};
@@ -634,6 +634,32 @@ impl LoweredType {
             init_constraint: None,
         }
     }
+}
+
+/// Which pinned name transform a pair of names collided under (RIDL-149,
+/// ADR-0016 decision 3 as amended).
+///
+/// The two transforms are incomparable — neither collision set contains the
+/// other — so a namespace projected through both is checked under both, and
+/// the diagnostic has to say which projection is the problem. A
+/// `camel_case`-only collision is a Rust defect (one enum, two variants of
+/// one name); a `snake_case`-only collision is a refusal from both wire
+/// backends.
+enum Collision {
+    /// The two names this report mentions project to this one snake_case
+    /// identifier. It states nothing about their CamelCase projections: they
+    /// may share one of those too. A third arm forces exactly that — in
+    /// `XY`, `x_y`, `xY` the arm `xY` is reported against `x_y` under
+    /// snake_case, and those two also share the CamelCase projection `XY`,
+    /// which was already reported against `XY` itself.
+    Snake(String),
+    /// The two names this report mentions project to this one CamelCase
+    /// identifier. As with [`Collision::Snake`], it states nothing about the
+    /// other transform.
+    Camel(String),
+    /// The two names this report mentions collide under both transforms —
+    /// the same earlier name is the first under each.
+    Both { snake: String, camel: String },
 }
 
 impl Checker<'_> {
@@ -1965,7 +1991,7 @@ impl Checker<'_> {
                                 self.colliding_projected_name(
                                     &name,
                                     &first_name,
-                                    &projection,
+                                    &Collision::Snake(projection),
                                     range,
                                     first,
                                 );
@@ -2780,6 +2806,14 @@ impl Checker<'_> {
             self.record_reserved(&entry, &mut reserved_names, &mut reserved_values);
         }
 
+        // RIDL-149 over one union's arms, keyed on both pinned transforms
+        // (ADR-0016 decision 3 as amended). A `reserved` arm is not in the
+        // namespace — it emits no variant, which is why `emit_union` skips
+        // it — so only the arms below are recorded.
+        let mut declared_arms: HashSet<String> = HashSet::new();
+        let mut snake_arms: HashMap<String, (String, TextRange)> = HashMap::new();
+        let mut camel_arms: HashMap<String, (String, TextRange)> = HashMap::new();
+
         let mut arms = Vec::new();
         let mut reserved = Vec::new();
         // (arm index, is_error) for every arm whose type resolved.
@@ -2806,6 +2840,21 @@ impl Checker<'_> {
                     DiagCode::TYPL_210,
                     member_name_range(arm.name(), arm.syntax()),
                     format!("union arm `{name}` re-declares a `reserved` name"),
+                );
+            }
+            // An arm name repeated verbatim is not a collision after a
+            // transform — the transform did nothing — so it is held out of
+            // the projection maps rather than greeted with a message that
+            // would describe one. It draws nothing today and still does; the
+            // exact-duplicate rule for a union's arms is the sibling of
+            // TYPL-215 and RIDL-413, is not minted here, and is tracked on
+            // driftsys/ridl#452.
+            if declared_arms.insert(name.clone()) {
+                self.check_arm_projection(
+                    &name,
+                    member_name_range(arm.name(), arm.syntax()),
+                    &mut snake_arms,
+                    &mut camel_arms,
                 );
             }
             let (type_ref, arm_is_error) = match arm.type_ref() {
@@ -3145,7 +3194,13 @@ impl Checker<'_> {
                 // later ordinal.
                 let projection = snake_case(&name);
                 if let Some((first_name, first)) = projected.get(&projection).cloned() {
-                    self.colliding_projected_name(&name, &first_name, &projection, range, first);
+                    self.colliding_projected_name(
+                        &name,
+                        &first_name,
+                        &Collision::Snake(projection),
+                        range,
+                        first,
+                    );
                 } else {
                     projected.insert(projection, (name.clone(), range));
                 }
@@ -3351,28 +3406,129 @@ impl Checker<'_> {
         );
     }
 
-    /// RIDL-149: two names in one scope that collide after the pinned name
-    /// transform (ADR-0016 decision 3). Shared by the interface-member check
-    /// and the parameter check — one rule over two namespaces.
+    /// RIDL-149 over one union arm name, against the arms already seen.
+    ///
+    /// A union arm reaches two target namespaces: the Rust backend spells the
+    /// variant with `camel_case`, both wire backends claim a symbol with
+    /// `snake_case`. The two transforms are incomparable, so the arm is
+    /// checked under both and the package is rejected when either collides
+    /// (ADR-0016 decision 3 as amended). First wins in each map, so the
+    /// secondary label points at the arm that keeps the projected name.
+    fn check_arm_projection(
+        &mut self,
+        name: &str,
+        range: TextRange,
+        snake_seen: &mut HashMap<String, (String, TextRange)>,
+        camel_seen: &mut HashMap<String, (String, TextRange)>,
+    ) {
+        let snake = snake_case(name);
+        let camel = camel_case(name);
+        match (
+            snake_seen.get(&snake).cloned(),
+            camel_seen.get(&camel).cloned(),
+        ) {
+            // One arm collided with under both transforms: one diagnostic
+            // naming both projections.
+            (Some((snake_first, first_range)), Some((camel_first, _)))
+                if snake_first == camel_first =>
+            {
+                self.colliding_projected_name(
+                    name,
+                    &snake_first,
+                    &Collision::Both {
+                        snake: snake.clone(),
+                        camel: camel.clone(),
+                    },
+                    range,
+                    first_range,
+                );
+            }
+            // Otherwise each colliding transform is its own report, because
+            // each names a different arm.
+            (snake_hit, camel_hit) => {
+                if let Some((first, first_range)) = snake_hit {
+                    self.colliding_projected_name(
+                        name,
+                        &first,
+                        &Collision::Snake(snake.clone()),
+                        range,
+                        first_range,
+                    );
+                }
+                if let Some((first, first_range)) = camel_hit {
+                    self.colliding_projected_name(
+                        name,
+                        &first,
+                        &Collision::Camel(camel.clone()),
+                        range,
+                        first_range,
+                    );
+                }
+            }
+        }
+        snake_seen
+            .entry(snake)
+            .or_insert_with(|| (name.to_string(), range));
+        camel_seen
+            .entry(camel)
+            .or_insert_with(|| (name.to_string(), range));
+    }
+
+    /// RIDL-149: two names in one scope that collide after a pinned name
+    /// transform (ADR-0016 decision 3, as amended). Shared by the
+    /// interface-member, parameter, struct-field and union-arm checks — one
+    /// rule over four namespaces.
+    ///
+    /// The message names the transform that actually collided. It used to
+    /// state `snake_case` for every input, which stopped being true when
+    /// union arms joined: they project through both transforms, and the two
+    /// collision sets are incomparable (`XY` and `x_y` collide under
+    /// `camel_case` only). The distinction is worth stating rather than
+    /// blurring, because the consequences differ — a `camel_case` collision
+    /// gives one Rust enum two variants of one name, a `snake_case` one is
+    /// refused by both wire backends.
     fn colliding_projected_name(
         &mut self,
         name: &str,
         first: &str,
-        projected: &str,
+        collision: &Collision,
         range: TextRange,
         first_range: TextRange,
     ) {
+        let (cause, label) = match collision {
+            Collision::Snake(projected) => (
+                format!(
+                    "`{projected}` under the snake_case name transform, so a target \
+                     whose namespace is snake_case would carry one identifier twice"
+                ),
+                format!("`{first}` becomes `{projected}` here"),
+            ),
+            Collision::Camel(projected) => (
+                format!(
+                    "`{projected}` under the camel_case name transform, so a target \
+                     whose namespace is CamelCase would carry one identifier twice"
+                ),
+                format!("`{first}` becomes `{projected}` here"),
+            ),
+            Collision::Both { snake, camel } => (
+                format!(
+                    "`{snake}` under the snake_case name transform and `{camel}` \
+                     under the camel_case one, so a target whose namespace is \
+                     snake_case and a target whose namespace is CamelCase would \
+                     each carry one identifier twice"
+                ),
+                format!("`{first}` becomes `{snake}` and `{camel}` here"),
+            ),
+        };
         self.error_with_label(
             DiagCode::RIDL_149,
             range,
             format!(
-                "`{name}` and `{first}` both become `{projected}` under the name \
-                 transform, so a target whose namespace is snake_case would carry \
-                 one identifier twice. Rename one of them (ridl §11, §16.4; \
-                 ADR-0016 decision 3)"
+                "`{name}` and `{first}` both become {cause}. Rename one of them \
+                 (ridl §11, §16.4; ADR-0016 decision 3)"
             ),
             first_range,
-            format!("`{first}` becomes `{projected}` here"),
+            label,
         );
     }
 
@@ -3569,7 +3725,13 @@ impl Checker<'_> {
                 // [`Checker::lower_interface`].
                 let projection = snake_case(&name);
                 if let Some((first_name, first)) = projected.get(&projection).cloned() {
-                    self.colliding_projected_name(&name, &first_name, &projection, range, first);
+                    self.colliding_projected_name(
+                        &name,
+                        &first_name,
+                        &Collision::Snake(projection),
+                        range,
+                        first,
+                    );
                 } else {
                     projected.insert(projection, (name.clone(), range));
                 }
@@ -4420,7 +4582,13 @@ impl Checker<'_> {
                 declared.insert(name.clone(), range);
                 let projection = snake_case(&name);
                 if let Some((first_name, first)) = projected.get(&projection).cloned() {
-                    self.colliding_projected_name(&name, &first_name, &projection, range, first);
+                    self.colliding_projected_name(
+                        &name,
+                        &first_name,
+                        &Collision::Snake(projection),
+                        range,
+                        first,
+                    );
                 } else {
                     projected.insert(projection, (name, range));
                 }
@@ -5891,6 +6059,316 @@ mod tests {
         );
         assert_eq!(codes(&checked), vec!["TYPL-211"]);
         assert_eq!(checked.diagnostics[0].severity, Severity::Warning);
+    }
+
+    // --- RIDL-149 over union arms (ADR-0016 amendment, decision D) --------
+
+    /// The three arm sources of decision D's table share a prelude: two
+    /// named types for the arms to reference, since typl §10 admits named
+    /// types only.
+    fn union_source(first: &str, second: &str) -> String {
+        format!(
+            "package app\n\
+             struct A {{ v : Counter }}\n\
+             struct B {{ v : Counter }}\n\
+             type Counter : integer [0..255]\n\
+             union U {{ {first} : A, {second} : B }}\n"
+        )
+    }
+
+    /// The same prelude with a third named type, for the reports that name
+    /// two different earlier arms.
+    fn union_source_3(first: &str, second: &str, third: &str) -> String {
+        format!(
+            "package app\n\
+             struct A {{ v : Counter }}\n\
+             struct B {{ v : Counter }}\n\
+             struct C {{ v : Counter }}\n\
+             type Counter : integer [0..255]\n\
+             union U {{ {first} : A, {second} : B, {third} : C }}\n"
+        )
+    }
+
+    /// Row 1 of decision D's table: the pair collides under both transforms.
+    /// This is the shipped defect — the Rust backend emitted the variant
+    /// `FooBar` twice, which `rustc` rejects with E0428.
+    #[test]
+    fn ridl_149_union_arms_colliding_under_both_transforms_are_refused() {
+        let checked = check_source("app", &union_source("foo_bar", "fooBar"));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// Row 2: the pair collides under `camel_case` only. A check keyed on
+    /// `snake_case` alone lets this through, and it is the Rust defect —
+    /// `snake_case` gives `xy` and `x_y`, which both wire backends accept.
+    #[test]
+    fn ridl_149_union_arms_colliding_under_camel_case_only_are_refused() {
+        let checked = check_source("app", &union_source("XY", "x_y"));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// Row 3: the pair collides under `snake_case` only. A check keyed on
+    /// `camel_case` alone lets this through, and it is the wire-backend
+    /// refusal — the Rust variants `HTTPServer` and `HttpServer` compile.
+    #[test]
+    fn ridl_149_union_arms_colliding_under_snake_case_only_are_refused() {
+        let checked = check_source("app", &union_source("HTTPServer", "httpServer"));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+    }
+
+    /// Row 4: a union whose arms collide under neither transform draws
+    /// nothing.
+    #[test]
+    fn ridl_149_union_arms_that_do_not_collide_are_accepted() {
+        let checked = check_source("app", &union_source("httpServer", "fanLevel"));
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// A `reserved` arm holds an ordinal and emits no variant, so it is not
+    /// in the namespace the transforms project into — `emit_union` skips it
+    /// the same way.
+    #[test]
+    fn ridl_149_a_reserved_union_arm_is_not_in_the_checked_namespace() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct A { v : Counter }\n\
+             type Counter : integer [0..255]\n\
+             union U { reserved fooBar, foo_bar : A }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    // --- RIDL-149 names the transform that collided -----------------------
+
+    /// The message hardcoded `snake_case`, which is false of a pair that
+    /// collides under `camel_case` only. The two have different consequences
+    /// — a `camel_case` collision is a Rust defect, a `snake_case` one a wire
+    /// backend refusal — so the message names the transform that collided.
+    #[test]
+    fn ridl_149_names_the_transform_that_collided() {
+        let both = check_source("app", &union_source("foo_bar", "fooBar"));
+        let message = both.diagnostics[0].message.as_str();
+        assert!(
+            message.contains("`foo_bar` under the snake_case name transform")
+                && message.contains("`FooBar` under the camel_case one"),
+            "a pair colliding under both must name both: {message}"
+        );
+
+        let camel = check_source("app", &union_source("XY", "x_y"));
+        let message = camel.diagnostics[0].message.as_str();
+        assert!(
+            message.contains("`XY` under the camel_case name transform"),
+            "a camel_case-only collision must name camel_case: {message}"
+        );
+        assert!(
+            !message.contains("snake_case"),
+            "a camel_case-only collision must not claim a snake_case one: {message}"
+        );
+
+        let snake = check_source("app", &union_source("HTTPServer", "httpServer"));
+        let message = snake.diagnostics[0].message.as_str();
+        assert!(
+            message.contains("`http_server` under the snake_case name transform"),
+            "a snake_case-only collision must name snake_case: {message}"
+        );
+        assert!(
+            !message.contains("camel_case"),
+            "a snake_case-only collision must not claim a camel_case one: {message}"
+        );
+    }
+
+    /// The one secondary label of `diagnostic`, or a panic naming what is
+    /// there. RIDL-149 always carries exactly one.
+    fn only_label(diagnostic: &Diagnostic) -> &str {
+        let [label] = diagnostic.labels.as_slice() else {
+            panic!(
+                "RIDL-149 carries exactly one secondary label, got: {:?}",
+                diagnostic.labels
+            );
+        };
+        label.message.as_str()
+    }
+
+    /// The secondary label names the projection the message reports, for each
+    /// of the three forms. The message test above reads `.message` only, so a
+    /// label that reported the other transform — "`XY` becomes `xy` here" on
+    /// a camel_case-only collision, which is false — would pass it.
+    #[test]
+    fn ridl_149_labels_the_earlier_arm_with_the_projection_that_collided() {
+        let both = check_source("app", &union_source("foo_bar", "fooBar"));
+        assert_eq!(
+            only_label(&both.diagnostics[0]),
+            "`foo_bar` becomes `foo_bar` and `FooBar` here"
+        );
+
+        let camel = check_source("app", &union_source("x_y", "XY"));
+        assert_eq!(only_label(&camel.diagnostics[0]), "`x_y` becomes `XY` here");
+
+        let snake = check_source("app", &union_source("HTTPServer", "httpServer"));
+        assert_eq!(
+            only_label(&snake.diagnostics[0]),
+            "`HTTPServer` becomes `http_server` here"
+        );
+    }
+
+    /// A near miss for the four rows above. The two transforms are not one
+    /// merged transform: a check keyed on `name.to_lowercase().replace('_',
+    /// "")` satisfies every row of decision D's table and the message test,
+    /// and it over-rejects — `ab_c` and `a_bc` share `abc` under it while
+    /// `snake_case` gives `ab_c` and `a_bc` and `camel_case` gives `AbC` and
+    /// `ABc`. The pair is accepted.
+    #[test]
+    fn ridl_149_a_pair_that_collides_only_under_a_merged_transform_is_accepted() {
+        let checked = check_source("app", &union_source("ab_c", "a_bc"));
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// Three arms that collide under different transforms against different
+    /// earlier arms. `x_y` collides with `XY` under `camel_case` alone, and
+    /// `xY` then collides with `XY` under `camel_case` and with `x_y` under
+    /// `snake_case` — two earlier arms, so two reports rather than one
+    /// `Both`. Three diagnostics in all.
+    #[test]
+    fn ridl_149_an_arm_colliding_with_two_different_earlier_arms_reports_each() {
+        let checked = check_source("app", &union_source_3("XY", "x_y", "xY"));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149", "RIDL-149", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        // The second arm against the first, under `camel_case` alone.
+        assert!(
+            checked.diagnostics[0]
+                .message
+                .contains("`x_y` and `XY` both become `XY` under the camel_case"),
+            "got: {}",
+            checked.diagnostics[0].message
+        );
+        // The third arm against the second under `snake_case`, and against
+        // the first under `camel_case`. Neither is a `Both`, because the two
+        // earlier arms are different arms.
+        assert!(
+            checked.diagnostics[1]
+                .message
+                .contains("`xY` and `x_y` both become `x_y` under the snake_case"),
+            "got: {}",
+            checked.diagnostics[1].message
+        );
+        assert!(
+            checked.diagnostics[2]
+                .message
+                .contains("`xY` and `XY` both become `XY` under the camel_case"),
+            "got: {}",
+            checked.diagnostics[2].message
+        );
+    }
+
+    /// The same branch reached through the other transform: `HTTPServer`
+    /// collides with `httpServer` under `snake_case` alone, and `HTTP_Server`
+    /// then collides with `httpServer` under `snake_case` and with
+    /// `HTTPServer` under `camel_case`.
+    #[test]
+    fn ridl_149_a_third_arm_names_the_first_under_snake_and_the_second_under_camel() {
+        let checked = check_source(
+            "app",
+            &union_source_3("httpServer", "HTTPServer", "HTTP_Server"),
+        );
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149", "RIDL-149", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(
+            checked.diagnostics[1].message.contains(
+                "`HTTP_Server` and `httpServer` both become `http_server` under the snake_case"
+            ),
+            "got: {}",
+            checked.diagnostics[1].message
+        );
+        assert!(
+            checked.diagnostics[2].message.contains(
+                "`HTTP_Server` and `HTTPServer` both become `HTTPServer` under the camel_case"
+            ),
+            "got: {}",
+            checked.diagnostics[2].message
+        );
+    }
+
+    /// Three arms that all collide with the first under both transforms. Each
+    /// later arm is reported once, against the arm that keeps the projected
+    /// names — first wins in each map, so the third arm names the first and
+    /// not the second.
+    #[test]
+    fn ridl_149_a_third_arm_colliding_with_the_first_under_both_is_reported_once() {
+        let checked = check_source("app", &union_source_3("fooBar", "foo_bar", "FooBar"));
+        assert_eq!(
+            codes(&checked),
+            vec!["RIDL-149", "RIDL-149"],
+            "got: {:?}",
+            checked.diagnostics
+        );
+        assert!(
+            checked.diagnostics[1]
+                .message
+                .contains("`FooBar` and `fooBar` both become"),
+            "got: {}",
+            checked.diagnostics[1].message
+        );
+        assert_eq!(
+            only_label(&checked.diagnostics[1]),
+            "`fooBar` becomes `foo_bar` and `FooBar` here"
+        );
+    }
+
+    /// An arm name repeated verbatim is not a collision after a transform —
+    /// the transform did nothing — so it is held out of the projection maps
+    /// and draws no RIDL-149, whose message would read "`foo` and `foo` both
+    /// become `foo`". A union has no exact-duplicate rule of its own today:
+    /// that rule is the sibling of TYPL-215 (struct fields) and RIDL-413
+    /// (parameters), and it is tracked on driftsys/ridl#452, not minted here.
+    #[test]
+    fn a_union_arm_repeated_verbatim_draws_no_ridl_149() {
+        let checked = check_source("app", &union_source("foo", "foo"));
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+    }
+
+    /// The member, parameter and struct-field namespaces are checked under
+    /// `snake_case` alone, so their message names that transform and no
+    /// other.
+    #[test]
+    fn ridl_149_over_a_struct_field_names_snake_case_alone() {
+        let checked = check_source(
+            "app",
+            "package app\n\
+             struct Reading {\n\
+               vinNumber : integer [0..1]\n\
+               vin_number : integer [0..1]\n\
+             }\n",
+        );
+        let message = checked.diagnostics[0].message.as_str();
+        assert!(
+            message.contains("`vin_number` under the snake_case name transform"),
+            "got: {message}"
+        );
+        assert!(!message.contains("camel_case"), "got: {message}");
     }
 
     // --- RIDL-149 over struct fields (ADR-0016 decision 4) ----------------

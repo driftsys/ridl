@@ -25,6 +25,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
+use ridl_ir::name::{camel_case, snake_case};
 use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -706,13 +707,21 @@ fn emit_struct(
     }
 }
 
+/// One struct field. The name is projected through the pinned transform
+/// (ADR-0016 decisions 1 and 2): a typl field name is camelCase (typl §15.1)
+/// and reaching generated Rust verbatim draws `non_snake_case` at every
+/// consumer. The `hint` below keeps `camel_case`, because it builds the type
+/// name of an induced tuple struct rather than a field name. That second
+/// projection reaches a namespace RIDL-149 does not check — two field names
+/// distinct under `snake_case` can induce one tuple type name — which is
+/// driftsys/ridl#453, recorded in ADR-0016's consequences.
 fn emit_field(
     parent: &str,
     visibility: i32,
     field: &v2::Field,
     tuples: &mut Vec<InducedTuple>,
 ) -> TokenStream {
-    let field_name = ident(&field.name);
+    let field_name = ident(&snake_case(&field.name));
     let attrs = field_attrs(field);
     let hint = format!("{}{}", camel_case(parent), camel_case(&field.name));
     let ty = field
@@ -915,6 +924,13 @@ fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef, derived: &TokenStream) -> Toke
 /// reached at (see [`InducedTuple`] and [`vis_tokens`]). The fields stay `pub`,
 /// as they are on a declared `struct`: a field's effective visibility is capped
 /// by the item's, so `pub(crate) struct T { pub f: Private }` exposes nothing.
+///
+/// A tuple field name is projected through the pinned transform, the same one
+/// [`emit_field`] applies to a declared struct's field (ADR-0016 decisions 1
+/// and 2). The `hint` below keeps `camel_case`, because it builds a nested
+/// tuple's type name rather than a field name. Neither namespace is checked:
+/// two tuple field names distinct in typl can spell one Rust field name, which
+/// rustc then rejects with E0124 — driftsys/ridl#449.
 fn emit_tuple_struct(
     ctx: &Ctx,
     induced: &InducedTuple,
@@ -929,7 +945,7 @@ fn emit_tuple_struct(
     let vis = vis_tokens(*visibility);
     let derived = derives::tuple_derive_attr(ctx, tuple);
     let fields = tuple.fields.iter().map(|field| {
-        let fname = ident(&field.name);
+        let fname = ident(&snake_case(&field.name));
         let hint = format!("{}{}", name, camel_case(&field.name));
         let ty = field
             .r#type
@@ -1322,21 +1338,6 @@ pub(crate) fn bool_tokens(value: &str) -> TokenStream {
     } else {
         quote! { false }
     }
-}
-
-/// CamelCase of a snake, screaming-snake, or camel name. Used for union variant
-/// names and generated tuple struct names.
-pub(crate) fn camel_case(name: &str) -> String {
-    name.split('_')
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| {
-            let mut chars = segment.chars();
-            match chars.next() {
-                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect()
 }
 
 #[cfg(test)]

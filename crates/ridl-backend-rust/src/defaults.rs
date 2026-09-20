@@ -12,11 +12,10 @@
 //! this backend cannot resolve (it generates one package at a time) and which
 //! T15 computed with full resolution.
 
-use crate::{
-    Ctx, ScalarBacking, backing_scalar, bool_tokens, camel_case, ident, numeric_tokens, type_path,
-};
+use crate::{Ctx, ScalarBacking, backing_scalar, bool_tokens, ident, numeric_tokens, type_path};
 use proc_macro2::TokenStream;
 use quote::quote;
+use ridl_ir::name::{camel_case, snake_case};
 use ridl_ir::v2;
 
 /// The right-hand side of `fn default() -> Self` for a top-level declaration,
@@ -84,7 +83,9 @@ fn struct_default(ctx: &Ctx, name: &str, sd: &v2::StructDef) -> Option<TokenStre
     for member in &sd.members {
         if let Some(v2::struct_member::Member::Field(field)) = &member.member {
             let ft = field.r#type.as_ref()?;
-            let fname = ident(&field.name);
+            // The same projection `emit_field` applies, or the initializer
+            // names a field the struct does not have (ADR-0016 decision 2).
+            let fname = ident(&snake_case(&field.name));
             let hint = format!("{}{}", camel_case(name), camel_case(&field.name));
             let init = field.init.as_ref();
             let slot = Slot {
@@ -112,7 +113,9 @@ pub(crate) fn tuple_default_expr(
     let mut inits = Vec::new();
     for field in &tuple.fields {
         let ft = field.r#type.as_ref()?;
-        let fname = ident(&field.name);
+        // The same projection `emit_tuple_struct` applies, or the initializer
+        // names a field the tuple struct does not have (ADR-0016 decision 2).
+        let fname = ident(&snake_case(&field.name));
         let hint = format!("{}{}", name, camel_case(&field.name));
         let slot = Slot {
             init_value: None,

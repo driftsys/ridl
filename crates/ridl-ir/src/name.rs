@@ -1,9 +1,17 @@
-//! The pinned name transform (ADR-0016 decisions 1 and 2).
+//! The pinned name transforms (ADR-0016 decisions 1 and 2).
 //!
-//! One transform serves every backend whose target namespace is snake_case.
-//! It lives here rather than in a backend because it is a projection — a pure
-//! function from IR identity to a target's namespace — and because `ridl-ir`
-//! is the only crate `ridl-sem` and both backends already depend on.
+//! [`snake_case`] serves every target whose namespace is snake_case, and
+//! [`camel_case`] every target whose namespace is CamelCase — the Rust
+//! backend's union variants and its induced tuple struct names. They live
+//! here rather than in a backend because a projection is a pure function from
+//! IR identity to a target's namespace, and because `ridl-ir` is the only
+//! crate `ridl-sem` and the backends already depend on.
+//!
+//! The two are **incomparable**: neither collision set contains the other.
+//! `XY` and `x_y` collide under [`camel_case`] and not under [`snake_case`];
+//! `HTTPServer` and `httpServer` collide under [`snake_case`] and not under
+//! [`camel_case`]. A namespace projected through both is therefore checked
+//! under both.
 
 /// snake_case of a ridl name: `currentSpeed` becomes `current_speed`.
 ///
@@ -40,9 +48,66 @@ pub fn snake_case(name: &str) -> String {
     out
 }
 
+/// CamelCase of a snake, screaming-snake, or camel name: `foo_bar` becomes
+/// `FooBar`. Used for the Rust backend's union variant names and for the
+/// names of its induced tuple structs.
+///
+/// Each underscore-separated segment has its first character upper-cased and
+/// the rest left as written, so an acronym already spelled in capitals keeps
+/// them (`httpServer` gives `HttpServer`, `HTTPServer` gives `HTTPServer`).
+///
+/// **The transform is not injective**, for two reasons. The underscores it
+/// removes are what distinguished `foo_bar` from `fooBar`, so those two share
+/// an output; and upper-casing a segment's first character destroys the case
+/// that distinguished `fooBar` from `FooBar`, so those two do as well. A
+/// package whose names collide under it is rejected by RIDL-149 (ADR-0016
+/// decision 3 as amended), which is where the projection contract's
+/// injectivity obligation is discharged.
+pub fn camel_case(name: &str) -> String {
+    name.split('_')
+        .filter(|segment| !segment.is_empty())
+        .map(|segment| {
+            let mut chars = segment.chars();
+            match chars.next() {
+                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+                None => String::new(),
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::snake_case;
+    use super::{camel_case, snake_case};
+
+    /// The outputs the docstring names, pinned as values. The relational
+    /// tests below constrain which names share an output, not what that
+    /// output is, so without these a transform composed with any injective
+    /// suffix would satisfy them.
+    #[test]
+    fn camel_case_pins_the_outputs_its_docstring_names() {
+        assert_eq!(camel_case("httpServer"), "HttpServer");
+        assert_eq!(camel_case("HTTPServer"), "HTTPServer");
+        assert_eq!(camel_case("foo_bar"), "FooBar");
+    }
+
+    /// The two sources of non-injectivity the docstring names: the removed
+    /// underscore, and the upper-cased first character.
+    #[test]
+    fn camel_case_is_not_injective_in_two_ways() {
+        assert_eq!(camel_case("foo_bar"), camel_case("fooBar"));
+        assert_eq!(camel_case("fooBar"), camel_case("FooBar"));
+    }
+
+    /// Neither collision set contains the other, which is why a union's arms
+    /// are checked under both (ADR-0016 amendment, Task 11 decision D).
+    #[test]
+    fn the_two_transforms_are_incomparable() {
+        assert_eq!(camel_case("XY"), camel_case("x_y"));
+        assert_ne!(snake_case("XY"), snake_case("x_y"));
+        assert_ne!(camel_case("HTTPServer"), camel_case("httpServer"));
+        assert_eq!(snake_case("HTTPServer"), snake_case("httpServer"));
+    }
 
     #[test]
     fn an_acronym_stays_one_word() {
