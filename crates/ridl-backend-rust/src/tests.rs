@@ -134,6 +134,36 @@ fn warning_bits() -> Vec<v2::EnumValue> {
     ]
 }
 
+/// A `GearPosition`-like enum declaration used by the raw-discriminant
+/// conversion tests.
+fn gear_position_decl() -> v2::Decl {
+    public_decl(
+        "GearPosition",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![
+                enum_value("PARK", 0),
+                enum_value("DRIVE", 1),
+                enum_value("REVERSE", 2),
+                enum_value("NEUTRAL", 3),
+            ],
+            reserved: Vec::new(),
+        }),
+    )
+}
+
+/// A `Features`-like enum set declaration used by the raw bit-pattern
+/// conversion tests.
+fn features_decl() -> v2::Decl {
+    public_decl(
+        "Features",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: warning_bits(),
+            width: v2::IntWidth::U8 as i32,
+        }),
+    )
+}
+
 /// A `Speed`-like unit type declaration used across the small fixtures.
 fn speed_decl() -> v2::Decl {
     v2::Decl {
@@ -759,6 +789,21 @@ fn enumset_standalone_form() {
         }),
     )];
     insta::assert_snapshot!(rust_for(decls));
+}
+
+#[test]
+fn enum_converts_from_a_raw_discriminant() {
+    let source = rust_for(vec![gear_position_decl()]);
+    assert!(source.contains("impl ::core::convert::TryFrom<i64> for GearPosition"));
+    assert!(source.contains("impl ::core::convert::From<GearPosition> for i64"));
+    assert!(source.contains("::ridl_rt::payload::Rule::Variant"));
+}
+
+#[test]
+fn enum_set_rejects_bits_outside_the_declared_mask() {
+    let source = rust_for(vec![features_decl()]);
+    assert!(source.contains("impl ::core::convert::TryFrom<i64> for Features"));
+    assert!(source.contains("const DECLARED_MASK: i64"));
 }
 
 #[test]
@@ -2323,6 +2368,7 @@ pub mod veh {
     let source_path = dir.path().join("appendix_a.rs");
     let meta_path = dir.path().join("appendix_a.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -2335,6 +2381,8 @@ pub mod veh {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");

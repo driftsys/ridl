@@ -657,11 +657,45 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
         quote! { #vdoc #vname = #disc }
     });
 
+    // A raw discriminant off the wire is where an out-of-contract value
+    // actually enters a program: a wire backend emits no constructor
+    // (ADR-0013 decision 2), so this is the validating seam.
+    let arms = ed.values.iter().map(|value| {
+        let vname = ident(&value.name);
+        let disc = int_tokens(value.value);
+        quote! { #disc => ::core::result::Result::Ok(Self::#vname) }
+    });
+    let type_name = decl.name.as_str();
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
+
     quote! {
         #attrs
         #[repr(i64)]
         #vis enum #name {
             #(#variants),*
+        }
+
+        #allow_deprecated
+        impl ::core::convert::TryFrom<i64> for #name {
+            type Error = ::ridl_rt::payload::Violation;
+            fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+                match value {
+                    #(#arms,)*
+                    _ => ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Variant,
+                    }),
+                }
+            }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<#name> for i64 {
+            fn from(value: #name) -> Self { value as i64 }
         }
     }
 }
@@ -680,12 +714,52 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
         quote! { #vis const #bname: #name = #name(1 << #shift); }
     });
 
+    let mask = esd
+        .bits
+        .iter()
+        .fold(0i64, |acc, bit| acc | (1i64 << bit.value));
+    let mask_lit = int_tokens(mask);
+    let type_name = decl.name.as_str();
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
+
     quote! {
         #attrs
         #[repr(transparent)]
-        #vis struct #name(#vis i64);
+        #vis struct #name(i64);
         impl #name {
             #(#bits)*
+
+            #vis const fn get(self) -> i64 { self.0 }
+        }
+
+        #allow_deprecated
+        impl #name {
+            /// The union of every declared bit. A value carrying any other
+            /// bit is not a member of this set (typl §9).
+            #vis const DECLARED_MASK: i64 = #mask_lit;
+        }
+
+        #allow_deprecated
+        impl ::core::convert::TryFrom<i64> for #name {
+            type Error = ::ridl_rt::payload::Violation;
+            fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+                if value & !Self::DECLARED_MASK != 0 {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Variant,
+                    });
+                }
+                ::core::result::Result::Ok(Self(value))
+            }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<#name> for i64 {
+            fn from(value: #name) -> Self { value.0 }
         }
     }
 }

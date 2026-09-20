@@ -3,12 +3,37 @@ source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_for(decls)
 ---
 #[repr(transparent)]
-pub struct WarningFlags(pub i64);
+pub struct WarningFlags(i64);
 impl WarningFlags {
     pub const LOW_FUEL: WarningFlags = WarningFlags(1 << 0);
     pub const CHECK_ENGINE: WarningFlags = WarningFlags(1 << 1);
     pub const DOOR_OPEN: WarningFlags = WarningFlags(1 << 2);
     pub const SEATBELT: WarningFlags = WarningFlags(1 << 3);
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+impl WarningFlags {
+    /// The union of every declared bit. A value carrying any other
+    /// bit is not a member of this set (typl §9).
+    pub const DECLARED_MASK: i64 = 15;
+}
+impl ::core::convert::TryFrom<i64> for WarningFlags {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        if value & !Self::DECLARED_MASK != 0 {
+            return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                type_name: "WarningFlags",
+                rule: ::ridl_rt::payload::Rule::Variant,
+            });
+        }
+        ::core::result::Result::Ok(Self(value))
+    }
+}
+impl ::core::convert::From<WarningFlags> for i64 {
+    fn from(value: WarningFlags) -> Self {
+        value.0
+    }
 }
 impl Default for WarningFlags {
     fn default() -> Self {

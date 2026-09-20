@@ -157,6 +157,26 @@ pub enum LockState {
     UNLOCKED = 0,
     LOCKED = 1,
 }
+impl ::core::convert::TryFrom<i64> for LockState {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        match value {
+            0 => ::core::result::Result::Ok(Self::UNLOCKED),
+            1 => ::core::result::Result::Ok(Self::LOCKED),
+            _ => {
+                ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "LockState",
+                    rule: ::ridl_rt::payload::Rule::Variant,
+                })
+            }
+        }
+    }
+}
+impl ::core::convert::From<LockState> for i64 {
+    fn from(value: LockState) -> Self {
+        value as i64
+    }
+}
 impl Default for LockState {
     fn default() -> Self {
         LockState::UNLOCKED
@@ -180,6 +200,26 @@ pub enum DoorFault {
     JAMMED = 0,
     UNPOWERED = 1,
 }
+impl ::core::convert::TryFrom<i64> for DoorFault {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        match value {
+            0 => ::core::result::Result::Ok(Self::JAMMED),
+            1 => ::core::result::Result::Ok(Self::UNPOWERED),
+            _ => {
+                ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "DoorFault",
+                    rule: ::ridl_rt::payload::Rule::Variant,
+                })
+            }
+        }
+    }
+}
+impl ::core::convert::From<DoorFault> for i64 {
+    fn from(value: DoorFault) -> Self {
+        value as i64
+    }
+}
 impl Default for DoorFault {
     fn default() -> Self {
         DoorFault::JAMMED
@@ -193,6 +233,26 @@ impl Default for DoorFault {
 pub enum DoorFault {
     STUCK = 0,
     NO_POWER = 1,
+}
+impl ::core::convert::TryFrom<i64> for DoorFault {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        match value {
+            0 => ::core::result::Result::Ok(Self::STUCK),
+            1 => ::core::result::Result::Ok(Self::NO_POWER),
+            _ => {
+                ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "DoorFault",
+                    rule: ::ridl_rt::payload::Rule::Variant,
+                })
+            }
+        }
+    }
+}
+impl ::core::convert::From<DoorFault> for i64 {
+    fn from(value: DoorFault) -> Self {
+        value as i64
+    }
 }
 impl Default for DoorFault {
     fn default() -> Self {
