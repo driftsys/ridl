@@ -385,11 +385,11 @@ mechanisms some runtimes have, not interaction semantics every runtime must
 present, so a runtime may omit either.
 
 **Every port trait is implemented for `&mut P`, and the `&self`-only traits also
-for `&P` — impls this module does not yet contain.** For each port trait `T`,
-the crate provides `impl<P: T + ?Sized> T for &mut P`; for the traits whose
-methods all take `&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`,
-`ScannableSignals` and `CoherentSignals` — it also provides
-`impl<P: T + ?Sized> T for &P`. A generated face holds its port by value
+for `&P`.** For each port trait `T`, the crate provides
+`impl<P: T + ?Sized> T for &mut P`; for the traits whose methods all take
+`&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`, `ScannableSignals`
+and `CoherentSignals` — it also provides `impl<P: T + ?Sized> T for &P`. A
+generated face holds its port by value
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5),
 so these impls are what let it be built over a borrow of a handle. An owned
 handle, a `Clone` handle and a wrapper that adds tracing or a test double are
@@ -398,9 +398,7 @@ implements the port traits itself rather than borrowing through them. The impls
 are additive and need no `alloc`; `Box<P>` is not forwarded, because that would
 need `alloc`, which no feature combination of this crate brings in.
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
-records them and the reasoning; until the `ridl-rt` change that follows it
-merges, this paragraph describes impls `crates/ridl-rt/src/port.rs` does not
-contain.
+records them and the reasoning.
 
 **A runtime presents one handle per port role, and this crate adds no `Send` or
 `Sync` bound.** A port role is one port trait. A runtime crate exposes one
