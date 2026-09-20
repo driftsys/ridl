@@ -204,10 +204,30 @@ fn the_pipeline_generate_stays_clean_of_the_face() {
     let face = generate_face(&package).expect("generate_face").rust_source;
 
     assert_ne!(plain, face, "the two entry points must differ");
-    assert!(
-        !dense(&plain).contains("ridl_rt"),
-        "the pipeline generate must name no runtime path",
-    );
+    // A named scalar's constructor names `::ridl_rt::payload::Violation` and
+    // `::ridl_rt::payload::Rule` (typl value objects, Task 3). Every `ridl_rt`
+    // in the output must be one of those two, spelled in full and followed by
+    // a character that cannot continue an identifier: `Ref`, `Payload`,
+    // `VerifyError` and the rest of `payload` are the face's, and a name that
+    // only starts with `Rule` is not `Rule`.
+    let dense_plain = dense(&plain);
+    for (index, _) in dense_plain.match_indices("ridl_rt") {
+        let rest = &dense_plain[index..];
+        let is_constructor_path = ["ridl_rt::payload::Violation", "ridl_rt::payload::Rule"]
+            .iter()
+            .any(|path| {
+                dense_plain[..index].ends_with("::")
+                    && rest.strip_prefix(path).is_some_and(|after| {
+                        !after.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+                    })
+            });
+        assert!(
+            is_constructor_path,
+            "the pipeline generate must name no runtime path outside the constructors, \
+             found `{}`",
+            rest.chars().take(48).collect::<String>(),
+        );
+    }
     assert!(
         !plain.contains("impl ::ridl_rt::contract::Interface"),
         "the pipeline generate must emit no interface descriptor",

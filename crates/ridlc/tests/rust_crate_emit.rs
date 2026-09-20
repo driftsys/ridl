@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 
 use ridlc::Emit;
 
+mod support;
+
 /// Writes a one-package fixture (a `ridl.toml` naming `package_name` and one
 /// source file) into `dir` and returns the package directory, for the package
 /// shapes no corpus fixture has: a name whose segment is a Rust keyword, a
@@ -35,7 +37,12 @@ fn write_package_fixture(dir: &Path, package_name: &str, source: &str) -> PathBu
 /// Compiles `<dir>/lib.rs` as a crate root with `rustc`, which is the only
 /// thing that proves a module tree resolves. Panics with the crate root's own
 /// text when it does not compile.
+///
+/// The `ridl-rt` rlib is built into its own directory, so a test that reads
+/// `dir` afterwards sees only what the build wrote.
 fn compile_crate_root(dir: &Path) {
+    let rlib_dir = tempfile::tempdir().expect("a temp dir is created");
+    let rlib = support::ridl_rt_rlib(rlib_dir.path());
     let status = std::process::Command::new("rustc")
         .current_dir(dir)
         .args([
@@ -48,6 +55,8 @@ fn compile_crate_root(dir: &Path) {
             "-o",
         ])
         .arg(dir.join("out.rmeta"))
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg("lib.rs")
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");
@@ -892,10 +901,8 @@ fn a_previously_generated_crate_root_is_overwritten() {
 /// THE REAL PROOF: the emitted crate root actually compiles with `rustc`,
 /// which is the only thing that proves the module tree resolves — including
 /// every `crate::…` cross-package reference the packages make to each other.
-/// This deliberately does not pass `--extern ridl_rt`: nothing generated names
-/// the runtime crate until Task 3 lands, so the argument would be inert and
-/// would hide an `E0433` if generated code named `ridl_rt` when it should not
-/// yet. Task 3 adds `--extern ridl_rt` to this test.
+/// `compile_crate_root` passes `--extern ridl_rt`, because every generated
+/// named scalar names `::ridl_rt::payload::Violation` from its `new`.
 #[test]
 fn emitted_lib_rs_compiles_with_rustc() {
     let out = tempfile::tempdir().expect("temp dir");

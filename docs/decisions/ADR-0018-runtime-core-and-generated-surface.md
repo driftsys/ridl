@@ -81,8 +81,10 @@ have to implement does not survive being emitted twice.
 
 **And the types below it carry no contract.** A named scalar becomes
 `pub struct Speed(pub f64)`, so `Speed(9999.0)` and `Speed(f64::NAN)` both
-construct and typl's range, unit and step reach Rust as doc comments. Composite
-fields keep the ridl spelling, enum variants come out `FILTER_INVALID`, and no
+constructed at the time of this record, and typl's range, unit and step reach
+Rust as doc comments. Epic 10 added checked construction, so `Speed(9999.0)` no
+longer constructs; `Speed(f64::NAN)` still does (issue #421). Composite fields
+keep the ridl spelling, enum variants come out `FILTER_INVALID`, and no
 generated type carries a derive.
 
 So the elaborate half of the output is unusable and the thin half is unfinished.

@@ -45,19 +45,18 @@ pub struct GenerateError {
     pub message: String,
 }
 
-/// Generates the Rust source for `package`: the domain types only, naming no
-/// runtime.
+/// Generates the Rust source for `package`: the domain types only. The only
+/// runtime paths in its output are the `::ridl_rt::payload::Violation` and
+/// `::ridl_rt::payload::Rule` a named scalar's constructor names (typl value
+/// objects, Task 3); it emits no interaction face.
 ///
 /// This is the pipeline entry point — `ridl --emit rust` and the compiler
-/// corpus run it — and its output is byte-identical to what it was before the
-/// interaction face was added. The face is emitted by the companion
-/// [`generate_face`], not from here, for two reasons the Lane M plan records
-/// ("Where the face is emitted from"): the corpus interfaces carry contract
-/// clauses the M3 clause translator must refuse, and generated code that names
-/// `::ridl_rt` cannot yet be compiled by the corpus proofs, which pass no
-/// `--extern ridl_rt`. Lane C's Epic 10 Task 3 is where generated code first
-/// names the runtime and the proofs first link it; until then the pipeline
-/// keeps this narrow entry point.
+/// corpus run it. The face is emitted by the companion [`generate_face`], not
+/// from here, for the reason the Lane M plan records ("Where the face is
+/// emitted from"): the corpus interfaces carry contract clauses the M3 clause
+/// translator must refuse. The plan's second reason, that the corpus proofs
+/// passed no `--extern ridl_rt`, no longer holds: every compile proof links
+/// the runtime, because every generated named scalar names it.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking. Every
 /// emitted identifier is produced through `ident`, which escapes Rust
@@ -80,10 +79,11 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// point, not the pipeline" decision. The descriptors it appends name
 /// `::ridl_rt` and carry the translated `require`/`ensure` clause bodies, so it
 /// is the only caller of the clause translator, and the only entry point whose
-/// output links the runtime. The domain types come from the same call because
-/// the checked-in fixture is brought in with a single `include!`: the face
-/// names those types, and the orphan rule needs them local to the test crate
-/// for the hand-written `Payload<ReprC>` implementations.
+/// output names the runtime outside a named scalar's constructor. The domain
+/// types come from the same call because the checked-in fixture is brought in
+/// with a single `include!`: the face names those types, and the orphan rule
+/// needs them local to the test crate for the hand-written `Payload<ReprC>`
+/// implementations.
 ///
 /// Total for the same reason [`generate`] is: it returns [`GenerateError`]
 /// rather than panicking, and additionally refuses a contract clause outside
@@ -300,17 +300,227 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> Toke
     quote! { #item #default_impl }
 }
 
-/// A named scalar type becomes a `#[repr(transparent)]` newtype (typl §5.7).
+/// A named scalar becomes a `#[repr(transparent)]` newtype with a private
+/// inner value (typl §5.7). Construction goes through `new`, which enforces
+/// the typl constraints, or `new_unchecked`, which does not.
+///
+/// `Violation` and `Rule` are named by absolute path and nothing is imported:
+/// a typl package may declare a type named `Violation` or `Rule`, and a `use`
+/// of either would collide with that declaration. The leading `::` covers a
+/// package that declares a type named `ridl_rt`. The prelude names the
+/// constructors use — `Result`, `Ok`, `Err`, `TryFrom`, `From` — are absolute
+/// for the same reason: a type name is CamelCase (typl §15.1) and `ridl-sem`
+/// reserves no identifier, so a package may declare `type Result`, and that
+/// struct would shadow the prelude's in the module the constructors share
+/// with it.
+///
+/// A deprecated declaration's impl blocks carry `#[allow(deprecated)]`, with
+/// one exception: the `Default` impl `defaults::decl_default_expr` emits
+/// carries no allow, because `emit_decl` attaches it outside this function.
+/// Each covered impl block uses the deprecated type, and without the allow
+/// the consumer's build draws the `deprecated` lint on code the consumer did
+/// not write.
 fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
-    let attrs = decl_attrs(decl);
+    let doc = doc_attrs(&decl.doc);
+    let unchecked = unchecked_doc(td);
+    // A blank doc line keeps the unchecked note out of the declaration's own
+    // doc paragraph.
+    let separator = if decl.doc.is_empty() || unchecked.is_empty() {
+        quote! {}
+    } else {
+        quote! { #[doc = ""] }
+    };
+    let deprecated = deprecated_attr(decl.deprecated.as_deref());
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
     let vis = vis_tokens(decl.visibility);
+    let type_name = decl.name.as_str();
+
+    let checks = constraint_checks(td, type_name, quote! { value });
+    let getter = scalar_getter(td, vis.clone(), inner.clone());
+
     quote! {
-        #attrs
+        #doc
+        #separator
+        #unchecked
+        #deprecated
         #[repr(transparent)]
-        #vis struct #name(#vis #inner);
+        #vis struct #name(#inner);
+
+        #allow_deprecated
+        impl #name {
+            /// Constructs the value, enforcing its typl constraints.
+            #vis fn new(
+                value: #inner,
+            ) -> ::core::result::Result<Self, ::ridl_rt::payload::Violation> {
+                #checks
+                ::core::result::Result::Ok(Self(value))
+            }
+
+            /// Constructs the value without checking its constraints.
+            ///
+            /// Safe: nothing here relies on the invariant for memory
+            /// soundness. Use it only for a value already known to satisfy
+            /// the contract.
+            #vis const fn new_unchecked(value: #inner) -> Self {
+                Self(value)
+            }
+
+            #getter
+        }
+
+        #allow_deprecated
+        impl ::core::convert::TryFrom<#inner> for #name {
+            type Error = ::ridl_rt::payload::Violation;
+            fn try_from(value: #inner) -> ::core::result::Result<Self, Self::Error> {
+                Self::new(value)
+            }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<#name> for #inner {
+            fn from(value: #name) -> Self {
+                value.0
+            }
+        }
     }
+}
+
+/// The range and length checks for one constraint, as statements that return
+/// early with a `Violation`. Only the branches the constraint carries are
+/// emitted, so a string with a length bound and no range gets only the length
+/// check. The pattern check is not emitted here.
+///
+/// A `min` or `max` is a numeric bound (typl §5.5), so a range check is
+/// emitted only for a float or integer backing; on any other backing the two
+/// are ignored rather than rendered as a literal of the wrong type.
+fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> TokenStream {
+    let Some(c) = td.constraint.as_ref() else {
+        return quote! {};
+    };
+    let mut checks = Vec::new();
+
+    let is_float = match backing_scalar(td) {
+        ScalarBacking::Float => Some(true),
+        ScalarBacking::Integer => Some(false),
+        ScalarBacking::Boolean | ScalarBacking::String | ScalarBacking::Bytes => None,
+    };
+    if let Some(is_float) = is_float {
+        if let Some(min) = c.min.as_deref() {
+            let lit = numeric_tokens(min, is_float);
+            checks.push(quote! {
+                if #value < #lit {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Range,
+                    });
+                }
+            });
+        }
+        // The newtype backing an integer is always `i64` (`newtype_inner`), so
+        // a declared maximum at `i64::MAX` (9223372036854775807) makes
+        // `value > 9223372036854775807` never true: rustc draws its
+        // `unused_comparisons` warning on it in the consumer's build. The
+        // branch is emitted only when the maximum is below the inner type's
+        // maximum.
+        let checked_max = c
+            .max
+            .as_deref()
+            .filter(|max| is_float || max.parse::<i64>() != Ok(i64::MAX));
+        if let Some(max) = checked_max {
+            let lit = numeric_tokens(max, is_float);
+            checks.push(quote! {
+                if #value > #lit {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Range,
+                    });
+                }
+            });
+        }
+    }
+    // Length is in characters for string (typl §5.3) and bytes for bytes
+    // (§5.4), which is why the two use different expressions. The cast is
+    // parenthesized because `as u64 < 8` does not parse: after a cast type,
+    // `<` opens a generic-argument list.
+    if c.len_min.is_some() || c.len_max.is_some() {
+        let len = match backing_scalar(td) {
+            ScalarBacking::String => quote! { (#value.chars().count() as u64) },
+            _ => quote! { (#value.len() as u64) },
+        };
+        // A minimum of 0 is the default length bound of string and bytes
+        // (typl §4.4, §4.5), and `(… as u64) < 0` is never true: rustc draws
+        // its `unused_comparisons` warning on it in the consumer's build. The
+        // branch is emitted only for a positive minimum.
+        if let Some(min) = c.len_min.filter(|min| *min > 0) {
+            let lit = proc_macro2::Literal::u64_unsuffixed(min);
+            checks.push(quote! {
+                if #len < #lit {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
+                }
+            });
+        }
+        if let Some(max) = c.len_max {
+            let lit = proc_macro2::Literal::u64_unsuffixed(max);
+            checks.push(quote! {
+                if #len > #lit {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Length,
+                    });
+                }
+            });
+        }
+    }
+    quote! { #(#checks)* }
+}
+
+/// The accessor. A `Copy` backing returns by value from a `const fn`; `String`
+/// and `Vec<u8>` borrow, and gain `into_inner` for the owned form.
+///
+/// `backing_scalar` is total: it maps a unit backing and an absent backing to
+/// `Float`, so every named scalar gets exactly one of the three forms.
+fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> TokenStream {
+    match backing_scalar(td) {
+        ScalarBacking::String => quote! {
+            #vis fn get(&self) -> &str { &self.0 }
+            #vis fn into_inner(self) -> String { self.0 }
+        },
+        ScalarBacking::Bytes => quote! {
+            #vis fn get(&self) -> &[u8] { &self.0 }
+            #vis fn into_inner(self) -> Vec<u8> { self.0 }
+        },
+        _ => quote! {
+            #vis const fn get(self) -> #inner { self.0 }
+        },
+    }
+}
+
+/// The gaps a generated constructor does not close, named on the type itself
+/// rather than left silent: a `step` is not checked by `new`, and neither is
+/// a `match` pattern until the pattern check lands. `pattern_const` is read as
+/// well as `pattern`, because a pattern constant that did not resolve leaves
+/// `pattern` absent while the type still carries a match constraint.
+fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
+    let Some(c) = td.constraint.as_ref() else {
+        return quote! {};
+    };
+    let mut lines = Vec::new();
+    if c.step.is_some() {
+        lines.push(" Quantization (`step`) is not checked by `new`.");
+    }
+    if c.pattern.is_some() || c.pattern_const.is_some() {
+        lines.push(" The `match` pattern is not checked by `new`.");
+    }
+    quote! { #(#[doc = #lines])* }
 }
 
 /// A constant becomes a `pub const`. A constant of a `String`-backed named type
@@ -343,17 +553,17 @@ fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
             ScalarBacking::Float => {
                 let value = numeric_tokens(&cd.value, true);
                 let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name(#value); }
+                quote! { #attrs #vis const #name: #type_name = #type_name::new_unchecked(#value); }
             }
             ScalarBacking::Integer => {
                 let value = numeric_tokens(&cd.value, false);
                 let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name(#value); }
+                quote! { #attrs #vis const #name: #type_name = #type_name::new_unchecked(#value); }
             }
             ScalarBacking::Boolean => {
                 let value = bool_tokens(&cd.value);
                 let type_name = type_path(type_ref);
-                quote! { #attrs #vis const #name: #type_name = #type_name(#value); }
+                quote! { #attrs #vis const #name: #type_name = #type_name::new_unchecked(#value); }
             }
             ScalarBacking::String => {
                 let value = cd.value.as_str();
