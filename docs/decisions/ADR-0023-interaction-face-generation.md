@@ -6,10 +6,11 @@ Accepted — 2026-09-19. Scope: four decisions taken while implementing story
 E11.13, the MVP of the generated `Client`/`Publisher`/`Provider`/`dispatch` face
 ADR-0018 decision 15 restores as the runtime layer's "phase 2". Two settle a
 mechanism the approved design left unnamed; two supersede or close a gap in that
-design's example signatures. All four bind every later story that extends the
-Rust backend's interaction face, until superseded: E5.1 (the clause translator),
-Epic 10 (the entry-point split), and any later language backend that follows
-this precedent (ADR-0020 decision 7).
+design's example signatures. All four, and the 2026-09-20 amendment below that
+adds a fifth and amends decision 4, bind every later story that extends the Rust
+backend's interaction face, until superseded: E5.1 (the clause translator), Epic
+10 (the entry-point split), and any later language backend that follows this
+precedent (ADR-0020 decision 7).
 
 Written from lane M's stage M3, on delegated authority — the approved design,
 now
@@ -20,6 +21,18 @@ its reasoning so it can be read and overturned. The as-built architecture these
 decisions produced is
 [the interaction-face design record](../design/interaction-face.md); this record
 is the reasoning behind the choices that had more than one defensible answer.
+
+**Amendment (2026-09-20) — decision 4 amended, and a fifth decision.** An
+assessment of the face and the ports on 2026-09-20 found two shapes an
+application pays for on every use: a face borrows its port mutably for its whole
+life, so one runtime value can be held by one face at a time and by none while
+`dispatch` runs; and a `Correlation` does not know whether it names a command or
+a query, so `ack` on a query's correlation returns `None` forever. Decision 5
+answers the first and decision 4's amendment the second. Sebastien took both on
+2026-09-20, as D-1 and D-4 of the face-and-port ergonomics note; the disposition
+is recorded on driftsys/ridl#429. Both change emitted code, and until lane R's
+face change merges this record is ahead of
+`crates/ridl-backend-rust/src/face.rs` and the checked-in fixture.
 
 ## Context
 
@@ -116,6 +129,44 @@ never stated.
    conversion between two error types. This closes a gap the design left open
    rather than overriding a stated decision.
 
+   **Amendment (2026-09-20) — the success half is the call's own correlation
+   newtype.** The error half is unchanged: a send still returns `SendError`, for
+   the reason above. The success half is no longer the bare
+   `ridl_rt::contract::Correlation` but a `Copy` newtype the face emits per call
+   — `SetLevelCorrelation(Correlation)` for a command,
+   `AverageCorrelation(Correlation)` for a query — so a send method returns its
+   own call's newtype, `average_reply` takes `AverageCorrelation`, and the
+   interface-wide `ack` becomes one `set_level_ack(SetLevelCorrelation)` per
+   command. A query's correlation then cannot reach an `ack`, and a command's
+   cannot reach a `*_reply`; before this amendment both compiled, and
+   `Caller::ack` on a query's correlation returned `None` forever with nothing
+   in the type to say it always would. The newtype is the face's, not the
+   port's: `Correlation` and `ClaimId` in `ridl-rt` stay untyped `u64` newtypes
+   ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md)), because a port carries
+   interface numbers, ordinals and bytes and never a payload type, while which
+   interaction a correlation belongs to is a payload-shaped fact. Keeping it in
+   the face also makes the change codegen-only: no runtime, and no consumer of
+   `ridl-rt` that is not generated code, is touched.
+
+5. **Amendment (2026-09-20) — a generated face holds its port by value and has
+   no lifetime parameter.** `Client<P>` and `Publisher<W>` hold `P` and `W`
+   rather than `&'a mut P` and `&'a mut W`, and `new` takes the port by value.
+   The bounds are unchanged: a `Client` still carries exactly the port traits
+   its interface needs, and the catalog check
+   [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 3 places once at
+   construction still has a constructor to live in. What changes is what a face
+   can be built over. A borrowed port still works — `Client::new(&mut port)`
+   compiles with `P` inferred as `&mut Runtime`, under the forwarding impls of
+   ADR-0021 decision 11 — and so now does an owned handle, a `Clone` handle, or
+   any wrapper that forwards the port traits. Under the borrowed form a runtime
+   implementing every port on one value could be held by one face at a time and
+   by none while `dispatch` ran over it, which is why the round-trip tests build
+   a face inside a block, drop it, and build another for the next step; a
+   component that reads a signal, sends a command and later polls the reply had
+   to rebuild its `Client` at each step. This decision **supersedes** the M1
+   design's `Client<'a, P>` and `Publisher<'a, W>` shape. It rests on ADR-0021
+   decision 11 for the borrowed case, so it must not land before it.
+
 ## Alternatives considered
 
 | Alternative                                                                             | Why not                                                                                                                                                                                                                                         |
@@ -126,6 +177,9 @@ never stated.
 | Take the `--extern ridl_rt` flag in the pipeline proof now, ahead of Epic 10 Task 3     | Pre-empts an in-flight lane's own task and removes the detector that task's proof exists to provide.                                                                                                                                            |
 | A `Provider` method takes its argument by value, as the M1 design's example showed      | Does not compile: `dispatch` reads the argument again after the provider returns, and the generated payload types are neither `Copy` nor `Clone`. See decision 3.                                                                               |
 | Map a client-side `require` failure into `CallError`, reusing the settlement vocabulary | Invents a conversion no port performs; `SendError` is what `Caller` itself already returns and already carries `Contract`. See decision 4.                                                                                                      |
+| A stateless face, every generated method taking the port as an argument                 | Removes the borrow, but adds a parameter to every generated method and leaves nowhere for the once-at-construction catalog check of ADR-0021 decision 3. See decision 5.                                                                        |
+| Keep `Client<'a, P>`, and ask every runtime to hand out short-lived ports               | Moves the cost into every runtime rather than removing it, and still admits no owned handle and no wrapper. See decision 5.                                                                                                                     |
+| `Correlation<K>` in `ridl-rt`, typed by a marker `K`                                    | Types the port, which contradicts the rule that a port carries identity and bytes and never a payload type, and makes every runtime carry a type parameter it never reads. See decision 4's amendment.                                          |
 
 ## Consequences
 
@@ -148,6 +202,17 @@ never stated.
   backend's own test tree can generate one yet. This is deliberate (ADR-0018
   decision 15) and is expected to be revisited once Epic 10 Task 3 lands the
   `--extern ridl_rt` proof `generate`'s own tests currently withhold.
+- Positive — added 2026-09-20: a face can be built over an owned handle, a
+  borrowed port or any wrapper that forwards the port traits, rather than only
+  over a mutable borrow of a runtime's own value (decision 5); and a correlation
+  cannot reach the wrong method, so the `None` that `Caller::ack` returns
+  forever for a query is unreachable from generated code (decision 4's
+  amendment).
+- Negative — added 2026-09-20: both amendments change the emitted face, so every
+  consumer written against the E11.13 shape is edited once. The MVP is
+  in-process and its only consumers are this backend's own tests and the
+  checked-in fixture, which is why the change is taken now rather than after
+  E11.9 builds the first runtime against it.
 - Neutral: decisions 3 and 4 are signature choices with no behavioural
   alternative once decision 1's translator and decision 2's clause-holding
   `dispatch` are fixed; they are recorded here because the M1 design's example
@@ -166,7 +231,11 @@ never stated.
   the runtime layering, and the later `CodegenRequest`/`CodegenResponse` entry
   point decision 2 is the less-committed choice against
 - [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) — the `ridl-rt` API this
-  face's generated code calls: `Payload`, the ports, `SendError`, `CallError`
+  face's generated code calls: `Payload`, the ports, `SendError`, `CallError`;
+  decision 3 is the catalog check decision 5 keeps in the constructor, and
+  decision 11 is the forwarding impls decision 5 rests on for the borrowed case
+- driftsys/ridl#429 — the face-and-port ergonomics note, and the disposition
+  that ratifies D-1 and D-4 as the 2026-09-20 amendment
 - [the interaction-face design record](../design/interaction-face.md) — the
   as-built architecture these decisions produced
 - [`2026-09-16-interaction-face-v0-design.md`](../archive/2026-09-16-interaction-face-v0-design.md)
