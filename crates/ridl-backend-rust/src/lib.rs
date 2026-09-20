@@ -47,8 +47,9 @@ pub struct GenerateError {
 
 /// Generates the Rust source for `package`: the domain types only. The only
 /// runtime paths in its output are the `::ridl_rt::payload::Violation` and
-/// `::ridl_rt::payload::Rule` a named scalar's constructor names (typl value
-/// objects, Task 3); it emits no interaction face.
+/// `::ridl_rt::payload::Rule` that a named scalar's constructor (typl value
+/// objects, Task 3) and an enum's or enum set's `TryFrom<i64>` (Task 5) name;
+/// it emits no interaction face.
 ///
 /// This is the pipeline entry point — `ridl --emit rust` and the compiler
 /// corpus run it. The face is emitted by the companion [`generate_face`], not
@@ -56,7 +57,9 @@ pub struct GenerateError {
 /// emitted from"): the corpus interfaces carry contract clauses the M3 clause
 /// translator must refuse. The plan's second reason, that the corpus proofs
 /// passed no `--extern ridl_rt`, no longer holds: every compile proof links
-/// the runtime, because every generated named scalar names it.
+/// the runtime, because a generated named scalar, enum and enum set all name
+/// it. A package of pure `enum` and `enumset` declarations, with no named
+/// scalar at all, still depends on `ridl-rt`.
 ///
 /// The call is total: it returns [`GenerateError`] rather than panicking. Every
 /// emitted identifier is produced through `ident`, which escapes Rust
@@ -79,8 +82,9 @@ pub fn generate(package: &v2::Package) -> Result<Generated, GenerateError> {
 /// point, not the pipeline" decision. The descriptors it appends name
 /// `::ridl_rt` and carry the translated `require`/`ensure` clause bodies, so it
 /// is the only caller of the clause translator, and the only entry point whose
-/// output names the runtime outside a named scalar's constructor. The domain
-/// types come from the same call because the checked-in fixture is brought in
+/// output names the runtime outside the domain types' own constructors and
+/// conversions. The domain types come from the same call because the
+/// checked-in fixture is brought in
 /// with a single `include!`: the face names those types, and the orphan rule
 /// needs them local to the test crate for the hand-written `Payload<ReprC>`
 /// implementations.
@@ -657,11 +661,45 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
         quote! { #vdoc #vname = #disc }
     });
 
+    // A raw discriminant off the wire is where an out-of-contract value
+    // actually enters a program: a wire backend emits no constructor
+    // (ADR-0013 decision 2), so this is the validating seam.
+    let arms = ed.values.iter().map(|value| {
+        let vname = ident(&value.name);
+        let disc = int_tokens(value.value);
+        quote! { #disc => ::core::result::Result::Ok(Self::#vname) }
+    });
+    let type_name = decl.name.as_str();
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
+
     quote! {
         #attrs
         #[repr(i64)]
         #vis enum #name {
             #(#variants),*
+        }
+
+        #allow_deprecated
+        impl ::core::convert::TryFrom<i64> for #name {
+            type Error = ::ridl_rt::payload::Violation;
+            fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+                match value {
+                    #(#arms,)*
+                    _ => ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Variant,
+                    }),
+                }
+            }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<#name> for i64 {
+            fn from(value: #name) -> Self { value as i64 }
         }
     }
 }
@@ -669,6 +707,18 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
 /// An enum set becomes a `#[repr(transparent)]` newtype over `i64` (the
 /// language layer width, Appendix D) with one associated bit constant per bit
 /// position (typl §9).
+///
+/// The inner value is private, as a named scalar's is and for the same reason
+/// ([`emit_type_def`]): a raw bit pattern enters through `TryFrom<i64>`, which
+/// refuses a value carrying an undeclared bit. `get` reads it back.
+///
+/// The bit constants, `DECLARED_MASK` and `get` share one inherent impl block
+/// so that a deprecated declaration carries `#[allow(deprecated)]` over all
+/// three. The `impl` header itself names the deprecated type, as do the bit
+/// constants and `get`; `DECLARED_MASK` names only `i64`, and is covered
+/// because it shares the block. Without the allow the consumer's build draws
+/// the `deprecated` lint on code the consumer did not write — which is what
+/// driftsys/ridl#420 settled for a named scalar's impl blocks.
 fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
     let name = ident(&decl.name);
     let attrs = decl_attrs(decl);
@@ -680,12 +730,80 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
         quote! { #vis const #bname: #name = #name(1 << #shift); }
     });
 
+    // Refusing a value that carries an undeclared bit is this backend's
+    // reading, not a rule the reference states. typl §9 fixes a bit's
+    // identity as its declared position and infers the width from the highest
+    // one; it says nothing about what an undeclared bit means. The reading is
+    // in tension with `ridl-diff`, whose `EnumSetDef` arm classifies an
+    // appended bit as compatible outright — it calls `appended_slot` with an
+    // empty retired set, so an enum set has no retired half the way an enum's
+    // values do (`crates/ridl-diff/src/classify.rs`). A producer that appends
+    // a bit on that advice sends a value an older consumer's `TryFrom` then
+    // refuses whole, rather than ignoring the bit it does not know. Whether
+    // an enum set is closed or open on the wire is recorded as an open
+    // question rather than settled here, because settling it changes that arm
+    // of `ridl-diff` as well as this backend.
+    //
+    // A bit outside the int64 domain contributes nothing to the mask rather
+    // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside
+    // 0..=63 and still carries the bit into the IR — its range guard covers
+    // the width it derives, not the value it stores — so this fold can be
+    // handed one. `1i64 << 64` panics in a debug build, and codegen is total:
+    // every failure is a `GenerateError` value, never a panic.
+    //
+    // The filter covers the fold alone, and that is all it is for. The bit
+    // constants still emit `#name(1 << 64)` as source text, which rustc
+    // rejects under its deny-by-default `arithmetic_overflow`, and the mask
+    // then omits a bit the type publishes as a constant. Both are reachable
+    // only on a package the checker has already failed with TYPL-111, so no
+    // build that produces usable output reaches either. The filter keeps the
+    // compiler from panicking; it does not make such a package emit sound
+    // code.
+    let mask = esd
+        .bits
+        .iter()
+        .filter(|bit| (0..=63).contains(&bit.value))
+        .fold(0i64, |acc, bit| acc | (1i64 << bit.value));
+    let mask_lit = int_tokens(mask);
+    let type_name = decl.name.as_str();
+    let allow_deprecated = if decl.deprecated.is_some() {
+        quote! { #[allow(deprecated)] }
+    } else {
+        quote! {}
+    };
+
     quote! {
         #attrs
         #[repr(transparent)]
-        #vis struct #name(#vis i64);
+        #vis struct #name(i64);
+        #allow_deprecated
         impl #name {
             #(#bits)*
+
+            /// The union of every declared bit. `TryFrom` refuses a value
+            /// that carries any other bit.
+            #vis const DECLARED_MASK: i64 = #mask_lit;
+
+            #vis const fn get(self) -> i64 { self.0 }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::TryFrom<i64> for #name {
+            type Error = ::ridl_rt::payload::Violation;
+            fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+                if value & !Self::DECLARED_MASK != 0 {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Variant,
+                    });
+                }
+                ::core::result::Result::Ok(Self(value))
+            }
+        }
+
+        #allow_deprecated
+        impl ::core::convert::From<#name> for i64 {
+            fn from(value: #name) -> Self { value.0 }
         }
     }
 }

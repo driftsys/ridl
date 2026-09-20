@@ -134,6 +134,42 @@ fn warning_bits() -> Vec<v2::EnumValue> {
     ]
 }
 
+/// A `GearPosition`-like enum declaration used by the raw-discriminant
+/// conversion tests.
+///
+/// The discriminants are deliberately not contiguous from zero, which is what
+/// the `enum_with_discriminants` snapshot fixture uses. A conversion built
+/// from each variant's position rather than its declared value emits the same
+/// source for a contiguous fixture, so a gap is what makes the arm mapping
+/// observable.
+fn gear_position_decl() -> v2::Decl {
+    public_decl(
+        "GearPosition",
+        v2::decl::Kind::EnumDef(v2::EnumDef {
+            values: vec![
+                enum_value("PARK", 0),
+                enum_value("DRIVE", 1),
+                enum_value("REVERSE", 7),
+                enum_value("NEUTRAL", 9),
+            ],
+            reserved: Vec::new(),
+        }),
+    )
+}
+
+/// A `Features`-like enum set declaration used by the raw bit-pattern
+/// conversion tests.
+fn features_decl() -> v2::Decl {
+    public_decl(
+        "Features",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: warning_bits(),
+            width: v2::IntWidth::U8 as i32,
+        }),
+    )
+}
+
 /// A `Speed`-like unit type declaration used across the small fixtures.
 fn speed_decl() -> v2::Decl {
     v2::Decl {
@@ -759,6 +795,146 @@ fn enumset_standalone_form() {
         }),
     )];
     insta::assert_snapshot!(rust_for(decls));
+}
+
+#[test]
+fn enum_converts_from_a_raw_discriminant() {
+    let source = rust_for(vec![gear_position_decl()]);
+    assert!(source.contains("impl ::core::convert::TryFrom<i64> for GearPosition"));
+    assert!(source.contains("impl ::core::convert::From<GearPosition> for i64"));
+    assert!(source.contains("::ridl_rt::payload::Rule::Variant"));
+    // Each arm carries the declared discriminant, not the variant's position.
+    // Asserting one arm of the gap is what distinguishes the two: over a
+    // fixture numbered contiguously from zero, arms built from the position
+    // emit identical source.
+    assert!(
+        source.contains("7 => ::core::result::Result::Ok(Self::REVERSE)"),
+        "the arm maps the declared discriminant, got:\n{source}"
+    );
+}
+
+#[test]
+fn enum_set_rejects_bits_outside_the_declared_mask() {
+    let source = rust_for(vec![features_decl()]);
+    assert!(source.contains("impl ::core::convert::TryFrom<i64> for Features"));
+    // The declared bits are positions 0 to 3, so the mask is 0b1111. The
+    // value is asserted rather than the constant's presence: a fold that
+    // ORed the bit positions instead of shifting by them would still emit a
+    // `DECLARED_MASK`, and would still pass a presence check.
+    assert!(
+        source.contains("const DECLARED_MASK: i64 = 15"),
+        "the mask is the union of the declared bits, got:\n{source}"
+    );
+}
+
+#[test]
+fn a_bit_position_outside_the_int64_domain_does_not_panic_codegen() {
+    // `ridl-sem` reports TYPL-111 for a position outside 0..=63 and still
+    // carries the bit into the IR, so codegen is handed one. Folding it into
+    // the mask would shift by 64 and panic in a debug build; codegen is
+    // total, so the bit contributes nothing and the checker's diagnostic is
+    // what reports it.
+    let source = rust_for(vec![public_decl(
+        "Odd",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![
+                enum_value("IN_DOMAIN", 1),
+                enum_value("TOO_HIGH", 64),
+                enum_value("NEGATIVE", -1),
+            ],
+            width: v2::IntWidth::U8 as i32,
+        }),
+    )]);
+    assert!(
+        source.contains("const DECLARED_MASK: i64 = 2"),
+        "only the in-domain bit reaches the mask, got:\n{source}"
+    );
+}
+
+#[test]
+fn the_highest_declared_bit_is_in_domain() {
+    // Bit 63 is the highest position the int64 domain admits (typl §9.3), so
+    // it belongs in the mask. The domain guard is an inclusive range for this
+    // reason: an exclusive one would drop a declared bit, and `TryFrom` would
+    // then refuse a value that is in contract.
+    let source = rust_for(vec![public_decl(
+        "Wide",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![enum_value("TOP", 63)],
+            width: v2::IntWidth::U64 as i32,
+        }),
+    )]);
+    assert!(
+        source.contains("const DECLARED_MASK: i64 = -9223372036854775808"),
+        "bit 63 is in the mask, got:\n{source}"
+    );
+}
+
+/// The `#[allow(deprecated)]` branch of `emit_enum` and `emit_enum_set`.
+///
+/// [`a_deprecated_scalar_allows_deprecated_on_its_impls`] covers
+/// `emit_type_def` only. A deprecated enum or enum set reaches neither of the
+/// two emitters this exercises, so without this test both branches could be
+/// replaced by an empty token stream with nothing failing.
+#[test]
+fn a_deprecated_enum_and_enum_set_allow_deprecated_on_their_impls() {
+    let source = rust_for(vec![
+        v2::Decl {
+            deprecated: Some("use Gear".to_string()),
+            ..gear_position_decl()
+        },
+        v2::Decl {
+            deprecated: Some("use Flags".to_string()),
+            ..features_decl()
+        },
+    ]);
+    // The enum's two trait impls, and the enum set's inherent block and two
+    // trait impls. A lower bound, not an exact total: `defaults.rs` emits a
+    // `Default` impl that still draws the lint, and closing that gap must not
+    // fail this test.
+    assert!(
+        source.matches("#[allow(deprecated)]").count() >= 5,
+        "each generated impl of a deprecated enum or enum set allows the lint, got:\n{source}"
+    );
+    let plain = rust_for(vec![gear_position_decl(), features_decl()]);
+    assert!(
+        !plain.contains("allow(deprecated)"),
+        "declarations that are not deprecated allow nothing, got:\n{plain}"
+    );
+}
+
+#[test]
+fn an_internal_enum_set_keeps_its_visibility_on_every_generated_item() {
+    // The mask and the accessor carry the declaration's visibility, as the
+    // bit constants do.
+    //
+    // No lint catches a literal `pub` here. An associated item's effective
+    // visibility is capped by the impl's self type, so `pub const` inside an
+    // inherent impl of a `pub(crate)` type is accepted in silence — checked
+    // with rustc under `-D private-interfaces -D private-bounds`, which exits
+    // 0. `private_interfaces` fires on a public field or signature that
+    // exposes a private type, which is the driftsys/ridl#161 shape and not
+    // this one. This assertion is the only thing that observes the
+    // visibility, so do not weaken it on the assumption that the corpus
+    // proof's lint flags would catch a regression.
+    let source = rust_for(vec![v2::Decl {
+        visibility: v2::Visibility::Internal as i32,
+        ..features_decl()
+    }]);
+    assert!(
+        source.contains("pub(crate) const DECLARED_MASK"),
+        "the mask carries the declaration's visibility, got:\n{source}"
+    );
+    assert!(
+        source.contains("pub(crate) const fn get"),
+        "the accessor carries the declaration's visibility, got:\n{source}"
+    );
+    assert!(
+        !source.contains("pub const "),
+        "no generated item of an internal enum set is public, got:\n{source}"
+    );
 }
 
 #[test]
@@ -1866,6 +2042,90 @@ pub mod ridl {
     );
 }
 
+/// The generated conversions are compiled **and run**.
+///
+/// Every other proof in this file stops at `--emit metadata`, which
+/// type-checks the emitted source and never evaluates it. That leaves the
+/// semantics of the validating seam resting on the snapshots alone, and the
+/// task's own workflow blesses a snapshot with `--accept`, so a wrong
+/// emission introduced alongside a right one is written into the `.snap` in
+/// the same command and never fails again. Inverting the enum set's mask test
+/// to `value & Self::DECLARED_MASK != 0` type-checks, so only an executed
+/// assertion catches it.
+#[test]
+fn the_generated_conversions_run() {
+    let source = format!(
+        "{}\n{}",
+        rust_for(vec![gear_position_decl(), features_decl()]),
+        r#"
+fn main() {
+    // The declared discriminants are 0, 1, 7, 9 — not contiguous, so a
+    // conversion keyed on the variant's position would map 7 to nothing.
+    match GearPosition::try_from(7) {
+        Ok(GearPosition::REVERSE) => {}
+        _ => panic!("7 is REVERSE"),
+    }
+    // 2 is a gap in the declared discriminants, so it is out of contract.
+    match GearPosition::try_from(2) {
+        Err(v) => assert_eq!(v.rule, ::ridl_rt::payload::Rule::Variant),
+        Ok(_) => panic!("2 names no declared variant"),
+    }
+    assert_eq!(i64::from(GearPosition::NEUTRAL), 9);
+
+    // Bits 0 to 3 are declared, so the mask is 0b1111.
+    assert_eq!(Features::DECLARED_MASK, 15);
+    // Bits 0 and 2, both declared.
+    match Features::try_from(5) {
+        Ok(f) => assert_eq!(f.get(), 5),
+        Err(_) => panic!("5 carries only declared bits"),
+    }
+    // Bit 4 is not declared. This is the assertion that fails if the mask
+    // test is inverted.
+    match Features::try_from(16) {
+        Err(v) => assert_eq!(v.rule, ::ridl_rt::payload::Rule::Variant),
+        Ok(_) => panic!("16 carries an undeclared bit"),
+    }
+    // A declared bit on its own is accepted, so the test above is not passing
+    // because everything is refused.
+    match Features::try_from(8) {
+        Ok(f) => assert_eq!(f.get(), 8),
+        Err(_) => panic!("8 is the declared bit 3"),
+    }
+    assert_eq!(i64::from(Features::LOW_FUEL), 1);
+}
+"#
+    );
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("conversions.rs");
+    let bin_path = dir.path().join("conversions");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+
+    let status = std::process::Command::new("rustc")
+        .args(["--edition", "2024", "--crate-type", "bin"])
+        .arg("-o")
+        .arg(&bin_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "the generated conversions must compile, source:\n{source}"
+    );
+
+    let run = std::process::Command::new(&bin_path)
+        .output()
+        .expect("the compiled program runs");
+    assert!(
+        run.status.success(),
+        "the generated conversions must behave as declared, stderr:\n{}",
+        String::from_utf8_lossy(&run.stderr)
+    );
+}
+
 /// A package whose collection fields are Default-constructible, so the array
 /// and map default forms (`core::array::from_fn`, range-map collect) are
 /// emitted and compiled.
@@ -2323,6 +2583,7 @@ pub mod veh {
     let source_path = dir.path().join("appendix_a.rs");
     let meta_path = dir.path().join("appendix_a.rmeta");
     std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
 
     let status = std::process::Command::new("rustc")
         .args([
@@ -2335,6 +2596,8 @@ pub mod veh {
         ])
         .arg("-o")
         .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
         .arg(&source_path)
         .status()
         .expect("rustc must be installed and runnable for this test to be meaningful");

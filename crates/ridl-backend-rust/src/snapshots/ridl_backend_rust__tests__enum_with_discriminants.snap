@@ -9,6 +9,28 @@ pub enum GearPosition {
     REVERSE = 2,
     NEUTRAL = 3,
 }
+impl ::core::convert::TryFrom<i64> for GearPosition {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        match value {
+            0 => ::core::result::Result::Ok(Self::PARK),
+            1 => ::core::result::Result::Ok(Self::DRIVE),
+            2 => ::core::result::Result::Ok(Self::REVERSE),
+            3 => ::core::result::Result::Ok(Self::NEUTRAL),
+            _ => {
+                ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "GearPosition",
+                    rule: ::ridl_rt::payload::Rule::Variant,
+                })
+            }
+        }
+    }
+}
+impl ::core::convert::From<GearPosition> for i64 {
+    fn from(value: GearPosition) -> Self {
+        value as i64
+    }
+}
 impl Default for GearPosition {
     fn default() -> Self {
         GearPosition::PARK

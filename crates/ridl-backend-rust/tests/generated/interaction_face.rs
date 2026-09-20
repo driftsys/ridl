@@ -204,6 +204,27 @@ pub enum Health {
     WARN = 1,
     FAIL = 2,
 }
+impl ::core::convert::TryFrom<i64> for Health {
+    type Error = ::ridl_rt::payload::Violation;
+    fn try_from(value: i64) -> ::core::result::Result<Self, Self::Error> {
+        match value {
+            0 => ::core::result::Result::Ok(Self::OK),
+            1 => ::core::result::Result::Ok(Self::WARN),
+            2 => ::core::result::Result::Ok(Self::FAIL),
+            _ => {
+                ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                    type_name: "Health",
+                    rule: ::ridl_rt::payload::Rule::Variant,
+                })
+            }
+        }
+    }
+}
+impl ::core::convert::From<Health> for i64 {
+    fn from(value: Health) -> Self {
+        value as i64
+    }
+}
 impl Default for Health {
     fn default() -> Self {
         Health::OK

@@ -1145,6 +1145,24 @@ latter with Error = Infallible."
 
 **Model:** Sonnet (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
+**Landed** in driftsys/ridl#433. Review corrected the mask fold, which panicked
+in a debug build on a bit position `ridl-sem` reports TYPL-111 for and still
+carries into the IR, and merged the enum set's two impl blocks so
+`#[allow(deprecated)]` covers the bit constants. Both corrections and their
+reasons are in the pull request.
+
+**The blocks below are a summary of what landed, not a transcript of it.** They
+were brought in line with the shipped behaviour so that replaying this task does
+not reintroduce either defect, but they are shorter than the source: the
+comments are paraphrased, and `crates/ridl-backend-rust/src/lib.rs` carries
+reasoning that has no counterpart here — the whole `ridl-diff` paragraph on
+whether an enum set is closed or open on the wire, and the impl-merge rationale,
+which is a rustdoc comment on `emit_enum_set` rather than a comment inside
+`quote!`. Step 1 below is likewise the test as first written; the landed test
+also asserts the arm mapping, `7 => ::core::result::Result::Ok(Self::REVERSE)`,
+which is what makes the discriminant gap in the fixture mean anything. **Read
+the source, not this, before changing any of it.**
+
 **Files:**
 
 - Modify: `crates/ridl-backend-rust/src/lib.rs` — `emit_enum`, `emit_enum_set`
@@ -1183,7 +1201,7 @@ let allow_deprecated = if decl.deprecated.is_some() {
 
 and prefixes each impl block with `#allow_deprecated`. Do the same here.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
@@ -1198,7 +1216,10 @@ fn enum_converts_from_a_raw_discriminant() {
 fn enum_set_rejects_bits_outside_the_declared_mask() {
     let source = rust_for(vec![features_decl()]);
     assert!(source.contains("impl ::core::convert::TryFrom<i64> for Features"));
-    assert!(source.contains("const DECLARED_MASK: i64"));
+    // The declared bits are 0 to 3, so the mask is 0b1111. Assert the value:
+    // a fold that ORed the bit positions instead of shifting by them would
+    // still emit a `DECLARED_MASK` and still pass a presence check.
+    assert!(source.contains("const DECLARED_MASK: i64 = 15"));
 }
 ```
 
@@ -1207,13 +1228,13 @@ build them with the existing `public_decl` helper and `v2::decl::Kind::EnumDef`
 / `EnumSetDef`, mirroring the fixtures the `enum` and `enumset` snapshot tests
 already use.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run:
 `cargo test -p ridl-backend-rust --locked enum_converts_from_a_raw enum_set_rejects_bits`
 Expected: FAIL — no `TryFrom` impl is emitted for either kind.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `emit_enum`'s returned stream:
 
@@ -1255,10 +1276,21 @@ Append to `emit_enum`'s returned stream:
     }
 ```
 
-Append to `emit_enum_set`'s returned stream:
+**Replace** `emit_enum_set`'s inherent impl block with the following, and append
+the two trait impls. This is a replacement, not an addition: the function
+already emits an `impl #name` holding the bit constants, and appending a second
+block that defines them again is a duplicate definition (E0201).
 
 ```rust
-    let mask = esd.bits.iter().fold(0i64, |acc, bit| acc | (1i64 << bit.value));
+    // A bit outside the int64 domain contributes nothing. `ridl-sem` reports
+    // TYPL-111 for a position outside 0..=63 and still carries the bit into
+    // the IR, so this fold can be handed one, and `1i64 << 64` panics in a
+    // debug build. Codegen is total (Global Constraints, above).
+    let mask = esd
+        .bits
+        .iter()
+        .filter(|bit| (0..=63).contains(&bit.value))
+        .fold(0i64, |acc, bit| acc | (1i64 << bit.value));
     let mask_lit = int_tokens(mask);
     let type_name = decl.name.as_str();
     let allow_deprecated = if decl.deprecated.is_some() {
@@ -1268,11 +1300,19 @@ Append to `emit_enum_set`'s returned stream:
     };
 
     quote! {
+        // The bit constants, `DECLARED_MASK` and `get` share one inherent
+        // impl block, so `#[allow(deprecated)]` covers all three. Split
+        // across two blocks with the allow on one, a deprecated enum set's
+        // own constants draw the `deprecated` lint in the consumer's build.
         #allow_deprecated
         impl #name {
-            /// The union of every declared bit. A value carrying any other
-            /// bit is not a member of this set (typl §9).
+            #(#bits)*
+
+            /// The union of every declared bit. `TryFrom` refuses a value
+            /// that carries any other bit.
             #vis const DECLARED_MASK: i64 = #mask_lit;
+
+            #vis const fn get(self) -> i64 { self.0 }
         }
 
         #allow_deprecated
@@ -1298,16 +1338,23 @@ Append to `emit_enum_set`'s returned stream:
 
 Note the enum set's inner field is already emitted as `#vis i64` —
 `#vis struct #name(#vis i64);` in `emit_enum_set` — change it to a private `i64`
-for consistency with Task 3, and add `#vis const fn get(self) -> i64 { self.0 }`
-to its impl block.
+for consistency with Task 3. `get` joins the impl block above.
 
-- [ ] **Step 4: Run the tests**
+**`get` takes `self`, and the enum set has no `Copy` until Task 6.** Between
+this task and Task 6 an enum set held in a struct field cannot be read through a
+shared reference: `get` and `From<EnumSet> for i64` both move, and rustc reports
+E0507. This is the state Task 3 already left every `Copy`-backed named scalar
+in, for the same reason and with the same fix — Task 6 derives `Copy`, whose
+leaf rule (`f64`, `i64` or `bool`) an enum set satisfies. **Task 6 closes this;
+confirm it covers the enum set and not only the named scalar.**
+
+- [x] **Step 4: Run the tests**
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS, including the
 `rustc` compile proofs.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/ridl-backend-rust/
