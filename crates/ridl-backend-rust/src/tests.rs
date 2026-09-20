@@ -742,16 +742,21 @@ fn pattern_check_is_feature_gated() {
     assert!(ungated.contains("::ridl_rt::payload::Rule::Length"));
 }
 
-/// No test elsewhere in this repository compiles the `#[cfg(feature =
-/// "validate-pattern")]` block: every other `rustc` compile proof, here and in
+/// Outside this test and [`the_generated_pattern_check_runs`], no proof in
+/// this repository compiles the `#[cfg(feature = "validate-pattern")]` block:
+/// every other `rustc` compile proof, here and in
 /// `crates/ridlc/tests/rust_crate_emit.rs`, drives bare `rustc` with no
 /// `--cfg` for that feature, so the block is compiled out. `regex` is not a
-/// declared dependency of any workspace crate, so this proof cannot link the
-/// real one; it links [`regex_stub_rlib`] instead, a hand-written stand-in
-/// built the same way [`ridl_rt_rlib`] builds `ridl-rt` (see its doc comment
-/// for why one `rustc` call is the whole build). This is the only proof that
-/// would catch a syntax error, a type error or a bad path inside the gated
-/// block.
+/// declared dependency of any workspace crate, so neither proof can link the
+/// real one; both link [`regex_stub_rlib`], a hand-written stand-in built the
+/// same way [`ridl_rt_rlib`] builds `ridl-rt` (see its doc comment for why one
+/// `rustc` call is the whole build).
+///
+/// The two are not redundant. This one uses `vin_decl` and is the only test
+/// asserting that the gate attribute is emitted at all, so it alone catches
+/// the gate being dropped. [`the_generated_pattern_check_runs`] uses a fixture
+/// whose pattern its stand-in can decide, and runs the result, so it catches
+/// what compiling cannot see.
 #[test]
 fn pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in() {
     let source = rust_for(vec![vin_decl()]);
@@ -2256,11 +2261,17 @@ pub struct Error;
 
 impl Regex {
     /// Refuses a pattern that still carries its `/` delimiters. The real
-    /// engine would accept `"/ABC/"` as a regex matching a literal slash,
-    /// which is why an executed proof needs this refusal to notice that the
-    /// emitter stopped stripping them.
+    /// engine accepts `"/ABC/"` — it is a valid regex whose first and last
+    /// characters are literal slashes, so it simply never matches a value
+    /// that has none — which is why an executed proof needs this refusal to
+    /// notice that the emitter stopped stripping them.
+    ///
+    /// Both ends must be slashes, not either end. `strip_regex_delimiters`
+    /// removes one leading and one trailing `/`, so a typl pattern written
+    /// `/a\//` strips to `a\/`, which ends in a slash and is correct. A
+    /// refusal keyed on either end alone would reject that.
     pub fn new(pattern: &str) -> Result<Regex, Error> {
-        if pattern.starts_with('/') || pattern.ends_with('/') {
+        if pattern.len() >= 2 && pattern.starts_with('/') && pattern.ends_with('/') {
             return Err(Error);
         }
         Ok(Regex { pattern: pattern.to_string() })

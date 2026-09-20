@@ -2091,14 +2091,15 @@ which does not type-check against `regex::Regex::is_match` (`&str`).
 
 **That IR does not come from a typl source.** The reference gives bytes no
 `match` (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for that
-backing, so a `match` written on a bytes type is dropped before lowering and the
-constraint reaches the backend as `{len_min, len_max}` alone. An earlier draft
-of this task justified the guard by claiming typl permits the form; it does not,
-and the TYPL-115 note such a source draws is about its missing init value, not
-its pattern. The guard is kept on the same footing as the `is_float` guard
-beside it, which is also unreachable from a typl source — `lower_len_scalar`
-always leaves `min` and `max` absent — and is pinned by its own test. A backend
-reads the IR, which need not have come from this checker.
+backing, so a `match` written on a bytes type is dropped during lowering — the
+guard is inside `lower_len_scalar` itself — and the constraint reaches the
+backend as `{len_min, len_max}` alone. An earlier draft of this task justified
+the guard by claiming typl permits the form; it does not, and the TYPL-115 note
+such a source draws is about its missing init value, not its pattern. The guard
+is kept on the same footing as the `is_float` guard beside it, which is also
+unreachable from a typl source — `lower_len_scalar` always leaves `min` and
+`max` absent — and is pinned by its own test. A backend reads the IR, which need
+not have come from this checker.
 
 No `rustc` compile proof in this repository drove
 `--cfg
