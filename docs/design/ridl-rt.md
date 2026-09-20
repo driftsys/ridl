@@ -384,6 +384,38 @@ Semantics each implementation presents:
 mechanisms some runtimes have, not interaction semantics every runtime must
 present, so a runtime may omit either.
 
+**A port trait is implemented for a reference to an implementation.** For each
+port trait `T`, the crate provides `impl<P: T + ?Sized> T for &mut P`; for the
+traits whose methods all take `&self` — `Attached`, `Clock`, `SignalReader`,
+`FixedReader`, `ScannableSignals` and `CoherentSignals` — it also provides
+`impl<P: T + ?Sized> T for &P`. A generated face holds its port by value
+([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5),
+so these impls are what let it be built over a borrow of a runtime's port as
+well as over an owned handle, a `Clone` handle, or a wrapper that adds tracing
+or a test double. They are additive and need no `alloc`. `Box<P>` is not
+forwarded, because that would need `alloc`, which no feature combination of this
+crate brings in. These impls are decided
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11)
+and not yet written; they land with lane R's `ridl-rt` change, and this
+paragraph is ahead of `crates/ridl-rt/src/port.rs` until it does.
+
+**The handle model a runtime is expected to present.** A runtime crate exposes
+one handle type per port trait it implements, not one type implementing them
+all. Its reader handles — `SignalReader`, `FixedReader` and the two extensions —
+are `Send + Sync`, because a read takes `&self` and several threads may read one
+store at once; its writer, caller, event-source and handler handles are `Send`
+and need not be `Sync`, because those methods take `&mut self` and one thread
+drives each. A face is built over one handle. This crate states the expectation
+and does not enforce it: no port trait carries `Send` or `Sync` as a supertrait,
+so a single-threaded `no_std` runtime whose handles use `Cell` or `RefCell`
+internally stays legal, and a runtime pins its own half with a compile-time
+assertion — `fn assert_sync<T: Sync>()` applied to its reader handle. The
+alternative, one struct implementing every port behind a mutex, would make every
+`SignalReader::read` wait behind every `SignalWriter::commit`, which is the case
+reading a signal exists to avoid
+([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 12).
+Story E11.9 builds the first runtime to this shape.
+
 ## The `error` module and the port errors
 
 ```rust
