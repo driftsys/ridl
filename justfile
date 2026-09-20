@@ -556,7 +556,8 @@ doc-path-check:
     # on the directory it is given.
     git_at() {
         env -u GIT_DIR -u GIT_INDEX_FILE -u GIT_WORK_TREE -u GIT_OBJECT_DIRECTORY \
-            -u GIT_COMMON_DIR -u GIT_NAMESPACE git -C "$@"
+            -u GIT_COMMON_DIR -u GIT_NAMESPACE -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+            git -C "$@"
     }
     # The tracked files of the repository at $1, under the pathspecs after it.
     #
@@ -639,10 +640,22 @@ doc-path-check:
     # ASCII, and the repository needs no commit, because git lists the index.
     quoting="$work/quoting"
     mkdir -p "$quoting"
-    git_at "$quoting" -c init.defaultBranch=main init -q
-    printf 'no path is cited here\n' > "$quoting/na$(printf '\303\257')ve.md"
-    git_at "$quoting" add -A
-    if ! list_files "$quoting" | scan_paths "$quoting" 2>"$report"; then
+    git_at "$quoting" -c init.defaultBranch=main -c init.templateDir= init -q
+    name="na$(printf '\303\257')ve.md"
+    printf 'no path is cited here\n' > "$quoting/$name"
+    # An ignore rule reaching this repository from the machine's own git config
+    # would drop the file from the listing, and a scan over an empty listing
+    # returns 0 — the assertion would pass having tested nothing. The rule is
+    # neutralised, and the listing is compared against the name rather than
+    # only being fed to the scan, so the check cannot succeed vacuously.
+    git_at "$quoting" -c core.excludesFile=/dev/null add -A
+    listed="$(list_files "$quoting")"
+    if [ "$listed" != "$name" ]; then
+        echo "doc-path-check: the listing did not give the fixture's name as it is spelled on disk:" >&2
+        printf '%s\n' "$listed" >&2
+        exit 1
+    fi
+    if ! printf '%s\n' "$listed" | scan_paths "$quoting" 2>"$report"; then
         echo "doc-path-check: the scan could not read a tracked path holding a byte outside ASCII:" >&2
         cat "$report" >&2
         exit 1
