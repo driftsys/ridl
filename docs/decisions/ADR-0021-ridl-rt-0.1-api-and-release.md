@@ -233,10 +233,12 @@ trusted with no `unsafe` and no second verification pass.
     `impl<P: T + ?Sized> T for &mut P`; for the traits whose methods all take
     `&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`,
     `ScannableSignals` and `CoherentSignals` — it also provides
-    `impl<P: T + ?Sized> T for &P`. Until these impls land, nothing except a
-    runtime's own type implements a port trait, so a face can be built over a
-    runtime's port and over nothing else: not over a borrow of it, and not over
-    a wrapper that adds tracing or a test double. The impls are additive — every
+    `impl<P: T + ?Sized> T for &P`. The crate itself implements no port trait,
+    so until these impls land a face can be built only over a type that
+    implements the traits by hand — a runtime's own, or an application's wrapper
+    — and never over a reference to one. That is the whole of what they buy: a
+    wrapper that adds tracing and a test double are accepted by the face's trait
+    bounds already, with or without them. The impls are additive — every
     existing signature and every existing implementation is unchanged — so this
     is not a breaking change under decision 10, and they need no `alloc`. They
     are what keep `Client::new(&mut h)` compiling once the face of
@@ -258,29 +260,32 @@ trusted with no `unsafe` and no second verification pass.
     may also offer an aggregate handle per face, and `ridl-rt` adds no `Send` or
     `Sync` bound to any port trait.** A **port role** is one port trait. A
     runtime crate exposes one handle type per port role it implements, rather
-    than one type implementing them all. A handle whose port traits all take
-    `&self` is `Send + Sync`, because several threads may read one store at
-    once; a handle carrying a trait with a `&mut self` method is `Send` and is
-    not required to be `Sync`, because one thread drives each. Stating the rule
-    by receiver rather than as a list classifies every port trait, including
-    `EventSink`, whose `raise` takes `&mut self`, and `Clock`, whose `now` does
-    not.
+    than one type implementing them all. In a runtime whose handles are used
+    from more than one thread, a handle whose port traits all take `&self` —
+    `Attached`, `Clock`, `SignalReader`, `FixedReader` and the two signal
+    extensions — is `Send + Sync`, because several threads may read one store at
+    once, and a handle carrying a trait with a `&mut self` method —
+    `SignalWriter`, `EventSource`, `EventSink`, `Caller` and `Handler` — is
+    `Send` and need not be `Sync`, because one thread drives each. Deriving the
+    split from the receiver rather than from a list classifies every one of the
+    eleven port traits. A single-threaded runtime is held to neither, for the
+    reason the third paragraph gives.
 
     A face is built over one value implementing exactly the port traits its
     interface needs, which [ADR-0023](ADR-0023-interaction-face-generation.md)
-    decision 5 leaves unchanged. When a face needs exactly one port trait, that
-    value is the role handle itself. When it needs more than one — the common
-    case, because a generated `Client` may be bound over
+    decision 5 leaves unchanged; the value implements at least those traits, and
+    may implement more. When a face needs exactly one port trait, that value is
+    the role handle itself. When it needs more than one — the common case,
+    because a generated `Client` may be bound over
     `SignalReader + EventSource + Caller` at once — it is an **aggregate
     handle**: one the runtime offers for that port set, or one the application
-    composes from role handles and forwards the port traits through, which is
-    the wrapper decision 11's impls admit. An aggregate is `Send`, and is `Sync`
-    only if every port trait it carries takes `&self` in all its methods, which
-    is the same receiver rule applied to the traits it composes. Either value
-    reaches `Client::new` by value, or as a `&mut` borrow of itself under
-    decision 11's forwarding impls. A handle for one role does not satisfy a
-    multi-trait bound, so a face that needs more than one port trait must be
-    given an aggregate (the second 2026-09-20 amendment; driftsys/ridl#429).
+    writes over role handles, implementing each port trait by delegating to the
+    handle that has it. An aggregate is `Send` or `Sync` exactly when the
+    handles it holds are, which the compiler derives. Either value reaches
+    `Client::new` by value, or as a `&mut` borrow of itself under decision 11's
+    forwarding impls. A handle for one role does not satisfy a multi-trait
+    bound, so a face that needs more than one port trait must be given an
+    aggregate (the second 2026-09-20 amendment; driftsys/ridl#429).
 
     This record states the expectation; the crate does not enforce it. No port
     trait gains `Send` or `Sync` as a supertrait, because that would exclude a
@@ -314,7 +319,7 @@ trusted with no `unsafe` and no second verification pass.
 | Rust version (decision 10) | `rust-version` equal to the `rust-toolchain.toml` pin      | it would rise with every toolchain bump, and repeats the pin that ADR-0009 decision 2 keeps in one file                                                                                                                                    |
 | Rust version (decision 10) | no `rust-version` at all                                   | cargo's MSRV-aware resolver and crates.io get no minimum to build against                                                                                                                                                                  |
 | Rust edition (decision 10) | keep `ridl-rt` on the workspace's edition 2024 only        | the 1.83 minimum cannot build edition 2024, so the crate would break its own `rust-version`; and source ridl emits, copied or generated into an edition-2021 consumer — which compiles as that consumer's own edition — would have no test |
-| Forwarding (decision 11)   | no forwarding impls; runtimes hand out short-lived ports   | moves the cost into every runtime rather than removing it, and still admits no wrapper, no test double, and no face over a borrow of a runtime's own value                                                                                 |
+| Forwarding (decision 11)   | no forwarding impls; runtimes hand out short-lived ports   | moves the cost into every runtime rather than removing it, and still admits no face over a reference to a port                                                                                                                             |
 | Forwarding (decision 11)   | `impl<P: T + ?Sized> T for Box<P>` in 0.1                  | needs `alloc`, which no feature combination of this crate brings in (decision 8); deferred rather than rejected                                                                                                                            |
 | Threading (decision 12)    | one runtime struct implementing every port, behind a mutex | serialises every signal read behind every publication commit, removing the property a signal read is specified to have                                                                                                                     |
 | Threading (decision 12)    | `Send + Sync` as supertraits on the port traits            | excludes a single-threaded `no_std` runtime whose handles use `Cell` or `RefCell` internally, a supported target on the platform ladder                                                                                                    |
@@ -358,9 +363,13 @@ trusted with no `unsafe` and no second verification pass.
    — the Rust codegen's question, once it starts consuming this crate.
 5. **`Box<P>` forwarding** (decision 11), deferred until a cargo feature brings
    `alloc` into this crate and something needs a boxed port.
-6. **driftsys/ridl#350 items 15, 16 and 17** — the two the 2026-09-20 amendment
-   settles, recorded there against decisions 11 and 12, and the wake hook, which
-   that amendment deliberately leaves open for stories E11.1 and E11.9.
+6. **A wake hook** — whether a port gains a way to register interest in the
+   arrival of a reply, an occurrence or a claim, or whether waiting stays a
+   runtime's own loop. Every port method returns immediately, which this record
+   keeps; what an adapter that presents a reply as a future does instead of
+   polling is a frame and transport question, left to stories E11.1 and E11.9.
+   Tracked as driftsys/ridl#350 item 17; items 15 and 16 of that issue are the
+   two the 2026-09-20 amendment settles.
 
 ## Documents amended
 

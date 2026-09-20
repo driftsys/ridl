@@ -131,16 +131,15 @@ never stated.
    types implement neither `Copy` nor `Clone`" — is true today and stops being
    true then, so it is replaced rather than left in place to become false.
 
-   The replacement is that decision 7 derives `Clone` on every generated type
-   but `Copy` on only some: `Copy` lands when the transitive closure is `f64`,
-   `i64` or `bool` only, so a payload reaching a string or a sequence is `Clone`
-   and not `Copy`. A by-value parameter moves such a payload — `Clone` does not
-   prevent a move — so a by-value query signature would still take the arguments
-   out from under `dispatch`'s `ensure` evaluation for every payload that is not
-   `Copy`, while compiling for those that are. The signature would then depend
-   on a payload's closure. One rule describes the whole trait instead, and by
-   reference costs nothing. The rule itself does not change, and neither does
-   the argument for it in the command case.
+The replacement is a cost rather than an impossibility. Decision 7 derives
+`Clone` on every generated type and `Copy` on only some — `Copy` lands when the
+transitive closure is `f64`, `i64` or `bool` only — so after task 6 a by-value
+query signature can always be made to compile: the emitter copies the argument
+where the payload is `Copy` and clones it otherwise, because `dispatch` still
+reads it after the provider returns. What by reference buys is that it needs
+neither, at every query call. One rule describes the whole trait instead, and by
+reference costs nothing. The rule itself does not change, and neither does the
+argument for it in the command case.
 
 4. **A consumer-side `Client` call returns `Result<Correlation, SendError>`, not
    `CallError`** — the success half amended 2026-09-20, below. The M1 design
@@ -200,17 +199,17 @@ never stated.
 
 ## Alternatives considered
 
-| Alternative                                                                             | Why not                                                                                                                                                                                                                                         |
-| --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Silently drop a clause the translator cannot express                                    | Generates a provider that accepts arguments its own contract forbids — a worse failure than refusing to generate. See decision 1.                                                                                                               |
-| Wait for E5.1's expression-tree translator before generating any clause body            | Blocks the whole MVP on an unscheduled story; the design's settlement rows for `PreconditionFailed`/`ContractBroken` would stay unreachable in the interim.                                                                                     |
-| Fold the face's items into `generate` itself                                            | Breaks `corpus_entries_compile_to_reviewed_snapshots` (the translator refuses clauses the corpus already carries) and `veh_cluster_generated_rust_compiles_with_rustc` (which compiles `generate`'s output with no `--extern`). See decision 2. |
-| Take the `--extern ridl_rt` flag in the pipeline proof now, ahead of Epic 10 Task 3     | Pre-empts an in-flight lane's own task and removes the detector that task's proof exists to provide.                                                                                                                                            |
-| A `Provider` method takes its argument by value, as the M1 design's example showed      | Does not compile: `dispatch` reads the argument again after the provider returns, and the generated payload types are neither `Copy` nor `Clone`. See decision 3.                                                                               |
-| Map a client-side `require` failure into `CallError`, reusing the settlement vocabulary | Invents a conversion no port performs; `SendError` is what `Caller` itself already returns and already carries `Contract`. See decision 4.                                                                                                      |
-| A stateless face, every generated method taking the port as an argument                 | Removes the borrow, but adds a parameter to every generated method and leaves nowhere for the once-at-construction catalog check of ADR-0021 decision 3. See decision 5.                                                                        |
-| Keep `Client<'a, P>`, and ask every runtime to hand out short-lived ports               | Moves the cost into every runtime rather than removing it, and still admits no owned handle and no wrapper. See decision 5.                                                                                                                     |
-| `Correlation<K>` in `ridl-rt`, typed by a marker `K`                                    | Types the port, which contradicts the rule that a port carries identity and bytes and never a payload type, and makes every runtime carry a type parameter it never reads. See decision 4's amendment.                                          |
+| Alternative                                                                             | Why not                                                                                                                                                                                                                                                                                                 |
+| --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Silently drop a clause the translator cannot express                                    | Generates a provider that accepts arguments its own contract forbids — a worse failure than refusing to generate. See decision 1.                                                                                                                                                                       |
+| Wait for E5.1's expression-tree translator before generating any clause body            | Blocks the whole MVP on an unscheduled story; the design's settlement rows for `PreconditionFailed`/`ContractBroken` would stay unreachable in the interim.                                                                                                                                             |
+| Fold the face's items into `generate` itself                                            | Breaks `corpus_entries_compile_to_reviewed_snapshots` (the translator refuses clauses the corpus already carries) and `veh_cluster_generated_rust_compiles_with_rustc` (which compiles `generate`'s output with no `--extern`). See decision 2.                                                         |
+| Take the `--extern ridl_rt` flag in the pipeline proof now, ahead of Epic 10 Task 3     | Pre-empts an in-flight lane's own task and removes the detector that task's proof exists to provide.                                                                                                                                                                                                    |
+| A `Provider` method takes its argument by value, as the M1 design's example showed      | Does not compile today, because `dispatch` reads the argument again after the provider returns and the generated payload types are neither `Copy` nor `Clone`; once the derive set lands it compiles only at the cost of a copy or a clone per query call. See decision 3 and its 2026-09-20 amendment. |
+| Map a client-side `require` failure into `CallError`, reusing the settlement vocabulary | Invents a conversion no port performs; `SendError` is what `Caller` itself already returns and already carries `Contract`. See decision 4.                                                                                                                                                              |
+| A stateless face, every generated method taking the port as an argument                 | Removes the borrow, but adds a parameter to every generated method and leaves nowhere for the once-at-construction catalog check of ADR-0021 decision 3. See decision 5.                                                                                                                                |
+| Keep `Client<'a, P>`, and ask every runtime to hand out short-lived ports               | Moves the cost into every runtime rather than removing it, and still admits no owned handle and no wrapper. See decision 5.                                                                                                                                                                             |
+| `Correlation<K>` in `ridl-rt`, typed by a marker `K`                                    | Types the port, which contradicts the rule that a port carries identity and bytes and never a payload type, and makes every runtime carry a type parameter it never reads. See decision 4's amendment.                                                                                                  |
 
 ## Consequences
 

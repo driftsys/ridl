@@ -166,7 +166,7 @@
 - **ADR-0023 — The generated interaction face: entry point, clause translator,
   and call signatures.** Five decisions: four taken while implementing story
   E11.13, the in-process MVP of the face ADR-0018 decision 15 restores, and one
-  added by the 2026-09-20 amendment. the Rust backend's contract-clause
+  added by the 2026-09-20 amendment. The Rust backend's contract-clause
   translator accepts one expression form and refuses every other with a
   `GenerateError`, never dropping a clause silently; the face is emitted from a
   companion entry point, `generate_face`, while `generate` stays exactly what it

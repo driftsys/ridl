@@ -391,12 +391,12 @@ methods all take `&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`,
 `ScannableSignals` and `CoherentSignals` — it also provides
 `impl<P: T + ?Sized> T for &P`. A generated face holds its port by value
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5),
-so these impls are what let it be built over a borrow of a runtime's port; an
-owned handle, a `Clone` handle and a wrapper that adds tracing or a test double
-are accepted by the by-value form itself, since a wrapper implements the port
-traits rather than borrowing through them. The impls are additive and need no
-`alloc`; `Box<P>` is not forwarded, because that would need `alloc`, which no
-feature combination of this crate brings in.
+so these impls are what let it be built over a borrow of a handle. An owned
+handle, a `Clone` handle and a wrapper that adds tracing or a test double are
+accepted by the face's trait bounds with or without them, because such a type
+implements the port traits itself rather than borrowing through them. The impls
+are additive and need no `alloc`; `Box<P>` is not forwarded, because that would
+need `alloc`, which no feature combination of this crate brings in.
 [ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
 records them and the reasoning; until the `ridl-rt` change that follows it
 merges, this paragraph describes impls `crates/ridl-rt/src/port.rs` does not
@@ -406,14 +406,14 @@ contain.
 `Sync` bound.** A port role is one port trait. A runtime crate exposes one
 handle type per port role it implements rather than one type implementing them
 all, and may also offer an aggregate handle covering the port set one
-interface's face needs. A handle whose port traits all take `&self` is
-`Send + Sync`, because several threads may read one store at once; a handle
-carrying a trait with a `&mut self` method is `Send` and need not be `Sync`,
-because one thread drives each. An aggregate is `Send`, and is `Sync` only if
-every port trait it carries takes `&self` in all its methods. A face is built
-over one value implementing exactly the port traits its interface needs: the
-role handle itself when the face needs exactly one, and an aggregate — the
-runtime's, or one the application composes from role handles — when it needs
+interface's face needs. In a runtime whose handles are used from more than one
+thread, a handle whose port traits all take `&self` is `Send + Sync`, because
+several threads may read one store at once, and a handle carrying a trait with a
+`&mut self` method is `Send` and need not be `Sync`, because one thread drives
+each. An aggregate is `Send` or `Sync` exactly when the handles it holds are. A
+face is built over one value implementing at least the port traits its interface
+needs: the role handle itself when the face needs exactly one, and an aggregate
+— the runtime's, or one the application writes over role handles — when it needs
 more, because a generated `Client` may be bound over
 `SignalReader + EventSource + Caller` at once. Either value reaches
 `Client::new` by value, or as a `&mut` borrow of itself under the forwarding
