@@ -9,14 +9,12 @@ impl WarningFlags {
     pub const CHECK_ENGINE: WarningFlags = WarningFlags(1 << 1);
     pub const DOOR_OPEN: WarningFlags = WarningFlags(1 << 2);
     pub const SEATBELT: WarningFlags = WarningFlags(1 << 3);
-    pub const fn get(self) -> i64 {
-        self.0
-    }
-}
-impl WarningFlags {
     /// The union of every declared bit. A value carrying any other
     /// bit is not a member of this set (typl §9).
     pub const DECLARED_MASK: i64 = 15;
+    pub const fn get(self) -> i64 {
+        self.0
+    }
 }
 impl ::core::convert::TryFrom<i64> for WarningFlags {
     type Error = ::ridl_rt::payload::Violation;

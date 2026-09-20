@@ -703,6 +703,16 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
 /// An enum set becomes a `#[repr(transparent)]` newtype over `i64` (the
 /// language layer width, Appendix D) with one associated bit constant per bit
 /// position (typl §9).
+///
+/// The inner value is private, as a named scalar's is and for the same reason
+/// ([`emit_type_def`]): a raw bit pattern enters through `TryFrom<i64>`, which
+/// refuses a value carrying an undeclared bit. `get` reads it back.
+///
+/// The bit constants, `DECLARED_MASK` and `get` share one inherent impl block
+/// so that a deprecated declaration carries `#[allow(deprecated)]` over all
+/// three. Each names the deprecated type, and without the allow the consumer's
+/// build draws the `deprecated` lint on code the consumer did not write —
+/// which is what driftsys/ridl#420 settled for a named scalar's impl blocks.
 fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
     let name = ident(&decl.name);
     let attrs = decl_attrs(decl);
@@ -714,9 +724,18 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
         quote! { #vis const #bname: #name = #name(1 << #shift); }
     });
 
+    // A bit outside the int64 domain contributes nothing to the mask rather
+    // than shifting by it. `ridl-sem` reports TYPL-111 for a position outside
+    // 0..=63 and still carries the bit into the IR — its range guard covers
+    // the width it derives, not the value it stores — so this fold can be
+    // handed one. `1i64 << 64` panics in a debug build, and codegen is total:
+    // every failure is a `GenerateError` value, never a panic. The emitted
+    // bit constants are not exposed this way, because their shift is emitted
+    // as source text for rustc to evaluate rather than folded here.
     let mask = esd
         .bits
         .iter()
+        .filter(|bit| (0..=63).contains(&bit.value))
         .fold(0i64, |acc, bit| acc | (1i64 << bit.value));
     let mask_lit = int_tokens(mask);
     let type_name = decl.name.as_str();
@@ -730,17 +749,15 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
         #attrs
         #[repr(transparent)]
         #vis struct #name(i64);
+        #allow_deprecated
         impl #name {
             #(#bits)*
 
-            #vis const fn get(self) -> i64 { self.0 }
-        }
-
-        #allow_deprecated
-        impl #name {
             /// The union of every declared bit. A value carrying any other
             /// bit is not a member of this set (typl §9).
             #vis const DECLARED_MASK: i64 = #mask_lit;
+
+            #vis const fn get(self) -> i64 { self.0 }
         }
 
         #allow_deprecated

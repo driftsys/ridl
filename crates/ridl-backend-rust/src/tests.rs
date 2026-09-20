@@ -803,7 +803,39 @@ fn enum_converts_from_a_raw_discriminant() {
 fn enum_set_rejects_bits_outside_the_declared_mask() {
     let source = rust_for(vec![features_decl()]);
     assert!(source.contains("impl ::core::convert::TryFrom<i64> for Features"));
-    assert!(source.contains("const DECLARED_MASK: i64"));
+    // The declared bits are positions 0 to 3, so the mask is 0b1111. The
+    // value is asserted rather than the constant's presence: a fold that
+    // ORed the bit positions instead of shifting by them would still emit a
+    // `DECLARED_MASK`, and would still pass a presence check.
+    assert!(
+        source.contains("const DECLARED_MASK: i64 = 15"),
+        "the mask is the union of the declared bits, got:\n{source}"
+    );
+}
+
+#[test]
+fn a_bit_position_outside_the_int64_domain_does_not_panic_codegen() {
+    // `ridl-sem` reports TYPL-111 for a position outside 0..=63 and still
+    // carries the bit into the IR, so codegen is handed one. Folding it into
+    // the mask would shift by 64 and panic in a debug build; codegen is
+    // total, so the bit contributes nothing and the checker's diagnostic is
+    // what reports it.
+    let source = rust_for(vec![public_decl(
+        "Odd",
+        v2::decl::Kind::EnumSetDef(v2::EnumSetDef {
+            backing_enum: None,
+            bits: vec![
+                enum_value("IN_DOMAIN", 1),
+                enum_value("TOO_HIGH", 64),
+                enum_value("NEGATIVE", -1),
+            ],
+            width: v2::IntWidth::U8 as i32,
+        }),
+    )]);
+    assert!(
+        source.contains("const DECLARED_MASK: i64 = 2"),
+        "only the in-domain bit reaches the mask, got:\n{source}"
+    );
 }
 
 #[test]
