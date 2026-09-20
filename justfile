@@ -478,8 +478,8 @@ link-check:
 # Both halves are exercised before the scan, because a gate that cannot be shown
 # to fail is not a gate. `extract_paths` runs over a built-in sample and must
 # give exactly the expected paths. `scan_paths` runs over a temporary root
-# holding one `.rs` and one `.ridl` that between them cite two paths which do
-# not exist and one which does, and must report exactly the two and return
+# holding one `.rs` and one `.ridl` that between them cite three paths which do
+# not exist and one which does, and must report exactly the three and return
 # non-zero.
 doc-path-check:
     #!/usr/bin/env bash
@@ -531,7 +531,7 @@ doc-path-check:
             fi
             if [ -n "$targets" ]; then
                 while IFS= read -r target; do
-                    if [ -n "$target" ] && [ ! -e "$root/$target" ]; then
+                    if [ ! -e "$root/$target" ]; then
                         echo "doc-path-check: $file -> $target" >&2
                         broken=$((broken + 1))
                     fi
@@ -605,18 +605,19 @@ doc-path-check:
         exit 1
     fi
     # A file the list names but grep cannot open fails the scan rather than
-    # being passed over: grep's exit 2 is an error, not an empty result.
-    if printf '%s\n' src/not-there.rs | scan_paths "$root" 2>"$report"; then
-        echo "doc-path-check: the scan returned 0 over a file it could not read:" >&2
+    # being skipped: grep's exit 2 is an error, not an empty result.
+    if printf '%s\n' src/not-there.rs | scan_paths "$root" 2>"$report" \
+        || ! grep -q -- "cannot read 'src/not-there.rs'" "$report"; then
+        echo "doc-path-check: the scan no longer fails on a file it cannot read:" >&2
         cat "$report" >&2
         exit 1
     fi
     # Each skipped pathspec is asserted to match tracked files, so a typo that
-    # makes one of them inert fails here rather than widening the scan in
-    # silence.
+    # makes one of them inert fails here rather than widening the scan without
+    # reporting it.
     for skipped in "$skip_archive" "$skip_wip"; do
         if [ -z "$(git ls-files "$skipped")" ]; then
-            echo "doc-path-check: the skipped tree '$skipped' matches no tracked file." >&2
+            echo "doc-path-check: the skipped tree '$skipped' matches no tracked file; correct the pathspec, or drop the exclusion if that tree is gone." >&2
             exit 1
         fi
     done
