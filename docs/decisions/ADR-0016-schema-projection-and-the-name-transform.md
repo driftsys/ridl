@@ -57,9 +57,15 @@ that collided, and names both for a pair that collides under both: the message
 previously asserted `snake_case` of every input, which a `camel_case`-only
 collision makes false, and the two have different consequences — a `camel_case`
 collision gives one Rust enum two variants of one name, a `snake_case` one is
-refused by both wire backends. The member, parameter and struct-field namespaces
-are unchanged: each is projected through `snake_case` alone and is checked under
-that transform alone.
+refused by both wire backends. The member and parameter namespaces are
+unchanged: each is projected through `snake_case` alone and is checked under
+that transform alone. A struct field is checked under `snake_case` alone too,
+but it is not projected through `snake_case` alone: the Rust backend also
+projects a field name through `camel_case`, into the type name of the induced
+tuple struct a tuple-typed field generates —
+`format!("{}{}", camel_case(parent), camel_case(&field.name))` in `emit_field`.
+That namespace is unchecked, and the amendment does not extend to it. The
+residual is recorded below and on driftsys/ridl#453.
 
 The cost is stated where it falls. A package whose arms collide under
 `camel_case` only was already broken — the Rust backend emitted E0428 — so the
@@ -309,20 +315,42 @@ implementation cites. Decisions 6 to 10 ratify the note unchanged.
   transform still compiles with no diagnostic and emits a header no C consumer
   can compile. The defect predates this story, and extending RIDL-149 to type
   names is excluded from E9.7's scope. Recorded on driftsys/ridl#236.
-- **Closed by the 2026-09-20 amendment — a second transform in the Rust backend
-  had the same defect shape.** `crates/ridl-backend-rust/src/lib.rs` camel-cased
-  union arm names, so arms `foo_bar` and `fooBar` both emitted the Rust variant
-  `FooBar` and the emitted file failed to compile (E0428). That transform was
-  not the pinned `snake_case` and was outside this record's scope, so RIDL-149
-  did not make "the backend never emits non-compiling output on a name
-  collision" true. The amendment pins `camel_case` in `ridl-ir` and extends
-  RIDL-149 to a union's arms under both transforms, which makes that sentence
-  true for a union's arms. Recorded on driftsys/ridl#237.
+- **Narrowed by the 2026-09-20 amendment — a second transform in the Rust
+  backend had the same defect shape.** `crates/ridl-backend-rust/src/lib.rs`
+  camel-cased union arm names, so arms `foo_bar` and `fooBar` both emitted the
+  Rust variant `FooBar` and the emitted file failed to compile (E0428). That
+  transform was not the pinned `snake_case` and was outside this record's scope.
+  The amendment pins `camel_case` in `ridl-ir` and extends RIDL-149 to a union's
+  arms under both transforms, which closes the **post-transform** collision: two
+  arm names distinct in source whose projections collide are now refused at
+  check time. Recorded on driftsys/ridl#237.
+
+  It does not make "the backend never emits non-compiling output on a name
+  collision" true, even for a union's arms. `union U { fooBar : A, fooBar : B }`
+  — the **same name spelled identically twice** — still passes `ridlc check`
+  with exit 0 and still emits the variant `FooBar` twice. That is outside
+  RIDL-149's remedy by design: the rule is about names distinct in source, and
+  `lower_union` deliberately holds a verbatim repeat out of the projection maps
+  rather than report a collision the transform did not cause. What is missing is
+  the exact-duplicate rule for a union's arms, the sibling of TYPL-215 for
+  struct fields and RIDL-413 for parameters. It remains open, on
+  driftsys/ridl#452.
 - **Negative — a third transform, `crates/ridl-backend-rust/src/face.rs`'s
   private `snake_case`, is still not the pinned one.** It names the generated
   face's modules and methods, is outside this record's scope as the arm
   transform was, and is unchecked in the same way. Stated here rather than
   discovered later.
+- **Negative — a struct field name also reaches `camel_case`, and that namespace
+  is unchecked.** Decision 4 puts struct fields in RIDL-149 under `snake_case`,
+  which is the Rust field name and the wire symbol. The Rust backend also spells
+  the **type name of an induced tuple struct** from the field name through
+  `camel_case`, and nothing checks that namespace. A struct with the tuple-typed
+  fields `XY` and `x_y` passes `ridlc check` with exit 0 and fails `ridlc build`
+  with "the generated name SXY is claimed by two different tuple types" — the
+  two field names are distinct under `snake_case` and identical under
+  `camel_case`. The refusal is clean rather than non-compiling output, so this
+  is a question of where the diagnostic belongs, not an unsoundness. Recorded on
+  driftsys/ridl#453.
 
 ## Documents amended
 

@@ -105,7 +105,7 @@ recorded at the top of Task 3. The corrections made here:
   an integer backing, because `min` and `max` are numeric bounds.
 
 **Line references were replaced by symbol names** wherever a symbol exists. The
-line numbers this plan carried had drifted by eleven lines in
+line numbers this plan carried had drifted in
 `crates/ridl-backend-rust/src/lib.rs` alone, and a symbol name does not drift.
 Where a line number remains it is the one at 86e10d7 and is given as an aid, not
 as the identifier.
