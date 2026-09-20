@@ -196,8 +196,9 @@ with the impl in K5. No inherent `FLATBUFFERS_MAX_SIZE` is invented.
   return the `GenerateError` when it is `None`).
 - Test: `crates/ridl-backend-rust/src/tests.rs`.
 
-**Interfaces:** consumes `max_size` of Task 1; produces one new `GenerateError`
-variant. It emits no generated code.
+**Interfaces:** consumes `max_size` of Task 1; produces a `GenerateError` (a
+struct with one `message` field, not an enum — this task adds no variant, only a
+new call that can construct one). It emits no generated code.
 
 **Must not break:** `generate`'s output for every corpus fixture — this stage
 adds a refusal path and nothing else, so no snapshot may move.

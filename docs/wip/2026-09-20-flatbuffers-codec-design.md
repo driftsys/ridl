@@ -220,7 +220,10 @@ the padding and vtable slack the projection charges.
 
 If the bound of D-6 is `None`, the emitter writes no `Payload<FlatBuffers>`
 implementation for that type and returns a `GenerateError` naming the type and
-the member that is unbounded.
+the member that is unbounded. **§4a records stage K4's implementation of this
+refusal**: the function exists (`check_flatbuffers_bounds`) and names the
+member, but nothing calls it yet — K5 does, once it has a per-type
+implementation to withhold.
 
 **Taken with an addition, 2026-09-20.** typl makes every array and map bound
 mandatory, defaults a `string` and a `bytes` to `[0..256]` when unspecified
@@ -412,82 +415,83 @@ exercised by the face's round trip.
    diagnostic is totality over the IR, tested but not loud, and the plan's first
    task needs no fixture work to settle it.
 
-## 4a. Stage K4, 2026-09-20: D-7's refusal, and two decisions it rests on
+## 4a. Stage K4, 2026-09-20: D-7's refusal exists, uncalled, and names its member
 
-Stage K4 (plan Task 3) implemented D-7's refusal —
+Stage K4 (plan Task 3) added D-7's refusal —
 `ridl_backend_rust::check_flatbuffers_bounds`, in
-`crates/ridl-backend-rust/src/lib.rs`. Two facts about the implementation are
-additions this note did not carry, recorded here as the plan's own instructions
-for this stage ask.
+`crates/ridl-backend-rust/src/lib.rs` — as a function nothing in the pipeline
+calls yet. It does not implement D-7 in the sense of the compiler refusing
+anything today; it is the refusal, ready for K5 to call once K5 has something to
+withhold. The review round of 2026-09-20 corrected two things this addition
+first got wrong, recorded here in place of what it said before.
 
-**The unbounded member is whatever `ridl_ir::projection::flatbuffers::max_size`
-can name, and no more.** That function answers `Option<u64>`, not a reason, so a
-refusal can name the declaration a bound could not be derived for, never the
-specific field, array, or map that made it unbounded. D-7's own text says
-"naming the type and the member that is unbounded"; K4 does not widen
-`max_size`'s API to carry a reason, so the refusal names only the type. Naming
-the member is left to whichever later stage needs it enough to add that to the
-shared API — most plausibly K5, once a real diagnostic path exists for it.
+**The ground for not wiring it in is per-type, not "this breaks existing
+tests."** D-7's own text is "the emitter writes no `Payload<FlatBuffers>`
+implementation _for that type_" — a per-type withholding, not a per-package
+refusal. Before K5 there is no per-type `Payload<FlatBuffers>` implementation to
+withhold, so `generate`/`generate_face` (which emit only domain types) have no
+correct call site for this function at all, independent of what wiring it in
+anyway would break. Gating all of `domain_items` — the shape the plan's Task 3
+text and this note's first draft both took — would be a wholesale package
+refusal D-7 does not authorise, since it would withhold every type's domain code
+over one type's unbounded codec.
 
-**`check_flatbuffers_bounds` is not called from `generate` or `generate_face`
-yet, and will not be until K5.** This is new: neither the note nor the plan
-anticipated it, and it surfaced only once K4 was implemented against the tree.
-Wiring the refusal into every `generate` call — the literal reading of the
-plan's Task 3, "return the `GenerateError` when it is `None`" — breaks two
-things this backend already does, both pinned by existing tests that predate
-this stage:
+**The first draft's measurement was wrong, and its two named tests were never
+the failures.** It said wiring `check_flatbuffers_bounds(package)?` into
+`domain_items` breaks eight of this crate's own tests, naming
+`recursive_struct_default_terminates`,
+`a_cyclic_struct_takes_no_conditional_derives`, a cross-package case, and a
+`Stream` case. Measured directly (`cargo test -p ridl-backend-rust --locked`
+with the check wired in), the count is **five**, and **none** of the four named
+tests is among them — those four pass, because the function's own cross-package,
+cycle, and `Stream` guards already shield exactly the shapes they build. The
+five that do fail — `struct_with_optional_and_reserved`,
+`an_unspecified_field_primitive_takes_no_conditional_derives`,
+`an_induced_tuple_struct_carries_its_derives`,
+`a_tuple_under_an_internal_declaration_is_package_private`,
+`leaf_recursion_denies_default_through_a_composite_field` — are unrelated
+hand-built fixtures in `src/tests.rs` that carry a `string` with no `len_max`
+incidentally, not on purpose: they predate this stage and were never written
+with a FlatBuffers bound in mind. `cargo test -p ridlc --locked` passes in full
+with the check wired in, so the corpus claim ("`ClimateReport` already depends
+on generating across a cross-package reference") was also not what made the
+wiring fail — it is true as a fact about the corpus, but it was not the failure
+the wiring produced. Repairing those five fixtures' bounds is K5's, when it
+wires the check in per type.
 
-- **A cross-package reference.** `ridl-backend-rust` generates one package at a
-  time and resolves no cross-package reference itself (`Ctx::lookup` answers
-  `None` for one by design). Handed `others: &[]`, `max_size` cannot tell "this
-  reference does not resolve here" from "this type has no finite bound" — both
-  answer `None`, by that function's own doc. The corpus already depends on
-  generating across one:
-  `crates/ridlc/tests/corpus/veh-cluster/cluster/services.ridl`'s
-  `ClimateReport` types its `cabin` and `setpoint` fields with the imported
-  `veh.common.Temperature`, and
-  `struct_with_a_cross_package_field_drops_conditional_derives` pins that
-  `generate` still emits `Telemetry` over an unresolved `veh.other.Speed`
-  reference.
-- **A same-package cycle.** TYPL-206 rejects one, so it is IR handed in
-  directly, the same footing D-7 itself gives a bare unbounded `string`. But
-  this backend already has a considered, tested answer for a cyclic struct that
-  is not refusal: `recursive_struct_default_terminates` and
-  `a_cyclic_struct_takes_no_conditional_derives` both pin that `generate` still
-  emits `S`'s domain type over `struct S { next: S }`, because Default
-  derivation and the conditional-derive walk both guard the cycle and degrade to
-  the conservative answer rather than erroring or overflowing the stack.
+**The cross-package and cycle guards are per-member, not per-declaration.** The
+first draft's guard answered for the whole declaration: if any member's type
+reached an unresolved reference or a cycle, the _entire_ declaration was left
+alone, silently, even when a different member of the same declaration was
+genuinely unbounded — a struct with both a bare `string` map key and one foreign
+field returned `Ok(())`, which is the silent omission ADR-0016 decision 6 and
+ADR-0017 decision 4 forbid. The guard is now scoped to the one member being
+examined: a member this backend cannot judge is exempted, and every other member
+of the same declaration is still probed on its own — `unbounded_member` in
+`crates/ridl-backend-rust/src/lib.rs`, pinned by two tests in `src/tests.rs`
+over the two declaration orders (the exempt member first, and the exempt member
+last).
 
-Both are real, not hypothetical: running the literal wiring against this crate's
-own test suite refuses eight passing tests, not only the two named above.
-`check_flatbuffers_bounds` is total and internally guards exactly these two
-cases (plus a `Stream` field, which never reaches a struct or tuple field in
-checked IR and which `a_stream_field_takes_no_conditional_derives` already
-covers) by leaving the declaration alone rather than refusing it — see the
-function's own doc and `decl_resolves_locally`'s for the three cases named in
-full. K4's own tests call it directly over hand-built IR
-(`flatbuffers_bound_accepts_a_bounded_struct`,
-`flatbuffers_bound_refuses_a_bare_string_map_key`,
-`flatbuffers_bound_leaves_a_cross_package_reference_alone`,
-`flatbuffers_bound_leaves_a_cycle_alone`), which is what the plan's own
-`Done when` for this task asks for: no test reaches the refusal from typl
-source, because the corpus is bounded (driftsys/ridl#459) and carries neither a
-cyclic type nor an unresolved reference into an unbounded shape.
+**The refusal names the member, not only the declaration.** D-7's own text asks
+for "the type and the member that is unbounded", and this needed no change to
+`ridl_ir::projection::flatbuffers::max_size`'s API: a synthetic one-member
+`v2::Decl` in the same package, handed to the existing public `max_size`,
+charges exactly that member the way the real declaration's own computation would
+— `struct_table_bound` sums each member's `field_charge` independently, and
+`union_wrapper_bound` takes the largest of its arms' `union_arm_bound` — so
+probing one member in isolation reproduces its share of the real bound with
+nothing else able to answer `None` in its place (`probe_struct_field`,
+`probe_union_arm`). Only the aggregate causes — the summed size overflows `u64`,
+or exceeds `MAX_ENCODABLE` while every member is individually bounded — have no
+single member to name, and the refusal falls back to the declaration alone for
+exactly those
+(`flatbuffers_bound_names_the_declaration_when_the_cause_is_aggregate`).
 
-**Consequence for K5.** K5's own task doc already separates `MAX_SIZE` from the
-refusal — "the constant travels with the impl in K5" — so K5 was always going to
-call `check_flatbuffers_bounds` (or its equivalent) itself, once it has a
-`Payload<FlatBuffers>` implementation to withhold. What this addition records is
-that the call cannot simply gate the whole package ahead of every other emit the
-way K4's own doc comment first suggested: `check_flatbuffers_bounds` is
-permissive exactly where this backend already generates something today (a
-cross-package field, a same-package cycle), so K5 inherits the same two
-exemptions and has to decide, as part of its own scope, what a package carrying
-one of them means for the codec — whether that is "no codec for the whole
-package" (matching `generate`'s current all-or-nothing `Result`) or something
-narrower. K4 does not take that decision; it only establishes that the refusal
-must not regress domain-type generation for a shape this backend already
-supports. `MAX_SIZE` itself is emitted by K5, as the plan already states.
+**Consequence for K5.** K5 calls `check_flatbuffers_bounds` once per type, as it
+is about to emit that type's `Payload<FlatBuffers>` implementation, not once for
+the whole package ahead of every other emit. It inherits the per-member
+cross-package and cycle exemptions as built here, and repairs the five test
+fixtures named above when it wires the check into the live pipeline.
 
 ## 5. Records this changes, if the disposition takes it
 
