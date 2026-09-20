@@ -2007,7 +2007,7 @@ entry point, not as a repair of a defect a `ridl build` can produce today.
 - Consumes: `constraint_checks` (Task 3), the manifest feature (Task 7).
 - Produces: nothing new; extends the generated `new`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```rust
 #[test]
@@ -2026,22 +2026,36 @@ fn pattern_check_is_feature_gated() {
 ```
 
 `vin_decl` is a `string` type carrying `len_min == len_max == 17` and a
-`pattern`; build it with the existing `primitive_type` helper. Its `len_min` has
-to stay positive for the last assertion to mean anything: a `len_min` of 0 emits
-no branch at all (Task 3, correction 2), so a fixture defaulting to 0 would
-leave that assertion resting on the `len_max` branch alone.
+`pattern`. Build the `TypeDef` inline: the `primitive_type` helper hardcodes
+`constraint: None` and takes no constraint argument, so it cannot carry either
+the length bound or the pattern. Its `len_min` has to stay positive for the last
+assertion to mean anything: a `len_min` of 0 emits no branch at all (Task 3,
+correction 2), so a fixture defaulting to 0 would leave that assertion resting
+on the `len_max` branch alone.
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cargo test -p ridl-backend-rust --locked pattern_check_is_feature_gated`
 Expected: FAIL — no `cfg` attribute is emitted.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Append to `constraint_checks`, after the length checks:
 
 ```rust
-if let Some(pattern) = c.pattern.as_deref() {
+if backing_scalar(td) == ScalarBacking::String
+    && let Some(pattern) = c.pattern.as_deref()
+{
+    // A `match` pattern is checked against text, and `regex::Regex`
+    // matches `&str`. Only a `String` backing has a value that coerces
+    // to `&str` (`newtype_inner`); a bytes backing carries `Vec<u8>`,
+    // against which `Regex::is_match` does not type-check.
+    //
+    // No typl source reaches this: the reference gives bytes no `match`
+    // (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for
+    // that backing. The guard is totality over the IR rather than over
+    // the surface, like the `is_float` guard above.
+    //
     // The pattern needs a regex engine, which `core` has none of. The
     // range and length checks above are not gated; only this one is, so a
     // `--no-default-features` build still validates the bounds it emits.
@@ -2069,23 +2083,71 @@ if let Some(pattern) = c.pattern.as_deref() {
 }
 ```
 
+The pattern branch carries a backing guard, mirroring the `is_float` guard
+already in the same function for `min`/`max`: it fires only for
+`ScalarBacking::String`. Without it, an IR carrying a literal `pattern` on a
+bytes backing would get `PATTERN.is_match(&value)` where `value` is a `Vec<u8>`,
+which does not type-check against `regex::Regex::is_match` (`&str`).
+
+**That IR does not come from a typl source.** The reference gives bytes no
+`match` (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for that
+backing, so a `match` written on a bytes type is dropped during lowering — the
+guard is inside `lower_len_scalar` itself — and the constraint reaches the
+backend as `{len_min, len_max}` alone. An earlier draft of this task justified
+the guard by claiming typl permits the form; it does not, and the TYPL-115 note
+such a source draws is about its missing init value, not its pattern. The guard
+is kept on the same footing as the `is_float` guard beside it, which is also
+unreachable from a typl source — `lower_len_scalar` always leaves `min` and
+`max` absent — and is pinned by its own test. A backend reads the IR, which need
+not have come from this checker.
+
+No `rustc` compile proof in this repository drove
+`--cfg
+feature="validate-pattern"` before this task, so no test compiled the
+block a missing guard would produce. Step 4 below covers both the guard and the
+proofs that now compile and run the gated block.
+
 Emit a doc line on the type naming that the pattern is enforced only under the
 feature, so the guarantee is not silently variable. That line replaces one
 rather than joining it: `unchecked_doc` (Task 3) emits " The `match` pattern is
 not checked by `new`." whenever the constraint carries a `pattern` or a
-`pattern_const`, and the `pattern` half of that becomes untrue here. An
-unresolved `pattern_const` keeps the existing line, because no check is emitted
-for it.
+`pattern_const`, and the `pattern` half of that becomes untrue here — but only
+for a `String` backing, which is the only backing the emitted check covers;
+`unchecked_doc` applies the same `backing_scalar` guard so the feature-gated
+line appears exactly when the feature-gated check is emitted, and any other
+backing carrying a literal `pattern` keeps the plain "not checked" line. An
+unresolved `pattern_const` keeps the existing line too, because no check is
+emitted for it.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cargo insta test -p ridl-backend-rust --accept --unreferenced=reject`
 Then: `cargo test -p ridl-backend-rust --locked` Expected: PASS. The `rustc`
-compile proofs run without the feature, so they exercise the gated-out path; the
-enabled path is covered by Task 7's emitted crate building under default
-features.
+compile proofs that use `vin_decl` and its siblings run without the feature, so
+they exercise the gated-out path only. The gated-in path is covered by a named
+proof, `pattern_check_compiles_under_validate_pattern_against_a_regex_stand_in`,
+which compiles the generated source for a `string`-backed named scalar with a
+literal pattern and a length bound, with `--cfg 'feature="validate-pattern"'`,
+against a hand-written stand-in `regex` rlib built with `rustc` (`regex` is not
+a declared dependency of any workspace crate, so the real crate cannot be linked
+here) and the existing `ridl_rt_rlib` helper's `ridl-rt` rlib. No test builds
+the emitted crate itself with cargo or under a cargo feature flag; the proof
+above is what exercises the feature-gated code, not a build of Task 7's emitted
+crate.
 
-- [ ] **Step 5: Commit**
+A compile proof is not enough on its own, because two ways of getting the
+emitted check wrong still type-check. Inverting `if !PATTERN.is_match(…)`
+compiles, and so does leaving the pattern's `/` delimiters in place — that is a
+valid regex source which simply never matches, so every `new` would reject every
+value. Both leave every string assertion in the file green. A second proof,
+`the_generated_pattern_check_runs`, compiles the gated block as a program and
+runs it: the stand-in's `Regex::new` refuses a delimiter-carrying pattern and
+its `is_match` compares for equality, so a matching value must be accepted and a
+non-matching value of the same length must be refused with `Rule::Pattern`. This
+follows the precedent `the_generated_conversions_run` set for the enum and
+enum-set conversions.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/ridl-backend-rust/

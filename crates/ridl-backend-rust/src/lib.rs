@@ -395,10 +395,11 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     }
 }
 
-/// The range and length checks for one constraint, as statements that return
-/// early with a `Violation`. Only the branches the constraint carries are
-/// emitted, so a string with a length bound and no range gets only the length
-/// check. The pattern check is not emitted here.
+/// The range, length and pattern checks for one constraint, as statements
+/// that return early with a `Violation`. Only the branches the constraint
+/// carries are emitted, so a string with a length bound and no range gets
+/// only the length check. The pattern check is emitted last and is the only
+/// one behind a feature gate.
 ///
 /// A `min` or `max` is a numeric bound (typl §5.5), so a range check is
 /// emitted only for a float or integer backing; on any other backing the two
@@ -484,6 +485,49 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
             });
         }
     }
+    if backing_scalar(td) == ScalarBacking::String
+        && let Some(pattern) = c.pattern.as_deref()
+    {
+        // A `match` pattern is checked against text, and `regex::Regex`
+        // matches `&str`. Only a `String` backing has a value that coerces
+        // to `&str` (`newtype_inner`); a bytes backing carries `Vec<u8>`,
+        // against which `Regex::is_match` does not type-check.
+        //
+        // No typl source reaches this: the reference gives bytes no `match`
+        // (§4.5, §5.4) and `lower_scalar` passes `allow_pattern: false` for
+        // that backing, so the pattern never enters the IR. The guard is
+        // totality over the IR rather than over the surface, on the same
+        // footing as the `is_float` guard above — `lower_len_scalar` always
+        // leaves `min` and `max` absent, so that one is unreachable from a
+        // typl source too, and is pinned by its own test. A backend reads
+        // the IR, which need not have come from this checker.
+        //
+        // The pattern needs a regex engine, which `core` has none of. The
+        // range and length checks above are not gated; only this one is, so
+        // a `--no-default-features` build still validates the bounds it
+        // emits.
+        //
+        // `::std` and `::regex` are absolute for the reason the prelude
+        // names are: the face module of an interface named `Std` or `Regex`
+        // is a module of that name in this same module, and it would shadow
+        // the extern crate.
+        let source = strip_regex_delimiters(pattern);
+        checks.push(quote! {
+            #[cfg(feature = "validate-pattern")]
+            {
+                static PATTERN: ::std::sync::LazyLock<::regex::Regex> =
+                    ::std::sync::LazyLock::new(|| {
+                        ::regex::Regex::new(#source).expect("ridlc emitted an invalid pattern")
+                    });
+                if !PATTERN.is_match(&#value) {
+                    return ::core::result::Result::Err(::ridl_rt::payload::Violation {
+                        type_name: #type_name,
+                        rule: ::ridl_rt::payload::Rule::Pattern,
+                    });
+                }
+            }
+        });
+    }
     quote! { #(#checks)* }
 }
 
@@ -509,20 +553,33 @@ fn scalar_getter(td: &v2::TypeDef, vis: TokenStream, inner: TokenStream) -> Toke
 }
 
 /// The gaps a generated constructor does not close, named on the type itself
-/// rather than left silent: a `step` is not checked by `new`, and neither is
-/// a `match` pattern until the pattern check lands. `pattern_const` is read as
-/// well as `pattern`, because a pattern constant that did not resolve leaves
-/// `pattern` absent while the type still carries a match constraint.
+/// rather than left silent: a `step` is not checked by `new`. A literal
+/// `match` pattern on a `String` backing is checked by `new`, but only under
+/// the `validate-pattern` feature, so the type names that condition rather
+/// than leaving the guarantee silently variable. On any other backing
+/// `constraint_checks` emits no pattern branch at all (a `regex::Regex`
+/// matches `&str`, and only a `String` backing's value coerces to one), so
+/// the plain "not checked" line applies there instead. `pattern_const` is
+/// read as well as `pattern`, because a pattern constant that did not resolve
+/// leaves `pattern` absent while the type still carries a match constraint,
+/// and no check is emitted for that case either, so it keeps the plain "not
+/// checked" line.
 fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
     let Some(c) = td.constraint.as_ref() else {
         return quote! {};
     };
     let mut lines = Vec::new();
     if c.step.is_some() {
-        lines.push(" Quantization (`step`) is not checked by `new`.");
+        lines.push(" Quantization (`step`) is not checked by `new`.".to_string());
     }
-    if c.pattern.is_some() || c.pattern_const.is_some() {
-        lines.push(" The `match` pattern is not checked by `new`.");
+    if c.pattern.is_some() && backing_scalar(td) == ScalarBacking::String {
+        lines.push(
+            " The `match` pattern is checked by `new` only when the crate is built with \
+              the `validate-pattern` feature."
+                .to_string(),
+        );
+    } else if c.pattern.is_some() || c.pattern_const.is_some() {
+        lines.push(" The `match` pattern is not checked by `new`.".to_string());
     }
     quote! { #(#[doc = #lines])* }
 }

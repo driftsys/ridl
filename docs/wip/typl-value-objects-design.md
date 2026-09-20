@@ -95,6 +95,14 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    backing it ignores both rather than rendering a literal of the wrong type. A
    length bound on the same type is still checked.
 
+   A fourth skip has the same shape: `pattern` is checked only on a `string`
+   backing, because the check calls `regex::Regex::is_match`, which takes
+   `&str`, and only a `string` backing's inner value coerces to one. Neither the
+   third skip nor this one is reachable from a typl source — `§4.5` and `§5.4`
+   give bytes no `match`, and the checker drops a `min` or `max` on any
+   non-numeric backing — so both are totality over the IR a backend reads rather
+   than over the surface a user writes.
+
    This is why codegen must emit a manifest: `regex` cannot be an optional
    dependency of a bare `.rs` file, and a `#[cfg(feature = "std")]` gate would
    be wrong because most std crates declare no `std` feature at all.
@@ -223,6 +231,11 @@ check, rather than staying silent:
 - **Cross-field struct invariants** — deferred by typl §17.7 to an `invariant`
   block.
 - **Anything reached through `new_unchecked`, or a TypeScript `as` cast.**
+- **A `match` pattern whose constant did not resolve**, which leaves the type
+  carrying a match constraint with no pattern text to check.
+- **A `match` pattern on a backing the check does not cover**, per decision 4's
+  fourth skip. Unreachable from a typl source, but the generated type states it
+  rather than claiming the feature-gated guarantee.
 
 ## Deferred — step normalization and steppers
 
