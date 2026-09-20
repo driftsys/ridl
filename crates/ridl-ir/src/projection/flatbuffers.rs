@@ -98,10 +98,17 @@ pub enum SlotSource {
 /// or retired, its id the typl ordinal minus one (typl §7.4).
 ///
 /// Ordinal 0 is refused rather than subtracted with a wrapping or panicking
-/// underflow. typl never assigns it, so this is totality over IR handed in
-/// directly, not a case reachable through the compiler.
+/// underflow, and so is an ordinal used twice. typl assigns neither, so both
+/// are totality over IR handed in directly rather than cases reachable
+/// through the compiler.
+///
+/// The repeat matters beyond the schema `flatc` would refuse: [`max_size`]
+/// charges one alignment event per vtable slot, and that dominates the real
+/// per-field padding only while the fields and the slots are one to one. Two
+/// fields sharing an ordinal would be charged one slot's slack and pay two
+/// fields' padding.
 pub fn struct_table(owner: &str, def: &v2::StructDef) -> Result<TableLayout, ProjectionError> {
-    let mut slots = Vec::with_capacity(def.members.len());
+    let mut slots: Vec<FieldSlot> = Vec::with_capacity(def.members.len());
     for member in &def.members {
         match &member.member {
             Some(v2::struct_member::Member::Field(field)) => slots.push(FieldSlot {
@@ -118,6 +125,19 @@ pub fn struct_table(owner: &str, def: &v2::StructDef) -> Result<TableLayout, Pro
                 },
             }),
             None => {}
+        }
+        if let Some(last) = slots.last()
+            && slots[..slots.len() - 1]
+                .iter()
+                .any(|slot| slot.id == last.id)
+        {
+            return Err(ProjectionError {
+                message: format!(
+                    "`{owner}` carries two struct members with ordinal {}, which FlatBuffers \
+                     cannot represent — one id names one field (typl §7.4).",
+                    last.id + 1
+                ),
+            });
         }
     }
     Ok(TableLayout { slots })

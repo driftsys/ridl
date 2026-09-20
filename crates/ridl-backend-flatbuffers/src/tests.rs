@@ -1442,28 +1442,48 @@ struct Schema {
 fn read_back(fbs_source: &str) -> Schema {
     let mut schema = Schema::default();
     let mut open_table: Option<(String, Vec<EmittedField>)> = None;
+    let mut in_enum = false;
     for line in fbs_source.lines() {
         let trimmed = line.trim();
-        if trimmed.starts_with("//") {
+        if trimmed.is_empty()
+            || trimmed.starts_with("//")
+            || trimmed.starts_with("namespace ")
+            || trimmed.starts_with("include ")
+        {
             continue;
         }
         if let Some(rest) = trimmed.strip_prefix("union ") {
             let (name, body) = rest.split_once('{').expect("a union line carries a body");
-            let members = body
-                .trim_end_matches('}')
-                .split(',')
-                .map(|member| {
-                    // Every arm is emitted in the alias form `member: Type`
-                    // ([`emit_union`]). One that is not would shift every
-                    // later member's implicit discriminant, so it is a panic
-                    // rather than a member this reader drops.
-                    let (member, _) = member
-                        .split_once(':')
-                        .unwrap_or_else(|| panic!("union member `{member}` carries no alias"));
-                    member.trim().to_string()
-                })
-                .collect();
+            let body = body.trim_end_matches('}').trim();
+            let members = if body.is_empty() {
+                // Every arm retired: `emit_union` writes an empty body.
+                Vec::new()
+            } else {
+                body.split(',')
+                    .map(|member| {
+                        // Every arm is emitted in the alias form `member: Type`
+                        // ([`emit_union`]). One that is not would shift every
+                        // later member's implicit discriminant, so it is a panic
+                        // rather than a member this reader drops.
+                        let (member, _) = member
+                            .split_once(':')
+                            .unwrap_or_else(|| panic!("union member `{member}` carries no alias"));
+                        member.trim().to_string()
+                    })
+                    .collect()
+            };
             schema.unions.insert(name.trim().to_string(), members);
+            continue;
+        }
+        if trimmed.starts_with("enum ") {
+            // An enum declaration carries no field slot, so it is not part of
+            // what the facts fix. It is recognised rather than skipped by
+            // falling through, so that an unrecognised line can be refused.
+            in_enum = true;
+            continue;
+        }
+        if in_enum {
+            in_enum = trimmed != "}";
             continue;
         }
         if let Some(rest) = trimmed.strip_prefix("table ") {
@@ -1477,7 +1497,10 @@ fn read_back(fbs_source: &str) -> Schema {
             }
             continue;
         }
-        if let Some((_, fields)) = open_table.as_mut() {
+        let Some((_, fields)) = open_table.as_mut() else {
+            panic!("`{trimmed}` is not a line this reader knows how to read");
+        };
+        {
             let (name, rest) = trimmed
                 .split_once(':')
                 .unwrap_or_else(|| panic!("table line `{trimmed}` is not a field"));
@@ -1614,67 +1637,137 @@ fn drift(package: &v2::Package, others: &[&v2::Package]) -> Vec<String> {
         }
     }
 
-    // Every remaining table is one the walk induced. Its shape names which
-    // one it is, and each shape's ids come from the facts.
-    for (name, emitted) in &schema.tables {
-        if declared.contains(name) {
-            continue;
-        }
-        let spelled: Vec<&str> = emitted.iter().map(|field| field.name.as_str()).collect();
-        let layout = match spelled.as_slice() {
-            ["key", "value"] => projection::map_entry_table(),
-            ["value"] => projection::union_arm_box_table(),
-            positional
-                if positional
-                    .iter()
-                    .enumerate()
-                    .all(|(index, field)| *field == format!("field_{}", index + 1)) =>
-            {
-                projection::tuple_table(name, &positional_tuple(positional.len())).expect("layout")
-            }
-            _ => {
-                findings.push(format!(
-                    "the generated table `{name}` has fields {spelled:?}, which is none of the \
-                     shapes the facts describe"
-                ));
-                continue;
-            }
-        };
-        let expected = expected_fields(&layout, &[]);
-        // A generated table's `= null` marker is the ordinary field rule and
-        // is checked on the declared tables above; here only the ids and the
-        // names are the facts' to fix.
-        let ids: Vec<(String, u32)> = emitted
-            .iter()
-            .map(|field| (field.name.clone(), field.id))
-            .collect();
-        let expected_ids: Vec<(String, u32)> = expected
-            .iter()
-            .map(|field| (field.name.clone(), field.id))
-            .collect();
-        if ids != expected_ids {
-            findings.push(format!(
-                "the generated table `{name}` has {ids:?}, the facts say {expected_ids:?}"
-            ));
-        }
+    // Every remaining table is one the walk induced — a map's entry table, a
+    // tuple's positional table, a union arm's box. None of them is a
+    // declaration, so there is no name to look them up by that does not
+    // duplicate the emitter's own naming rule. What is compared instead is
+    // the multiset of layouts: the facts say which generated tables a package
+    // owes and what shape each one has, and the schema either has that
+    // collection or it does not.
+    //
+    // Classifying the emitted tables by the field names they happen to carry
+    // would not do. It derives the expectation from the emission, so a table
+    // that lost a field is simply compared against a shorter expectation —
+    // `TelemetryBounds` emitted as a one-field tuple matches a one-field
+    // tuple, and an emptied box matches a zero-field tuple.
+    let mut owed = induced_layouts(package, others);
+    let mut emitted_generated: Vec<Vec<(String, u32)>> = schema
+        .tables
+        .iter()
+        .filter(|(name, _)| !declared.contains(name))
+        .map(|(_, fields)| {
+            fields
+                .iter()
+                .map(|field| (field.name.clone(), field.id))
+                .collect()
+        })
+        .collect();
+    let mut owed_shapes: Vec<Vec<(String, u32)>> = owed
+        .drain(..)
+        .map(|layout| {
+            expected_fields(&layout, &[])
+                .iter()
+                .map(|field| (field.name.clone(), field.id))
+                .collect()
+        })
+        .collect();
+    owed_shapes.sort();
+    emitted_generated.sort();
+    if owed_shapes != emitted_generated {
+        findings.push(format!(
+            "the generated tables are {emitted_generated:?}, the facts owe {owed_shapes:?}"
+        ));
     }
 
     findings.sort();
     findings
 }
 
-/// A tuple of `count` fields, to ask the facts what ids a positional table of
-/// that width takes. The field types are irrelevant — [`projection::tuple_table`]
-/// reads only how many there are.
-fn positional_tuple(count: usize) -> v2::TupleType {
-    v2::TupleType {
-        fields: (0..count)
-            .map(|index| v2::TupleField {
-                name: format!("field{index}"),
-                r#type: Some(float64_type()),
-            })
-            .collect(),
+/// The layout of every table the projection generates for `package` — one per
+/// map, one per tuple, one per union arm that is not itself a table — derived
+/// from the IR, never from what was emitted.
+///
+/// The walk follows the same paths `emit_structs` does: a struct's fields, a
+/// tuple's fields, a map's key and value, an array's element, and a union's
+/// arms. It collects layouts rather than names, because a generated table's
+/// name is the emitter's to choose and this module fixes only its slots.
+fn induced_layouts(package: &v2::Package, others: &[&v2::Package]) -> Vec<projection::TableLayout> {
+    let mut layouts = Vec::new();
+    for decl in &package.decls {
+        match &decl.kind {
+            Some(v2::decl::Kind::StructDef(def)) => {
+                for member in &def.members {
+                    if let Some(v2::struct_member::Member::Field(field)) = &member.member {
+                        collect_induced(field.r#type.as_ref(), &mut layouts);
+                    }
+                }
+            }
+            Some(v2::decl::Kind::UnionDef(def)) => {
+                for arm in &def.arms {
+                    // ADR-0019 decision 2: an arm that is not a table of its
+                    // own is isolated in a box. A struct or a union arm is a
+                    // table already.
+                    let boxed = match resolve_kind(package, others, &arm.type_ref) {
+                        Some(v2::decl::Kind::StructDef(_) | v2::decl::Kind::UnionDef(_)) => false,
+                        Some(_) => true,
+                        None => continue,
+                    };
+                    if boxed {
+                        layouts.push(projection::union_arm_box_table());
+                    }
+                }
+            }
+            _ => {}
+        }
     }
+    layouts
+}
+
+/// Adds the table `ty` induces, and the tables anything nested inside it
+/// induces.
+fn collect_induced(ty: Option<&v2::FieldType>, layouts: &mut Vec<projection::TableLayout>) {
+    let Some(kind) = ty.and_then(|ty| ty.kind.as_ref()) else {
+        return;
+    };
+    match kind {
+        v2::field_type::Kind::Array(array) => {
+            collect_induced(array.element.as_deref(), layouts);
+        }
+        v2::field_type::Kind::Map(map) => {
+            layouts.push(projection::map_entry_table());
+            collect_induced(map.key.as_deref(), layouts);
+            collect_induced(map.value.as_deref(), layouts);
+        }
+        v2::field_type::Kind::Tuple(tuple) => {
+            layouts.push(projection::tuple_table("", tuple).expect("layout"));
+            for field in &tuple.fields {
+                collect_induced(field.r#type.as_ref(), layouts);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// The kind of the declaration `reference` names, local or foreign.
+fn resolve_kind(
+    package: &v2::Package,
+    others: &[&v2::Package],
+    reference: &str,
+) -> Option<v2::decl::Kind> {
+    let (home, name) = match reference.rsplit_once('.') {
+        Some((referenced, name)) => (
+            *others
+                .iter()
+                .find(|candidate| candidate.name == referenced)?,
+            name,
+        ),
+        None => (package, reference),
+    };
+    home.decls
+        .iter()
+        .find(|decl| decl.name == name)?
+        .kind
+        .clone()
 }
 
 /// The enum declaration behind a field's type, if its type is a reference to
@@ -1854,6 +1947,66 @@ fn an_emitter_that_leaves_the_facts_is_reported() {
         "a wrapper at id 0 must not compare equal to the facts, which put it at {}",
         projection::UNION_WRAPPER_VALUE_ID
     );
+}
+
+#[test]
+fn the_null_default_is_compared_on_a_fixture_that_carries_one() {
+    // ADR-0019 decision 6 is a fact the codec reads too (design note D-9), so
+    // the drift walk compares it. Neither corpus fixture exercises it —
+    // `cruise.ridl` has no struct field typed by an enum at all, and
+    // `EngageState` declares `OFF = 0` anyway — so the comparison would be
+    // vacuous without this package. Removing the `= null` emission turns this
+    // test red and leaves the corpus ones green, which is why it exists.
+    let package = v2::Package {
+        name: "veh.cruise".to_string(),
+        decls: vec![
+            v2::Decl {
+                name: "Gear".to_string(),
+                kind: Some(v2::decl::Kind::EnumDef(v2::EnumDef {
+                    values: vec![
+                        v2::EnumValue {
+                            name: "FIRST".to_string(),
+                            value: 1,
+                            ..Default::default()
+                        },
+                        v2::EnumValue {
+                            name: "SECOND".to_string(),
+                            value: 2,
+                            ..Default::default()
+                        },
+                    ],
+                    ..Default::default()
+                })),
+                ..Default::default()
+            },
+            v2::Decl {
+                name: "Drivetrain".to_string(),
+                kind: Some(v2::decl::Kind::StructDef(v2::StructDef {
+                    members: vec![field_member("gear", 1, named_type("Gear"))],
+                    fixed_layout: false,
+                })),
+                ..Default::default()
+            },
+        ],
+        ..Default::default()
+    };
+
+    let generated = generate(&package).expect("generate");
+    assert!(
+        generated.fbs_source.contains("gear: Gear = null (id: 0);"),
+        "the fixture exists to carry a `= null`; got:\n{}",
+        generated.fbs_source
+    );
+    assert!(
+        read_back(&generated.fbs_source)
+            .tables
+            .get("Drivetrain")
+            .expect("a table")[0]
+            .null_default,
+        "the reader must see the `= null` it is about to compare"
+    );
+
+    assert_eq!(drift(&package, &[]), Vec::<String>::new());
 }
 
 #[test]
