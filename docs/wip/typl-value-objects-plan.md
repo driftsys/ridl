@@ -1145,7 +1145,7 @@ latter with Error = Infallible."
 
 **Model:** Sonnet (`docs/wip/2026-09-13-step1-lanes-plan.md` §4, stage C4).
 
-**Landed** in driftsys/ridl#TASK5PR. The blocks below are the code that is on
+**Landed** in driftsys/ridl#433. The blocks below are the code that is on
 `main`, not the code this task was first written with: review corrected the mask
 fold, which panicked in a debug build on a bit position `ridl-sem` reports
 TYPL-111 for and still carries into the IR, and merged the enum set's two impl
