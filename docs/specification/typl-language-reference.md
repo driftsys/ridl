@@ -978,6 +978,12 @@ metadata : [Label : Name; 0..32]
 sensors  : [Label : Speed; 1..8]
 ```
 
+A bare `string` or `bytes` key takes §4.4–§4.5's `[0..256]` length default, with
+TYPL-103, the same as every other position — §15.3 keeps a bare `string`/`bytes`
+out of a field position, but a map key is not one, so the default applies there
+instead. A key therefore always carries a length bound, which is what lets a
+projection state a finite size for the map.
+
 **A map has no declared entry order, and typl defines no canonical payload
 encoding.** A map is the only typl construct whose ordering is free: an array is
 ordered, a struct field and a union arm are identified by ordinal (§7.4), and an

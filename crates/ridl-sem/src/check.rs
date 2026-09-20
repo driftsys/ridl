@@ -2484,6 +2484,30 @@ impl Checker<'_> {
                 }
             }
             None => {
+                // §12.2 admits a bare `string`/`bytes` as a map key, where
+                // §15.3 keeps it out of a field position. §4.4–§4.5's `[0..256]`
+                // default applies there the same way it applies everywhere
+                // else, with the same TYPL-103 warning, so the IR always
+                // carries a length bound for the key (#457).
+                if map_key && matches!(class, BackingClass::Str | BackingClass::Bytes) {
+                    let parts = self.lower_scalar(class, None, span);
+                    return LoweredType {
+                        ty: v2::FieldType {
+                            optional: false,
+                            kind: Some(v2::field_type::Kind::InlineScalar(Box::new(v2::TypeDef {
+                                backing: Some(v2::Backing {
+                                    kind: Some(v2::backing::Kind::Primitive(primitive as i32)),
+                                }),
+                                constraint: parts.constraint.clone(),
+                                declared_init: None,
+                                init: None,
+                                width: parts.width,
+                            }))),
+                        },
+                        scalar_bounds: Some((parts.min, parts.max)),
+                        init_constraint: parts.constraint,
+                    };
+                }
                 if !map_key {
                     match class {
                         // §15.3: bare string/bytes never appear directly as a
@@ -5982,6 +6006,70 @@ mod tests {
         };
         let constraint = inline.constraint.as_ref().unwrap();
         assert_eq!(constraint.len_min, Some(8));
+        assert_eq!(constraint.len_max, Some(8));
+    }
+
+    /// §12.2 admits a bare `string` key where §15.3 keeps one out of a field
+    /// position. §4.4–§4.5's `[0..256]` default applies there too, so the key
+    /// lowers to an inline scalar carrying the bound, with TYPL-103 (#457).
+    #[test]
+    fn bare_string_map_key_takes_the_default_length_bound() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Speed: km/h [0.0..250.0 step 0.5]\nstruct S { m : [string : Speed; 0..4] }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-103"]);
+        let v2::struct_member::Member::Field(field) = struct_def(&checked, "S").members[0]
+            .member
+            .as_ref()
+            .unwrap()
+        else {
+            panic!("expected a field");
+        };
+        let Some(v2::field_type::Kind::Map(map)) = &field.r#type.as_ref().unwrap().kind else {
+            panic!("expected a map");
+        };
+        let Some(v2::field_type::Kind::InlineScalar(key)) = &map.key.as_ref().unwrap().kind else {
+            panic!("expected an inline scalar key");
+        };
+        let constraint = key.constraint.as_ref().unwrap();
+        assert_eq!(constraint.len_min, Some(0));
+        assert_eq!(constraint.len_max, Some(256));
+    }
+
+    /// A bare `bytes` key takes the same default.
+    #[test]
+    fn bare_bytes_map_key_takes_the_default_length_bound() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Speed: km/h [0.0..250.0 step 0.5]\nstruct S { m : [bytes : Speed; 0..4] }\n",
+        );
+        assert_eq!(codes(&checked), vec!["TYPL-103"]);
+    }
+
+    /// A key that writes its own length bound keeps it, and draws no warning.
+    #[test]
+    fn constrained_string_map_key_keeps_its_own_bound() {
+        let checked = check_source(
+            "app",
+            "package app\ntype Speed: km/h [0.0..250.0 step 0.5]\nstruct S { m : [string [0..8] : Speed; 0..4] }\n",
+        );
+        assert!(codes(&checked).is_empty(), "got: {:?}", checked.diagnostics);
+        let v2::struct_member::Member::Field(field) = struct_def(&checked, "S").members[0]
+            .member
+            .as_ref()
+            .unwrap()
+        else {
+            panic!("expected a field");
+        };
+        let Some(v2::field_type::Kind::Map(map)) = &field.r#type.as_ref().unwrap().kind else {
+            panic!("expected a map");
+        };
+        let Some(v2::field_type::Kind::InlineScalar(key)) = &map.key.as_ref().unwrap().kind else {
+            panic!("expected an inline scalar key");
+        };
+        let constraint = key.constraint.as_ref().unwrap();
+        assert_eq!(constraint.len_min, Some(0));
         assert_eq!(constraint.len_max, Some(8));
     }
 

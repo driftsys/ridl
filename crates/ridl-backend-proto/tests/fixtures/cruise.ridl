@@ -50,7 +50,7 @@ struct Setpoint {
 
 struct Telemetry {
   history : [Speed; 8]
-  byId    : [string : Speed; 0..8]
+  byId    : [string [0..16] : Speed; 0..8]
   bounds  : (min: Speed, max: Speed)
   active  : Warnings
 }
