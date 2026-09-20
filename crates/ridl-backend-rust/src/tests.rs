@@ -372,6 +372,59 @@ fn a_maximum_at_the_inner_types_maximum_emits_no_check() {
     );
 }
 
+/// The suppression above is an exact equality, not a threshold: a maximum one
+/// below `i64::MAX` is a comparison rustc cannot fold, so the branch is still
+/// emitted. Without this test a guard that suppressed a range of large maxima
+/// would pass the suite.
+#[test]
+fn a_maximum_below_the_inner_types_maximum_still_emits_a_check() {
+    let source = rust_for(vec![public_decl(
+        "Timestamp",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Integer as i32,
+                )),
+            }),
+            constraint: Some(constraint(Some("0"), Some("9223372036854775806"), None)),
+            declared_init: None,
+            init: Some(init_value(true, Some("0"))),
+            width: None,
+        }),
+    )]);
+    assert!(
+        source.contains("> 9223372036854775806"),
+        "a maximum below i64::MAX must still be checked, got:\n{source}"
+    );
+}
+
+/// The suppression applies to an integer backing only. A float backing is
+/// never asked whether its maximum looks like `i64::MAX`, because the float
+/// newtype is not backed by `i64` and the comparison is not a tautology there.
+/// This pins that short circuit: without it, a float maximum that happens to
+/// spell `i64::MAX` would lose its check.
+#[test]
+fn a_float_maximum_spelling_the_integer_maximum_still_emits_a_check() {
+    let source = rust_for(vec![public_decl(
+        "Ratio",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Float as i32,
+                )),
+            }),
+            constraint: Some(constraint(Some("0.0"), Some("9223372036854775807"), None)),
+            declared_init: None,
+            init: Some(init_value(true, Some("0.0"))),
+            width: None,
+        }),
+    )]);
+    assert!(
+        source.contains("> 9223372036854775807"),
+        "a float maximum must be checked whatever it spells, got:\n{source}"
+    );
+}
+
 /// A `min` or `max` on a non-numeric backing is not something `ridl-sem`
 /// produces, but the IR is an artifact other tools write (ADR-0014), so the
 /// backend ignores the two rather than rendering a numeric comparison against
