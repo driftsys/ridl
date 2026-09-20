@@ -314,9 +314,12 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> Toke
 /// struct would shadow the prelude's in the module the constructors share
 /// with it.
 ///
-/// A deprecated declaration's impl blocks carry `#[allow(deprecated)]`: each
-/// uses the deprecated type, and without the allow the consumer's build draws
-/// the `deprecated` lint on code the consumer did not write.
+/// A deprecated declaration's impl blocks carry `#[allow(deprecated)]`, with
+/// one exception: the `Default` impl `defaults::decl_default_expr` emits
+/// carries no allow, because `emit_decl` attaches it outside this function.
+/// Each covered impl block uses the deprecated type, and without the allow
+/// the consumer's build draws the `deprecated` lint on code the consumer did
+/// not write.
 fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
@@ -419,7 +422,17 @@ fn constraint_checks(td: &v2::TypeDef, type_name: &str, value: TokenStream) -> T
                 }
             });
         }
-        if let Some(max) = c.max.as_deref() {
+        // The newtype backing an integer is always `i64` (`newtype_inner`), so
+        // a declared maximum at `i64::MAX` (9223372036854775807) makes
+        // `value > 9223372036854775807` never true: rustc draws its
+        // `unused_comparisons` warning on it in the consumer's build. The
+        // branch is emitted only when the maximum is below the inner type's
+        // maximum.
+        let checked_max = c
+            .max
+            .as_deref()
+            .filter(|max| is_float || max.parse::<i64>() != Ok(i64::MAX));
+        if let Some(max) = checked_max {
             let lit = numeric_tokens(max, is_float);
             checks.push(quote! {
                 if #value > #lit {

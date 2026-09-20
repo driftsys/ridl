@@ -45,5 +45,13 @@ pub fn ridl_rt_rlib(dir: &Path) -> PathBuf {
         status.success(),
         "ridl-rt must build as an rlib for the compile proofs to see it"
     );
+    // An rlib is an `ar` archive. Asserting the magic distinguishes a real
+    // rlib from a metadata-only file under the same name, which a proof using
+    // `--emit metadata` would accept while nothing that links could.
+    let head = std::fs::read(&rlib).expect("the rlib is readable");
+    assert!(
+        head.starts_with(b"!<arch>\n"),
+        "the helper must produce an rlib archive, not metadata under an rlib name"
+    );
     rlib
 }

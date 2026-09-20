@@ -341,6 +341,37 @@ fn a_zero_length_minimum_emits_no_check() {
     }
 }
 
+/// The newtype backing an integer named scalar is always `i64`
+/// (`newtype_inner`). A maximum equal to `i64::MAX` (9223372036854775807)
+/// makes `value > 9223372036854775807` never true: rustc draws its
+/// `unused_comparisons` warning on it in the consumer's build, so the branch
+/// is not emitted when the declared maximum equals the inner type's maximum.
+#[test]
+fn a_maximum_at_the_inner_types_maximum_emits_no_check() {
+    let source = rust_for(vec![public_decl(
+        "Timestamp",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::Integer as i32,
+                )),
+            }),
+            constraint: Some(constraint(Some("0"), Some("9223372036854775807"), None)),
+            declared_init: None,
+            init: Some(init_value(true, Some("0"))),
+            width: None,
+        }),
+    )]);
+    assert!(
+        !source.contains("> 9223372036854775807"),
+        "a maximum at i64::MAX must emit no comparison, got:\n{source}"
+    );
+    assert!(
+        source.contains("if value < 0 {"),
+        "the minimum is still checked, got:\n{source}"
+    );
+}
+
 /// A `min` or `max` on a non-numeric backing is not something `ridl-sem`
 /// produces, but the IR is an artifact other tools write (ADR-0014), so the
 /// backend ignores the two rather than rendering a numeric comparison against
