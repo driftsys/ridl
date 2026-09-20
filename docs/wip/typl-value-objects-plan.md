@@ -2252,10 +2252,24 @@ as written, with five additions the steps below do not name:
    names unprojected. Sebastien decided the tuple half on 2026-09-20.
 
    The tuple half is guarded by `a_tuple_field_name_is_projected_to_snake_case`
-   alone. Reverting both tuple sites was checked by mutation: no `rustc` compile
-   proof fails, because no corpus or golden fixture carries a multi-word tuple
-   field name. That is unlike the struct half, which
-   `appendix_a_compiles_with_rustc` also guards.
+   alone. Reverting both tuple sites was checked by mutation over
+   `cargo test --workspace --no-fail-fast`: nothing else fails, because no
+   corpus or golden fixture carries a multi-word tuple field name. That is
+   unlike the struct half, where reverting both sites also fails
+   `appendix_a_compiles_with_rustc` and, in the compiler corpus,
+   `veh_cluster_generated_rust_compiles_with_rustc` and
+   `corpus_entries_compile_to_reviewed_snapshots`.
+
+   `--no-fail-fast` is load-bearing in that sentence. `cargo test` stops at the
+   first failing test binary, so a mutation run over two packages reports the
+   failures of one of them and looks like a clean result for the other. An
+   earlier reading of this same mutation, taken without the flag, concluded that
+   no `rustc` proof guards the struct half at all. That conclusion was wrong:
+   `veh_cluster_generated_rust_compiles_with_rustc` always bit, because the
+   `veh-cluster` corpus carries `sensorId`. What was true is narrower — the
+   three `ridl-backend-rust` compile proofs carried the deny on fixtures with
+   single-word field names only, which is what addition 1's guard change
+   repairs.
 2. **RIDL-149's message names the transform that collided.**
    `Checker::colliding_projected_name` hardcoded "a target whose namespace is
    snake_case", which a `camel_case`-only collision — decision D's `XY` and
