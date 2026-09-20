@@ -106,9 +106,10 @@ recorded at the top of Task 3. The corrections made here:
 
 **Line references were replaced by symbol names** wherever a symbol exists. The
 line numbers this plan carried had drifted in
-`crates/ridl-backend-rust/src/lib.rs` alone, and a symbol name does not drift.
-Where a line number remains it is the one at 86e10d7 and is given as an aid, not
-as the identifier.
+`crates/ridl-backend-rust/src/lib.rs`, in `crates/ridl-sem/src/check.rs` and in
+`crates/ridl-backend-rust/src/tests.rs`, and a symbol name does not drift. Where
+a line number remains it is the one at 86e10d7 and is given as an aid, not as
+the identifier.
 
 ## Global Constraints
 
@@ -2294,12 +2295,14 @@ as written, with five additions the steps below do not name:
    that is not the pinned one. It names the generated face's modules and
    methods, and it is outside this task as the arm transform was outside E9.7.
 
-Snapshot churn was what the steps predict: `corpus__rust@veh-cluster.snap` (four
-field names) and `corpus__diagnostics@ridl-diag-showcase.snap` (the one word
-added to RIDL-149's message). The proto3, FlatBuffers and TypeScript snapshots
-did not move. The tuple half moved no snapshot at all, for the reason the
-mutation check gives: no fixture carries a multi-word tuple field name. One
-stale artifact was deleted rather than left alone:
+Snapshot churn was what the steps predict: `corpus__rust@veh-cluster.snap`
+(three field names over six lines — `sensorId`, `isOpen` and `hoursRun`, each in
+its struct and in its `Default` body) and
+`corpus__diagnostics@ridl-diag-showcase.snap` (the one word added to RIDL-149's
+message). The proto3, FlatBuffers and TypeScript snapshots did not move. The
+tuple half moved no snapshot at all, for the reason the mutation check gives: no
+fixture carries a multi-word tuple field name. One stale artifact was deleted
+rather than left alone:
 `ridl_backend_rust__tests__appendix_a_rust_snapshot.snap` was an orphan — no
 test read or wrote it, and it still showed pre-change field names.
 
@@ -2333,12 +2336,24 @@ rewrites, and Task 6 is the larger change.
 - Modify: `crates/ridl-sem/src/check.rs` — RIDL-149 over a union's arms, beside
   the existing member, parameter and struct-field namespaces
 - Modify: `crates/ridlc/tests/corpus.rs` — the `rustc_accepts` lint list
+- Modify: `crates/ridl-core/src/diag.rs` — RIDL-149's doc comment and one-line
+  summary, which stated the old scope. No code minted; see "A shared file after
+  all" below
+- Modify: `crates/ridl-backend-rust/src/descriptors.rs` and `face.rs` — the
+  `camel_case` import only, which follows the move into `ridl-ir`
 - Test: `crates/ridl-backend-rust/src/tests.rs`,
-  `crates/ridl-sem/src/check.rs`'s test module, `crates/ridlc/tests/corpus.rs`
+  `crates/ridl-sem/src/check.rs`'s test module, and
+  `crates/ridl-ir/src/name.rs`'s test module. `crates/ridlc/tests/corpus.rs`
+  gains no test — it gains a lint flag and a doc comment, which is why it is
+  listed under Modify above
 
-**Not a shared file.** `crates/ridl-core/src/diag.rs` is in the §6 shared-file
-order (S1 and S2 → L4 → C3 → B3) and this task does not touch it, because
-decision D reuses RIDL-149 rather than minting a code.
+**A shared file after all.** `crates/ridl-core/src/diag.rs` is in the §6
+shared-file order (S1 and S2 → L4 → C3 → B3). This paragraph said the task does
+not touch it, because decision D reuses RIDL-149 rather than minting a code.
+Minting is indeed avoided, but the file is touched anyway: RIDL-149's doc
+comment and one-line summary both stated its scope as three namespaces under one
+transform, and both had to change. See landed addition 4 above. No code is
+minted.
 
 **Interfaces:**
 
@@ -2460,7 +2475,10 @@ adds; this task runs after Task 6, so it is present.
 Run: `cargo test -p ridl-backend-rust --locked a_struct_field_name_is_projected`
 Expected: FAIL — `emit_field` renders `ident(&field.name)` with no transform, so
 the emitted field is `pub sensorId`. The same string is visible in the committed
-snapshots today: grep `crates/ridl-backend-rust/src/snapshots/` for `sensorId`.
+snapshots today: grep `crates/ridlc/tests/snapshots/` for `sensorId`. This
+sentence named `crates/ridl-backend-rust/src/snapshots/` when it was written,
+which was wrong even then: the only file there that held the string was an
+orphan no test read, and Task 11 deleted it.
 
 - [x] **Step 3: Write the implementation**
 
