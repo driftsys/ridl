@@ -130,8 +130,25 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
 
 7. **Derives.** Always sound, on every generated type: `Debug`, `Clone`,
    `PartialEq`. Conditional: `Copy` when the transitive closure is
-   `f64`/`i64`/`bool` only; `Eq` and `Hash` when no `f64` appears anywhere in
-   the closure, including unit-backed types since a unit backing implies float.
+   `f64`/`i64`/`bool` only **and** holds no array and no map position; `Eq` and
+   `Hash` when no `f64` appears anywhere in the closure, including unit-backed
+   types since a unit backing implies float.
+
+   Both leaf conditions are necessary and neither is sufficient. Four positions
+   refuse every conditional derive whatever their leaves are: a reference that
+   does not resolve to a declaration of the package, a reference that closes a
+   cycle, a `Stream`, and an `Unspecified` field primitive. The full rule,
+   including those four, is stated in the module documentation of
+   `crates/ridl-backend-rust/src/derives.rs`, which is where it is enforced.
+
+   **An array position refuses `Copy` in both of its emitted forms.** A bounded
+   array emits `Vec<T>`, which is not `Copy` at all. A fixed array emits
+   `[T; N]`, which is `Copy` when `T` is — so refusing it there is policy, not
+   soundness. The reason for the policy is that `Copy` would otherwise depend on
+   the array bounds being equal, which is a rule no reader of the generated
+   crate could predict from the declaration. A map emits `Vec<(K, V)>` and
+   refuses `Copy` for the first reason. Neither position refuses `Eq` or `Hash`:
+   a `Vec` has both when its element has both.
 
    `PartialOrd`/`Ord` are derived on **numeric named scalars only**. Ordering a
    struct's fields lexicographically, or a union's arms by declaration order, is
@@ -140,14 +157,25 @@ struct invariants, which typl §17.7 defers to a future `invariant` block; serde
    while an integer-backed one receives both.
 
    Eligibility uses the recursion `defaults.rs` already implements: leaf
-   recursion, the C1b cycle guard, and the rule that a composite's one-level
-   `derivable` flag is re-checked by recursion rather than trusted.
+   recursion and the C1b cycle guard. It reads **no** `derivable` flag.
+   `InitValue.derivable` governs `Default` derivation and plays no part in
+   derive eligibility, so there is no one-level flag here to trust or re-check.
+   An earlier draft of this decision said there was; that sentence was carried
+   over from `defaults.rs` and never described this code.
 
    **Cross-package references are handled conservatively.** `defaults.rs` can be
    optimistic — it emits `path::default()` and lets rustc verify. A derive
    cannot: `#[derive(Copy)]` on a struct whose cross-package field is not `Copy`
    is a hard error in the consumer's build. So an unresolvable cross-package
    reference in the transitive closure disables the conditional derives.
+
+   **An induced tuple struct gets its own derive attribute, and must.** A tuple
+   field generates a named struct of its own (typl §11), and the struct that
+   holds it derives `Debug`, `Clone` and `PartialEq` unconditionally — none of
+   which compiles unless the generated tuple struct carries them too. The
+   tuple's eligibility is computed over the tuple's own fields, so it can differ
+   from its holder's. A tuple is anonymous in source, so it is never a named
+   scalar and takes no ordering.
 
 8. **`Default` is never derived.** `defaults.rs` builds it from the typl init
    value (§5.8), which may be a declared `= 0.5`. `#[derive(Default)]` would

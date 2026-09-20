@@ -1443,6 +1443,9 @@ The tests that landed, all in `crates/ridl-backend-rust/src/tests.rs` under the
 - `an_enum_set_in_a_struct_field_is_readable_through_a_shared_reference`
 - `the_derive_attribute_sits_under_the_doc_comment`
 
+Review added seven more and reworked two of the above; see "Review findings" at
+the end of this task.
+
 **The enum set is the reason this task matters beyond tidiness.**
 driftsys/ridl#433 made an enum set's inner value private with a `get(self)` that
 takes `self` by value, so an enum set held in a struct field could not be read
@@ -1472,7 +1475,9 @@ sketch's, with these differences:
 3. An array contributes `copy: false` in both of its emitted forms. A fixed
    array is `[T; N]` and would be `Copy` when `T` is, but a `Copy` that depends
    on the array bounds being equal is a rule no reader of the generated crate
-   could predict, and the conservative answer is sound for both.
+   could predict, and the conservative answer is sound for both. Refusing the
+   fixed form is therefore a policy rather than a soundness rule, which is how
+   review read it and why it now has an in-crate test of its own.
 
 **Induced tuple structs were missing from the sketch, and they are not
 optional.** A tuple generates a named struct of its own (`emit_tuple_struct`),
@@ -1538,10 +1543,14 @@ reference disables them on the importing side, so the proof could not observe
 them.
 
 The `rustc` compile proofs are the real check that no unsound derive was
-emitted. Each behaviour was also verified by mutation — `Copy` unconditional,
-`Eq` unconditional, an unresolvable reference treated as eligible, `PartialOrd`
-on a struct, an enum set not `Copy`, and no derive on an induced tuple struct —
-and every one was caught by a named test as well as by a compile proof.
+emitted. Six behaviours were verified by mutation — `Copy` unconditional, `Eq`
+unconditional, an unresolvable reference treated as eligible, `PartialOrd` on a
+struct, an enum set not `Copy`, and no derive on an induced tuple struct — and
+every one was caught by a named test as well as by a compile proof.
+
+**That was six behaviours, not every behaviour.** Review afterwards found five
+more that no test discriminated and two tests that did not discriminate what
+their names claimed. The repair is recorded below.
 
 - [x] **Step 5: Commit**
 
@@ -1557,6 +1566,101 @@ Cross-package references disable the conditional derives, because an
 unsound derive is a hard error in the consumer's build rather than a
 graceful failure."
 ```
+
+- [x] **Step 6: Review findings**
+
+Two review seats returned eleven findings. Neither found an unsound derive — one
+seat re-verified soundness across every IR shape with `rustc` compile probes.
+Every finding was a missing test or an inaccurate statement, so **no eligibility
+behaviour changed**.
+
+Five behaviours had no discriminating test. Each now has one, and each new test
+was verified by applying the mutation that previously survived, watching the new
+test fail, reverting, and watching it pass:
+
+- `a_reserved_tombstone_does_not_constrain_the_derives` — the tombstone skip in
+  `decl_eligibility`. `struct_with_optional_and_reserved` is the only other
+  fixture with a tombstone, and it holds a `String` leaf and an `f64` leaf, so
+  its struct already meets to no conditional derive and a tombstone contributing
+  `Eligibility::NONE` changed nothing there. The new fixture is integer-only.
+- `a_map_field_loses_copy` and `a_map_whose_value_reaches_a_float_loses_eq` —
+  the map arm. Its only previous guard was the `bounded_map` snapshot, which the
+  same commit regenerated with `INSTA_UPDATE=always`, so it recorded whatever
+  the code produced. The mutation
+  `Eligibility { copy: key.copy && value.copy, eq: true }` is unsound twice
+  over: `Copy` on a `Vec<(K, V)>`, and `Eq`/`Hash` on a map whose value reaches
+  `f64`. No compile proof caught it, because the only compiled map fixture is
+  cross-package and its conditional derives are already disabled.
+- `a_cyclic_struct_takes_no_conditional_derives` — the cycle guard's return
+  value. `recursive_struct_default_terminates` predates this task and pins only
+  that the recursion terminates, which a guard returning `Eligibility::ALL` also
+  does.
+- `a_stream_field_takes_no_conditional_derives` and
+  `an_unspecified_field_primitive_takes_no_conditional_derives` — the two arms
+  that returned `Eligibility::NONE` with nothing pinning either. An
+  `Unspecified` _backing_ is not the second of these: `backing_scalar` maps it
+  to `ScalarBacking::Bytes`, so only the field-primitive path was unpinned.
+- `a_fixed_array_field_loses_copy_by_policy` — the fixed-versus-bounded
+  decision, previously pinned only by a corpus snapshot in `ridlc`. The mutation
+  `copy: array.min == array.max && inner.copy` is sound Rust, so the test pins a
+  deliberate policy rather than a soundness hole.
+
+Two tests did not discriminate what their names claimed:
+
+- `an_induced_tuple_struct_carries_its_derives` held a tuple of two `Counter`
+  fields, so a `tuple_derive_attr` returning `attr(Eligibility::ALL, false)` —
+  ignoring the eligibility computation entirely — satisfied both assertions. The
+  tuple is now an integer and a float, so its answer is `Copy` without the
+  equality pair, and the holder now also carries a `String`-backed field, so its
+  answer differs from the tuple's and neither attribute can be the other's.
+- `default_is_never_derived` checked `type` declarations only, so deriving
+  `Default` for `StructDef`, `EnumDef` and `UnionDef` satisfied it. The
+  behaviour was covered elsewhere, so this was scope rather than a hole; the
+  fixture now covers every declaration kind that receives a derive attribute.
+
+Three statements did not match the code:
+
+- **Design decision 7, three divergences.** It said `Copy` is derived when the
+  transitive closure is `f64`/`i64`/`bool` only, without stating that an array
+  position refuses `Copy` even when its closure is `i64` throughout; the array
+  rule and its reason are now stated, including that refusing the fixed form is
+  policy rather than soundness. It said eligibility re-checks "a composite's
+  one-level `derivable` flag"; `InitValue.derivable` plays no part in derive
+  eligibility and that sentence was carried over from `defaults.rs`, so it is
+  corrected rather than softened. It said nothing about induced tuple structs,
+  which are mandatory, so that paragraph is added.
+- **`attr`'s doc comment** said "the always-sound three, then `Copy` beside
+  `Clone`, then the equality pair". Both clauses cannot hold: `Copy` is pushed
+  between `Clone` and `PartialEq`, so the three are not a block. Every snapshot
+  reads `Debug, Clone, Copy, PartialEq, …`. The true clause is kept.
+- **The module-doc bullets** stated necessary conditions as if they were
+  sufficient. A fixed array, an unresolvable reference, a `Stream` position and
+  an `Unspecified` field primitive each drop a conditional derive with no float
+  and no allocating leaf present; two of those four appeared later in the module
+  doc and two only in inline comments. The bullets now state the full rule and
+  the four refusing positions are listed together under them. Decision 7 was
+  written from these bullets, which is how its first divergence arose, so this
+  is the fix that stops it recurring.
+
+- [x] **Step 7: Commit the review repair**
+
+Three commits, one scope each — the tests, the module documentation they
+describe, and the design record:
+
+```bash
+git add crates/ridl-backend-rust/src/tests.rs
+git commit -m "test(ridl-backend-rust): pin the derive behaviours left unguarded"
+
+git add crates/ridl-backend-rust/src/derives.rs
+git commit -m "docs(ridl-backend-rust): state the full derive rule in the module doc"
+
+git add docs/wip/typl-value-objects-design.md docs/wip/typl-value-objects-plan.md
+git commit -m "docs(typl): correct decision 7 and record the review repair"
+```
+
+No snapshot changed: every new assertion reads the emitted source directly
+through `derives_of`, and the two reworked fixtures are built inside their own
+tests.
 
 ---
 
