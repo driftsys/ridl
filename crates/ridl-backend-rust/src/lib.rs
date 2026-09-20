@@ -25,7 +25,7 @@
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use ridl_ir::name::snake_case;
+use ridl_ir::name::{camel_case, snake_case};
 use ridl_ir::v2;
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
@@ -1328,21 +1328,6 @@ pub(crate) fn bool_tokens(value: &str) -> TokenStream {
     } else {
         quote! { false }
     }
-}
-
-/// CamelCase of a snake, screaming-snake, or camel name. Used for union variant
-/// names and generated tuple struct names.
-pub(crate) fn camel_case(name: &str) -> String {
-    name.split('_')
-        .filter(|segment| !segment.is_empty())
-        .map(|segment| {
-            let mut chars = segment.chars();
-            match chars.next() {
-                Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
-                None => String::new(),
-            }
-        })
-        .collect()
 }
 
 #[cfg(test)]

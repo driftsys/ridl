@@ -12,12 +12,10 @@
 //! this backend cannot resolve (it generates one package at a time) and which
 //! T15 computed with full resolution.
 
-use crate::{
-    Ctx, ScalarBacking, backing_scalar, bool_tokens, camel_case, ident, numeric_tokens, type_path,
-};
+use crate::{Ctx, ScalarBacking, backing_scalar, bool_tokens, ident, numeric_tokens, type_path};
 use proc_macro2::TokenStream;
 use quote::quote;
-use ridl_ir::name::snake_case;
+use ridl_ir::name::{camel_case, snake_case};
 use ridl_ir::v2;
 
 /// The right-hand side of `fn default() -> Self` for a top-level declaration,

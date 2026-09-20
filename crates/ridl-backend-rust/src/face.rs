@@ -30,9 +30,10 @@
 //! pipeline [`crate::generate`].
 
 use crate::descriptors::{query_reply_type, single_param_type};
-use crate::{GenerateError, camel_case, ident, type_path};
+use crate::{GenerateError, ident, type_path};
 use proc_macro2::{Ident, Literal, TokenStream};
 use quote::quote;
+use ridl_ir::name::camel_case;
 use ridl_ir::v2;
 
 /// The face module for every named interface in `package`, in source order.

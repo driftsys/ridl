@@ -19,9 +19,10 @@
 //! the two entry points' documentation).
 
 use crate::clauses::{self, ClauseKind};
-use crate::{Ctx, GenerateError, camel_case, ident, type_path};
+use crate::{Ctx, GenerateError, ident, type_path};
 use proc_macro2::{Literal, TokenStream};
 use quote::quote;
+use ridl_ir::name::camel_case;
 use ridl_ir::v2;
 
 /// The descriptor and face items for every named interface in `package`, in

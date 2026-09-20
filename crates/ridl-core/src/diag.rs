@@ -615,9 +615,9 @@ diag_codes! {
         RIDL_145 = "RIDL-145", Error,
             "the same interface named twice in one service";
 
-        /// Two names in one scope that collide after the pinned name
-        /// transform (ridl §11, §16.4; ADR-0016 decision 3). The transform is
-        /// not injective and no case-folding transform can be, so
+        /// Two names in one scope that collide after a pinned name transform
+        /// (ridl §11, §16.4; ADR-0016 decision 3). Neither transform is
+        /// injective and no case-folding transform can be, so
         /// `parseHTTPResponse` and `parseHttpResponse` both project to
         /// `parse_http_response` and a target whose namespace is snake_case
         /// would carry one identifier twice — in Rust, one trait with two
@@ -628,11 +628,16 @@ diag_codes! {
         /// the same name declared twice — because the remedy differs: these
         /// names are distinct in source and only their projections collide.
         /// Scoped to the members of one interface, the parameters of one
-        /// interaction (decision 4), and the fields of one struct, which
-        /// joined in the commit where E9.8 started projecting them onto
-        /// proto3. Emitted per-package by the checker (E9.7).
+        /// interaction (decision 4), the fields of one struct, which joined
+        /// in the commit where E9.8 started projecting them onto proto3, and
+        /// the arms of one union, which joined with the ADR-0016 amendment.
+        /// The first three namespaces are checked under `snake_case` alone;
+        /// a union's arms are checked under `snake_case` and `camel_case`
+        /// both, because a union arm reaches both namespaces and the two
+        /// collision sets are incomparable. The message names the transform
+        /// that collided. Emitted per-package by the checker (E9.7).
         RIDL_149 = "RIDL-149", Error,
-            "two names in one scope collide after the pinned name transform";
+            "two names in one scope collide after a pinned name transform";
 
         /// Stream `<T>` on a `signal` or `event` payload (ridl §12.3, §16.2).
         /// Emitted by the checker (E2 task 5).
