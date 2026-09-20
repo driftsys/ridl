@@ -504,10 +504,12 @@ doc-path-check root="":
     # `-I` states that a file holding a NUL byte is skipped rather than leaving
     # that to whichever grep is installed; no tracked file is binary today, so
     # it pins the behaviour rather than changing it. The two greps this was run
-    # against announce a match in a binary file differently — one prints a line
-    # on stdout that the extractor would take for a path, the other a notice on
-    # stderr — so the fixture below asserts the whole report and not only the
-    # status. The extension is unbounded: capping its length would truncate a
+    # against announce a match in a binary file differently: BSD grep prints
+    # `Binary file <name> matches` on stdout, which the extractor reads as a
+    # path, and GNU grep 3.12 writes `grep: <name>: binary file matches` on
+    # stderr. So the fixture below asserts the whole report and not only the
+    # status; either one alone would let the mutation through on one of the
+    # two. The extension is unbounded: capping its length would truncate a
     # long one rather than skip it, and report a string that is in no file.
     extract_paths() {
         local matches status=0
@@ -529,7 +531,7 @@ doc-path-check root="":
     # it is not read for paths, so whatever it cites goes unchecked, and a gate
     # that loses coverage has to say where.
     scan_paths() {
-        local root="$1" broken=0 not_text="" file target targets
+        local root="$1" broken=0 file target targets
         while IFS= read -r file; do
             if ! targets="$(extract_paths "$root/$file")"; then
                 echo "doc-path-check: cannot read '$file'." >&2
@@ -546,12 +548,11 @@ doc-path-check root="":
                 # Nothing came back from a file that is not empty. `-e ''`
                 # matches every line of a text file, so only `-I` can hold the
                 # match back: grep skipped the file rather than reading it.
-                not_text="$not_text $file"
+                # One line per file, like the report above it, so a name
+                # holding a space stays readable.
+                echo "doc-path-check: not text, so not scanned: $file" >&2
             fi
         done
-        if [ -n "$not_text" ]; then
-            echo "doc-path-check: not text, so not scanned:$not_text" >&2
-        fi
         if [ "$broken" -ne 0 ]; then
             echo "doc-path-check: $broken docs/ file path(s) above do not resolve." >&2
             echo "doc-path-check: $skip_archive and $skip_wip are not scanned; a path" >&2
