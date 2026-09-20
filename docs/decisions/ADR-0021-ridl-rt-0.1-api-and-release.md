@@ -10,8 +10,9 @@ driftsys/ridl#308 and #309, the proof type that keeps decoding safe with no
 `unsafe`, the cargo features, the exhaustiveness split of the error enums, and
 the release and versioning policy. It binds every consumer of `ridl-rt`: the
 Rust codegen (roadmap epic E11's later stories), the two runtimes
-(`ridl-loopback`, `ridl-transport-ws`, story E11.9), and the ridl reference
-finalization pass (story E14.2).
+(`ridl-loopback`, story E11.15 since the split of 2026-09-20; and
+`ridl-transport-ws`, story E11.9), and the ridl reference finalization pass
+(story E14.2).
 
 Written from lane A of the 2026-09-13 step-1 coordination (driftsys/ridl#328),
 which built `crates/ridl-rt`. The reasoning trail, including the "Alternatives
