@@ -78,9 +78,11 @@ Proposed draft with no implementation. See
   ADR-0013's target list and ADR-0007 decision 13 change with them — the last is
   the only one of these that changes shipped code), ADR-0021 (the `ridl-rt` 0.1
   API decisions and the 0.x breaking-change rule; binds every consumer of
-  `ridl-rt` — the Rust codegen, the runtimes, and story E14.2; the crate's
-  as-built design record is `docs/design/ridl-rt.md`), ADR-0022 (the rsdl system
-  in the IR — where the lowered system lives, that it is its own artifact
+  `ridl-rt` — the Rust codegen, the runtimes, and story E14.2; its 2026-09-20
+  amendment adds decisions 11 and 12, the port-trait forwarding impls and the
+  handle model a runtime presents; the crate's as-built design record is
+  `docs/design/ridl-rt.md`), ADR-0022 (the rsdl system in the IR — where the
+  lowered system lives, that it is its own artifact
   `<pkg.Name>.system.{json,txtpb,binpb}` written by the three IR dump emits,
   which facts of rsdl §13 the IR states and which it does not, that a build
   whose only errors are RSDL-7xx writes every artifact and still exits 1, and
@@ -91,9 +93,12 @@ Proposed draft with no implementation. See
   signatures — the Rust backend's `generate_face` companion entry point over the
   unchanged pipeline `generate`, a narrow contract-clause translator that
   refuses every clause form it does not accept, a `Provider` method taking its
-  argument by reference, and a consumer-side call returning
-  `Result<Correlation, SendError>`; binds every later story that extends the
-  Rust backend's interaction face. The as-built design record is
+  argument by reference, and a consumer-side call returning a correlation on
+  success and `SendError` on failure; binds every later story that extends the
+  Rust backend's interaction face. Its 2026-09-20 amendment makes that success
+  half the call's own correlation newtype and adds decision 5, a face that holds
+  its port by value with no lifetime parameter — neither emitted yet, both
+  landing with lane R's face change. The as-built design record is
   `docs/design/interaction-face.md`).
 - `docs/ROADMAP.md` — the forward plan: the two steps it structures from the
   2026-09-12 re-scope's release scope (step 1, rsdl finalized plus the Rust

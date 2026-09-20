@@ -6,11 +6,11 @@ Accepted — 2026-09-19. Scope: four decisions taken while implementing story
 E11.13, the MVP of the generated `Client`/`Publisher`/`Provider`/`dispatch` face
 ADR-0018 decision 15 restores as the runtime layer's "phase 2". Two settle a
 mechanism the approved design left unnamed; two supersede or close a gap in that
-design's example signatures. All four, and the 2026-09-20 amendment below that
-adds a fifth and amends decision 4, bind every later story that extends the Rust
-backend's interaction face, until superseded: E5.1 (the clause translator), Epic
-10 (the entry-point split), and any later language backend that follows this
-precedent (ADR-0020 decision 7).
+design's example signatures. All four bind every later story that extends the
+Rust backend's interaction face, until superseded: E5.1 (the clause translator),
+Epic 10 (the entry-point split), and any later language backend that follows
+this precedent (ADR-0020 decision 7). The 2026-09-20 amendment below, which adds
+decision 5 and amends decision 4, binds them on the same terms.
 
 Written from lane M's stage M3, on delegated authority — the approved design,
 now
@@ -23,16 +23,22 @@ decisions produced is
 is the reasoning behind the choices that had more than one defensible answer.
 
 **Amendment (2026-09-20) — decision 4 amended, and a fifth decision.** An
-assessment of the face and the ports on 2026-09-20 found two shapes an
-application pays for on every use: a face borrows its port mutably for its whole
-life, so one runtime value can be held by one face at a time and by none while
-`dispatch` runs; and a `Correlation` does not know whether it names a command or
-a query, so `ack` on a query's correlation returns `None` forever. Decision 5
-answers the first and decision 4's amendment the second. Sebastien took both on
-2026-09-20, as D-1 and D-4 of the face-and-port ergonomics note; the disposition
-is recorded on driftsys/ridl#429. Both change emitted code, and until lane R's
-face change merges this record is ahead of
-`crates/ridl-backend-rust/src/face.rs` and the checked-in fixture.
+assessment of the face and the ports on 2026-09-20 found two costs the face
+imposes on every use: a face borrows its port mutably for its whole life, so one
+runtime value can be held by one face at a time and by none while `dispatch`
+runs; and a `Correlation` does not record whether it names a command or a query,
+so `ack` on a query's correlation returns `None` always. Decision 5 answers the
+first and decision 4's amendment the second. Sebastien took both on 2026-09-20;
+the working note they come from and his disposition of it are on
+driftsys/ridl#429, as its items D-1 and D-4. Both change emitted code, and until
+the face change that follows this record merges, this record describes a face
+that `crates/ridl-backend-rust/src/face.rs` and the checked-in fixture do not
+yet emit. It also describes shapes that
+[the interaction-face design record](../design/interaction-face.md) and
+[`ridl-rt` by example](../technotes/ridl-rt-by-example.md) still document in
+their pre-amendment form; both are corrected in that same change, and until then
+a reader who follows their pointer to decision 4 finds a success half those
+documents do not yet show.
 
 ## Context
 
@@ -118,30 +124,42 @@ never stated.
    and a command has no failure the application reports, ridl §6.1) is kept
    exactly.
 
+   **Amendment (2026-09-20) — the rule survives the derives, and its reason is
+   restated.** Epic 10 task 6 emits the derive set the value-objects design's
+   decision 7 fixes, which puts `Copy` and `Clone` on generated types whose
+   closure admits them. The reason given above — "the generated payload types
+   implement neither `Copy` nor `Clone`" — is true today and stops being true
+   then, so it is replaced rather than left to expire: a `Provider` method takes
+   its argument by reference because one rule describes the whole trait, and by
+   reference costs nothing. The rule itself does not change, and neither does
+   the argument for it in the command case.
+
 4. **A consumer-side `Client` call returns `Result<Correlation, SendError>`, not
-   `CallError`.** The M1 design fixed the `Client` shape — a query returning a
-   `Correlation` a separate `*_reply` method polls — but never named the error
-   type a send method returns; the `CallError` vocabulary in the design belongs
-   to the settlement table, which is the provider side. `SendError` is what the
-   `Caller` port itself returns from `command`/`query`, and it already carries
-   `Contract`, so a `require` clause failing client-side is
+   `CallError`** (the success half amended 2026-09-20, below)**.** The M1 design
+   fixed the `Client` shape — a query returning a `Correlation` a separate
+   `*_reply` method polls — but never named the error type a send method
+   returns; the `CallError` vocabulary in the design belongs to the settlement
+   table, which is the provider side. `SendError` is what the `Caller` port
+   itself returns from `command`/`query`, and it already carries `Contract`, so
+   a `require` clause failing client-side is
    `SendError::Contract(Contract::PreconditionFailed)` with no invented
    conversion between two error types. This closes a gap the design left open
    rather than overriding a stated decision.
 
    **Amendment (2026-09-20) — the success half is the call's own correlation
-   newtype.** The error half is unchanged: a send still returns `SendError`, for
-   the reason above. The success half is no longer the bare
-   `ridl_rt::contract::Correlation` but a `Copy` newtype the face emits per call
-   — `SetLevelCorrelation(Correlation)` for a command,
+   newtype.** Once the face change that follows this record lands, the success
+   half is no longer the bare `ridl_rt::port::Correlation` but a `Copy` newtype
+   the face emits per call — `SetLevelCorrelation(Correlation)` for a command,
    `AverageCorrelation(Correlation)` for a query — so a send method returns its
    own call's newtype, `average_reply` takes `AverageCorrelation`, and the
    interface-wide `ack` becomes one `set_level_ack(SetLevelCorrelation)` per
-   command. A query's correlation then cannot reach an `ack`, and a command's
-   cannot reach a `*_reply`; before this amendment both compiled, and
-   `Caller::ack` on a query's correlation returned `None` forever with nothing
-   in the type to say it always would. The newtype is the face's, not the
-   port's: `Correlation` and `ClaimId` in `ridl-rt` stay untyped `u64` newtypes
+   command. The error half is unchanged: a send still returns `SendError`, for
+   the reason above. A query's correlation then cannot be passed to an `ack`,
+   and a command's cannot be passed to a `*_reply`; today both compile, and
+   `Caller::ack` on a query's correlation returns `None` for every such
+   correlation, with no part of the type expressing that it always will. The
+   newtype is the face's, not the port's: `Correlation` and `ClaimId` in
+   `ridl-rt` stay untyped `u64` newtypes
    ([ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md)), because a port carries
    interface numbers, ordinals and bytes and never a payload type, while which
    interaction a correlation belongs to is a payload-shaped fact. Keeping it in
@@ -159,13 +177,18 @@ never stated.
    compiles with `P` inferred as `&mut Runtime`, under the forwarding impls of
    ADR-0021 decision 11 — and so now does an owned handle, a `Clone` handle, or
    any wrapper that forwards the port traits. Under the borrowed form a runtime
-   implementing every port on one value could be held by one face at a time and
-   by none while `dispatch` ran over it, which is why the round-trip tests build
-   a face inside a block, drop it, and build another for the next step; a
-   component that reads a signal, sends a command and later polls the reply had
-   to rebuild its `Client` at each step. This decision **supersedes** the M1
-   design's `Client<'a, P>` and `Publisher<'a, W>` shape. It rests on ADR-0021
-   decision 11 for the borrowed case, so it must not land before it.
+   implementing every port on one value can be held by one face at a time and by
+   none while `dispatch` runs over it, which is why the round-trip tests build a
+   face inside a block, drop it, and build another for the next step
+   (`crates/ridl-backend-rust/tests/interaction_face.rs`); a component that
+   reads a signal, sends a command and later polls the reply rebuilds its
+   `Client` at each step. This decision **supersedes** the M1 design's
+   `Client<'a, P>` and `Publisher<'a, W>` shape. A face built over a borrow
+   needs the forwarding impls of
+   [ADR-0021](ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11 to compile at
+   all, because `&mut Runtime` implements no port trait without them, so the two
+   changes land in that order even though the ratified note left their order
+   open.
 
 ## Alternatives considered
 
@@ -202,12 +225,12 @@ never stated.
   backend's own test tree can generate one yet. This is deliberate (ADR-0018
   decision 15) and is expected to be revisited once Epic 10 Task 3 lands the
   `--extern ridl_rt` proof `generate`'s own tests currently withhold.
-- Positive — added 2026-09-20: a face can be built over an owned handle, a
-  borrowed port or any wrapper that forwards the port traits, rather than only
-  over a mutable borrow of a runtime's own value (decision 5); and a correlation
-  cannot reach the wrong method, so the `None` that `Caller::ack` returns
-  forever for a query is unreachable from generated code (decision 4's
-  amendment).
+- Positive — added 2026-09-20: once these amendments land, a face can be built
+  over an owned handle, a borrowed port or any wrapper that forwards the port
+  traits, rather than only over a mutable borrow of a runtime's own value
+  (decision 5); and a correlation cannot be passed to a method of the other
+  kind, which puts the `None` that `Caller::ack` returns for every query
+  correlation out of reach of generated code (decision 4's amendment).
 - Negative — added 2026-09-20: both amendments change the emitted face, so every
   consumer written against the E11.13 shape is edited once. The MVP is
   in-process and its only consumers are this backend's own tests and the

@@ -384,37 +384,45 @@ Semantics each implementation presents:
 mechanisms some runtimes have, not interaction semantics every runtime must
 present, so a runtime may omit either.
 
-**A port trait is implemented for a reference to an implementation.** For each
-port trait `T`, the crate provides `impl<P: T + ?Sized> T for &mut P`; for the
-traits whose methods all take `&self` — `Attached`, `Clock`, `SignalReader`,
-`FixedReader`, `ScannableSignals` and `CoherentSignals` — it also provides
+**Every port trait is implemented for `&mut P`, and the `&self`-only traits also
+for `&P` — impls this module does not yet contain.** For each port trait `T`,
+the crate provides `impl<P: T + ?Sized> T for &mut P`; for the traits whose
+methods all take `&self` — `Attached`, `Clock`, `SignalReader`, `FixedReader`,
+`ScannableSignals` and `CoherentSignals` — it also provides
 `impl<P: T + ?Sized> T for &P`. A generated face holds its port by value
 ([ADR-0023](../decisions/ADR-0023-interaction-face-generation.md) decision 5),
-so these impls are what let it be built over a borrow of a runtime's port as
-well as over an owned handle, a `Clone` handle, or a wrapper that adds tracing
-or a test double. They are additive and need no `alloc`. `Box<P>` is not
-forwarded, because that would need `alloc`, which no feature combination of this
-crate brings in. These impls are decided
-([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11)
-and not yet written; they land with lane R's `ridl-rt` change, and this
-paragraph is ahead of `crates/ridl-rt/src/port.rs` until it does.
+so these impls are what let it be built over a borrow of a runtime's port; an
+owned handle, a `Clone` handle and a wrapper that adds tracing or a test double
+are accepted by the by-value form itself, since a wrapper implements the port
+traits rather than borrowing through them. The impls are additive and need no
+`alloc`; `Box<P>` is not forwarded, because that would need `alloc`, which no
+feature combination of this crate brings in.
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 11
+records them and the reasoning; until the `ridl-rt` change that follows it
+merges, this paragraph describes impls `crates/ridl-rt/src/port.rs` does not
+contain.
 
-**The handle model a runtime is expected to present.** A runtime crate exposes
-one handle type per port trait it implements, not one type implementing them
-all. Its reader handles — `SignalReader`, `FixedReader` and the two extensions —
-are `Send + Sync`, because a read takes `&self` and several threads may read one
-store at once; its writer, caller, event-source and handler handles are `Send`
-and need not be `Sync`, because those methods take `&mut self` and one thread
-drives each. A face is built over one handle. This crate states the expectation
-and does not enforce it: no port trait carries `Send` or `Sync` as a supertrait,
-so a single-threaded `no_std` runtime whose handles use `Cell` or `RefCell`
-internally stays legal, and a runtime pins its own half with a compile-time
-assertion — `fn assert_sync<T: Sync>()` applied to its reader handle. The
-alternative, one struct implementing every port behind a mutex, would make every
-`SignalReader::read` wait behind every `SignalWriter::commit`, which is the case
-reading a signal exists to avoid
-([ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 12).
-Story E11.9 builds the first runtime to this shape.
+**A runtime presents one handle per port role, and this crate adds no `Send` or
+`Sync` bound.** A runtime crate exposes one handle type per port trait it
+implements rather than one type implementing them all, and may also offer an
+aggregate handle covering the port set one interface's face needs. A handle
+whose port traits all take `&self` is `Send + Sync`, because several threads may
+read one store at once; a handle carrying a trait with a `&mut self` method is
+`Send` and need not be `Sync`, because one thread drives each. An aggregate is
+`Send`, and `Sync` only if every trait it carries is. A face is built over one
+value implementing exactly the port traits its interface needs: the role handle
+itself when the interface has one interaction kind, and an aggregate — the
+runtime's, or one the application composes from role handles — when it has
+several, because a generated `Client` may be bound over
+`SignalReader + EventSource + Caller` at once. No port trait in this crate
+carries `Send` or `Sync` as a supertrait, so a single-threaded `no_std` runtime
+whose handles use `Cell` or `RefCell` internally remains supported; a runtime
+checks its own handles with a compile-time assertion,
+`fn assert_sync<T: Sync>()` applied to a reader handle.
+[ADR-0021](../decisions/ADR-0021-ridl-rt-0.1-api-and-release.md) decision 12
+records the reasoning and the alternative it rejects, one runtime struct behind
+a mutex. No runtime exists in this workspace yet; story E11.9 builds the first
+one to this shape.
 
 ## The `error` module and the port errors
 
