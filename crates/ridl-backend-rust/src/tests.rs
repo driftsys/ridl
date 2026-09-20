@@ -178,6 +178,33 @@ fn speed_decl() -> v2::Decl {
     }
 }
 
+/// A `string`-backed type carrying a positive length bound and a literal
+/// pattern, used to pin that the pattern check is gated behind
+/// `validate-pattern` while the length check is not. `len_min` and `len_max`
+/// are both 17 so the minimum branch is emitted (a `len_min` of 0 emits no
+/// branch at all).
+fn vin_decl() -> v2::Decl {
+    public_decl(
+        "Vin",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(17),
+                len_max: Some(17),
+                pattern: Some("/[A-HJ-NPR-Z0-9]{17}/".to_string()),
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )
+}
+
 fn counter_decl() -> v2::Decl {
     public_decl(
         "Counter",
@@ -510,14 +537,13 @@ fn a_range_without_a_step_names_nothing_unchecked() {
     );
 }
 
-/// The pattern check is not emitted until a later task, so a type carrying a
-/// `match` constraint names that on itself (design, "Not validated, and
-/// documented as such"). A pattern given by name is read as well as one given
-/// literally: a pattern constant that did not resolve leaves `pattern` absent
-/// while the type still carries a match constraint.
+/// An unresolved `pattern_const` names the pattern as unchecked, because no
+/// check is emitted for it (design, "Not validated, and documented as such"
+/// still applies to that case). A length bound alone leaves nothing unchecked
+/// to name.
 #[test]
-fn an_unchecked_pattern_is_named_on_the_type() {
-    let with_pattern = |pattern: Option<&str>, pattern_const: Option<&str>| {
+fn an_unresolved_pattern_const_is_named_on_the_type() {
+    let with_pattern = |pattern_const: Option<&str>| {
         rust_for(vec![public_decl(
             "Handle",
             v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -529,7 +555,7 @@ fn an_unchecked_pattern_is_named_on_the_type() {
                 constraint: Some(v2::Constraint {
                     len_min: Some(3),
                     len_max: Some(8),
-                    pattern: pattern.map(str::to_string),
+                    pattern: None,
                     pattern_const: pattern_const.map(str::to_string),
                     ..constraint(None, None, None)
                 }),
@@ -539,21 +565,57 @@ fn an_unchecked_pattern_is_named_on_the_type() {
             }),
         )])
     };
-    for source in [
-        with_pattern(Some("/[a-z]+/"), None),
-        with_pattern(None, Some("HANDLE_PATTERN")),
-    ] {
-        assert!(
-            source.contains("/// The `match` pattern is not checked by `new`."),
-            "an unchecked pattern must be named on the type, got:\n{source}"
-        );
-    }
-    let source = with_pattern(None, None);
+    let source = with_pattern(Some("HANDLE_PATTERN"));
+    assert!(
+        source.contains("/// The `match` pattern is not checked by `new`."),
+        "an unresolved pattern constant must be named as unchecked, got:\n{source}"
+    );
+    let source = with_pattern(None);
     assert!(
         !source.contains("is not checked by `new`"),
         "a length bound alone leaves nothing unchecked to name, got:\n{source}"
     );
-    // A `step` and a pattern together are both named.
+}
+
+/// A literal pattern is checked by `new` under `validate-pattern`, so the
+/// type names that condition instead of claiming the pattern goes unchecked
+/// outright.
+#[test]
+fn a_literal_pattern_is_named_as_feature_gated() {
+    let source = rust_for(vec![public_decl(
+        "Handle",
+        v2::decl::Kind::TypeDef(v2::TypeDef {
+            backing: Some(v2::Backing {
+                kind: Some(v2::backing::Kind::Primitive(
+                    v2::PrimitiveType::String as i32,
+                )),
+            }),
+            constraint: Some(v2::Constraint {
+                len_min: Some(3),
+                len_max: Some(8),
+                pattern: Some("/[a-z]+/".to_string()),
+                pattern_const: None,
+                ..constraint(None, None, None)
+            }),
+            declared_init: None,
+            init: Some(init_value(false, None)),
+            width: None,
+        }),
+    )]);
+    assert!(
+        !source.contains("The `match` pattern is not checked by `new`."),
+        "a literal pattern is checked by `new` under the feature, got:\n{source}"
+    );
+    assert!(
+        source.contains("validate-pattern"),
+        "the type must name the condition its pattern guarantee depends on, got:\n{source}"
+    );
+}
+
+/// A `step` and a literal pattern together are both named: the step is never
+/// checked, and the pattern is checked only under `validate-pattern`.
+#[test]
+fn a_step_and_a_literal_pattern_are_both_named() {
     let source = rust_for(vec![public_decl(
         "Stepped",
         v2::decl::Kind::TypeDef(v2::TypeDef {
@@ -572,7 +634,27 @@ fn an_unchecked_pattern_is_named_on_the_type() {
         }),
     )]);
     assert!(source.contains("/// Quantization (`step`) is not checked by `new`."));
-    assert!(source.contains("/// The `match` pattern is not checked by `new`."));
+    assert!(!source.contains("The `match` pattern is not checked by `new`."));
+    assert!(source.contains("validate-pattern"));
+}
+
+/// The pattern check is emitted only under `validate-pattern`; the range and
+/// length checks above it are not gated, since they need no dependency.
+#[test]
+fn pattern_check_is_feature_gated() {
+    let source = rust_for(vec![vin_decl()]);
+    assert!(source.contains("#[cfg(feature = \"validate-pattern\")]"));
+    assert!(source.contains("::ridl_rt::payload::Rule::Pattern"));
+    // Both crate paths are absolute, so an interface named `Std` or `Regex`
+    // cannot shadow them from the module the constructor lives in.
+    assert!(source.contains("::std::sync::LazyLock"));
+    assert!(source.contains("::regex::Regex::new"));
+    // The length check is not gated - it needs no dependency.
+    let gated = source
+        .split("#[cfg(feature = \"validate-pattern\")]")
+        .next()
+        .unwrap();
+    assert!(gated.contains("::ridl_rt::payload::Rule::Length"));
 }
 
 /// A deprecated declaration's own impl blocks use the deprecated type, which
