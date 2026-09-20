@@ -165,25 +165,29 @@ unchanged and makes the fix codegen-only.
   which contradicts the port's own rule above, and it makes every runtime carry
   a type parameter it never reads.
 
-### D-5. Every generated domain type derives what a valid value can carry
+### D-5. The derive set is design decision 7 of the value-objects design, and lands in task 6
 
-The emitter derives `Debug`, `Clone` and `PartialEq` on every generated type;
-`Copy` when every field is `Copy`, which covers every named scalar (backed by
-`i64`, `f64` or `bool`), every enum and enum set, and a struct of those; and
-`Eq` and `Hash` when no field is float-backed. `Default` stays as Epic 10 task 3
-emits it, through `new_unchecked`. None of these derives reconstructs a value
-from its raw parts: `Clone` and `Copy` reproduce a value that was already
-constructed through `new`, and `PartialEq` reads one. `get(self)` is then a copy
-for every scalar, and the `Provider`-by-reference rule (ADR-0023 decision 3)
-stays as it is, because by reference costs nothing and the reason it was chosen
-no longer needs `Clone` to hold.
+`docs/wip/typl-value-objects-design.md` decision 7 already fixes the derives:
+`Debug`, `Clone` and `PartialEq` on every generated type; `Copy` when the
+transitive closure is `f64`, `i64` or `bool` only; `Eq` and `Hash` when no `f64`
+appears in the closure; `PartialOrd` and `Ord` on numeric named scalars only.
+Decision 8 keeps `Default` built from the typl init value, and decision 9 emits
+nothing for `Send` and `Sync`. Epic 10 task 6 implements decision 7. This note
+adds no derive and changes no rule there; it records two things the face depends
+on:
 
-- Changes: `crates/ridl-backend-rust/src/lib.rs`, every snapshot, the fixture.
-  This lands inside Epic 10 task 6, "sound derives", whose plan text in
-  `typl-value-objects-plan.md` is amended to name this derive set; it does not
-  land as a separate pull request, because task 6 changes the same emitter.
-- Rejected: `Copy` on every type regardless of fields. A struct holding a string
-  or a sequence cannot be `Copy`; the rule has to be field-driven.
+- `Copy` on every named scalar is what makes `get(self)` a copy rather than a
+  move (F-4), so the face's usability rests on task 6 landing, not on a change
+  to the face.
+- The `Provider`-by-reference rule (ADR-0023 decision 3) stays as it is after
+  task 6. By reference costs nothing, and the rule no longer needs "the payload
+  types implement neither `Copy` nor `Clone`" as its reason; the ADR-0023
+  amendment of §5 restates the reason as "one rule describes the whole trait".
+
+- Changes: none to the design or the plan. The ADR-0023 amendment names decision
+  7 as the reason the by-reference rule survives.
+- Rejected: a separate derives pull request ahead of task 6. It would change the
+  same emitter and every snapshot twice.
 
 ### D-6. The order these land in
 
@@ -195,7 +199,7 @@ no longer needs `Clone` to hold.
 3. D-2, in `ridl-rt`, any time after step 1; it is additive and touches no file
    lane C touches. Whether it ships as 0.1.1 or 0.2.0 is the maintainer's call
    under ADR-0007 decision 14; nothing here requires a breaking release.
-4. D-5, inside Epic 10 task 6.
+4. Epic 10 task 6, which carries the derives D-5 depends on.
 5. E11.9 starts against the face of step 2 and the impls of step 3, and builds
    D-3.
 
@@ -230,7 +234,7 @@ no longer needs `Clone` to hold.
 | ADR-0023                                      | a new decision recording D-1: the face takes its port by value                                                                                                  |
 | `docs/design/ridl-rt.md`, "The ports"         | one paragraph: the forwarding impls, and the handle model a runtime is expected to present                                                                      |
 | `docs/design/interaction-face.md`             | the `Client`, `Publisher` and correlation paragraphs rewritten to the shape of D-1 and D-4                                                                      |
-| `docs/wip/typl-value-objects-plan.md`, task 6 | the derive set of D-5 named explicitly                                                                                                                          |
+| `docs/wip/typl-value-objects-plan.md`, task 6 | no change; D-5 confirms design decision 7                                                                                                                       |
 | `docs/ROADMAP.md`, E11.9                      | `Done when` gains the handle model of D-3                                                                                                                       |
 | driftsys/ridl#350                             | three new rows: the handle model, the forwarding impls, the wake hook                                                                                           |
 
