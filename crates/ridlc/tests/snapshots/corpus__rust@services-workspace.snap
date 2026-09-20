@@ -4,6 +4,7 @@ expression: compiled.rust
 input_file: crates/ridlc/tests/corpus/services-workspace/ridl.toml
 ---
 // ===== package fleet.contracts =====
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct DoorId(i64);
 impl DoorId {
@@ -54,6 +55,7 @@ impl Default for DoorId {
     }
 }
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Percent(f64);
 impl Percent {
@@ -103,6 +105,7 @@ impl Default for Percent {
         Percent::new_unchecked(0.0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Odometer(i64);
 impl Odometer {
@@ -152,6 +155,7 @@ impl Default for Odometer {
         Odometer::new_unchecked(0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum LockState {
     UNLOCKED = 0,
@@ -182,6 +186,7 @@ impl Default for LockState {
         LockState::UNLOCKED
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(C)]
 pub struct DoorReport {
     pub door: DoorId,
@@ -195,6 +200,7 @@ impl Default for DoorReport {
         }
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum DoorFault {
     JAMMED = 0,
@@ -229,6 +235,7 @@ impl Default for DoorFault {
 
 // ===== package fleet.legacy =====
 /// The M1 fleet's door failure set, kept for contracts still on the old wire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(i64)]
 pub enum DoorFault {
     STUCK = 0,

@@ -2435,12 +2435,24 @@ fn the_harness_rlib_belongs_to_its_caller() {
 fn appendix_b_compiles_with_rustc() {
     let Generated { rust_source, .. } = generate(&appendix_b()).expect("Appendix B generates");
 
+    // The stand-in types carry the three derives every generated type carries
+    // (design decision 7), because that is what the real `ridl.std` package
+    // generates. Without them the proof fails on the stand-in rather than on
+    // the code under test: a struct with a cross-package field still derives
+    // `Debug`, `Clone` and `PartialEq`, and those three reach the field's type.
+    // The conditional derives are deliberately absent here — a cross-package
+    // reference disables them on this side, so the proof would not notice if
+    // the stand-in had them.
     const PRELUDE: &str = "\
 pub mod ridl {
     pub mod std {
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Name(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Message(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Label(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Timestamp(pub i64);
         impl Default for Timestamp {
             fn default() -> Self {
@@ -2993,22 +3005,35 @@ fn appendix_a() -> v2::Package {
 fn appendix_a_compiles_with_rustc() {
     let Generated { rust_source, .. } = generate(&appendix_a()).expect("Appendix A generates");
 
+    // Every stand-in carries the three derives a generated type always
+    // carries (design decision 7), because the real packages generate them
+    // and the importing package's own derives reach these types through its
+    // fields. The conditional ones are left off: a cross-package reference
+    // disables them on the importing side, so the proof cannot observe them.
     const PRELUDE: &str = "\
 pub mod ridl {
     pub mod std {
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Message(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Label(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Version(pub String);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Duration(pub i64);
-        #[derive(Default)]
+        #[derive(Debug, Clone, PartialEq, Default)]
         pub struct Timestamp(pub i64);
     }
 }
 pub mod veh {
     pub mod common {
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Speed(pub f64);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct Temperature(pub f64);
+        #[derive(Debug, Clone, PartialEq)]
         pub struct WarningFlags(pub i64);
+        #[derive(Debug, Clone, PartialEq)]
         pub enum GearPosition {
             PARK = 0,
             DRIVE = 1,
@@ -3125,4 +3150,446 @@ fn module_segment_spells_a_segment_the_way_type_path_does() {
              `{segment}` must agree, or the crate root emits a module the reference cannot name"
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Derives (design decision 7, Task 6).
+// ---------------------------------------------------------------------------
+
+/// The trait names inside the `#[derive(...)]` attribute that belongs to the
+/// item whose rendered header is `header` (for example `pub struct Bag {`).
+///
+/// The attribute is found by scanning backwards from the header to the nearest
+/// `#[derive(`, and the text between that attribute and the header is required
+/// to hold nothing but further attributes and doc comments. Without that guard
+/// the helper would silently report the *previous* item's derive for an item
+/// that carries none, which is exactly the failure mode a negative assertion
+/// has to rule out. prettyplease may wrap a long trait list over several
+/// lines, so the list is split on commas and each name trimmed rather than
+/// compared as one string.
+fn derives_of(source: &str, header: &str) -> Vec<String> {
+    let header_at = source
+        .find(header)
+        .unwrap_or_else(|| panic!("`{header}` must be emitted, got:\n{source}"));
+    let open = "#[derive(";
+    let attr_at = source[..header_at]
+        .rfind(open)
+        .unwrap_or_else(|| panic!("`{header}` must carry a derive attribute, got:\n{source}"));
+    let list_at = attr_at + open.len();
+    let close = source[list_at..header_at]
+        .find(")]")
+        .unwrap_or_else(|| panic!("the derive attribute must close, got:\n{source}"));
+    let list = &source[list_at..list_at + close];
+    let gap = &source[list_at + close + ")]".len()..header_at];
+    for line in gap.lines().map(str::trim).filter(|line| !line.is_empty()) {
+        assert!(
+            line.starts_with("#[") || line.starts_with("///") || line.starts_with("//"),
+            "the derive attribute found for `{header}` belongs to another item; \
+             the text between them is:\n{gap}"
+        );
+    }
+    list.split(',')
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect()
+}
+
+/// Every generated type carries `Debug`, `Clone` and `PartialEq` — the three
+/// that are sound on every backing (design decision 7). Asserted as the
+/// positive companion of each negative assertion below.
+fn assert_always_derived(derived: &[String], header: &str) {
+    for name in ["Debug", "Clone", "PartialEq"] {
+        assert!(
+            derived.iter().any(|d| d == name),
+            "`{header}` must derive {name}, got {derived:?}"
+        );
+    }
+}
+
+#[test]
+fn float_backed_scalar_derives_partial_ord_but_not_ord() {
+    let source = rust_for(vec![speed_decl()]);
+    let derived = derives_of(&source, "pub struct Speed(f64);");
+    assert_always_derived(&derived, "Speed");
+    // Ord requires Eq, and f64 is neither Eq nor Hash.
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "Copy", "PartialEq", "PartialOrd"]
+    );
+}
+
+#[test]
+fn integer_backed_scalar_derives_the_full_ordering_set() {
+    let source = rust_for(vec![counter_decl()]);
+    let derived = derives_of(&source, "pub struct Counter(i64);");
+    assert_always_derived(&derived, "Counter");
+    assert_eq!(
+        derived,
+        [
+            "Debug",
+            "Clone",
+            "Copy",
+            "PartialEq",
+            "Eq",
+            "Hash",
+            "PartialOrd",
+            "Ord"
+        ]
+    );
+}
+
+#[test]
+fn string_backed_scalar_is_not_copy() {
+    let decls = vec![public_decl(
+        "Label",
+        primitive_type(v2::PrimitiveType::String, init_value(true, Some("")), None),
+    )];
+    let source = rust_for(decls);
+    let derived = derives_of(&source, "pub struct Label(String);");
+    assert_always_derived(&derived, "Label");
+    // A String is Eq and Hash but not Copy, and a string backing is not
+    // numeric, so it takes no ordering.
+    assert_eq!(derived, ["Debug", "Clone", "PartialEq", "Eq", "Hash"]);
+}
+
+/// A struct whose transitive closure reaches a float is neither `Eq` nor
+/// `Hash`, but is still `Copy` — the two conditions are independent.
+#[test]
+fn struct_with_a_float_field_is_not_eq() {
+    let speed_field = named_field("speed", 1, "Speed", false, init_value(true, None));
+    let telemetry = public_decl(
+        "Telemetry",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(speed_field)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), telemetry]);
+    let derived = derives_of(&source, "pub struct Telemetry {");
+    assert_always_derived(&derived, "Telemetry");
+    assert_eq!(derived, ["Debug", "Clone", "Copy", "PartialEq"]);
+}
+
+/// A struct whose closure holds no float is `Eq` and `Hash`. This is the
+/// positive companion of [`struct_with_a_float_field_is_not_eq`]: without it,
+/// a rule that never emits `Eq` would pass that test.
+#[test]
+fn struct_over_integers_only_is_eq_and_hash() {
+    let count_field = named_field("count", 1, "Counter", false, init_value(true, None));
+    let tally = public_decl(
+        "Tally",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(count_field)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), tally]);
+    let derived = derives_of(&source, "pub struct Tally {");
+    assert_always_derived(&derived, "Tally");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]
+    );
+}
+
+/// Ordering is a named-scalar property. A struct takes none of it, because
+/// ordering a struct's fields lexicographically is not something typl states
+/// (design decision 7).
+#[test]
+fn a_struct_takes_no_ordering() {
+    let count_field = named_field("count", 1, "Counter", false, init_value(true, None));
+    let tally = public_decl(
+        "Tally",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(count_field)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), tally]);
+    let derived = derives_of(&source, "pub struct Tally {");
+    // The positive companion: the numeric named scalar in the same package
+    // does take both, so an emitter that never emits ordering at all cannot
+    // pass this pair.
+    let scalar = derives_of(&source, "pub struct Counter(i64);");
+    assert!(
+        scalar.iter().any(|d| d == "PartialOrd") && scalar.iter().any(|d| d == "Ord"),
+        "the numeric named scalar must take both, got {scalar:?}"
+    );
+    assert!(
+        !derived.iter().any(|d| d == "PartialOrd" || d == "Ord"),
+        "a struct must take no ordering, got {derived:?}"
+    );
+}
+
+/// A union takes no ordering either, for the same reason: arm declaration
+/// order is not a contract typl states.
+#[test]
+fn a_union_takes_no_ordering() {
+    let arm_struct = |name: &str, field: &str| {
+        public_decl(
+            name,
+            v2::decl::Kind::StructDef(v2::StructDef {
+                members: vec![field_member(named_field(
+                    field,
+                    1,
+                    "Counter",
+                    false,
+                    init_value(true, None),
+                ))],
+                fixed_layout: false,
+            }),
+        )
+    };
+    let union = public_decl(
+        "Outcome",
+        v2::decl::Kind::UnionDef(v2::UnionDef {
+            arms: vec![
+                v2::UnionArm {
+                    name: "ok".to_string(),
+                    ordinal: 1,
+                    type_ref: "Reading".to_string(),
+                    doc: String::new(),
+                },
+                v2::UnionArm {
+                    name: "err".to_string(),
+                    ordinal: 2,
+                    type_ref: "Fault".to_string(),
+                    doc: String::new(),
+                },
+            ],
+            is_result: true,
+            reserved: Vec::new(),
+        }),
+    );
+    let source = rust_for(vec![
+        counter_decl(),
+        arm_struct("Reading", "value"),
+        arm_struct("Fault", "code"),
+        union,
+    ]);
+    let derived = derives_of(&source, "pub enum Outcome {");
+    assert_always_derived(&derived, "Outcome");
+    assert_eq!(
+        derived,
+        ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]
+    );
+}
+
+/// A union whose arm reaches a float loses `Eq` and `Hash` through the arm,
+/// which is the recursion working through a union rather than a struct.
+#[test]
+fn a_union_arm_reaching_a_float_loses_eq() {
+    let reading = public_decl(
+        "Reading",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(named_field(
+                "value",
+                1,
+                "Speed",
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let union = public_decl(
+        "Outcome",
+        v2::decl::Kind::UnionDef(v2::UnionDef {
+            arms: vec![v2::UnionArm {
+                name: "ok".to_string(),
+                ordinal: 1,
+                type_ref: "Reading".to_string(),
+                doc: String::new(),
+            }],
+            is_result: false,
+            reserved: Vec::new(),
+        }),
+    );
+    let source = rust_for(vec![speed_decl(), reading, union]);
+    let derived = derives_of(&source, "pub enum Outcome {");
+    assert_always_derived(&derived, "Outcome");
+    assert_eq!(derived, ["Debug", "Clone", "Copy", "PartialEq"]);
+}
+
+/// An unresolvable cross-package reference disables every conditional derive.
+/// An unsound `#[derive(Copy)]` is a hard error in the consumer's build, so
+/// the backend cannot be optimistic the way `defaults.rs` is.
+#[test]
+fn struct_with_a_cross_package_field_drops_conditional_derives() {
+    let field = named_field("speed", 1, "veh.other.Speed", false, init_value(true, None));
+    let telemetry = public_decl(
+        "Telemetry",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(field)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![telemetry]);
+    let derived = derives_of(&source, "pub struct Telemetry {");
+    assert_always_derived(&derived, "Telemetry");
+    assert_eq!(derived, ["Debug", "Clone", "PartialEq"]);
+}
+
+/// A collection field keeps `Eq` but never `Copy`: the emitted Rust is a
+/// `Vec`, which is not `Copy`.
+#[test]
+fn a_collection_field_keeps_eq_and_loses_copy() {
+    let bag = public_decl(
+        "Bag",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(array_field("counts", "Counter", 2, 8))],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), bag]);
+    let derived = derives_of(&source, "pub struct Bag {");
+    assert_always_derived(&derived, "Bag");
+    assert_eq!(derived, ["Debug", "Clone", "PartialEq", "Eq", "Hash"]);
+}
+
+/// `Default` is never derived (design decision 8): it comes from the typl init
+/// value through `defaults.rs`, which may be a declared `= 0.5` that
+/// `#[derive(Default)]` would silently replace with the backing's zero.
+#[test]
+fn default_is_never_derived() {
+    let source = rust_for(vec![speed_decl(), counter_decl(), features_decl()]);
+    for header in [
+        "pub struct Speed(f64);",
+        "pub struct Counter(i64);",
+        "pub struct Features(i64);",
+    ] {
+        let derived = derives_of(&source, header);
+        assert!(
+            !derived.iter().any(|d| d == "Default"),
+            "`{header}` must not derive Default, got {derived:?}"
+        );
+    }
+    // The positive companion: the Default the backend does emit is an impl
+    // built from the init value, not a derive.
+    assert!(
+        source.contains("impl Default for Speed"),
+        "the init-value Default is still emitted, got:\n{source}"
+    );
+}
+
+/// An induced tuple struct carries its own derive attribute. It has to: the
+/// struct that holds it derives `Debug`, `Clone` and `PartialEq`
+/// unconditionally, and those derives do not compile unless the tuple struct
+/// has them too.
+#[test]
+fn an_induced_tuple_struct_carries_its_derives() {
+    let range = v2::Field {
+        r#type: Some(v2::FieldType {
+            optional: false,
+            kind: Some(v2::field_type::Kind::Tuple(v2::TupleType {
+                fields: vec![tuple_field("min", "Counter"), tuple_field("max", "Counter")],
+            })),
+        }),
+        ..named_field("range", 1, "", false, init_value(true, None))
+    };
+    let bounds = public_decl(
+        "Bounds",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(range)],
+            fixed_layout: false,
+        }),
+    );
+    let source = rust_for(vec![counter_decl(), bounds]);
+    let tuple = derives_of(&source, "pub struct BoundsRange {");
+    assert_always_derived(&tuple, "BoundsRange");
+    assert_eq!(tuple, ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]);
+    let outer = derives_of(&source, "pub struct Bounds {");
+    assert_eq!(outer, ["Debug", "Clone", "Copy", "PartialEq", "Eq", "Hash"]);
+}
+
+/// An enum set is `Copy`, and that is what lets a struct field holding one be
+/// read through a shared reference.
+///
+/// `get` takes `self` by value (driftsys/ridl#433), so `warnings.flags.get()`
+/// behind a `&Warnings` moves out of the borrow and rustc reports E0507
+/// unless the enum set is `Copy`. #433 declined to fix that and recorded it as
+/// this task's to cover, so the proof is a `rustc` run rather than a string
+/// assertion: the string says `Copy` is in the list, the compile says the list
+/// is enough.
+#[test]
+fn an_enum_set_in_a_struct_field_is_readable_through_a_shared_reference() {
+    let warnings = public_decl(
+        "Warnings",
+        v2::decl::Kind::StructDef(v2::StructDef {
+            members: vec![field_member(named_field(
+                "flags",
+                1,
+                "Features",
+                false,
+                init_value(true, None),
+            ))],
+            fixed_layout: false,
+        }),
+    );
+    let generated = rust_for(vec![features_decl(), warnings]);
+    let derived = derives_of(&generated, "pub struct Features(i64);");
+    assert_always_derived(&derived, "Features");
+    assert!(
+        derived.iter().any(|d| d == "Copy"),
+        "an enum set must be Copy, got {derived:?}"
+    );
+
+    let source = format!(
+        "{generated}\n{}",
+        r#"
+pub fn read_through_a_shared_reference(warnings: &Warnings) -> i64 {
+    warnings.flags.get()
+}
+"#
+    );
+
+    let dir = tempfile::tempdir().expect("a temp dir is created");
+    let source_path = dir.path().join("enum_set_read.rs");
+    let meta_path = dir.path().join("enum_set_read.rmeta");
+    std::fs::write(&source_path, &source).expect("the generated source is written");
+    let rlib = ridl_rt_rlib(dir.path());
+    let status = std::process::Command::new("rustc")
+        .args([
+            "--edition",
+            "2024",
+            "--crate-type",
+            "lib",
+            "--emit",
+            "metadata",
+        ])
+        .arg("-o")
+        .arg(&meta_path)
+        .arg("--extern")
+        .arg(format!("ridl_rt={}", rlib.display()))
+        .arg(&source_path)
+        .status()
+        .expect("rustc must be installed and runnable for this test to be meaningful");
+    assert!(
+        status.success(),
+        "an enum set held in a struct field must be readable through a shared \
+         reference, source:\n{source}"
+    );
+}
+
+/// The derive attribute is placed under the declaration's doc comment, not
+/// above it. A naive prepend in `emit_decl` renders it above, which is
+/// backwards from how Rust is written everywhere else.
+#[test]
+fn the_derive_attribute_sits_under_the_doc_comment() {
+    let source = rust_for(vec![speed_decl()]);
+    let doc_at = source
+        .find("/// Vehicle speed over ground")
+        .expect("the doc comment is emitted");
+    let derive_at = source.find("#[derive(").expect("the derive is emitted");
+    assert!(
+        doc_at < derive_at,
+        "the doc comment must come first, got:\n{source}"
+    );
+    let repr_at = source
+        .find("#[repr(transparent)]")
+        .expect("the repr is emitted");
+    assert!(
+        derive_at < repr_at,
+        "the derive must precede the repr, got:\n{source}"
+    );
 }

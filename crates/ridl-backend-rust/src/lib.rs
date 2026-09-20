@@ -17,6 +17,11 @@
 //! derivable. The IR `InitValue.derivable` flag on a composite-typed field is a
 //! one-level flag, so same-package composite references are re-checked by
 //! recursion rather than trusted (see the `defaults` module).
+//!
+//! Derive eligibility uses the same recursion over the transitive closure, in
+//! the `derives` module: `Debug`, `Clone` and `PartialEq` on every generated
+//! type, `Copy`, `Eq`, `Hash` and the ordering pair where the closure permits,
+//! and `Default` never, because it comes from the typl init value instead.
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
@@ -26,6 +31,7 @@ use std::collections::{HashMap, HashSet};
 
 mod clauses;
 mod defaults;
+mod derives;
 mod descriptors;
 mod face;
 
@@ -282,13 +288,19 @@ impl<'a> Ctx<'a> {
 // ---------------------------------------------------------------------------
 
 fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> TokenStream {
+    // The derive attribute is computed once and handed to the emitter, which
+    // places it under the declaration's doc comment rather than above it.
+    // Prepending it to the finished item would render it above the doc, which
+    // is backwards from how Rust is written everywhere else — and `Default` is
+    // never among the traits (`derives`, design decision 8).
+    let derived = derives::derive_attr(ctx, decl);
     let item = match &decl.kind {
-        Some(v2::decl::Kind::TypeDef(td)) => emit_type_def(decl, td),
+        Some(v2::decl::Kind::TypeDef(td)) => emit_type_def(decl, td, &derived),
         Some(v2::decl::Kind::ConstDef(cd)) => return emit_const(ctx, decl, cd),
-        Some(v2::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, tuples),
-        Some(v2::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed),
-        Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd),
-        Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud),
+        Some(v2::decl::Kind::StructDef(sd)) => emit_struct(decl, sd, &derived, tuples),
+        Some(v2::decl::Kind::EnumDef(ed)) => emit_enum(decl, ed, &derived),
+        Some(v2::decl::Kind::EnumSetDef(esd)) => emit_enum_set(decl, esd, &derived),
+        Some(v2::decl::Kind::UnionDef(ud)) => emit_union(decl, ud, &derived),
         // Interaction kinds ride `Interface.interactions`, never a package
         // decl, so none of them reaches this match; nothing emits them today.
         Some(_) | None => return quote! {},
@@ -324,7 +336,7 @@ fn emit_decl(ctx: &Ctx, decl: &v2::Decl, tuples: &mut Vec<InducedTuple>) -> Toke
 /// Each covered impl block uses the deprecated type, and without the allow
 /// the consumer's build draws the `deprecated` lint on code the consumer did
 /// not write.
-fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
+fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
     let inner = newtype_inner(td);
     let doc = doc_attrs(&decl.doc);
@@ -352,6 +364,7 @@ fn emit_type_def(decl: &v2::Decl, td: &v2::TypeDef) -> TokenStream {
         #doc
         #separator
         #unchecked
+        #derived
         #deprecated
         #[repr(transparent)]
         #vis struct #name(#inner);
@@ -590,7 +603,8 @@ fn unchecked_doc(td: &v2::TypeDef) -> TokenStream {
 /// constructed in a `const` context. This asymmetry is documented in the C
 /// header and here.
 fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
-    let attrs = decl_attrs(decl);
+    // A constant is a value, not a type: there is nothing to derive on it.
+    let attrs = decl_attrs(decl, &quote! {});
     let vis = vis_tokens(decl.visibility);
     let name = ident(&decl.name);
 
@@ -659,9 +673,14 @@ fn emit_const(ctx: &Ctx, decl: &v2::Decl, cd: &v2::ConstDef) -> TokenStream {
     }
 }
 
-fn emit_struct(decl: &v2::Decl, sd: &v2::StructDef, tuples: &mut Vec<InducedTuple>) -> TokenStream {
+fn emit_struct(
+    decl: &v2::Decl,
+    sd: &v2::StructDef,
+    derived: &TokenStream,
+    tuples: &mut Vec<InducedTuple>,
+) -> TokenStream {
     let name = ident(&decl.name);
-    let attrs = decl_attrs(decl);
+    let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
     let repr = if sd.fixed_layout {
         quote! { #[repr(C)] }
@@ -706,9 +725,9 @@ fn emit_field(
 
 /// An enum becomes `#[repr(i64)]` with the declared discriminants (typl §8).
 /// Variant names keep their typl `SCREAMING_SNAKE` spelling.
-fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
+fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
-    let attrs = decl_attrs(decl);
+    let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ed.values.iter().map(|value| {
@@ -776,9 +795,9 @@ fn emit_enum(decl: &v2::Decl, ed: &v2::EnumDef) -> TokenStream {
 /// because it shares the block. Without the allow the consumer's build draws
 /// the `deprecated` lint on code the consumer did not write — which is what
 /// driftsys/ridl#420 settled for a named scalar's impl blocks.
-fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
+fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
-    let attrs = decl_attrs(decl);
+    let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let bits = esd.bits.iter().map(|bit| {
@@ -867,9 +886,9 @@ fn emit_enum_set(decl: &v2::Decl, esd: &v2::EnumSetDef) -> TokenStream {
 
 /// A union becomes a `pub enum` with one variant per arm; arm names are
 /// CamelCased (typl §10). Reserved arms are skipped.
-fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef) -> TokenStream {
+fn emit_union(decl: &v2::Decl, ud: &v2::UnionDef, derived: &TokenStream) -> TokenStream {
     let name = ident(&decl.name);
-    let attrs = decl_attrs(decl);
+    let attrs = decl_attrs(decl, derived);
     let vis = vis_tokens(decl.visibility);
 
     let variants = ud.arms.iter().map(|arm| {
@@ -908,6 +927,7 @@ fn emit_tuple_struct(
     } = induced;
     let name_id = ident(name);
     let vis = vis_tokens(*visibility);
+    let derived = derives::tuple_derive_attr(ctx, tuple);
     let fields = tuple.fields.iter().map(|field| {
         let fname = ident(&field.name);
         let hint = format!("{}{}", name, camel_case(&field.name));
@@ -920,6 +940,7 @@ fn emit_tuple_struct(
     });
 
     let struct_item = quote! {
+        #derived
         #vis struct #name_id {
             #(#fields),*
         }
@@ -1131,10 +1152,15 @@ fn primitive_keyword(reference: &str) -> Option<v2::PrimitiveType> {
 // Attributes: docs, deprecation, visibility.
 // ---------------------------------------------------------------------------
 
-fn decl_attrs(decl: &v2::Decl) -> TokenStream {
+/// The attributes that precede a generated item: its doc comment first, then
+/// its `#[derive(...)]`, then `#[deprecated]`. The derive sits under the doc
+/// comment because that is where Rust is conventionally written; it sits above
+/// `#[deprecated]` and the `#[repr(...)]` each emitter adds because a reader
+/// looks for the trait list first.
+fn decl_attrs(decl: &v2::Decl, derived: &TokenStream) -> TokenStream {
     let doc = doc_attrs(&decl.doc);
     let deprecated = deprecated_attr(decl.deprecated.as_deref());
-    quote! { #doc #deprecated }
+    quote! { #doc #derived #deprecated }
 }
 
 fn field_attrs(field: &v2::Field) -> TokenStream {

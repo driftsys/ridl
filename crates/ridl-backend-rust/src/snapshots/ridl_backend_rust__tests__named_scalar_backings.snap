@@ -5,6 +5,7 @@ expression: rust_for(decls)
 /// Vehicle speed over ground
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
@@ -54,6 +55,7 @@ impl Default for Speed {
         Speed::new_unchecked(0.0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[repr(transparent)]
 pub struct Counter(i64);
 impl Counter {
@@ -91,6 +93,7 @@ impl Default for Counter {
         Counter::new_unchecked(0)
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Enabled(bool);
 impl Enabled {
@@ -128,6 +131,7 @@ impl Default for Enabled {
         Enabled::new_unchecked(false)
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Label(String);
 impl Label {
@@ -168,6 +172,7 @@ impl Default for Label {
         Label::new_unchecked(String::new())
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Blob(Vec<u8>);
 impl Blob {

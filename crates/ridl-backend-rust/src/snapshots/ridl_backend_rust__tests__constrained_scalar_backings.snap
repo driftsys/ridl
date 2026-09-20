@@ -2,6 +2,7 @@
 source: crates/ridl-backend-rust/src/tests.rs
 expression: rust_for(decls)
 ---
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Name(String);
 impl Name {
@@ -49,6 +50,7 @@ impl ::core::convert::From<Name> for String {
         value.0
     }
 }
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[repr(transparent)]
 pub struct Digest(Vec<u8>);
 impl Digest {
@@ -95,6 +97,7 @@ impl Default for Digest {
         Digest::new_unchecked(Vec::new())
     }
 }
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Ratio(f64);
 impl Ratio {

@@ -7,6 +7,7 @@ input_file: crates/ridlc/tests/corpus/workspace-two-members/ridl.toml
 /// Vehicle speed over ground
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
@@ -59,6 +60,7 @@ impl Default for Speed {
 /// Coolant temperature
 ///
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Temperature(f64);
 impl Temperature {
@@ -112,6 +114,7 @@ impl Default for Temperature {
 
 // ===== package veh.cluster =====
 /// Instrument-cluster reading, carrying a speed from the common package.
+#[derive(Debug, Clone, PartialEq)]
 #[repr(C)]
 pub struct ClusterReading {
     pub speed: crate::veh::common::Speed,

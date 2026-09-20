@@ -3,6 +3,7 @@ source: crates/ridlc/tests/golden.rs
 expression: output.rust_source
 ---
 /// Quantization (`step`) is not checked by `new`.
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(transparent)]
 pub struct Speed(f64);
 impl Speed {
