@@ -3,21 +3,47 @@
 //! `Debug`, `Clone`, and `PartialEq` are sound on every generated type: every
 //! backing has them and every generated type receives them, so the recursion
 //! cannot fail on them. The rest are conditional and need the transitive
-//! closure:
+//! closure.
 //!
-//! - `Copy` — every leaf must be `f64`, `i64`, or `bool`.
-//! - `Eq`, `Hash` — no `f64` anywhere, including unit-backed types, since a
-//!   unit backing implies float (typl §5.1).
+//! Each conditional rule below is stated in full. A condition on the leaves
+//! alone is necessary and **not** sufficient: four positions refuse every
+//! conditional derive whatever their leaves are, and they are listed after the
+//! rules.
+//!
+//! - `Copy` — every leaf is `f64`, `i64`, or `bool`; no position in the
+//!   closure is an array or a map, because an array emits `Vec<T>` or
+//!   `[T; N]` and a map emits `Vec<(K, V)>`; and no position is a refusing
+//!   position.
+//! - `Eq`, `Hash` — no `f64` appears anywhere in the closure, including
+//!   unit-backed types, since a unit backing implies float (typl §5.1); and no
+//!   position is a refusing position. An array or a map does not disqualify
+//!   these: a `Vec` is `Eq` and `Hash` when its element is.
 //! - `PartialOrd`/`Ord` — named scalars over a numeric backing only. Ordering
 //!   a struct's fields lexicographically, or a union's arms by declaration
 //!   order, is not a property typl states, so deriving it would invent
 //!   contract semantics. `Ord` requires `Eq`, so a float-backed scalar takes
 //!   `PartialOrd` alone.
 //!
+//! The four refusing positions, each of which makes `Copy` and the equality
+//! pair both false for the whole closure that contains it:
+//!
+//! 1. A named reference that does not resolve to a declaration of this
+//!    package — a dotted cross-package name, an unknown name, or a name that
+//!    resolves to a constant rather than a type. See the paragraph below.
+//! 2. A named reference that closes a cycle. A cyclic IR is TYPL-206 upstream,
+//!    but this pass does not trust that gate; on a repeat visit it refuses
+//!    rather than recursing forever.
+//! 3. A `Stream`, which is an interaction-position type (ridl §12.3) and emits
+//!    `()` in a field position it should never reach.
+//! 4. An `Unspecified` field primitive, which also emits `()`. An
+//!    `Unspecified` *backing* is not this position: [`backing_scalar`] maps an
+//!    absent or unspecified primitive backing to [`ScalarBacking::Bytes`], so
+//!    such a type emits `Vec<u8>` and is `Eq` and `Hash` without being `Copy`.
+//!
 //! `Default` is never derived (design decision 8). [`defaults`] builds it from
 //! the typl init value, which may be a declared `= 0.5`; `#[derive(Default)]`
 //! would give the backing's `0.0` and silently contradict the contract. There
-//! is no branch here that can emit it.
+//! is no branch here that can emit it, for any declaration kind.
 //!
 //! **Cross-package references are handled conservatively.** [`defaults`] can be
 //! optimistic — it emits `path::default()` and lets rustc verify. A derive
@@ -28,8 +54,10 @@
 //! stay, because every generated type has them and a cross-package reference
 //! in checked IR names a generated type.
 //!
-//! The recursion mirrors [`defaults`]: leaf recursion with a cycle guard, and
-//! a composite reference re-checked rather than trusted.
+//! The recursion mirrors [`defaults`]: leaf recursion with a cycle guard. It
+//! reads no `derivable` flag — `InitValue.derivable` governs `Default`
+//! derivation in [`defaults`] and plays no part in derive eligibility, so
+//! there is nothing here to trust or re-check.
 //!
 //! [`defaults`]: crate::defaults
 
@@ -96,8 +124,11 @@ pub(crate) fn tuple_derive_attr(ctx: &Ctx, tuple: &v2::TupleType) -> TokenStream
 }
 
 /// Assembles the attribute. The order is the one Rust is conventionally
-/// written in: the always-sound three, then `Copy` beside `Clone`, then the
-/// equality pair, then the ordering pair.
+/// written in: `Debug`, then `Clone` with `Copy` beside it, then `PartialEq`
+/// with the equality pair after it, then the ordering pair. The three
+/// unconditional traits are therefore not one block — `Copy` sits between
+/// `Clone` and `PartialEq`, which is what every snapshot shows as
+/// `Debug, Clone, Copy, PartialEq, …`.
 fn attr(eligibility: Eligibility, ordered: bool) -> TokenStream {
     let mut traits = vec![quote! { Debug }, quote! { Clone }];
     if eligibility.copy {
@@ -206,7 +237,9 @@ fn field_type_eligibility(
             // the second is `Copy` when `T` is, and the distinction is not
             // drawn here: the conservative answer is sound for both, and a
             // `Copy` that depends on the array bounds being equal is a rule
-            // no reader of the generated crate could predict.
+            // no reader of the generated crate could predict. Refusing the
+            // fixed form is therefore policy, not soundness, and
+            // `a_fixed_array_field_loses_copy_by_policy` pins it.
             let inner = array
                 .element
                 .as_deref()
