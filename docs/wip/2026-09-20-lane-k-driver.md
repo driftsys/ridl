@@ -90,6 +90,44 @@ at that boundary and post the handoff; the plan is a fresh session with the same
 prompt and the `THIS SESSION RUNS` line set to K1, continuing from the approved
 note.
 
+### K2 to K8 — the plan's tasks, one stage each
+
+Added by the plan's pull request, as K1 requires. The plan is
+[`2026-09-20-flatbuffers-codec-plan.md`](2026-09-20-flatbuffers-codec-plan.md)
+and each stage is one of its tasks, with the files, the test and the
+must-not-break set stated there.
+
+- **K2 — the shared projection facts and the size bound.** Outside any backend,
+  in `ridl-ir` or a small projection crate; the stage chooses between them and
+  records the ground. Carries the drift test that makes driftsys/ridl#302
+  visible. No FlatBuffers snapshot may move.
+- **K3 — the `ridl-rt` helpers.** The `flatbuffers` feature stops being empty,
+  `Encoded.bytes` becomes a subslice, and **the proof mechanism is settled
+  here**, before any emitter exists, because D-1's amendment rests on it. The
+  helpers must build at `rust-version = "1.83"`, which `just compat-check`
+  enforces with `cargo +1.83 test --all-features`.
+- **K4 — D-7's refusal only.** `MAX_SIZE` is an associated const of
+  `Payload<FlatBuffers>`, so it travels with the impl in K5 rather than being
+  emitted a stage early. K4 emits no generated code: it adds a refusal path,
+  tested over a hand-built IR, because no typl source can reach an unbounded
+  type. No snapshot may move.
+- **K5 — the view, `encode`, `verify`, `decode`.** Emitted into `generate`'s
+  output. **Waits on Epic 10 Task 4**, which has no session.
+- **K6 — the constraint check beside `new`.** Epic 10 Task 6 (8e5a552) landed no
+  `check`, so **this stage adds it**. Whether it is public stays Epic 10's call.
+- **K7 — the face on `Wire`, and driftsys/ridl#448.** Regenerates the
+  interaction-face fixture, so it conflicts with any other in-flight change to
+  that file. Either emits the catalog check ADR-0021 decision 3 describes or
+  records that it waits for E16.2; leaving the promise false is ruled out.
+- **K8 — conformance, determinism, and the records.** **The one stage in this
+  lane that adds a dependency**: the round trip needs planus's code generator
+  and runtime as dev-dependencies of `ridl-backend-rust`, which D-8 did not
+  decide — the `planus-translation` already in the tree is a schema compiler and
+  reads no buffer. K8 also records which package joins `just wasm-check`, and
+  corrects E11.14's roadmap row.
+
+K5 to K8 wait on Epic 10 Task 4. K2 to K4 do not, and can run now.
+
 ## The twelve decisions K1 must take
 
 **K-1. What reads and writes the buffer.** Emitted Rust that encodes and
